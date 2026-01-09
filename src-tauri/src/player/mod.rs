@@ -11,9 +11,10 @@
 
 use std::io::{BufReader, Cursor};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::mpsc::{self, Sender};
+use std::sync::mpsc::{self, Sender, RecvTimeoutError};
 use std::sync::Arc;
 use std::thread;
+use std::time::Duration;
 use rodio::{Decoder, OutputStream, Sink, Source};
 
 use crate::api::{client::QobuzClient, models::Quality};
@@ -198,7 +199,8 @@ impl Player {
             log::info!("Audio thread ready and waiting for commands");
 
             loop {
-                match rx.recv() {
+                // Use recv_timeout so we can periodically check if sink is empty
+                match rx.recv_timeout(Duration::from_millis(100)) {
                     Ok(AudioCommand::Play { data, track_id, duration_secs }) => {
                         log::info!("Audio thread: playing track {}", track_id);
 
@@ -283,7 +285,21 @@ impl Player {
                         }
                         log::info!("Audio thread: volume set to {}", volume);
                     }
-                    Err(_) => {
+                    Err(RecvTimeoutError::Timeout) => {
+                        // Check if sink is empty (playback finished)
+                        if let Some(ref sink) = current_sink {
+                            if sink.empty() && thread_state.is_playing.load(Ordering::SeqCst) {
+                                // Track finished playing naturally
+                                log::info!("Audio thread: track finished (sink empty)");
+                                thread_state.is_playing.store(false, Ordering::SeqCst);
+                                // Set position to duration to signal completion
+                                let duration = thread_state.duration.load(Ordering::SeqCst);
+                                thread_state.position.store(duration, Ordering::SeqCst);
+                                thread_state.playback_start_millis.store(0, Ordering::SeqCst);
+                            }
+                        }
+                    }
+                    Err(RecvTimeoutError::Disconnected) => {
                         // Channel closed, exit thread
                         log::info!("Audio thread: channel closed, exiting");
                         break;
