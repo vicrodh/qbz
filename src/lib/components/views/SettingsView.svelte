@@ -67,10 +67,17 @@
   // Appearance settings
   let theme = $state('Dark');
   let compactMode = $state(false);
+  let language = $state('Auto');
 
-  // Integrations
+  // Last.fm integration state
   let lastfmConnected = $state(false);
-  let scrobbling = $state(false);
+  let lastfmUsername = $state('');
+  let scrobbling = $state(true);
+  let lastfmApiKey = $state('');
+  let lastfmApiSecret = $state('');
+  let lastfmAuthToken = $state('');
+  let lastfmConnecting = $state(false);
+  let showLastfmConfig = $state(false);
 
   // Load saved settings on mount
   onMount(() => {
@@ -91,12 +98,139 @@
       preferHighest = savedPreferHighest === 'true';
     }
 
+    // Load language setting
+    const savedLanguage = localStorage.getItem('qbz-language');
+    if (savedLanguage) {
+      language = savedLanguage;
+    }
+
     // Load cache stats
     loadCacheStats();
 
     // Load audio devices
     loadAudioDevices();
+
+    // Load Last.fm state
+    loadLastfmState();
   });
+
+  async function loadLastfmState() {
+    try {
+      // Check if Last.fm credentials are configured
+      const hasCredentials = await invoke<boolean>('lastfm_has_credentials');
+
+      // Load saved credentials from localStorage
+      const savedApiKey = localStorage.getItem('qbz-lastfm-api-key');
+      const savedApiSecret = localStorage.getItem('qbz-lastfm-api-secret');
+      const savedSessionKey = localStorage.getItem('qbz-lastfm-session-key');
+      const savedUsername = localStorage.getItem('qbz-lastfm-username');
+      const savedScrobbling = localStorage.getItem('qbz-lastfm-scrobbling');
+
+      if (savedApiKey && savedApiSecret) {
+        lastfmApiKey = savedApiKey;
+        lastfmApiSecret = savedApiSecret;
+        // Set credentials in backend
+        await invoke('lastfm_set_credentials', {
+          apiKey: savedApiKey,
+          apiSecret: savedApiSecret
+        });
+      }
+
+      if (savedSessionKey && savedUsername) {
+        await invoke('lastfm_set_session', { sessionKey: savedSessionKey });
+        lastfmConnected = true;
+        lastfmUsername = savedUsername;
+      }
+
+      if (savedScrobbling !== null) {
+        scrobbling = savedScrobbling === 'true';
+      }
+    } catch (err) {
+      console.error('Failed to load Last.fm state:', err);
+    }
+  }
+
+  async function handleLastfmConnect() {
+    if (!lastfmApiKey || !lastfmApiSecret) {
+      showLastfmConfig = true;
+      return;
+    }
+
+    lastfmConnecting = true;
+    try {
+      // Save credentials
+      localStorage.setItem('qbz-lastfm-api-key', lastfmApiKey);
+      localStorage.setItem('qbz-lastfm-api-secret', lastfmApiSecret);
+
+      // Set credentials in backend
+      await invoke('lastfm_set_credentials', {
+        apiKey: lastfmApiKey,
+        apiSecret: lastfmApiSecret
+      });
+
+      // Get auth URL and token
+      const [token, url] = await invoke<[string, string]>('lastfm_get_auth_url');
+      lastfmAuthToken = token;
+
+      // Open browser for authorization
+      window.open(url, '_blank');
+
+      // Show message to user - they need to authorize and then click a button
+      showLastfmConfig = true;
+    } catch (err) {
+      console.error('Failed to start Last.fm auth:', err);
+      alert(`Last.fm error: ${err}`);
+    } finally {
+      lastfmConnecting = false;
+    }
+  }
+
+  async function handleLastfmCompleteAuth() {
+    if (!lastfmAuthToken) {
+      alert('Please start the authorization first');
+      return;
+    }
+
+    lastfmConnecting = true;
+    try {
+      const session = await invoke<{ name: string; key: string }>('lastfm_authenticate', {
+        token: lastfmAuthToken
+      });
+
+      lastfmConnected = true;
+      lastfmUsername = session.name;
+      showLastfmConfig = false;
+      lastfmAuthToken = '';
+
+      // Save session
+      localStorage.setItem('qbz-lastfm-session-key', session.key);
+      localStorage.setItem('qbz-lastfm-username', session.name);
+    } catch (err) {
+      console.error('Failed to complete Last.fm auth:', err);
+      alert(`Authorization failed: ${err}`);
+    } finally {
+      lastfmConnecting = false;
+    }
+  }
+
+  async function handleLastfmDisconnect() {
+    try {
+      await invoke('lastfm_disconnect');
+      lastfmConnected = false;
+      lastfmUsername = '';
+
+      // Clear saved session
+      localStorage.removeItem('qbz-lastfm-session-key');
+      localStorage.removeItem('qbz-lastfm-username');
+    } catch (err) {
+      console.error('Failed to disconnect Last.fm:', err);
+    }
+  }
+
+  function handleScrobblingChange(enabled: boolean) {
+    scrobbling = enabled;
+    localStorage.setItem('qbz-lastfm-scrobbling', String(enabled));
+  }
 
   function handleQualityChange(quality: string) {
     streamingQuality = quality;
@@ -106,6 +240,11 @@
   function handlePreferHighestChange(enabled: boolean) {
     preferHighest = enabled;
     localStorage.setItem('qbz-prefer-highest', String(enabled));
+  }
+
+  function handleLanguageChange(lang: string) {
+    language = lang;
+    localStorage.setItem('qbz-language', lang);
   }
 
   async function loadAudioDevices() {
@@ -269,6 +408,14 @@
         onchange={handleThemeChange}
       />
     </div>
+    <div class="setting-row">
+      <span class="setting-label">Language</span>
+      <Dropdown
+        value={language}
+        options={['Auto', 'English', 'Español', 'Français', 'Deutsch', 'Italiano', 'Português']}
+        onchange={handleLanguageChange}
+      />
+    </div>
     <div class="setting-row last">
       <span class="setting-label">Compact Mode</span>
       <Toggle enabled={compactMode} onchange={(v) => (compactMode = v)} />
@@ -278,21 +425,85 @@
   <!-- Integrations Section -->
   <section class="section">
     <h3 class="section-title">Integrations</h3>
-    <div class="setting-row" class:last={!lastfmConnected}>
-      <span class="setting-label">Last.fm</span>
-      <button
-        class="connect-btn"
-        class:connected={lastfmConnected}
-        onclick={() => (lastfmConnected = !lastfmConnected)}
-      >
-        {lastfmConnected ? 'Disconnect' : 'Connect'}
-      </button>
-    </div>
+
     {#if lastfmConnected}
+      <div class="setting-row">
+        <div class="lastfm-connected">
+          <span class="setting-label">Last.fm</span>
+          <span class="lastfm-username">Connected as {lastfmUsername}</span>
+        </div>
+        <button
+          class="connect-btn connected"
+          onclick={handleLastfmDisconnect}
+        >
+          Disconnect
+        </button>
+      </div>
       <div class="setting-row last">
         <span class="setting-label">Scrobbling</span>
-        <Toggle enabled={scrobbling} onchange={(v) => (scrobbling = v)} />
+        <Toggle enabled={scrobbling} onchange={handleScrobblingChange} />
       </div>
+    {:else}
+      <div class="setting-row" class:last={!showLastfmConfig}>
+        <span class="setting-label">Last.fm</span>
+        <button
+          class="connect-btn"
+          onclick={handleLastfmConnect}
+          disabled={lastfmConnecting}
+        >
+          {lastfmConnecting ? 'Connecting...' : 'Connect'}
+        </button>
+      </div>
+
+      {#if showLastfmConfig}
+        <div class="lastfm-config">
+          <p class="config-info">
+            To connect Last.fm, you need API credentials.
+            <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">
+              Create an API account
+            </a>
+          </p>
+          <div class="config-field">
+            <label for="lastfm-api-key">API Key</label>
+            <input
+              id="lastfm-api-key"
+              type="text"
+              bind:value={lastfmApiKey}
+              placeholder="Enter your API key"
+            />
+          </div>
+          <div class="config-field">
+            <label for="lastfm-api-secret">Shared Secret</label>
+            <input
+              id="lastfm-api-secret"
+              type="password"
+              bind:value={lastfmApiSecret}
+              placeholder="Enter your shared secret"
+            />
+          </div>
+
+          {#if lastfmAuthToken}
+            <p class="auth-info">
+              Authorization window opened. After authorizing in the browser, click below:
+            </p>
+            <button
+              class="auth-complete-btn"
+              onclick={handleLastfmCompleteAuth}
+              disabled={lastfmConnecting}
+            >
+              {lastfmConnecting ? 'Verifying...' : 'I\'ve Authorized'}
+            </button>
+          {:else}
+            <button
+              class="auth-start-btn"
+              onclick={handleLastfmConnect}
+              disabled={!lastfmApiKey || !lastfmApiSecret || lastfmConnecting}
+            >
+              {lastfmConnecting ? 'Opening...' : 'Authorize with Last.fm'}
+            </button>
+          {/if}
+        </div>
+      {/if}
     {/if}
   </section>
 
@@ -510,6 +721,125 @@
   }
 
   .clear-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* Last.fm styles */
+  .lastfm-connected {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .lastfm-username {
+    font-size: 12px;
+    color: var(--accent-primary);
+  }
+
+  .lastfm-config {
+    padding: 16px;
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+    margin-top: 8px;
+  }
+
+  .config-info {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+  }
+
+  .config-info a {
+    color: var(--accent-primary);
+    text-decoration: none;
+  }
+
+  .config-info a:hover {
+    text-decoration: underline;
+  }
+
+  .config-field {
+    margin-bottom: 12px;
+  }
+
+  .config-field label {
+    display: block;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  .config-field input {
+    width: 100%;
+    padding: 8px 12px;
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 14px;
+  }
+
+  .config-field input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+  }
+
+  .config-field input::placeholder {
+    color: var(--text-disabled);
+  }
+
+  .auth-info {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 16px 0;
+    padding: 12px;
+    background-color: var(--bg-secondary);
+    border-radius: 6px;
+  }
+
+  .auth-start-btn,
+  .auth-complete-btn {
+    width: 100%;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .auth-start-btn {
+    background-color: var(--accent-primary);
+    color: white;
+    border: none;
+  }
+
+  .auth-start-btn:hover:not(:disabled) {
+    background-color: var(--accent-hover);
+  }
+
+  .auth-start-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .auth-complete-btn {
+    background-color: #1db954;
+    color: white;
+    border: none;
+  }
+
+  .auth-complete-btn:hover:not(:disabled) {
+    background-color: #1ed760;
+  }
+
+  .auth-complete-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .connect-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

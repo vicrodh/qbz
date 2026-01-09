@@ -7,6 +7,7 @@ pub mod api;
 pub mod cache;
 pub mod commands;
 pub mod config;
+pub mod lastfm;
 pub mod media_controls;
 pub mod player;
 pub mod queue;
@@ -16,6 +17,7 @@ use tokio::sync::Mutex;
 
 use api::QobuzClient;
 use cache::AudioCache;
+use lastfm::LastFmClient;
 use media_controls::{MediaControlsManager, TrackInfo};
 use player::Player;
 use queue::QueueManager;
@@ -27,6 +29,7 @@ pub struct AppState {
     pub queue: QueueManager,
     pub media_controls: MediaControlsManager,
     pub audio_cache: Arc<AudioCache>,
+    pub lastfm: Arc<Mutex<LastFmClient>>,
 }
 
 impl AppState {
@@ -37,6 +40,7 @@ impl AppState {
             queue: QueueManager::new(),
             media_controls: MediaControlsManager::new(),
             audio_cache: Arc::new(AudioCache::default()),
+            lastfm: Arc::new(Mutex::new(LastFmClient::default())),
         }
     }
 }
@@ -131,6 +135,16 @@ pub fn run() {
             // Cache commands
             commands::get_cache_stats,
             commands::clear_cache,
+            // Last.fm commands
+            commands::lastfm_has_credentials,
+            commands::lastfm_set_credentials,
+            commands::lastfm_is_authenticated,
+            commands::lastfm_get_auth_url,
+            commands::lastfm_authenticate,
+            commands::lastfm_set_session,
+            commands::lastfm_disconnect,
+            commands::lastfm_scrobble,
+            commands::lastfm_now_playing,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

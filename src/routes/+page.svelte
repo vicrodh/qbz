@@ -366,6 +366,15 @@
         selectedAlbum?.title || '',
         artwork || undefined
       );
+
+      // Update Last.fm
+      updateLastfmNowPlaying(
+        track.title,
+        track.artist || selectedAlbum?.artist || 'Unknown Artist',
+        selectedAlbum?.title || '',
+        track.durationSeconds,
+        track.id
+      );
     } catch (err) {
       console.error('Failed to play track:', err);
       showToast(`Playback error: ${err}`, 'error');
@@ -501,6 +510,9 @@
 
       // Show system notification
       showTrackNotification(track.title, track.artist, track.album, track.artwork_url || undefined);
+
+      // Update Last.fm
+      updateLastfmNowPlaying(track.title, track.artist, track.album, track.duration_secs, track.id);
 
       // Refresh queue state
       await syncQueueState();
@@ -680,6 +692,15 @@
         track.albumArt
       );
 
+      // Update Last.fm
+      updateLastfmNowPlaying(
+        track.title,
+        track.artist || 'Unknown Artist',
+        track.album || '',
+        track.durationSeconds,
+        track.id
+      );
+
       await syncQueueState();
     } catch (err) {
       console.error('Failed to play track:', err);
@@ -699,6 +720,56 @@
       });
     } catch (err) {
       console.error('Failed to show track notification:', err);
+    }
+  }
+
+  // Last.fm scrobbling state
+  let lastScrobbledTrackId: number | null = null;
+  let scrobbleTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Update Last.fm "now playing" and schedule scrobble
+  async function updateLastfmNowPlaying(title: string, artist: string, album: string, durationSecs: number, trackId: number) {
+    // Check if scrobbling is enabled
+    const scrobblingEnabled = localStorage.getItem('qbz-lastfm-scrobbling') !== 'false';
+    const sessionKey = localStorage.getItem('qbz-lastfm-session-key');
+
+    if (!scrobblingEnabled || !sessionKey) return;
+
+    try {
+      // Update "now playing"
+      await invoke('lastfm_now_playing', {
+        artist,
+        track: title,
+        album: album || null
+      });
+      console.log('Last.fm: Updated now playing');
+
+      // Schedule scrobble after 50% of track or 4 minutes (whichever is shorter)
+      if (scrobbleTimeout) {
+        clearTimeout(scrobbleTimeout);
+      }
+
+      const scrobbleDelay = Math.min(durationSecs * 0.5, 240) * 1000; // in ms
+
+      scrobbleTimeout = setTimeout(async () => {
+        if (lastScrobbledTrackId !== trackId) {
+          try {
+            const timestamp = Math.floor(Date.now() / 1000);
+            await invoke('lastfm_scrobble', {
+              artist,
+              track: title,
+              album: album || null,
+              timestamp
+            });
+            lastScrobbledTrackId = trackId;
+            console.log('Last.fm: Scrobbled track');
+          } catch (err) {
+            console.error('Last.fm scrobble failed:', err);
+          }
+        }
+      }, scrobbleDelay);
+    } catch (err) {
+      console.error('Last.fm now playing failed:', err);
     }
   }
 
