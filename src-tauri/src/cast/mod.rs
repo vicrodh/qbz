@@ -6,6 +6,7 @@ pub mod discovery;
 pub mod errors;
 pub mod media_server;
 pub mod airplay;
+pub mod dlna;
 
 pub use commands::CastState;
 pub use device::{CastDeviceConnection, CastStatus, MediaMetadata};
@@ -20,6 +21,15 @@ pub use airplay::{
     AirPlayState,
     AirPlayStatus,
     DiscoveredAirPlayDevice,
+};
+pub use dlna::{
+    DiscoveredDlnaDevice,
+    DlnaConnection,
+    DlnaDiscovery,
+    DlnaError,
+    DlnaMetadata,
+    DlnaState,
+    DlnaStatus,
 };
 
 pub type CastDevice = CastDeviceConnection;
