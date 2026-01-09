@@ -1,0 +1,181 @@
+{
+  "app": {
+    "name": "QBZ-NIX",
+    "tagline": "Cliente Hi-Fi de Qobuz para Linux"
+  },
+  "nav": {
+    "home": "Inicio",
+    "search": "Buscar",
+    "library": "Biblioteca",
+    "albums": "Álbumes",
+    "artists": "Artistas",
+    "tracks": "Canciones",
+    "playlists": "Playlists",
+    "newReleases": "Novedades",
+    "radio": "Radio",
+    "recentlyAdded": "Añadido recientemente"
+  },
+  "home": {
+    "title": "Inicio",
+    "featuredForYou": "Sugerencias destacadas para ti",
+    "recentlyPlayed": "Escuchado recientemente",
+    "newReleases": "Nuevos lanzamientos",
+    "madeForYou": "Hecho para ti",
+    "topPicks": "Selecciones destacadas"
+  },
+  "search": {
+    "title": "Buscar",
+    "placeholder": "Buscar álbumes, artistas, canciones...",
+    "all": "Todo",
+    "noResults": "No se encontraron resultados",
+    "searching": "Buscando..."
+  },
+  "album": {
+    "tracks": "canciones",
+    "track": "canción",
+    "by": "de",
+    "released": "Publicado",
+    "label": "Sello",
+    "genre": "Género"
+  },
+  "artist": {
+    "albums": "Álbumes",
+    "popularTracks": "Canciones populares",
+    "similarArtists": "Artistas similares",
+    "followers": "seguidores"
+  },
+  "playlist": {
+    "tracks": "canciones",
+    "createNew": "Crear nueva...",
+    "allPlaylists": "Todas las playlists",
+    "myPlaylists": "Mis playlists"
+  },
+  "player": {
+    "nowPlaying": "Reproduciendo ahora",
+    "queue": "Cola",
+    "lyrics": "Letra",
+    "shuffle": "Aleatorio",
+    "repeat": "Repetir",
+    "repeatOne": "Repetir una",
+    "previous": "Anterior",
+    "next": "Siguiente",
+    "play": "Reproducir",
+    "pause": "Pausar",
+    "volume": "Volumen",
+    "mute": "Silenciar"
+  },
+  "quality": {
+    "mp3": "MP3",
+    "cdQuality": "Calidad CD",
+    "hiRes": "Hi-Res",
+    "ultraHiRes": "Ultra Hi-Res",
+    "flac": "FLAC",
+    "bitDepth": "{depth}-bit",
+    "sampleRate": "{rate} kHz",
+    "lossless": "Sin pérdida"
+  },
+  "actions": {
+    "play": "Reproducir",
+    "playAll": "Reproducir todo",
+    "shuffle": "Aleatorio",
+    "addToQueue": "Añadir a la cola",
+    "addToPlaylist": "Añadir a playlist",
+    "addToFavorites": "Añadir a favoritos",
+    "removeFromFavorites": "Quitar de favoritos",
+    "download": "Descargar",
+    "share": "Compartir",
+    "viewAlbum": "Ver álbum",
+    "viewArtist": "Ver artista",
+    "more": "Más",
+    "back": "Atrás",
+    "seeAll": "Ver todo",
+    "cancel": "Cancelar",
+    "save": "Guardar",
+    "delete": "Eliminar",
+    "edit": "Editar"
+  },
+  "settings": {
+    "title": "Configuración",
+    "account": {
+      "title": "Cuenta",
+      "loggedInAs": "Conectado como",
+      "subscription": "Suscripción",
+      "logout": "Cerrar sesión",
+      "login": "Iniciar sesión"
+    },
+    "audio": {
+      "title": "Audio",
+      "streamingQuality": "Calidad de streaming",
+      "preferHighest": "Preferir la más alta disponible",
+      "outputDevice": "Dispositivo de salida",
+      "exclusiveMode": "Modo exclusivo",
+      "exclusiveModeDesc": "Bloquear dispositivo de audio para uso exclusivo",
+      "dacPassthrough": "Passthrough DAC",
+      "dacPassthroughDesc": "Bypass del mixer del sistema para salida bit-perfect"
+    },
+    "playback": {
+      "title": "Reproducción",
+      "gapless": "Reproducción sin pausas",
+      "crossfade": "Crossfade",
+      "crossfadeSeconds": "{seconds}s",
+      "normalizeVolume": "Normalizar volumen"
+    },
+    "appearance": {
+      "title": "Apariencia",
+      "theme": "Tema",
+      "themes": {
+        "dark": "Oscuro",
+        "light": "Claro",
+        "oled": "OLED Negro",
+        "warm": "Cálido"
+      },
+      "accentColor": "Color de acento",
+      "compactMode": "Modo compacto",
+      "language": "Idioma"
+    },
+    "integrations": {
+      "title": "Integraciones",
+      "lastfm": "Last.fm",
+      "connected": "Conectado",
+      "notConnected": "No conectado",
+      "connect": "Conectar",
+      "disconnect": "Desconectar",
+      "scrobbling": "Scrobbling"
+    },
+    "storage": {
+      "title": "Almacenamiento",
+      "cacheSize": "Tamaño de caché",
+      "clearCache": "Limpiar caché"
+    }
+  },
+  "auth": {
+    "login": "Iniciar sesión",
+    "email": "Correo electrónico",
+    "password": "Contraseña",
+    "loginButton": "Entrar",
+    "loggingIn": "Iniciando sesión...",
+    "loginError": "Error al iniciar sesión. Verifica tus credenciales.",
+    "welcomeBack": "Bienvenido de nuevo"
+  },
+  "errors": {
+    "generic": "Algo salió mal",
+    "networkError": "Error de red. Verifica tu conexión.",
+    "notFound": "No encontrado",
+    "unauthorized": "Inicia sesión para continuar",
+    "trackNotAvailable": "Esta canción no está disponible para streaming",
+    "qualityNotAvailable": "La calidad solicitada no está disponible"
+  },
+  "time": {
+    "hours": "h",
+    "minutes": "min",
+    "seconds": "s"
+  },
+  "empty": {
+    "noAlbums": "Sin álbumes aún",
+    "noArtists": "Sin artistas aún",
+    "noTracks": "Sin canciones aún",
+    "noPlaylists": "Sin playlists aún",
+    "noFavorites": "Sin favoritos aún",
+    "queueEmpty": "La cola está vacía"
+  }
+}
