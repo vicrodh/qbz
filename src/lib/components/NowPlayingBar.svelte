@@ -40,17 +40,17 @@
   }
 
   let {
-    artwork = 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&h=200&fit=crop',
-    trackTitle = 'Irreplaceable',
-    artist = 'El Silencio de las Vega',
-    quality = 'FLAC • 24/192',
-    qualityLevel = 5,
+    artwork = '',
+    trackTitle = '',
+    artist = '',
+    quality = '',
+    qualityLevel = 0,
     isPlaying = false,
     onTogglePlay,
     onSkipBack,
     onSkipForward,
-    currentTime = 201,
-    duration = 345,
+    currentTime = 0,
+    duration = 0,
     onSeek,
     volume = 70,
     onVolumeChange,
@@ -69,7 +69,8 @@
   let isDraggingProgress = $state(false);
   let isDraggingVolume = $state(false);
 
-  const progress = $derived((currentTime / duration) * 100);
+  const progress = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
+  const hasTrack = $derived(trackTitle !== '');
 
   function formatTime(seconds: number): string {
     const mins = Math.floor(seconds / 60);
@@ -133,22 +134,36 @@
 <div class="now-playing-bar">
   <!-- Left Section - Track Info -->
   <div class="track-info">
-    <button class="artwork-btn" onclick={onOpenFullScreen}>
-      <img src={artwork} alt={trackTitle} />
-    </button>
-    <div class="track-details">
-      <div class="track-title">{trackTitle}</div>
-      <div class="track-artist">{artist}</div>
-      <div class="track-quality">
-        <span>{quality}</span>
-        <span>•</span>
-        <div class="quality-dots">
-          {#each Array(5) as _, i}
-            <div class="dot" class:active={i < qualityLevel}></div>
-          {/each}
+    {#if hasTrack}
+      <button class="artwork-btn" onclick={onOpenFullScreen}>
+        {#if artwork}
+          <img src={artwork} alt={trackTitle} />
+        {:else}
+          <div class="artwork-placeholder">
+            <Play size={20} />
+          </div>
+        {/if}
+      </button>
+      <div class="track-details">
+        <div class="track-title">{trackTitle}</div>
+        <div class="track-artist">{artist}</div>
+        <div class="track-quality">
+          <span>{quality}</span>
+          {#if quality}
+            <span>•</span>
+            <div class="quality-dots">
+              {#each Array(5) as _, i}
+                <div class="dot" class:active={i < qualityLevel}></div>
+              {/each}
+            </div>
+          {/if}
         </div>
       </div>
-    </div>
+    {:else}
+      <div class="empty-state">
+        <span class="empty-text">No track playing</span>
+      </div>
+    {/if}
   </div>
 
   <!-- Center Section - Controls & Progress -->
@@ -248,7 +263,7 @@
       </div>
     </div>
 
-    <span class="remaining-time">2:34</span>
+    <span class="remaining-time">-{formatTime(Math.max(0, duration - currentTime))}</span>
   </div>
 </div>
 
@@ -292,6 +307,28 @@
     height: 56px;
     border-radius: 4px;
     object-fit: cover;
+  }
+
+  .artwork-placeholder {
+    width: 56px;
+    height: 56px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+  }
+
+  .empty-state {
+    display: flex;
+    align-items: center;
+    height: 56px;
+  }
+
+  .empty-text {
+    font-size: 14px;
+    color: var(--text-muted);
   }
 
   .track-details {

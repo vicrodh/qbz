@@ -116,32 +116,11 @@
       </button>
 
       <NavigationItem
-        label="All Playlists"
-        active={activeView === 'all-playlists'}
-        onclick={() => handleViewChange('all-playlists')}
+        label="Favorites"
+        active={activeView === 'favorites'}
+        onclick={() => handleViewChange('favorites')}
       >
-        {#snippet icon()}<Music size={18} />{/snippet}
-      </NavigationItem>
-      <NavigationItem
-        label="My Playlist 1"
-        active={activeView === 'playlist-1'}
-        onclick={() => handleViewChange('playlist-1')}
-      >
-        {#snippet icon()}<Music size={18} />{/snippet}
-      </NavigationItem>
-      <NavigationItem
-        label="My Playlist 2"
-        active={activeView === 'playlist-2'}
-        onclick={() => handleViewChange('playlist-2')}
-      >
-        {#snippet icon()}<Music size={18} />{/snippet}
-      </NavigationItem>
-      <NavigationItem
-        label="My Playlist 3"
-        active={activeView === 'playlist-3'}
-        onclick={() => handleViewChange('playlist-3')}
-      >
-        {#snippet icon()}<Music size={18} />{/snippet}
+        {#snippet icon()}<Heart size={18} />{/snippet}
       </NavigationItem>
     </div>
   </div>
