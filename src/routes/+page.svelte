@@ -22,6 +22,7 @@
   import QueuePanel from '$lib/components/QueuePanel.svelte';
   import FullScreenNowPlaying from '$lib/components/FullScreenNowPlaying.svelte';
   import FocusMode from '$lib/components/FocusMode.svelte';
+  import PlaylistModal from '$lib/components/PlaylistModal.svelte';
 
   // Types
   interface QobuzTrack {
@@ -174,6 +175,15 @@
   let isQueueOpen = $state(false);
   let isFullScreenOpen = $state(false);
   let isFocusModeOpen = $state(false);
+
+  // Playlist Modal State
+  let isPlaylistModalOpen = $state(false);
+  let playlistModalMode = $state<'create' | 'edit' | 'addTrack'>('create');
+  let playlistModalTrackIds = $state<number[]>([]);
+  let userPlaylists = $state<{ id: number; name: string; tracks_count: number }[]>([]);
+
+  // Sidebar reference for refreshing playlists
+  let sidebarRef: { getPlaylists: () => { id: number; name: string; tracks_count: number }[], refreshPlaylists: () => void } | undefined;
 
   // Playback State
   let currentTrack = $state<PlayingTrack | null>(null);
@@ -942,6 +952,19 @@
     }
   }
 
+  // Playlist Modal Functions
+  function openCreatePlaylist() {
+    userPlaylists = sidebarRef?.getPlaylists() ?? [];
+    playlistModalMode = 'create';
+    playlistModalTrackIds = [];
+    isPlaylistModalOpen = true;
+  }
+
+  function handlePlaylistCreated() {
+    showToast('Playlist created', 'success');
+    sidebarRef?.refreshPlaylists();
+  }
+
   // Toast Functions
   function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
     toast = { message, type };
@@ -1112,10 +1135,12 @@
   <div class="app">
     <!-- Sidebar -->
     <Sidebar
+      bind:this={sidebarRef}
       {activeView}
       {selectedPlaylistId}
       onNavigate={navigateTo}
       onPlaylistSelect={handlePlaylistSelect}
+      onCreatePlaylist={openCreatePlaylist}
       onSettingsClick={() => navigateTo('settings')}
       onLogout={handleLogout}
       userName={userInfo?.userName || 'User'}
@@ -1279,6 +1304,16 @@
         onClose={hideToast}
       />
     {/if}
+
+    <!-- Playlist Modal -->
+    <PlaylistModal
+      isOpen={isPlaylistModalOpen}
+      mode={playlistModalMode}
+      trackIds={playlistModalTrackIds}
+      {userPlaylists}
+      onClose={() => (isPlaylistModalOpen = false)}
+      onSuccess={handlePlaylistCreated}
+    />
   </div>
 {/if}
 

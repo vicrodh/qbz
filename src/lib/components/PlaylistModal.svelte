@@ -1,0 +1,485 @@
+<script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
+  import { X } from 'lucide-svelte';
+
+  interface Playlist {
+    id: number;
+    name: string;
+    tracks_count: number;
+  }
+
+  interface Props {
+    isOpen: boolean;
+    mode: 'create' | 'edit' | 'addTrack';
+    playlist?: Playlist;
+    trackIds?: number[];
+    userPlaylists?: Playlist[];
+    onClose: () => void;
+    onSuccess?: (playlist?: Playlist) => void;
+  }
+
+  let {
+    isOpen,
+    mode,
+    playlist,
+    trackIds = [],
+    userPlaylists = [],
+    onClose,
+    onSuccess
+  }: Props = $props();
+
+  // Form state
+  let name = $state('');
+  let description = $state('');
+  let isPublic = $state(false);
+  let selectedPlaylistId = $state<number | null>(null);
+  let loading = $state(false);
+  let error = $state<string | null>(null);
+
+  // Reset form when modal opens
+  $effect(() => {
+    if (isOpen) {
+      error = null;
+      loading = false;
+      if (mode === 'edit' && playlist) {
+        name = playlist.name;
+        description = '';
+        isPublic = false;
+      } else if (mode === 'create') {
+        name = '';
+        description = '';
+        isPublic = false;
+      } else if (mode === 'addTrack') {
+        selectedPlaylistId = null;
+      }
+    }
+  });
+
+  async function handleCreate() {
+    if (!name.trim()) {
+      error = 'Please enter a playlist name';
+      return;
+    }
+
+    loading = true;
+    error = null;
+
+    try {
+      const newPlaylist = await invoke<Playlist>('create_playlist', {
+        name: name.trim(),
+        description: description.trim() || null,
+        isPublic
+      });
+      onSuccess?.(newPlaylist);
+      onClose();
+    } catch (err) {
+      console.error('Failed to create playlist:', err);
+      error = String(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function handleUpdate() {
+    if (!playlist) return;
+    if (!name.trim()) {
+      error = 'Please enter a playlist name';
+      return;
+    }
+
+    loading = true;
+    error = null;
+
+    try {
+      const updatedPlaylist = await invoke<Playlist>('update_playlist', {
+        playlistId: playlist.id,
+        name: name.trim(),
+        description: description.trim() || null,
+        isPublic
+      });
+      onSuccess?.(updatedPlaylist);
+      onClose();
+    } catch (err) {
+      console.error('Failed to update playlist:', err);
+      error = String(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function handleAddToPlaylist() {
+    if (!selectedPlaylistId || trackIds.length === 0) {
+      error = 'Please select a playlist';
+      return;
+    }
+
+    loading = true;
+    error = null;
+
+    try {
+      await invoke('add_tracks_to_playlist', {
+        playlistId: selectedPlaylistId,
+        trackIds
+      });
+      onSuccess?.();
+      onClose();
+    } catch (err) {
+      console.error('Failed to add tracks to playlist:', err);
+      error = String(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function handleCreateAndAdd() {
+    if (!name.trim()) {
+      error = 'Please enter a playlist name';
+      return;
+    }
+
+    loading = true;
+    error = null;
+
+    try {
+      // Create the playlist first
+      const newPlaylist = await invoke<Playlist>('create_playlist', {
+        name: name.trim(),
+        description: description.trim() || null,
+        isPublic: false
+      });
+
+      // Then add tracks
+      if (trackIds.length > 0) {
+        await invoke('add_tracks_to_playlist', {
+          playlistId: newPlaylist.id,
+          trackIds
+        });
+      }
+
+      onSuccess?.(newPlaylist);
+      onClose();
+    } catch (err) {
+      console.error('Failed to create playlist and add tracks:', err);
+      error = String(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  function handleSubmit() {
+    if (mode === 'create') {
+      handleCreate();
+    } else if (mode === 'edit') {
+      handleUpdate();
+    } else if (mode === 'addTrack') {
+      if (selectedPlaylistId === -1) {
+        // Create new playlist option selected
+        handleCreateAndAdd();
+      } else {
+        handleAddToPlaylist();
+      }
+    }
+  }
+
+  function handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      onClose();
+    } else if (e.key === 'Enter' && !e.shiftKey) {
+      handleSubmit();
+    }
+  }
+</script>
+
+{#if isOpen}
+  <div
+    class="modal-overlay"
+    onclick={() => onClose()}
+    onkeydown={handleKeydown}
+    role="dialog"
+    aria-modal="true"
+    tabindex="-1"
+  >
+    <div class="modal" onclick={(e) => e.stopPropagation()} role="document">
+      <div class="modal-header">
+        <h2>
+          {#if mode === 'create'}
+            New Playlist
+          {:else if mode === 'edit'}
+            Edit Playlist
+          {:else}
+            Add to Playlist
+          {/if}
+        </h2>
+        <button class="close-btn" onclick={onClose}>
+          <X size={20} />
+        </button>
+      </div>
+
+      <div class="modal-body">
+        {#if error}
+          <div class="error-message">{error}</div>
+        {/if}
+
+        {#if mode === 'addTrack'}
+          <div class="track-info">
+            Adding {trackIds.length} track{trackIds.length !== 1 ? 's' : ''}
+          </div>
+
+          <div class="form-group">
+            <label for="playlist-select">Choose playlist</label>
+            <select
+              id="playlist-select"
+              bind:value={selectedPlaylistId}
+              disabled={loading}
+            >
+              <option value={null}>Select a playlist...</option>
+              <option value={-1}>+ Create new playlist</option>
+              {#each userPlaylists as pl (pl.id)}
+                <option value={pl.id}>{pl.name} ({pl.tracks_count} tracks)</option>
+              {/each}
+            </select>
+          </div>
+
+          {#if selectedPlaylistId === -1}
+            <div class="form-group">
+              <label for="name">Playlist name</label>
+              <input
+                type="text"
+                id="name"
+                bind:value={name}
+                placeholder="My Playlist"
+                disabled={loading}
+              />
+            </div>
+          {/if}
+        {:else}
+          <div class="form-group">
+            <label for="name">Name</label>
+            <input
+              type="text"
+              id="name"
+              bind:value={name}
+              placeholder="My Playlist"
+              disabled={loading}
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="description">Description (optional)</label>
+            <textarea
+              id="description"
+              bind:value={description}
+              placeholder="Add a description..."
+              rows="3"
+              disabled={loading}
+            ></textarea>
+          </div>
+
+          <div class="form-group checkbox">
+            <label>
+              <input
+                type="checkbox"
+                bind:checked={isPublic}
+                disabled={loading}
+              />
+              <span>Make playlist public</span>
+            </label>
+          </div>
+        {/if}
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn-secondary" onclick={onClose} disabled={loading}>
+          Cancel
+        </button>
+        <button class="btn-primary" onclick={handleSubmit} disabled={loading}>
+          {#if loading}
+            Saving...
+          {:else if mode === 'create'}
+            Create
+          {:else if mode === 'edit'}
+            Save
+          {:else if selectedPlaylistId === -1}
+            Create & Add
+          {:else}
+            Add
+          {/if}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+<style>
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal {
+    background: var(--bg-primary);
+    border-radius: 12px;
+    width: 100%;
+    max-width: 440px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--bg-tertiary);
+  }
+
+  .modal-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .close-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 4px;
+    transition: color 150ms ease;
+  }
+
+  .close-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .modal-body {
+    padding: 24px;
+    overflow-y: auto;
+  }
+
+  .error-message {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    color: #ef4444;
+    padding: 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+
+  .track-info {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+  }
+
+  .form-group {
+    margin-bottom: 16px;
+  }
+
+  .form-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .form-group input[type="text"],
+  .form-group textarea,
+  .form-group select {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-primary);
+    transition: border-color 150ms ease;
+  }
+
+  .form-group input[type="text"]:focus,
+  .form-group textarea:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+  }
+
+  .form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+  }
+
+  .form-group.checkbox label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+  }
+
+  .form-group.checkbox input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--accent-primary);
+  }
+
+  .form-group.checkbox span {
+    font-size: 14px;
+    color: var(--text-primary);
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 24px;
+    border-top: 1px solid var(--bg-tertiary);
+  }
+
+  .btn-secondary,
+  .btn-primary {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .btn-secondary {
+    background: transparent;
+    border: 1px solid var(--text-muted);
+    color: var(--text-primary);
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    border-color: var(--text-primary);
+  }
+
+  .btn-primary {
+    background: var(--accent-primary);
+    border: none;
+    color: white;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-hover);
+  }
+
+  .btn-secondary:disabled,
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+</style>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Search, Home, HardDrive, Music, Disc3, Mic2, Plus, MoreVertical, ChevronDown, Heart, ListMusic } from 'lucide-svelte';
+  import { Search, Home, HardDrive, Music, Disc3, Mic2, Plus, RefreshCw, ChevronDown, Heart, ListMusic } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import NavigationItem from './NavigationItem.svelte';
@@ -16,6 +16,7 @@
     selectedPlaylistId?: number | null;
     onNavigate: (view: string) => void;
     onPlaylistSelect?: (playlistId: number) => void;
+    onCreatePlaylist?: () => void;
     onSettingsClick?: () => void;
     onLogout?: () => void;
     userName?: string;
@@ -27,6 +28,7 @@
     selectedPlaylistId = null,
     onNavigate,
     onPlaylistSelect,
+    onCreatePlaylist,
     onSettingsClick,
     onLogout,
     userName = 'User',
@@ -35,6 +37,15 @@
 
   let userPlaylists = $state<Playlist[]>([]);
   let playlistsLoading = $state(false);
+
+  // Expose playlists to parent via binding
+  export function getPlaylists(): Playlist[] {
+    return userPlaylists;
+  }
+
+  export function refreshPlaylists() {
+    loadUserPlaylists();
+  }
 
   onMount(() => {
     loadUserPlaylists();
@@ -107,8 +118,11 @@
       <div class="playlists-header">
         <div class="section-header">Playlists</div>
         <div class="header-actions">
+          <button class="icon-btn" onclick={onCreatePlaylist} title="New playlist">
+            <Plus size={14} />
+          </button>
           <button class="icon-btn" onclick={loadUserPlaylists} title="Refresh playlists">
-            <MoreVertical size={14} />
+            <RefreshCw size={14} />
           </button>
         </div>
       </div>
