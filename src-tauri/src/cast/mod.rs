@@ -5,11 +5,21 @@ pub mod device;
 pub mod discovery;
 pub mod errors;
 pub mod media_server;
+pub mod airplay;
 
 pub use commands::CastState;
 pub use device::{CastDeviceConnection, CastStatus, MediaMetadata};
 pub use discovery::{DeviceDiscovery, DiscoveredDevice};
 pub use errors::CastError;
 pub use media_server::MediaServer;
+pub use airplay::{
+    AirPlayConnection,
+    AirPlayDiscovery,
+    AirPlayError,
+    AirPlayMetadata,
+    AirPlayState,
+    AirPlayStatus,
+    DiscoveredAirPlayDevice,
+};
 
 pub type CastDevice = CastDeviceConnection;
