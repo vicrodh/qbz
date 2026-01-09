@@ -4,11 +4,11 @@
 
 # QBZ-NIX
 
-Free and open source (FOSS) Qobuz client for Linux with native, high-fidelity playback. QBZ-NIX removes browser sample-rate limits and delivers hi-res audio through a purpose-built Rust playback engine.
+Free and open source (FOSS) Qobuz client for Linux with native, high-fidelity playback. QBZ-NIX goes beyond wrapper apps by using a purpose-built Rust playback engine that removes browser sample-rate limits, adds DAC passthrough, and delivers true hi-res audio.
 
 ## Why QBZ-NIX
 
-Browsers cap audio output around 48 kHz, while Qobuz streams up to 192 kHz. QBZ-NIX uses a native playback pipeline so your system and DAC can receive the original resolution, with proper device control, caching, and media integration.
+Browsers cap audio output around 48 kHz, while Qobuz streams up to 192 kHz. QBZ-NIX uses a native playback pipeline so your system and DAC can receive the original resolution. This is a native client, not a wrapper, which enables features like DAC passthrough, real device control, caching, and media integration.
 
 ## Features
 
@@ -17,6 +17,7 @@ Browsers cap audio output around 48 kHz, while Qobuz streams up to 192 kHz. QBZ-
 - Native decoding for FLAC and MP3 with real-time playback state updates.
 - Quality selection with automatic fallback across Qobuz tiers.
 - Audio device enumeration and per-device output selection.
+- DAC passthrough mode for bit-perfect playback.
 - Gapless-ready playback pipeline with precise position tracking.
 
 ### Queue and Library
