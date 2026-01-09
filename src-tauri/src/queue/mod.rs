@@ -201,6 +201,53 @@ impl QueueManager {
         next_idx.and_then(|idx| state.tracks.get(idx).cloned())
     }
 
+    /// Get multiple upcoming tracks without advancing (for prefetching)
+    pub fn peek_upcoming(&self, count: usize) -> Vec<QueueTrack> {
+        let state = self.state.lock().unwrap();
+        if state.tracks.is_empty() || count == 0 {
+            return Vec::new();
+        }
+
+        // Don't return upcoming if repeat one (same track always)
+        if state.repeat == RepeatMode::One {
+            return Vec::new();
+        }
+
+        let mut result = Vec::with_capacity(count);
+
+        if state.shuffle {
+            let start_pos = state.shuffle_position + 1;
+            for i in 0..count {
+                let pos = start_pos + i;
+                if pos < state.shuffle_order.len() {
+                    if let Some(track) = state.tracks.get(state.shuffle_order[pos]) {
+                        result.push(track.clone());
+                    }
+                } else if state.repeat == RepeatMode::All {
+                    // Wrap around
+                    let wrapped_pos = pos % state.shuffle_order.len();
+                    if let Some(track) = state.tracks.get(state.shuffle_order[wrapped_pos]) {
+                        result.push(track.clone());
+                    }
+                }
+            }
+        } else {
+            let start_idx = state.current_index.map(|i| i + 1).unwrap_or(0);
+            for i in 0..count {
+                let idx = start_idx + i;
+                if idx < state.tracks.len() {
+                    result.push(state.tracks[idx].clone());
+                } else if state.repeat == RepeatMode::All {
+                    // Wrap around
+                    let wrapped_idx = idx % state.tracks.len();
+                    result.push(state.tracks[wrapped_idx].clone());
+                }
+            }
+        }
+
+        result
+    }
+
     /// Advance to next track and return it
     pub fn next(&self) -> Option<QueueTrack> {
         let mut state = self.state.lock().unwrap();

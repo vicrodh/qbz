@@ -398,13 +398,14 @@
 
   // Skip track handlers - wired to backend queue
   async function handleSkipBack() {
-    if (!currentTrack) return;
+    if (!currentTrack || isSkipping) return;
     // If more than 3 seconds in, restart track; otherwise go to previous
     if (currentTime > 3) {
       handleSeek(0);
       return;
     }
 
+    isSkipping = true;
     try {
       const prevTrack = await invoke<BackendQueueTrack | null>('previous_track');
       if (prevTrack) {
@@ -416,12 +417,15 @@
     } catch (err) {
       console.error('Failed to go to previous track:', err);
       showToast('Failed to go to previous track', 'error');
+    } finally {
+      isSkipping = false;
     }
   }
 
   async function handleSkipForward() {
-    if (!currentTrack) return;
+    if (!currentTrack || isSkipping) return;
 
+    isSkipping = true;
     try {
       const nextTrackResult = await invoke<BackendQueueTrack | null>('next_track');
       if (nextTrackResult) {
@@ -435,6 +439,8 @@
     } catch (err) {
       console.error('Failed to go to next track:', err);
       showToast('Failed to go to next track', 'error');
+    } finally {
+      isSkipping = false;
     }
   }
 
@@ -671,6 +677,7 @@
   let pollInterval: ReturnType<typeof setInterval> | null = null;
 
   let isAdvancingTrack = false; // Prevent multiple advances
+  let isSkipping = false; // Prevent concurrent skip operations
 
   async function pollPlaybackState() {
     if (!currentTrack) return;

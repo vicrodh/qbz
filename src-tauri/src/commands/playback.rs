@@ -103,67 +103,74 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
     Ok(bytes.to_vec())
 }
 
-/// Spawn background task to prefetch next track
+/// Number of tracks to prefetch ahead
+const PREFETCH_COUNT: usize = 3;
+
+/// Spawn background tasks to prefetch upcoming tracks
 fn spawn_prefetch(
     client: Arc<Mutex<QobuzClient>>,
     cache: Arc<AudioCache>,
     queue: &QueueManager,
 ) {
-    // Get next track from queue
-    let next_track = match queue.peek_next() {
-        Some(t) => t,
-        None => {
-            log::debug!("No next track to prefetch");
-            return;
-        }
-    };
+    // Get upcoming tracks from queue
+    let upcoming_tracks = queue.peek_upcoming(PREFETCH_COUNT);
 
-    let track_id = next_track.id;
-    let track_title = next_track.title.clone();
-
-    // Check if already cached or being fetched
-    if cache.contains(track_id) {
-        log::debug!("Next track {} already cached", track_id);
+    if upcoming_tracks.is_empty() {
+        log::debug!("No upcoming tracks to prefetch");
         return;
     }
 
-    if cache.is_fetching(track_id) {
-        log::debug!("Next track {} already being fetched", track_id);
-        return;
+    for track in upcoming_tracks {
+        let track_id = track.id;
+        let track_title = track.title.clone();
+
+        // Check if already cached or being fetched
+        if cache.contains(track_id) {
+            log::debug!("Track {} already cached", track_id);
+            continue;
+        }
+
+        if cache.is_fetching(track_id) {
+            log::debug!("Track {} already being fetched", track_id);
+            continue;
+        }
+
+        // Mark as fetching
+        cache.mark_fetching(track_id);
+
+        let client_clone = client.clone();
+        let cache_clone = cache.clone();
+
+        log::info!("Prefetching track: {} - {}", track_id, track_title);
+
+        // Spawn background task for each track
+        tokio::spawn(async move {
+            let result = async {
+                let client_guard = client_clone.lock().await;
+                let stream_url = client_guard
+                    .get_stream_url_with_fallback(track_id, Quality::HiRes)
+                    .await
+                    .map_err(|e| format!("Failed to get stream URL: {}", e))?;
+                drop(client_guard);
+
+                let data = download_audio(&stream_url.url).await?;
+                Ok::<Vec<u8>, String>(data)
+            }
+            .await;
+
+            match result {
+                Ok(data) => {
+                    cache_clone.insert(track_id, data);
+                    log::info!("Prefetch complete for track {}", track_id);
+                }
+                Err(e) => {
+                    log::warn!("Prefetch failed for track {}: {}", track_id, e);
+                }
+            }
+
+            cache_clone.unmark_fetching(track_id);
+        });
     }
-
-    // Mark as fetching
-    cache.mark_fetching(track_id);
-
-    log::info!("Prefetching next track: {} - {}", track_id, track_title);
-
-    // Spawn background task
-    tokio::spawn(async move {
-        let result = async {
-            let client_guard = client.lock().await;
-            let stream_url = client_guard
-                .get_stream_url_with_fallback(track_id, Quality::HiRes)
-                .await
-                .map_err(|e| format!("Failed to get stream URL: {}", e))?;
-            drop(client_guard);
-
-            let data = download_audio(&stream_url.url).await?;
-            Ok::<Vec<u8>, String>(data)
-        }
-        .await;
-
-        match result {
-            Ok(data) => {
-                cache.insert(track_id, data);
-                log::info!("Prefetch complete for track {}", track_id);
-            }
-            Err(e) => {
-                log::warn!("Prefetch failed for track {}: {}", track_id, e);
-            }
-        }
-
-        cache.unmark_fetching(track_id);
-    });
 }
 
 /// Pause playback
