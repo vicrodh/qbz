@@ -307,15 +307,21 @@ impl QobuzClient {
     /// Get playlist by ID
     pub async fn get_playlist(&self, playlist_id: u64) -> Result<Playlist> {
         let url = endpoints::build_url(paths::PLAYLIST_GET);
-        let response: Value = self
+        let mut request = self
             .http
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
-            .query(&[("playlist_id", playlist_id.to_string()), ("limit", "500".to_string())])
-            .send()
-            .await?
-            .json()
-            .await?;
+            .query(&[
+                ("playlist_id", playlist_id.to_string()),
+                ("limit", "500".to_string()),
+                ("extra", "tracks".to_string()),
+            ]);
+
+        if let Ok(token) = self.auth_token().await {
+            request = request.header("X-User-Auth-Token", token);
+        }
+
+        let response: Value = request.send().await?.json().await?;
 
         Ok(serde_json::from_value(response)?)
     }
