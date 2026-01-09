@@ -5,6 +5,9 @@
 
 pub mod api;
 pub mod cache;
+// NOTE: cast module disabled due to thread safety issues with rust_cast (Rc not Send)
+// and rupnp API changes. Scaffolding preserved in src/cast/ for future work.
+// pub mod cast;
 pub mod commands;
 pub mod config;
 pub mod credentials;
@@ -93,6 +96,11 @@ pub fn run() {
     // Initialize library state
     let library_state = library::init_library_state()
         .expect("Failed to initialize library database");
+
+    // NOTE: Casting module is scaffolded but not wired yet.
+    // The cast module has thread safety issues with rust_cast (uses Rc, not Send)
+    // and API compatibility issues with rupnp that need to be resolved first.
+    // See src/cast/ for the scaffolded implementation.
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -210,6 +218,10 @@ pub fn run() {
             library::commands::discogs_has_credentials,
             library::commands::library_fetch_missing_artwork,
             library::commands::library_fetch_album_artwork,
+            // Casting commands - NOT WIRED YET (see NOTE above)
+            // cast::commands::cast_* - Chromecast
+            // cast::airplay::commands::airplay_* - AirPlay
+            // cast::dlna::commands::dlna_* - DLNA/UPnP
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

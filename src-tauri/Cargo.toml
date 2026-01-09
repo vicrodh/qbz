@@ -76,3 +76,12 @@ keyring = "3"
 
 # Clipboard
 tauri-plugin-clipboard-manager = "2"
+
+# Casting (Chromecast, AirPlay, DLNA) - dependencies for future use
+# Module currently disabled in lib.rs due to thread safety issues
+# rust_cast = "0.18.1"
+# mdns-sd = "0.11"
+# tiny_http = "0.12"
+# rupnp = "3"
+# futures-util = "0.3"
+# home = "=0.5.11"
