@@ -191,12 +191,15 @@
     gap: 10px;
     width: 100%;
     height: 32px;
+    min-height: 32px;
+    max-height: 32px;
     background-color: var(--bg-tertiary);
     border-radius: 6px;
     padding: 0 10px;
     border: none;
     cursor: pointer;
     transition: background-color 150ms ease;
+    flex-shrink: 0;
   }
 
   .search-container:hover {
