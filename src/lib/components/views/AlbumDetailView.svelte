@@ -3,11 +3,16 @@
   import TrackRow from '../TrackRow.svelte';
 
   interface Track {
+    id: number;
     number: number;
     title: string;
     artist?: string;
     duration: string;
+    durationSeconds: number;
     quality?: string;
+    hires?: boolean;
+    bitDepth?: number;
+    samplingRate?: number;
   }
 
   interface Props {
@@ -25,9 +30,10 @@
     };
     onBack: () => void;
     onArtistClick?: () => void;
+    onTrackPlay?: (track: Track) => void;
   }
 
-  let { album, onBack, onArtistClick }: Props = $props();
+  let { album, onBack, onArtistClick, onTrackPlay }: Props = $props();
 
   let currentTrack = $state<number | null>(null);
   let isFavorite = $state(false);
@@ -112,8 +118,11 @@
           artist={track.artist}
           duration={track.duration}
           quality={track.quality}
-          isPlaying={currentTrack === track.number}
-          onPlay={() => (currentTrack = track.number)}
+          isPlaying={currentTrack === track.id}
+          onPlay={() => {
+            currentTrack = track.id;
+            onTrackPlay?.(track);
+          }}
         />
       {/each}
     </div>

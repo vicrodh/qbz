@@ -51,11 +51,16 @@
   }
 
   interface Track {
+    id: number;
     number: number;
     title: string;
     artist?: string;
     duration: string;
+    durationSeconds: number;
     quality?: string;
+    hires?: boolean;
+    bitDepth?: number;
+    samplingRate?: number;
   }
 
   interface AlbumDetail {
@@ -175,11 +180,16 @@
       trackCount: album.tracks_count || album.tracks?.items?.length || 0,
       duration: formatDurationMinutes(album.duration || 0),
       tracks: album.tracks?.items?.map((track, index) => ({
+        id: track.id,
         number: index + 1,
         title: track.title,
         artist: track.performer?.name,
         duration: formatDuration(track.duration),
-        quality: track.hires_streamable ? 'Hi-Res' : 'CD'
+        durationSeconds: track.duration,
+        quality: track.hires_streamable ? 'Hi-Res' : 'CD',
+        hires: track.hires_streamable,
+        bitDepth: track.maximum_bit_depth,
+        samplingRate: track.maximum_sampling_rate
       })) || []
     };
   }
@@ -220,14 +230,54 @@
 
     // Try to play the track
     try {
-      showToast(`Playing: ${track.title}`, 'info');
+      console.log('Invoking play_track with trackId:', track.id);
+      showToast(`Loading: ${track.title}`, 'info');
       await invoke('play_track', { trackId: track.id });
+      console.log('play_track invoke succeeded');
       isPlaying = true;
+      showToast(`Playing: ${track.title}`, 'success');
     } catch (err) {
       console.error('Failed to play track:', err);
       showToast(`Playback error: ${err}`, 'error');
-      // For now, just set isPlaying anyway for UI demo
+      isPlaying = false;
+    }
+  }
+
+  // Handle track play from album detail view
+  async function handleAlbumTrackPlay(track: Track) {
+    console.log('Playing album track:', track);
+
+    // Use album artwork from selectedAlbum
+    const artwork = selectedAlbum?.artwork || '';
+    const quality = track.hires && track.bitDepth && track.samplingRate
+      ? `${track.bitDepth}bit/${track.samplingRate}kHz`
+      : 'CD Quality';
+
+    currentTrack = {
+      id: track.id,
+      title: track.title,
+      artist: track.artist || selectedAlbum?.artist || 'Unknown Artist',
+      album: selectedAlbum?.title || '',
+      artwork,
+      duration: track.durationSeconds,
+      quality
+    };
+
+    duration = track.durationSeconds;
+    currentTime = 0;
+
+    // Try to play the track
+    try {
+      console.log('Invoking play_track with trackId:', track.id);
+      showToast(`Loading: ${track.title}`, 'info');
+      await invoke('play_track', { trackId: track.id });
+      console.log('play_track invoke succeeded');
       isPlaying = true;
+      showToast(`Playing: ${track.title}`, 'success');
+    } catch (err) {
+      console.error('Failed to play track:', err);
+      showToast(`Playback error: ${err}`, 'error');
+      isPlaying = false;
     }
   }
 
@@ -398,6 +448,7 @@
         <AlbumDetailView
           album={selectedAlbum}
           onBack={goBack}
+          onTrackPlay={handleAlbumTrackPlay}
         />
       {:else if activeView === 'library'}
         <div class="placeholder-view">
