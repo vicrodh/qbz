@@ -9,10 +9,11 @@ use std::collections::BTreeMap;
 
 const LASTFM_API_URL: &str = "https://ws.audioscrobbler.com/2.0/";
 
-// Last.fm API credentials - users need to create their own app at https://www.last.fm/api/account/create
-// For now using placeholder - in production this should be configurable or use OAuth
-const API_KEY: &str = ""; // User must set this
-const API_SECRET: &str = ""; // User must set this
+// Last.fm API credentials
+// Set via environment variables at build time, or users can enter their own
+// To set: LASTFM_API_KEY=xxx LASTFM_API_SECRET=yyy cargo build
+const DEFAULT_API_KEY: Option<&str> = option_env!("LASTFM_API_KEY");
+const DEFAULT_API_SECRET: Option<&str> = option_env!("LASTFM_API_SECRET");
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LastFmSession {
@@ -48,7 +49,17 @@ pub struct LastFmClient {
 
 impl Default for LastFmClient {
     fn default() -> Self {
-        Self::new(API_KEY.to_string(), API_SECRET.to_string())
+        Self::new(
+            DEFAULT_API_KEY.unwrap_or("").to_string(),
+            DEFAULT_API_SECRET.unwrap_or("").to_string(),
+        )
+    }
+}
+
+impl LastFmClient {
+    /// Check if embedded (build-time) credentials are available
+    pub fn has_embedded_credentials() -> bool {
+        DEFAULT_API_KEY.is_some() && DEFAULT_API_SECRET.is_some()
     }
 }
 

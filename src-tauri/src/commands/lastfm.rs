@@ -2,14 +2,26 @@
 
 use tauri::State;
 
-use crate::lastfm::LastFmSession;
+use crate::lastfm::{LastFmClient, LastFmSession};
 use crate::AppState;
 
-/// Check if Last.fm has API credentials configured
+/// Check if Last.fm has embedded (build-time) credentials
+#[tauri::command]
+pub fn lastfm_has_embedded_credentials() -> bool {
+    LastFmClient::has_embedded_credentials()
+}
+
+/// Check if Last.fm has API credentials configured (embedded or user-provided)
 #[tauri::command]
 pub async fn lastfm_has_credentials(state: State<'_, AppState>) -> Result<bool, String> {
     let client = state.lastfm.lock().await;
     Ok(client.has_credentials())
+}
+
+/// Open a URL in the default browser
+#[tauri::command]
+pub async fn lastfm_open_auth_url(url: String) -> Result<(), String> {
+    open::that(&url).map_err(|e| format!("Failed to open browser: {}", e))
 }
 
 /// Set Last.fm API credentials

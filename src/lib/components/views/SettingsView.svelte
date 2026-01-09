@@ -78,6 +78,7 @@
   let lastfmAuthToken = $state('');
   let lastfmConnecting = $state(false);
   let showLastfmConfig = $state(false);
+  let hasEmbeddedCredentials = $state(false);
 
   // Load saved settings on mount
   onMount(() => {
@@ -116,26 +117,27 @@
 
   async function loadLastfmState() {
     try {
-      // Check if Last.fm credentials are configured
-      const hasCredentials = await invoke<boolean>('lastfm_has_credentials');
+      // Check if embedded (build-time) credentials are available
+      hasEmbeddedCredentials = await invoke<boolean>('lastfm_has_embedded_credentials');
 
-      // Load saved credentials from localStorage
+      // Load saved credentials from localStorage (for user-provided keys)
       const savedApiKey = localStorage.getItem('qbz-lastfm-api-key');
       const savedApiSecret = localStorage.getItem('qbz-lastfm-api-secret');
       const savedSessionKey = localStorage.getItem('qbz-lastfm-session-key');
       const savedUsername = localStorage.getItem('qbz-lastfm-username');
       const savedScrobbling = localStorage.getItem('qbz-lastfm-scrobbling');
 
+      // If we have user-provided credentials, set them
       if (savedApiKey && savedApiSecret) {
         lastfmApiKey = savedApiKey;
         lastfmApiSecret = savedApiSecret;
-        // Set credentials in backend
         await invoke('lastfm_set_credentials', {
           apiKey: savedApiKey,
           apiSecret: savedApiSecret
         });
       }
 
+      // Restore session if available
       if (savedSessionKey && savedUsername) {
         await invoke('lastfm_set_session', { sessionKey: savedSessionKey });
         lastfmConnected = true;
@@ -151,31 +153,38 @@
   }
 
   async function handleLastfmConnect() {
-    if (!lastfmApiKey || !lastfmApiSecret) {
+    // If we don't have credentials (embedded or user-provided), show config
+    const hasCredentials = hasEmbeddedCredentials || (lastfmApiKey && lastfmApiSecret);
+    if (!hasCredentials) {
       showLastfmConfig = true;
       return;
     }
 
     lastfmConnecting = true;
     try {
-      // Save credentials
-      localStorage.setItem('qbz-lastfm-api-key', lastfmApiKey);
-      localStorage.setItem('qbz-lastfm-api-secret', lastfmApiSecret);
-
-      // Set credentials in backend
-      await invoke('lastfm_set_credentials', {
-        apiKey: lastfmApiKey,
-        apiSecret: lastfmApiSecret
-      });
+      // If user provided credentials, save and set them
+      if (lastfmApiKey && lastfmApiSecret) {
+        localStorage.setItem('qbz-lastfm-api-key', lastfmApiKey);
+        localStorage.setItem('qbz-lastfm-api-secret', lastfmApiSecret);
+        await invoke('lastfm_set_credentials', {
+          apiKey: lastfmApiKey,
+          apiSecret: lastfmApiSecret
+        });
+      }
 
       // Get auth URL and token
       const [token, url] = await invoke<[string, string]>('lastfm_get_auth_url');
       lastfmAuthToken = token;
 
-      // Open browser for authorization
-      window.open(url, '_blank');
+      // Open browser for authorization using Tauri's native opener
+      try {
+        await invoke('lastfm_open_auth_url', { url });
+      } catch {
+        // Fallback to window.open if native opener fails
+        window.open(url, '_blank');
+      }
 
-      // Show message to user - they need to authorize and then click a button
+      // Show the "I've Authorized" button
       showLastfmConfig = true;
     } catch (err) {
       console.error('Failed to start Last.fm auth:', err);
@@ -444,7 +453,7 @@
         <Toggle enabled={scrobbling} onchange={handleScrobblingChange} />
       </div>
     {:else}
-      <div class="setting-row" class:last={!showLastfmConfig}>
+      <div class="setting-row" class:last={!showLastfmConfig && !lastfmAuthToken}>
         <span class="setting-label">Last.fm</span>
         <button
           class="connect-btn"
@@ -455,13 +464,34 @@
         </button>
       </div>
 
-      {#if showLastfmConfig}
+      {#if lastfmAuthToken}
+        <!-- Waiting for user to authorize in browser -->
+        <div class="lastfm-config">
+          <p class="auth-info">
+            A browser window has been opened. Please authorize QBZ on Last.fm, then click the button below.
+          </p>
+          <button
+            class="auth-complete-btn"
+            onclick={handleLastfmCompleteAuth}
+            disabled={lastfmConnecting}
+          >
+            {lastfmConnecting ? 'Verifying...' : 'I\'ve Authorized'}
+          </button>
+          <button
+            class="auth-cancel-btn"
+            onclick={() => { lastfmAuthToken = ''; showLastfmConfig = false; }}
+          >
+            Cancel
+          </button>
+        </div>
+      {:else if showLastfmConfig && !hasEmbeddedCredentials}
+        <!-- No embedded credentials, user needs to provide their own -->
         <div class="lastfm-config">
           <p class="config-info">
-            To connect Last.fm, you need API credentials.
+            QBZ needs Last.fm API credentials to enable scrobbling.
             <a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">
               Create an API account
-            </a>
+            </a> and enter your credentials below.
           </p>
           <div class="config-field">
             <label for="lastfm-api-key">API Key</label>
@@ -481,27 +511,13 @@
               placeholder="Enter your shared secret"
             />
           </div>
-
-          {#if lastfmAuthToken}
-            <p class="auth-info">
-              Authorization window opened. After authorizing in the browser, click below:
-            </p>
-            <button
-              class="auth-complete-btn"
-              onclick={handleLastfmCompleteAuth}
-              disabled={lastfmConnecting}
-            >
-              {lastfmConnecting ? 'Verifying...' : 'I\'ve Authorized'}
-            </button>
-          {:else}
-            <button
-              class="auth-start-btn"
-              onclick={handleLastfmConnect}
-              disabled={!lastfmApiKey || !lastfmApiSecret || lastfmConnecting}
-            >
-              {lastfmConnecting ? 'Opening...' : 'Authorize with Last.fm'}
-            </button>
-          {/if}
+          <button
+            class="auth-start-btn"
+            onclick={handleLastfmConnect}
+            disabled={!lastfmApiKey || !lastfmApiSecret || lastfmConnecting}
+          >
+            {lastfmConnecting ? 'Opening...' : 'Authorize with Last.fm'}
+          </button>
         </div>
       {/if}
     {/if}
@@ -837,6 +853,25 @@
   .auth-complete-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .auth-cancel-btn {
+    width: 100%;
+    padding: 10px 16px;
+    margin-top: 8px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+    background: none;
+    border: 1px solid var(--text-muted);
+    color: var(--text-muted);
+  }
+
+  .auth-cancel-btn:hover {
+    border-color: var(--text-secondary);
+    color: var(--text-secondary);
   }
 
   .connect-btn:disabled {

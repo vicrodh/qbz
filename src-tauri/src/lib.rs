@@ -141,10 +141,12 @@ pub fn run() {
             commands::get_cache_stats,
             commands::clear_cache,
             // Last.fm commands
+            commands::lastfm_has_embedded_credentials,
             commands::lastfm_has_credentials,
             commands::lastfm_set_credentials,
             commands::lastfm_is_authenticated,
             commands::lastfm_get_auth_url,
+            commands::lastfm_open_auth_url,
             commands::lastfm_authenticate,
             commands::lastfm_set_session,
             commands::lastfm_disconnect,
