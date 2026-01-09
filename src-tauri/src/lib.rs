@@ -8,6 +8,7 @@ pub mod cache;
 pub mod commands;
 pub mod config;
 pub mod lastfm;
+pub mod library;
 pub mod media_controls;
 pub mod player;
 pub mod queue;
@@ -83,9 +84,14 @@ pub fn run() {
 
     log::info!("QBZ starting...");
 
+    // Initialize library state
+    let library_state = library::init_library_state()
+        .expect("Failed to initialize library database");
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(AppState::new())
+        .manage(library_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -158,6 +164,20 @@ pub fn run() {
             commands::get_qobuz_track_url,
             commands::get_qobuz_album_url,
             commands::get_qobuz_artist_url,
+            // Local library commands
+            library::commands::library_add_folder,
+            library::commands::library_remove_folder,
+            library::commands::library_get_folders,
+            library::commands::library_scan,
+            library::commands::library_get_scan_progress,
+            library::commands::library_get_albums,
+            library::commands::library_get_album_tracks,
+            library::commands::library_get_artists,
+            library::commands::library_search,
+            library::commands::library_get_stats,
+            library::commands::library_clear,
+            library::commands::library_get_track,
+            library::commands::library_play_track,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

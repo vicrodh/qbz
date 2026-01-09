@@ -58,6 +58,12 @@ notify-rust = "4"
 # URL opening
 open = "5"
 
+# Local library
+walkdir = "2"
+lofty = "0.18"
+rusqlite = { version = "0.31", features = ["bundled"] }
+dirs = "5"
+
 # Storage
 # sled = "0.34"
 
