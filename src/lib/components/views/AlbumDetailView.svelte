@@ -31,9 +31,12 @@
     onBack: () => void;
     onArtistClick?: () => void;
     onTrackPlay?: (track: Track) => void;
+    onPlayAll?: () => void;
+    onShuffleAll?: () => void;
+    onAddToQueue?: () => void;
   }
 
-  let { album, onBack, onArtistClick, onTrackPlay }: Props = $props();
+  let { album, onBack, onArtistClick, onTrackPlay, onPlayAll, onShuffleAll, onAddToQueue }: Props = $props();
 
   let currentTrack = $state<number | null>(null);
   let isFavorite = $state(false);
@@ -71,11 +74,12 @@
           style="background-color: {playBtnHovered ? 'var(--accent-hover)' : 'var(--accent-primary)'}"
           onmouseenter={() => (playBtnHovered = true)}
           onmouseleave={() => (playBtnHovered = false)}
+          onclick={onPlayAll}
         >
           <Play size={18} fill="white" color="white" />
           <span>Play</span>
         </button>
-        <button class="secondary-btn">
+        <button class="secondary-btn" onclick={onShuffleAll}>
           <Shuffle size={18} />
           <span>Shuffle</span>
         </button>
@@ -86,7 +90,7 @@
             fill={isFavorite ? 'var(--accent-primary)' : 'none'}
           />
         </button>
-        <button class="icon-btn">
+        <button class="icon-btn" onclick={onAddToQueue}>
           <Plus size={20} color="white" />
         </button>
         <button class="icon-btn">

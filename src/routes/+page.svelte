@@ -541,6 +541,54 @@
     }
   }
 
+  // Play all tracks from album (starting from first track)
+  async function handlePlayAllAlbum() {
+    if (!selectedAlbum?.tracks?.length) return;
+    const firstTrack = selectedAlbum.tracks[0];
+    await handleAlbumTrackPlay(firstTrack);
+  }
+
+  // Shuffle play all tracks from album
+  async function handleShuffleAlbum() {
+    if (!selectedAlbum?.tracks?.length) return;
+
+    // Set shuffle mode first
+    try {
+      await invoke('set_shuffle', { enabled: true });
+      isShuffle = true;
+    } catch (err) {
+      console.error('Failed to enable shuffle:', err);
+    }
+
+    // Then play from first track (queue will be shuffled)
+    await handlePlayAllAlbum();
+    showToast('Shuffle play enabled', 'info');
+  }
+
+  // Add all album tracks to existing queue
+  async function handleAddAlbumToQueue() {
+    if (!selectedAlbum?.tracks?.length) return;
+
+    const artwork = selectedAlbum.artwork || '';
+    const queueTracks: BackendQueueTrack[] = selectedAlbum.tracks.map(t => ({
+      id: t.id,
+      title: t.title,
+      artist: t.artist || selectedAlbum?.artist || 'Unknown Artist',
+      album: selectedAlbum?.title || '',
+      duration_secs: t.durationSeconds,
+      artwork_url: artwork || null
+    }));
+
+    try {
+      await invoke('add_tracks_to_queue', { tracks: queueTracks });
+      await syncQueueState();
+      showToast(`Added ${queueTracks.length} tracks to queue`, 'success');
+    } catch (err) {
+      console.error('Failed to add to queue:', err);
+      showToast('Failed to add to queue', 'error');
+    }
+  }
+
   // Toast Functions
   function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
     toast = { message, type };
@@ -730,6 +778,9 @@
           album={selectedAlbum}
           onBack={goBack}
           onTrackPlay={handleAlbumTrackPlay}
+          onPlayAll={handlePlayAllAlbum}
+          onShuffleAll={handleShuffleAlbum}
+          onAddToQueue={handleAddAlbumToQueue}
         />
       {:else if activeView === 'library'}
         <div class="placeholder-view">
