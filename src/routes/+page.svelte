@@ -13,6 +13,7 @@
   import SearchView from '$lib/components/views/SearchView.svelte';
   import SettingsView from '$lib/components/views/SettingsView.svelte';
   import AlbumDetailView from '$lib/components/views/AlbumDetailView.svelte';
+  import ArtistDetailView from '$lib/components/views/ArtistDetailView.svelte';
   import PlaylistDetailView from '$lib/components/views/PlaylistDetailView.svelte';
   import FavoritesView from '$lib/components/views/FavoritesView.svelte';
 
@@ -50,6 +51,44 @@
     maximum_bit_depth?: number;
     maximum_sampling_rate?: number;
     tracks?: { items: QobuzTrack[] };
+  }
+
+  interface QobuzArtist {
+    id: number;
+    name: string;
+    image?: { small?: string; thumbnail?: string; large?: string };
+    albums_count?: number;
+    biography?: {
+      summary?: string;
+      content?: string;
+      source?: string;
+    };
+    albums?: {
+      items: QobuzAlbum[];
+      total: number;
+      offset: number;
+      limit: number;
+    };
+  }
+
+  interface ArtistDetail {
+    id: number;
+    name: string;
+    image?: string;
+    albumsCount?: number;
+    biography?: {
+      summary?: string;
+      content?: string;
+      source?: string;
+    };
+    albums: {
+      id: string;
+      title: string;
+      artwork: string;
+      year?: string;
+      quality: string;
+    }[];
+    totalAlbums: number;
   }
 
   interface Track {
@@ -121,10 +160,11 @@
   let userInfo = $state<{ userName: string; subscription: string } | null>(null);
 
   // View State
-  type ViewType = 'home' | 'search' | 'library' | 'settings' | 'album' | 'playlist' | 'favorites';
+  type ViewType = 'home' | 'search' | 'library' | 'settings' | 'album' | 'artist' | 'playlist' | 'favorites';
   let activeView = $state<ViewType>('home');
   let viewHistory = $state<ViewType[]>(['home']);
   let selectedAlbum = $state<AlbumDetail | null>(null);
+  let selectedArtist = $state<ArtistDetail | null>(null);
   let selectedPlaylistId = $state<number | null>(null);
 
   // Overlay States
@@ -168,6 +208,9 @@
       activeView = viewHistory[viewHistory.length - 1];
       if (activeView !== 'album') {
         selectedAlbum = null;
+      }
+      if (activeView !== 'artist') {
+        selectedArtist = null;
       }
       if (activeView !== 'playlist') {
         selectedPlaylistId = null;
@@ -223,6 +266,47 @@
         bitDepth: track.maximum_bit_depth,
         samplingRate: track.maximum_sampling_rate
       })) || []
+    };
+  }
+
+  async function handleArtistClick(artistId: number) {
+    try {
+      showToast('Loading artist...', 'info');
+      const artist = await invoke<QobuzArtist>('get_artist', { artistId });
+      console.log('Artist details:', artist);
+
+      selectedArtist = convertQobuzArtist(artist);
+      navigateTo('artist');
+      hideToast();
+    } catch (err) {
+      console.error('Failed to load artist:', err);
+      showToast('Failed to load artist', 'error');
+    }
+  }
+
+  function convertQobuzArtist(artist: QobuzArtist): ArtistDetail {
+    const image = artist.image?.large || artist.image?.thumbnail || artist.image?.small;
+
+    return {
+      id: artist.id,
+      name: artist.name,
+      image,
+      albumsCount: artist.albums_count,
+      biography: artist.biography,
+      albums: artist.albums?.items?.map(album => {
+        const artwork = album.image?.large || album.image?.thumbnail || album.image?.small || '';
+        const quality = album.hires_streamable && album.maximum_bit_depth && album.maximum_sampling_rate
+          ? `${album.maximum_bit_depth}bit/${album.maximum_sampling_rate}kHz`
+          : 'CD Quality';
+        return {
+          id: album.id,
+          title: album.title,
+          artwork,
+          year: album.release_date_original?.split('-')[0],
+          quality
+        };
+      }) || [],
+      totalAlbums: artist.albums?.total || artist.albums_count || 0
     };
   }
 
@@ -975,10 +1059,17 @@
         <AlbumDetailView
           album={selectedAlbum}
           onBack={goBack}
+          onArtistClick={() => selectedAlbum && handleArtistClick(0)}
           onTrackPlay={handleAlbumTrackPlay}
           onPlayAll={handlePlayAllAlbum}
           onShuffleAll={handleShuffleAlbum}
           onAddToQueue={handleAddAlbumToQueue}
+        />
+      {:else if activeView === 'artist' && selectedArtist}
+        <ArtistDetailView
+          artist={selectedArtist}
+          onBack={goBack}
+          onAlbumClick={handleAlbumClick}
         />
       {:else if activeView === 'library'}
         <div class="placeholder-view">

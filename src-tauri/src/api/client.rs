@@ -157,13 +157,17 @@ impl QobuzClient {
     // === Search endpoints ===
 
     /// Search for albums
-    pub async fn search_albums(&self, query: &str, limit: u32) -> Result<SearchResultsPage<Album>> {
+    pub async fn search_albums(&self, query: &str, limit: u32, offset: u32) -> Result<SearchResultsPage<Album>> {
         let url = endpoints::build_url(paths::ALBUM_SEARCH);
         let response: Value = self
             .http
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
-            .query(&[("query", query), ("limit", &limit.to_string())])
+            .query(&[
+                ("query", query),
+                ("limit", &limit.to_string()),
+                ("offset", &offset.to_string()),
+            ])
             .send()
             .await?
             .json()
@@ -177,13 +181,17 @@ impl QobuzClient {
     }
 
     /// Search for tracks
-    pub async fn search_tracks(&self, query: &str, limit: u32) -> Result<SearchResultsPage<Track>> {
+    pub async fn search_tracks(&self, query: &str, limit: u32, offset: u32) -> Result<SearchResultsPage<Track>> {
         let url = endpoints::build_url(paths::TRACK_SEARCH);
         let response: Value = self
             .http
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
-            .query(&[("query", query), ("limit", &limit.to_string())])
+            .query(&[
+                ("query", query),
+                ("limit", &limit.to_string()),
+                ("offset", &offset.to_string()),
+            ])
             .send()
             .await?
             .json()
@@ -197,13 +205,17 @@ impl QobuzClient {
     }
 
     /// Search for artists
-    pub async fn search_artists(&self, query: &str, limit: u32) -> Result<SearchResultsPage<Artist>> {
+    pub async fn search_artists(&self, query: &str, limit: u32, offset: u32) -> Result<SearchResultsPage<Artist>> {
         let url = endpoints::build_url(paths::ARTIST_SEARCH);
         let response: Value = self
             .http
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
-            .query(&[("query", query), ("limit", &limit.to_string())])
+            .query(&[
+                ("query", query),
+                ("limit", &limit.to_string()),
+                ("offset", &offset.to_string()),
+            ])
             .send()
             .await?
             .json()
@@ -251,11 +263,32 @@ impl QobuzClient {
     }
 
     /// Get artist by ID
-    pub async fn get_artist(&self, artist_id: u64, with_albums: bool) -> Result<Artist> {
+    pub async fn get_artist(
+        &self,
+        artist_id: u64,
+        with_albums: bool,
+    ) -> Result<Artist> {
+        self.get_artist_with_pagination(artist_id, with_albums, None, None).await
+    }
+
+    /// Get artist by ID with album pagination
+    pub async fn get_artist_with_pagination(
+        &self,
+        artist_id: u64,
+        with_albums: bool,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Artist> {
         let url = endpoints::build_url(paths::ARTIST_GET);
         let mut query = vec![("artist_id", artist_id.to_string())];
         if with_albums {
             query.push(("extra", "albums".to_string()));
+        }
+        if let Some(l) = limit {
+            query.push(("limit", l.to_string()));
+        }
+        if let Some(o) = offset {
+            query.push(("offset", o.to_string()));
         }
 
         let response: Value = self

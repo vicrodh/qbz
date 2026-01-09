@@ -99,6 +99,7 @@ pub fn run() {
             commands::search_artists,
             commands::get_album,
             commands::get_track,
+            commands::get_artist,
             // Playback commands
             commands::play_track,
             commands::pause_playback,

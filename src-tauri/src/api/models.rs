@@ -136,6 +136,31 @@ pub struct Artist {
     pub image: Option<ImageSet>,
     #[serde(default)]
     pub albums_count: Option<u32>,
+    /// Biography (available when fetching full artist details)
+    #[serde(default)]
+    pub biography: Option<ArtistBiography>,
+    /// Albums (available when fetching with extra=albums)
+    #[serde(default)]
+    pub albums: Option<ArtistAlbums>,
+}
+
+/// Artist biography content
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtistBiography {
+    pub summary: Option<String>,
+    pub content: Option<String>,
+    pub source: Option<String>,
+}
+
+/// Artist albums container
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtistAlbums {
+    pub items: Vec<Album>,
+    pub total: u32,
+    #[serde(default)]
+    pub offset: u32,
+    #[serde(default)]
+    pub limit: u32,
 }
 
 /// Playlist model
