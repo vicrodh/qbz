@@ -1,14 +1,29 @@
 <p align="center">
-  <img src="static/logo.png" alt="QBZ-NIX logo" width="180" />
+  <img src="static/logo.png" alt="QBZ logo" width="180" />
 </p>
 
-# QBZ-NIX
+<p align="center">
+  <a href="https://github.com/vicrodh/qbz"><img src="https://img.shields.io/badge/github-vicrodh%2Fqbz-0b0b0b?style=flat&logo=github" alt="GitHub repo" /></a>
+  <a href="https://github.com/vicrodh/qbz/releases"><img src="https://img.shields.io/github/v/release/vicrodh/qbz?style=flat" alt="Release" /></a>
+  <a href="https://github.com/vicrodh/qbz"><img src="https://img.shields.io/badge/version-0.1.0-0b0b0b?style=flat" alt="Version" /></a>
+  <a href="https://github.com/vicrodh/qbz"><img src="https://img.shields.io/github/license/vicrodh/qbz?style=flat" alt="License" /></a>
+  <a href="https://github.com/vicrodh/qbz"><img src="https://img.shields.io/github/last-commit/vicrodh/qbz?style=flat" alt="Last commit" /></a>
+  <a href="https://github.com/vicrodh/qbz"><img src="https://img.shields.io/badge/platform-Linux-0b0b0b?style=flat&logo=linux" alt="Platform" /></a>
+  <a href="https://github.com/vicrodh/qbz"><img src="https://img.shields.io/badge/lang-Rust-0b0b0b?style=flat&logo=rust" alt="Language: Rust" /></a>
+  <a href="https://github.com/vicrodh/qbz"><img src="https://img.shields.io/badge/ui-Svelte-0b0b0b?style=flat&logo=svelte" alt="UI: Svelte" /></a>
+</p>
 
-Free and open source (FOSS) Qobuz client for Linux with native, high-fidelity playback. QBZ-NIX goes beyond wrapper apps by using a purpose-built Rust playback engine that removes browser sample-rate limits, adds DAC passthrough, and delivers true hi-res audio.
+# QBZ
 
-## Why QBZ-NIX
+QBZ is a free and open source (FOSS) Qobuz client for Linux with native, high-fidelity playback. It is a real desktop application, not a web wrapper, so it can use DAC passthrough, preserve hi-res sample rates end-to-end, and deliver bit-perfect audio.
 
-Browsers cap audio output around 48 kHz, while Qobuz streams up to 192 kHz. QBZ-NIX uses a native playback pipeline so your system and DAC can receive the original resolution. This is a native client, not a wrapper, which enables features like DAC passthrough, real device control, caching, and media integration.
+## Why QBZ
+
+Browsers cap audio output around 48 kHz, while Qobuz streams up to 192 kHz. QBZ uses a native playback pipeline with direct device control so your system and DAC receive the original resolution, with caching and system integrations that wrappers cannot provide.
+
+## Screenshots
+
+Coming soon.
 
 ## Features
 
@@ -39,11 +54,11 @@ Browsers cap audio output around 48 kHz, while Qobuz streams up to 192 kHz. QBZ-
 
 ## Open Source
 
-QBZ-NIX is MIT-licensed and fully open source. No telemetry, no lock-in, and no hidden services. Just a clean, transparent player built for Linux audio fans.
+QBZ is MIT-licensed and fully open source. No telemetry, no lock-in, and no hidden services. Just a clean, transparent player built for Linux audio fans.
 
 ## Inspiration
 
-QBZ-NIX draws inspiration from projects like qobuz-dl, and from the broader Linux audio community that values open tools and high-fidelity playback.
+QBZ draws inspiration from projects like qobuz-dl, and from the broader Linux audio community that values open tools and high-fidelity playback.
 
 ## Tech Stack
 
