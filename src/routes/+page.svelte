@@ -1050,13 +1050,19 @@
         togglePlay();
         break;
       case 'ArrowLeft':
-        if (e.ctrlKey || e.metaKey) {
+        if (e.altKey) {
+          e.preventDefault();
+          goBack();
+        } else if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
           handleSkipBack();
         }
         break;
       case 'ArrowRight':
-        if (e.ctrlKey || e.metaKey) {
+        if (e.altKey) {
+          e.preventDefault();
+          goForward();
+        } else if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
           handleSkipForward();
         }

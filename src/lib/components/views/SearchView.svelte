@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { Search, Disc3, Music, Mic2, User } from 'lucide-svelte';
+  import { Search, Disc3, Music, Mic2, User, X } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import { getSearchState, setSearchState, type SearchResults, type SearchTab } from '$lib/stores/searchState';
 
@@ -90,6 +90,19 @@
       return;
     }
     searchTimeout = setTimeout(() => performSearch(), 300);
+  }
+
+  function clearSearch() {
+    if (searchTimeout) {
+      clearTimeout(searchTimeout);
+      searchTimeout = null;
+    }
+    query = '';
+    searchError = null;
+    isSearching = false;
+    albumResults = null;
+    trackResults = null;
+    artistResults = null;
   }
 
   $effect(() => {
@@ -236,6 +249,11 @@
         oninput={debounceSearch}
         class="search-input"
       />
+      {#if query.trim()}
+        <button class="search-clear" onclick={clearSearch} aria-label="Clear search">
+          <X size={18} />
+        </button>
+      {/if}
     </div>
   </div>
 
@@ -416,7 +434,7 @@
   .search-input {
     width: 100%;
     height: 52px;
-    padding: 0 16px 0 48px;
+    padding: 0 48px 0 48px;
     background-color: var(--bg-secondary);
     border: 1px solid var(--bg-tertiary);
     border-radius: 12px;
@@ -432,6 +450,29 @@
 
   .search-input::placeholder {
     color: var(--text-muted);
+  }
+
+  .search-clear {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .search-clear:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
   }
 
   .tabs {
