@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
   // Components
   import Sidebar from '$lib/components/Sidebar.svelte';
@@ -364,19 +365,7 @@
 
   async function copyToClipboard(text: string, successMessage: string) {
     try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(text);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
+      await writeText(text);
       showToast(successMessage, 'success');
     } catch (err) {
       console.error('Failed to copy to clipboard:', err);
@@ -475,7 +464,7 @@
       await copyToClipboard(url, 'Qobuz link copied');
     } catch (err) {
       console.error('Failed to get Qobuz link:', err);
-      showToast('Failed to share link', 'error');
+      showToast(`Failed to share Qobuz link: ${err}`, 'error');
     }
   }
 
@@ -499,11 +488,12 @@
       return;
     }
     try {
+      showToast('Fetching Song.link...', 'info');
       const response = await invoke<SongLinkResponse>('share_track_songlink', { isrc: resolvedIsrc });
       await copyToClipboard(response.pageUrl, 'Song.link copied');
     } catch (err) {
       console.error('Failed to get Song.link:', err);
-      showToast('Failed to share link', 'error');
+      showToast(`Song.link error: ${err}`, 'error');
     }
   }
 

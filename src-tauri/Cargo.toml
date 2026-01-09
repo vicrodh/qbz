@@ -73,3 +73,6 @@ dotenvy = "0.15"
 
 # Secure credential storage (system keyring)
 keyring = "3"
+
+# Clipboard
+tauri-plugin-clipboard-manager = "2"
