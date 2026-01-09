@@ -319,14 +319,18 @@
   }
 
   .table-header {
+    width: 100%;
     height: 40px;
     padding: 0 16px;
     display: flex;
+    flex-direction: row;
     align-items: center;
+    gap: 16px;
     font-size: 12px;
     text-transform: uppercase;
     color: #666666;
     font-weight: 400;
+    box-sizing: border-box;
   }
 
   .col-number {
@@ -335,6 +339,7 @@
 
   .col-title {
     flex: 1;
+    min-width: 0;
   }
 
   .col-duration {
@@ -345,5 +350,17 @@
   .col-quality {
     width: 80px;
     text-align: right;
+  }
+
+  .track-list {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .tracks {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
   }
 </style>

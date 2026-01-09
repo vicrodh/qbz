@@ -97,14 +97,17 @@
 
 <style>
   .track-row {
+    width: 100%;
     height: 56px;
     padding: 0 16px;
     display: flex;
+    flex-direction: row;
     align-items: center;
     gap: 16px;
     border-radius: 8px;
     cursor: pointer;
     transition: background-color 150ms ease;
+    box-sizing: border-box;
   }
 
   .track-row.hovered {

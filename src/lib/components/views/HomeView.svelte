@@ -53,58 +53,58 @@
 
     <!-- Recently Played -->
     {#if recentAlbums.length > 0}
-    <HorizontalScrollRow title="Escuchado recientemente">
-      {#snippet children()}
-        {#each recentAlbums as album}
-          <AlbumCard
-            artwork={album.artwork}
-            title={album.title}
-            artist={album.artist}
-            quality={album.quality}
-            onclick={() => onAlbumClick?.(album.id ?? '')}
-          />
-        {/each}
-        <div class="spacer"></div>
-      {/snippet}
-    </HorizontalScrollRow>
-  {/if}
+      <HorizontalScrollRow title="Escuchado recientemente">
+        {#snippet children()}
+          {#each recentAlbums as album}
+            <AlbumCard
+              artwork={album.artwork}
+              title={album.title}
+              artist={album.artist}
+              quality={album.quality}
+              onclick={() => onAlbumClick?.(album.id ?? '')}
+            />
+          {/each}
+          <div class="spacer"></div>
+        {/snippet}
+      </HorizontalScrollRow>
+    {/if}
 
-  <!-- Recommended For You -->
-  {#if recommendedAlbums.length > 0}
-    <HorizontalScrollRow title="Recomendado para ti">
-      {#snippet children()}
-        {#each recommendedAlbums as album}
-          <AlbumCard
-            artwork={album.artwork}
-            title={album.title}
-            artist={album.artist}
-            quality={album.quality}
-            size="large"
-            onclick={() => onAlbumClick?.(album.id ?? '')}
-          />
-        {/each}
-        <div class="spacer"></div>
-      {/snippet}
-    </HorizontalScrollRow>
-  {/if}
+    <!-- Recommended For You -->
+    {#if recommendedAlbums.length > 0}
+      <HorizontalScrollRow title="Recomendado para ti">
+        {#snippet children()}
+          {#each recommendedAlbums as album}
+            <AlbumCard
+              artwork={album.artwork}
+              title={album.title}
+              artist={album.artist}
+              quality={album.quality}
+              size="large"
+              onclick={() => onAlbumClick?.(album.id ?? '')}
+            />
+          {/each}
+          <div class="spacer"></div>
+        {/snippet}
+      </HorizontalScrollRow>
+    {/if}
 
-  <!-- New Releases -->
-  {#if newReleases.length > 0}
-    <HorizontalScrollRow title="Nuevos lanzamientos">
-      {#snippet children()}
-        {#each newReleases as album}
-          <AlbumCard
-            artwork={album.artwork}
-            title={album.title}
-            artist={album.artist}
-            quality={album.quality}
-            onclick={() => onAlbumClick?.(album.id ?? '')}
-          />
-        {/each}
-        <div class="spacer"></div>
-      {/snippet}
-    </HorizontalScrollRow>
-  {/if}
+    <!-- New Releases -->
+    {#if newReleases.length > 0}
+      <HorizontalScrollRow title="Nuevos lanzamientos">
+        {#snippet children()}
+          {#each newReleases as album}
+            <AlbumCard
+              artwork={album.artwork}
+              title={album.title}
+              artist={album.artist}
+              quality={album.quality}
+              onclick={() => onAlbumClick?.(album.id ?? '')}
+            />
+          {/each}
+          <div class="spacer"></div>
+        {/snippet}
+      </HorizontalScrollRow>
+    {/if}
   {:else}
     <!-- Welcome/Empty State -->
     <div class="welcome-state">
