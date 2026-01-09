@@ -76,6 +76,13 @@
   let artistResults = $state<SearchResults<Artist> | null>(null);
 
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+  let isLoadingMore = $state(false);
+  const PAGE_SIZE = 20;
+
+  // Check if there are more results to load
+  let hasMoreAlbums = $derived(albumResults ? albumResults.offset + albumResults.items.length < albumResults.total : false);
+  let hasMoreTracks = $derived(trackResults ? trackResults.offset + trackResults.items.length < trackResults.total : false);
+  let hasMoreArtists = $derived(artistResults ? artistResults.offset + artistResults.items.length < artistResults.total : false);
 
   function debounceSearch() {
     if (searchTimeout) clearTimeout(searchTimeout);
@@ -95,23 +102,26 @@
     searchError = null;
 
     try {
-      // Search based on active tab
+      // Search based on active tab - reset to first page
       if (activeTab === 'albums') {
         albumResults = await invoke<SearchResults<Album>>('search_albums', {
           query: query.trim(),
-          limit: 20
+          limit: PAGE_SIZE,
+          offset: 0
         });
         console.log('Album results:', albumResults);
       } else if (activeTab === 'tracks') {
         trackResults = await invoke<SearchResults<Track>>('search_tracks', {
           query: query.trim(),
-          limit: 20
+          limit: PAGE_SIZE,
+          offset: 0
         });
         console.log('Track results:', trackResults);
       } else if (activeTab === 'artists') {
         artistResults = await invoke<SearchResults<Artist>>('search_artists', {
           query: query.trim(),
-          limit: 20
+          limit: PAGE_SIZE,
+          offset: 0
         });
         console.log('Artist results:', artistResults);
       }
@@ -120,6 +130,56 @@
       searchError = String(err);
     } finally {
       isSearching = false;
+    }
+  }
+
+  async function loadMore() {
+    if (!query.trim() || isLoadingMore) return;
+
+    isLoadingMore = true;
+
+    try {
+      if (activeTab === 'albums' && albumResults && hasMoreAlbums) {
+        const newOffset = albumResults.offset + albumResults.items.length;
+        const moreResults = await invoke<SearchResults<Album>>('search_albums', {
+          query: query.trim(),
+          limit: PAGE_SIZE,
+          offset: newOffset
+        });
+        albumResults = {
+          ...moreResults,
+          items: [...albumResults.items, ...moreResults.items],
+          offset: 0 // Keep offset at 0 since we're accumulating
+        };
+      } else if (activeTab === 'tracks' && trackResults && hasMoreTracks) {
+        const newOffset = trackResults.offset + trackResults.items.length;
+        const moreResults = await invoke<SearchResults<Track>>('search_tracks', {
+          query: query.trim(),
+          limit: PAGE_SIZE,
+          offset: newOffset
+        });
+        trackResults = {
+          ...moreResults,
+          items: [...trackResults.items, ...moreResults.items],
+          offset: 0
+        };
+      } else if (activeTab === 'artists' && artistResults && hasMoreArtists) {
+        const newOffset = artistResults.offset + artistResults.items.length;
+        const moreResults = await invoke<SearchResults<Artist>>('search_artists', {
+          query: query.trim(),
+          limit: PAGE_SIZE,
+          offset: newOffset
+        });
+        artistResults = {
+          ...moreResults,
+          items: [...artistResults.items, ...moreResults.items],
+          offset: 0
+        };
+      }
+    } catch (err) {
+      console.error('Load more error:', err);
+    } finally {
+      isLoadingMore = false;
     }
   }
 
@@ -241,6 +301,13 @@
             />
           {/each}
         </div>
+        {#if hasMoreAlbums}
+          <div class="load-more-container">
+            <button class="load-more-btn" onclick={loadMore} disabled={isLoadingMore}>
+              {isLoadingMore ? 'Loading...' : `Load More (${albumResults.items.length} of ${albumResults.total})`}
+            </button>
+          </div>
+        {/if}
       {/if}
     {:else if activeTab === 'tracks' && trackResults}
       {#if trackResults.items.length === 0}
@@ -269,6 +336,13 @@
             </button>
           {/each}
         </div>
+        {#if hasMoreTracks}
+          <div class="load-more-container">
+            <button class="load-more-btn" onclick={loadMore} disabled={isLoadingMore}>
+              {isLoadingMore ? 'Loading...' : `Load More (${trackResults.items.length} of ${trackResults.total})`}
+            </button>
+          </div>
+        {/if}
       {/if}
     {:else if activeTab === 'artists' && artistResults}
       {#if artistResults.items.length === 0}
@@ -291,6 +365,13 @@
             </div>
           {/each}
         </div>
+        {#if hasMoreArtists}
+          <div class="load-more-container">
+            <button class="load-more-btn" onclick={loadMore} disabled={isLoadingMore}>
+              {isLoadingMore ? 'Loading...' : `Load More (${artistResults.items.length} of ${artistResults.total})`}
+            </button>
+          </div>
+        {/if}
       {/if}
     {/if}
   </div>
@@ -566,5 +647,33 @@
   .artist-albums {
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .load-more-container {
+    display: flex;
+    justify-content: center;
+    padding: 32px 0;
+  }
+
+  .load-more-btn {
+    padding: 12px 32px;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .load-more-btn:hover:not(:disabled) {
+    background-color: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+
+  .load-more-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 </style>
