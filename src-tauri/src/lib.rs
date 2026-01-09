@@ -16,11 +16,13 @@ use tokio::sync::Mutex;
 use api::QobuzClient;
 use media_controls::{MediaControlsManager, TrackInfo};
 use player::Player;
+use queue::QueueManager;
 
 /// Application state shared across commands
 pub struct AppState {
     pub client: Arc<Mutex<QobuzClient>>,
     pub player: Player,
+    pub queue: QueueManager,
     pub media_controls: MediaControlsManager,
 }
 
@@ -29,6 +31,7 @@ impl AppState {
         Self {
             client: Arc::new(Mutex::new(QobuzClient::default())),
             player: Player::new(),
+            queue: QueueManager::new(),
             media_controls: MediaControlsManager::new(),
         }
     }
@@ -93,6 +96,22 @@ pub fn run() {
             commands::seek,
             commands::get_playback_state,
             commands::set_media_metadata,
+            // Queue commands
+            commands::add_to_queue,
+            commands::add_tracks_to_queue,
+            commands::set_queue,
+            commands::clear_queue,
+            commands::remove_from_queue,
+            commands::get_current_queue_track,
+            commands::peek_next_track,
+            commands::next_track,
+            commands::previous_track,
+            commands::play_queue_index,
+            commands::set_shuffle,
+            commands::get_shuffle,
+            commands::set_repeat,
+            commands::get_repeat,
+            commands::get_queue_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

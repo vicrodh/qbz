@@ -84,6 +84,26 @@
     duration: string;
   }
 
+  // Backend queue track format
+  interface BackendQueueTrack {
+    id: number;
+    title: string;
+    artist: string;
+    album: string;
+    duration_secs: number;
+    artwork_url: string | null;
+  }
+
+  interface BackendQueueState {
+    current_track: BackendQueueTrack | null;
+    current_index: number | null;
+    upcoming: BackendQueueTrack[];
+    history: BackendQueueTrack[];
+    shuffle: boolean;
+    repeat: 'Off' | 'All' | 'One';
+    total_tracks: number;
+  }
+
   interface PlayingTrack {
     id: number;
     title: string;
@@ -119,8 +139,9 @@
   let repeatMode = $state<'off' | 'all' | 'one'>('off');
   let isFavorite = $state(false);
 
-  // Queue State
+  // Queue State (synced from backend)
   let queue = $state<QueueTrack[]>([]);
+  let queueTotalTracks = $state(0);
 
   // Toast State
   let toast = $state<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -275,6 +296,32 @@
     duration = track.durationSeconds;
     currentTime = 0;
 
+    // Build queue from album tracks
+    if (selectedAlbum?.tracks) {
+      const trackIndex = selectedAlbum.tracks.findIndex(t => t.id === track.id);
+      const queueTracks: BackendQueueTrack[] = selectedAlbum.tracks.map(t => ({
+        id: t.id,
+        title: t.title,
+        artist: t.artist || selectedAlbum?.artist || 'Unknown Artist',
+        album: selectedAlbum?.title || '',
+        duration_secs: t.durationSeconds,
+        artwork_url: artwork || null
+      }));
+
+      // Set the queue starting at the clicked track
+      try {
+        await invoke('set_queue', {
+          tracks: queueTracks,
+          startIndex: trackIndex >= 0 ? trackIndex : 0
+        });
+        console.log(`Queue set with ${queueTracks.length} tracks, starting at index ${trackIndex}`);
+        // Sync queue state to update UI
+        await syncQueueState();
+      } catch (err) {
+        console.error('Failed to set queue:', err);
+      }
+    }
+
     // Try to play the track
     try {
       console.log('Invoking play_track with trackId:', track.id);
@@ -321,18 +368,27 @@
     invoke('set_volume', { volume: newVolume / 100 }).catch(console.error);
   }
 
-  function toggleShuffle() {
+  async function toggleShuffle() {
     isShuffle = !isShuffle;
-    showToast(isShuffle ? 'Shuffle enabled' : 'Shuffle disabled', 'info');
+    try {
+      await invoke('set_shuffle', { enabled: isShuffle });
+      showToast(isShuffle ? 'Shuffle enabled' : 'Shuffle disabled', 'info');
+    } catch (err) {
+      console.error('Failed to set shuffle:', err);
+      isShuffle = !isShuffle; // Revert
+    }
   }
 
-  function toggleRepeat() {
-    if (repeatMode === 'off') repeatMode = 'all';
-    else if (repeatMode === 'all') repeatMode = 'one';
-    else repeatMode = 'off';
-
-    const messages = { off: 'Repeat off', all: 'Repeat all', one: 'Repeat one' };
-    showToast(messages[repeatMode], 'info');
+  async function toggleRepeat() {
+    const nextMode = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
+    try {
+      await invoke('set_repeat', { mode: nextMode });
+      repeatMode = nextMode;
+      const messages = { off: 'Repeat off', all: 'Repeat all', one: 'Repeat one' };
+      showToast(messages[repeatMode], 'info');
+    } catch (err) {
+      console.error('Failed to set repeat:', err);
+    }
   }
 
   function toggleFavorite() {
@@ -340,23 +396,149 @@
     showToast(isFavorite ? 'Added to favorites' : 'Removed from favorites', 'success');
   }
 
-  // Skip track handlers (will be wired to queue when implemented)
-  function handleSkipBack() {
+  // Skip track handlers - wired to backend queue
+  async function handleSkipBack() {
     if (!currentTrack) return;
     // If more than 3 seconds in, restart track; otherwise go to previous
     if (currentTime > 3) {
       handleSeek(0);
-      showToast('Restarted track', 'info');
-    } else {
-      // TODO: Go to previous track in queue
-      showToast('Previous track (not implemented yet)', 'info');
+      return;
+    }
+
+    try {
+      const prevTrack = await invoke<BackendQueueTrack | null>('previous_track');
+      if (prevTrack) {
+        await playQueueTrack(prevTrack);
+      } else {
+        // No previous track, just restart
+        handleSeek(0);
+      }
+    } catch (err) {
+      console.error('Failed to go to previous track:', err);
+      showToast('Failed to go to previous track', 'error');
     }
   }
 
-  function handleSkipForward() {
+  async function handleSkipForward() {
     if (!currentTrack) return;
-    // TODO: Go to next track in queue
-    showToast('Next track (not implemented yet)', 'info');
+
+    try {
+      const nextTrackResult = await invoke<BackendQueueTrack | null>('next_track');
+      if (nextTrackResult) {
+        await playQueueTrack(nextTrackResult);
+      } else {
+        // No next track - stop playback
+        await invoke('stop_playback');
+        isPlaying = false;
+        showToast('Queue ended', 'info');
+      }
+    } catch (err) {
+      console.error('Failed to go to next track:', err);
+      showToast('Failed to go to next track', 'error');
+    }
+  }
+
+  // Helper to play a track from the queue
+  async function playQueueTrack(track: BackendQueueTrack) {
+    currentTrack = {
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      artwork: track.artwork_url || '',
+      duration: track.duration_secs,
+      quality: 'Hi-Res' // Will be updated by actual quality info
+    };
+
+    duration = track.duration_secs;
+    currentTime = 0;
+
+    try {
+      await invoke('play_track', { trackId: track.id });
+      isPlaying = true;
+
+      // Update MPRIS
+      await invoke('set_media_metadata', {
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        durationSecs: track.duration_secs,
+        coverUrl: track.artwork_url
+      });
+
+      // Refresh queue state
+      await syncQueueState();
+    } catch (err) {
+      console.error('Failed to play queue track:', err);
+      showToast(`Playback error: ${err}`, 'error');
+      isPlaying = false;
+    }
+  }
+
+  // Sync queue state from backend
+  async function syncQueueState() {
+    try {
+      const queueState = await invoke<BackendQueueState>('get_queue_state');
+
+      // Convert backend queue tracks to frontend format
+      queue = queueState.upcoming.map(t => ({
+        id: String(t.id),
+        artwork: t.artwork_url || '',
+        title: t.title,
+        artist: t.artist,
+        duration: formatDuration(t.duration_secs)
+      }));
+
+      queueTotalTracks = queueState.total_tracks;
+      isShuffle = queueState.shuffle;
+      repeatMode = queueState.repeat.toLowerCase() as 'off' | 'all' | 'one';
+    } catch (err) {
+      console.error('Failed to sync queue state:', err);
+    }
+  }
+
+  // Play a specific track from the queue panel
+  async function handleQueueTrackPlay(trackId: string) {
+    try {
+      // Find the index in the queue
+      const queueState = await invoke<BackendQueueState>('get_queue_state');
+      const allTracks = [queueState.current_track, ...queueState.upcoming].filter(Boolean) as BackendQueueTrack[];
+      const trackIndex = allTracks.findIndex(t => String(t.id) === trackId);
+
+      if (trackIndex >= 0) {
+        // If it's the current track (index 0), just ensure it's playing
+        if (trackIndex === 0 && queueState.current_index !== null) {
+          // Already current, nothing to do
+          return;
+        }
+
+        // Play by index (accounting for current track offset)
+        const actualIndex = queueState.current_index !== null
+          ? queueState.current_index + trackIndex
+          : trackIndex;
+
+        const track = await invoke<BackendQueueTrack | null>('play_queue_index', { index: actualIndex });
+        if (track) {
+          await playQueueTrack(track);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to play queue track:', err);
+      showToast('Failed to play track', 'error');
+    }
+  }
+
+  // Clear the queue
+  async function handleClearQueue() {
+    try {
+      await invoke('clear_queue');
+      queue = [];
+      queueTotalTracks = 0;
+      showToast('Queue cleared', 'info');
+    } catch (err) {
+      console.error('Failed to clear queue:', err);
+      showToast('Failed to clear queue', 'error');
+    }
   }
 
   // Toast Functions
@@ -440,6 +622,8 @@
 
   let pollInterval: ReturnType<typeof setInterval> | null = null;
 
+  let isAdvancingTrack = false; // Prevent multiple advances
+
   async function pollPlaybackState() {
     if (!currentTrack) return;
 
@@ -451,10 +635,24 @@
         currentTime = state.position;
         isPlaying = state.is_playing;
 
-        // Check if track ended
-        if (state.duration > 0 && state.position >= state.duration && !state.is_playing) {
-          // Track finished - could trigger next track here
-          console.log('Track finished playing');
+        // Check if track ended - auto-advance to next
+        if (state.duration > 0 && state.position >= state.duration - 1 && !state.is_playing && !isAdvancingTrack) {
+          console.log('Track finished, advancing to next...');
+          isAdvancingTrack = true;
+
+          try {
+            const nextTrackResult = await invoke<BackendQueueTrack | null>('next_track');
+            if (nextTrackResult) {
+              await playQueueTrack(nextTrackResult);
+            } else {
+              // Queue ended
+              console.log('Queue ended');
+            }
+          } catch (err) {
+            console.error('Failed to auto-advance:', err);
+          } finally {
+            isAdvancingTrack = false;
+          }
         }
       }
     } catch (err) {
@@ -481,6 +679,13 @@
   onMount(() => {
     document.addEventListener('keydown', handleKeydown);
     return () => document.removeEventListener('keydown', handleKeydown);
+  });
+
+  // Sync queue state when opening queue panel
+  $effect(() => {
+    if (isQueueOpen) {
+      syncQueueState();
+    }
   });
 
   // Derived values for NowPlayingBar
@@ -572,11 +777,9 @@
       onClose={() => (isQueueOpen = false)}
       currentTrack={currentQueueTrack ?? undefined}
       upcomingTracks={queue}
-      onClearQueue={() => {
-        queue = [];
-        showToast('Queue cleared', 'info');
-      }}
-      onSaveAsPlaylist={() => showToast('Saved as playlist', 'success')}
+      onPlayTrack={handleQueueTrackPlay}
+      onClearQueue={handleClearQueue}
+      onSaveAsPlaylist={() => showToast('Save as playlist coming soon', 'info')}
     />
 
     <!-- Full Screen Now Playing -->
