@@ -236,6 +236,15 @@
       console.log('play_track invoke succeeded');
       isPlaying = true;
       showToast(`Playing: ${track.title}`, 'success');
+
+      // Update MPRIS metadata for system media controls
+      await invoke('set_media_metadata', {
+        title: track.title,
+        artist: track.performer?.name || 'Unknown Artist',
+        album: track.album?.title || '',
+        durationSecs: track.duration,
+        coverUrl: artwork || null
+      });
     } catch (err) {
       console.error('Failed to play track:', err);
       showToast(`Playback error: ${err}`, 'error');
@@ -274,6 +283,15 @@
       console.log('play_track invoke succeeded');
       isPlaying = true;
       showToast(`Playing: ${track.title}`, 'success');
+
+      // Update MPRIS metadata for system media controls
+      await invoke('set_media_metadata', {
+        title: track.title,
+        artist: track.artist || selectedAlbum?.artist || 'Unknown Artist',
+        album: selectedAlbum?.title || '',
+        durationSecs: track.durationSeconds,
+        coverUrl: artwork || null
+      });
     } catch (err) {
       console.error('Failed to play track:', err);
       showToast(`Playback error: ${err}`, 'error');

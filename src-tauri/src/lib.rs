@@ -6,6 +6,7 @@
 pub mod api;
 pub mod commands;
 pub mod config;
+pub mod media_controls;
 pub mod player;
 pub mod queue;
 
@@ -13,12 +14,14 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use api::QobuzClient;
+use media_controls::{MediaControlsManager, TrackInfo};
 use player::Player;
 
 /// Application state shared across commands
 pub struct AppState {
     pub client: Arc<Mutex<QobuzClient>>,
     pub player: Player,
+    pub media_controls: MediaControlsManager,
 }
 
 impl AppState {
@@ -26,6 +29,7 @@ impl AppState {
         Self {
             client: Arc::new(Mutex::new(QobuzClient::default())),
             player: Player::new(),
+            media_controls: MediaControlsManager::new(),
         }
     }
 }
@@ -34,6 +38,25 @@ impl Default for AppState {
     fn default() -> Self {
         Self::new()
     }
+}
+
+/// Update MPRIS metadata when track changes
+pub fn update_media_controls_metadata(
+    media_controls: &MediaControlsManager,
+    title: &str,
+    artist: &str,
+    album: &str,
+    duration_secs: Option<u64>,
+    cover_url: Option<String>,
+) {
+    let track_info = TrackInfo {
+        title: title.to_string(),
+        artist: artist.to_string(),
+        album: album.to_string(),
+        duration_secs,
+        cover_url,
+    };
+    media_controls.set_metadata(&track_info);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -69,6 +92,7 @@ pub fn run() {
             commands::set_volume,
             commands::seek,
             commands::get_playback_state,
+            commands::set_media_metadata,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
