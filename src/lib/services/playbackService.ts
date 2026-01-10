@@ -17,6 +17,7 @@ import {
   type PlayingTrack
 } from '$lib/stores/playerStore';
 import { syncQueueState } from '$lib/stores/queueStore';
+import { logRecoEvent } from '$lib/services/recoService';
 
 // ============ Types ============
 
@@ -76,6 +77,16 @@ export async function playTrack(
 
     setIsPlaying(true);
     showToast(`Playing: ${track.title}`, 'success');
+
+    if (!isLocal) {
+      void logRecoEvent({
+        eventType: 'play',
+        itemType: 'track',
+        trackId: track.id,
+        albumId: track.albumId,
+        artistId: track.artistId
+      });
+    }
 
     // Update MPRIS metadata
     await updateMediaMetadata({
@@ -246,6 +257,11 @@ export async function toggleTrackFavorite(
   try {
     if (newFavoriteState) {
       await invoke('add_favorite', { favType: 'track', itemId: String(trackId) });
+      void logRecoEvent({
+        eventType: 'favorite',
+        itemType: 'track',
+        trackId
+      });
     } else {
       await invoke('remove_favorite', { favType: 'track', itemId: String(trackId) });
     }
@@ -262,6 +278,11 @@ export async function toggleTrackFavorite(
 export async function addTrackToFavorites(trackId: number): Promise<boolean> {
   try {
     await invoke('add_favorite', { favType: 'track', itemId: String(trackId) });
+    void logRecoEvent({
+      eventType: 'favorite',
+      itemType: 'track',
+      trackId
+    });
     return true;
   } catch (err) {
     console.error('Failed to add to favorites:', err);

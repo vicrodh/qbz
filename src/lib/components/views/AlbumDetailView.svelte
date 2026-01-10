@@ -4,6 +4,7 @@
   import { ArrowLeft, Play, Shuffle, Heart, Plus, MoreHorizontal, Download } from 'lucide-svelte';
   import TrackRow from '../TrackRow.svelte';
   import { getDownloadState, type DownloadStatus } from '$lib/stores/downloadState';
+  import { logRecoEvent } from '$lib/services/recoService';
 
   interface Track {
     id: number;
@@ -130,6 +131,12 @@
         isFavorite = false;
       } else {
         await invoke('add_favorite', { favType: 'album', itemId: album.id });
+        void logRecoEvent({
+          eventType: 'favorite',
+          itemType: 'album',
+          albumId: album.id,
+          artistId: album.artistId
+        });
         isFavorite = true;
       }
     } catch (err) {

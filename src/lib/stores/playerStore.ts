@@ -15,6 +15,8 @@ export interface PlayingTrack {
   title: string;
   artist: string;
   album: string;
+  albumId?: string;
+  artistId?: number;
   artwork: string;
   duration: number;
   quality: string;

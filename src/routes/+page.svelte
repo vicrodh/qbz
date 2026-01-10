@@ -292,6 +292,8 @@
       title: track.title,
       artist: track.performer?.name || 'Unknown Artist',
       album: track.album?.title || '',
+      albumId: track.album?.id,
+      artistId: track.performer?.id,
       artwork,
       duration: track.duration,
       quality,
@@ -331,6 +333,8 @@
       title: track.title,
       artist: track.artist || selectedAlbum?.artist || 'Unknown Artist',
       album: selectedAlbum?.title || '',
+      albumId: track.albumId || selectedAlbum?.id,
+      artistId: track.artistId || selectedAlbum?.artistId,
       artwork,
       duration: track.durationSeconds,
       quality
@@ -654,6 +658,8 @@
       title: track.title,
       artist: track.artist || 'Unknown Artist',
       album: track.album || 'Playlist',
+      albumId: track.albumId,
+      artistId: track.artistId,
       artwork: track.albumArt || '',
       duration: track.durationSeconds,
       quality
@@ -933,6 +939,8 @@
       {#if activeView === 'home'}
         <HomeView
           onAlbumClick={handleAlbumClick}
+          onArtistClick={handleArtistClick}
+          onTrackPlay={handleDisplayTrackPlay}
         />
       {:else if activeView === 'search'}
         <SearchView

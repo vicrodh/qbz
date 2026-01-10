@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { X } from 'lucide-svelte';
+  import { logPlaylistAdd } from '$lib/services/recoService';
 
   interface Playlist {
     id: number;
@@ -121,6 +122,7 @@
         playlistId: selectedPlaylistId,
         trackIds
       });
+      void logPlaylistAdd(trackIds, selectedPlaylistId);
       onSuccess?.();
       onClose();
     } catch (err) {
@@ -154,6 +156,7 @@
           playlistId: newPlaylist.id,
           trackIds
         });
+        void logPlaylistAdd(trackIds, newPlaylist.id);
       }
 
       onSuccess?.(newPlaylist);
