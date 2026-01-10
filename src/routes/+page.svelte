@@ -118,9 +118,17 @@
     AlbumDetail,
     ArtistDetail,
     PlaylistTrack,
+    DisplayTrack,
     LocalLibraryTrack,
     SongLinkResponse
   } from '$lib/types';
+
+  // Adapters
+  import {
+    convertQobuzAlbum,
+    convertQobuzArtist,
+    formatDuration
+  } from '$lib/adapters/qobuzAdapters';
 
   // Services
   import {
@@ -128,6 +136,8 @@
     setToastCallback as setPlaybackToastCallback,
     checkTrackFavorite,
     toggleTrackFavorite,
+    showTrackNotification,
+    updateLastfmNowPlaying,
     cleanup as cleanupPlayback
   } from '$lib/services/playbackService';
 
@@ -250,41 +260,6 @@
     }
   }
 
-  function convertQobuzAlbum(album: QobuzAlbum): AlbumDetail {
-    const artwork = album.image?.large || album.image?.thumbnail || album.image?.small || '';
-    const quality = album.hires_streamable && album.maximum_bit_depth && album.maximum_sampling_rate
-      ? `${album.maximum_bit_depth}-Bit / ${album.maximum_sampling_rate} kHz`
-      : 'CD Quality';
-
-    return {
-      id: album.id,
-      artwork,
-      title: album.title,
-      artist: album.artist?.name || 'Unknown Artist',
-      artistId: album.artist?.id,
-      year: album.release_date_original?.split('-')[0] || '',
-      label: album.label?.name || '',
-      genre: album.genre?.name || '',
-      quality,
-      trackCount: album.tracks_count || album.tracks?.items?.length || 0,
-      duration: formatDurationMinutes(album.duration || 0),
-      tracks: album.tracks?.items?.map((track, index) => ({
-        id: track.id,
-        number: index + 1,
-        title: track.title,
-        artist: track.performer?.name,
-        duration: formatDuration(track.duration),
-        durationSeconds: track.duration,
-        quality: track.hires_streamable ? 'Hi-Res' : 'CD',
-        hires: track.hires_streamable,
-        bitDepth: track.maximum_bit_depth,
-        samplingRate: track.maximum_sampling_rate,
-        albumId: album.id,
-        artistId: track.performer?.id ?? album.artist?.id,
-        isrc: track.isrc
-      })) || []
-    };
-  }
 
   async function handleArtistClick(artistId: number) {
     try {
@@ -301,43 +276,6 @@
     }
   }
 
-  function convertQobuzArtist(artist: QobuzArtist): ArtistDetail {
-    const image = artist.image?.large || artist.image?.thumbnail || artist.image?.small;
-
-    return {
-      id: artist.id,
-      name: artist.name,
-      image,
-      albumsCount: artist.albums_count,
-      biography: artist.biography,
-      albums: artist.albums?.items?.map(album => {
-        const artwork = album.image?.large || album.image?.thumbnail || album.image?.small || '';
-        const quality = album.hires_streamable && album.maximum_bit_depth && album.maximum_sampling_rate
-          ? `${album.maximum_bit_depth}bit/${album.maximum_sampling_rate}kHz`
-          : 'CD Quality';
-        return {
-          id: album.id,
-          title: album.title,
-          artwork,
-          year: album.release_date_original?.split('-')[0],
-          quality
-        };
-      }) || [],
-      totalAlbums: artist.albums?.total || artist.albums_count || 0
-    };
-  }
-
-  function formatDuration(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  function formatDurationMinutes(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
 
   // Album-specific queue track builder (needs selectedAlbum context)
   function buildAlbumQueueTrack(track: Track): BackendQueueTrack {
@@ -828,14 +766,19 @@
     }
   }
 
-  async function handlePlaylistTrackPlay(track: PlaylistTrack) {
-    console.log('Playing playlist track:', track);
+  /**
+   * Handle playback of DisplayTrack (used by ArtistDetailView, PlaylistDetailView, FavoritesView)
+   * This is fire-and-forget to match view callback signatures
+   */
+  function handleDisplayTrackPlay(track: DisplayTrack): void {
+    console.log('Playing display track:', track);
 
     const quality = track.hires && track.bitDepth && track.samplingRate
       ? `${track.bitDepth}bit/${track.samplingRate}kHz`
       : 'CD Quality';
 
-    await playTrack({
+    // Fire-and-forget async call
+    playTrack({
       id: track.id,
       title: track.title,
       artist: track.artist || 'Unknown Artist',
@@ -1207,7 +1150,7 @@
           artist={selectedArtist}
           onBack={goBack}
           onAlbumClick={handleAlbumClick}
-          onTrackPlay={handlePlaylistTrackPlay}
+          onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queueQobuzTrackNext}
           onTrackPlayLater={queueQobuzTrackLater}
           onTrackAddFavorite={handleAddToFavorites}
@@ -1228,7 +1171,7 @@
         <PlaylistDetailView
           playlistId={selectedPlaylistId}
           onBack={goBack}
-          onTrackPlay={handlePlaylistTrackPlay}
+          onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queuePlaylistTrackNext}
           onTrackPlayLater={queuePlaylistTrackLater}
           onTrackAddFavorite={handleAddToFavorites}
@@ -1248,7 +1191,7 @@
       {:else if activeView === 'favorites'}
         <FavoritesView
           onAlbumClick={handleAlbumClick}
-          onTrackPlay={handlePlaylistTrackPlay}
+          onTrackPlay={handleDisplayTrackPlay}
           onArtistClick={handleArtistClick}
           onTrackPlayNext={queuePlaylistTrackNext}
           onTrackPlayLater={queuePlaylistTrackLater}

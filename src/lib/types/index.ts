@@ -134,6 +134,30 @@ export interface PlaylistTrack {
   isrc?: string;
 }
 
+/**
+ * Unified display track interface used across views
+ * Compatible with PlaylistTrack, FavoritesTrack, and ArtistTrack displays
+ */
+export interface DisplayTrack {
+  id: number;
+  number?: number;
+  title: string;
+  artist?: string;
+  album?: string;
+  albumArt?: string;
+  albumId?: string;
+  artistId?: number;
+  duration: string;
+  durationSeconds: number;
+  hires?: boolean;
+  bitDepth?: number;
+  samplingRate?: number;
+  isrc?: string;
+  isLocal?: boolean;
+  localTrackId?: number;
+  artworkPath?: string;
+}
+
 // ============ Local Library Types ============
 
 export interface LocalLibraryTrack {

@@ -247,7 +247,7 @@
             onShareQobuz: onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
             onShareSonglink: onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined,
             onGoToAlbum: onTrackGoToAlbum ? () => onTrackGoToAlbum(album.id) : undefined,
-            onGoToArtist: album.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(album.artistId) : undefined
+            onGoToArtist: album.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(album.artistId!) : undefined
           }}
         />
       {/each}
