@@ -287,7 +287,7 @@
     );
   }
 
-  // Playback Functions
+  // Playback Functions - QobuzTrack from search results
   async function handleTrackPlay(track: QobuzTrack) {
     console.log('Playing track:', track);
 
@@ -296,7 +296,7 @@
       ? `${track.maximum_bit_depth}bit/${track.maximum_sampling_rate}kHz`
       : 'CD Quality';
 
-    const newTrack: PlayingTrack = {
+    await playTrack({
       id: track.id,
       title: track.title,
       artist: track.performer?.name || 'Unknown Artist',
@@ -306,66 +306,19 @@
       quality,
       bitDepth: track.maximum_bit_depth,
       samplingRate: track.maximum_sampling_rate
-    };
-    setCurrentTrack(newTrack);
-
-    // Try to play the track
-    try {
-      console.log('Invoking play_track with trackId:', track.id);
-      showToast(`Loading: ${track.title}`, 'info');
-      await invoke('play_track', { trackId: track.id });
-      console.log('play_track invoke succeeded');
-      setIsPlaying(true);
-      showToast(`Playing: ${track.title}`, 'success');
-
-      // Update MPRIS metadata for system media controls
-      await invoke('set_media_metadata', {
-        title: track.title,
-        artist: track.performer?.name || 'Unknown Artist',
-        album: track.album?.title || '',
-        durationSecs: track.duration,
-        coverUrl: artwork || null
-      });
-
-      // Show system notification
-      showTrackNotification(
-        track.title,
-        track.performer?.name || 'Unknown Artist',
-        track.album?.title || '',
-        artwork || undefined
-      );
-
-      // Check if track is favorite
-      setIsFavorite(await checkTrackFavorite(track.id));
-    } catch (err) {
-      console.error('Failed to play track:', err);
-      showToast(`Playback error: ${err}`, 'error');
-      setIsPlaying(false);
-    }
+    });
   }
 
   // Handle track play from album detail view
   async function handleAlbumTrackPlay(track: Track) {
     console.log('Playing album track:', track);
 
-    // Use album artwork from selectedAlbum
     const artwork = selectedAlbum?.artwork || '';
     const quality = track.hires && track.bitDepth && track.samplingRate
       ? `${track.bitDepth}bit/${track.samplingRate}kHz`
       : 'CD Quality';
 
-    const newTrack: PlayingTrack = {
-      id: track.id,
-      title: track.title,
-      artist: track.artist || selectedAlbum?.artist || 'Unknown Artist',
-      album: selectedAlbum?.title || '',
-      artwork,
-      duration: track.durationSeconds,
-      quality
-    };
-    setCurrentTrack(newTrack);
-
-    // Build queue from album tracks
+    // Build queue from album tracks before playing
     if (selectedAlbum?.tracks) {
       const trackIndex = selectedAlbum.tracks.findIndex(t => t.id === track.id);
       const queueTracks: BackendQueueTrack[] = selectedAlbum.tracks.map(t => ({
@@ -377,54 +330,20 @@
         artwork_url: artwork || null
       }));
 
-      // Set the queue starting at the clicked track (clearLocal=true for Qobuz tracks)
-      const success = await setQueue(queueTracks, trackIndex >= 0 ? trackIndex : 0, true);
-      if (success) {
-        console.log(`Queue set with ${queueTracks.length} tracks, starting at index ${trackIndex}`);
-      } else {
-        console.error('Failed to set queue');
-      }
+      // Set the queue starting at the clicked track
+      await setQueue(queueTracks, trackIndex >= 0 ? trackIndex : 0, true);
     }
 
-    // Try to play the track
-    try {
-      console.log('Invoking play_track with trackId:', track.id);
-      showToast(`Loading: ${track.title}`, 'info');
-      await invoke('play_track', { trackId: track.id });
-      console.log('play_track invoke succeeded');
-      setIsPlaying(true);
-      showToast(`Playing: ${track.title}`, 'success');
-
-      // Update MPRIS metadata for system media controls
-      await invoke('set_media_metadata', {
-        title: track.title,
-        artist: track.artist || selectedAlbum?.artist || 'Unknown Artist',
-        album: selectedAlbum?.title || '',
-        durationSecs: track.durationSeconds,
-        coverUrl: artwork || null
-      });
-
-      // Show system notification
-      showTrackNotification(
-        track.title,
-        track.artist || selectedAlbum?.artist || 'Unknown Artist',
-        selectedAlbum?.title || '',
-        artwork || undefined
-      );
-
-      // Update Last.fm
-      updateLastfmNowPlaying(
-        track.title,
-        track.artist || selectedAlbum?.artist || 'Unknown Artist',
-        selectedAlbum?.title || '',
-        track.durationSeconds,
-        track.id
-      );
-    } catch (err) {
-      console.error('Failed to play track:', err);
-      showToast(`Playback error: ${err}`, 'error');
-      setIsPlaying(false);
-    }
+    // Play track using unified service
+    await playTrack({
+      id: track.id,
+      title: track.title,
+      artist: track.artist || selectedAlbum?.artist || 'Unknown Artist',
+      album: selectedAlbum?.title || '',
+      artwork,
+      duration: track.durationSeconds,
+      quality
+    });
   }
 
   // Playback controls (delegating to playerStore)
@@ -520,7 +439,8 @@
     // Reset queue ended flag when playing a new track
     setQueueEnded(false);
 
-    const newTrack: PlayingTrack = {
+    // Play track using unified service
+    await playTrack({
       id: track.id,
       title: track.title,
       artist: track.artist,
@@ -529,47 +449,7 @@
       duration: track.duration_secs,
       quality: isLocal ? 'Local' : 'Hi-Res',
       isLocal
-    };
-    setCurrentTrack(newTrack);
-
-    try {
-      // Use appropriate playback command based on track source
-      if (isLocal) {
-        await invoke('library_play_track', { trackId: track.id });
-      } else {
-        await invoke('play_track', { trackId: track.id });
-      }
-      setIsPlaying(true);
-
-      // Update MPRIS
-      await invoke('set_media_metadata', {
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        durationSecs: track.duration_secs,
-        coverUrl: track.artwork_url
-      });
-
-      // Show system notification
-      showTrackNotification(track.title, track.artist, track.album, track.artwork_url || undefined);
-
-      // Update Last.fm
-      updateLastfmNowPlaying(track.title, track.artist, track.album, track.duration_secs, track.id);
-
-      // Check if track is favorite (for Qobuz tracks only)
-      if (!isLocal) {
-        setIsFavorite(await checkTrackFavorite(track.id));
-      } else {
-        setIsFavorite(false);
-      }
-
-      // Refresh queue state
-      await syncQueueState();
-    } catch (err) {
-      console.error('Failed to play queue track:', err);
-      showToast(`Playback error: ${err}`, 'error');
-      setIsPlaying(false);
-    }
+    }, { isLocal, showLoadingToast: false });
   }
 
   // Play a specific track from the queue panel
