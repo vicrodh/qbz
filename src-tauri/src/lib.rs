@@ -13,6 +13,7 @@ pub mod discogs;
 pub mod download_cache;
 pub mod lastfm;
 pub mod library;
+pub mod lyrics;
 pub mod media_controls;
 pub mod player;
 pub mod queue;
@@ -107,6 +108,9 @@ pub fn run() {
     // Initialize download cache state
     let download_cache_state = download_cache::DownloadCacheState::new()
         .expect("Failed to initialize download cache");
+    // Initialize lyrics cache state
+    let lyrics_state = lyrics::LyricsState::new()
+        .expect("Failed to initialize lyrics cache");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -118,6 +122,7 @@ pub fn run() {
         .manage(dlna_state)
         .manage(airplay_state)
         .manage(download_cache_state)
+        .manage(lyrics_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -277,6 +282,9 @@ pub fn run() {
             download_cache::commands::clear_download_cache,
             download_cache::commands::set_download_cache_limit,
             download_cache::commands::open_download_cache_folder,
+            // Lyrics commands
+            lyrics::commands::lyrics_get,
+            lyrics::commands::lyrics_clear_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
