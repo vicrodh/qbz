@@ -1,5 +1,6 @@
 <script lang="ts">
   import { X, GripVertical, Play } from 'lucide-svelte';
+  import GlassSurface from './glass/GlassSurface.svelte';
 
   interface QueueTrack {
     id: string;
@@ -37,7 +38,7 @@
   <div class="backdrop" onclick={onClose} role="presentation"></div>
 
   <!-- Queue Panel -->
-  <div class="queue-panel">
+  <GlassSurface rootClassName="queue-panel" enableRipple={false} enableDistortion={false}>
     <!-- Header -->
     <div class="header">
       <h2>Queue</h2>
@@ -123,7 +124,7 @@
         <button class="save-btn" onclick={onSaveAsPlaylist}>Save as Playlist</button>
       </div>
     {/if}
-  </div>
+  </GlassSurface>
 {/if}
 
 <style>
@@ -134,19 +135,21 @@
     z-index: 40;
   }
 
-  .queue-panel {
+  :global(.queue-panel) {
     position: fixed;
     top: 0;
     right: 0;
     bottom: 0;
     width: 360px;
-    background-color: var(--bg-secondary);
-    border-left: 1px solid var(--bg-tertiary);
     z-index: 50;
     display: flex;
     flex-direction: column;
-    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
     animation: slideInRight 200ms ease-out;
+    --glass-bg: rgba(30, 30, 35, 0.85);
+    --glass-blur: 24px;
+    --glass-radius: 0;
+    --glass-border: rgba(255, 255, 255, 0.08);
+    --glass-shadow: -4px 0 24px rgba(0, 0, 0, 0.5);
   }
 
   @keyframes slideInRight {

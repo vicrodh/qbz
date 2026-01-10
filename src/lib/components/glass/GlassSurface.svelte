@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, type Snippet } from 'svelte';
   import GlassFilterDefs from './GlassFilterDefs.svelte';
 
   interface Props {
@@ -12,6 +12,7 @@
     enableDistortion?: boolean;
     includeDefs?: boolean;
     onclick?: (event: MouseEvent) => void;
+    children?: Snippet;
   }
 
   let {
@@ -23,7 +24,8 @@
     rippleDurationMs = 800,
     enableDistortion = true,
     includeDefs = true,
-    onclick
+    onclick,
+    children
   }: Props = $props();
 
   const filterId = `glass-dist-${Math.random().toString(36).slice(2, 9)}`;
@@ -83,6 +85,7 @@
   style={`--glass-ripple-duration: ${rippleDurationMs}ms;`}
   bind:this={container}
   onclick={handleClick}
+  role="presentation"
 >
   <div class="glass-backdrop" style={enableDistortion ? `filter: url(#${filterId})` : undefined}></div>
   <div class="glass-sheen"></div>
@@ -91,13 +94,14 @@
     <div class="glass-ripple" style={`--ripple-x: ${rippleX}%; --ripple-y: ${rippleY}%`}></div>
   {/if}
   <div class={`glass-content ${contentClassName}`.trim()}>
-    <slot />
+    {#if children}
+      {@render children()}
+    {/if}
   </div>
 </svelte:element>
 
 <style>
   .glass-surface {
-    position: relative;
     overflow: hidden;
     border-radius: var(--glass-radius, 14px);
     background: var(--glass-fallback, rgba(255, 255, 255, 0.06));

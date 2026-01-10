@@ -2,6 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { X } from 'lucide-svelte';
   import { logPlaylistAdd } from '$lib/services/recoService';
+  import GlassSurface from './glass/GlassSurface.svelte';
 
   interface Playlist {
     id: number;
@@ -202,7 +203,7 @@
     aria-modal="true"
     tabindex="-1"
   >
-    <div class="modal" onclick={(e) => e.stopPropagation()} role="document">
+    <GlassSurface rootClassName="modal" enableRipple={false} onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h2>
           {#if mode === 'create'}
@@ -309,7 +310,7 @@
           {/if}
         </button>
       </div>
-    </div>
+    </GlassSurface>
   </div>
 {/if}
 
@@ -324,15 +325,18 @@
     z-index: 1000;
   }
 
-  .modal {
-    background: var(--bg-primary);
-    border-radius: 12px;
+  :global(.modal) {
     width: 100%;
     max-width: 440px;
     max-height: 90vh;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    --glass-bg: rgba(30, 30, 35, 0.9);
+    --glass-blur: 24px;
+    --glass-radius: 16px;
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
   }
 
   .modal-header {

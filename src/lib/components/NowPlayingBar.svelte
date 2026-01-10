@@ -16,6 +16,7 @@
     Mic2
   } from 'lucide-svelte';
   import QualityBadge from './QualityBadge.svelte';
+  import GlassSurface from './glass/GlassSurface.svelte';
 
   interface Props {
     artwork?: string;
@@ -144,7 +145,7 @@
   });
 </script>
 
-<div class="now-playing-bar">
+<GlassSurface rootClassName="now-playing-bar" enableRipple={false} enableDistortion={false}>
   <!-- Left Section - Track Info -->
   <div class="track-info">
     {#if hasTrack}
@@ -284,21 +285,31 @@
 
     <span class="remaining-time">-{formatTime(Math.max(0, duration - currentTime))}</span>
   </div>
-</div>
+</GlassSurface>
 
 <style>
-  .now-playing-bar {
-    position: fixed;
-    bottom: 0;
-    left: 0;
-    right: 0;
+  :global(.now-playing-bar) {
+    position: fixed !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    top: auto !important;
     height: 80px;
+    z-index: 100;
+    --glass-bg: rgba(25, 25, 30, 0.88);
+    --glass-blur: 20px;
+    --glass-radius: 0;
+    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  :global(.now-playing-bar .glass-content) {
     display: flex;
     align-items: center;
+    width: 100%;
+    height: 100%;
     padding: 0 16px;
     gap: 24px;
-    background-color: var(--bg-secondary);
-    border-top: 1px solid var(--bg-tertiary);
   }
 
   /* Track Info */

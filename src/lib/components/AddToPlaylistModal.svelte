@@ -2,6 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import { X, Plus, ListMusic, Loader2 } from 'lucide-svelte';
+  import GlassSurface from './glass/GlassSurface.svelte';
 
   interface Playlist {
     id: number;
@@ -65,7 +66,7 @@
 
 {#if isOpen}
   <div class="overlay" onclick={onClose} onkeydown={(e) => e.key === 'Escape' && onClose()} role="presentation">
-    <div class="modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" tabindex="-1">
+    <GlassSurface rootClassName="modal" enableRipple={false} onclick={(e) => e.stopPropagation()}>
       <div class="header">
         <h3>Add to Playlist</h3>
         <button class="close-btn" onclick={onClose}>
@@ -121,7 +122,7 @@
           </div>
         {/if}
       </div>
-    </div>
+    </GlassSurface>
   </div>
 {/if}
 
@@ -136,15 +137,17 @@
     justify-content: center;
   }
 
-  .modal {
+  :global(.modal) {
     width: 400px;
     max-height: 500px;
-    background-color: var(--bg-secondary);
-    border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     display: flex;
     flex-direction: column;
+    --glass-bg: rgba(30, 30, 35, 0.9);
+    --glass-blur: 24px;
+    --glass-radius: 16px;
+    --glass-border: rgba(255, 255, 255, 0.1);
+    --glass-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
   }
 
   .header {
