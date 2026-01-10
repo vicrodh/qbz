@@ -461,6 +461,7 @@
             artist={track.artist !== selectedAlbum?.artist ? track.artist : undefined}
             duration={formatDuration(track.duration_secs)}
             quality={getQualityBadge(track)}
+            hideDownload={true}
             onPlay={() => handleTrackPlay(track)}
             menuActions={{
               onPlayNow: () => handleTrackPlay(track),
@@ -671,6 +672,7 @@
                 artist={track.artist}
                 duration={formatDuration(track.duration_secs)}
                 quality={getQualityBadge(track)}
+                hideDownload={true}
                 onPlay={() => handleTrackPlay(track)}
                 menuActions={{
                   onPlayNow: () => handleTrackPlay(track),

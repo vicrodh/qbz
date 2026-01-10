@@ -15,6 +15,7 @@
     isFavorite?: boolean;
     downloadStatus?: DownloadStatus;
     downloadProgress?: number;
+    hideDownload?: boolean;
     onPlay?: () => void;
     onDownload?: () => void;
     onRemoveDownload?: () => void;
@@ -43,6 +44,7 @@
     isFavorite = false,
     downloadStatus = 'none',
     downloadProgress = 0,
+    hideDownload = false,
     onPlay,
     onDownload,
     onRemoveDownload,
@@ -105,15 +107,17 @@
   </div>
 
   <!-- Download Indicator -->
-  <div class="download-indicator" class:has-download={downloadStatus !== 'none'}>
-    <DownloadButton
-      status={downloadStatus}
-      progress={downloadProgress}
-      size={14}
-      onDownload={onDownload}
-      onRemove={onRemoveDownload}
-    />
-  </div>
+  {#if !hideDownload}
+    <div class="download-indicator" class:has-download={downloadStatus !== 'none'}>
+      <DownloadButton
+        status={downloadStatus}
+        progress={downloadProgress}
+        size={14}
+        onDownload={onDownload}
+        onRemove={onRemoveDownload}
+      />
+    </div>
+  {/if}
 
   <div class="track-actions">
     <TrackMenu
