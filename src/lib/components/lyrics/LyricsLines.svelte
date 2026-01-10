@@ -29,6 +29,7 @@
 
   let container: HTMLDivElement | null = null;
   let prevActiveIndex = -1;
+  let hasInitialSync = false;
 
   // Calculate opacity based on distance from active line
   function getLineOpacity(index: number, active: number): number {
@@ -43,7 +44,8 @@
   }
 
   // Scroll active line into view (centered)
-  async function scrollActiveIntoView(index: number) {
+  // instant: true for catch-up sync, false for normal progression
+  async function scrollActiveIntoView(index: number, instant: boolean = false) {
     if (!container || index < 0) return;
 
     await tick();
@@ -59,15 +61,35 @@
 
     container.scrollBy({
       top: scrollOffset,
-      behavior: 'smooth'
+      behavior: instant ? 'instant' : 'smooth'
     });
   }
 
-  // React to activeIndex changes - always scroll when it changes
+  // React to activeIndex changes
   $effect(() => {
     if (scrollToActive && activeIndex >= 0 && activeIndex !== prevActiveIndex) {
+      // Determine if we need instant scroll (catch-up sync)
+      // - First sync after lyrics load (hasInitialSync is false and activeIndex > 0)
+      // - Jump of more than 2 lines (user seeked or lyrics catching up)
+      const needsInstantSync = !hasInitialSync && activeIndex > 0;
+      const isLargeJump = prevActiveIndex >= 0 && Math.abs(activeIndex - prevActiveIndex) > 2;
+      const useInstant = needsInstantSync || isLargeJump;
+
+      if (!hasInitialSync && activeIndex >= 0) {
+        hasInitialSync = true;
+      }
+
       prevActiveIndex = activeIndex;
-      scrollActiveIntoView(activeIndex);
+      scrollActiveIntoView(activeIndex, useInstant);
+    }
+  });
+
+  // Reset initial sync flag when lines change (new track)
+  $effect(() => {
+    if (lines.length > 0) {
+      // New lyrics loaded - reset sync state
+      hasInitialSync = false;
+      prevActiveIndex = -1;
     }
   });
 </script>
