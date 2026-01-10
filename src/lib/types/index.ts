@@ -1,0 +1,162 @@
+/**
+ * Shared Type Definitions
+ *
+ * Central location for types used across the application.
+ */
+
+// ============ Qobuz API Types ============
+// Raw response types from Qobuz API (via backend)
+
+export interface QobuzImage {
+  small?: string;
+  thumbnail?: string;
+  large?: string;
+}
+
+export interface QobuzTrack {
+  id: number;
+  title: string;
+  duration: number;
+  album?: {
+    id?: string;
+    title: string;
+    image?: QobuzImage;
+  };
+  performer?: { id?: number; name: string };
+  hires_streamable?: boolean;
+  maximum_bit_depth?: number;
+  maximum_sampling_rate?: number;
+  isrc?: string;
+}
+
+export interface QobuzAlbum {
+  id: string;
+  title: string;
+  artist: { id?: number; name: string };
+  image: QobuzImage;
+  release_date_original?: string;
+  hires_streamable?: boolean;
+  tracks_count?: number;
+  duration?: number;
+  label?: { name: string };
+  genre?: { name: string };
+  maximum_bit_depth?: number;
+  maximum_sampling_rate?: number;
+  tracks?: { items: QobuzTrack[] };
+}
+
+export interface QobuzArtist {
+  id: number;
+  name: string;
+  image?: QobuzImage;
+  albums_count?: number;
+  biography?: {
+    summary?: string;
+    content?: string;
+    source?: string;
+  };
+  albums?: {
+    items: QobuzAlbum[];
+    total: number;
+    offset: number;
+    limit: number;
+  };
+}
+
+// ============ UI Display Types ============
+// Converted/formatted types for UI components
+
+export interface Track {
+  id: number;
+  number: number;
+  title: string;
+  artist?: string;
+  duration: string;
+  durationSeconds: number;
+  quality?: string;
+  hires?: boolean;
+  bitDepth?: number;
+  samplingRate?: number;
+  albumId?: string;
+  artistId?: number;
+  isrc?: string;
+}
+
+export interface AlbumDetail {
+  id: string;
+  artwork: string;
+  title: string;
+  artist: string;
+  artistId?: number;
+  year: string;
+  label: string;
+  genre: string;
+  quality: string;
+  trackCount: number;
+  duration: string;
+  tracks: Track[];
+}
+
+export interface ArtistDetail {
+  id: number;
+  name: string;
+  image?: string;
+  albumsCount?: number;
+  biography?: {
+    summary?: string;
+    content?: string;
+    source?: string;
+  };
+  albums: {
+    id: string;
+    title: string;
+    artwork: string;
+    year?: string;
+    quality: string;
+  }[];
+  totalAlbums: number;
+}
+
+export interface PlaylistTrack {
+  id: number;
+  number: number;
+  title: string;
+  artist?: string;
+  album?: string;
+  albumArt?: string;
+  duration: string;
+  durationSeconds: number;
+  hires?: boolean;
+  bitDepth?: number;
+  samplingRate?: number;
+  albumId?: string;
+  artistId?: number;
+  isrc?: string;
+}
+
+// ============ Local Library Types ============
+
+export interface LocalLibraryTrack {
+  id: number;
+  file_path: string;
+  title: string;
+  artist: string;
+  album: string;
+  duration_secs: number;
+  format: string;
+  bit_depth?: number;
+  sample_rate: number;
+  artwork_path?: string;
+}
+
+// ============ External API Types ============
+
+export interface SongLinkResponse {
+  pageUrl: string;
+  title?: string;
+  artist?: string;
+  thumbnailUrl?: string;
+  platforms: Record<string, string>;
+  identifier: string;
+  contentType: string;
+}
