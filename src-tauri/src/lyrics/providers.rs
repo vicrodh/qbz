@@ -33,11 +33,30 @@ pub async fn fetch_lrclib(
     duration_secs: Option<u64>,
 ) -> Result<Option<LyricsData>, String> {
     let client = Client::new();
+
+    // Try direct GET first
     let mut best = fetch_lrclib_get(&client, title, artist).await?;
 
-    if best.is_none() {
+    // Check if GET result has synced lyrics
+    let get_has_synced = best.as_ref()
+        .and_then(|item| item.synced_lyrics.as_ref())
+        .map(|s| !s.trim().is_empty())
+        .unwrap_or(false);
+
+    // If no result OR no synced lyrics, try search for a better match
+    if best.is_none() || !get_has_synced {
         let results = fetch_lrclib_search(&client, title, artist).await?;
-        best = pick_best_match(&results, title, artist, duration_secs);
+        if let Some(search_result) = pick_best_match(&results, title, artist, duration_secs) {
+            // Check if search result has synced lyrics
+            let search_has_synced = search_result.synced_lyrics.as_ref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
+
+            // Prefer search result if it has synced lyrics and GET didn't
+            if search_has_synced || best.is_none() {
+                best = Some(search_result);
+            }
+        }
     }
 
     let Some(item) = best else {
