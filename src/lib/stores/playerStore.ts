@@ -21,6 +21,9 @@ export interface PlayingTrack {
   bitDepth?: number;
   samplingRate?: number;
   isLocal?: boolean;
+  // Optional IDs for recommendation tracking
+  albumId?: string;
+  artistId?: number;
 }
 
 interface BackendPlaybackState {

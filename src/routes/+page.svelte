@@ -318,7 +318,9 @@
       duration: track.duration,
       quality,
       bitDepth: track.maximum_bit_depth,
-      samplingRate: track.maximum_sampling_rate
+      samplingRate: track.maximum_sampling_rate,
+      albumId: track.album?.id,
+      artistId: track.performer?.id
     });
   }
 
@@ -355,7 +357,9 @@
       album: selectedAlbum?.title || '',
       artwork,
       duration: track.durationSeconds,
-      quality
+      quality,
+      albumId: selectedAlbum?.id,
+      artistId: track.artistId
     });
   }
 
@@ -678,7 +682,9 @@
       album: track.album || 'Playlist',
       artwork: track.albumArt || '',
       duration: track.durationSeconds,
-      quality
+      quality,
+      albumId: track.albumId,
+      artistId: track.artistId
     });
   }
 

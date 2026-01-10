@@ -17,6 +17,7 @@ pub mod lyrics;
 pub mod media_controls;
 pub mod player;
 pub mod queue;
+pub mod reco_store;
 pub mod share;
 
 use std::sync::Arc;
@@ -112,6 +113,9 @@ pub fn run() {
     // Initialize lyrics cache state
     let lyrics_state = lyrics::LyricsState::new()
         .expect("Failed to initialize lyrics cache");
+    // Initialize recommendation store state
+    let reco_state = reco_store::RecoState::new()
+        .expect("Failed to initialize recommendation store");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -169,6 +173,7 @@ pub fn run() {
         .manage(airplay_state)
         .manage(download_cache_state)
         .manage(lyrics_state)
+        .manage(reco_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -331,6 +336,11 @@ pub fn run() {
             // Lyrics commands
             lyrics::commands::lyrics_get,
             lyrics::commands::lyrics_clear_cache,
+            // Recommendation store commands
+            reco_store::commands::reco_log_event,
+            reco_store::commands::reco_get_home,
+            reco_store::commands::reco_train_scores,
+            reco_store::commands::reco_get_home_ml,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
