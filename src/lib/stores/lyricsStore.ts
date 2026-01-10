@@ -10,13 +10,13 @@ import { getCurrentTrack, getCurrentTime, subscribe as subscribePlayer } from '.
 // ============ Types ============
 
 export interface LyricsPayload {
-  track_id: number | null;
+  trackId: number | null;
   title: string;
   artist: string;
   album: string | null;
-  duration_secs: number | null;
+  durationSecs: number | null;
   plain: string | null;
-  synced_lrc: string | null;
+  syncedLrc: string | null;
   provider: 'lrclib' | 'ovh';
   cached: boolean;
 }
@@ -161,8 +161,8 @@ function parsePlain(plain: string): LyricsLine[] {
  * Parse lyrics payload into lines
  */
 function parsePayload(p: LyricsPayload): ParsedLyrics {
-  if (p.synced_lrc && p.synced_lrc.trim()) {
-    const lines = parseLRC(p.synced_lrc);
+  if (p.syncedLrc && p.syncedLrc.trim()) {
+    const lines = parseLRC(p.syncedLrc);
     if (lines.length > 0) {
       return { lines, isSynced: true };
     }
@@ -292,9 +292,9 @@ export async function fetchLyrics(): Promise<void> {
     });
 
     // Explicit logging - no objects to expand
-    console.log(`[Lyrics] Backend: hasResult=${!!result}, hasSyncedLrc=${!!result?.synced_lrc}, syncedLen=${result?.synced_lrc?.length ?? 0}, hasPlain=${!!result?.plain}, provider=${result?.provider}`);
-    if (result?.synced_lrc) {
-      console.log(`[Lyrics] Synced LRC preview: ${result.synced_lrc.substring(0, 150)}`);
+    console.log(`[Lyrics] Backend: hasResult=${!!result}, hasSyncedLrc=${!!result?.syncedLrc}, syncedLen=${result?.syncedLrc?.length ?? 0}, hasPlain=${!!result?.plain}, provider=${result?.provider}`);
+    if (result?.syncedLrc) {
+      console.log(`[Lyrics] Synced LRC preview: ${result.syncedLrc.substring(0, 150)}`);
     }
 
     if (result) {
