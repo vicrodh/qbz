@@ -472,28 +472,10 @@
     }
   }
 
-  async function resolveTrackIsrc(trackId: number, isrc?: string): Promise<string | null> {
-    if (isrc && isrc.trim()) {
-      return isrc;
-    }
-    try {
-      const fullTrack = await invoke<QobuzTrack>('get_track', { trackId });
-      return fullTrack.isrc || null;
-    } catch (err) {
-      console.error('Failed to fetch track ISRC:', err);
-      return null;
-    }
-  }
-
-  async function shareSonglinkTrack(trackId: number, isrc?: string) {
-    const resolvedIsrc = await resolveTrackIsrc(trackId, isrc);
-    if (!resolvedIsrc) {
-      showToast('ISRC not available for this track', 'error');
-      return;
-    }
+  async function shareSonglinkTrack(trackId: number) {
     try {
       showToast('Fetching Song.link...', 'info');
-      const response = await invoke<SongLinkResponse>('share_track_songlink', { isrc: resolvedIsrc });
+      const response = await invoke<SongLinkResponse>('share_track_songlink', { trackId });
       await copyToClipboard(response.pageUrl, 'Song.link copied');
     } catch (err) {
       console.error('Failed to get Song.link:', err);
@@ -1422,7 +1404,7 @@
           onTrackAddFavorite={addTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
-          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
           onArtistClick={handleArtistClick}
@@ -1444,7 +1426,7 @@
           onTrackPlayLater={handleAlbumTrackPlayLater}
           onTrackAddFavorite={addTrackToFavorites}
           onTrackShareQobuz={shareQobuzTrackLink}
-          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
           onPlayAll={handlePlayAllAlbum}
@@ -1463,7 +1445,7 @@
           onTrackAddFavorite={addTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
-          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
         />
@@ -1484,7 +1466,7 @@
           onTrackAddFavorite={addTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
-          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
         />
@@ -1498,7 +1480,7 @@
           onTrackAddFavorite={addTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
-          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
         />

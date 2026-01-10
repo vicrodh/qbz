@@ -2,29 +2,20 @@
 
 use tauri::State;
 
-use crate::share::{ShareError, SongLinkClient, SongLinkResponse};
+use crate::share::{ShareError, SongLinkResponse};
 use crate::AppState;
 
-/// Get song.link URL for a track
-/// Requires ISRC to be present in the track metadata
+/// Get song.link URL for a track using Qobuz track ID
 #[tauri::command]
 pub async fn share_track_songlink(
-    isrc: Option<String>,
+    track_id: u64,
     state: State<'_, AppState>,
 ) -> Result<SongLinkResponse, String> {
-    let isrc = isrc.ok_or_else(|| {
-        ShareError::MissingIsrc.to_string()
-    })?;
-
-    if isrc.is_empty() {
-        return Err(ShareError::MissingIsrc.to_string());
-    }
-
-    log::info!("Command: share_track_songlink ISRC={}", isrc);
+    log::info!("Command: share_track_songlink track_id={}", track_id);
 
     state
         .songlink
-        .get_by_isrc(&isrc)
+        .get_by_track_id(&track_id.to_string())
         .await
         .map_err(|e| e.to_string())
 }

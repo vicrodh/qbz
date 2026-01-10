@@ -48,22 +48,24 @@ impl SongLinkClient {
         }
     }
 
-    /// Get song.link URL for a track by ISRC
-    pub async fn get_by_isrc(&self, isrc: &str) -> Result<SongLinkResponse, ShareError> {
-        let cache_key = format!("isrc:{}", isrc);
+    /// Get song.link URL for a track by Qobuz track ID
+    pub async fn get_by_track_id(&self, track_id: &str) -> Result<SongLinkResponse, ShareError> {
+        let cache_key = format!("track:{}", track_id);
 
         // Check cache first
         if let Some(cached) = self.get_from_cache(&cache_key) {
-            log::debug!("Cache hit for ISRC: {}", isrc);
+            log::debug!("Cache hit for track ID: {}", track_id);
             return Ok(cached);
         }
 
-        log::info!("Fetching song.link for ISRC: {}", isrc);
+        // Use Qobuz track URL for Odesli lookup
+        let qobuz_url = format!("https://open.qobuz.com/track/{}", track_id);
+        log::info!("Fetching song.link for Qobuz track: {}", qobuz_url);
 
         let response = self
             .client
             .get(ODESLI_API_URL)
-            .query(&[("isrc", isrc), ("userCountry", "US")])
+            .query(&[("url", &qobuz_url), ("userCountry", &"US".to_string())])
             .send()
             .await?;
 
@@ -77,7 +79,7 @@ impl SongLinkClient {
         }
 
         let odesli: OdesliResponse = response.json().await?;
-        let result = self.convert_response(odesli, isrc.to_string(), ContentType::Track)?;
+        let result = self.convert_response(odesli, track_id.to_string(), ContentType::Track)?;
 
         // Cache the result
         self.store_in_cache(cache_key, result.clone());
