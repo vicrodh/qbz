@@ -15,6 +15,14 @@
     type DownloadStatus
   } from '$lib/stores/downloadState';
 
+  // Toast state management
+  import {
+    showToast,
+    hideToast,
+    subscribe as subscribeToast,
+    type Toast as ToastData
+  } from '$lib/stores/toastStore';
+
   // Components
   import Sidebar from '$lib/components/Sidebar.svelte';
   import NowPlayingBar from '$lib/components/NowPlayingBar.svelte';
@@ -235,8 +243,8 @@
   // Local library track IDs in current queue (for distinguishing from Qobuz tracks)
   let localTrackIds = $state<Set<number>>(new Set());
 
-  // Toast State
-  let toast = $state<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+  // Toast State (from store subscription)
+  let toast = $state<ToastData | null>(null);
 
   // Navigation Functions
   function navigateTo(view: string) {
@@ -1314,15 +1322,6 @@
     sidebarRef?.refreshPlaylists();
   }
 
-  // Toast Functions
-  function showToast(message: string, type: 'success' | 'error' | 'info' = 'info') {
-    toast = { message, type };
-  }
-
-  function hideToast() {
-    toast = null;
-  }
-
   // Auth Handlers
   function handleLoginSuccess(info: { userName: string; subscription: string }) {
     isLoggedIn = true;
@@ -1499,6 +1498,11 @@
       downloadStateVersion++;
     });
 
+    // Subscribe to toast state changes
+    const unsubscribeToast = subscribeToast((newToast) => {
+      toast = newToast;
+    });
+
     // Restore Last.fm session on app startup
     (async () => {
       try {
@@ -1529,6 +1533,7 @@
       window.removeEventListener('mouseup', handleMouseNavigation);
       stopDownloadEventListeners();
       unsubscribeDownloads();
+      unsubscribeToast();
     };
   });
 
