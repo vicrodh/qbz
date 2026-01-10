@@ -29,7 +29,7 @@
   }: Props = $props();
 </script>
 
-<aside class="lyrics-sidebar">
+  <aside class="lyrics-sidebar">
   <div class="header">
     <div class="header-icon">
       <Mic2 size={18} />
@@ -65,20 +65,28 @@
 <style>
   .lyrics-sidebar {
     width: var(--lyrics-sidebar-width, 320px);
+    min-width: var(--lyrics-sidebar-width, 320px);
     height: calc(100vh - 80px);
     display: flex;
     flex-direction: column;
     border-left: 1px solid rgba(255, 255, 255, 0.06);
-    background: linear-gradient(160deg, rgba(54, 44, 34, 0.8), rgba(23, 21, 18, 0.9));
+    background: linear-gradient(160deg, rgba(52, 38, 26, 0.92), rgba(22, 17, 12, 0.95));
     color: var(--text-primary);
     backdrop-filter: blur(14px);
+    --lyrics-font-size: 15px;
+    --lyrics-active-size: 20px;
+    --lyrics-line-gap: 12px;
+    --lyrics-line-height: 1.5;
+    --lyrics-dimmed-opacity: 0.35;
+    --lyrics-highlight-muted: rgba(255, 255, 255, 0.22);
+    --lyrics-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
   }
 
   .header {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 18px 16px 10px 16px;
+    padding: 18px 16px 12px 16px;
     border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   }
 

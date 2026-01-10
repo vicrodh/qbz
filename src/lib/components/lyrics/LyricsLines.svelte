@@ -74,7 +74,7 @@
   .lyrics-lines {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: var(--lyrics-line-gap, 16px);
     padding: 12px 16px 24px 16px;
     overflow-y: auto;
     height: 100%;
@@ -95,12 +95,13 @@
     font-size: var(--lyrics-font-size, 18px);
     line-height: var(--lyrics-line-height, 1.45);
     letter-spacing: 0.01em;
-    transition: color 180ms ease, opacity 180ms ease, transform 180ms ease;
+    transition: color 180ms ease, opacity 180ms ease, transform 180ms ease, filter 180ms ease;
     position: relative;
   }
 
   .lyrics-line.dimmed {
-    opacity: var(--lyrics-dimmed-opacity, 0.45);
+    opacity: var(--lyrics-dimmed-opacity, 0.4);
+    filter: blur(var(--lyrics-dimmed-blur, 0px));
   }
 
   .lyrics-line.active {
@@ -116,7 +117,7 @@
     background: linear-gradient(
       90deg,
       var(--lyrics-active-color, var(--text-primary)) calc(var(--line-progress, 0) * 100%),
-      rgba(255, 255, 255, 0.35) calc(var(--line-progress, 0) * 100%)
+      var(--lyrics-highlight-muted, rgba(255, 255, 255, 0.25)) calc(var(--line-progress, 0) * 100%)
     );
     -webkit-background-clip: text;
     background-clip: text;
