@@ -197,7 +197,7 @@
 
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
-  import FullScreenNowPlaying from '$lib/components/FullScreenNowPlaying.svelte';
+  import ExpandedPlayer from '$lib/components/ExpandedPlayer.svelte';
   import FocusMode from '$lib/components/FocusMode.svelte';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import CastPicker from '$lib/components/CastPicker.svelte';
@@ -958,7 +958,7 @@
 
   // Start/stop lyrics active line updates based on playback state and visibility
   $effect(() => {
-    const lyricsVisible = lyricsSidebarVisible || isFocusModeOpen;
+    const lyricsVisible = lyricsSidebarVisible || isFocusModeOpen || isFullScreenOpen;
     if (isPlaying && lyricsIsSynced && lyricsVisible) {
       startActiveLineUpdates();
     } else {
@@ -1174,9 +1174,9 @@
       onSaveAsPlaylist={() => showToast('Save as playlist coming soon', 'info')}
     />
 
-    <!-- Full Screen Now Playing -->
+    <!-- Expanded Player -->
     {#if currentTrack}
-      <FullScreenNowPlaying
+      <ExpandedPlayer
         isOpen={isFullScreenOpen}
         onClose={closeFullScreen}
         artwork={currentTrack.artwork}
@@ -1211,6 +1211,12 @@
           openFocusMode();
         }}
         onCast={openCastPicker}
+        lyricsLines={lyricsLines.map(l => ({ text: l.text }))}
+        lyricsActiveIndex={lyricsActiveIndex}
+        lyricsActiveProgress={lyricsActiveProgress}
+        lyricsSynced={lyricsIsSynced}
+        lyricsLoading={lyricsStatus === 'loading'}
+        lyricsError={lyricsStatus === 'error' ? lyricsError : (lyricsStatus === 'not_found' ? 'No lyrics found' : null)}
       />
     {/if}
 

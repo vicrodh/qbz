@@ -302,11 +302,17 @@
   /* Main Layout */
   .main-layout {
     position: absolute;
-    inset: 0;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100%;
+    max-width: 1400px;
+    height: 100%;
     display: flex;
     align-items: center;
+    justify-content: center;
     padding: 80px 48px 140px;
-    gap: 40px;
+    gap: 60px;
     z-index: 1;
   }
 
