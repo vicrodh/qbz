@@ -170,15 +170,33 @@ pub fn load_qobuz_credentials() -> Result<Option<QobuzCredentials>, String> {
 
 /// Check if credentials are saved (keyring or fallback)
 pub fn has_saved_credentials() -> bool {
+    log::info!("Checking for saved credentials...");
+
     // Check keyring
-    if let Ok(entry) = Entry::new(SERVICE_NAME, QOBUZ_CREDENTIALS_KEY) {
-        if entry.get_password().is_ok() {
-            return true;
+    match Entry::new(SERVICE_NAME, QOBUZ_CREDENTIALS_KEY) {
+        Ok(entry) => {
+            match entry.get_password() {
+                Ok(_) => {
+                    log::info!("Found credentials in system keyring");
+                    return true;
+                }
+                Err(keyring::Error::NoEntry) => {
+                    log::info!("No credentials in keyring (NoEntry)");
+                }
+                Err(e) => {
+                    log::warn!("Keyring check failed: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            log::warn!("Keyring not available: {}", e);
         }
     }
 
     // Check fallback
-    has_fallback_credentials()
+    let has_fallback = has_fallback_credentials();
+    log::info!("Fallback credentials exist: {}", has_fallback);
+    has_fallback
 }
 
 /// Clear saved Qobuz credentials (both keyring and fallback)
