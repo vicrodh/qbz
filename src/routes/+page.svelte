@@ -122,6 +122,18 @@
     SongLinkResponse
   } from '$lib/types';
 
+  // Services
+  import {
+    playTrack,
+    setToastCallback,
+    checkTrackFavorite,
+    toggleTrackFavorite,
+    addTrackToFavorites,
+    showTrackNotification,
+    updateLastfmNowPlaying,
+    cleanup as cleanupPlayback
+  } from '$lib/services/playbackService';
+
   // Components
   import Sidebar from '$lib/components/Sidebar.svelte';
   import NowPlayingBar from '$lib/components/NowPlayingBar.svelte';
@@ -385,12 +397,11 @@
     }
   }
 
-  async function addTrackToFavorites(trackId: number) {
-    try {
-      await invoke('add_favorite', { favType: 'track', itemId: String(trackId) });
+  async function handleAddTrackToFavorites(trackId: number) {
+    const success = await addTrackToFavorites(trackId);
+    if (success) {
       showToast('Added to favorites', 'success');
-    } catch (err) {
-      console.error('Failed to add to favorites:', err);
+    } else {
       showToast('Failed to add to favorites', 'error');
     }
   }
@@ -586,40 +597,14 @@
     }
   }
 
-  // Check if a track is in favorites
-  async function checkTrackFavorite(trackId: number): Promise<boolean> {
-    try {
-      const response = await invoke<{ tracks?: { items: Array<{ id: number }> } }>('get_favorites', {
-        favType: 'tracks',
-        limit: 500
-      });
-      if (response.tracks?.items) {
-        return response.tracks.items.some(item => item.id === trackId);
-      }
-      return false;
-    } catch (err) {
-      console.error('Failed to check favorite status:', err);
-      return false;
-    }
-  }
-
   async function toggleFavorite() {
     if (!currentTrack) return;
 
-    const trackId = String(currentTrack.id);
-    const newFavoriteState = !isFavorite;
-
-    try {
-      if (newFavoriteState) {
-        await invoke('add_favorite', { favType: 'track', itemId: trackId });
-        showToast('Added to favorites', 'success');
-      } else {
-        await invoke('remove_favorite', { favType: 'track', itemId: trackId });
-        showToast('Removed from favorites', 'success');
-      }
-      setIsFavorite(newFavoriteState);
-    } catch (err) {
-      console.error('Failed to toggle favorite:', err);
+    const result = await toggleTrackFavorite(currentTrack.id, isFavorite);
+    if (result.success) {
+      setIsFavorite(result.isFavorite);
+      showToast(result.isFavorite ? 'Added to favorites' : 'Removed from favorites', 'success');
+    } else {
       showToast('Failed to update favorites', 'error');
     }
   }
@@ -958,7 +943,7 @@
       ? `${track.bitDepth}bit/${track.samplingRate}kHz`
       : 'CD Quality';
 
-    const newTrack: PlayingTrack = {
+    await playTrack({
       id: track.id,
       title: track.title,
       artist: track.artist || 'Unknown Artist',
@@ -966,47 +951,7 @@
       artwork: track.albumArt || '',
       duration: track.durationSeconds,
       quality
-    };
-    setCurrentTrack(newTrack);
-
-    try {
-      await invoke('play_track', { trackId: track.id });
-      setIsPlaying(true);
-
-      await invoke('set_media_metadata', {
-        title: track.title,
-        artist: track.artist || 'Unknown Artist',
-        album: track.album || 'Playlist',
-        durationSecs: track.durationSeconds,
-        coverUrl: track.albumArt
-      });
-
-      // Show system notification
-      showTrackNotification(
-        track.title,
-        track.artist || 'Unknown Artist',
-        track.album || 'Playlist',
-        track.albumArt
-      );
-
-      // Update Last.fm
-      updateLastfmNowPlaying(
-        track.title,
-        track.artist || 'Unknown Artist',
-        track.album || '',
-        track.durationSeconds,
-        track.id
-      );
-
-      // Check if track is favorite
-      setIsFavorite(await checkTrackFavorite(track.id));
-
-      await syncQueueState();
-    } catch (err) {
-      console.error('Failed to play track:', err);
-      showToast(`Playback error: ${err}`, 'error');
-      setIsPlaying(false);
-    }
+    });
   }
 
   async function handleLocalTrackPlay(track: LocalLibraryTrack) {
@@ -1019,7 +964,7 @@
         : track.format)
       : track.format;
 
-    const newTrack: PlayingTrack = {
+    await playTrack({
       id: track.id,
       title: track.title,
       artist: track.artist,
@@ -1028,112 +973,13 @@
       duration: track.duration_secs,
       quality,
       isLocal: true
-    };
-    setCurrentTrack(newTrack);
-
-    try {
-      await invoke('library_play_track', { trackId: track.id });
-      setIsPlaying(true);
-      showToast(`Playing: ${track.title}`, 'success');
-
-      // Update MPRIS metadata
-      await invoke('set_media_metadata', {
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        durationSecs: track.duration_secs,
-        coverUrl: artwork || null
-      });
-
-      // Show system notification
-      showTrackNotification(track.title, track.artist, track.album, artwork || undefined);
-
-      // Update Last.fm
-      updateLastfmNowPlaying(
-        track.title,
-        track.artist,
-        track.album,
-        track.duration_secs,
-        track.id
-      );
-
-      // Local tracks don't have Qobuz favorites
-      setIsFavorite(false);
-    } catch (err) {
-      console.error('Failed to play local track:', err);
-      showToast(`Playback error: ${err}`, 'error');
-      setIsPlaying(false);
-    }
+    }, { isLocal: true });
   }
 
   // Handle setting queue from local library (tracks need different playback command)
   function handleSetLocalQueue(trackIds: number[]) {
     // Set local track IDs via queueStore
     setLocalTrackIds(trackIds);
-  }
-
-  // System Notification for track changes
-  async function showTrackNotification(title: string, artist: string, album: string, artworkUrl?: string) {
-    try {
-      await invoke('show_track_notification', {
-        title,
-        artist,
-        album,
-        artworkUrl: artworkUrl || null
-      });
-    } catch (err) {
-      console.error('Failed to show track notification:', err);
-    }
-  }
-
-  // Last.fm scrobbling state
-  let lastScrobbledTrackId: number | null = null;
-  let scrobbleTimeout: ReturnType<typeof setTimeout> | null = null;
-
-  // Update Last.fm "now playing" and schedule scrobble
-  async function updateLastfmNowPlaying(title: string, artist: string, album: string, durationSecs: number, trackId: number) {
-    // Check if scrobbling is enabled
-    const scrobblingEnabled = localStorage.getItem('qbz-lastfm-scrobbling') !== 'false';
-    const sessionKey = localStorage.getItem('qbz-lastfm-session-key');
-
-    if (!scrobblingEnabled || !sessionKey) return;
-
-    try {
-      // Update "now playing"
-      await invoke('lastfm_now_playing', {
-        artist,
-        track: title,
-        album: album || null
-      });
-      console.log('Last.fm: Updated now playing');
-
-      // Schedule scrobble after 50% of track or 4 minutes (whichever is shorter)
-      if (scrobbleTimeout) {
-        clearTimeout(scrobbleTimeout);
-      }
-
-      const scrobbleDelay = Math.min(durationSecs * 0.5, 240) * 1000; // in ms
-
-      scrobbleTimeout = setTimeout(async () => {
-        if (lastScrobbledTrackId !== trackId) {
-          try {
-            const timestamp = Math.floor(Date.now() / 1000);
-            await invoke('lastfm_scrobble', {
-              artist,
-              track: title,
-              album: album || null,
-              timestamp
-            });
-            lastScrobbledTrackId = trackId;
-            console.log('Last.fm: Scrobbled track');
-          } catch (err) {
-            console.error('Last.fm scrobble failed:', err);
-          }
-        }
-      }, scrobbleDelay);
-    } catch (err) {
-      console.error('Last.fm now playing failed:', err);
-    }
   }
 
   // Playlist Modal Functions
@@ -1268,6 +1114,9 @@
     initDownloadStates();
     startDownloadEventListeners();
 
+    // Set up playback service toast callback
+    setToastCallback(showToast);
+
     // Subscribe to download state changes to trigger reactivity
     const unsubscribeDownloads = subscribeDownloads(() => {
       downloadStateVersion++;
@@ -1371,6 +1220,7 @@
       unsubscribePlayer();
       unsubscribeQueue();
       stopPolling();
+      cleanupPlayback();
     };
   });
 
@@ -1421,7 +1271,7 @@
           onTrackPlay={handleTrackPlay}
           onTrackPlayNext={handleQobuzTrackPlayNext}
           onTrackPlayLater={handleQobuzTrackPlayLater}
-          onTrackAddFavorite={addTrackToFavorites}
+          onTrackAddFavorite={handleAddTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
           onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
@@ -1444,7 +1294,7 @@
           onTrackPlay={handleAlbumTrackPlay}
           onTrackPlayNext={handleAlbumTrackPlayNext}
           onTrackPlayLater={handleAlbumTrackPlayLater}
-          onTrackAddFavorite={addTrackToFavorites}
+          onTrackAddFavorite={handleAddTrackToFavorites}
           onTrackShareQobuz={shareQobuzTrackLink}
           onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
           onTrackGoToAlbum={handleAlbumClick}
@@ -1467,7 +1317,7 @@
           onTrackPlay={handlePlaylistTrackPlay}
           onTrackPlayNext={handleQobuzTrackPlayNext}
           onTrackPlayLater={handleQobuzTrackPlayLater}
-          onTrackAddFavorite={addTrackToFavorites}
+          onTrackAddFavorite={handleAddTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
           onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
@@ -1488,7 +1338,7 @@
           onTrackPlay={handlePlaylistTrackPlay}
           onTrackPlayNext={handleDisplayTrackPlayNext}
           onTrackPlayLater={handleDisplayTrackPlayLater}
-          onTrackAddFavorite={addTrackToFavorites}
+          onTrackAddFavorite={handleAddTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
           onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
@@ -1509,7 +1359,7 @@
           onArtistClick={handleArtistClick}
           onTrackPlayNext={handleDisplayTrackPlayNext}
           onTrackPlayLater={handleDisplayTrackPlayLater}
-          onTrackAddFavorite={addTrackToFavorites}
+          onTrackAddFavorite={handleAddTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
           onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
