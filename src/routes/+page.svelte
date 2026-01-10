@@ -479,7 +479,8 @@
       showToast('Fetching Song.link...', 'info');
       const response = await invoke<SongLinkResponse>('share_track_songlink', {
         isrc: resolvedIsrc?.length ? resolvedIsrc : null,
-        url: qobuzUrl
+        url: qobuzUrl,
+        trackId
       });
       await copyToClipboard(response.pageUrl, 'Song.link copied');
     } catch (err) {
