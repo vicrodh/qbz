@@ -227,22 +227,10 @@
   // Toast State (from store subscription)
   let toast = $state<ToastData | null>(null);
 
-  // Navigation Functions (using store)
+  // Navigation wrapper (keeps debug logging)
   function navigateTo(view: string) {
     console.log('navigateTo called with:', view, 'current activeView:', activeView);
     navTo(view as ViewType);
-  }
-
-  function goBack() {
-    navGoBack();
-  }
-
-  function goForward() {
-    navGoForward();
-  }
-
-  function handlePlaylistSelect(playlistId: number) {
-    selectPlaylist(playlistId);
   }
 
   async function handleAlbumClick(albumId: string) {
@@ -759,7 +747,7 @@
       case 'ArrowLeft':
         if (e.altKey) {
           e.preventDefault();
-          goBack();
+          navGoBack();
         } else if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
           handleSkipBack();
@@ -768,7 +756,7 @@
       case 'ArrowRight':
         if (e.altKey) {
           e.preventDefault();
-          goForward();
+          navGoForward();
         } else if (e.ctrlKey || e.metaKey) {
           e.preventDefault();
           handleSkipForward();
@@ -815,10 +803,10 @@
     const handleMouseNavigation = (event: MouseEvent) => {
       if (event.button === 3) {
         event.preventDefault();
-        goBack();
+        navGoBack();
       } else if (event.button === 4) {
         event.preventDefault();
-        goForward();
+        navGoForward();
       }
     };
 
@@ -967,7 +955,7 @@
       {activeView}
       {selectedPlaylistId}
       onNavigate={navigateTo}
-      onPlaylistSelect={handlePlaylistSelect}
+      onPlaylistSelect={selectPlaylist}
       onCreatePlaylist={openCreatePlaylist}
       onSettingsClick={() => navigateTo('settings')}
       onLogout={handleLogout}
@@ -997,7 +985,7 @@
         />
       {:else if activeView === 'settings'}
         <SettingsView
-          onBack={goBack}
+          onBack={navGoBack}
           onLogout={handleLogout}
           userName={userInfo?.userName}
           subscription={userInfo?.subscription}
@@ -1005,7 +993,7 @@
       {:else if activeView === 'album' && selectedAlbum}
         <AlbumDetailView
           album={selectedAlbum}
-          onBack={goBack}
+          onBack={navGoBack}
           onArtistClick={() => selectedAlbum?.artistId && handleArtistClick(selectedAlbum.artistId)}
           onTrackPlay={handleAlbumTrackPlay}
           onTrackPlayNext={handleAlbumTrackPlayNext}
@@ -1028,7 +1016,7 @@
       {:else if activeView === 'artist' && selectedArtist}
         <ArtistDetailView
           artist={selectedArtist}
-          onBack={goBack}
+          onBack={navGoBack}
           onAlbumClick={handleAlbumClick}
           onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queueQobuzTrackNext}
@@ -1050,7 +1038,7 @@
       {:else if activeView === 'playlist' && selectedPlaylistId}
         <PlaylistDetailView
           playlistId={selectedPlaylistId}
-          onBack={goBack}
+          onBack={navGoBack}
           onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queuePlaylistTrackNext}
           onTrackPlayLater={queuePlaylistTrackLater}
