@@ -472,10 +472,26 @@
     }
   }
 
-  async function shareSonglinkTrack(trackId: number) {
+  async function shareSonglinkTrack(trackId: number, isrc?: string) {
+    // Get ISRC - either from parameter or fetch from track details
+    let resolvedIsrc = isrc;
+    if (!resolvedIsrc) {
+      try {
+        const fullTrack = await invoke<QobuzTrack>('get_track', { trackId });
+        resolvedIsrc = fullTrack.isrc;
+      } catch (err) {
+        console.error('Failed to fetch track ISRC:', err);
+      }
+    }
+
+    if (!resolvedIsrc) {
+      showToast('ISRC not available for this track', 'error');
+      return;
+    }
+
     try {
       showToast('Fetching Song.link...', 'info');
-      const response = await invoke<SongLinkResponse>('share_track_songlink', { trackId });
+      const response = await invoke<SongLinkResponse>('share_track_songlink', { isrc: resolvedIsrc });
       await copyToClipboard(response.pageUrl, 'Song.link copied');
     } catch (err) {
       console.error('Failed to get Song.link:', err);
@@ -532,6 +548,9 @@
         track.album?.title || '',
         artwork || undefined
       );
+
+      // Check if track is favorite
+      isFavorite = await checkTrackFavorite(track.id);
     } catch (err) {
       console.error('Failed to play track:', err);
       showToast(`Playback error: ${err}`, 'error');
@@ -676,6 +695,23 @@
     }
   }
 
+  // Check if a track is in favorites
+  async function checkTrackFavorite(trackId: number): Promise<boolean> {
+    try {
+      const response = await invoke<{ tracks?: { items: Array<{ id: number }> } }>('get_favorites', {
+        favType: 'tracks',
+        limit: 500
+      });
+      if (response.tracks?.items) {
+        return response.tracks.items.some(item => item.id === trackId);
+      }
+      return false;
+    } catch (err) {
+      console.error('Failed to check favorite status:', err);
+      return false;
+    }
+  }
+
   async function toggleFavorite() {
     if (!currentTrack) return;
 
@@ -788,6 +824,13 @@
 
       // Update Last.fm
       updateLastfmNowPlaying(track.title, track.artist, track.album, track.duration_secs, track.id);
+
+      // Check if track is favorite (for Qobuz tracks only)
+      if (!isLocalTrack) {
+        isFavorite = await checkTrackFavorite(track.id);
+      } else {
+        isFavorite = false;
+      }
 
       // Refresh queue state
       await syncQueueState();
@@ -1404,7 +1447,7 @@
           onTrackAddFavorite={addTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
-          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id)}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
           onArtistClick={handleArtistClick}
@@ -1426,7 +1469,7 @@
           onTrackPlayLater={handleAlbumTrackPlayLater}
           onTrackAddFavorite={addTrackToFavorites}
           onTrackShareQobuz={shareQobuzTrackLink}
-          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id)}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
           onPlayAll={handlePlayAllAlbum}
@@ -1445,7 +1488,7 @@
           onTrackAddFavorite={addTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
-          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id)}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
         />
@@ -1466,7 +1509,7 @@
           onTrackAddFavorite={addTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
-          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id)}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
         />
@@ -1480,7 +1523,7 @@
           onTrackAddFavorite={addTrackToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackShareQobuz={shareQobuzTrackLink}
-          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id)}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
         />

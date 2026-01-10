@@ -85,11 +85,13 @@
   {/if}
 
   <!-- Favorite Indicator -->
-  {#if isFavorite}
-    <div class="favorite-indicator">
+  <div class="favorite-indicator" class:is-favorite={isFavorite}>
+    {#if isFavorite}
       <Heart size={14} fill="var(--accent-primary)" color="var(--accent-primary)" />
-    </div>
-  {/if}
+    {:else}
+      <Heart size={14} color="var(--text-muted)" />
+    {/if}
+  </div>
 
   <div class="track-actions">
     <TrackMenu
@@ -228,6 +230,20 @@
     align-items: center;
     justify-content: center;
     width: 24px;
+    opacity: 0.3;
+    transition: opacity 150ms ease;
+  }
+
+  .favorite-indicator.is-favorite {
+    opacity: 1;
+  }
+
+  .track-row:hover .favorite-indicator {
+    opacity: 0.6;
+  }
+
+  .track-row:hover .favorite-indicator.is-favorite {
+    opacity: 1;
   }
 
   .track-actions {

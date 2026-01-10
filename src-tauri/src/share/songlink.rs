@@ -48,38 +48,58 @@ impl SongLinkClient {
         }
     }
 
-    /// Get song.link URL for a track by Qobuz track ID
-    pub async fn get_by_track_id(&self, track_id: &str) -> Result<SongLinkResponse, ShareError> {
-        let cache_key = format!("track:{}", track_id);
+    /// Get song.link URL for a track by ISRC
+    /// Qobuz isn't supported by Odesli, so we use ISRC to find the track on Spotify
+    pub async fn get_by_isrc(&self, isrc: &str) -> Result<SongLinkResponse, ShareError> {
+        let cache_key = format!("isrc:{}", isrc);
 
         // Check cache first
         if let Some(cached) = self.get_from_cache(&cache_key) {
-            log::debug!("Cache hit for track ID: {}", track_id);
+            log::debug!("Cache hit for ISRC: {}", isrc);
             return Ok(cached);
         }
 
-        // Use Qobuz track URL for Odesli lookup
-        let qobuz_url = format!("https://open.qobuz.com/track/{}", track_id);
-        log::info!("Fetching song.link for Qobuz track: {}", qobuz_url);
+        // Use Spotify search URL with ISRC - Odesli will resolve it
+        // Format: https://open.spotify.com/search/isrc:{ISRC}
+        let spotify_search_url = format!("https://open.spotify.com/search/isrc%3A{}", isrc);
+        log::info!("Fetching song.link via Spotify ISRC search: {}", isrc);
 
         let response = self
             .client
             .get(ODESLI_API_URL)
-            .query(&[("url", &qobuz_url), ("userCountry", &"US".to_string())])
+            .query(&[("url", &spotify_search_url), ("userCountry", &"US".to_string())])
             .send()
             .await?;
 
+        // If Spotify search doesn't work, try Deezer
         if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(ShareError::OdesliError(format!(
-                "HTTP {}: {}",
-                status, text
-            )));
+            log::debug!("Spotify search failed, trying Deezer...");
+            let deezer_url = format!("https://www.deezer.com/search/{}", isrc);
+
+            let response = self
+                .client
+                .get(ODESLI_API_URL)
+                .query(&[("url", &deezer_url), ("userCountry", &"US".to_string())])
+                .send()
+                .await?;
+
+            if !response.status().is_success() {
+                let status = response.status();
+                let text = response.text().await.unwrap_or_default();
+                return Err(ShareError::OdesliError(format!(
+                    "HTTP {}: {}",
+                    status, text
+                )));
+            }
+
+            let odesli: OdesliResponse = response.json().await?;
+            let result = self.convert_response(odesli, isrc.to_string(), ContentType::Track)?;
+            self.store_in_cache(cache_key, result.clone());
+            return Ok(result);
         }
 
         let odesli: OdesliResponse = response.json().await?;
-        let result = self.convert_response(odesli, track_id.to_string(), ContentType::Track)?;
+        let result = self.convert_response(odesli, isrc.to_string(), ContentType::Track)?;
 
         // Cache the result
         self.store_in_cache(cache_key, result.clone());

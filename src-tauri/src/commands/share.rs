@@ -5,17 +5,22 @@ use tauri::State;
 use crate::share::{ShareError, SongLinkResponse};
 use crate::AppState;
 
-/// Get song.link URL for a track using Qobuz track ID
+/// Get song.link URL for a track using ISRC
+/// Qobuz isn't supported by Odesli, so we use ISRC to find the track
 #[tauri::command]
 pub async fn share_track_songlink(
-    track_id: u64,
+    isrc: String,
     state: State<'_, AppState>,
 ) -> Result<SongLinkResponse, String> {
-    log::info!("Command: share_track_songlink track_id={}", track_id);
+    if isrc.is_empty() {
+        return Err(ShareError::MissingIsrc.to_string());
+    }
+
+    log::info!("Command: share_track_songlink ISRC={}", isrc);
 
     state
         .songlink
-        .get_by_track_id(&track_id.to_string())
+        .get_by_isrc(&isrc)
         .await
         .map_err(|e| e.to_string())
 }
