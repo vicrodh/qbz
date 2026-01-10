@@ -339,6 +339,8 @@ pub fn run() {
             // Recommendations commands
             reco_store::commands::reco_log_event,
             reco_store::commands::reco_get_home,
+            reco_store::commands::reco_train_scores,
+            reco_store::commands::reco_get_home_ml,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
