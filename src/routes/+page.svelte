@@ -940,9 +940,10 @@
     }
   });
 
-  // Start/stop lyrics active line updates based on playback state
+  // Start/stop lyrics active line updates based on playback state and visibility
   $effect(() => {
-    if (isPlaying && lyricsIsSynced && lyricsSidebarVisible) {
+    const lyricsVisible = lyricsSidebarVisible || isFocusModeOpen;
+    if (isPlaying && lyricsIsSynced && lyricsVisible) {
       startActiveLineUpdates();
     } else {
       stopActiveLineUpdates();
@@ -1206,9 +1207,16 @@
         artist={currentTrack.artist}
         {isPlaying}
         onTogglePlay={togglePlay}
+        onSkipBack={handleSkipBack}
+        onSkipForward={handleSkipForward}
         {currentTime}
         {duration}
         onSeek={handleSeek}
+        lyricsLines={lyricsLines.map(l => ({ text: l.text }))}
+        lyricsActiveIndex={lyricsActiveIndex}
+        lyricsActiveProgress={lyricsActiveProgress}
+        lyricsLoading={lyricsStatus === 'loading'}
+        lyricsError={lyricsStatus === 'error' ? lyricsError : (lyricsStatus === 'not_found' ? 'No lyrics found' : null)}
       />
     {/if}
 

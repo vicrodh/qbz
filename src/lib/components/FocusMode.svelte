@@ -1,6 +1,10 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
   import { X, SkipBack, Play, Pause, SkipForward } from 'lucide-svelte';
+  import LyricsLines from './lyrics/LyricsLines.svelte';
+
+  interface LyricsLine {
+    text: string;
+  }
 
   interface Props {
     isOpen: boolean;
@@ -10,9 +14,17 @@
     artist: string;
     isPlaying: boolean;
     onTogglePlay: () => void;
+    onSkipBack?: () => void;
+    onSkipForward?: () => void;
     currentTime: number;
     duration: number;
     onSeek: (time: number) => void;
+    // Lyrics props
+    lyricsLines?: LyricsLine[];
+    lyricsActiveIndex?: number;
+    lyricsActiveProgress?: number;
+    lyricsLoading?: boolean;
+    lyricsError?: string | null;
   }
 
   let {
@@ -23,20 +35,30 @@
     artist,
     isPlaying,
     onTogglePlay,
+    onSkipBack,
+    onSkipForward,
     currentTime,
     duration,
-    onSeek
+    onSeek,
+    lyricsLines = [],
+    lyricsActiveIndex = -1,
+    lyricsActiveProgress = 0,
+    lyricsLoading = false,
+    lyricsError = null
   }: Props = $props();
 
-  let showControls = $state(false);
+  let showControls = $state(true);
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
   let progressRef: HTMLDivElement;
 
-  const progress = $derived((currentTime / duration) * 100);
+  const progress = $derived((currentTime / duration) * 100 || 0);
+  const hasLyrics = $derived(lyricsLines.length > 0);
+  const showLyricsPane = $derived(hasLyrics || lyricsLoading);
 
   function formatTime(seconds: number): string {
+    if (!seconds || !isFinite(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
@@ -51,7 +73,7 @@
   function showControlsTemporarily() {
     showControls = true;
     if (hideTimeout) clearTimeout(hideTimeout);
-    hideTimeout = setTimeout(() => (showControls = false), 3000);
+    hideTimeout = setTimeout(() => (showControls = false), 4000);
   }
 
   function handleKeyPress(e: KeyboardEvent) {
@@ -70,6 +92,7 @@
 
   $effect(() => {
     if (isOpen) {
+      showControlsTemporarily();
       document.addEventListener('keydown', handleKeyPress);
       document.addEventListener('mousemove', handleMouseMove);
       return () => {
@@ -83,66 +106,105 @@
 
 {#if isOpen}
   <div class="focus-mode" onclick={showControlsTemporarily} role="presentation">
+    <!-- Blurred Background Artwork -->
+    <div class="background">
+      <img src={artwork} alt="" aria-hidden="true" />
+      <div class="background-overlay"></div>
+    </div>
+
     <!-- Close Button -->
     <button class="close-btn" class:visible={showControls} onclick={onClose}>
-      <X size={32} />
+      <X size={28} />
     </button>
 
-    <!-- Album Artwork -->
-    <div class="artwork-container">
-      <img src={artwork} alt={trackTitle} />
+    <!-- Main Content Grid -->
+    <div class="content" class:has-lyrics={showLyricsPane}>
+      <!-- Left Side: Artwork -->
+      <div class="artwork-side">
+        <div class="artwork-container">
+          <img src={artwork} alt={trackTitle} />
+        </div>
+      </div>
 
-      <!-- Overlay Controls -->
-      <div class="overlay" class:visible={showControls}>
+      <!-- Right Side: Lyrics -->
+      {#if showLyricsPane}
+        <div class="lyrics-side">
+          {#if lyricsLoading}
+            <div class="lyrics-loading">
+              <div class="spinner"></div>
+              <span>Loading lyrics...</span>
+            </div>
+          {:else if lyricsError}
+            <div class="lyrics-error">{lyricsError}</div>
+          {:else}
+            <LyricsLines
+              lines={lyricsLines}
+              activeIndex={lyricsActiveIndex}
+              activeProgress={lyricsActiveProgress}
+              center={false}
+              compact={false}
+              immersive={true}
+            />
+          {/if}
+        </div>
+      {/if}
+    </div>
+
+    <!-- Bottom Bar: Track Info + Controls + Progress -->
+    <div class="bottom-bar" class:visible={showControls}>
+      <div class="track-info">
+        <div class="track-artwork">
+          <img src={artwork} alt="" />
+        </div>
+        <div class="track-meta">
+          <div class="track-title">{trackTitle}</div>
+          <div class="track-artist">{artist}</div>
+        </div>
+      </div>
+
+      <div class="center-controls">
         <div class="playback-controls">
-          <button class="nav-btn">
-            <SkipBack size={40} />
+          <button class="control-btn" onclick={onSkipBack} disabled={!onSkipBack}>
+            <SkipBack size={24} />
           </button>
           <button
-            class="play-btn"
+            class="control-btn play"
             onclick={(e) => {
               e.stopPropagation();
               onTogglePlay();
             }}
           >
             {#if isPlaying}
-              <Pause size={36} fill="white" color="white" />
+              <Pause size={28} />
             {:else}
-              <Play size={36} fill="white" color="white" class="play-icon" />
+              <Play size={28} class="play-icon" />
             {/if}
           </button>
-          <button class="nav-btn">
-            <SkipForward size={40} />
+          <button class="control-btn" onclick={onSkipForward} disabled={!onSkipForward}>
+            <SkipForward size={24} />
           </button>
         </div>
-      </div>
-    </div>
 
-    <!-- Track Info -->
-    <div class="track-info">
-      <h1 class="title">{trackTitle}</h1>
-      <h2 class="artist">{artist}</h2>
-    </div>
+        <div class="progress-section">
+          <span class="time">{formatTime(currentTime)}</span>
+          <div
+            class="progress-bar"
+            bind:this={progressRef}
+            onclick={handleProgressClick}
+            role="slider"
+            tabindex="0"
+            aria-valuenow={currentTime}
+            aria-valuemin={0}
+            aria-valuemax={duration}
+          >
+            <div class="progress-fill" style="width: {progress}%"></div>
+            <div class="progress-thumb" style="left: {progress}%"></div>
+          </div>
+          <span class="time">{formatTime(duration)}</span>
+        </div>
+      </div>
 
-    <!-- Progress Bar -->
-    <div class="progress-container" class:visible={showControls}>
-      <div
-        class="progress-bar"
-        bind:this={progressRef}
-        onclick={handleProgressClick}
-        role="slider"
-        tabindex="0"
-        aria-valuenow={currentTime}
-        aria-valuemin={0}
-        aria-valuemax={duration}
-      >
-        <div class="progress-fill" style="width: {progress}%"></div>
-        <div class="progress-thumb" style="left: {progress}%"></div>
-      </div>
-      <div class="time-display">
-        <span>{formatTime(currentTime)}</span>
-        <span>{formatTime(duration)}</span>
-      </div>
+      <div class="spacer"></div>
     </div>
   </div>
 {/if}
@@ -154,9 +216,7 @@
     z-index: 110;
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background-color: #0a0a0a;
+    background-color: #000;
     cursor: default;
     animation: fadeIn 300ms ease-out;
   }
@@ -166,19 +226,49 @@
     to { opacity: 1; }
   }
 
+  /* Blurred Background */
+  .background {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+  }
+
+  .background img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: blur(60px) saturate(1.2);
+    transform: scale(1.2);
+    opacity: 0.6;
+  }
+
+  .background-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.3) 0%,
+      rgba(0, 0, 0, 0.5) 50%,
+      rgba(0, 0, 0, 0.8) 100%
+    );
+  }
+
+  /* Close Button */
   .close-btn {
     position: absolute;
-    top: 24px;
-    right: 24px;
-    width: 40px;
-    height: 40px;
+    top: 20px;
+    right: 20px;
+    z-index: 10;
+    width: 44px;
+    height: 44px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: none;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
     border: none;
     border-radius: 50%;
-    color: #666666;
+    color: rgba(255, 255, 255, 0.7);
     cursor: pointer;
     opacity: 0;
     transition: all 300ms ease;
@@ -189,30 +279,47 @@
   }
 
   .close-btn:hover {
-    color: var(--text-primary);
-    background-color: rgba(255, 255, 255, 0.1);
+    color: white;
+    background: rgba(0, 0, 0, 0.6);
+  }
+
+  /* Main Content Grid */
+  .content {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 48px;
+    padding: 60px 60px 120px;
+    position: relative;
+    z-index: 1;
+    align-items: center;
+    justify-items: center;
+  }
+
+  .content.has-lyrics {
+    grid-template-columns: 1fr 1fr;
+    justify-items: start;
+  }
+
+  /* Artwork Side */
+  .artwork-side {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .content.has-lyrics .artwork-side {
+    justify-content: flex-end;
+    padding-right: 24px;
   }
 
   .artwork-container {
-    position: relative;
-    width: 500px;
-    height: 500px;
-    border-radius: 16px;
+    width: min(55vh, 500px);
+    aspect-ratio: 1;
+    border-radius: 12px;
     overflow: hidden;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
-    margin-bottom: 32px;
-    animation: scaleIn 400ms ease-out;
-  }
-
-  @keyframes scaleIn {
-    from {
-      transform: scale(0.95);
-      opacity: 0;
-    }
-    to {
-      transform: scale(1);
-      opacity: 1;
-    }
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
   }
 
   .artwork-container img {
@@ -221,102 +328,201 @@
     object-fit: cover;
   }
 
-  .overlay {
-    position: absolute;
-    inset: 0;
+  /* Lyrics Side */
+  .lyrics-side {
+    width: 100%;
+    height: 100%;
+    max-height: calc(100vh - 200px);
     display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: rgba(0, 0, 0, 0.4);
-    opacity: 0;
-    transition: opacity 300ms ease;
+    flex-direction: column;
+    padding-left: 24px;
   }
 
-  .overlay.visible {
+  .lyrics-side :global(.lyrics-lines) {
+    --text-primary: rgba(255, 255, 255, 0.95);
+    --text-secondary: rgba(255, 255, 255, 0.5);
+    --text-muted: rgba(255, 255, 255, 0.3);
+    --bg-tertiary: rgba(255, 255, 255, 0.1);
+    padding: 0;
+  }
+
+  .lyrics-loading,
+  .lyrics-error {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    height: 100%;
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 14px;
+  }
+
+  .spinner {
+    width: 24px;
+    height: 24px;
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    border-top-color: rgba(255, 255, 255, 0.8);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  /* Bottom Bar */
+  .bottom-bar {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    padding: 16px 24px 20px;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: all 300ms ease;
+  }
+
+  .bottom-bar.visible {
     opacity: 1;
+    transform: translateY(0);
+  }
+
+  .track-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 200px;
+  }
+
+  .track-artwork {
+    width: 48px;
+    height: 48px;
+    border-radius: 6px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .track-artwork img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .track-meta {
+    min-width: 0;
+  }
+
+  .track-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .track-artist {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.6);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .center-controls {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    max-width: 600px;
   }
 
   .playback-controls {
     display: flex;
     align-items: center;
-    gap: 24px;
+    gap: 16px;
   }
 
-  .nav-btn {
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.9);
-    cursor: pointer;
-    transition: color 150ms ease;
-  }
-
-  .nav-btn:hover {
-    color: white;
-  }
-
-  .play-btn {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    border: none;
+  .control-btn {
+    width: 40px;
+    height: 40px;
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(8px);
+    background: none;
+    border: none;
+    border-radius: 50%;
+    color: rgba(255, 255, 255, 0.8);
     cursor: pointer;
-    transition: background-color 150ms ease;
+    transition: all 150ms ease;
   }
 
-  .play-btn:hover {
-    background-color: rgba(255, 255, 255, 0.3);
+  .control-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
   }
 
-  .play-btn :global(.play-icon) {
-    margin-left: 3px;
+  .control-btn:not(:disabled):hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
   }
 
-  .track-info {
-    text-align: center;
-    margin-bottom: 24px;
+  .control-btn.play {
+    width: 48px;
+    height: 48px;
+    background: rgba(255, 255, 255, 0.15);
+    color: white;
   }
 
-  .title {
-    font-size: 28px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 8px;
+  .control-btn.play:hover {
+    background: rgba(255, 255, 255, 0.25);
   }
 
-  .artist {
-    font-size: 20px;
-    color: var(--text-muted);
+  .control-btn.play :global(.play-icon) {
+    margin-left: 2px;
   }
 
-  .progress-container {
+  .progress-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
     width: 100%;
-    max-width: 600px;
-    opacity: 0;
-    transition: opacity 300ms ease;
   }
 
-  .progress-container.visible {
-    opacity: 1;
+  .time {
+    font-size: 12px;
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    color: rgba(255, 255, 255, 0.6);
+    min-width: 40px;
+  }
+
+  .time:last-child {
+    text-align: right;
   }
 
   .progress-bar {
+    flex: 1;
     height: 4px;
-    background-color: #333333;
-    border-radius: 9999px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 2px;
     position: relative;
     cursor: pointer;
-    margin-bottom: 12px;
   }
 
   .progress-fill {
     height: 100%;
-    background-color: var(--accent-primary);
-    border-radius: 9999px;
+    background: white;
+    border-radius: 2px;
+    transition: width 100ms linear;
   }
 
   .progress-thumb {
@@ -325,22 +531,18 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background-color: white;
+    background: white;
     transform: translate(-50%, -50%);
     opacity: 0;
     transition: opacity 150ms ease;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
   }
 
   .progress-bar:hover .progress-thumb {
     opacity: 1;
   }
 
-  .time-display {
-    display: flex;
-    justify-content: space-between;
-    font-size: 14px;
-    color: #666666;
-    font-family: var(--font-mono);
-    font-variant-numeric: tabular-nums;
+  .spacer {
+    min-width: 200px;
   }
 </style>

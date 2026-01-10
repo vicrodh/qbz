@@ -13,6 +13,7 @@
     center?: boolean;
     compact?: boolean;
     scrollToActive?: boolean;
+    immersive?: boolean;
   }
 
   let {
@@ -22,11 +23,12 @@
     dimInactive = true,
     center = false,
     compact = false,
-    scrollToActive = true
+    scrollToActive = true,
+    immersive = false
   }: Props = $props();
 
   let container: HTMLDivElement | null = null;
-  let lastScrolledIndex = -1;
+  let prevActiveIndex = -1;
 
   // Calculate opacity based on distance from active line
   function getLineOpacity(index: number, active: number): number {
@@ -34,36 +36,21 @@
     if (index === active) return 1;
 
     const distance = Math.abs(index - active);
-    // Fade out based on distance: 1 line away = 0.6, 2 = 0.4, 3+ = 0.25
-    if (distance === 1) return 0.6;
-    if (distance === 2) return 0.4;
-    if (distance === 3) return 0.3;
-    return 0.2;
+    if (distance === 1) return 0.5;
+    if (distance === 2) return 0.35;
+    if (distance === 3) return 0.25;
+    return 0.15;
   }
 
-  // Calculate blur based on distance (subtle effect)
-  function getLineBlur(index: number, active: number): number {
-    if (!dimInactive || active < 0) return 0;
-    if (index === active) return 0;
+  // Scroll active line into view (centered)
+  async function scrollActiveIntoView(index: number) {
+    if (!container || index < 0) return;
 
-    const distance = Math.abs(index - active);
-    if (distance <= 2) return 0;
-    if (distance <= 4) return 0.5;
-    return 1;
-  }
+    await tick();
 
-  // Scroll active line into view
-  async function scrollActiveIntoView() {
-    if (!container || activeIndex < 0 || activeIndex === lastScrolledIndex) return;
-
-    await tick(); // Wait for DOM update
-
-    const target = container.querySelector<HTMLElement>(`[data-line-index="${activeIndex}"]`);
+    const target = container.querySelector<HTMLElement>(`[data-line-index="${index}"]`);
     if (!target) return;
 
-    lastScrolledIndex = activeIndex;
-
-    // Calculate scroll position to center the active line
     const containerRect = container.getBoundingClientRect();
     const targetRect = target.getBoundingClientRect();
     const targetCenter = targetRect.top + targetRect.height / 2;
@@ -76,10 +63,11 @@
     });
   }
 
-  // React to activeIndex changes
+  // React to activeIndex changes - always scroll when it changes
   $effect(() => {
-    if (scrollToActive && activeIndex >= 0) {
-      scrollActiveIntoView();
+    if (scrollToActive && activeIndex >= 0 && activeIndex !== prevActiveIndex) {
+      prevActiveIndex = activeIndex;
+      scrollActiveIntoView(activeIndex);
     }
   });
 </script>
@@ -88,6 +76,7 @@
   class="lyrics-lines"
   class:compact
   class:center
+  class:immersive
   bind:this={container}
 >
   {#if lines.length === 0}
@@ -100,16 +89,11 @@
       {@const isActive = index === activeIndex}
       {@const isPast = index < activeIndex}
       {@const opacity = getLineOpacity(index, activeIndex)}
-      {@const blur = getLineBlur(index, activeIndex)}
       <div
         class="lyrics-line"
         class:active={isActive}
         class:past={isPast}
-        style="
-          --line-opacity: {opacity};
-          --line-blur: {blur}px;
-          {isActive ? `--line-progress: ${Math.max(0, Math.min(1, activeProgress))}` : ''}
-        "
+        style="--line-opacity: {opacity}; {isActive ? `--line-progress: ${Math.max(0, Math.min(1, activeProgress))}` : ''}"
         data-line-index={index}
       >
         <span class="line-text">{line.text}</span>
@@ -125,7 +109,7 @@
   .lyrics-lines {
     display: flex;
     flex-direction: column;
-    gap: var(--lyrics-line-gap, 20px);
+    gap: 16px;
     padding: 16px 20px;
     overflow-y: auto;
     height: 100%;
@@ -157,23 +141,47 @@
   }
 
   .lyrics-lines.compact {
-    gap: 14px;
+    gap: 12px;
+  }
+
+  .lyrics-lines.compact .lyrics-line {
+    font-size: 15px;
+  }
+
+  .lyrics-lines.compact .lyrics-line.active {
+    font-size: 17px;
+  }
+
+  /* Immersive mode - larger text, center aligned */
+  .lyrics-lines.immersive {
+    gap: 20px;
+    padding: 24px;
+  }
+
+  .lyrics-lines.immersive .lyrics-line {
+    font-size: 22px;
+    font-weight: 500;
+  }
+
+  .lyrics-lines.immersive .lyrics-line.active {
+    font-size: 28px;
+    font-weight: 700;
   }
 
   .lyrics-line {
     color: var(--text-secondary);
     font-family: var(--font-sans);
     font-size: 16px;
+    font-weight: 500;
     line-height: 1.5;
     letter-spacing: 0.01em;
     opacity: var(--line-opacity, 1);
-    filter: blur(var(--line-blur, 0));
     transition:
-      opacity 300ms ease-out,
-      filter 300ms ease-out,
-      transform 300ms ease-out,
-      font-size 200ms ease-out,
-      color 200ms ease-out;
+      opacity 400ms cubic-bezier(0.4, 0, 0.2, 1),
+      transform 400ms cubic-bezier(0.4, 0, 0.2, 1),
+      font-size 300ms cubic-bezier(0.4, 0, 0.2, 1),
+      font-weight 300ms cubic-bezier(0.4, 0, 0.2, 1),
+      color 300ms cubic-bezier(0.4, 0, 0.2, 1);
     transform-origin: left center;
   }
 
@@ -187,11 +195,15 @@
 
   .lyrics-line.active {
     color: var(--text-primary);
-    font-size: 22px;
-    font-weight: 600;
+    font-size: 20px;
+    font-weight: 700;
     opacity: 1;
-    filter: blur(0);
     transform: scale(1.02);
+    text-shadow: 0 0 30px rgba(255, 255, 255, 0.15);
+  }
+
+  .lyrics-lines.center .lyrics-line.active {
+    transform: scale(1.05);
   }
 
   /* Karaoke progress effect on active line */
