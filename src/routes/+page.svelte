@@ -1261,7 +1261,7 @@
   .main-content {
     flex: 1;
     min-width: 0;
-    height: 100%;
+    height: calc(100vh - 80px);
     overflow-y: auto;
     padding: 24px 32px;
   }
