@@ -1,11 +1,11 @@
 //! DLNA device connection and playback (placeholder)
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::cast::dlna::{DiscoveredDlnaDevice, DlnaError};
 
 /// Metadata for DLNA playback
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DlnaMetadata {
     pub title: String,
     pub artist: String,

@@ -8,16 +8,6 @@
     "opener:default",
     "dialog:default",
     "clipboard-manager:default",
-    "clipboard-manager:allow-write-text",
-    "fs:default",
-    {
-      "identifier": "fs:allow-read",
-      "allow": [
-        { "path": "$HOME/**" },
-        { "path": "$CACHE/**" },
-        { "path": "$CONFIG/**" },
-        { "path": "/**" }
-      ]
-    }
+    "clipboard-manager:allow-write-text"
   ]
 }

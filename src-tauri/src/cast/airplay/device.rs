@@ -1,11 +1,11 @@
 //! AirPlay device connection and streaming (placeholder)
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::cast::airplay::{AirPlayError, DiscoveredAirPlayDevice};
 
 /// Metadata for AirPlay playback
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AirPlayMetadata {
     pub title: String,
     pub artist: String,

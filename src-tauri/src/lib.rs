@@ -96,9 +96,13 @@ pub fn run() {
     let library_state = library::init_library_state()
         .expect("Failed to initialize library database");
 
-    // Initialize casting state
+    // Initialize casting state (Chromecast, DLNA, AirPlay)
     let cast_state = cast::CastState::new()
-        .expect("Failed to initialize casting state");
+        .expect("Failed to initialize Chromecast state");
+    let dlna_state = cast::dlna::commands::DlnaState::new()
+        .expect("Failed to initialize DLNA state");
+    let airplay_state = cast::airplay::commands::AirPlayState::new()
+        .expect("Failed to initialize AirPlay state");
 
     // Initialize download cache state
     let download_cache_state = download_cache::DownloadCacheState::new()
@@ -111,6 +115,8 @@ pub fn run() {
         .manage(AppState::new())
         .manage(library_state)
         .manage(cast_state)
+        .manage(dlna_state)
+        .manage(airplay_state)
         .manage(download_cache_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
@@ -236,6 +242,30 @@ pub fn run() {
             cast::commands::cast_stop,
             cast::commands::cast_seek,
             cast::commands::cast_set_volume,
+            // DLNA casting commands
+            cast::dlna::commands::dlna_start_discovery,
+            cast::dlna::commands::dlna_stop_discovery,
+            cast::dlna::commands::dlna_get_devices,
+            cast::dlna::commands::dlna_connect,
+            cast::dlna::commands::dlna_disconnect,
+            cast::dlna::commands::dlna_get_status,
+            cast::dlna::commands::dlna_load_media,
+            cast::dlna::commands::dlna_play,
+            cast::dlna::commands::dlna_pause,
+            cast::dlna::commands::dlna_stop,
+            cast::dlna::commands::dlna_set_volume,
+            // AirPlay casting commands
+            cast::airplay::commands::airplay_start_discovery,
+            cast::airplay::commands::airplay_stop_discovery,
+            cast::airplay::commands::airplay_get_devices,
+            cast::airplay::commands::airplay_connect,
+            cast::airplay::commands::airplay_disconnect,
+            cast::airplay::commands::airplay_get_status,
+            cast::airplay::commands::airplay_load_media,
+            cast::airplay::commands::airplay_play,
+            cast::airplay::commands::airplay_pause,
+            cast::airplay::commands::airplay_stop,
+            cast::airplay::commands::airplay_set_volume,
             // Download cache commands
             download_cache::commands::download_track,
             download_cache::commands::is_track_downloaded,
