@@ -425,7 +425,7 @@
   }
 
   function buildQueueTrackFromLocalTrack(track: LocalLibraryTrack): BackendQueueTrack {
-    const artwork = track.artwork_path ? `file://${track.artwork_path}` : null;
+    const artwork = track.artwork_path ? `asset://localhost/${encodeURIComponent(track.artwork_path)}` : null;
     return {
       id: track.id,
       title: track.title,
@@ -1175,7 +1175,7 @@
   async function handleLocalTrackPlay(track: LocalLibraryTrack) {
     console.log('Playing local track:', track);
 
-    const artwork = track.artwork_path ? `file://${track.artwork_path}` : '';
+    const artwork = track.artwork_path ? `asset://localhost/${encodeURIComponent(track.artwork_path)}` : '';
     const quality = track.bit_depth && track.sample_rate
       ? (track.bit_depth >= 24 || track.sample_rate > 48000
         ? `${track.bit_depth}bit/${track.sample_rate / 1000}kHz`
