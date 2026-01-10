@@ -161,6 +161,9 @@
     shareSonglinkTrack
   } from '$lib/services/trackActions';
 
+  // App bootstrap
+  import { bootstrapApp } from '$lib/app/bootstrap';
+
   // Components
   import Sidebar from '$lib/components/Sidebar.svelte';
   import NowPlayingBar from '$lib/components/NowPlayingBar.svelte';
@@ -794,24 +797,11 @@
   let downloadStateVersion = $state(0);
 
   onMount(() => {
-    // Load saved theme
-    const savedTheme = localStorage.getItem('qbz-theme');
-    if (savedTheme) {
-      document.documentElement.setAttribute('data-theme', savedTheme);
-    }
+    // Bootstrap app (theme, mouse nav, Last.fm restore)
+    const { cleanup: cleanupBootstrap } = bootstrapApp();
 
-    const handleMouseNavigation = (event: MouseEvent) => {
-      if (event.button === 3) {
-        event.preventDefault();
-        navGoBack();
-      } else if (event.button === 4) {
-        event.preventDefault();
-        navGoForward();
-      }
-    };
-
+    // Keyboard navigation
     document.addEventListener('keydown', handleKeydown);
-    window.addEventListener('mouseup', handleMouseNavigation);
 
     // Initialize download states
     initDownloadStates();
@@ -887,34 +877,9 @@
       }
     });
 
-    // Restore Last.fm session on app startup
-    (async () => {
-      try {
-        const savedApiKey = localStorage.getItem('qbz-lastfm-api-key');
-        const savedApiSecret = localStorage.getItem('qbz-lastfm-api-secret');
-        const savedSessionKey = localStorage.getItem('qbz-lastfm-session-key');
-
-        // Restore credentials if user-provided
-        if (savedApiKey && savedApiSecret) {
-          await invoke('lastfm_set_credentials', {
-            apiKey: savedApiKey,
-            apiSecret: savedApiSecret
-          });
-        }
-
-        // Restore session if available
-        if (savedSessionKey) {
-          await invoke('lastfm_set_session', { sessionKey: savedSessionKey });
-          console.log('Last.fm session restored on startup');
-        }
-      } catch (err) {
-        console.error('Failed to restore Last.fm session:', err);
-      }
-    })();
-
     return () => {
+      cleanupBootstrap();
       document.removeEventListener('keydown', handleKeydown);
-      window.removeEventListener('mouseup', handleMouseNavigation);
       stopDownloadEventListeners();
       unsubscribeDownloads();
       unsubscribeToast();
