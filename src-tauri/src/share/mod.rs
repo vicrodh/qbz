@@ -8,5 +8,5 @@ pub mod models;
 pub mod songlink;
 
 pub use errors::ShareError;
-pub use models::SongLinkResponse;
+pub use models::{ContentType, SongLinkResponse};
 pub use songlink::SongLinkClient;

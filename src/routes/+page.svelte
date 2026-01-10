@@ -473,25 +473,14 @@
   }
 
   async function shareSonglinkTrack(trackId: number, isrc?: string) {
-    // Get ISRC - either from parameter or fetch from track details
-    let resolvedIsrc = isrc;
-    if (!resolvedIsrc) {
-      try {
-        const fullTrack = await invoke<QobuzTrack>('get_track', { trackId });
-        resolvedIsrc = fullTrack.isrc;
-      } catch (err) {
-        console.error('Failed to fetch track ISRC:', err);
-      }
-    }
-
-    if (!resolvedIsrc) {
-      showToast('ISRC not available for this track', 'error');
-      return;
-    }
-
+    const qobuzUrl = `https://www.qobuz.com/track/${trackId}`;
+    const resolvedIsrc = isrc?.trim();
     try {
       showToast('Fetching Song.link...', 'info');
-      const response = await invoke<SongLinkResponse>('share_track_songlink', { isrc: resolvedIsrc });
+      const response = await invoke<SongLinkResponse>('share_track_songlink', {
+        isrc: resolvedIsrc?.length ? resolvedIsrc : null,
+        url: qobuzUrl
+      });
       await copyToClipboard(response.pageUrl, 'Song.link copied');
     } catch (err) {
       console.error('Failed to get Song.link:', err);

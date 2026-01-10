@@ -144,6 +144,40 @@ impl SongLinkClient {
         Ok(result)
     }
 
+    /// Get song.link URL by URL (fallback when ISRC/UPC are missing)
+    pub async fn get_by_url(&self, url: &str, content_type: ContentType) -> Result<SongLinkResponse, ShareError> {
+        let cache_key = format!("url:{}", url);
+
+        if let Some(cached) = self.get_from_cache(&cache_key) {
+            log::debug!("Cache hit for URL: {}", url);
+            return Ok(cached);
+        }
+
+        log::info!("Fetching song.link for URL: {}", url);
+
+        let response = self
+            .client
+            .get(ODESLI_API_URL)
+            .query(&[("url", url), ("userCountry", "US")])
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(ShareError::OdesliError(format!(
+                "HTTP {}: {}",
+                status, text
+            )));
+        }
+
+        let odesli: OdesliResponse = response.json().await?;
+        let result = self.convert_response(odesli, url.to_string(), content_type)?;
+
+        self.store_in_cache(cache_key, result.clone());
+        Ok(result)
+    }
+
     /// Convert Odesli response to our simplified format
     fn convert_response(
         &self,

@@ -7,6 +7,9 @@ pub enum ShareError {
     #[error("Missing ISRC for track")]
     MissingIsrc,
 
+    #[error("Missing ISRC or URL for track")]
+    MissingIdentifier,
+
     #[error("Missing UPC for album")]
     MissingUpc,
 
