@@ -1,11 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft } from 'lucide-svelte';
+  import { ArrowLeft, FolderOpen } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import VolumeSlider from '../VolumeSlider.svelte';
   import Tooltip from '../Tooltip.svelte';
+  import {
+    getDownloadCacheStats,
+    clearDownloadCache,
+    openDownloadCacheFolder,
+    setDownloadCacheLimit,
+    type DownloadCacheStats
+  } from '$lib/stores/downloadState';
 
   interface Props {
     onBack?: () => void;
@@ -29,9 +36,14 @@
 
   let { onBack, onLogout, userName = 'User', userEmail = '', subscription = 'Qobuz' }: Props = $props();
 
-  // Cache state
+  // Cache state (memory cache)
   let cacheStats = $state<CacheStats | null>(null);
   let isClearing = $state(false);
+
+  // Download cache state (offline storage)
+  let downloadStats = $state<DownloadCacheStats | null>(null);
+  let isClearingDownloads = $state(false);
+  let downloadCacheLimit = $state('2 GB'); // Default 2GB
 
   // Audio device state
   let audioDevices = $state<AudioDevice[]>([]);
@@ -107,6 +119,9 @@
 
     // Load cache stats
     loadCacheStats();
+
+    // Load download cache stats
+    loadDownloadStats();
 
     // Load audio devices
     loadAudioDevices();
@@ -276,6 +291,68 @@
       cacheStats = await invoke<CacheStats>('get_cache_stats');
     } catch (err) {
       console.error('Failed to load cache stats:', err);
+    }
+  }
+
+  async function loadDownloadStats() {
+    try {
+      downloadStats = await getDownloadCacheStats();
+      // Set the limit dropdown to match current limit
+      if (downloadStats.limitBytes) {
+        const limitGb = downloadStats.limitBytes / (1024 * 1024 * 1024);
+        if (limitGb <= 0.5) downloadCacheLimit = '500 MB';
+        else if (limitGb <= 1) downloadCacheLimit = '1 GB';
+        else if (limitGb <= 2) downloadCacheLimit = '2 GB';
+        else if (limitGb <= 5) downloadCacheLimit = '5 GB';
+        else if (limitGb <= 10) downloadCacheLimit = '10 GB';
+        else downloadCacheLimit = 'Unlimited';
+      } else {
+        downloadCacheLimit = 'Unlimited';
+      }
+    } catch (err) {
+      console.error('Failed to load download stats:', err);
+    }
+  }
+
+  async function handleClearDownloads() {
+    if (isClearingDownloads) return;
+    isClearingDownloads = true;
+    try {
+      await clearDownloadCache();
+      await loadDownloadStats();
+    } catch (err) {
+      console.error('Failed to clear download cache:', err);
+    } finally {
+      isClearingDownloads = false;
+    }
+  }
+
+  async function handleOpenDownloadFolder() {
+    try {
+      await openDownloadCacheFolder();
+    } catch (err) {
+      console.error('Failed to open download folder:', err);
+    }
+  }
+
+  async function handleDownloadLimitChange(limit: string) {
+    downloadCacheLimit = limit;
+    let limitMb: number | null = null;
+
+    switch (limit) {
+      case '500 MB': limitMb = 500; break;
+      case '1 GB': limitMb = 1024; break;
+      case '2 GB': limitMb = 2048; break;
+      case '5 GB': limitMb = 5120; break;
+      case '10 GB': limitMb = 10240; break;
+      case 'Unlimited': limitMb = null; break;
+    }
+
+    try {
+      await setDownloadCacheLimit(limitMb);
+      await loadDownloadStats();
+    } catch (err) {
+      console.error('Failed to set download limit:', err);
     }
   }
 
@@ -523,7 +600,7 @@
     {/if}
   </section>
 
-  <!-- Storage Section -->
+  <!-- Storage Section (Memory Cache) -->
   <section class="section">
     <h3 class="section-title">Storage</h3>
     <div class="setting-row">
@@ -554,6 +631,50 @@
         disabled={isClearing || !cacheStats || cacheStats.current_size_bytes === 0}
       >
         {isClearing ? 'Clearing...' : 'Clear'}
+      </button>
+    </div>
+  </section>
+
+  <!-- Downloads Section (Offline Storage) -->
+  <section class="section">
+    <h3 class="section-title">Downloads</h3>
+    <div class="setting-row">
+      <span class="setting-label">Downloaded Tracks</span>
+      <span class="setting-value">
+        {#if downloadStats}
+          {downloadStats.readyTracks} tracks ({formatBytes(downloadStats.totalSizeBytes)})
+        {:else}
+          Loading...
+        {/if}
+      </span>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Storage Limit</span>
+      <Dropdown
+        value={downloadCacheLimit}
+        options={['500 MB', '1 GB', '2 GB', '5 GB', '10 GB', 'Unlimited']}
+        onchange={handleDownloadLimitChange}
+      />
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Clear Downloads</span>
+      <button
+        class="clear-btn"
+        onclick={handleClearDownloads}
+        disabled={isClearingDownloads || !downloadStats || downloadStats.readyTracks === 0}
+      >
+        {isClearingDownloads ? 'Clearing...' : 'Clear All'}
+      </button>
+    </div>
+    <div class="setting-row last">
+      <span class="setting-label">Open Folder</span>
+      <button
+        class="folder-btn"
+        onclick={handleOpenDownloadFolder}
+        title="Open download cache folder"
+      >
+        <FolderOpen size={16} />
+        <span>Open</span>
       </button>
     </div>
   </section>
@@ -739,6 +860,27 @@
   .clear-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .folder-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 16px;
+    border-radius: 8px;
+    border: 1px solid var(--text-muted);
+    background: none;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .folder-btn:hover {
+    border-color: var(--text-primary);
+    color: var(--text-primary);
+    background-color: var(--bg-hover);
   }
 
   /* Last.fm styles */
