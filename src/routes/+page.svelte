@@ -1656,6 +1656,9 @@
           onTrackRemoveDownload={handleTrackRemoveDownload}
           getTrackDownloadStatus={getTrackDownloadStatus}
           {downloadStateVersion}
+          onLocalTrackPlay={handleLocalTrackPlay}
+          onLocalTrackPlayNext={handleLocalTrackPlayNext}
+          onLocalTrackPlayLater={handleLocalTrackPlayLater}
         />
       {:else if activeView === 'favorites'}
         <FavoritesView

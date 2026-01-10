@@ -4,10 +4,11 @@
   import { onMount } from 'svelte';
   import {
     HardDrive, Music, Disc3, Mic2, FolderPlus, Trash2, RefreshCw,
-    Settings, X, Play, Plus, AlertCircle, Clock, ImageDown
+    Settings, X, Play, Plus, AlertCircle, Clock, ImageDown, ListPlus
   } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
+  import AddToPlaylistModal from '../AddToPlaylistModal.svelte';
 
   // Backend types matching Rust models
   interface LocalTrack {
@@ -110,6 +111,29 @@
   // Album detail state (for viewing album tracks)
   let selectedAlbum = $state<LocalAlbum | null>(null);
   let albumTracks = $state<LocalTrack[]>([]);
+
+  // Playlist modal state
+  let showPlaylistModal = $state(false);
+  let selectedTrackForPlaylist = $state<LocalTrack | null>(null);
+
+  async function handleAddToPlaylist(playlistId: number) {
+    if (!selectedTrackForPlaylist) return;
+
+    // Get the current count of local tracks to determine position
+    const existingTracks = await invoke<LocalTrack[]>('playlist_get_local_tracks', { playlistId });
+    const position = existingTracks.length;
+
+    await invoke('playlist_add_local_track', {
+      playlistId,
+      localTrackId: selectedTrackForPlaylist.id,
+      position
+    });
+  }
+
+  function openPlaylistPicker(track: LocalTrack) {
+    selectedTrackForPlaylist = track;
+    showPlaylistModal = true;
+  }
 
   onMount(() => {
     loadLibraryData();
@@ -466,7 +490,8 @@
             menuActions={{
               onPlayNow: () => handleTrackPlay(track),
               onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
-              onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined
+              onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,
+              onAddToPlaylist: () => openPlaylistPicker(track)
             }}
           />
         {/each}
@@ -677,7 +702,8 @@
                 menuActions={{
                   onPlayNow: () => handleTrackPlay(track),
                   onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
-                  onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined
+                  onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,
+                  onAddToPlaylist: () => openPlaylistPicker(track)
                 }}
               />
             {/each}
@@ -687,6 +713,14 @@
     </div>
   {/if}
 </div>
+
+<!-- Add to Playlist Modal -->
+<AddToPlaylistModal
+  isOpen={showPlaylistModal}
+  onClose={() => { showPlaylistModal = false; selectedTrackForPlaylist = null; }}
+  onSelect={handleAddToPlaylist}
+  trackTitle={selectedTrackForPlaylist?.title}
+/>
 
 <style>
   .library-view {

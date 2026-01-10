@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, Play, Shuffle, Plus, ListMusic, Search, X, ChevronDown, ImagePlus } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Plus, ListMusic, Search, X, ChevronDown, ImagePlus, HardDrive, Info } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
   import { onMount } from 'svelte';
@@ -46,6 +46,23 @@
     bitDepth?: number;
     samplingRate?: number;
     isrc?: string;
+    isLocal?: boolean;
+    localTrackId?: number;
+    artworkPath?: string;
+  }
+
+  // Local library track from backend
+  interface LocalLibraryTrack {
+    id: number;
+    file_path: string;
+    title: string;
+    artist: string;
+    album: string;
+    duration_secs: number;
+    format: string;
+    bit_depth?: number;
+    sample_rate: number;
+    artwork_path?: string;
   }
 
   interface PlaylistSettings {
@@ -76,6 +93,9 @@
     onTrackRemoveDownload?: (trackId: number) => void;
     getTrackDownloadStatus?: (trackId: number) => { status: DownloadStatus; progress: number };
     downloadStateVersion?: number;
+    onLocalTrackPlay?: (track: LocalLibraryTrack) => void;
+    onLocalTrackPlayNext?: (track: LocalLibraryTrack) => void;
+    onLocalTrackPlayLater?: (track: LocalLibraryTrack) => void;
   }
 
   let {
@@ -93,11 +113,17 @@
     onTrackDownload,
     onTrackRemoveDownload,
     getTrackDownloadStatus,
-    downloadStateVersion
+    downloadStateVersion,
+    onLocalTrackPlay,
+    onLocalTrackPlayNext,
+    onLocalTrackPlayLater
   }: Props = $props();
 
   let playlist = $state<Playlist | null>(null);
   let tracks = $state<DisplayTrack[]>([]);
+  let localTracks = $state<LocalLibraryTrack[]>([]);
+  let localTracksMap = $state<Map<number, LocalLibraryTrack>>(new Map());
+  let hasLocalTracks = $derived(localTracks.length > 0);
   let loading = $state(true);
   let error = $state<string | null>(null);
   let playBtnHovered = $state(false);
@@ -118,7 +144,19 @@
     loadPlaylist();
     loadSettings();
     loadFavorites();
+    loadLocalTracks();
   });
+
+  async function loadLocalTracks() {
+    try {
+      const result = await invoke<LocalLibraryTrack[]>('playlist_get_local_tracks', { playlistId });
+      localTracks = result;
+      // Create a map for quick lookup
+      localTracksMap = new Map(result.map(t => [t.id, t]));
+    } catch (err) {
+      console.error('Failed to load local tracks:', err);
+    }
+  }
 
   async function loadFavorites() {
     try {
@@ -217,9 +255,31 @@
     }
   }
 
-  // Filtered and sorted tracks
+  // Convert local tracks to DisplayTrack format
+  function localTrackToDisplay(track: LocalLibraryTrack, index: number): DisplayTrack {
+    return {
+      id: -track.id, // Negative ID to distinguish from Qobuz tracks
+      number: index + 1,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      albumArt: track.artwork_path ? `asset://localhost/${encodeURIComponent(track.artwork_path)}` : undefined,
+      duration: formatDuration(track.duration_secs),
+      durationSeconds: track.duration_secs,
+      hires: (track.bit_depth && track.bit_depth >= 24) || track.sample_rate > 48000,
+      bitDepth: track.bit_depth,
+      samplingRate: track.sample_rate,
+      isLocal: true,
+      localTrackId: track.id,
+      artworkPath: track.artwork_path
+    };
+  }
+
+  // Filtered and sorted tracks (merged Qobuz + local)
   let displayTracks = $derived.by(() => {
-    let result = [...tracks];
+    // Combine Qobuz tracks with local tracks
+    const localDisplayTracks = localTracks.map((t, idx) => localTrackToDisplay(t, tracks.length + idx));
+    let result = [...tracks, ...localDisplayTracks];
 
     // Filter by search query
     if (searchQuery.trim()) {
@@ -295,8 +355,46 @@
   }
 
   function handleTrackClick(track: DisplayTrack) {
-    if (onTrackPlay) {
+    if (track.isLocal && track.localTrackId) {
+      // Handle local track play
+      const localTrack = localTracksMap.get(track.localTrackId);
+      if (localTrack && onLocalTrackPlay) {
+        onLocalTrackPlay(localTrack);
+      }
+    } else if (onTrackPlay) {
       onTrackPlay(track);
+    }
+  }
+
+  function handleTrackPlayNext(track: DisplayTrack) {
+    if (track.isLocal && track.localTrackId) {
+      const localTrack = localTracksMap.get(track.localTrackId);
+      if (localTrack && onLocalTrackPlayNext) {
+        onLocalTrackPlayNext(localTrack);
+      }
+    } else if (onTrackPlayNext) {
+      onTrackPlayNext(track);
+    }
+  }
+
+  function handleTrackPlayLater(track: DisplayTrack) {
+    if (track.isLocal && track.localTrackId) {
+      const localTrack = localTracksMap.get(track.localTrackId);
+      if (localTrack && onLocalTrackPlayLater) {
+        onLocalTrackPlayLater(localTrack);
+      }
+    } else if (onTrackPlayLater) {
+      onTrackPlayLater(track);
+    }
+  }
+
+  async function removeLocalTrack(track: DisplayTrack) {
+    if (!track.localTrackId) return;
+    try {
+      await invoke('playlist_remove_local_track', { playlistId, localTrackId: track.localTrackId });
+      await loadLocalTracks(); // Refresh
+    } catch (err) {
+      console.error('Failed to remove local track:', err);
     }
   }
 
@@ -489,9 +587,20 @@
       </div>
 
       <span class="track-count">
-        {displayTracks.length}{searchQuery ? ` / ${tracks.length}` : ''} tracks
+        {displayTracks.length}{searchQuery ? ` / ${tracks.length + localTracks.length}` : ''} tracks
+        {#if hasLocalTracks}
+          <span class="local-count">({localTracks.length} local)</span>
+        {/if}
       </span>
     </div>
+
+    <!-- Local tracks notice -->
+    {#if hasLocalTracks}
+      <div class="local-notice">
+        <Info size={14} />
+        <span>Local tracks are only available on this device</span>
+      </div>
+    {/if}
 
     <!-- Track List -->
     <div class="track-list">
@@ -503,31 +612,44 @@
       </div>
 
       {#each displayTracks as track, idx (`${track.id}-${downloadStateVersion}`)}
-        {@const downloadInfo = getTrackDownloadStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
-        <TrackRow
-          number={idx + 1}
-          title={track.title}
-          artist={track.artist}
-          duration={track.duration}
-          quality={track.hires ? 'Hi-Res' : undefined}
-          isFavorite={favoriteTrackIds.has(track.id)}
-          downloadStatus={downloadInfo.status}
-          downloadProgress={downloadInfo.progress}
-          onPlay={() => handleTrackClick(track)}
-          onDownload={onTrackDownload ? () => onTrackDownload(track) : undefined}
-          onRemoveDownload={onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
-          menuActions={{
-            onPlayNow: () => handleTrackClick(track),
-            onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
-            onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,
-            onAddFavorite: onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined,
-            onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined,
-            onShareQobuz: onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
-            onShareSonglink: onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined,
-            onGoToAlbum: track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId) : undefined,
-            onGoToArtist: track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId) : undefined
-          }}
-        />
+        {@const downloadInfo = track.isLocal ? { status: 'none' as const, progress: 0 } : (getTrackDownloadStatus?.(track.id) ?? { status: 'none' as const, progress: 0 })}
+        <div class="track-row-wrapper" class:is-local={track.isLocal}>
+          {#if track.isLocal}
+            <div class="local-indicator" title="Local track">
+              <HardDrive size={12} />
+            </div>
+          {/if}
+          <TrackRow
+            number={idx + 1}
+            title={track.title}
+            artist={track.artist}
+            duration={track.duration}
+            quality={track.hires ? 'Hi-Res' : undefined}
+            isFavorite={!track.isLocal && favoriteTrackIds.has(track.id)}
+            hideDownload={track.isLocal}
+            downloadStatus={downloadInfo.status}
+            downloadProgress={downloadInfo.progress}
+            onPlay={() => handleTrackClick(track)}
+            onDownload={!track.isLocal && onTrackDownload ? () => onTrackDownload(track) : undefined}
+            onRemoveDownload={!track.isLocal && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
+            menuActions={{
+              onPlayNow: () => handleTrackClick(track),
+              onPlayNext: track.isLocal ? () => handleTrackPlayNext(track) : (onTrackPlayNext ? () => onTrackPlayNext(track) : undefined),
+              onPlayLater: track.isLocal ? () => handleTrackPlayLater(track) : (onTrackPlayLater ? () => onTrackPlayLater(track) : undefined),
+              onAddFavorite: !track.isLocal && onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined,
+              onAddToPlaylist: !track.isLocal && onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined,
+              onShareQobuz: !track.isLocal && onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
+              onShareSonglink: !track.isLocal && onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined,
+              onGoToAlbum: !track.isLocal && track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId) : undefined,
+              onGoToArtist: !track.isLocal && track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId) : undefined
+            }}
+          />
+          {#if track.isLocal}
+            <button class="remove-local-btn" onclick={() => removeLocalTrack(track)} title="Remove from playlist">
+              <X size={14} />
+            </button>
+          {/if}
+        </div>
       {/each}
 
       {#if displayTracks.length === 0 && searchQuery}
@@ -957,5 +1079,77 @@
 
   .no-results p {
     margin: 0;
+  }
+
+  /* Local tracks styles */
+  .local-count {
+    color: var(--accent-primary);
+    margin-left: 4px;
+  }
+
+  .local-notice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    margin-bottom: 16px;
+    background-color: rgba(var(--accent-primary-rgb, 139, 92, 246), 0.1);
+    border: 1px solid rgba(var(--accent-primary-rgb, 139, 92, 246), 0.2);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+
+  .local-notice :global(svg) {
+    color: var(--accent-primary);
+    flex-shrink: 0;
+  }
+
+  .track-row-wrapper {
+    display: flex;
+    align-items: center;
+    position: relative;
+  }
+
+  .track-row-wrapper.is-local {
+    padding-left: 24px;
+  }
+
+  .track-row-wrapper :global(.track-row) {
+    flex: 1;
+  }
+
+  .local-indicator {
+    position: absolute;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    color: var(--accent-primary);
+  }
+
+  .remove-local-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    opacity: 0;
+    transition: all 150ms ease;
+  }
+
+  .track-row-wrapper:hover .remove-local-btn {
+    opacity: 1;
+  }
+
+  .remove-local-btn:hover {
+    color: #ff6b6b;
+    background-color: rgba(255, 107, 107, 0.1);
   }
 </style>
