@@ -23,6 +23,27 @@
     type Toast as ToastData
   } from '$lib/stores/toastStore';
 
+  // UI state management
+  import {
+    subscribe as subscribeUI,
+    openQueue,
+    closeQueue,
+    toggleQueue,
+    openFullScreen,
+    closeFullScreen,
+    toggleFullScreen,
+    openFocusMode,
+    closeFocusMode,
+    toggleFocusMode,
+    openCastPicker,
+    closeCastPicker,
+    openPlaylistModal,
+    closePlaylistModal,
+    handleEscapeKey as handleUIEscape,
+    getUIState,
+    type UIState
+  } from '$lib/stores/uiStore';
+
   // Components
   import Sidebar from '$lib/components/Sidebar.svelte';
   import NowPlayingBar from '$lib/components/NowPlayingBar.svelte';
@@ -211,13 +232,13 @@
   let selectedArtist = $state<ArtistDetail | null>(null);
   let selectedPlaylistId = $state<number | null>(null);
 
-  // Overlay States
+  // Overlay States (from uiStore subscription)
   let isQueueOpen = $state(false);
   let isFullScreenOpen = $state(false);
   let isFocusModeOpen = $state(false);
   let isCastPickerOpen = $state(false);
 
-  // Playlist Modal State
+  // Playlist Modal State (from uiStore subscription)
   let isPlaylistModalOpen = $state(false);
   let playlistModalMode = $state<'create' | 'edit' | 'addTrack'>('create');
   let playlistModalTrackIds = $state<number[]>([]);
@@ -1301,16 +1322,12 @@
   // Playlist Modal Functions
   function openCreatePlaylist() {
     userPlaylists = sidebarRef?.getPlaylists() ?? [];
-    playlistModalMode = 'create';
-    playlistModalTrackIds = [];
-    isPlaylistModalOpen = true;
+    openPlaylistModal('create', []);
   }
 
   function openAddToPlaylist(trackIds: number[]) {
     userPlaylists = sidebarRef?.getPlaylists() ?? [];
-    playlistModalMode = 'addTrack';
-    playlistModalTrackIds = trackIds;
-    isPlaylistModalOpen = true;
+    openPlaylistModal('addTrack', trackIds);
   }
 
   function handlePlaylistCreated() {
@@ -1383,16 +1400,14 @@
         break;
       case 'f':
         if (!e.ctrlKey && !e.metaKey) {
-          isFocusModeOpen = !isFocusModeOpen;
+          toggleFocusMode();
         }
         break;
       case 'q':
-        isQueueOpen = !isQueueOpen;
+        toggleQueue();
         break;
       case 'Escape':
-        if (isFocusModeOpen) isFocusModeOpen = false;
-        else if (isFullScreenOpen) isFullScreenOpen = false;
-        else if (isQueueOpen) isQueueOpen = false;
+        handleUIEscape();
         break;
     }
   }
@@ -1503,6 +1518,18 @@
       toast = newToast;
     });
 
+    // Subscribe to UI state changes
+    const unsubscribeUI = subscribeUI(() => {
+      const uiState = getUIState();
+      isQueueOpen = uiState.isQueueOpen;
+      isFullScreenOpen = uiState.isFullScreenOpen;
+      isFocusModeOpen = uiState.isFocusModeOpen;
+      isCastPickerOpen = uiState.isCastPickerOpen;
+      isPlaylistModalOpen = uiState.isPlaylistModalOpen;
+      playlistModalMode = uiState.playlistModalMode;
+      playlistModalTrackIds = uiState.playlistModalTrackIds;
+    });
+
     // Restore Last.fm session on app startup
     (async () => {
       try {
@@ -1534,6 +1561,7 @@
       stopDownloadEventListeners();
       unsubscribeDownloads();
       unsubscribeToast();
+      unsubscribeUI();
     };
   });
 
@@ -1710,22 +1738,22 @@
         onToggleRepeat={toggleRepeat}
         {isFavorite}
         onToggleFavorite={toggleFavorite}
-        onOpenQueue={() => (isQueueOpen = true)}
-        onOpenFullScreen={() => (isFullScreenOpen = true)}
-        onCast={() => (isCastPickerOpen = true)}
+        onOpenQueue={openQueue}
+        onOpenFullScreen={openFullScreen}
+        onCast={openCastPicker}
       />
     {:else}
       <NowPlayingBar
-        onOpenQueue={() => (isQueueOpen = true)}
-        onOpenFullScreen={() => (isFullScreenOpen = true)}
-        onCast={() => (isCastPickerOpen = true)}
+        onOpenQueue={openQueue}
+        onOpenFullScreen={openFullScreen}
+        onCast={openCastPicker}
       />
     {/if}
 
     <!-- Queue Panel -->
     <QueuePanel
       isOpen={isQueueOpen}
-      onClose={() => (isQueueOpen = false)}
+      onClose={closeQueue}
       currentTrack={currentQueueTrack ?? undefined}
       upcomingTracks={queue}
       onPlayTrack={handleQueueTrackPlay}
@@ -1737,7 +1765,7 @@
     {#if currentTrack}
       <FullScreenNowPlaying
         isOpen={isFullScreenOpen}
-        onClose={() => (isFullScreenOpen = false)}
+        onClose={closeFullScreen}
         artwork={currentTrack.artwork}
         trackTitle={currentTrack.title}
         artist={currentTrack.artist}
@@ -1762,14 +1790,14 @@
         {isFavorite}
         onToggleFavorite={toggleFavorite}
         onOpenQueue={() => {
-          isFullScreenOpen = false;
-          isQueueOpen = true;
+          closeFullScreen();
+          openQueue();
         }}
         onOpenFocusMode={() => {
-          isFullScreenOpen = false;
-          isFocusModeOpen = true;
+          closeFullScreen();
+          openFocusMode();
         }}
-        onCast={() => (isCastPickerOpen = true)}
+        onCast={openCastPicker}
       />
     {/if}
 
@@ -1777,7 +1805,7 @@
     {#if currentTrack}
       <FocusMode
         isOpen={isFocusModeOpen}
-        onClose={() => (isFocusModeOpen = false)}
+        onClose={closeFocusMode}
         artwork={currentTrack.artwork}
         trackTitle={currentTrack.title}
         artist={currentTrack.artist}
@@ -1804,14 +1832,14 @@
       mode={playlistModalMode}
       trackIds={playlistModalTrackIds}
       {userPlaylists}
-      onClose={() => (isPlaylistModalOpen = false)}
+      onClose={closePlaylistModal}
       onSuccess={handlePlaylistCreated}
     />
 
     <!-- Cast Picker -->
     <CastPicker
       isOpen={isCastPickerOpen}
-      onClose={() => (isCastPickerOpen = false)}
+      onClose={closeCastPicker}
       onConnect={(deviceId) => {
         showToast(`Connected to device`, 'success');
       }}
