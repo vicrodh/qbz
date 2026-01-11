@@ -48,18 +48,11 @@
   // Scroll active line into view (centered)
   // instant: true for catch-up sync, false for normal progression
   async function scrollActiveIntoView(index: number, instant: boolean = false) {
-    console.log('[LyricsLines] scrollActiveIntoView called', { index, instant, hasContainer: !!container });
-
-    if (!container || index < 0) {
-      console.log('[LyricsLines] Early return - no container or invalid index');
-      return;
-    }
+    if (!container || index < 0) return;
 
     await tick();
 
     const target = container.querySelector<HTMLElement>(`[data-line-index="${index}"]`);
-    console.log('[LyricsLines] Found target element:', !!target);
-
     if (!target) return;
 
     const containerRect = container.getBoundingClientRect();
@@ -67,8 +60,6 @@
     const targetCenter = targetRect.top + targetRect.height / 2;
     const containerCenter = containerRect.top + containerRect.height / 2;
     const scrollOffset = targetCenter - containerCenter;
-
-    console.log('[LyricsLines] Scrolling by', scrollOffset, { targetCenter, containerCenter });
 
     container.scrollBy({
       top: scrollOffset,
@@ -78,26 +69,14 @@
 
   // React to activeIndex changes - scroll to keep active line visible
   $effect(() => {
-    console.log('[LyricsLines] Effect running', { scrollToActive, activeIndex, isSynced, lastScrolledIndex });
-
-    // Only scroll if we should and have a valid index
-    if (!scrollToActive || activeIndex < 0 || !isSynced) {
-      console.log('[LyricsLines] Skipping scroll - conditions not met');
-      return;
-    }
-
-    // Skip if we already scrolled to this index
-    if (activeIndex === lastScrolledIndex) {
-      console.log('[LyricsLines] Skipping scroll - same index');
-      return;
-    }
+    if (!scrollToActive || activeIndex < 0 || !isSynced) return;
+    if (activeIndex === lastScrolledIndex) return;
 
     // Determine scroll behavior
     const isLargeJump = lastScrolledIndex >= 0 && Math.abs(activeIndex - lastScrolledIndex) > 2;
     const isInitialSync = lastScrolledIndex === -1 && activeIndex > 0;
     const useInstant = isLargeJump || isInitialSync;
 
-    console.log('[LyricsLines] Will scroll to', activeIndex, { isLargeJump, isInitialSync, useInstant });
     lastScrolledIndex = activeIndex;
     scrollActiveIntoView(activeIndex, useInstant);
   });
@@ -107,7 +86,6 @@
   $effect(() => {
     const newKey = lines.length > 0 ? `${lines.length}-${lines[0].text}` : '';
     if (newKey !== lastLyricsKey) {
-      console.log('[LyricsLines] Lyrics content changed, resetting scroll tracking');
       lastLyricsKey = newKey;
       lastScrolledIndex = -1;
     }

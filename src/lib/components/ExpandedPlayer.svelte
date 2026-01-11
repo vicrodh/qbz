@@ -93,9 +93,7 @@
 
   // Ensure lyrics updates run when ExpandedPlayer is open with synced lyrics
   $effect(() => {
-    console.log('[ExpandedPlayer] Effect check:', { isOpen, isPlaying, lyricsSynced, lyricsActiveIndex, hasLyrics: lyricsLines.length > 0 });
     if (isOpen && isPlaying && lyricsSynced) {
-      console.log('[ExpandedPlayer] Starting lyrics updates');
       startActiveLineUpdates();
     }
   });
@@ -665,17 +663,20 @@
   .right-section {
     flex: 1;
     min-width: 0;
+    min-height: 0; /* Critical for nested flex to respect max-height */
     display: flex;
     flex-direction: column;
     justify-content: center;
     overflow: hidden;
     padding-right: 40px;
+    height: 100%; /* Explicit height for proper constraint cascade */
   }
 
   .lyrics-container {
     flex: 1;
     min-height: 0; /* Critical for flex child to allow shrinking */
     max-height: calc(100vh - 160px);
+    overflow: hidden; /* Clip content for mask effect */
     mask-image: linear-gradient(
       to bottom,
       transparent 0%,
@@ -699,6 +700,8 @@
     --bg-tertiary: rgba(255, 255, 255, 0.08);
     padding: 0;
     height: 100%;
+    max-height: 100%; /* Constrain to parent height */
+    overflow-y: auto; /* Ensure scrolling works */
   }
 
   .lyrics-state {
