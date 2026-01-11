@@ -20,6 +20,7 @@ pub mod player;
 pub mod queue;
 pub mod reco_store;
 pub mod share;
+pub mod playlist_import;
 
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
