@@ -377,12 +377,13 @@
             {@const displayTrack = buildDisplayTrack(track, index)}
             {@const downloadInfo = getTrackDownloadStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
             <TrackRow
+              trackId={track.id}
               number={index + 1}
               title={track.title}
               artist={track.performer?.name}
               duration={formatDuration(track.duration)}
               quality={track.hires ? 'Hi-Res' : undefined}
-              isFavorite={true}
+              isFavoriteOverride={true}
               downloadStatus={downloadInfo.status}
               downloadProgress={downloadInfo.progress}
               onPlay={() => handleTrackClick(track, index)}
@@ -392,7 +393,6 @@
                 onPlayNow: () => handleTrackClick(track, index),
                 onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(displayTrack) : undefined,
                 onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(displayTrack) : undefined,
-                onAddFavorite: onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined,
                 onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined,
                 onShareQobuz: onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
                 onShareSonglink: onTrackShareSonglink ? () => onTrackShareSonglink(displayTrack) : undefined,

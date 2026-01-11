@@ -486,6 +486,7 @@
             duration={formatDuration(track.duration_secs)}
             quality={getQualityBadge(track)}
             hideDownload={true}
+            hideFavorite={true}
             onPlay={() => handleTrackPlay(track)}
             menuActions={{
               onPlayNow: () => handleTrackPlay(track),
@@ -698,6 +699,7 @@
                 duration={formatDuration(track.duration_secs)}
                 quality={getQualityBadge(track)}
                 hideDownload={true}
+                hideFavorite={true}
                 onPlay={() => handleTrackPlay(track)}
                 menuActions={{
                   onPlayNow: () => handleTrackPlay(track),

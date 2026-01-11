@@ -129,7 +129,6 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let playBtnHovered = $state(false);
-  let favoriteTrackIds = $state<Set<number>>(new Set());
 
   // Local settings state
   let searchQuery = $state('');
@@ -138,14 +137,9 @@
   let customArtworkPath = $state<string | null>(null);
   let showSortMenu = $state(false);
 
-  interface FavoritesResponse {
-    tracks?: { items: Array<{ id: number }>; total: number };
-  }
-
   onMount(() => {
     loadPlaylist();
     loadSettings();
-    loadFavorites();
     loadLocalTracks();
   });
 
@@ -157,21 +151,6 @@
       localTracksMap = new Map(result.map(t => [t.id, t]));
     } catch (err) {
       console.error('Failed to load local tracks:', err);
-    }
-  }
-
-  async function loadFavorites() {
-    try {
-      const response = await invoke<FavoritesResponse>('get_favorites', {
-        favType: 'tracks',
-        limit: 500,
-        offset: 0
-      });
-      if (response.tracks?.items) {
-        favoriteTrackIds = new Set(response.tracks.items.map(item => item.id));
-      }
-    } catch (err) {
-      console.error('Failed to load favorite tracks:', err);
     }
   }
 
@@ -659,12 +638,13 @@
             </div>
           {/if}
           <TrackRow
+            trackId={track.isLocal ? undefined : track.id}
             number={idx + 1}
             title={track.title}
             artist={track.artist}
             duration={track.duration}
             quality={track.hires ? 'Hi-Res' : undefined}
-            isFavorite={!track.isLocal && favoriteTrackIds.has(track.id)}
+            hideFavorite={track.isLocal}
             hideDownload={track.isLocal}
             downloadStatus={downloadInfo.status}
             downloadProgress={downloadInfo.progress}
@@ -675,7 +655,6 @@
               onPlayNow: () => handleTrackClick(track),
               onPlayNext: track.isLocal ? () => handleTrackPlayNext(track) : (onTrackPlayNext ? () => onTrackPlayNext(track) : undefined),
               onPlayLater: track.isLocal ? () => handleTrackPlayLater(track) : (onTrackPlayLater ? () => onTrackPlayLater(track) : undefined),
-              onAddFavorite: !track.isLocal && onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined,
               onAddToPlaylist: !track.isLocal && onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined,
               onShareQobuz: !track.isLocal && onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
               onShareSonglink: !track.isLocal && onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined,

@@ -1,21 +1,29 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { Play, Heart } from 'lucide-svelte';
   import TrackMenu from './TrackMenu.svelte';
   import DownloadButton from './DownloadButton.svelte';
+  import {
+    subscribe as subscribeFavorites,
+    isTrackFavorite,
+    toggleTrackFavorite
+  } from '$lib/stores/favoritesStore';
 
   type DownloadStatus = 'none' | 'queued' | 'downloading' | 'ready' | 'failed';
 
   interface Props {
+    trackId?: number; // Optional - required for favorites functionality unless hideFavorite=true
     number: number;
     title: string;
     artist?: string;
     duration: string;
     quality?: string;
     isPlaying?: boolean;
-    isFavorite?: boolean;
+    isFavoriteOverride?: boolean; // Optional override for favorite state
     downloadStatus?: DownloadStatus;
     downloadProgress?: number;
     hideDownload?: boolean;
+    hideFavorite?: boolean;
     onPlay?: () => void;
     onDownload?: () => void;
     onRemoveDownload?: () => void;
@@ -26,7 +34,6 @@
     onPlayNow?: () => void;
     onPlayNext?: () => void;
     onPlayLater?: () => void;
-    onAddFavorite?: () => void;
     onAddToPlaylist?: () => void;
     onShareQobuz?: () => void;
     onShareSonglink?: () => void;
@@ -35,16 +42,18 @@
   }
 
   let {
+    trackId,
     number,
     title,
     artist,
     duration,
     quality,
     isPlaying = false,
-    isFavorite = false,
+    isFavoriteOverride,
     downloadStatus = 'none',
     downloadProgress = 0,
     hideDownload = false,
+    hideFavorite = false,
     onPlay,
     onDownload,
     onRemoveDownload,
@@ -52,7 +61,30 @@
   }: Props = $props();
 
   let isHovered = $state(false);
+  let favoriteFromStore = $state(false);
+
+  // Use override if provided, otherwise use store
+  const isFavorite = $derived(isFavoriteOverride ?? favoriteFromStore);
   const playNowAction = $derived(menuActions?.onPlayNow ?? onPlay);
+
+  // Subscribe to favorites store (only if trackId is provided)
+  onMount(() => {
+    if (trackId !== undefined) {
+      favoriteFromStore = isTrackFavorite(trackId);
+      const unsubscribe = subscribeFavorites(() => {
+        favoriteFromStore = isTrackFavorite(trackId);
+      });
+      return unsubscribe;
+    }
+  });
+
+  // Handle favorite toggle internally
+  async function handleToggleFavorite(e: MouseEvent) {
+    e.stopPropagation();
+    if (trackId !== undefined) {
+      await toggleTrackFavorite(trackId);
+    }
+  }
 </script>
 
 <div
@@ -98,21 +130,20 @@
   {/if}
 
   <!-- Favorite Button -->
-  <button
-    class="favorite-btn"
-    class:is-favorite={isFavorite}
-    onclick={(e) => {
-      e.stopPropagation();
-      menuActions?.onAddFavorite?.();
-    }}
-    title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-  >
-    {#if isFavorite}
-      <Heart size={14} fill="var(--accent-primary)" color="var(--accent-primary)" />
-    {:else}
-      <Heart size={14} color="var(--text-muted)" />
-    {/if}
-  </button>
+  {#if !hideFavorite}
+    <button
+      class="favorite-btn"
+      class:is-favorite={isFavorite}
+      onclick={handleToggleFavorite}
+      title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+    >
+      {#if isFavorite}
+        <Heart size={14} fill="var(--accent-primary)" color="var(--accent-primary)" />
+      {:else}
+        <Heart size={14} color="var(--text-muted)" />
+      {/if}
+    </button>
+  {/if}
 
   <!-- Download Indicator -->
   {#if !hideDownload}
@@ -132,7 +163,7 @@
       onPlayNow={playNowAction}
       onPlayNext={menuActions?.onPlayNext}
       onPlayLater={menuActions?.onPlayLater}
-      onAddFavorite={menuActions?.onAddFavorite}
+      onAddFavorite={handleToggleFavorite}
       onAddToPlaylist={menuActions?.onAddToPlaylist}
       onShareQobuz={menuActions?.onShareQobuz}
       onShareSonglink={menuActions?.onShareSonglink}

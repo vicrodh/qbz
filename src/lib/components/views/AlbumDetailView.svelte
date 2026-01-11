@@ -89,16 +89,13 @@
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
   let playBtnHovered = $state(false);
-  let favoriteTrackIds = $state<Set<number>>(new Set());
 
   interface FavoritesResponse {
     albums?: { items: Array<{ id: string }>; total: number };
-    tracks?: { items: Array<{ id: number }>; total: number };
   }
 
-  // Check if album and tracks are in favorites on mount
+  // Check if album is in favorites on mount
   onMount(async () => {
-    // Fetch album favorites
     try {
       const response = await invoke<FavoritesResponse>('get_favorites', {
         favType: 'albums',
@@ -110,20 +107,6 @@
       }
     } catch (err) {
       console.error('Failed to check album favorite status:', err);
-    }
-
-    // Fetch track favorites
-    try {
-      const response = await invoke<FavoritesResponse>('get_favorites', {
-        favType: 'tracks',
-        limit: 500,
-        offset: 0
-      });
-      if (response.tracks?.items) {
-        favoriteTrackIds = new Set(response.tracks.items.map(item => item.id));
-      }
-    } catch (err) {
-      console.error('Failed to check track favorite status:', err);
     }
   });
 
@@ -223,13 +206,13 @@
       {#each album.tracks as track (`${track.id}-${downloadStateVersion}`)}
         {@const downloadInfo = getTrackDownloadStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
         <TrackRow
+          trackId={track.id}
           number={track.number}
           title={track.title}
           artist={track.artist}
           duration={track.duration}
           quality={track.quality}
           isPlaying={currentTrack === track.id}
-          isFavorite={favoriteTrackIds.has(track.id)}
           downloadStatus={downloadInfo.status}
           downloadProgress={downloadInfo.progress}
           onPlay={() => {
@@ -245,7 +228,6 @@
             },
             onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
             onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,
-            onAddFavorite: onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined,
             onAddToPlaylist: onAddTrackToPlaylist ? () => onAddTrackToPlaylist(track.id) : undefined,
             onShareQobuz: onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
             onShareSonglink: onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined,

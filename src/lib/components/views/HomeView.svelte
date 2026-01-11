@@ -7,7 +7,6 @@
   import TrackRow from '../TrackRow.svelte';
   import HomeSettingsModal from '../HomeSettingsModal.svelte';
   import { formatDuration, formatQuality, getQobuzImage } from '$lib/adapters/qobuzAdapters';
-  import { handleAddToFavorites } from '$lib/services/trackActions';
   import {
     subscribe as subscribeHomeSettings,
     getSettings,
@@ -587,6 +586,7 @@
           <div class="track-list">
             {#each continueTracks as track, index}
               <TrackRow
+                trackId={track.id}
                 number={index + 1}
                 title={track.title}
                 artist={track.artist}
@@ -595,8 +595,7 @@
                 hideDownload={true}
                 onPlay={() => onTrackPlay?.(track)}
                 menuActions={{
-                  onPlayNow: () => onTrackPlay?.(track),
-                  onAddFavorite: () => handleAddToFavorites(track.id)
+                  onPlayNow: () => onTrackPlay?.(track)
                 }}
               />
             {/each}

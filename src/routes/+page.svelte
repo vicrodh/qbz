@@ -53,6 +53,9 @@
     type UserInfo
   } from '$lib/stores/authStore';
 
+  // Favorites state management
+  import { loadFavorites } from '$lib/stores/favoritesStore';
+
   // Navigation state management
   import {
     subscribe as subscribeNav,
@@ -881,6 +884,9 @@
     // Initialize download states
     initDownloadStates();
     startDownloadEventListeners();
+
+    // Load favorites for global state
+    loadFavorites();
 
     // Set up service toast callbacks
     setPlaybackToastCallback(showToast);
