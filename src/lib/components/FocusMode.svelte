@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { X, SkipBack, Play, Pause, SkipForward, ChevronDown } from 'lucide-svelte';
+  import { SkipBack, Play, Pause, SkipForward, ChevronDown } from 'lucide-svelte';
   import LyricsLines from './lyrics/LyricsLines.svelte';
+  import { startActiveLineUpdates, stopActiveLineUpdates } from '$lib/stores/lyricsStore';
 
   interface LyricsLine {
     text: string;
@@ -48,6 +49,16 @@
     lyricsLoading = false,
     lyricsError = null
   }: Props = $props();
+
+  // Ensure lyrics updates run when FocusMode is open with synced lyrics
+  $effect(() => {
+    if (isOpen && isPlaying && lyricsSynced) {
+      startActiveLineUpdates();
+    }
+    return () => {
+      // Cleanup is handled by the main page effect
+    };
+  });
 
   let showControls = $state(true);
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;

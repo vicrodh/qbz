@@ -197,12 +197,12 @@
   }
 
   .lyrics-lines.immersive .lyrics-line {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: 500;
   }
 
   .lyrics-lines.immersive .lyrics-line.active {
-    font-size: 28px;
+    font-size: 30px;
     font-weight: 700;
   }
 
@@ -215,11 +215,11 @@
     letter-spacing: 0.01em;
     opacity: var(--line-opacity, 1);
     transition:
-      opacity 150ms ease-out,
-      transform 150ms ease-out,
-      font-size 120ms ease-out,
-      font-weight 120ms ease-out,
-      color 150ms ease-out;
+      opacity 400ms cubic-bezier(0.4, 0, 0.2, 1),
+      transform 400ms cubic-bezier(0.4, 0, 0.2, 1),
+      font-size 300ms cubic-bezier(0.4, 0, 0.2, 1),
+      font-weight 300ms cubic-bezier(0.4, 0, 0.2, 1),
+      color 500ms cubic-bezier(0.4, 0, 0.2, 1);
     transform-origin: left center;
     will-change: opacity, transform;
   }
@@ -238,23 +238,33 @@
     font-weight: 700;
     opacity: 1;
     transform: scale(1.02);
-    text-shadow: 0 0 30px rgba(255, 255, 255, 0.15);
+    text-shadow:
+      0 0 40px rgba(99, 102, 241, 0.3),
+      0 0 80px rgba(99, 102, 241, 0.15);
   }
 
   .lyrics-lines.center .lyrics-line.active {
     transform: scale(1.05);
   }
 
-  /* Karaoke progress effect on active line */
+  /* Shimmer karaoke effect on active line */
   .lyrics-line.active .line-text {
+    --shimmer-width: 8%;
+    --progress-pos: calc(var(--line-progress, 0) * 100%);
     background: linear-gradient(
       90deg,
-      var(--accent-primary) calc(var(--line-progress, 0) * 100%),
-      var(--text-primary) calc(var(--line-progress, 0) * 100%)
+      var(--accent-primary) 0%,
+      var(--accent-primary) calc(var(--progress-pos) - var(--shimmer-width)),
+      rgba(255, 255, 255, 0.95) calc(var(--progress-pos) - 2%),
+      rgba(255, 255, 255, 0.95) var(--progress-pos),
+      var(--text-primary) calc(var(--progress-pos) + 2%),
+      var(--text-primary) 100%
     );
+    background-size: 100% 100%;
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    transition: background 50ms linear;
   }
 
   .lyrics-empty {
