@@ -7,6 +7,7 @@
   import TrackRow from '../TrackRow.svelte';
   import HomeSettingsModal from '../HomeSettingsModal.svelte';
   import { formatDuration, formatQuality, getQobuzImage } from '$lib/adapters/qobuzAdapters';
+  import { handleAddToFavorites } from '$lib/services/trackActions';
   import {
     subscribe as subscribeHomeSettings,
     getSettings,
@@ -83,7 +84,7 @@
 
   // Loading states for progressive render
   let isInitializing = $state(true);
-  let isOverlayVisible = $state(true); // Overlay that fades out when ready
+  let isOverlayVisible = $state(true); // Overlay that fades out when ALL sections ready
   let error = $state<string | null>(null);
   let loadingNewReleases = $state(true);
   let loadingPressAwards = $state(true);
@@ -95,9 +96,9 @@
   let loadingTopArtists = $state(true);
   let loadingFavoriteAlbums = $state(true);
 
-  // Track when we have enough content to show
-  let sectionsReady = $state(0);
-  const MIN_SECTIONS_BEFORE_SHOW = 2; // Wait for at least 2 sections
+  // Track loading completion for overlay
+  let totalVisibleSections = $state(0);
+  let sectionsFinished = $state(0);
 
   // Featured albums (from Qobuz editorial)
   let newReleases = $state<AlbumCardData[]>([]);
@@ -126,14 +127,20 @@
     || favoriteAlbums.length > 0
   );
 
-  // Mark a section as ready and check if we can hide overlay
-  function markSectionReady() {
-    sectionsReady++;
-    if (sectionsReady >= MIN_SECTIONS_BEFORE_SHOW && isOverlayVisible) {
-      // Small delay to ensure DOM is ready, then fade out
+  // Mark a section as finished loading and check if we can hide overlay
+  function markSectionFinished() {
+    sectionsFinished++;
+    checkAllSectionsReady();
+  }
+
+  // Check if all visible sections have finished loading
+  function checkAllSectionsReady() {
+    if (sectionsFinished >= totalVisibleSections && totalVisibleSections > 0 && isOverlayVisible) {
+      // Small delay to ensure DOM has rendered, then fade out
       setTimeout(() => {
         isOverlayVisible = false;
-      }, 100);
+        isInitializing = false;
+      }, 150);
     }
   }
 
@@ -273,7 +280,7 @@
   async function loadHome() {
     isInitializing = true;
     isOverlayVisible = true;
-    sectionsReady = 0;
+    sectionsFinished = 0;
     error = null;
     loadingNewReleases = true;
     loadingPressAwards = true;
@@ -285,14 +292,32 @@
     loadingTopArtists = true;
     loadingFavoriteAlbums = true;
 
-    // Start loading featured albums immediately (no seeds needed)
-    // These show first since they're fast API calls
-    // Only load if section is visible to save API calls
+    // Count total visible sections to know when we're done
+    totalVisibleSections = 0;
+    if (isSectionVisible('newReleases')) totalVisibleSections++;
+    if (isSectionVisible('pressAwards')) totalVisibleSections++;
+    if (isSectionVisible('mostStreamed')) totalVisibleSections++;
+    if (isSectionVisible('qobuzissimes')) totalVisibleSections++;
+    if (isSectionVisible('editorPicks')) totalVisibleSections++;
+    if (isSectionVisible('recentAlbums')) totalVisibleSections++;
+    if (isSectionVisible('continueTracks')) totalVisibleSections++;
+    if (isSectionVisible('topArtists')) totalVisibleSections++;
+    if (isSectionVisible('favoriteAlbums')) totalVisibleSections++;
+
+    // Start ML data loading FIRST (local SQLite) - this gets the seeds
+    const mlPromise = invoke<HomeSeeds>('reco_get_home_ml', {
+      limitRecentAlbums: LIMITS.recentAlbums,
+      limitContinueTracks: LIMITS.continueTracks,
+      limitTopArtists: LIMITS.topArtists,
+      limitFavorites: Math.max(LIMITS.favoriteAlbums, LIMITS.favoriteTracks)
+    });
+
+    // Start Qobuz API calls in parallel (don't await)
     if (isSectionVisible('newReleases')) {
       fetchFeaturedAlbums('new-releases', LIMITS.featuredAlbums).then(albums => {
         newReleases = albums;
         loadingNewReleases = false;
-        if (albums.length > 0) markSectionReady();
+        markSectionFinished();
       });
     } else {
       loadingNewReleases = false;
@@ -302,7 +327,7 @@
       fetchFeaturedAlbums('press-awards', LIMITS.featuredAlbums).then(albums => {
         pressAwards = albums;
         loadingPressAwards = false;
-        if (albums.length > 0) markSectionReady();
+        markSectionFinished();
       });
     } else {
       loadingPressAwards = false;
@@ -312,7 +337,7 @@
       fetchFeaturedAlbums('most-streamed', LIMITS.featuredAlbums).then(albums => {
         mostStreamed = albums;
         loadingMostStreamed = false;
-        if (albums.length > 0) markSectionReady();
+        markSectionFinished();
       });
     } else {
       loadingMostStreamed = false;
@@ -322,7 +347,7 @@
       fetchFeaturedAlbums('qobuzissimes', LIMITS.featuredAlbums).then(albums => {
         qobuzissimes = albums;
         loadingQobuzissimes = false;
-        if (albums.length > 0) markSectionReady();
+        markSectionFinished();
       });
     } else {
       loadingQobuzissimes = false;
@@ -332,69 +357,67 @@
       fetchFeaturedAlbums('editor-picks', LIMITS.featuredAlbums).then(albums => {
         editorPicks = albums;
         loadingEditorPicks = false;
-        if (albums.length > 0) markSectionReady();
+        markSectionFinished();
       });
     } else {
       loadingEditorPicks = false;
     }
 
     try {
-      // ML-based scoring for personalized recommendations (falls back to simple queries if no scores)
-      const seeds = await invoke<HomeSeeds>('reco_get_home_ml', {
-        limitRecentAlbums: LIMITS.recentAlbums,
-        limitContinueTracks: LIMITS.continueTracks,
-        limitTopArtists: LIMITS.topArtists,
-        limitFavorites: Math.max(LIMITS.favoriteAlbums, LIMITS.favoriteTracks)
-      });
+      // Wait for ML seeds (local data)
+      const seeds = await mlPromise;
 
-      // Seeds are ready, can start showing content
-      isInitializing = false;
-
-      // Load each section in parallel for progressive rendering
-      const continueTracksPromise = fetchTracks(seeds.continueListeningTrackIds).then(tracks => {
-        continueTracks = tracks;
+      // Load ML-based sections in parallel
+      // Continue Listening (tracks)
+      if (isSectionVisible('continueTracks')) {
+        fetchTracks(seeds.continueListeningTrackIds).then(tracks => {
+          continueTracks = tracks;
+          loadingContinueTracks = false;
+          markSectionFinished();
+        });
+      } else {
         loadingContinueTracks = false;
-        if (tracks.length > 0) markSectionReady();
-        return tracks;
-      });
-
-      // Start recent albums immediately
-      let recentAlbumIds = normalizeAlbumIds(seeds.recentlyPlayedAlbumIds);
-      if (recentAlbumIds.length === 0) {
-        // Wait for continue tracks to derive album IDs
-        const tracks = await continueTracksPromise;
-        recentAlbumIds = normalizeAlbumIds(tracks.map(track => track.albumId));
       }
 
-      fetchAlbums(recentAlbumIds.slice(0, LIMITS.recentAlbums)).then(albums => {
-        recentAlbums = albums;
+      // Recently Played (albums) - start immediately with seeds
+      if (isSectionVisible('recentAlbums')) {
+        const recentAlbumIds = normalizeAlbumIds(seeds.recentlyPlayedAlbumIds);
+        fetchAlbums(recentAlbumIds.slice(0, LIMITS.recentAlbums)).then(albums => {
+          recentAlbums = albums;
+          loadingRecentAlbums = false;
+          markSectionFinished();
+        });
+      } else {
         loadingRecentAlbums = false;
-        if (albums.length > 0) markSectionReady();
-      });
-
-      // Favorite albums
-      fetchTracks(seeds.favoriteTrackIds.slice(0, LIMITS.favoriteTracks)).then(async favoriteTrackDetails => {
-        const favoriteAlbumIds = normalizeAlbumIds([
-          ...seeds.favoriteAlbumIds,
-          ...favoriteTrackDetails.map(track => track.albumId)
-        ]);
-        const albums = await fetchAlbums(favoriteAlbumIds.slice(0, LIMITS.favoriteAlbums));
-        favoriteAlbums = albums;
-        loadingFavoriteAlbums = false;
-        if (albums.length > 0) markSectionReady();
-      });
-
-      // Top artists
-      let artistSeeds = seeds.topArtistIds;
-      if (artistSeeds.length === 0) {
-        const tracks = await continueTracksPromise;
-        artistSeeds = buildTopArtistSeedsFromTracks(tracks);
       }
-      fetchArtists(artistSeeds.slice(0, LIMITS.topArtists)).then(artists => {
-        topArtists = artists;
+
+      // Top Artists
+      if (isSectionVisible('topArtists')) {
+        fetchArtists(seeds.topArtistIds.slice(0, LIMITS.topArtists)).then(artists => {
+          topArtists = artists;
+          loadingTopArtists = false;
+          markSectionFinished();
+        });
+      } else {
         loadingTopArtists = false;
-        if (artists.length > 0) markSectionReady();
-      });
+      }
+
+      // Favorite Albums
+      if (isSectionVisible('favoriteAlbums')) {
+        // Get favorite track details to extract album IDs
+        fetchTracks(seeds.favoriteTrackIds.slice(0, LIMITS.favoriteTracks)).then(async favoriteTrackDetails => {
+          const favoriteAlbumIds = normalizeAlbumIds([
+            ...seeds.favoriteAlbumIds,
+            ...favoriteTrackDetails.map(track => track.albumId)
+          ]);
+          const albums = await fetchAlbums(favoriteAlbumIds.slice(0, LIMITS.favoriteAlbums));
+          favoriteAlbums = albums;
+          loadingFavoriteAlbums = false;
+          markSectionFinished();
+        });
+      } else {
+        loadingFavoriteAlbums = false;
+      }
 
     } catch (err) {
       console.error('Failed to load home data:', err);
@@ -410,9 +433,9 @@
 </script>
 
 <div class="home-view">
-  <!-- Loading Overlay - fades out when content is ready -->
+  <!-- Loading Overlay - fades out when ALL sections are ready -->
   {#if isOverlayVisible}
-    <div class="loading-overlay" class:fade-out={!isInitializing && sectionsReady >= MIN_SECTIONS_BEFORE_SHOW}>
+    <div class="loading-overlay" class:fade-out={sectionsFinished >= totalVisibleSections && totalVisibleSections > 0}>
       <div class="loading-content">
         <div class="loading-icon">
           <Loader2 size={36} class="spinner" />
@@ -571,6 +594,10 @@
                 quality={getTrackQuality(track)}
                 hideDownload={true}
                 onPlay={() => onTrackPlay?.(track)}
+                menuActions={{
+                  onPlayNow: () => onTrackPlay?.(track),
+                  onAddFavorite: () => handleAddToFavorites(track.id)
+                }}
               />
             {/each}
           </div>
