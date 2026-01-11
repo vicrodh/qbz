@@ -674,7 +674,7 @@
 
   .lyrics-container {
     flex: 1;
-    overflow: hidden;
+    min-height: 0; /* Critical for flex child to allow shrinking */
     max-height: calc(100vh - 160px);
     mask-image: linear-gradient(
       to bottom,

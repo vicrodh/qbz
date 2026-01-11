@@ -31,6 +31,7 @@
 
   let container: HTMLDivElement | null = null;
   let lastScrolledIndex = -1;
+  let lastLyricsKey = '';
 
   // Calculate opacity based on distance from active line
   function getLineOpacity(index: number, active: number): number {
@@ -102,10 +103,14 @@
   });
 
   // Reset scroll tracking when lyrics change (new track)
+  // Use first line text as key to detect actual content change, not just array reference
   $effect(() => {
-    // This effect only cares about lines array identity changing
-    void lines;
-    lastScrolledIndex = -1;
+    const newKey = lines.length > 0 ? `${lines.length}-${lines[0].text}` : '';
+    if (newKey !== lastLyricsKey) {
+      console.log('[LyricsLines] Lyrics content changed, resetting scroll tracking');
+      lastLyricsKey = newKey;
+      lastScrolledIndex = -1;
+    }
   });
 </script>
 
