@@ -40,9 +40,9 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<header class="titlebar" ondblclick={handleDoubleClick}>
-  <!-- Drag region - uses CSS app-region: drag -->
-  <div class="drag-region"></div>
+<header class="titlebar" data-tauri-drag-region ondblclick={handleDoubleClick}>
+  <!-- Drag region - uses both data-tauri-drag-region and CSS app-region: drag -->
+  <div class="drag-region" data-tauri-drag-region></div>
 
   <!-- Window Controls -->
   <div class="window-controls">
