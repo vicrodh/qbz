@@ -89,16 +89,13 @@
 
   onMount(() => {
     loadStatus();
-
-    // Poll less frequently - only needed to detect settings changes
-    const interval = setInterval(loadStatus, 10000);
-    return () => clearInterval(interval);
+    // No polling - data is loaded once on mount and refreshed on hover
   });
 </script>
 
 <div
   class="audio-badges"
-  onmouseenter={() => isHovering = true}
+  onmouseenter={() => { isHovering = true; loadStatus(); }}
   onmouseleave={() => isHovering = false}
 >
   <!-- DAC Badge -->
