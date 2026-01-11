@@ -1289,14 +1289,14 @@
     display: flex;
     flex: 1;
     min-width: 0;
-    height: calc(100vh - 88px);
+    height: calc(100vh - 96px);
     overflow: hidden;
   }
 
   .main-content {
     flex: 1;
     min-width: 0;
-    height: calc(100vh - 88px);
+    height: calc(100vh - 96px);
     overflow-y: auto;
     padding: 24px 32px;
   }

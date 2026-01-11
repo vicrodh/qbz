@@ -360,7 +360,7 @@
     bottom: 0;
     left: 0;
     right: 0;
-    height: 88px;
+    height: 96px;
     background: linear-gradient(to top, rgba(18, 18, 20, 0.98) 0%, rgba(24, 24, 28, 0.95) 100%);
     backdrop-filter: blur(20px);
     border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -445,7 +445,7 @@
     flex: 1;
     display: flex;
     align-items: center;
-    padding: 8px 16px;
+    padding: 10px 16px 14px 16px;
     gap: 16px;
   }
 

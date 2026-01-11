@@ -195,7 +195,7 @@
     background-color: var(--bg-secondary);
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 88px);
+    height: calc(100vh - 96px);
   }
 
   .content {

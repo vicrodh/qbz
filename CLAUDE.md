@@ -19,7 +19,7 @@ The `.main-content` container in `src/routes/+page.svelte` must NOT have `displa
 .main-content {
   flex: 1;
   min-width: 0;
-  height: calc(100vh - 88px);  /* 88px = NowPlayingBar height */
+  height: calc(100vh - 96px);  /* 96px = NowPlayingBar height */
   overflow-y: auto;
   padding: 24px 32px;
 }
