@@ -98,17 +98,23 @@
 
 ## 6. Playlist Management
 
-**Status:** Not Started
+**Status:** Partial (Import implemented)
 
 **Description:** Create, edit, and manage playlists within QBZ.
 
+**Implemented Features:**
+- [x] Import playlists from Spotify, Apple Music, Tidal, Deezer
+- [x] Track matching via ISRC + fuzzy matching algorithm
+- [x] Progress log UI during import
+- [x] Auto-create Qobuz playlist with matched tracks
+
 **TODO:**
-- [ ] Create new playlists
+- [ ] Create new playlists (basic UI exists)
 - [ ] Add/remove tracks from playlists
 - [ ] Reorder tracks in playlist
 - [ ] Delete playlists
 - [ ] Sync with Qobuz account playlists
-- [ ] Import/export playlists
+- [ ] Export playlists
 
 ---
 
@@ -120,6 +126,7 @@
 - [x] Window drag region fix for TitleBar
 - [x] Removed unnecessary PipeWire polling (was every 10s)
 - [x] Artwork caching with MD5 hash filenames
+- [x] Playlist import from Spotify/Apple/Tidal/Deezer (Codex integration)
 
 ---
 
