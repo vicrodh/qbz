@@ -5,9 +5,12 @@
     value: string;
     options: string[];
     onchange: (value: string) => void;
+    wide?: boolean;        // For long device names
+    expandLeft?: boolean;  // Expand menu to the left
+    compact?: boolean;     // Smaller text in options
   }
 
-  let { value, options, onchange }: Props = $props();
+  let { value, options, onchange, wide = false, expandLeft = false, compact = false }: Props = $props();
 
   let isOpen = $state(false);
   let dropdownRef: HTMLDivElement;
@@ -26,14 +29,14 @@
   });
 </script>
 
-<div class="dropdown" bind:this={dropdownRef}>
+<div class="dropdown" class:wide bind:this={dropdownRef}>
   <button class="trigger" onclick={() => (isOpen = !isOpen)}>
-    <span>{value}</span>
+    <span class="value-text">{value}</span>
     <ChevronDown size={16} class="chevron" />
   </button>
 
   {#if isOpen}
-    <div class="menu">
+    <div class="menu" class:expand-left={expandLeft} class:compact>
       {#each options as option}
         <button
           class="option"
@@ -42,6 +45,7 @@
             onchange(option);
             isOpen = false;
           }}
+          title={option}
         >
           {option}
         </button>
@@ -55,9 +59,14 @@
     position: relative;
   }
 
+  .dropdown.wide {
+    min-width: 280px;
+  }
+
   .trigger {
     height: 40px;
     min-width: 160px;
+    width: 100%;
     padding: 0 16px;
     background-color: var(--bg-tertiary);
     border-radius: 8px;
@@ -72,25 +81,46 @@
     transition: background-color 150ms ease;
   }
 
+  .dropdown.wide .trigger {
+    min-width: 280px;
+  }
+
+  .value-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    text-align: left;
+  }
+
   .trigger:hover {
     background-color: #333333;
   }
 
   .trigger :global(.chevron) {
     color: var(--text-muted);
+    flex-shrink: 0;
   }
 
   .menu {
     position: absolute;
     top: 100%;
     left: 0;
-    right: 0;
     margin-top: 4px;
+    min-width: 100%;
     background-color: var(--bg-tertiary);
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
     z-index: 50;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .menu.expand-left {
+    left: auto;
+    right: 0;
+    min-width: 320px;
   }
 
   .option {
@@ -103,6 +133,14 @@
     border: none;
     cursor: pointer;
     transition: background-color 150ms ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .menu.compact .option {
+    padding: 10px 14px;
+    font-size: 12px;
   }
 
   .option:hover {

@@ -501,12 +501,15 @@
     <div class="setting-row">
       <div class="label-with-tooltip">
         <span class="setting-label">Output Device</span>
-        <Tooltip text="Select your preferred audio output device. Changes take effect on next playback." />
+        <Tooltip text="Select your preferred audio output device. Changes take effect on app restart." />
       </div>
       <Dropdown
         value={outputDevice}
         options={audioDeviceOptions.length > 1 ? audioDeviceOptions : ['System Default']}
         onchange={handleOutputDeviceChange}
+        wide
+        expandLeft
+        compact
       />
     </div>
     <div class="setting-row">
