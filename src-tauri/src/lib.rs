@@ -124,6 +124,9 @@ pub fn run() {
     // Initialize session store state
     let session_store_state = session_store::SessionStoreState::new()
         .expect("Failed to initialize session store");
+    // Initialize audio settings state
+    let audio_settings_state = config::audio_settings::AudioSettingsState::new()
+        .expect("Failed to initialize audio settings");
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
@@ -184,6 +187,7 @@ pub fn run() {
         .manage(reco_state)
         .manage(api_cache_state)
         .manage(session_store_state)
+        .manage(audio_settings_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -359,6 +363,12 @@ pub fn run() {
             session_store::save_session_position,
             session_store::save_session_playback_mode,
             session_store::clear_session,
+            // Audio settings commands
+            config::audio_settings::get_audio_settings,
+            config::audio_settings::set_audio_output_device,
+            config::audio_settings::set_audio_exclusive_mode,
+            config::audio_settings::set_audio_dac_passthrough,
+            config::audio_settings::set_audio_sample_rate,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

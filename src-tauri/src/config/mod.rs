@@ -7,5 +7,14 @@
 //! - Local playlists
 //! - Cached favorites
 
-// TODO: Implement configuration storage
-// pub mod store;
+pub mod audio_settings;
+
+pub use audio_settings::{
+    AudioSettings,
+    AudioSettingsState,
+    get_audio_settings,
+    set_audio_output_device,
+    set_audio_exclusive_mode,
+    set_audio_dac_passthrough,
+    set_audio_sample_rate,
+};
