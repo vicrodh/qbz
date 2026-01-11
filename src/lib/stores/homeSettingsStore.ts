@@ -10,6 +10,8 @@ export type HomeSectionId =
   | 'newReleases'
   | 'pressAwards'
   | 'mostStreamed'
+  | 'qobuzissimes'
+  | 'editorPicks'
   | 'recentAlbums'
   | 'continueTracks'
   | 'topArtists'
@@ -37,6 +39,8 @@ const DEFAULT_SECTIONS: HomeSection[] = [
   { id: 'newReleases', label: 'New Releases', visible: true, source: 'qobuz' },
   { id: 'pressAwards', label: 'Press Awards', visible: true, source: 'qobuz' },
   { id: 'mostStreamed', label: 'Popular Albums', visible: false, source: 'qobuz' },
+  { id: 'qobuzissimes', label: 'Qobuzissimes', visible: false, source: 'qobuz' },
+  { id: 'editorPicks', label: "Editor's Picks", visible: false, source: 'qobuz' },
   { id: 'recentAlbums', label: 'Recently Played', visible: true, source: 'ml' },
   { id: 'continueTracks', label: 'Continue Listening', visible: true, source: 'ml' },
   { id: 'topArtists', label: 'Your Top Artists', visible: true, source: 'ml' },

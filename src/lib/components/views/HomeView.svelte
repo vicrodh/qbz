@@ -87,6 +87,8 @@
   let loadingNewReleases = $state(true);
   let loadingPressAwards = $state(true);
   let loadingMostStreamed = $state(true);
+  let loadingQobuzissimes = $state(true);
+  let loadingEditorPicks = $state(true);
   let loadingRecentAlbums = $state(true);
   let loadingContinueTracks = $state(true);
   let loadingTopArtists = $state(true);
@@ -96,6 +98,8 @@
   let newReleases = $state<AlbumCardData[]>([]);
   let pressAwards = $state<AlbumCardData[]>([]);
   let mostStreamed = $state<AlbumCardData[]>([]);
+  let qobuzissimes = $state<AlbumCardData[]>([]);
+  let editorPicks = $state<AlbumCardData[]>([]);
 
   // User-specific content
   let recentAlbums = $state<AlbumCardData[]>([]);
@@ -109,6 +113,8 @@
     newReleases.length > 0
     || pressAwards.length > 0
     || mostStreamed.length > 0
+    || qobuzissimes.length > 0
+    || editorPicks.length > 0
     || recentAlbums.length > 0
     || continueTracks.length > 0
     || topArtists.length > 0
@@ -254,6 +260,8 @@
     loadingNewReleases = true;
     loadingPressAwards = true;
     loadingMostStreamed = true;
+    loadingQobuzissimes = true;
+    loadingEditorPicks = true;
     loadingRecentAlbums = true;
     loadingContinueTracks = true;
     loadingTopArtists = true;
@@ -289,6 +297,24 @@
       });
     } else {
       loadingMostStreamed = false;
+    }
+
+    if (isSectionVisible('qobuzissimes')) {
+      fetchFeaturedAlbums('qobuzissimes', LIMITS.featuredAlbums).then(albums => {
+        qobuzissimes = albums;
+        loadingQobuzissimes = false;
+      });
+    } else {
+      loadingQobuzissimes = false;
+    }
+
+    if (isSectionVisible('editorPicks')) {
+      fetchFeaturedAlbums('editor-picks', LIMITS.featuredAlbums).then(albums => {
+        editorPicks = albums;
+        loadingEditorPicks = false;
+      });
+    } else {
+      loadingEditorPicks = false;
     }
 
     try {
@@ -427,6 +453,40 @@
         <HorizontalScrollRow title="Popular Albums">
           {#snippet children()}
             {#each mostStreamed as album}
+              <AlbumCard
+                artwork={album.artwork}
+                title={album.title}
+                artist={album.artist}
+                quality={album.quality}
+                onclick={() => onAlbumClick?.(album.id)}
+              />
+            {/each}
+            <div class="spacer"></div>
+          {/snippet}
+        </HorizontalScrollRow>
+      {/if}
+
+      {#if sectionId === 'qobuzissimes' && qobuzissimes.length > 0}
+        <HorizontalScrollRow title="Qobuzissimes">
+          {#snippet children()}
+            {#each qobuzissimes as album}
+              <AlbumCard
+                artwork={album.artwork}
+                title={album.title}
+                artist={album.artist}
+                quality={album.quality}
+                onclick={() => onAlbumClick?.(album.id)}
+              />
+            {/each}
+            <div class="spacer"></div>
+          {/snippet}
+        </HorizontalScrollRow>
+      {/if}
+
+      {#if sectionId === 'editorPicks' && editorPicks.length > 0}
+        <HorizontalScrollRow title="Editor's Picks">
+          {#snippet children()}
+            {#each editorPicks as album}
               <AlbumCard
                 artwork={album.artwork}
                 title={album.title}
