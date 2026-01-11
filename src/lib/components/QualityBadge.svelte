@@ -5,52 +5,68 @@
     quality?: string;
     bitDepth?: number;
     samplingRate?: number;
-    compact?: boolean;
   }
 
   let {
     quality = '',
     bitDepth,
-    samplingRate,
-    compact = false
+    samplingRate
   }: Props = $props();
 
   // Determine quality tier
   const tier = $derived.by(() => {
+    // Check bitDepth and samplingRate first
     if (bitDepth && bitDepth >= 24 && samplingRate && samplingRate > 96) {
       return 'max';
     }
     if (bitDepth && bitDepth >= 24) {
       return 'hires';
     }
-    if (quality.toLowerCase().includes('mp3') || quality.toLowerCase().includes('320')) {
-      return 'lossy';
-    }
-    if (bitDepth === 16 || quality.toLowerCase().includes('cd') || quality.toLowerCase().includes('flac') || quality.toLowerCase().includes('lossless')) {
+    if (bitDepth === 16 || (samplingRate && samplingRate >= 44.1 && samplingRate <= 48)) {
       return 'cd';
     }
+
+    // Check quality string
+    const q = quality.toLowerCase();
+    if (q.includes('mp3') || q.includes('320')) {
+      return 'lossy';
+    }
+    if (q.includes('hi-res') || q.includes('hires') || q.includes('24')) {
+      return 'hires';
+    }
+    if (q.includes('cd') || q.includes('flac') || q.includes('lossless') || q.includes('16')) {
+      return 'cd';
+    }
+
+    // Default fallback
     if (samplingRate && samplingRate >= 44.1) {
       return 'cd';
     }
-    return 'unknown';
+
+    return 'cd'; // Default to CD instead of unknown
   });
 
   // Format the display text
   const displayText = $derived.by(() => {
-    if (tier === 'max' || tier === 'hires') {
+    if (tier === 'max') {
       const depth = bitDepth || 24;
-      const rate = samplingRate ? `${samplingRate} kHz` : '';
-      return compact ? `${depth}/${samplingRate || ''}` : `${depth}-bit${rate ? ` / ${rate}` : ''}`;
+      const rate = samplingRate || 192;
+      return `${depth}-bit / ${rate} kHz`;
+    }
+    if (tier === 'hires') {
+      const depth = bitDepth || 24;
+      const rate = samplingRate || 96;
+      return `${depth}-bit / ${rate} kHz`;
     }
     if (tier === 'cd') {
       const depth = bitDepth || 16;
       const rate = samplingRate || 44.1;
-      return compact ? `${depth}/${rate}` : `${depth}-bit / ${rate} kHz`;
+      return `${depth}-bit / ${rate} kHz`;
     }
     if (tier === 'lossy') {
-      return compact ? '320k' : '320 kbps';
+      return '320 kbps';
     }
-    return '';
+    return '16-bit / 44.1 kHz';
   });
 
   const tierLabel = $derived.by(() => {
@@ -58,38 +74,34 @@
     if (tier === 'hires') return 'Hi-Res';
     if (tier === 'cd') return 'CD';
     if (tier === 'lossy') return 'MP3';
-    return '';
+    return 'CD';
   });
 </script>
 
-{#if tier !== 'unknown'}
-  <div class="quality-badge tier-{tier}" class:compact>
-    <!-- Icon -->
-    <div class="badge-icon">
-      {#if tier === 'max' || tier === 'hires'}
-        <!-- Hi-Res Audio Icon (simplified) -->
-        <svg viewBox="0 0 24 24" fill="currentColor" class="hires-icon">
-          <rect x="2" y="6" width="4" height="12" rx="1" />
-          <rect x="8" y="3" width="4" height="18" rx="1" />
-          <rect x="14" y="8" width="4" height="8" rx="1" />
-          <rect x="20" y="5" width="2" height="14" rx="1" />
-        </svg>
-      {:else if tier === 'cd'}
-        <Disc size={14} />
-      {:else if tier === 'lossy'}
-        <Music size={14} />
-      {/if}
-    </div>
-
-    <!-- Text -->
-    <div class="badge-text">
-      {#if !compact}
-        <span class="tier-label">{tierLabel}</span>
-      {/if}
-      <span class="quality-info">{displayText}</span>
-    </div>
+<div class="quality-badge tier-{tier}">
+  <!-- Icon -->
+  <div class="badge-icon">
+    {#if tier === 'max' || tier === 'hires'}
+      <!-- Hi-Res Audio Icon -->
+      <svg viewBox="0 0 24 24" fill="currentColor" class="hires-icon">
+        <rect x="2" y="6" width="4" height="12" rx="1" />
+        <rect x="8" y="3" width="4" height="18" rx="1" />
+        <rect x="14" y="8" width="4" height="8" rx="1" />
+        <rect x="20" y="5" width="2" height="14" rx="1" />
+      </svg>
+    {:else if tier === 'cd'}
+      <Disc size={14} />
+    {:else}
+      <Music size={14} />
+    {/if}
   </div>
-{/if}
+
+  <!-- Text -->
+  <div class="badge-text">
+    <span class="tier-label">{tierLabel}</span>
+    <span class="quality-info">{displayText}</span>
+  </div>
+</div>
 
 <style>
   .quality-badge {
@@ -99,11 +111,6 @@
     padding: 4px 8px;
     border-radius: 4px;
     font-family: var(--font-sans, system-ui);
-  }
-
-  .quality-badge.compact {
-    padding: 2px 6px;
-    gap: 4px;
   }
 
   .badge-icon {
@@ -118,21 +125,10 @@
     height: 16px;
   }
 
-  .compact .hires-icon {
-    width: 12px;
-    height: 12px;
-  }
-
   .badge-text {
     display: flex;
     flex-direction: column;
     line-height: 1.2;
-  }
-
-  .compact .badge-text {
-    flex-direction: row;
-    gap: 4px;
-    align-items: center;
   }
 
   .tier-label {
@@ -142,18 +138,10 @@
     letter-spacing: 0.5px;
   }
 
-  .compact .tier-label {
-    font-size: 9px;
-  }
-
   .quality-info {
     font-size: 11px;
     font-weight: 500;
     opacity: 0.9;
-  }
-
-  .compact .quality-info {
-    font-size: 10px;
   }
 
   /* Tier colors */
