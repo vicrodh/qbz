@@ -674,8 +674,11 @@
 
   /* Loading Overlay */
   .loading-overlay {
-    position: absolute;
-    inset: 0;
+    position: fixed;
+    top: 0;
+    left: var(--sidebar-width, 280px);
+    right: 0;
+    bottom: calc(var(--player-bar-height, 104px));
     z-index: 10;
     background: var(--bg-primary);
     display: flex;
