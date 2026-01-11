@@ -137,12 +137,12 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: rgba(255, 255, 255, 0.9);
+    color: #b0b0b0;
   }
 
   .quality-info {
     font-size: 9px;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.9);
+    color: #999999;
   }
 </style>

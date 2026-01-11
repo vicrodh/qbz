@@ -1131,6 +1131,7 @@
         artwork={currentTrack.artwork}
         trackTitle={currentTrack.title}
         artist={currentTrack.artist}
+        album={currentTrack.album}
         quality={currentTrack.quality}
         bitDepth={currentTrack.bitDepth}
         samplingRate={currentTrack.samplingRate}
@@ -1154,6 +1155,8 @@
         onCast={openCastPicker}
         onToggleLyrics={toggleLyricsSidebar}
         lyricsActive={lyricsSidebarVisible}
+        onArtistClick={() => currentTrack.artistId && handleArtistClick(currentTrack.artistId)}
+        onAlbumClick={() => currentTrack.albumId && handleAlbumClick(currentTrack.albumId)}
       />
     {:else}
       <NowPlayingBar
