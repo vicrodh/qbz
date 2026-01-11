@@ -246,6 +246,30 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
+    /// Get featured albums by type (new-releases, press-awards, most-streamed)
+    pub async fn get_featured_albums(&self, featured_type: &str, limit: u32, offset: u32) -> Result<SearchResultsPage<Album>> {
+        let url = endpoints::build_url(paths::ALBUM_GET_FEATURED);
+        let response: Value = self
+            .http
+            .get(&url)
+            .header("X-App-Id", self.app_id().await?)
+            .query(&[
+                ("type", featured_type),
+                ("limit", &limit.to_string()),
+                ("offset", &offset.to_string()),
+            ])
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        let albums = response
+            .get("albums")
+            .ok_or_else(|| ApiError::ApiResponse("No albums in response".to_string()))?;
+
+        Ok(serde_json::from_value(albums.clone())?)
+    }
+
     /// Get track by ID
     pub async fn get_track(&self, track_id: u64) -> Result<Track> {
         let url = endpoints::build_url(paths::TRACK_GET);

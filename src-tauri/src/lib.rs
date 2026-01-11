@@ -191,6 +191,7 @@ pub fn run() {
             commands::search_tracks,
             commands::search_artists,
             commands::get_album,
+            commands::get_featured_albums,
             commands::get_track,
             commands::get_artist,
             // Playback commands

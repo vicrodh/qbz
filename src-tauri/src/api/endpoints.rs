@@ -15,6 +15,7 @@ pub mod paths {
     // Album
     pub const ALBUM_GET: &str = "/album/get";
     pub const ALBUM_SEARCH: &str = "/album/search";
+    pub const ALBUM_GET_FEATURED: &str = "/album/getFeatured";
 
     // Artist
     pub const ARTIST_GET: &str = "/artist/get";

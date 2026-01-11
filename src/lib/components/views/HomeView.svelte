@@ -49,17 +49,25 @@
     continueTracks: 8,
     topArtists: 10,
     favoriteAlbums: 12,
-    favoriteTracks: 10
+    favoriteTracks: 10,
+    featuredAlbums: 12
   };
 
   // Loading states for progressive render
   let isInitializing = $state(true);
   let error = $state<string | null>(null);
+  let loadingNewReleases = $state(true);
+  let loadingPressAwards = $state(true);
   let loadingRecentAlbums = $state(true);
   let loadingContinueTracks = $state(true);
   let loadingTopArtists = $state(true);
   let loadingFavoriteAlbums = $state(true);
 
+  // Featured albums (from Qobuz editorial)
+  let newReleases = $state<AlbumCardData[]>([]);
+  let pressAwards = $state<AlbumCardData[]>([]);
+
+  // User-specific content
   let recentAlbums = $state<AlbumCardData[]>([]);
   let continueTracks = $state<DisplayTrack[]>([]);
   let topArtists = $state<ArtistCardData[]>([]);
@@ -68,7 +76,9 @@
   let failedArtistImages = $state<Set<number>>(new Set());
 
   const hasContent = $derived(
-    recentAlbums.length > 0
+    newReleases.length > 0
+    || pressAwards.length > 0
+    || recentAlbums.length > 0
     || continueTracks.length > 0
     || topArtists.length > 0
     || favoriteAlbums.length > 0
@@ -125,6 +135,24 @@
     });
 
     return artists;
+  }
+
+  interface FeaturedAlbumsResponse {
+    items: QobuzAlbum[];
+    total: number;
+  }
+
+  async function fetchFeaturedAlbums(featuredType: string, limit: number): Promise<AlbumCardData[]> {
+    try {
+      const response = await invoke<FeaturedAlbumsResponse>('get_featured_albums', {
+        featuredType,
+        limit
+      });
+      return response.items.map(toAlbumCard);
+    } catch (err) {
+      console.error(`Failed to fetch ${featuredType}:`, err);
+      return [];
+    }
   }
 
   function toAlbumCard(album: QobuzAlbum): AlbumCardData {
@@ -184,10 +212,26 @@
   async function loadHome() {
     isInitializing = true;
     error = null;
+    loadingNewReleases = true;
+    loadingPressAwards = true;
     loadingRecentAlbums = true;
     loadingContinueTracks = true;
     loadingTopArtists = true;
     loadingFavoriteAlbums = true;
+
+    // Start loading featured albums immediately (no seeds needed)
+    // These show first since they're fast API calls
+    fetchFeaturedAlbums('new-releases', LIMITS.featuredAlbums).then(albums => {
+      newReleases = albums;
+      loadingNewReleases = false;
+      // Hide initializing as soon as we have some content
+      if (albums.length > 0) isInitializing = false;
+    });
+
+    fetchFeaturedAlbums('press-awards', LIMITS.featuredAlbums).then(albums => {
+      pressAwards = albums;
+      loadingPressAwards = false;
+    });
 
     try {
       // Fast query for seeds (uses simple DB queries, falls back if no ML scores)
@@ -273,6 +317,40 @@
       <p>{error}</p>
     </div>
   {:else if hasContent}
+    {#if newReleases.length > 0}
+      <HorizontalScrollRow title="New Releases">
+        {#snippet children()}
+          {#each newReleases as album}
+            <AlbumCard
+              artwork={album.artwork}
+              title={album.title}
+              artist={album.artist}
+              quality={album.quality}
+              onclick={() => onAlbumClick?.(album.id)}
+            />
+          {/each}
+          <div class="spacer"></div>
+        {/snippet}
+      </HorizontalScrollRow>
+    {/if}
+
+    {#if pressAwards.length > 0}
+      <HorizontalScrollRow title="Press Awards">
+        {#snippet children()}
+          {#each pressAwards as album}
+            <AlbumCard
+              artwork={album.artwork}
+              title={album.title}
+              artist={album.artist}
+              quality={album.quality}
+              onclick={() => onAlbumClick?.(album.id)}
+            />
+          {/each}
+          <div class="spacer"></div>
+        {/snippet}
+      </HorizontalScrollRow>
+    {/if}
+
     {#if recentAlbums.length > 0}
       <HorizontalScrollRow title="Recently Played">
         {#snippet children()}
