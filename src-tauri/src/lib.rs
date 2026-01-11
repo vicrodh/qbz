@@ -17,6 +17,7 @@ pub mod library;
 pub mod lyrics;
 pub mod media_controls;
 pub mod player;
+pub mod playlist_import;
 pub mod queue;
 pub mod reco_store;
 pub mod session_store;
@@ -263,6 +264,9 @@ pub fn run() {
             commands::add_tracks_to_playlist,
             commands::remove_tracks_from_playlist,
             commands::update_playlist,
+            // Playlist import commands
+            commands::playlist_import_preview,
+            commands::playlist_import_execute,
             // Favorites commands
             commands::get_favorites,
             commands::add_favorite,

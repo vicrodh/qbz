@@ -39,6 +39,8 @@
     closeCastPicker,
     openPlaylistModal,
     closePlaylistModal,
+    openPlaylistImport,
+    closePlaylistImport,
     handleEscapeKey as handleUIEscape,
     getUIState,
     type UIState
@@ -218,6 +220,7 @@
   import ExpandedPlayer from '$lib/components/ExpandedPlayer.svelte';
   import FocusMode from '$lib/components/FocusMode.svelte';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
+  import PlaylistImportModal from '$lib/components/PlaylistImportModal.svelte';
   import CastPicker from '$lib/components/CastPicker.svelte';
   import LyricsSidebar from '$lib/components/lyrics/LyricsSidebar.svelte';
 
@@ -242,6 +245,7 @@
   let isPlaylistModalOpen = $state(false);
   let playlistModalMode = $state<'create' | 'edit' | 'addTrack'>('create');
   let playlistModalTrackIds = $state<number[]>([]);
+  let isPlaylistImportOpen = $state(false);
   let isAboutModalOpen = $state(false);
   let userPlaylists = $state<{ id: number; name: string; tracks_count: number }[]>([]);
 
@@ -801,6 +805,17 @@
     sidebarRef?.refreshPlaylists();
   }
 
+  function openImportPlaylist() {
+    openPlaylistImport();
+  }
+
+  function handlePlaylistImported(summary: { qobuz_playlist_id?: number | null }) {
+    sidebarRef?.refreshPlaylists();
+    if (summary.qobuz_playlist_id) {
+      selectPlaylist(summary.qobuz_playlist_id);
+    }
+  }
+
   // Auth Handlers
   async function handleLoginSuccess(info: UserInfo) {
     setLoggedIn(info);
@@ -1053,6 +1068,7 @@
       isPlaylistModalOpen = uiState.isPlaylistModalOpen;
       playlistModalMode = uiState.playlistModalMode;
       playlistModalTrackIds = uiState.playlistModalTrackIds;
+      isPlaylistImportOpen = uiState.isPlaylistImportOpen;
     });
 
     // Subscribe to auth state changes
@@ -1180,6 +1196,7 @@
       onNavigate={navigateTo}
       onPlaylistSelect={selectPlaylist}
       onCreatePlaylist={openCreatePlaylist}
+      onImportPlaylist={openImportPlaylist}
       onSettingsClick={() => navigateTo('settings')}
       onAboutClick={() => isAboutModalOpen = true}
       onLogout={handleLogout}
@@ -1476,6 +1493,13 @@
       {userPlaylists}
       onClose={closePlaylistModal}
       onSuccess={handlePlaylistCreated}
+    />
+
+    <!-- Playlist Import Modal -->
+    <PlaylistImportModal
+      isOpen={isPlaylistImportOpen}
+      onClose={closePlaylistImport}
+      onSuccess={handlePlaylistImported}
     />
 
     <!-- About Modal -->

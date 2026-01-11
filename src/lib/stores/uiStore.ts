@@ -14,6 +14,7 @@ let isCastPickerOpen = false;
 let isPlaylistModalOpen = false;
 let playlistModalMode: 'create' | 'edit' | 'addTrack' = 'create';
 let playlistModalTrackIds: number[] = [];
+let isPlaylistImportOpen = false;
 
 // Listeners
 const listeners = new Set<() => void>();
@@ -144,6 +145,22 @@ export function closePlaylistModal(): void {
   notifyListeners();
 }
 
+// ============ Playlist Import Modal ============
+
+export function getPlaylistImportOpen(): boolean {
+  return isPlaylistImportOpen;
+}
+
+export function openPlaylistImport(): void {
+  isPlaylistImportOpen = true;
+  notifyListeners();
+}
+
+export function closePlaylistImport(): void {
+  isPlaylistImportOpen = false;
+  notifyListeners();
+}
+
 // ============ Escape Key Handler ============
 
 /**
@@ -171,6 +188,10 @@ export function handleEscapeKey(): boolean {
     closePlaylistModal();
     return true;
   }
+  if (isPlaylistImportOpen) {
+    closePlaylistImport();
+    return true;
+  }
   return false;
 }
 
@@ -184,6 +205,7 @@ export interface UIState {
   isPlaylistModalOpen: boolean;
   playlistModalMode: 'create' | 'edit' | 'addTrack';
   playlistModalTrackIds: number[];
+  isPlaylistImportOpen: boolean;
 }
 
 export function getUIState(): UIState {
@@ -194,6 +216,7 @@ export function getUIState(): UIState {
     isCastPickerOpen,
     isPlaylistModalOpen,
     playlistModalMode,
-    playlistModalTrackIds
+    playlistModalTrackIds,
+    isPlaylistImportOpen
   };
 }
