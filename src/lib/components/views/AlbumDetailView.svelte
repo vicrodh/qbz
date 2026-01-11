@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, Play, Shuffle, Heart, Plus, MoreHorizontal, Download } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Heart } from 'lucide-svelte';
   import TrackRow from '../TrackRow.svelte';
+  import AlbumMenu from '../AlbumMenu.svelte';
   import { getDownloadState, type DownloadStatus } from '$lib/stores/downloadState';
 
   interface Track {
@@ -46,12 +47,15 @@
     onTrackGoToArtist?: (artistId: number) => void;
     onPlayAll?: () => void;
     onShuffleAll?: () => void;
-    onAddToQueue?: () => void;
+    onPlayAllNext?: () => void;
+    onPlayAllLater?: () => void;
     onAddTrackToPlaylist?: (trackId: number) => void;
     onTrackDownload?: (track: Track) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
     getTrackDownloadStatus?: (trackId: number) => { status: DownloadStatus; progress: number };
     onDownloadAlbum?: () => void;
+    onShareAlbumQobuz?: () => void;
+    onShareAlbumSonglink?: () => void;
     downloadStateVersion?: number;
   }
 
@@ -69,12 +73,15 @@
     onTrackGoToArtist,
     onPlayAll,
     onShuffleAll,
-    onAddToQueue,
+    onPlayAllNext,
+    onPlayAllLater,
     onAddTrackToPlaylist,
     onTrackDownload,
     onTrackRemoveDownload,
     getTrackDownloadStatus,
     onDownloadAlbum,
+    onShareAlbumQobuz,
+    onShareAlbumSonglink,
     downloadStateVersion
   }: Props = $props();
 
@@ -187,17 +194,13 @@
             fill={isFavorite ? 'var(--accent-primary)' : 'none'}
           />
         </button>
-        <button class="icon-btn" onclick={onAddToQueue}>
-          <Plus size={20} color="white" />
-        </button>
-        {#if onDownloadAlbum}
-          <button class="icon-btn" onclick={onDownloadAlbum} title="Download album">
-            <Download size={20} color="white" />
-          </button>
-        {/if}
-        <button class="icon-btn">
-          <MoreHorizontal size={20} color="white" />
-        </button>
+        <AlbumMenu
+          onPlayNext={onPlayAllNext}
+          onPlayLater={onPlayAllLater}
+          onShareQobuz={onShareAlbumQobuz}
+          onShareSonglink={onShareAlbumSonglink}
+          onDownload={onDownloadAlbum}
+        />
       </div>
     </div>
   </div>

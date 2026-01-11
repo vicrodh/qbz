@@ -998,7 +998,7 @@
     padding: 10px 20px;
     background: none;
     border: none;
-    border-radius: 20px;
+    border-radius: 8px;
     color: var(--text-muted);
     font-size: 14px;
     font-weight: 500;
@@ -1248,7 +1248,7 @@
     background: var(--accent-primary);
     color: white;
     border: none;
-    border-radius: 24px;
+    border-radius: 8px;
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;

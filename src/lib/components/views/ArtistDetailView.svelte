@@ -517,7 +517,7 @@
     padding: 8px 16px;
     background-color: var(--accent-primary);
     border: none;
-    border-radius: 20px;
+    border-radius: 8px;
     color: white;
     font-size: 13px;
     font-weight: 500;

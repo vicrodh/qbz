@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { ArrowLeft, Play, Shuffle, Plus, ListMusic, Search, X, ChevronDown, ImagePlus, HardDrive, Info } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ImagePlus, HardDrive, Info } from 'lucide-svelte';
+  import AlbumMenu from '../AlbumMenu.svelte';
+  import { writeText } from '@tauri-apps/plugin-clipboard-manager';
   import { invoke } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
   import { onMount } from 'svelte';
@@ -430,23 +432,57 @@
     }
   }
 
-  async function handleAddToQueue() {
-    if (tracks.length > 0) {
-      const queueTracks = tracks.map(t => ({
-        id: t.id,
-        title: t.title,
-        artist: t.artist || 'Unknown Artist',
-        album: t.album || playlist?.name || 'Playlist',
-        duration_secs: t.durationSeconds,
-        artwork_url: t.albumArt || getPlaylistImage(),
-      }));
-
+  async function handlePlayAllNext() {
+    if (tracks.length === 0) return;
+    // Add in reverse order so first track ends up right after current
+    for (let i = tracks.length - 1; i >= 0; i--) {
+      const t = tracks[i];
       try {
-        await invoke('add_tracks_to_queue', { tracks: queueTracks });
+        await invoke('add_track_next', {
+          track: {
+            id: t.id,
+            title: t.title,
+            artist: t.artist || 'Unknown Artist',
+            album: t.album || playlist?.name || 'Playlist',
+            duration_secs: t.durationSeconds,
+            artwork_url: t.albumArt || getPlaylistImage(),
+          }
+        });
       } catch (err) {
-        console.error('Failed to add to queue:', err);
+        console.error('Failed to add track next:', err);
       }
     }
+  }
+
+  async function handlePlayAllLater() {
+    if (tracks.length === 0) return;
+    const queueTracks = tracks.map(t => ({
+      id: t.id,
+      title: t.title,
+      artist: t.artist || 'Unknown Artist',
+      album: t.album || playlist?.name || 'Playlist',
+      duration_secs: t.durationSeconds,
+      artwork_url: t.albumArt || getPlaylistImage(),
+    }));
+
+    try {
+      await invoke('add_tracks_to_queue', { tracks: queueTracks });
+    } catch (err) {
+      console.error('Failed to add to queue:', err);
+    }
+  }
+
+  function sharePlaylistQobuz() {
+    if (!playlist?.id) return;
+    const url = `https://play.qobuz.com/playlist/${playlist.id}`;
+    writeText(url);
+  }
+
+  function sharePlaylistSonglink() {
+    if (!playlist?.id) return;
+    const qobuzUrl = `https://play.qobuz.com/playlist/${playlist.id}`;
+    const songlinkUrl = `https://song.link/${encodeURIComponent(qobuzUrl)}`;
+    writeText(songlinkUrl);
   }
 </script>
 
@@ -525,9 +561,12 @@
             <Shuffle size={18} />
             <span>Shuffle</span>
           </button>
-          <button class="icon-btn" onclick={handleAddToQueue} title="Add all to queue">
-            <Plus size={20} color="white" />
-          </button>
+          <AlbumMenu
+            onPlayNext={handlePlayAllNext}
+            onPlayLater={handlePlayAllLater}
+            onShareQobuz={sharePlaylistQobuz}
+            onShareSonglink={sharePlaylistSonglink}
+          />
         </div>
       </div>
     </div>

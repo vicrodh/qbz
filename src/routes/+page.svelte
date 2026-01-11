@@ -542,8 +542,28 @@
     showToast('Shuffle play enabled', 'info');
   }
 
-  // Add all album tracks to existing queue
-  async function handleAddAlbumToQueue() {
+  // Add all album tracks next in queue (after current track)
+  async function handleAddAlbumToQueueNext() {
+    if (!selectedAlbum?.tracks?.length) return;
+
+    const artwork = selectedAlbum.artwork || '';
+    // Add in reverse order so first track ends up right after current
+    for (let i = selectedAlbum.tracks.length - 1; i >= 0; i--) {
+      const t = selectedAlbum.tracks[i];
+      queueTrackNext({
+        id: t.id,
+        title: t.title,
+        artist: t.artist || selectedAlbum?.artist || 'Unknown Artist',
+        album: selectedAlbum?.title || '',
+        duration_secs: t.durationSeconds,
+        artwork_url: artwork || null
+      });
+    }
+    showToast(`Playing ${selectedAlbum.tracks.length} tracks next`, 'success');
+  }
+
+  // Add all album tracks to end of queue
+  async function handleAddAlbumToQueueLater() {
     if (!selectedAlbum?.tracks?.length) return;
 
     const artwork = selectedAlbum.artwork || '';
@@ -562,6 +582,23 @@
     } else {
       showToast('Failed to add to queue', 'error');
     }
+  }
+
+  // Share album Qobuz link
+  function shareAlbumQobuzLink() {
+    if (!selectedAlbum?.id) return;
+    const url = `https://play.qobuz.com/album/${selectedAlbum.id}`;
+    writeText(url);
+    showToast('Album link copied to clipboard', 'success');
+  }
+
+  // Share album via song.link
+  async function shareAlbumSonglink() {
+    if (!selectedAlbum?.id) return;
+    const qobuzUrl = `https://play.qobuz.com/album/${selectedAlbum.id}`;
+    const songlinkUrl = `https://song.link/${encodeURIComponent(qobuzUrl)}`;
+    writeText(songlinkUrl);
+    showToast('Song.link copied to clipboard', 'success');
   }
 
   function handleAlbumTrackPlayNext(track: Track) {
@@ -1038,12 +1075,15 @@
           onTrackGoToArtist={handleArtistClick}
           onPlayAll={handlePlayAllAlbum}
           onShuffleAll={handleShuffleAlbum}
-          onAddToQueue={handleAddAlbumToQueue}
+          onPlayAllNext={handleAddAlbumToQueueNext}
+          onPlayAllLater={handleAddAlbumToQueueLater}
           onAddTrackToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackDownload={handleTrackDownload}
           onTrackRemoveDownload={handleTrackRemoveDownload}
           getTrackDownloadStatus={getTrackDownloadStatus}
           onDownloadAlbum={handleDownloadAlbum}
+          onShareAlbumQobuz={shareAlbumQobuzLink}
+          onShareAlbumSonglink={shareAlbumSonglink}
           {downloadStateVersion}
         />
       {:else if activeView === 'artist' && selectedArtist}
