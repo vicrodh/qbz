@@ -184,23 +184,23 @@
         onclick={onToggleShuffle}
         title="Shuffle"
       >
-        <Shuffle size={18} />
+        <Shuffle size={16} />
       </button>
 
       <button class="control-btn" onclick={onSkipBack} title="Previous">
-        <SkipBack size={20} />
+        <SkipBack size={18} />
       </button>
 
       <button class="control-btn play-btn" onclick={onTogglePlay} title={isPlaying ? 'Pause' : 'Play'}>
         {#if isPlaying}
-          <Pause size={22} />
+          <Pause size={20} />
         {:else}
-          <Play size={22} />
+          <Play size={20} />
         {/if}
       </button>
 
       <button class="control-btn" onclick={onSkipForward} title="Next">
-        <SkipForward size={20} />
+        <SkipForward size={18} />
       </button>
 
       <button
@@ -210,16 +210,16 @@
         title={repeatMode === 'off' ? 'Repeat' : repeatMode === 'all' ? 'Repeat All' : 'Repeat One'}
       >
         {#if repeatMode === 'one'}
-          <Repeat1 size={18} />
+          <Repeat1 size={16} />
         {:else}
-          <Repeat size={18} />
+          <Repeat size={16} />
         {/if}
       </button>
 
       <div class="divider"></div>
 
       <button class="control-btn" title="Add to Playlist">
-        <Plus size={18} />
+        <Plus size={16} />
       </button>
 
       <button
@@ -228,26 +228,25 @@
         onclick={onToggleFavorite}
         title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
       >
-        <Heart size={18} fill={isFavorite ? 'currentColor' : 'none'} />
+        <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
       </button>
     </div>
 
     <!-- Center: Song Card -->
     <div class="center-section">
       {#if hasTrack}
-        <div
-          class="song-card"
-          role="button"
-          tabindex="0"
-          onmouseenter={() => showArtworkPreview = true}
-          onmouseleave={() => showArtworkPreview = false}
-        >
-          <button class="artwork-container" onclick={onOpenFullScreen}>
+        <div class="song-card">
+          <button
+            class="artwork-container"
+            onclick={onOpenFullScreen}
+            onmouseenter={() => showArtworkPreview = true}
+            onmouseleave={() => showArtworkPreview = false}
+          >
             {#if artwork}
               <img src={artwork} alt={trackTitle} class="artwork" />
             {:else}
               <div class="artwork-placeholder">
-                <Play size={16} />
+                <Play size={14} />
               </div>
             {/if}
 
@@ -297,7 +296,7 @@
         onclick={onCast}
         title={isCastConnected ? 'Casting - Click to manage' : 'Cast to device'}
       >
-        <Cast size={18} />
+        <Cast size={16} />
       </button>
 
       <button
@@ -306,15 +305,15 @@
         onclick={onToggleLyrics}
         title="Lyrics"
       >
-        <Mic2 size={18} />
+        <Mic2 size={16} />
       </button>
 
       <button class="control-btn" onclick={onOpenQueue} title="Queue">
-        <ListMusic size={18} />
+        <ListMusic size={16} />
       </button>
 
       <button class="control-btn" onclick={onOpenFullScreen} title="Full Screen">
-        <Maximize2 size={18} />
+        <Maximize2 size={16} />
       </button>
 
       <div class="divider"></div>
@@ -327,11 +326,11 @@
           title={volume === 0 ? 'Unmute' : 'Mute'}
         >
           {#if volume === 0}
-            <VolumeX size={18} />
+            <VolumeX size={16} />
           {:else if volume < 50}
-            <Volume1 size={18} />
+            <Volume1 size={16} />
           {:else}
-            <Volume2 size={18} />
+            <Volume2 size={16} />
           {/if}
         </button>
 
@@ -485,8 +484,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 30px;
+    height: 30px;
     padding: 0;
     background: transparent;
     border: none;
@@ -520,8 +519,8 @@
   }
 
   .play-btn {
-    width: 36px;
-    height: 36px;
+    width: 34px;
+    height: 34px;
     color: white;
     margin: 0 4px;
   }
@@ -538,8 +537,8 @@
     padding: 8px 12px;
     background: rgba(255, 255, 255, 0.04);
     border-radius: 8px;
-    max-width: 500px;
-    min-width: 320px;
+    max-width: 700px;
+    min-width: 640px;
   }
 
   .artwork-container {
