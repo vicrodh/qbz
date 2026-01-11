@@ -60,13 +60,6 @@
   // Computed greeting
   const greetingText = $derived(getGreetingText(userName));
 
-  // Subscribe to home settings changes
-  $effect(() => {
-    const unsubscribe = subscribeHomeSettings(() => {
-      homeSettings = getSettings();
-    });
-    return unsubscribe;
-  });
 
   // Check if a section is visible
   function isSectionVisible(sectionId: HomeSectionId): boolean {
@@ -120,7 +113,15 @@
   );
 
   onMount(() => {
+    // Subscribe to home settings changes
+    const unsubscribe = subscribeHomeSettings(() => {
+      homeSettings = getSettings();
+    });
+
+    // Load home data
     loadHome();
+
+    return unsubscribe;
   });
 
   function handleArtistImageError(artistId: number) {

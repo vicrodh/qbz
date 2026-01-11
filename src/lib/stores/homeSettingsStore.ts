@@ -139,7 +139,7 @@ function saveSettings(): void {
  */
 export function subscribe(listener: () => void): () => void {
   listeners.add(listener);
-  listener(); // Immediately notify with current state
+  // Don't call immediately - caller should use getSettings() for initial state
   return () => listeners.delete(listener);
 }
 

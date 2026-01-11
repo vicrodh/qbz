@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { ChevronUp, ChevronDown, RotateCcw } from 'lucide-svelte';
   import Modal from './Modal.svelte';
   import {
@@ -23,8 +24,8 @@
   let settings = $state<HomeSettings>(getSettings());
   let customGreetingInput = $state(settings.greeting.customText || '');
 
-  // Subscribe to settings changes
-  $effect(() => {
+  // Subscribe to settings changes (use onMount to avoid reactive tracking)
+  onMount(() => {
     const unsubscribe = subscribe(() => {
       settings = getSettings();
       customGreetingInput = settings.greeting.customText || '';
