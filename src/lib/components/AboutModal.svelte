@@ -103,14 +103,12 @@
         <!-- Signature -->
         <div class="signature">
           <p>
-            Made with <span class="strikethrough">love in México</span> hatred.
+            Made with <span class="strikethrough">love in <img src="/mexico-flag.svg" alt="México" class="inline-icon flag" /></span> hatred.
           </p>
           <p class="signature-detail">
             Hatred towards all those companies that discriminate against the Linux community
             and don't provide us with a decent client for their product.
-            <svg class="tux" viewBox="0 0 24 24" width="14" height="14">
-              <path fill="currentColor" d="M12 2C9.8 2 8 3.8 8 6c0 .5.1 1 .3 1.4C6.1 8.1 5 9.9 5 12c0 2.8 1.6 5.2 4 6.3V21h6v-2.7c2.4-1.1 4-3.5 4-6.3 0-2.1-1.1-3.9-2.7-4.6.2-.4.3-.9.3-1.4 0-2.2-1.8-4-4-4zm-2 5c.6 0 1 .4 1 1s-.4 1-1 1-1-.4-1-1 .4-1 1-1zm4 0c.6 0 1 .4 1 1s-.4 1-1 1-1-.4-1-1 .4-1 1-1zm-2 3c1.1 0 2 .7 2 1.5S13.1 13 12 13s-2-.7-2-1.5.9-1.5 2-1.5z"/>
-            </svg>
+            <img src="/Tux.svg" alt="Tux" class="inline-icon tux" />
           </p>
         </div>
       </div>
@@ -338,10 +336,19 @@
     margin: 0 auto !important;
   }
 
-  .tux {
+  .inline-icon {
     display: inline-block;
     vertical-align: middle;
+    height: 1.3em;
+    width: auto;
+  }
+
+  .inline-icon.flag {
+    margin: 0 2px;
+  }
+
+  .inline-icon.tux {
     margin-left: 4px;
-    color: var(--text-muted);
+    height: 1.4em;
   }
 </style>
