@@ -234,6 +234,7 @@ pub fn run() {
             commands::get_playback_state,
             commands::set_media_metadata,
             commands::get_audio_devices,
+            commands::get_audio_output_status,
             // Queue commands
             commands::add_to_queue,
             commands::add_to_queue_next,

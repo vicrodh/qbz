@@ -63,6 +63,8 @@ pub struct SharedState {
     playback_start_millis: Arc<AtomicU64>,
     /// Position when playback was started/resumed (in seconds)
     position_at_start: Arc<AtomicU64>,
+    /// Current output device name
+    current_device: Arc<std::sync::RwLock<Option<String>>>,
 }
 
 impl Default for SharedState {
@@ -81,7 +83,18 @@ impl SharedState {
             volume: Arc::new(AtomicU64::new(75)),
             playback_start_millis: Arc::new(AtomicU64::new(0)),
             position_at_start: Arc::new(AtomicU64::new(0)),
+            current_device: Arc::new(std::sync::RwLock::new(None)),
         }
+    }
+
+    pub fn set_current_device(&self, device: Option<String>) {
+        if let Ok(mut d) = self.current_device.write() {
+            *d = device;
+        }
+    }
+
+    pub fn current_device(&self) -> Option<String> {
+        self.current_device.read().ok().and_then(|d| d.clone())
     }
 
     /// Get current position based on elapsed time since playback started
@@ -198,11 +211,13 @@ impl Player {
                 Some(d) => {
                     if let Ok(name) = d.name() {
                         log::info!("Using audio device: {}", name);
+                        thread_state.set_current_device(Some(name));
                     }
                     d
                 }
                 None => {
                     log::error!("No audio output device available");
+                    thread_state.set_current_device(None);
                     // Keep thread alive to receive commands
                     loop {
                         match rx.recv() {

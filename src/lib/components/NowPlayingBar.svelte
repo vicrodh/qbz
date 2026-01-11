@@ -18,6 +18,7 @@
     Maximize2
   } from 'lucide-svelte';
   import QualityBadge from './QualityBadge.svelte';
+  import AudioOutputBadges from './AudioOutputBadges.svelte';
 
   interface Props {
     artwork?: string;
@@ -277,6 +278,7 @@
 
           <div class="quality-indicator">
             <QualityBadge {quality} {bitDepth} {samplingRate} />
+            <AudioOutputBadges />
           </div>
         </div>
       {:else}
@@ -633,6 +635,9 @@
 
   .quality-indicator {
     flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    gap: 2px;
   }
 
   .empty-state {

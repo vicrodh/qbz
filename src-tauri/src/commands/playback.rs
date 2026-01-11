@@ -326,3 +326,24 @@ pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
     log::info!("Found {} audio output devices", devices.len());
     Ok(devices)
 }
+
+/// Current audio output status
+#[derive(serde::Serialize)]
+pub struct AudioOutputStatus {
+    pub device_name: Option<String>,
+    pub is_playing: bool,
+}
+
+/// Get current audio output status (what device is actually being used)
+#[tauri::command]
+pub fn get_audio_output_status(
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<AudioOutputStatus, String> {
+    let device_name = state.player.state.current_device();
+    let is_playing = state.player.state.is_playing();
+
+    Ok(AudioOutputStatus {
+        device_name,
+        is_playing,
+    })
+}

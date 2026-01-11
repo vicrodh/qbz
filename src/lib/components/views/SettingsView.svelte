@@ -14,6 +14,7 @@
     type DownloadCacheStats
   } from '$lib/stores/downloadState';
   import { clearCache as clearLyricsCache } from '$lib/stores/lyricsStore';
+  import { getDevicePrettyName } from '$lib/utils/audioDeviceNames';
 
   interface Props {
     onBack?: () => void;
@@ -51,7 +52,20 @@
 
   // Audio device state
   let audioDevices = $state<AudioDevice[]>([]);
-  let audioDeviceOptions = $derived(['System Default', ...audioDevices.map(d => d.name)]);
+
+  // Map of pretty name -> raw name
+  const deviceNameMap = $derived.by(() => {
+    const map = new Map<string, string>();
+    map.set('System Default', 'System Default');
+    for (const d of audioDevices) {
+      const pretty = getDevicePrettyName(d.name);
+      map.set(pretty, d.name);
+    }
+    return map;
+  });
+
+  // Options for dropdown (pretty names)
+  let audioDeviceOptions = $derived(['System Default', ...audioDevices.map(d => getDevicePrettyName(d.name))]);
 
   // Theme mapping: display name -> data-theme value
   const themeMap: Record<string, string> = {
@@ -295,7 +309,12 @@
   async function loadAudioSettings() {
     try {
       const settings = await invoke<AudioSettings>('get_audio_settings');
-      outputDevice = settings.output_device ?? 'System Default';
+      // Convert raw name to pretty name for display
+      if (settings.output_device) {
+        outputDevice = getDevicePrettyName(settings.output_device);
+      } else {
+        outputDevice = 'System Default';
+      }
       exclusiveMode = settings.exclusive_mode;
       dacPassthrough = settings.dac_passthrough;
     } catch (err) {
@@ -303,13 +322,15 @@
     }
   }
 
-  async function handleOutputDeviceChange(device: string) {
-    outputDevice = device;
+  async function handleOutputDeviceChange(prettyName: string) {
+    outputDevice = prettyName;
+    // Convert pretty name back to raw name for saving
+    const rawName = deviceNameMap.get(prettyName) ?? prettyName;
     try {
       await invoke('set_audio_output_device', {
-        device: device === 'System Default' ? null : device
+        device: rawName === 'System Default' ? null : rawName
       });
-      console.log('Audio output device saved:', device);
+      console.log('Audio output device saved:', rawName, '(displayed as:', prettyName, ')');
     } catch (err) {
       console.error('Failed to save audio output device:', err);
     }
