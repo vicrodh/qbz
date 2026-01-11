@@ -143,7 +143,7 @@
     background: var(--bg-secondary);
     border-radius: 16px;
     width: 90%;
-    max-width: 480px;
+    max-width: 672px;
     max-height: 85vh;
     overflow-y: auto;
     box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
@@ -353,6 +353,7 @@
 
   .inline-icon.flag {
     margin: 0 2px;
+    height: 1.1em;
   }
 
   .inline-icon.tux {
