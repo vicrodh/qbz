@@ -236,11 +236,12 @@
     gap: 8px;
     padding: 10px 16px;
     background: var(--bg-tertiary);
+    border: none;
     border-radius: 8px;
     color: var(--text-primary);
-    text-decoration: none;
     font-size: 13px;
     font-weight: 500;
+    cursor: pointer;
     transition: all 150ms ease;
   }
 

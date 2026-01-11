@@ -34,23 +34,15 @@
     await appWindow?.close();
   }
 
-  async function startDrag() {
-    await appWindow?.startDragging();
-  }
-
   async function handleDoubleClick() {
     await appWindow?.toggleMaximize();
   }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<header class="titlebar">
-  <!-- Drag region - entire left area -->
-  <div
-    class="drag-region"
-    onmousedown={startDrag}
-    ondblclick={handleDoubleClick}
-  ></div>
+<header class="titlebar" ondblclick={handleDoubleClick}>
+  <!-- Drag region - uses CSS app-region: drag -->
+  <div class="drag-region"></div>
 
   <!-- Window Controls -->
   <div class="window-controls">
