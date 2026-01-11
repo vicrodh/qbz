@@ -1195,8 +1195,20 @@
         onCast={openCastPicker}
         onToggleLyrics={toggleLyricsSidebar}
         lyricsActive={lyricsSidebarVisible}
-        onArtistClick={() => currentTrack.artistId && handleArtistClick(currentTrack.artistId)}
-        onAlbumClick={() => currentTrack.albumId && handleAlbumClick(currentTrack.albumId)}
+        onArtistClick={() => {
+          if (currentTrack.isLocal) {
+            showToast('Local track - search for artist in Search', 'info');
+          } else if (currentTrack.artistId) {
+            handleArtistClick(currentTrack.artistId);
+          }
+        }}
+        onAlbumClick={() => {
+          if (currentTrack.isLocal) {
+            navigateTo('library');
+          } else if (currentTrack.albumId) {
+            handleAlbumClick(currentTrack.albumId);
+          }
+        }}
       />
     {:else}
       <NowPlayingBar
