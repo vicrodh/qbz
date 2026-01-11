@@ -30,13 +30,8 @@
   }: Props = $props();
 
   let container: HTMLDivElement | null = null;
-  let prevActiveIndex = -1;
-  let hasInitialSync = false;
-
-  // Debug logging
-  $effect(() => {
-    console.log('[LyricsLines] Props:', { linesCount: lines.length, activeIndex, activeProgress: activeProgress.toFixed(2), isSynced, immersive });
-  });
+  let prevActiveIndex = $state(-1);
+  let hasInitialSync = $state(false);
 
   // Calculate opacity based on distance from active line
   function getLineOpacity(index: number, active: number): number {
@@ -76,11 +71,11 @@
   $effect(() => {
     if (scrollToActive && activeIndex >= 0 && activeIndex !== prevActiveIndex) {
       // Determine if we need instant scroll (catch-up sync)
-      // - First sync after lyrics load (hasInitialSync is false and activeIndex > 0)
-      // - Jump of more than 2 lines (user seeked or lyrics catching up)
       const needsInstantSync = !hasInitialSync && activeIndex > 0;
       const isLargeJump = prevActiveIndex >= 0 && Math.abs(activeIndex - prevActiveIndex) > 2;
       const useInstant = needsInstantSync || isLargeJump;
+
+      console.log('[LyricsLines] Scrolling to line', activeIndex, { prevActiveIndex, useInstant, hasInitialSync });
 
       if (!hasInitialSync && activeIndex >= 0) {
         hasInitialSync = true;
