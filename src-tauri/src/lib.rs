@@ -236,6 +236,8 @@ pub fn run() {
             commands::add_tracks_to_playlist,
             commands::remove_tracks_from_playlist,
             commands::update_playlist,
+            commands::playlist_import_preview,
+            commands::playlist_import_execute,
             // Favorites commands
             commands::get_favorites,
             commands::add_favorite,
