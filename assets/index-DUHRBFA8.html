@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>QBZ - Cliente Nativo Hi-Fi de Qobuz para Linux</title>
+  <meta name="description" content="Cliente de escritorio open-source para Qobuz con reproducción bit-perfect hasta 192kHz. Sin compromisos.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="QBZ - Cliente Nativo Hi-Fi de Qobuz para Linux">
+  <meta property="og:description" content="Cliente de escritorio open-source para Qobuz con reproducción bit-perfect hasta 192kHz.">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_MX">
+  <meta property="og:locale:alternate" content="en_US">
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>Q</text></svg>">
+  <link rel="alternate" hreflang="en" href="/index.html">
+  <link rel="alternate" hreflang="es" href="/es/index.html">
+
+  <script type="module" src="/src/js/main.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="container">
+      <a href="/es/" class="logo">
+        <span class="gradient-text">QBZ</span>
+      </a>
+      <nav class="nav">
+        <a href="#features">Características</a>
+        <a href="#download">Descargar</a>
+        <a href="https://github.com/vicrodh/qbz" target="_blank" rel="noopener">GitHub</a>
+        <a href="/" class="lang-switch">EN</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container">
+        <div class="hero__content">
+          <span class="hero__tagline">Audio Sin Compromisos</span>
+          <h1 class="hero__title">
+            El Cliente Nativo de Qobuz que <span class="gradient-text">Linux Merecía</span>
+          </h1>
+          <p class="hero__subtitle">
+            Open-source, reproducción bit-perfect hasta 192kHz. Aplicación de escritorio real, no un wrapper web.
+          </p>
+          <div class="hero__buttons">
+            <a href="https://github.com/vicrodh/qbz/releases" class="btn btn--primary">
+              Descargar para Linux
+            </a>
+            <a href="https://github.com/vicrodh/qbz" class="btn btn--secondary" target="_blank" rel="noopener">
+              Ver Código
+            </a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Problem -->
+    <section class="section section--alt">
+      <div class="container">
+        <header class="section__header">
+          <h2 class="section__title">El Problema</h2>
+          <p class="section__subtitle">¿Qobuz en Linux? Es complicado.</p>
+        </header>
+        <div class="problems">
+          <div class="problem-card">
+            <div class="problem-card__icon">~</div>
+            <h3 class="problem-card__title">El Web Player Limita el Audio</h3>
+            <p class="problem-card__text">
+              Los reproductores basados en navegador limitan la salida a 48kHz sin importar tu suscripción o la calidad original.
+            </p>
+          </div>
+          <div class="problem-card">
+            <div class="problem-card__icon">#</div>
+            <h3 class="problem-card__title">Sin App Nativa</h3>
+            <p class="problem-card__text">
+              A diferencia de Windows y macOS, los usuarios de Linux no tienen aplicación de escritorio oficial de Qobuz.
+            </p>
+          </div>
+          <div class="problem-card">
+            <div class="problem-card__icon">&gt;</div>
+            <h3 class="problem-card__title">¿Passthrough al DAC?</h3>
+            <p class="problem-card__text">
+              Obtener audio bit-perfect hacia tu DAC a través de un navegador es prácticamente imposible.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Solution -->
+    <section class="section">
+      <div class="container">
+        <header class="section__header">
+          <h2 class="section__title gradient-text">La Solución</h2>
+          <p class="section__subtitle">QBZ entrega la experiencia por la que pagaste.</p>
+        </header>
+        <div class="solution">
+          <div class="solution-item">
+            <span class="solution-item__check">✓</span>
+            <span class="solution-item__text">Aplicación nativa con acceso directo al hardware</span>
+          </div>
+          <div class="solution-item">
+            <span class="solution-item__check">✓</span>
+            <span class="solution-item__text">Soporte completo de resolución hasta 24-bit/192kHz</span>
+          </div>
+          <div class="solution-item">
+            <span class="solution-item__check">✓</span>
+            <span class="solution-item__text">Passthrough DAC para reproducción bit-perfect</span>
+          </div>
+          <div class="solution-item">
+            <span class="solution-item__check">✓</span>
+            <span class="solution-item__text">Open source, sin telemetría, licencia MIT</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features -->
+    <section id="features" class="section section--alt">
+      <div class="container">
+        <header class="section__header">
+          <h2 class="section__title">Características</h2>
+          <p class="section__subtitle">Todo lo que necesitas, nada que no.</p>
+        </header>
+        <div class="features">
+          <div class="feature-card">
+            <div class="feature-card__icon">*</div>
+            <h3 class="feature-card__title">Reproducción Hi-Fi</h3>
+            <ul class="feature-card__list">
+              <li>Decodificación FLAC nativa via Symphonia</li>
+              <li>Modo passthrough DAC</li>
+              <li>Reproducción gapless lista</li>
+              <li>Selección de calidad con fallback automático</li>
+              <li>Enumeración y selección de dispositivos de audio</li>
+            </ul>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card__icon">/</div>
+            <h3 class="feature-card__title">Biblioteca Local</h3>
+            <ul class="feature-card__list">
+              <li>Escanea e indexa tu colección de música</li>
+              <li>Soporte CUE sheet para álbumes de un solo archivo</li>
+              <li>Extracción de metadatos (ID3, Vorbis, APE)</li>
+              <li>Extracción de artwork embebido</li>
+              <li>Soporte FLAC, ALAC, WAV, AIFF, APE</li>
+            </ul>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card__icon">@</div>
+            <h3 class="feature-card__title">Integraciones</h3>
+            <ul class="feature-card__list">
+              <li>MPRIS para teclas multimedia de Linux</li>
+              <li>Scrobbling a Last.fm</li>
+              <li>Notificaciones de escritorio</li>
+              <li>Compartir via SongLink/Odesli</li>
+              <li>Soporte Chromecast</li>
+            </ul>
+          </div>
+          <div class="feature-card">
+            <div class="feature-card__icon">=</div>
+            <h3 class="feature-card__title">Cola y Playlists</h3>
+            <ul class="feature-card__list">
+              <li>Gestión completa de cola</li>
+              <li>Modos shuffle y repetición</li>
+              <li>Sincronización de playlists Qobuz</li>
+              <li>Crear y gestionar playlists</li>
+              <li>Gestión de favoritos</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tech Stack -->
+    <section class="section">
+      <div class="container">
+        <header class="section__header">
+          <h2 class="section__title">Tecnologías</h2>
+        </header>
+        <div class="tech-stack">
+          <div class="tech-item">
+            <span class="tech-item__label">Frontend</span>
+            <span class="tech-item__value">SvelteKit + TS</span>
+          </div>
+          <div class="tech-item">
+            <span class="tech-item__label">Backend</span>
+            <span class="tech-item__value">Tauri 2.0 + Rust</span>
+          </div>
+          <div class="tech-item">
+            <span class="tech-item__label">Audio</span>
+            <span class="tech-item__value">Rodio + Symphonia</span>
+          </div>
+          <div class="tech-item">
+            <span class="tech-item__label">Base de datos</span>
+            <span class="tech-item__value">SQLite</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CTA -->
+    <section id="download" class="cta">
+      <div class="container">
+        <h2 class="cta__title">¿Listo Para Escuchar la Diferencia?</h2>
+        <p class="cta__subtitle">
+          Descarga QBZ y experimenta Qobuz como debería escucharse.
+        </p>
+        <div class="cta__buttons">
+          <a href="https://github.com/vicrodh/qbz/releases/latest" class="btn btn--primary">
+            Descargar Última Versión
+          </a>
+          <a href="https://github.com/vicrodh/qbz/releases" class="btn btn--secondary">
+            Todas las Versiones
+          </a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="footer__content">
+        <div class="footer__links">
+          <a href="https://github.com/vicrodh/qbz" target="_blank" rel="noopener">GitHub</a>
+          <a href="https://github.com/vicrodh/qbz/blob/main/LICENSE" target="_blank" rel="noopener">Licencia MIT</a>
+        </div>
+        <p class="footer__disclaimer">
+          QBZ es un proyecto independiente. No afiliado con Qobuz.
+        </p>
+        <p class="footer__made">
+          Hecho con <span class="heart">♥</span> para audiófilos
+        </p>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
