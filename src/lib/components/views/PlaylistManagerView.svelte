@@ -465,9 +465,28 @@
 <style>
   .playlist-manager {
     padding: 24px;
+    padding-right: 8px;
     padding-bottom: 100px;
     height: 100%;
     overflow-y: auto;
+  }
+
+  /* Custom scrollbar */
+  .playlist-manager::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .playlist-manager::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .playlist-manager::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+
+  .playlist-manager::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   .header {

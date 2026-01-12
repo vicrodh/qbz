@@ -444,7 +444,29 @@
 <style>
   .search-view {
     width: 100%;
-    padding-bottom: 24px;
+    height: 100%;
+    padding: 24px;
+    padding-right: 8px;
+    padding-bottom: 100px;
+    overflow-y: auto;
+  }
+
+  /* Custom scrollbar */
+  .search-view::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .search-view::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .search-view::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+
+  .search-view::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   .search-header {

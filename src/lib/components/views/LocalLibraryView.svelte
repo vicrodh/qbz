@@ -730,9 +730,28 @@
 <style>
   .library-view {
     padding: 24px;
+    padding-right: 8px;
     padding-bottom: 100px;
     overflow-y: auto;
     height: 100%;
+  }
+
+  /* Custom scrollbar */
+  .library-view::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .library-view::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .library-view::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+
+  .library-view::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   /* Header */

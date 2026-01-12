@@ -407,7 +407,29 @@
 <style>
   .artist-detail {
     width: 100%;
-    padding-bottom: 24px;
+    height: 100%;
+    padding: 24px;
+    padding-right: 8px;
+    padding-bottom: 100px;
+    overflow-y: auto;
+  }
+
+  /* Custom scrollbar */
+  .artist-detail::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .artist-detail::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .artist-detail::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+
+  .artist-detail::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   .back-btn {

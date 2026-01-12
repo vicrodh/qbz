@@ -669,8 +669,30 @@
 <style>
   .home-view {
     width: 100%;
-    padding-bottom: 24px;
+    height: 100%;
+    padding: 24px;
+    padding-right: 8px;
+    padding-bottom: 100px;
+    overflow-y: auto;
     position: relative;
+  }
+
+  /* Custom scrollbar */
+  .home-view::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .home-view::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .home-view::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+
+  .home-view::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   /* Loading Overlay */

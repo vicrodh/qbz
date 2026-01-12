@@ -474,9 +474,28 @@
 <style>
   .favorites-view {
     padding: 24px;
+    padding-right: 8px;
     padding-bottom: 100px;
     overflow-y: auto;
     height: 100%;
+  }
+
+  /* Custom scrollbar */
+  .favorites-view::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .favorites-view::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .favorites-view::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+
+  .favorites-view::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   .header {

@@ -773,9 +773,28 @@
 <style>
   .playlist-detail {
     padding: 24px;
+    padding-right: 8px;
     padding-bottom: 100px;
     overflow-y: auto;
     height: 100%;
+  }
+
+  /* Custom scrollbar */
+  .playlist-detail::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .playlist-detail::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .playlist-detail::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+
+  .playlist-detail::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   .nav-row {

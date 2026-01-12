@@ -243,6 +243,29 @@
 <style>
   .album-detail {
     width: 100%;
+    height: 100%;
+    padding: 24px;
+    padding-right: 8px;
+    padding-bottom: 100px;
+    overflow-y: auto;
+  }
+
+  /* Custom scrollbar */
+  .album-detail::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .album-detail::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .album-detail::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+
+  .album-detail::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
   }
 
   .back-btn {
