@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, Filter, ArrowUpDown, LayoutGrid, List, GripVertical, EyeOff, Eye, BarChart2, Play } from 'lucide-svelte';
+  import { ArrowLeft, Filter, ArrowUpDown, LayoutGrid, List, GripVertical, EyeOff, Eye, BarChart2, Play, Pencil, Search, X } from 'lucide-svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
 
@@ -53,6 +53,9 @@
     (localStorage.getItem('qbz-pm-view') as ViewMode) || 'grid'
   );
 
+  // Search state
+  let searchQuery = $state('');
+
   // Dropdown state
   let showFilterMenu = $state(false);
   let showSortMenu = $state(false);
@@ -74,7 +77,13 @@
   const displayPlaylists = $derived.by(() => {
     let result = [...playlists];
 
-    // Apply filter
+    // Apply search filter
+    if (searchQuery.trim()) {
+      const query = searchQuery.trim().toLowerCase();
+      result = result.filter(p => p.name.toLowerCase().includes(query));
+    }
+
+    // Apply visibility filter
     if (filter === 'visible') {
       result = result.filter(p => !playlistSettings.get(p.id)?.hidden);
     } else if (filter === 'hidden') {
@@ -249,6 +258,22 @@
 
   <!-- Controls -->
   <div class="controls">
+    <!-- Search bar -->
+    <div class="search-container">
+      <Search size={16} class="search-icon" />
+      <input
+        type="text"
+        placeholder="Search playlists..."
+        bind:value={searchQuery}
+        class="search-input"
+      />
+      {#if searchQuery}
+        <button class="clear-search" onclick={() => searchQuery = ''}>
+          <X size={14} />
+        </button>
+      {/if}
+    </div>
+
     <!-- Filter dropdown -->
     <div class="dropdown-container">
       <button class="control-btn" onclick={() => { showFilterMenu = !showFilterMenu; showSortMenu = false; }}>
@@ -333,7 +358,6 @@
     <div class="grid">
       {#each displayPlaylists as playlist (playlist.id)}
         {@const isHidden = playlistSettings.get(playlist.id)?.hidden}
-        {@const stats = playlistStats.get(playlist.id)}
         <div
           class="grid-item"
           class:hidden={isHidden}
@@ -345,41 +369,44 @@
           ondragleave={handleDragLeave}
           ondrop={(e) => handleDrop(e, playlist.id)}
           ondragend={handleDragEnd}
-          role="button"
-          tabindex="0"
-          onclick={() => onPlaylistSelect?.(playlist.id)}
         >
-          {#if sort === 'custom'}
-            <div class="drag-handle">
-              <GripVertical size={14} />
-            </div>
-          {/if}
-          <div class="artwork">
-            <PlaylistCollage artworks={playlist.images ?? []} size={140} />
-            {#if isHidden}
-              <div class="hidden-badge">
-                <EyeOff size={14} />
+          <!-- Top row: drag handle (left) and edit button (right) -->
+          <div class="grid-item-header">
+            {#if sort === 'custom'}
+              <div class="drag-handle">
+                <GripVertical size={14} />
               </div>
+            {:else}
+              <div class="drag-handle-placeholder"></div>
             {/if}
-          </div>
-          <div class="info">
-            <span class="name">{playlist.name}</span>
-            <span class="meta">{playlist.tracks_count} tracks</span>
-            {#if stats && stats.play_count > 0}
-              <span class="play-count">
-                <BarChart2 size={12} />
-                {stats.play_count} plays
-              </span>
-            {/if}
-          </div>
-          <div class="actions">
-            <button class="action-btn" onclick={(e) => { e.stopPropagation(); toggleHidden(playlist); }} title={isHidden ? 'Show' : 'Hide'}>
-              {#if isHidden}
-                <Eye size={14} />
-              {:else}
-                <EyeOff size={14} />
-              {/if}
+            <button
+              class="edit-btn"
+              onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
+              title="Edit playlist"
+            >
+              <Pencil size={14} />
             </button>
+          </div>
+
+          <!-- Clickable area: artwork + info -->
+          <div
+            class="grid-item-content"
+            role="button"
+            tabindex="0"
+            onclick={() => onPlaylistSelect?.(playlist.id)}
+          >
+            <div class="artwork">
+              <PlaylistCollage artworks={playlist.images ?? []} size={140} />
+              {#if isHidden}
+                <div class="hidden-badge">
+                  <EyeOff size={12} />
+                </div>
+              {/if}
+            </div>
+            <div class="info">
+              <span class="name">{playlist.name}</span>
+              <span class="meta">{playlist.tracks_count} tracks</span>
+            </div>
           </div>
         </div>
       {/each}
@@ -434,15 +461,13 @@
               <EyeOff size={14} />
             </span>
           {/if}
-          <div class="actions">
-            <button class="action-btn" onclick={(e) => { e.stopPropagation(); toggleHidden(playlist); }} title={isHidden ? 'Show in sidebar' : 'Hide from sidebar'}>
-              {#if isHidden}
-                <Eye size={14} />
-              {:else}
-                <EyeOff size={14} />
-              {/if}
-            </button>
-          </div>
+          <button
+            class="edit-btn"
+            onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
+            title="Edit playlist"
+          >
+            <Pencil size={14} />
+          </button>
         </div>
       {/each}
     </div>
@@ -596,6 +621,62 @@
     margin-left: auto;
   }
 
+  /* Search bar */
+  .search-container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    max-width: 280px;
+  }
+
+  .search-container :global(.search-icon) {
+    position: absolute;
+    left: 10px;
+    color: var(--text-muted);
+    pointer-events: none;
+  }
+
+  .search-input {
+    width: 100%;
+    padding: 8px 32px 8px 34px;
+    background: var(--bg-tertiary);
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 150ms ease;
+  }
+
+  .search-input:focus {
+    border-color: var(--accent-primary);
+  }
+
+  .search-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .clear-search {
+    position: absolute;
+    right: 6px;
+    padding: 4px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    transition: all 150ms ease;
+  }
+
+  .clear-search:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
   .drag-hint {
     font-size: 12px;
     color: var(--text-muted);
@@ -628,19 +709,18 @@
   /* Grid View */
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(auto-fill, 180px);
     gap: 16px;
+    justify-content: start;
   }
 
   .grid-item {
-    position: relative;
+    width: 180px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 12px;
+    padding: 10px;
     background: var(--bg-secondary);
     border-radius: 8px;
-    cursor: pointer;
     transition: all 150ms ease;
   }
 
@@ -661,18 +741,64 @@
     border: 2px dashed var(--accent-primary);
   }
 
+  /* Grid item header: drag handle left, edit button right */
+  .grid-item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    height: 24px;
+    margin-bottom: 6px;
+  }
+
   .grid-item .drag-handle {
-    position: absolute;
-    top: 8px;
-    left: 8px;
     color: var(--text-muted);
     cursor: grab;
+    padding: 2px;
+  }
+
+  .grid-item .drag-handle:active {
+    cursor: grabbing;
+  }
+
+  .drag-handle-placeholder {
+    width: 18px;
+  }
+
+  .edit-btn {
+    padding: 4px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 150ms ease;
+  }
+
+  .edit-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  /* Clickable content area */
+  .grid-item-content {
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
   }
 
   .grid-item .artwork {
     position: relative;
+    width: 160px;
+    height: 160px;
+    margin: 0 auto;
     display: flex;
+    align-items: center;
     justify-content: center;
+    overflow: hidden;
+    border-radius: 4px;
   }
 
   .hidden-badge {
@@ -681,7 +807,7 @@
     right: 4px;
     background: rgba(0, 0, 0, 0.7);
     border-radius: 4px;
-    padding: 4px;
+    padding: 3px;
     color: var(--text-muted);
   }
 
@@ -689,50 +815,23 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    margin-top: 8px;
   }
 
   .grid-item .name {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-primary);
     display: -webkit-box;
     -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    line-height: 1.3;
   }
 
   .grid-item .meta {
-    font-size: 11px;
+    font-size: 12px;
     color: var(--text-muted);
-  }
-
-  .play-count {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 11px;
-    color: var(--text-muted);
-  }
-
-  .grid-item .actions {
-    display: flex;
-    gap: 4px;
-    justify-content: flex-end;
-  }
-
-  .action-btn {
-    padding: 6px;
-    background: var(--bg-tertiary);
-    border: none;
-    border-radius: 4px;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .action-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
   }
 
   /* List View */
@@ -822,9 +921,7 @@
     flex-shrink: 0;
   }
 
-  .list-item .actions {
-    display: flex;
-    gap: 4px;
+  .list-item .edit-btn {
     flex-shrink: 0;
   }
 </style>
