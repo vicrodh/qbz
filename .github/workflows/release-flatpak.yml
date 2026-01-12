@@ -94,7 +94,7 @@ jobs:
           TIDAL_API_CLIENT_SECRET: ${{ secrets.TIDAL_API_CLIENT_SECRET }}
         run: |
           mkdir -p flatpak-build flatpak-repo dist
-          flatpak-builder --user --force-clean --allow-network --repo=flatpak-repo flatpak-build packaging/flatpak/com.blitzkriegfc.qbz.yml
+          flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build packaging/flatpak/com.blitzkriegfc.qbz.yml
           flatpak build-bundle flatpak-repo dist/QBZ.flatpak com.blitzkriegfc.qbz
 
       - name: Upload Flatpak bundle
