@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings } from 'lucide-svelte';
+  import { tick } from 'svelte';
+  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import NavigationItem from './NavigationItem.svelte';
@@ -19,6 +20,8 @@
     position: number;
     play_count?: number;
   }
+
+  type SortOption = 'name' | 'recent' | 'tracks' | 'playcount' | 'custom';
 
   interface Props {
     activeView: string;
@@ -56,11 +59,150 @@
   let playlistsCollapsed = $state(false);
   let localLibraryCollapsed = $state(false);
 
-  // Visible playlists only (hide hidden ones from sidebar)
+  // Dropdown menu state
+  let menuOpen = $state(false);
+  let sortSubmenuOpen = $state(false);
+  let submenuCloseTimeout: ReturnType<typeof setTimeout> | null = null;
+  let menuRef: HTMLDivElement | null = null;
+  let menuEl: HTMLDivElement | null = null;
+  let triggerRef: HTMLButtonElement | null = null;
+  let sortTriggerRef: HTMLDivElement | null = null;
+  let submenuEl: HTMLDivElement | null = null;
+  let menuStyle = $state('');
+  let submenuStyle = $state('');
+
+  function openSubmenu() {
+    if (submenuCloseTimeout) {
+      clearTimeout(submenuCloseTimeout);
+      submenuCloseTimeout = null;
+    }
+    sortSubmenuOpen = true;
+  }
+
+  function closeSubmenuDelayed() {
+    if (submenuCloseTimeout) {
+      clearTimeout(submenuCloseTimeout);
+    }
+    submenuCloseTimeout = setTimeout(() => {
+      sortSubmenuOpen = false;
+    }, 150); // Small delay to allow mouse to move to submenu
+  }
+
+  // Sort state with localStorage persistence
+  let sortOption = $state<SortOption>('name');
+
+  // Tooltip cache for playlist artists (non-reactive for reads during render)
+  const playlistTooltipCache = new Map<number, string>();
+  const tooltipLoadingIds = new Set<number>();
+
+  // Fetch playlist artists for tooltip
+  async function fetchPlaylistArtists(playlistId: number, trackCount: number): Promise<string> {
+    interface PlaylistDetails {
+      tracks?: {
+        items: Array<{
+          performer?: { name: string };
+        }>;
+      };
+    }
+
+    try {
+      const details = await invoke<PlaylistDetails>('get_playlist', { playlistId });
+      if (details.tracks?.items) {
+        // Extract unique artist names
+        const artistNames = new Set<string>();
+        for (const track of details.tracks.items) {
+          if (track.performer?.name) {
+            artistNames.add(track.performer.name);
+            if (artistNames.size >= 5) break;
+          }
+        }
+
+        const artists = Array.from(artistNames).slice(0, 5);
+        const songText = `${trackCount} ${trackCount === 1 ? 'Song' : 'Songs'}`;
+
+        if (artists.length > 0) {
+          return `${artists.join('\n')}\n${songText}`;
+        }
+        return songText;
+      }
+    } catch (err) {
+      console.debug('Failed to fetch playlist artists:', err);
+    }
+
+    return `${trackCount} ${trackCount === 1 ? 'Song' : 'Songs'}`;
+  }
+
+  // Get basic tooltip (no state mutation during render)
+  function getPlaylistTooltip(playlist: Playlist): string {
+    const cached = playlistTooltipCache.get(playlist.id);
+    if (cached) return cached;
+
+    // Return basic tooltip - fetch will happen on hover
+    return `${playlist.tracks_count} ${playlist.tracks_count === 1 ? 'Song' : 'Songs'}`;
+  }
+
+  // Load artist info for tooltip (called on hover, not during render)
+  function loadPlaylistTooltip(playlist: Playlist) {
+    if (playlistTooltipCache.has(playlist.id) || tooltipLoadingIds.has(playlist.id)) return;
+
+    tooltipLoadingIds.add(playlist.id);
+
+    fetchPlaylistArtists(playlist.id, playlist.tracks_count).then(tooltip => {
+      playlistTooltipCache.set(playlist.id, tooltip);
+      tooltipLoadingIds.delete(playlist.id);
+    });
+  }
+
+  // Load sort preference from localStorage
+  function loadSortPreference() {
+    try {
+      const saved = localStorage.getItem('sidebar-playlist-sort');
+      if (saved && ['name', 'recent', 'tracks', 'playcount', 'custom'].includes(saved)) {
+        sortOption = saved as SortOption;
+      }
+    } catch (e) {
+      // localStorage not available
+    }
+  }
+
+  function saveSortPreference(option: SortOption) {
+    try {
+      localStorage.setItem('sidebar-playlist-sort', option);
+    } catch (e) {
+      // localStorage not available
+    }
+  }
+
+  // Visible and sorted playlists
   const visiblePlaylists = $derived.by(() => {
-    return userPlaylists.filter(p => {
+    const visible = userPlaylists.filter(p => {
       const settings = playlistSettings.get(p.id);
       return !settings?.hidden;
+    });
+
+    // Sort based on selected option
+    return [...visible].sort((a, b) => {
+      switch (sortOption) {
+        case 'name':
+          return a.name.localeCompare(b.name);
+        case 'recent':
+          // For now, use reverse order (most recently added first)
+          return userPlaylists.indexOf(b) - userPlaylists.indexOf(a);
+        case 'tracks':
+          return b.tracks_count - a.tracks_count;
+        case 'playcount': {
+          const aCount = playlistSettings.get(a.id)?.play_count ?? 0;
+          const bCount = playlistSettings.get(b.id)?.play_count ?? 0;
+          return bCount - aCount;
+        }
+        case 'custom': {
+          const aPos = playlistSettings.get(a.id)?.position ?? 9999;
+          const bPos = playlistSettings.get(b.id)?.position ?? 9999;
+          return aPos - bPos;
+        }
+        default:
+          return 0;
+      }
     });
   });
 
@@ -73,7 +215,107 @@
     loadUserPlaylists();
   }
 
+  // Menu handling functions
+  function closeMenu() {
+    menuOpen = false;
+    sortSubmenuOpen = false;
+    if (submenuCloseTimeout) {
+      clearTimeout(submenuCloseTimeout);
+      submenuCloseTimeout = null;
+    }
+  }
+
+  function handleClickOutside(event: MouseEvent) {
+    if (menuRef && !menuRef.contains(event.target as Node)) {
+      closeMenu();
+    }
+  }
+
+  async function setMenuPosition() {
+    await tick();
+    if (!triggerRef || !menuEl) return;
+
+    const triggerRect = triggerRef.getBoundingClientRect();
+    const menuRect = menuEl.getBoundingClientRect();
+    const padding = 8;
+
+    let left = triggerRect.left;
+    let top = triggerRect.bottom + 6;
+
+    // Keep menu within bounds
+    if (left + menuRect.width > window.innerWidth - padding) {
+      left = Math.max(padding, window.innerWidth - menuRect.width - padding);
+    }
+
+    if (top + menuRect.height > window.innerHeight - padding) {
+      top = triggerRect.top - menuRect.height - 6;
+      if (top < padding) top = padding;
+    }
+
+    menuStyle = `left: ${left}px; top: ${top}px;`;
+  }
+
+  async function setSubmenuPosition() {
+    await tick();
+    if (!sortTriggerRef || !submenuEl) return;
+
+    const triggerRect = sortTriggerRef.getBoundingClientRect();
+    const submenuRect = submenuEl.getBoundingClientRect();
+    const padding = 8;
+
+    // Try to position to the right of the trigger
+    let left = triggerRect.right + 4;
+    let top = triggerRect.top;
+
+    // If not enough space on right, position to left
+    if (left + submenuRect.width > window.innerWidth - padding) {
+      left = triggerRect.left - submenuRect.width - 4;
+    }
+
+    // Keep within vertical bounds
+    if (top + submenuRect.height > window.innerHeight - padding) {
+      top = Math.max(padding, window.innerHeight - submenuRect.height - padding);
+    }
+
+    submenuStyle = `left: ${left}px; top: ${top}px;`;
+  }
+
+  async function toggleMenu() {
+    if (menuOpen) {
+      closeMenu();
+    } else {
+      menuOpen = true;
+      await setMenuPosition();
+      document.addEventListener('click', handleClickOutside);
+    }
+  }
+
+  function handleSortChange(option: SortOption) {
+    sortOption = option;
+    saveSortPreference(option);
+    closeMenu();
+  }
+
+  function handleMenuAction(action: () => void) {
+    action();
+    closeMenu();
+  }
+
+  $effect(() => {
+    if (!menuOpen) {
+      document.removeEventListener('click', handleClickOutside);
+      sortSubmenuOpen = false;
+    }
+  });
+
+  $effect(() => {
+    if (sortSubmenuOpen) {
+      setSubmenuPosition();
+    }
+  });
+
   onMount(() => {
+    loadSortPreference();
     loadUserPlaylists();
     loadPlaylistSettings();
   });
@@ -157,18 +399,17 @@
     <div class="section playlists-section">
       <div class="playlists-header">
         <div class="section-header">Playlists</div>
-        <div class="header-actions">
+        <div class="header-actions" bind:this={menuRef}>
           <button class="icon-btn" onclick={onCreatePlaylist} title="New playlist">
             <Plus size={14} />
           </button>
-          <button class="icon-btn" onclick={onImportPlaylist} title="Import playlist">
-            <Import size={14} />
-          </button>
-          <button class="icon-btn" onclick={onPlaylistManagerClick} title="Manage playlists">
-            <Settings size={14} />
-          </button>
-          <button class="icon-btn" onclick={loadUserPlaylists} title="Refresh playlists">
-            <RefreshCw size={14} />
+          <button
+            class="icon-btn"
+            bind:this={triggerRef}
+            onclick={(e) => { e.stopPropagation(); toggleMenu(); }}
+            title="Options"
+          >
+            <MoreHorizontal size={14} />
           </button>
           <button class="icon-btn" onclick={() => playlistsCollapsed = !playlistsCollapsed} title={playlistsCollapsed ? "Expand" : "Collapse"}>
             {#if playlistsCollapsed}
@@ -180,6 +421,69 @@
         </div>
       </div>
 
+      <!-- Dropdown Menu -->
+      {#if menuOpen}
+        <div class="dropdown-menu" bind:this={menuEl} style={menuStyle}>
+          <!-- Sort by submenu trigger -->
+          <div
+            class="menu-item has-submenu"
+            bind:this={sortTriggerRef}
+            role="button"
+            tabindex="0"
+            onmouseenter={openSubmenu}
+            onmouseleave={closeSubmenuDelayed}
+          >
+            <ArrowUpDown size={14} />
+            <span class="menu-label">Sort by</span>
+            <ChevronRight size={14} class="submenu-arrow" />
+          </div>
+
+          <!-- Sort submenu (positioned outside trigger for better hover handling) -->
+          {#if sortSubmenuOpen}
+            <div
+              class="submenu"
+              bind:this={submenuEl}
+              style={submenuStyle}
+              onmouseenter={openSubmenu}
+              onmouseleave={closeSubmenuDelayed}
+            >
+              <button class="menu-item" class:selected={sortOption === 'name'} onclick={() => handleSortChange('name')}>
+                Name (A-Z)
+              </button>
+              <button class="menu-item" class:selected={sortOption === 'recent'} onclick={() => handleSortChange('recent')}>
+                Recent
+              </button>
+              <button class="menu-item" class:selected={sortOption === 'tracks'} onclick={() => handleSortChange('tracks')}>
+                # of Tracks
+              </button>
+              <button class="menu-item" class:selected={sortOption === 'playcount'} onclick={() => handleSortChange('playcount')}>
+                Play Count
+              </button>
+              <button class="menu-item" class:selected={sortOption === 'custom'} onclick={() => handleSortChange('custom')}>
+                Custom
+              </button>
+            </div>
+          {/if}
+
+          <button class="menu-item" onclick={() => handleMenuAction(loadUserPlaylists)}>
+            <RefreshCw size={14} />
+            <span>Refresh</span>
+          </button>
+
+          <button class="menu-item" onclick={() => handleMenuAction(onImportPlaylist ?? (() => {}))}>
+            <Import size={14} />
+            <span>Import</span>
+          </button>
+
+          <div class="menu-divider"></div>
+
+          <button class="menu-item" onclick={() => handleMenuAction(onPlaylistManagerClick ?? (() => {}))}>
+            <Settings size={14} />
+            <span>Manage playlists</span>
+          </button>
+        </div>
+      {/if}
+
       {#if !playlistsCollapsed}
         {#if playlistsLoading}
           <div class="playlists-loading">Loading...</div>
@@ -188,8 +492,10 @@
             {#each visiblePlaylists as playlist (playlist.id)}
               <NavigationItem
                 label={playlist.name}
+                tooltip={getPlaylistTooltip(playlist)}
                 active={activeView === 'playlist' && selectedPlaylistId === playlist.id}
                 onclick={() => handlePlaylistClick(playlist)}
+                onHover={() => loadPlaylistTooltip(playlist)}
               >
                 {#snippet icon()}<ListMusic size={14} />{/snippet}
               </NavigationItem>
@@ -390,5 +696,75 @@
   .user-section {
     border-top: 1px solid var(--bg-tertiary);
     padding: 8px;
+  }
+
+  /* Dropdown menu styles */
+  .dropdown-menu {
+    position: fixed;
+    min-width: 180px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10000;
+  }
+
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+    text-align: left;
+  }
+
+  .menu-item:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .menu-item.selected {
+    color: var(--accent-primary);
+  }
+
+  .menu-item.has-submenu {
+    position: relative;
+  }
+
+  .menu-item .menu-label {
+    flex: 1;
+  }
+
+  .menu-item .submenu-arrow {
+    flex-shrink: 0;
+  }
+
+  .menu-divider {
+    height: 1px;
+    background: var(--bg-tertiary);
+    margin: 6px 0;
+  }
+
+  .submenu {
+    position: fixed;
+    min-width: 140px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10001;
+  }
+
+  .submenu .menu-item {
+    gap: 8px;
   }
 </style>

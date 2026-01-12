@@ -112,7 +112,7 @@
     border-radius: 8px;
     overflow: hidden;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
-    z-index: 50;
+    z-index: 10000;
     max-height: 300px;
     overflow-y: auto;
   }
