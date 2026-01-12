@@ -6,19 +6,23 @@
   let isMaximized = $state(false);
   let appWindow: ReturnType<typeof getCurrentWindow>;
 
-  onMount(async () => {
-    appWindow = getCurrentWindow();
+  onMount(() => {
+    let unlisten: (() => void) | undefined;
 
-    // Check initial maximized state
-    isMaximized = await appWindow.isMaximized();
+    (async () => {
+      appWindow = getCurrentWindow();
 
-    // Listen for window state changes
-    const unlisten = await appWindow.onResized(async () => {
+      // Check initial maximized state
       isMaximized = await appWindow.isMaximized();
-    });
+
+      // Listen for window state changes
+      unlisten = await appWindow.onResized(async () => {
+        isMaximized = await appWindow.isMaximized();
+      });
+    })();
 
     return () => {
-      unlisten();
+      unlisten?.();
     };
   });
 

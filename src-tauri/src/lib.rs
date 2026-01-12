@@ -319,6 +319,14 @@ pub fn run() {
             library::commands::playlist_remove_local_track,
             library::commands::playlist_get_local_tracks,
             library::commands::playlist_clear_local_tracks,
+            // Playlist management commands
+            library::commands::playlist_get_all_settings,
+            library::commands::playlist_set_hidden,
+            library::commands::playlist_set_position,
+            library::commands::playlist_reorder,
+            library::commands::playlist_get_stats,
+            library::commands::playlist_get_all_stats,
+            library::commands::playlist_increment_play_count,
             // Discogs artwork commands
             library::commands::discogs_has_credentials,
             library::commands::library_fetch_missing_artwork,

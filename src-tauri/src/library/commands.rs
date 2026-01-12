@@ -379,7 +379,7 @@ pub async fn library_play_track(
 
 // === Playlist Local Settings ===
 
-use crate::library::PlaylistSettings;
+use crate::library::{PlaylistSettings, PlaylistStats};
 
 /// Get playlist settings by Qobuz playlist ID
 #[tauri::command]
@@ -488,6 +488,97 @@ pub async fn playlist_clear_local_tracks(
 
     let db = state.db.lock().await;
     db.clear_playlist_local_tracks(playlist_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Get all playlist settings (for sidebar filter/sort)
+#[tauri::command]
+pub async fn playlist_get_all_settings(
+    state: State<'_, LibraryState>,
+) -> Result<Vec<PlaylistSettings>, String> {
+    log::info!("Command: playlist_get_all_settings");
+
+    let db = state.db.lock().await;
+    db.get_all_playlist_settings()
+        .map_err(|e| e.to_string())
+}
+
+/// Set playlist hidden status
+#[tauri::command]
+pub async fn playlist_set_hidden(
+    playlist_id: u64,
+    hidden: bool,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("Command: playlist_set_hidden {} {}", playlist_id, hidden);
+
+    let db = state.db.lock().await;
+    db.set_playlist_hidden(playlist_id, hidden)
+        .map_err(|e| e.to_string())
+}
+
+/// Set playlist position (for custom ordering)
+#[tauri::command]
+pub async fn playlist_set_position(
+    playlist_id: u64,
+    position: i32,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("Command: playlist_set_position {} {}", playlist_id, position);
+
+    let db = state.db.lock().await;
+    db.set_playlist_position(playlist_id, position)
+        .map_err(|e| e.to_string())
+}
+
+/// Bulk reorder playlists
+#[tauri::command]
+pub async fn playlist_reorder(
+    playlist_ids: Vec<u64>,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("Command: playlist_reorder {:?}", playlist_ids);
+
+    let db = state.db.lock().await;
+    db.reorder_playlists(&playlist_ids)
+        .map_err(|e| e.to_string())
+}
+
+/// Get playlist statistics
+#[tauri::command]
+pub async fn playlist_get_stats(
+    playlist_id: u64,
+    state: State<'_, LibraryState>,
+) -> Result<Option<PlaylistStats>, String> {
+    log::info!("Command: playlist_get_stats {}", playlist_id);
+
+    let db = state.db.lock().await;
+    db.get_playlist_stats(playlist_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Get all playlist statistics (for sorting by play count)
+#[tauri::command]
+pub async fn playlist_get_all_stats(
+    state: State<'_, LibraryState>,
+) -> Result<Vec<PlaylistStats>, String> {
+    log::info!("Command: playlist_get_all_stats");
+
+    let db = state.db.lock().await;
+    db.get_all_playlist_stats()
+        .map_err(|e| e.to_string())
+}
+
+/// Increment playlist play count (called when "Play All" is clicked)
+#[tauri::command]
+pub async fn playlist_increment_play_count(
+    playlist_id: u64,
+    state: State<'_, LibraryState>,
+) -> Result<PlaylistStats, String> {
+    log::info!("Command: playlist_increment_play_count {}", playlist_id);
+
+    let db = state.db.lock().await;
+    db.increment_playlist_play_count(playlist_id)
         .map_err(|e| e.to_string())
 }
 

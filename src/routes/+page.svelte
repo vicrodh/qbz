@@ -1417,16 +1417,16 @@
         onToggleLyrics={toggleLyricsSidebar}
         lyricsActive={lyricsSidebarVisible}
         onArtistClick={() => {
-          if (currentTrack.isLocal) {
+          if (currentTrack?.isLocal) {
             showToast('Local track - search for artist in Search', 'info');
-          } else if (currentTrack.artistId) {
+          } else if (currentTrack?.artistId) {
             handleArtistClick(currentTrack.artistId);
           }
         }}
         onAlbumClick={() => {
-          if (currentTrack.isLocal) {
+          if (currentTrack?.isLocal) {
             navigateTo('library');
-          } else if (currentTrack.albumId) {
+          } else if (currentTrack?.albumId) {
             handleAlbumClick(currentTrack.albumId);
           }
         }}

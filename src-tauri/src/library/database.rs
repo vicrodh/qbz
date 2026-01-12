@@ -24,6 +24,7 @@ impl LibraryDatabase {
 
         let db = Self { conn };
         db.init_schema()?;
+        db.run_migrations()?;
         Ok(db)
     }
 
@@ -79,6 +80,17 @@ impl LibraryDatabase {
                 sort_order TEXT DEFAULT 'asc',
                 last_search_query TEXT,
                 notes TEXT,
+                hidden INTEGER DEFAULT 0,
+                position INTEGER DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+
+            -- Playlist statistics (play counts, etc.)
+            CREATE TABLE IF NOT EXISTS playlist_stats (
+                qobuz_playlist_id INTEGER PRIMARY KEY,
+                play_count INTEGER DEFAULT 0,
+                last_played_at INTEGER,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );
@@ -99,6 +111,52 @@ impl LibraryDatabase {
         "#,
             )
             .map_err(|e| LibraryError::Database(format!("Failed to create schema: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Run schema migrations for existing databases
+    fn run_migrations(&self) -> Result<(), LibraryError> {
+        // Check if playlist_settings has the 'hidden' column (added in v2)
+        let has_hidden: bool = self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('playlist_settings') WHERE name = 'hidden'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_hidden {
+            log::info!("Running migration: adding hidden and position columns to playlist_settings");
+            self.conn.execute_batch(
+                "ALTER TABLE playlist_settings ADD COLUMN hidden INTEGER DEFAULT 0;
+                 ALTER TABLE playlist_settings ADD COLUMN position INTEGER DEFAULT 0;"
+            ).map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
+        }
+
+        // Check if playlist_stats table exists
+        let has_stats_table: bool = self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='playlist_stats'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_stats_table {
+            log::info!("Running migration: creating playlist_stats table");
+            self.conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS playlist_stats (
+                    qobuz_playlist_id INTEGER PRIMARY KEY,
+                    play_count INTEGER DEFAULT 0,
+                    last_played_at INTEGER,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );"
+            ).map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
+        }
 
         Ok(())
     }
@@ -524,6 +582,18 @@ pub struct PlaylistSettings {
     pub sort_order: String,
     pub last_search_query: Option<String>,
     pub notes: Option<String>,
+    pub hidden: bool,
+    pub position: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// Playlist statistics
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PlaylistStats {
+    pub qobuz_playlist_id: u64,
+    pub play_count: u32,
+    pub last_played_at: Option<i64>,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -541,6 +611,24 @@ impl Default for PlaylistSettings {
             sort_order: "asc".to_string(),
             last_search_query: None,
             notes: None,
+            hidden: false,
+            position: 0,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+}
+
+impl Default for PlaylistStats {
+    fn default() -> Self {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+        Self {
+            qobuz_playlist_id: 0,
+            play_count: 0,
+            last_played_at: None,
             created_at: now,
             updated_at: now,
         }
@@ -554,7 +642,7 @@ impl LibraryDatabase {
     pub fn get_playlist_settings(&self, qobuz_playlist_id: u64) -> Result<Option<PlaylistSettings>, LibraryError> {
         let result = self.conn.query_row(
             "SELECT qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                    last_search_query, notes, created_at, updated_at
+                    last_search_query, notes, hidden, position, created_at, updated_at
              FROM playlist_settings WHERE qobuz_playlist_id = ?1",
             params![qobuz_playlist_id as i64],
             |row| {
@@ -565,8 +653,10 @@ impl LibraryDatabase {
                     sort_order: row.get(3)?,
                     last_search_query: row.get(4)?,
                     notes: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
+                    hidden: row.get::<_, i32>(6)? != 0,
+                    position: row.get(7)?,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
                 })
             },
         ).optional()
@@ -585,14 +675,16 @@ impl LibraryDatabase {
         self.conn.execute(
             "INSERT INTO playlist_settings
                 (qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                 last_search_query, notes, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+                 last_search_query, notes, hidden, position, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
              ON CONFLICT(qobuz_playlist_id) DO UPDATE SET
                 custom_artwork_path = excluded.custom_artwork_path,
                 sort_by = excluded.sort_by,
                 sort_order = excluded.sort_order,
                 last_search_query = excluded.last_search_query,
                 notes = excluded.notes,
+                hidden = excluded.hidden,
+                position = excluded.position,
                 updated_at = excluded.updated_at",
             params![
                 settings.qobuz_playlist_id as i64,
@@ -601,6 +693,8 @@ impl LibraryDatabase {
                 &settings.sort_order,
                 &settings.last_search_query,
                 &settings.notes,
+                settings.hidden as i32,
+                settings.position,
                 settings.created_at,
                 now,
             ],
@@ -699,8 +793,8 @@ impl LibraryDatabase {
     pub fn get_all_playlist_settings(&self) -> Result<Vec<PlaylistSettings>, LibraryError> {
         let mut stmt = self.conn.prepare(
             "SELECT qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                    last_search_query, notes, created_at, updated_at
-             FROM playlist_settings ORDER BY updated_at DESC"
+                    last_search_query, notes, hidden, position, created_at, updated_at
+             FROM playlist_settings ORDER BY position ASC, updated_at DESC"
         ).map_err(|e| LibraryError::Database(format!("Failed to prepare statement: {}", e)))?;
 
         let settings = stmt.query_map([], |row| {
@@ -711,13 +805,177 @@ impl LibraryDatabase {
                 sort_order: row.get(3)?,
                 last_search_query: row.get(4)?,
                 notes: row.get(5)?,
-                created_at: row.get(6)?,
-                updated_at: row.get(7)?,
+                hidden: row.get::<_, i32>(6)? != 0,
+                position: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
             })
         }).map_err(|e| LibraryError::Database(format!("Failed to query playlist settings: {}", e)))?;
 
         settings.collect::<Result<Vec<_>, _>>()
             .map_err(|e| LibraryError::Database(format!("Failed to collect playlist settings: {}", e)))
+    }
+
+    /// Update hidden status for a playlist
+    pub fn set_playlist_hidden(&self, qobuz_playlist_id: u64, hidden: bool) -> Result<(), LibraryError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        // First check if settings exist, if not create default
+        let existing = self.get_playlist_settings(qobuz_playlist_id)?;
+        if existing.is_none() {
+            let mut settings = PlaylistSettings::default();
+            settings.qobuz_playlist_id = qobuz_playlist_id;
+            settings.hidden = hidden;
+            return self.save_playlist_settings(&settings);
+        }
+
+        self.conn.execute(
+            "UPDATE playlist_settings SET hidden = ?1, updated_at = ?2
+             WHERE qobuz_playlist_id = ?3",
+            params![hidden as i32, now, qobuz_playlist_id as i64],
+        ).map_err(|e| LibraryError::Database(format!("Failed to update playlist hidden: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Update position for a playlist
+    pub fn set_playlist_position(&self, qobuz_playlist_id: u64, position: i32) -> Result<(), LibraryError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        // First check if settings exist, if not create default
+        let existing = self.get_playlist_settings(qobuz_playlist_id)?;
+        if existing.is_none() {
+            let mut settings = PlaylistSettings::default();
+            settings.qobuz_playlist_id = qobuz_playlist_id;
+            settings.position = position;
+            return self.save_playlist_settings(&settings);
+        }
+
+        self.conn.execute(
+            "UPDATE playlist_settings SET position = ?1, updated_at = ?2
+             WHERE qobuz_playlist_id = ?3",
+            params![position, now, qobuz_playlist_id as i64],
+        ).map_err(|e| LibraryError::Database(format!("Failed to update playlist position: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Bulk reorder playlists by setting positions
+    pub fn reorder_playlists(&self, playlist_ids: &[u64]) -> Result<(), LibraryError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        for (index, &playlist_id) in playlist_ids.iter().enumerate() {
+            // Ensure settings exist first
+            let existing = self.get_playlist_settings(playlist_id)?;
+            if existing.is_none() {
+                let mut settings = PlaylistSettings::default();
+                settings.qobuz_playlist_id = playlist_id;
+                settings.position = index as i32;
+                self.save_playlist_settings(&settings)?;
+            } else {
+                self.conn.execute(
+                    "UPDATE playlist_settings SET position = ?1, updated_at = ?2
+                     WHERE qobuz_playlist_id = ?3",
+                    params![index as i32, now, playlist_id as i64],
+                ).map_err(|e| LibraryError::Database(format!("Failed to reorder playlists: {}", e)))?;
+            }
+        }
+
+        Ok(())
+    }
+
+    // === Playlist Stats ===
+
+    /// Get playlist stats
+    pub fn get_playlist_stats(&self, qobuz_playlist_id: u64) -> Result<Option<PlaylistStats>, LibraryError> {
+        let result = self.conn.query_row(
+            "SELECT qobuz_playlist_id, play_count, last_played_at, created_at, updated_at
+             FROM playlist_stats WHERE qobuz_playlist_id = ?1",
+            params![qobuz_playlist_id as i64],
+            |row| {
+                Ok(PlaylistStats {
+                    qobuz_playlist_id: row.get::<_, i64>(0)? as u64,
+                    play_count: row.get::<_, i32>(1)? as u32,
+                    last_played_at: row.get(2)?,
+                    created_at: row.get(3)?,
+                    updated_at: row.get(4)?,
+                })
+            },
+        ).optional()
+        .map_err(|e| LibraryError::Database(format!("Failed to get playlist stats: {}", e)))?;
+
+        Ok(result)
+    }
+
+    /// Increment play count and update last_played_at for a playlist
+    pub fn increment_playlist_play_count(&self, qobuz_playlist_id: u64) -> Result<PlaylistStats, LibraryError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        // Try to update existing, if none exists, insert new
+        let existing = self.get_playlist_stats(qobuz_playlist_id)?;
+
+        if let Some(mut stats) = existing {
+            stats.play_count += 1;
+            stats.last_played_at = Some(now);
+            stats.updated_at = now;
+
+            self.conn.execute(
+                "UPDATE playlist_stats SET play_count = ?1, last_played_at = ?2, updated_at = ?3
+                 WHERE qobuz_playlist_id = ?4",
+                params![stats.play_count as i32, now, now, qobuz_playlist_id as i64],
+            ).map_err(|e| LibraryError::Database(format!("Failed to increment play count: {}", e)))?;
+
+            Ok(stats)
+        } else {
+            let stats = PlaylistStats {
+                qobuz_playlist_id,
+                play_count: 1,
+                last_played_at: Some(now),
+                created_at: now,
+                updated_at: now,
+            };
+
+            self.conn.execute(
+                "INSERT INTO playlist_stats (qobuz_playlist_id, play_count, last_played_at, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![qobuz_playlist_id as i64, 1, now, now, now],
+            ).map_err(|e| LibraryError::Database(format!("Failed to create playlist stats: {}", e)))?;
+
+            Ok(stats)
+        }
+    }
+
+    /// Get all playlist stats (for sorting by play count)
+    pub fn get_all_playlist_stats(&self) -> Result<Vec<PlaylistStats>, LibraryError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT qobuz_playlist_id, play_count, last_played_at, created_at, updated_at
+             FROM playlist_stats ORDER BY play_count DESC"
+        ).map_err(|e| LibraryError::Database(format!("Failed to prepare statement: {}", e)))?;
+
+        let stats = stmt.query_map([], |row| {
+            Ok(PlaylistStats {
+                qobuz_playlist_id: row.get::<_, i64>(0)? as u64,
+                play_count: row.get::<_, i32>(1)? as u32,
+                last_played_at: row.get(2)?,
+                created_at: row.get(3)?,
+                updated_at: row.get(4)?,
+            })
+        }).map_err(|e| LibraryError::Database(format!("Failed to query playlist stats: {}", e)))?;
+
+        stats.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| LibraryError::Database(format!("Failed to collect playlist stats: {}", e)))
     }
 
     // === Playlist Local Tracks ===
