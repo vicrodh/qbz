@@ -1,26 +1,26 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>QBZ - Experimenta Qobuz en Resolución Completa en Linux</title>
-  <meta name="description" content="Por fin, un cliente nativo de Qobuz para Linux. Reproducción bit-perfect 24-bit/192kHz, passthrough DAC, audio gapless. Gratis, open-source, sin compromisos.">
+  <title>QBZ - Experience Qobuz in Full Resolution on Linux</title>
+  <meta name="description" content="Finally, a native Qobuz client for Linux. Bit-perfect 24-bit/192kHz playback, DAC passthrough, gapless audio. Free, open-source, no compromises.">
 
-  <meta property="og:title" content="QBZ - Experimenta Qobuz en Resolución Completa en Linux">
-  <meta property="og:description" content="Por fin, un cliente nativo de Qobuz para Linux. Reproducción bit-perfect hasta 24-bit/192kHz. Gratis y open-source.">
+  <meta property="og:title" content="QBZ - Experience Qobuz in Full Resolution on Linux">
+  <meta property="og:description" content="Finally, a native Qobuz client for Linux. Bit-perfect playback up to 24-bit/192kHz. Free and open-source.">
   <meta property="og:type" content="website">
-  <meta property="og:url" content="https://qbz.lol/es/">
-  <meta property="og:locale" content="es_MX">
-  <meta property="og:locale:alternate" content="en_US">
+  <meta property="og:url" content="https://qbz.lol">
+  <meta property="og:locale" content="en_US">
+  <meta property="og:locale:alternate" content="es_MX">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
   <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>Q</text></svg>">
-  <link rel="alternate" hreflang="en" href="/index.html">
   <link rel="alternate" hreflang="es" href="/es/index.html">
-  <link rel="canonical" href="https://qbz.lol/es/">
+  <link rel="alternate" hreflang="en" href="/index.html">
+  <link rel="canonical" href="https://qbz.lol/">
 
   <script type="module" src="/src/js/main.js"></script>
 </head>
@@ -29,16 +29,16 @@
 
   <header class="header">
     <div class="container">
-      <a href="/es/" class="logo">
+      <a href="/" class="logo">
         <span class="text-gradient">QBZ</span>
       </a>
       <nav class="nav">
-        <a href="#features" class="nav__link">Características</a>
-        <a href="/es/changelog.html" class="nav__link">Cambios</a>
-        <a href="/es/licenses.html" class="nav__link">Licencias</a>
+        <a href="#features" class="nav__link">Features</a>
+        <a href="/changelog.html" class="nav__link">Changelog</a>
+        <a href="/licenses.html" class="nav__link">Licenses</a>
         <a href="https://github.com/vicrodh/qbz" target="_blank" rel="noopener" class="nav__link">GitHub</a>
       </nav>
-      <a href="/" class="lang-switch">EN</a>
+      <a href="/es/" class="lang-switch">ES</a>
     </div>
   </header>
 
@@ -48,26 +48,26 @@
       <div class="container">
         <div class="hero__content">
           <div class="hero__text">
-            <span class="hero__tagline">Para Audiófilos de Linux</span>
+            <span class="hero__tagline">For Linux Audiophiles</span>
             <h1 class="hero__title headline">
-              Tu Música.<br>
-              <span class="text-gradient">Resolución Completa.</span>
+              Your Music.<br>
+              <span class="text-gradient">Full Resolution.</span>
             </h1>
             <p class="hero__subtitle subheadline">
-              QBZ es el cliente nativo de Qobuz que Linux nunca tuvo. Transmite toda tu biblioteca en impresionante calidad 24-bit/192kHz, como los artistas lo concibieron.
+              QBZ is the native Qobuz client Linux never had. Stream your entire library in stunning 24-bit/192kHz quality, the way artists intended.
             </p>
             <div class="hero__buttons">
               <a href="https://github.com/vicrodh/qbz/releases/latest" class="btn btn--primary btn--large">
-                Descargar Ahora
+                Download Now
               </a>
               <a href="https://github.com/vicrodh/qbz" class="btn btn--glass btn--large" target="_blank" rel="noopener">
-                Ver en GitHub
+                View on GitHub
               </a>
             </div>
           </div>
           <div class="hero__visual">
             <div class="hero__screenshot hero__screenshot--placeholder glass">
-              Screenshot: Interfaz Principal
+              Screenshot: Main Interface
             </div>
           </div>
         </div>
@@ -79,24 +79,24 @@
       <div class="container">
         <div class="showcase__content">
           <div class="showcase__text">
-            <span class="section-label">El Problema</span>
+            <span class="section-label">The Problem</span>
             <h2 class="headline" style="font-size: clamp(2rem, 4vw, 3rem);">
-              ¿Qobuz en Linux?<br>
-              <span class="text-gradient">Ha sido complicado.</span>
+              Qobuz on Linux?<br>
+              <span class="text-gradient">Web Browser Limitations.</span>
             </h2>
             <p class="subheadline">
-              Pagas por audio Hi-Res, pero has estado atrapado con las limitaciones del navegador. Hasta ahora.
+              Qobuz offers Hi-Res audio, but web browsers have limitations that affect audio quality.
             </p>
             <ul class="showcase__list">
-              <li class="showcase__list-item">Los reproductores web limitan la salida a 48kHz — adiós hi-res</li>
-              <li class="showcase__list-item">No hay app de escritorio oficial para usuarios de Linux</li>
-              <li class="showcase__list-item">¿Conseguir bit-perfect a tu DAC? Casi imposible</li>
-              <li class="showcase__list-item">El resampling de audio destruye la calidad por la que pagaste</li>
+              <li class="showcase__list-item">Web browsers typically limit audio output to 48kHz, which means Hi-Res audio is downsampled</li>
+              <li class="showcase__list-item">Qobuz doesn't offer an official desktop app for Linux. Users must use web browsers</li>
+              <li class="showcase__list-item">Achieving bit-perfect playback to DACs requires a native application</li>
+              <li class="showcase__list-item">Audio resampling reduces audio quality</li>
             </ul>
           </div>
           <div class="showcase__visual">
             <div class="showcase__screenshot showcase__screenshot--placeholder glass">
-              Ilustración: Limitaciones del navegador
+              Illustration: Browser limitations
             </div>
           </div>
         </div>
@@ -108,24 +108,24 @@
       <div class="container">
         <div class="showcase__content showcase__content--reverse">
           <div class="showcase__text">
-            <span class="section-label">La Solución</span>
+            <span class="section-label">The Solution</span>
             <h2 class="headline" style="font-size: clamp(2rem, 4vw, 3rem);">
-              Audio Puro.<br>
-              <span class="text-gradient">Cero Compromisos.</span>
+              Pure Audio.<br>
+              <span class="text-gradient">Zero Compromise.</span>
             </h2>
             <p class="subheadline">
-              QBZ evita todas las limitaciones. Código nativo, acceso directo al hardware, salida bit-perfect.
+              QBZ bypasses every limitation. Native code, direct hardware access, bit-perfect output.
             </p>
             <ul class="showcase__list">
-              <li class="showcase__list-item">Resolución completa 24-bit/192kHz — cada sample, cada detalle</li>
-              <li class="showcase__list-item">Passthrough DAC directo para reproducción bit-perfect real</li>
-              <li class="showcase__list-item">Decodificación FLAC nativa — sin overhead del navegador</li>
-              <li class="showcase__list-item">Reproducción gapless para experiencias de álbum perfectas</li>
+              <li class="showcase__list-item">Full 24-bit/192kHz resolution — every sample, every detail</li>
+              <li class="showcase__list-item">Direct DAC passthrough for true bit-perfect playback</li>
+              <li class="showcase__list-item">Native FLAC decoding — no browser overhead</li>
+              <li class="showcase__list-item">Gapless playback for seamless album experiences</li>
             </ul>
           </div>
           <div class="showcase__visual">
             <div class="showcase__screenshot showcase__screenshot--placeholder glass">
-              Screenshot: Indicador de calidad mostrando 192kHz
+              Screenshot: Quality indicator showing 192kHz
             </div>
           </div>
         </div>
@@ -136,10 +136,10 @@
     <section id="features" class="section section--features">
       <div class="container">
         <header class="section__header">
-          <span class="section-label">Características</span>
-          <h2 class="headline">Todo Lo Que Necesitas</h2>
+          <span class="section-label">Features</span>
+          <h2 class="headline">Everything You Need</h2>
           <p class="subheadline">
-            Una experiencia completa de streaming construida para audiófilos que exigen lo mejor.
+            A complete streaming experience built for audiophiles who demand the best.
           </p>
         </header>
 
@@ -147,75 +147,75 @@
           <article class="feature-card glass">
             <div class="feature-card__icon">*</div>
             <div>
-              <h3 class="feature-card__title">Motor de Reproducción Hi-Fi</h3>
+              <h3 class="feature-card__title">Hi-Fi Playback Engine</h3>
               <p class="feature-card__description">
-                Decodificación FLAC nativa impulsada por Symphonia. El modo passthrough DAC asegura que tu audio llegue a tu hardware exactamente como fue codificado — sin resampling, sin procesamiento, señal pura.
+                Native FLAC decoding powered by Symphonia. DAC passthrough mode ensures your audio reaches your hardware exactly as encoded — no resampling, no processing, pure signal.
               </p>
             </div>
-            <div class="feature-card__screenshot">Screenshot: Controles de reproducción</div>
+            <div class="feature-card__screenshot">Screenshot: Playback controls</div>
           </article>
 
           <article class="feature-card glass">
             <div class="feature-card__icon">/</div>
             <div>
-              <h3 class="feature-card__title">Tu Biblioteca Local</h3>
+              <h3 class="feature-card__title">Your Local Library</h3>
               <p class="feature-card__description">
-                No solo streaming — QBZ también indexa tu colección personal. Soporte para CUE sheets, extracción de artwork embebido, y análisis completo de metadatos para FLAC, ALAC, WAV, y más.
+                Not just streaming — QBZ indexes your personal collection too. CUE sheet support, embedded artwork extraction, and full metadata parsing for FLAC, ALAC, WAV, and more.
               </p>
             </div>
-            <div class="feature-card__screenshot">Screenshot: Vista de biblioteca local</div>
+            <div class="feature-card__screenshot">Screenshot: Local library view</div>
           </article>
 
           <article class="feature-card glass">
             <div class="feature-card__icon">@</div>
             <div>
-              <h3 class="feature-card__title">Integración de Escritorio</h3>
+              <h3 class="feature-card__title">Desktop Integration</h3>
               <p class="feature-card__description">
-                Soporte MPRIS significa que tus teclas multimedia simplemente funcionan. Scrobbling a Last.fm registra tu historial de escucha. Notificaciones de escritorio te mantienen informado sin interrumpir tu flujo.
+                MPRIS support means your media keys just work. Last.fm scrobbling tracks your listening history. Desktop notifications keep you informed without interrupting your flow.
               </p>
             </div>
-            <div class="feature-card__screenshot">Screenshot: Integración MPRIS</div>
+            <div class="feature-card__screenshot">Screenshot: MPRIS integration</div>
           </article>
 
           <article class="feature-card glass">
             <div class="feature-card__icon">=</div>
             <div>
-              <h3 class="feature-card__title">Gestión Inteligente de Cola</h3>
+              <h3 class="feature-card__title">Smart Queue Management</h3>
               <p class="feature-card__description">
-                Construye la sesión de escucha perfecta. Aleatorio, repetir, arrastra para reordenar. Tus playlists de Qobuz se sincronizan automáticamente. Crea nuevas directamente desde la app.
+                Build the perfect listening session. Shuffle, repeat, drag to reorder. Your Qobuz playlists sync automatically. Create new ones right from the app.
               </p>
             </div>
-            <div class="feature-card__screenshot">Screenshot: Panel de cola</div>
+            <div class="feature-card__screenshot">Screenshot: Queue panel</div>
           </article>
 
           <article class="feature-card glass">
             <div class="feature-card__icon">></div>
             <div>
-              <h3 class="feature-card__title">Importador de Playlists Multiplataforma</h3>
+              <h3 class="feature-card__title">Multi-Platform Playlist Importer</h3>
               <p class="feature-card__description">
-                Pega una URL de playlist pública de Spotify, Tidal, Apple Music o Deezer y QBZ la convierte automáticamente a una playlist de Qobuz. Sin servicios externos requeridos — simplemente funciona.
+                Paste a public playlist URL from Spotify, Tidal, Apple Music, or Deezer and QBZ converts it to a Qobuz playlist automatically. No external services required — it just works.
               </p>
             </div>
-            <div class="feature-card__screenshot">Screenshot: Importador de playlists</div>
+            <div class="feature-card__screenshot">Screenshot: Playlist importer</div>
           </article>
 
           <article class="feature-card glass">
             <div class="feature-card__icon">~</div>
             <div>
-              <h3 class="feature-card__title">Letras Sincronizadas</h3>
+              <h3 class="feature-card__title">Time-Synced Lyrics</h3>
               <p class="feature-card__description">
-                Ve las letras desplazarse en sincronización perfecta con la música. Nunca pierdas un ritmo ni una palabra. Perfecto para karaoke o sesiones de escucha profunda.
+                See lyrics scroll in perfect sync with the music. Never miss a beat or miss a word. Perfect for karaoke or deep listening sessions.
               </p>
             </div>
-            <div class="feature-card__screenshot">Screenshot: Vista de letras</div>
+            <div class="feature-card__screenshot">Screenshot: Lyrics view</div>
           </article>
 
           <article class="feature-card glass">
             <div class="feature-card__icon">#</div>
             <div>
-              <h3 class="feature-card__title">Modo Mini Player</h3>
+              <h3 class="feature-card__title">Mini Player Mode</h3>
               <p class="feature-card__description">
-                Contrae el reproductor a un mini player compacto que permanece sobre otras ventanas. Controla la reproducción mientras trabajas sin distracciones.
+                Collapse the player to a compact mini player that stays on top of other windows. Control playback while you work without distractions.
               </p>
             </div>
             <div class="feature-card__screenshot">Screenshot: Mini player</div>
@@ -229,24 +229,24 @@
       <div class="container">
         <div class="showcase__content">
           <div class="showcase__text">
-            <span class="section-label">Transmite Donde Quieras</span>
+            <span class="section-label">Cast Anywhere</span>
             <h2 class="headline" style="font-size: clamp(2rem, 4vw, 3rem);">
-              Sonido Hi-Fi.<br>
-              <span class="text-gradient">En Cada Habitación.</span>
+              Hi-Fi Sound.<br>
+              <span class="text-gradient">Every Room.</span>
             </h2>
             <p class="subheadline">
-              Descubre dispositivos Chromecast y DLNA en tu red y transmite tu música por toda tu casa.
+              Discover Chromecast and DLNA devices on your network and stream your music throughout your home.
             </p>
             <ul class="showcase__list">
-              <li class="showcase__list-item">Descubrimiento automático de Chromecast y DLNA</li>
-              <li class="showcase__list-item">Control completo de reproducción desde QBZ</li>
-              <li class="showcase__list-item">Control de volumen y sincronización de metadatos</li>
-              <li class="showcase__list-item">Cambia entre local y cast sin interrupciones</li>
+              <li class="showcase__list-item">Automatic device discovery for Chromecast and DLNA</li>
+              <li class="showcase__list-item">Full playback control from QBZ</li>
+              <li class="showcase__list-item">Volume control and metadata sync</li>
+              <li class="showcase__list-item">Switch between local and cast seamlessly</li>
             </ul>
           </div>
           <div class="showcase__visual">
             <div class="showcase__screenshot showcase__screenshot--placeholder glass">
-              Screenshot: Selector de Chromecast
+              Screenshot: Chromecast picker
             </div>
           </div>
         </div>
@@ -259,11 +259,11 @@
         <div class="stats__grid">
           <div class="stat">
             <div class="stat__value text-gradient">192</div>
-            <div class="stat__label">kHz Tasa de Muestreo Máx</div>
+            <div class="stat__label">kHz Max Sample Rate</div>
           </div>
           <div class="stat">
             <div class="stat__value text-gradient">24</div>
-            <div class="stat__label">Bits de Profundidad</div>
+            <div class="stat__label">Bit Depth Support</div>
           </div>
           <div class="stat">
             <div class="stat__value text-gradient">100%</div>
@@ -271,7 +271,7 @@
           </div>
           <div class="stat">
             <div class="stat__value text-gradient">0</div>
-            <div class="stat__label">Telemetría</div>
+            <div class="stat__label">Telemetry</div>
           </div>
         </div>
       </div>
@@ -281,10 +281,10 @@
     <section class="section">
       <div class="container">
         <header class="section__header">
-          <span class="section-label">Bajo el Capó</span>
-          <h2 class="headline">Construido para Rendimiento</h2>
+          <span class="section-label">Under the Hood</span>
+          <h2 class="headline">Built for Performance</h2>
           <p class="subheadline">
-            Tecnologías modernas elegidas por velocidad, confiabilidad y fidelidad de audio.
+            Modern technologies chosen for speed, reliability, and audio fidelity.
           </p>
         </header>
 
@@ -302,7 +302,7 @@
             <div style="font-weight: 600; color: #a78bfa;">Rodio + Symphonia</div>
           </div>
           <div class="glass glass--subtle" style="padding: 32px; text-align: center;">
-            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.5); margin-bottom: 12px;">Base de Datos</div>
+            <div style="font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.1em; color: rgba(255,255,255,0.5); margin-bottom: 12px;">Database</div>
             <div style="font-weight: 600; color: #a78bfa;">SQLite</div>
           </div>
         </div>
@@ -314,17 +314,17 @@
       <div class="container">
         <div class="cta__card glass glass--glow">
           <h2 class="cta__title headline" style="font-size: clamp(2rem, 4vw, 3rem);">
-            ¿Listo para Escuchar <span class="text-gradient">la Diferencia</span>?
+            Ready to Hear <span class="text-gradient">the Difference</span>?
           </h2>
           <p class="cta__subtitle subheadline">
-            Descarga QBZ y experimenta tu biblioteca de Qobuz como fue concebida para ser escuchada. Gratis, para siempre.
+            Download QBZ and experience your Qobuz library the way it was meant to be heard. Free, forever.
           </p>
           <div class="cta__buttons">
             <a href="https://github.com/vicrodh/qbz/releases/latest" class="btn btn--primary btn--large">
-              Descargar para Linux
+              Download for Linux
             </a>
             <a href="https://github.com/vicrodh/qbz/releases" class="btn btn--glass btn--large">
-              Todas las Versiones
+              All Releases
             </a>
           </div>
         </div>
@@ -337,11 +337,11 @@
       <div class="footer__content">
         <div class="footer__links">
           <a href="https://github.com/vicrodh/qbz" target="_blank" rel="noopener">GitHub</a>
-          <a href="/es/licenses.html">Licencias</a>
-          <a href="/es/changelog.html">Cambios</a>
+          <a href="/licenses.html">Licenses</a>
+          <a href="/changelog.html">Changelog</a>
         </div>
         <p class="footer__copy">
-          QBZ es un proyecto open-source independiente. No afiliado con Qobuz. Licencia MIT.
+          QBZ is an independent open-source project. Not affiliated with Qobuz. MIT License.
         </p>
       </div>
     </div>
