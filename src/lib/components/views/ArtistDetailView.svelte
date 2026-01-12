@@ -87,11 +87,15 @@
   let similarArtists = $state<QobuzArtist[]>([]);
   let similarArtistsLoading = $state(false);
   let similarArtistImageErrors = $state<Set<number>>(new Set());
+  let artistDetailEl = $state<HTMLDivElement | null>(null);
+  let aboutSection = $state<HTMLDivElement | null>(null);
   let topTracksSection = $state<HTMLDivElement | null>(null);
   let discographySection = $state<HTMLDivElement | null>(null);
   let epsSinglesSection = $state<HTMLDivElement | null>(null);
   let compilationsSection = $state<HTMLDivElement | null>(null);
   let playlistsSection = $state<HTMLDivElement | null>(null);
+  let activeJumpSection = $state('about');
+  let jumpObserver: IntersectionObserver | null = null;
 
   interface SimilarArtistsPage {
     items: QobuzArtist[];
@@ -110,6 +114,7 @@
     topTracks = [];
     similarArtists = [];
     similarArtistImageErrors = new Set();
+    activeJumpSection = 'about';
 
     loadTopTracks();
     loadSimilarArtists();
@@ -273,16 +278,69 @@
   let hasEpsSingles = $derived(artist.epsSingles.length > 0);
   let hasCompilations = $derived(artist.compilations.length > 0);
   let hasPlaylists = $derived(artist.playlists.length > 0);
-  let showJumpNav = $derived(
-    [hasTopTracks, true, hasEpsSingles, hasCompilations, hasPlaylists].filter(Boolean).length > 1
-  );
+  let jumpSections = $derived.by(() => [
+    { id: 'about', label: 'About', el: aboutSection, visible: true },
+    { id: 'popular', label: 'Popular Tracks', el: topTracksSection, visible: hasTopTracks },
+    { id: 'discography', label: 'Discography', el: discographySection, visible: true },
+    { id: 'eps', label: 'EPs & Singles', el: epsSinglesSection, visible: hasEpsSingles },
+    { id: 'compilations', label: 'Compilations', el: compilationsSection, visible: hasCompilations },
+    { id: 'playlists', label: 'Playlists', el: playlistsSection, visible: hasPlaylists },
+  ].filter(section => section.visible));
 
-  function scrollToSection(target: HTMLDivElement | null) {
+  let showJumpNav = $derived(jumpSections.length > 1);
+
+  function scrollToSection(target: HTMLDivElement | null, id: string) {
+    activeJumpSection = id;
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+
+  $effect(() => {
+    if (!artistDetailEl) return;
+    if (jumpObserver) {
+      jumpObserver.disconnect();
+      jumpObserver = null;
+    }
+
+    if (jumpSections.length === 0) return;
+
+    const sectionByElement = new Map<HTMLDivElement, string>();
+    for (const section of jumpSections) {
+      if (section.el) {
+        sectionByElement.set(section.el, section.id);
+      }
+    }
+
+    const targets = [...sectionByElement.keys()];
+    if (targets.length === 0) return;
+
+    jumpObserver = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter(entry => entry.isIntersecting);
+        if (visible.length === 0) return;
+
+        visible.sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        const targetId = sectionByElement.get(visible[0].target as HTMLDivElement);
+        if (targetId) {
+          activeJumpSection = targetId;
+        }
+      },
+      {
+        root: artistDetailEl,
+        rootMargin: '-20% 0px -60% 0px',
+        threshold: [0, 0.2, 0.5, 1]
+      }
+    );
+
+    targets.forEach(target => jumpObserver?.observe(target));
+
+    return () => {
+      jumpObserver?.disconnect();
+      jumpObserver = null;
+    };
+  });
 </script>
 
-<div class="artist-detail">
+<div class="artist-detail" bind:this={artistDetailEl}>
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
@@ -290,7 +348,7 @@
   </button>
 
   <!-- Artist Header -->
-  <div class="artist-header">
+  <div class="artist-header section-anchor" bind:this={aboutSection}>
     <!-- Artist Image -->
     <div class="artist-image-container">
       {#if imageError || !artist.image}
@@ -388,30 +446,16 @@
   {#if showJumpNav}
     <div class="jump-nav">
       <div class="jump-label">Jump to</div>
-      <div class="jump-buttons">
-        {#if hasTopTracks}
-          <button class="jump-btn" onclick={() => scrollToSection(topTracksSection)}>
-            Popular Tracks
+      <div class="jump-links">
+        {#each jumpSections as section}
+          <button
+            class="jump-link"
+            class:active={activeJumpSection === section.id}
+            onclick={() => scrollToSection(section.el, section.id)}
+          >
+            {section.label}
           </button>
-        {/if}
-        <button class="jump-btn" onclick={() => scrollToSection(discographySection)}>
-          Discography
-        </button>
-        {#if hasEpsSingles}
-          <button class="jump-btn" onclick={() => scrollToSection(epsSinglesSection)}>
-            EPs & Singles
-          </button>
-        {/if}
-        {#if hasCompilations}
-          <button class="jump-btn" onclick={() => scrollToSection(compilationsSection)}>
-            Compilations
-          </button>
-        {/if}
-        {#if hasPlaylists}
-          <button class="jump-btn" onclick={() => scrollToSection(playlistsSection)}>
-            Playlists
-          </button>
-        {/if}
+        {/each}
       </div>
     </div>
   {/if}
@@ -758,17 +802,16 @@
 
   .jump-nav {
     position: sticky;
-    top: 8px;
+    top: 0;
     z-index: 4;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 10px;
-    padding: 10px 12px;
-    border-radius: 12px;
-    background-color: var(--bg-secondary);
-    border: 1px solid var(--bg-tertiary);
-    margin-bottom: 16px;
+    padding: 12px 24px;
+    background-color: var(--bg-primary);
+    border-bottom: 1px solid var(--bg-tertiary);
+    margin: 0 -24px 16px;
   }
 
   .jump-label {
@@ -778,27 +821,30 @@
     letter-spacing: 0.08em;
   }
 
-  .jump-buttons {
+  .jump-links {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 14px;
   }
 
-  .jump-btn {
-    padding: 6px 12px;
-    border-radius: 999px;
-    border: 1px solid var(--bg-tertiary);
-    background-color: transparent;
-    color: var(--text-secondary);
-    font-size: 12px;
+  .jump-link {
+    padding: 4px 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 13px;
     cursor: pointer;
-    transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+    border-bottom: 2px solid transparent;
+    transition: color 150ms ease, border-color 150ms ease;
   }
 
-  .jump-btn:hover {
-    background-color: var(--bg-tertiary);
-    border-color: var(--bg-tertiary);
+  .jump-link:hover {
+    color: var(--text-secondary);
+  }
+
+  .jump-link.active {
     color: var(--text-primary);
+    border-bottom-color: var(--accent-primary);
   }
 
   .similar-artists {
@@ -872,7 +918,7 @@
   }
 
   .section-anchor {
-    scroll-margin-top: 120px;
+    scroll-margin-top: 140px;
   }
 
   .section-title {
