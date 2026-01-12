@@ -2,7 +2,7 @@ name: Build and Deploy
 
 on:
   push:
-    branches: [website, claude/website-*]
+    branches: [website]
   workflow_dispatch:
 
 permissions:
