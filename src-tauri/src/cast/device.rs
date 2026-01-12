@@ -69,6 +69,14 @@ impl CastDeviceConnection {
         })
     }
 
+    /// Keep the connection alive with a heartbeat ping
+    pub fn heartbeat(&self) -> Result<(), CastError> {
+        self.device
+            .heartbeat
+            .ping()
+            .map_err(|e| CastError::Connection(e.to_string()))
+    }
+
     /// Disconnect from device
     pub fn disconnect(&mut self) -> Result<(), CastError> {
         if let Some(session) = &self.session {

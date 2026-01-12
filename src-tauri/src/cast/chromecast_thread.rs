@@ -3,8 +3,9 @@
 //! Since rust_cast uses Rc (not Arc), it cannot be shared across threads.
 //! This module provides a thread-safe wrapper using channels.
 
-use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread::{self, JoinHandle};
+use std::time::Duration;
 
 use crate::cast::device::CastDeviceConnection;
 use crate::cast::errors::CastError;
@@ -195,14 +196,24 @@ impl Drop for ChromecastHandle {
     }
 }
 
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(25);
+
 /// Main loop for the Chromecast thread
 fn chromecast_thread_main(receiver: Receiver<CastCommand>) {
     let mut connection: Option<CastDeviceConnection> = None;
 
     loop {
-        let command = match receiver.recv() {
+        let command = match receiver.recv_timeout(HEARTBEAT_INTERVAL) {
             Ok(cmd) => cmd,
-            Err(_) => break, // Channel closed
+            Err(RecvTimeoutError::Timeout) => {
+                if let Some(conn) = connection.as_ref() {
+                    if let Err(err) = conn.heartbeat() {
+                        log::warn!("Chromecast heartbeat failed: {}", err);
+                    }
+                }
+                continue;
+            }
+            Err(RecvTimeoutError::Disconnected) => break, // Channel closed
         };
 
         match command {
