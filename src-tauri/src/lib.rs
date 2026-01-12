@@ -225,6 +225,9 @@ pub fn run() {
             commands::get_featured_albums,
             commands::get_track,
             commands::get_artist,
+            commands::get_artist_detail,
+            commands::get_artist_albums,
+            commands::get_similar_artists,
             // Playback commands
             commands::play_track,
             commands::pause_playback,

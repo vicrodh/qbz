@@ -20,6 +20,7 @@ pub mod paths {
     // Artist
     pub const ARTIST_GET: &str = "/artist/get";
     pub const ARTIST_SEARCH: &str = "/artist/search";
+    pub const ARTIST_GET_SIMILAR: &str = "/artist/getSimilarArtists";
 
     // Playlist
     pub const PLAYLIST_GET: &str = "/playlist/get";

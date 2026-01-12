@@ -228,6 +228,30 @@ impl QobuzClient {
         Ok(serde_json::from_value(artists.clone())?)
     }
 
+    /// Get similar artists for an artist ID
+    pub async fn get_similar_artists(&self, artist_id: u64, limit: u32, offset: u32) -> Result<SearchResultsPage<Artist>> {
+        let url = endpoints::build_url(paths::ARTIST_GET_SIMILAR);
+        let response: Value = self
+            .http
+            .get(&url)
+            .header("X-App-Id", self.app_id().await?)
+            .query(&[
+                ("artist_id", artist_id.to_string()),
+                ("limit", limit.to_string()),
+                ("offset", offset.to_string()),
+            ])
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        let artists = response
+            .get("artists")
+            .ok_or_else(|| ApiError::ApiResponse("No artists in response".to_string()))?;
+
+        Ok(serde_json::from_value(artists.clone())?)
+    }
+
     // === Get endpoints ===
 
     /// Get album by ID
@@ -293,6 +317,38 @@ impl QobuzClient {
         with_albums: bool,
     ) -> Result<Artist> {
         self.get_artist_with_pagination(artist_id, with_albums, None, None).await
+    }
+
+    /// Get artist detail by ID with albums, playlists, and appears-on tracks
+    pub async fn get_artist_detail(
+        &self,
+        artist_id: u64,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Artist> {
+        let url = endpoints::build_url(paths::ARTIST_GET);
+        let mut query = vec![
+            ("artist_id", artist_id.to_string()),
+            ("extra", "albums,tracks_appears_on,playlists".to_string()),
+        ];
+        if let Some(l) = limit {
+            query.push(("limit", l.to_string()));
+        }
+        if let Some(o) = offset {
+            query.push(("offset", o.to_string()));
+        }
+
+        let response: Value = self
+            .http
+            .get(&url)
+            .header("X-App-Id", self.app_id().await?)
+            .query(&query)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(serde_json::from_value(response)?)
     }
 
     /// Get artist by ID with album pagination
