@@ -83,6 +83,15 @@ jobs:
             org.freedesktop.Sdk.Extension.rust-stable//23.08
 
       - name: Build Flatpak
+        env:
+          LAST_FM_API_KEY: ${{ secrets.LAST_FM_API_KEY }}
+          LAST_FM_API_SHARED_SECRET: ${{ secrets.LAST_FM_API_SHARED_SECRET }}
+          DISCOGS_API_CLIENT_KEY: ${{ secrets.DISCOGS_API_CLIENT_KEY }}
+          DISCOGS_API_CLIENT_SECRET: ${{ secrets.DISCOGS_API_CLIENT_SECRET }}
+          SPOTIFY_API_CLIENT_ID: ${{ secrets.SPOTIFY_API_CLIENT_ID }}
+          SPOTIFY_API_CLIENT_SECRET: ${{ secrets.SPOTIFY_API_CLIENT_SECRET }}
+          TIDAL_API_CLIENT_ID: ${{ secrets.TIDAL_API_CLIENT_ID }}
+          TIDAL_API_CLIENT_SECRET: ${{ secrets.TIDAL_API_CLIENT_SECRET }}
         run: |
           mkdir -p flatpak-build flatpak-repo dist
           flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build packaging/flatpak/com.blitzkriegfc.qbz.yml

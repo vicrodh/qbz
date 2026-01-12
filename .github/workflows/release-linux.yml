@@ -93,6 +93,15 @@ jobs:
         run: npm ci
 
       - name: Build DEB/RPM/AppImage
+        env:
+          LAST_FM_API_KEY: ${{ secrets.LAST_FM_API_KEY }}
+          LAST_FM_API_SHARED_SECRET: ${{ secrets.LAST_FM_API_SHARED_SECRET }}
+          DISCOGS_API_CLIENT_KEY: ${{ secrets.DISCOGS_API_CLIENT_KEY }}
+          DISCOGS_API_CLIENT_SECRET: ${{ secrets.DISCOGS_API_CLIENT_SECRET }}
+          SPOTIFY_API_CLIENT_ID: ${{ secrets.SPOTIFY_API_CLIENT_ID }}
+          SPOTIFY_API_CLIENT_SECRET: ${{ secrets.SPOTIFY_API_CLIENT_SECRET }}
+          TIDAL_API_CLIENT_ID: ${{ secrets.TIDAL_API_CLIENT_ID }}
+          TIDAL_API_CLIENT_SECRET: ${{ secrets.TIDAL_API_CLIENT_SECRET }}
         run: npm run tauri build -- --bundles deb,rpm,appimage
 
       - name: Collect artifacts

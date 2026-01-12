@@ -12,6 +12,10 @@ use crate::playlist_import::models::{ImportPlaylist, ImportProvider, ImportTrack
 const SPOTIFY_TOKEN_URL: &str = "https://accounts.spotify.com/api/token";
 const SPOTIFY_API_BASE: &str = "https://api.spotify.com/v1";
 
+// Compile-time embedded credentials (from build environment)
+const EMBEDDED_CLIENT_ID: Option<&str> = option_env!("SPOTIFY_API_CLIENT_ID");
+const EMBEDDED_CLIENT_SECRET: Option<&str> = option_env!("SPOTIFY_API_CLIENT_SECRET");
+
 pub fn parse_playlist_id(url: &str) -> Option<String> {
     if let Some(rest) = url.strip_prefix("spotify:playlist:") {
         if !rest.is_empty() {
@@ -249,10 +253,15 @@ async fn fetch_playlist_from_embed(playlist_id: &str) -> Result<ImportPlaylist, 
 }
 
 async fn get_app_token() -> Result<String, PlaylistImportError> {
-    let client_id = env::var("SPOTIFY_API_CLIENT_ID")
-        .map_err(|_| PlaylistImportError::MissingCredentials("SPOTIFY_API_CLIENT_ID".to_string()))?;
-    let client_secret = env::var("SPOTIFY_API_CLIENT_SECRET")
-        .map_err(|_| PlaylistImportError::MissingCredentials("SPOTIFY_API_CLIENT_SECRET".to_string()))?;
+    // Try embedded credentials first, fall back to runtime env vars
+    let client_id = EMBEDDED_CLIENT_ID
+        .map(String::from)
+        .or_else(|| env::var("SPOTIFY_API_CLIENT_ID").ok())
+        .ok_or_else(|| PlaylistImportError::MissingCredentials("SPOTIFY_API_CLIENT_ID".to_string()))?;
+    let client_secret = EMBEDDED_CLIENT_SECRET
+        .map(String::from)
+        .or_else(|| env::var("SPOTIFY_API_CLIENT_SECRET").ok())
+        .ok_or_else(|| PlaylistImportError::MissingCredentials("SPOTIFY_API_CLIENT_SECRET".to_string()))?;
 
     let auth = STANDARD.encode(format!("{}:{}", client_id, client_secret));
 

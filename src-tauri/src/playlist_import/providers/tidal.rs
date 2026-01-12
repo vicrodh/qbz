@@ -16,6 +16,10 @@ const RATE_LIMIT_DELAY_MS: u64 = 200; // Delay between API calls to avoid 429
 const TIDAL_TOKEN_URL: &str = "https://auth.tidal.com/v1/oauth2/token";
 const TIDAL_API_BASE: &str = "https://openapi.tidal.com/v2";
 
+// Compile-time embedded credentials (from build environment)
+const EMBEDDED_CLIENT_ID: Option<&str> = option_env!("TIDAL_API_CLIENT_ID");
+const EMBEDDED_CLIENT_SECRET: Option<&str> = option_env!("TIDAL_API_CLIENT_SECRET");
+
 pub fn parse_playlist_id(url: &str) -> Option<String> {
     if !url.contains("tidal.com") {
         return None;
@@ -329,10 +333,15 @@ fn parse_duration_ms(value: &str) -> Option<u64> {
 }
 
 async fn get_app_token() -> Result<String, PlaylistImportError> {
-    let client_id = env::var("TIDAL_API_CLIENT_ID")
-        .map_err(|_| PlaylistImportError::MissingCredentials("TIDAL_API_CLIENT_ID".to_string()))?;
-    let client_secret = env::var("TIDAL_API_CLIENT_SECRET")
-        .map_err(|_| PlaylistImportError::MissingCredentials("TIDAL_API_CLIENT_SECRET".to_string()))?;
+    // Try embedded credentials first, fall back to runtime env vars
+    let client_id = EMBEDDED_CLIENT_ID
+        .map(String::from)
+        .or_else(|| env::var("TIDAL_API_CLIENT_ID").ok())
+        .ok_or_else(|| PlaylistImportError::MissingCredentials("TIDAL_API_CLIENT_ID".to_string()))?;
+    let client_secret = EMBEDDED_CLIENT_SECRET
+        .map(String::from)
+        .or_else(|| env::var("TIDAL_API_CLIENT_SECRET").ok())
+        .ok_or_else(|| PlaylistImportError::MissingCredentials("TIDAL_API_CLIENT_SECRET".to_string()))?;
 
     let auth = STANDARD.encode(format!("{}:{}", client_id, client_secret));
 
