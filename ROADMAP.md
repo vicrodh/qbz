@@ -98,7 +98,7 @@
 
 ## 6. Playlist Management
 
-**Status:** In Progress (~90% complete)
+**Status:** Completed
 
 **Description:** Full playlist management with CRUD, statistics, and enhanced UI.
 
@@ -117,8 +117,8 @@
 - [x] Backend commands: `playlist_get_settings`, `playlist_set_artwork`, `playlist_get_stats`, etc.
 - [x] `get_playlist_suggestions` command for ML-based track suggestions
 
-**UI Components (90% complete):**
-- [x] PlaylistCollage component (Qobuz-style 4 album covers)
+**UI Components (100% complete):**
+- [x] PlaylistCollage component (2x2 grid layout)
 - [x] Custom artwork selection per playlist
 - [x] Sort menu in sidebar (dropdown with submenu)
 - [x] PlaylistDetailView with collage header
@@ -126,14 +126,10 @@
 - [x] Filter dropdown (All/Visible/Hidden) in PlaylistManagerView
 - [x] Drag-to-reorder playlists in PlaylistManagerView
 - [x] Grid view toggle (list vs mosaic) in PlaylistManagerView
-- [ ] PlaylistEditModal (edit name/description)
+- [x] PlaylistEditModal (PlaylistModal handles edit name/description/visibility/delete)
 
-**ML Suggestions (100% complete):**
-- [x] `get_playlist_suggestions` backend algorithm using reco_store scores
-- [x] Suggested Tracks section in PlaylistDetailView
-- [x] Add track to playlist button
-- [x] Dismiss suggestion (localStorage persistence per playlist)
-- [x] Refresh suggestions button
+**ML Suggestions (Removed):**
+- Removed due to lack of similarity algorithm (suggested unrelated tracks)
 
 ### Recent Fixes (This Session):
 - [x] Fixed custom artwork not loading (asset:// URL conversion)
@@ -174,7 +170,6 @@
 ## Priority Order for Remaining Work
 
 1. **Session Persistence debugging** - Critical for UX
-2. **PlaylistEditModal** - Complete playlist CRUD
-3. **Tray Icon** - Expected feature for music apps
-4. **MiniPlayer** - Nice to have
-5. **DLNA/AirPlay** - Lower priority
+2. **Tray Icon** - Expected feature for music apps
+3. **MiniPlayer** - Nice to have
+4. **DLNA/AirPlay** - Lower priority
