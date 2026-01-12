@@ -45,6 +45,16 @@ export interface QobuzAlbum {
   tracks?: { items: QobuzTrack[] };
 }
 
+export interface QobuzPlaylist {
+  id: number;
+  name: string;
+  description?: string;
+  owner?: { id?: number; name: string };
+  images?: string[];
+  tracks_count?: number;
+  duration?: number;
+}
+
 export interface QobuzArtist {
   id: number;
   name: string;
@@ -61,6 +71,13 @@ export interface QobuzArtist {
     offset: number;
     limit: number;
   };
+  tracks_appears_on?: {
+    items: QobuzTrack[];
+    total: number;
+    offset: number;
+    limit: number;
+  };
+  playlists?: QobuzPlaylist[];
 }
 
 // ============ UI Display Types ============
@@ -114,7 +131,29 @@ export interface ArtistDetail {
     year?: string;
     quality: string;
   }[];
+  epsSingles: {
+    id: string;
+    title: string;
+    artwork: string;
+    year?: string;
+    quality: string;
+  }[];
+  compilations: {
+    id: string;
+    title: string;
+    artwork: string;
+    year?: string;
+    quality: string;
+  }[];
+  playlists: {
+    id: number;
+    title: string;
+    artwork?: string;
+    trackCount?: number;
+    owner?: string;
+  }[];
   totalAlbums: number;
+  albumsFetched: number;
 }
 
 export interface PlaylistTrack {
