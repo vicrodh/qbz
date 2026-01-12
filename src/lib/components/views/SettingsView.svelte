@@ -841,6 +841,32 @@
 <style>
   .settings-view {
     width: 100%;
+    height: 100%;
+    overflow-y: auto;
+    padding: 24px 32px;
+    padding-right: 24px; /* Less padding on right for scrollbar */
+  }
+
+  /* Scrollbar styling */
+  .settings-view::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .settings-view::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .settings-view::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+  }
+
+  .settings-view:hover::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.25);
+  }
+
+  .settings-view::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
   }
 
   .header {
