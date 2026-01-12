@@ -75,17 +75,25 @@
 
 ## 4. MiniPlayer
 
-**Status:** Not Started
+**Status:** Completed
 
 **Description:** Compact floating player window for minimal screen usage.
 
-**TODO:**
-- [ ] Design compact player UI
-- [ ] Implement floating window mode
-- [ ] Essential controls (play/pause, next/prev, seek)
-- [ ] Album art display
-- [ ] Always-on-top option
-- [ ] Toggle between full and mini mode
+**Implemented Features:**
+- [x] Compact 340x90 floating window
+- [x] Draggable (no decorations)
+- [x] Always-on-top toggle (pin button)
+- [x] Play/Pause, Next/Previous controls
+- [x] Album art, track title, artist display
+- [x] Progress bar
+- [x] State sync from main window via events
+- [x] Toggle via NowPlayingBar button (PictureInPicture icon)
+
+**Technical:**
+- Route: `/miniplayer`
+- Service: `src/lib/services/miniplayerService.ts`
+- Uses Tauri WebviewWindow for secondary window
+- Events: `miniplayer:track`, `miniplayer:playback`
 
 ---
 
