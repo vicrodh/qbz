@@ -189,7 +189,7 @@
   } from '$lib/services/sessionService';
 
   // MiniPlayer
-  import { toggleMiniPlayer } from '$lib/services/miniplayerService';
+  import { enterMiniplayerMode } from '$lib/services/miniplayerService';
 
   // Lyrics state management
   import {
@@ -1551,7 +1551,7 @@
         onToggleFavorite={toggleFavorite}
         onOpenQueue={openQueue}
         onOpenFullScreen={openFullScreen}
-        onOpenMiniPlayer={toggleMiniPlayer}
+        onOpenMiniPlayer={enterMiniplayerMode}
         onCast={openCastPicker}
         onToggleLyrics={toggleLyricsSidebar}
         lyricsActive={lyricsSidebarVisible}
@@ -1574,7 +1574,7 @@
       <NowPlayingBar
         onOpenQueue={openQueue}
         onOpenFullScreen={openFullScreen}
-        onOpenMiniPlayer={toggleMiniPlayer}
+        onOpenMiniPlayer={enterMiniplayerMode}
         onCast={openCastPicker}
       />
     {/if}

@@ -2,11 +2,25 @@
 //!
 //! Provides system tray integration with playback controls and window management.
 
+use image::GenericImageView;
 use tauri::{
+    image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Emitter, Manager,
 };
+
+// Embed tray icon at compile time (transparent background)
+const TRAY_ICON_PNG: &[u8] = include_bytes!("../icons/tray.png");
+
+/// Decode PNG and convert to RGBA for Tauri Image
+fn load_tray_icon() -> Image<'static> {
+    let img = image::load_from_memory(TRAY_ICON_PNG)
+        .expect("Failed to decode tray icon PNG");
+    let (width, height) = img.dimensions();
+    let rgba = img.into_rgba8().into_raw();
+    Image::new_owned(rgba, width, height)
+}
 
 /// Initialize the system tray icon with menu
 pub fn init_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
@@ -35,9 +49,12 @@ pub fn init_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
         ],
     )?;
 
+    // Load custom tray icon (with transparent background)
+    let tray_icon = load_tray_icon();
+
     // Build and display tray icon
     let _tray = TrayIconBuilder::new()
-        .icon(app.default_window_icon().unwrap().clone())
+        .icon(tray_icon)
         .menu(&tray_menu)
         .tooltip("QBZ - Music Player")
         .show_menu_on_left_click(false) // Left click toggles window, right click shows menu

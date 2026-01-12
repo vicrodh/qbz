@@ -1,154 +1,149 @@
 /**
- * MiniPlayer Window Management Service
+ * MiniPlayer Mode Service
  *
- * Handles creating, toggling, and controlling the MiniPlayer window.
+ * Handles switching between normal and miniplayer modes by resizing
+ * the main window instead of creating a separate window.
  */
 
-import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
+import { getCurrentWindow } from '@tauri-apps/api/window';
+import type { PhysicalSize, PhysicalPosition } from '@tauri-apps/api/window';
+import { goto } from '$app/navigation';
 
-let miniplayerWindow: WebviewWindow | null = null;
+// Miniplayer dimensions (Cider-inspired compact mode)
+const MINIPLAYER_WIDTH = 400;
+const MINIPLAYER_HEIGHT = 150;
+
+// Store original window state for restoration
+let originalSize: PhysicalSize | null = null;
+let originalPosition: PhysicalPosition | null = null;
+let originalMaximized = false;
+let isMiniplayerMode = false;
+
+// Callbacks for state management
+let onModeChangeCallback: ((isMini: boolean) => void) | null = null;
 
 /**
- * Create the MiniPlayer window
+ * Set callback for mode changes
  */
-export async function createMiniPlayer(): Promise<void> {
-  // Check if window already exists
+export function onModeChange(callback: (isMini: boolean) => void): void {
+  onModeChangeCallback = callback;
+}
+
+/**
+ * Check if currently in miniplayer mode
+ */
+export function isInMiniplayerMode(): boolean {
+  return isMiniplayerMode;
+}
+
+/**
+ * Enter miniplayer mode - resize window and navigate to miniplayer route
+ */
+export async function enterMiniplayerMode(): Promise<void> {
+  if (isMiniplayerMode) return;
+
   try {
-    const existing = await WebviewWindow.getByLabel('miniplayer');
-    if (existing) {
-      await existing.show();
-      await existing.setFocus();
-      return;
+    const window = getCurrentWindow();
+
+    // Store current window state
+    originalMaximized = await window.isMaximized();
+    originalSize = await window.innerSize();
+    originalPosition = await window.innerPosition();
+
+    console.log('[MiniPlayer] Saving original state:', {
+      size: originalSize,
+      position: originalPosition,
+      maximized: originalMaximized
+    });
+
+    // If maximized, unmaximize first
+    if (originalMaximized) {
+      await window.unmaximize();
     }
-  } catch {
-    // Window doesn't exist, proceed to create
-  }
 
-  try {
-    miniplayerWindow = new WebviewWindow('miniplayer', {
-      url: '/miniplayer',
-      title: 'QBZ MiniPlayer',
-      width: 340,
-      height: 90,
-      minWidth: 300,
-      minHeight: 80,
-      maxHeight: 120,
-      decorations: false,
-      transparent: true,
-      alwaysOnTop: true,
-      resizable: false,
-      skipTaskbar: true,
-      // Position at top-right of screen
-      x: 100,
-      y: 100,
-    });
+    // Set miniplayer dimensions
+    await window.setResizable(false);
+    await window.setSize({ type: 'Physical', width: MINIPLAYER_WIDTH, height: MINIPLAYER_HEIGHT });
+    await window.setDecorations(false);
+    await window.setAlwaysOnTop(true);
 
-    miniplayerWindow.once('tauri://created', () => {
-      console.log('[MiniPlayer] Window created successfully');
-    });
+    // Navigate to miniplayer route
+    await goto('/miniplayer');
 
-    miniplayerWindow.once('tauri://error', (e) => {
-      console.error('[MiniPlayer] Failed to create window:', e);
-    });
+    isMiniplayerMode = true;
+    onModeChangeCallback?.(true);
+
+    console.log('[MiniPlayer] Entered miniplayer mode');
   } catch (err) {
-    console.error('[MiniPlayer] Error creating window:', err);
+    console.error('[MiniPlayer] Failed to enter miniplayer mode:', err);
   }
 }
 
 /**
- * Toggle MiniPlayer visibility
+ * Exit miniplayer mode - restore original window state
  */
-export async function toggleMiniPlayer(): Promise<void> {
-  try {
-    const window = await WebviewWindow.getByLabel('miniplayer');
-    if (!window) {
-      await createMiniPlayer();
-      return;
-    }
+export async function exitMiniplayerMode(): Promise<void> {
+  if (!isMiniplayerMode) return;
 
-    const isVisible = await window.isVisible();
-    if (isVisible) {
-      await window.hide();
+  try {
+    const window = getCurrentWindow();
+
+    // Restore window properties
+    await window.setAlwaysOnTop(false);
+    await window.setDecorations(true);
+    await window.setResizable(true);
+
+    // Restore size
+    if (originalSize) {
+      await window.setSize({ type: 'Physical', width: originalSize.width, height: originalSize.height });
     } else {
-      await window.show();
-      await window.setFocus();
+      // Fallback to default size
+      await window.setSize({ type: 'Physical', width: 1280, height: 800 });
     }
+
+    // Restore position
+    if (originalPosition) {
+      await window.setPosition({ type: 'Physical', x: originalPosition.x, y: originalPosition.y });
+    }
+
+    // Restore maximized state
+    if (originalMaximized) {
+      await window.maximize();
+    }
+
+    // Navigate back to main
+    await goto('/');
+
+    isMiniplayerMode = false;
+    onModeChangeCallback?.(false);
+
+    console.log('[MiniPlayer] Exited miniplayer mode');
   } catch (err) {
-    console.error('[MiniPlayer] Error toggling:', err);
-    // Window might not exist, try creating it
-    await createMiniPlayer();
+    console.error('[MiniPlayer] Failed to exit miniplayer mode:', err);
   }
 }
 
 /**
- * Show the MiniPlayer window
+ * Toggle between normal and miniplayer modes
  */
-export async function showMiniPlayer(): Promise<void> {
-  try {
-    const window = await WebviewWindow.getByLabel('miniplayer');
-    if (!window) {
-      await createMiniPlayer();
-      return;
-    }
-    await window.show();
-    await window.setFocus();
-  } catch {
-    await createMiniPlayer();
+export async function toggleMiniplayerMode(): Promise<void> {
+  if (isMiniplayerMode) {
+    await exitMiniplayerMode();
+  } else {
+    await enterMiniplayerMode();
   }
 }
 
 /**
- * Hide the MiniPlayer window
+ * Set miniplayer always on top
  */
-export async function hideMiniPlayer(): Promise<void> {
+export async function setMiniplayerAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
+  if (!isMiniplayerMode) return;
+
   try {
-    const window = await WebviewWindow.getByLabel('miniplayer');
-    if (window) {
-      await window.hide();
-    }
+    const window = getCurrentWindow();
+    await window.setAlwaysOnTop(alwaysOnTop);
   } catch (err) {
-    console.error('[MiniPlayer] Error hiding:', err);
-  }
-}
-
-/**
- * Close the MiniPlayer window
- */
-export async function closeMiniPlayer(): Promise<void> {
-  try {
-    const window = await WebviewWindow.getByLabel('miniplayer');
-    if (window) {
-      await window.close();
-      miniplayerWindow = null;
-    }
-  } catch (err) {
-    console.error('[MiniPlayer] Error closing:', err);
-  }
-}
-
-/**
- * Check if MiniPlayer is currently visible
- */
-export async function isMiniPlayerVisible(): Promise<boolean> {
-  try {
-    const window = await WebviewWindow.getByLabel('miniplayer');
-    if (!window) return false;
-    return await window.isVisible();
-  } catch {
-    return false;
-  }
-}
-
-/**
- * Set MiniPlayer always on top
- */
-export async function setMiniPlayerAlwaysOnTop(alwaysOnTop: boolean): Promise<void> {
-  try {
-    const window = await WebviewWindow.getByLabel('miniplayer');
-    if (window) {
-      await window.setAlwaysOnTop(alwaysOnTop);
-    }
-  } catch (err) {
-    console.error('[MiniPlayer] Error setting always on top:', err);
+    console.error('[MiniPlayer] Failed to set always on top:', err);
   }
 }
