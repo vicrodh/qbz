@@ -208,61 +208,58 @@
   role="application"
   aria-label="MiniPlayer"
 >
-  <!-- Album Art - draggable -->
-  <div class="artwork-section" onmousedown={startDrag}>
-    {#if playerState.currentTrack?.artwork}
-      <img src={playerState.currentTrack.artwork} alt="Album art" class="artwork" />
-    {:else}
-      <div class="artwork-placeholder">
-        <Play size={24} />
-      </div>
-    {/if}
-  </div>
+  <!-- Top Section: Artwork + Info + Restore -->
+  <div class="top-section">
+    <!-- Album Art -->
+    <div class="artwork-section" onmousedown={startDrag}>
+      {#if playerState.currentTrack?.artwork}
+        <img src={playerState.currentTrack.artwork} alt="Album art" class="artwork" />
+      {:else}
+        <div class="artwork-placeholder">
+          <Play size={24} />
+        </div>
+      {/if}
+    </div>
 
-  <!-- Main Content -->
-  <div class="content-section">
-    <!-- Header: Track info + window controls -->
-    <div class="header">
+    <!-- Track Info + Restore Button -->
+    <div class="info-section">
+      <button class="restore-btn" onclick={handleRestore} title="Restore">
+        <Maximize2 size={14} />
+      </button>
       <div class="track-info" onmousedown={startDrag}>
         <div class="title">{playerState.currentTrack?.title ?? 'No track'}</div>
-        <div class="artist">{playerState.currentTrack?.artist ?? '—'}</div>
-      </div>
-      <div class="window-controls">
-        <button class="window-btn" onclick={togglePin} title={isPinned ? 'Unpin' : 'Pin'}>
-          {#if isPinned}
-            <Pin size={12} />
-          {:else}
-            <PinOff size={12} />
+        <div class="artist-album">
+          {playerState.currentTrack?.artist ?? '—'}
+          {#if playerState.currentTrack?.album}
+            <span class="separator">—</span>
+            <span class="album">{playerState.currentTrack.album}</span>
           {/if}
-        </button>
-        <button class="window-btn restore" onclick={handleRestore} title="Restore">
-          <Maximize2 size={12} />
-        </button>
-      </div>
-    </div>
-
-    <!-- Progress Bar -->
-    <div class="progress-section">
-      <span class="time">{formatTime(playerState.currentTime)}</span>
-      <div
-        class="progress-bar"
-        bind:this={progressRef}
-        onmousedown={handleProgressMouseDown}
-        role="slider"
-        tabindex="0"
-        aria-valuenow={playerState.currentTime}
-        aria-valuemin={0}
-        aria-valuemax={playerState.duration}
-      >
-        <div class="progress-track">
-          <div class="progress-fill" style="width: {progress}%"></div>
         </div>
       </div>
-      <span class="time">-{formatTime(Math.max(0, playerState.duration - playerState.currentTime))}</span>
     </div>
+  </div>
 
-    <!-- Controls Row -->
-    <div class="controls-row">
+  <!-- Seek Bar (full width) -->
+  <div class="seek-section">
+    <div
+      class="progress-bar"
+      bind:this={progressRef}
+      onmousedown={handleProgressMouseDown}
+      role="slider"
+      tabindex="0"
+      aria-valuenow={playerState.currentTime}
+      aria-valuemin={0}
+      aria-valuemax={playerState.duration}
+    >
+      <div class="progress-track">
+        <div class="progress-fill" style="width: {progress}%"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom: Media Controls + Window Controls -->
+  <div class="bottom-section">
+    <div class="media-controls">
       <button
         class="ctrl-btn"
         class:active={isShuffle}
@@ -300,13 +297,18 @@
           <Repeat size={14} />
         {/if}
       </button>
+    </div>
 
-      <button
-        class="ctrl-btn"
-        onclick={handleOpenQueue}
-        title="Queue ({queueCount})"
-      >
+    <div class="window-controls">
+      <button class="ctrl-btn" onclick={handleOpenQueue} title="Queue ({queueCount})">
         <ListMusic size={14} />
+      </button>
+      <button class="ctrl-btn" onclick={togglePin} title={isPinned ? 'Unpin' : 'Pin'}>
+        {#if isPinned}
+          <Pin size={14} />
+        {:else}
+          <PinOff size={14} />
+        {/if}
       </button>
     </div>
   </div>
@@ -315,12 +317,16 @@
 <style>
   .miniplayer {
     display: flex;
+    flex-direction: column;
     width: 100%;
     height: 100%;
     background: transparent;
     color: white;
     user-select: none;
     overflow: hidden;
+    padding: 8px;
+    box-sizing: border-box;
+    gap: 6px;
   }
 
   .miniplayer.dragging {
@@ -331,13 +337,19 @@
     cursor: grabbing;
   }
 
+  /* Top Section: Artwork + Info */
+  .top-section {
+    display: flex;
+    flex: 1;
+    gap: 10px;
+    min-height: 0;
+  }
+
   /* Album Art */
   .artwork-section {
-    width: 110px;
+    aspect-ratio: 1;
+    height: 100%;
     flex-shrink: 0;
-    padding: 6px;
-    display: flex;
-    align-items: center;
     cursor: grab;
   }
 
@@ -359,62 +371,24 @@
     border-radius: 6px;
   }
 
-  /* Content */
-  .content-section {
+  /* Info Section */
+  .info-section {
     flex: 1;
     display: flex;
     flex-direction: column;
-    padding: 10px 12px 10px 6px;
     min-width: 0;
-    justify-content: space-between;
+    position: relative;
   }
 
-  /* Header */
-  .header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 6px;
-  }
-
-  .track-info {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    cursor: grab;
-  }
-
-  .title {
-    font-weight: 600;
-    font-size: 13px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: #fff;
-    line-height: 1.3;
-  }
-
-  .artist {
-    font-size: 11px;
-    color: rgba(255, 255, 255, 0.5);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-top: 2px;
-  }
-
-  .window-controls {
-    display: flex;
-    gap: 2px;
-    flex-shrink: 0;
-  }
-
-  .window-btn {
+  .restore-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 24px;
+    height: 24px;
     background: rgba(255, 255, 255, 0.06);
     border: none;
     color: rgba(255, 255, 255, 0.5);
@@ -423,34 +397,58 @@
     transition: all 0.15s ease;
   }
 
-  .window-btn:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: rgba(255, 255, 255, 0.9);
-  }
-
-  .window-btn.restore:hover {
+  .restore-btn:hover {
     background: rgba(99, 102, 241, 0.3);
     color: #a5b4fc;
   }
 
-  /* Progress */
-  .progress-section {
+  .track-info {
+    flex: 1;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    flex-direction: column;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+    cursor: grab;
+    padding-right: 30px;
   }
 
-  .time {
-    font-size: 9px;
-    font-family: var(--font-mono, monospace);
-    font-variant-numeric: tabular-nums;
+  .title {
+    font-weight: 600;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: #fff;
+    line-height: 1.4;
+  }
+
+  .artist-album {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
+  }
+
+  .separator {
+    margin: 0 4px;
+    opacity: 0.5;
+  }
+
+  .album {
     color: rgba(255, 255, 255, 0.4);
-    min-width: 28px;
+  }
+
+  /* Seek Bar */
+  .seek-section {
+    flex-shrink: 0;
   }
 
   .progress-bar {
-    flex: 1;
-    height: 12px;
+    width: 100%;
+    height: 14px;
     display: flex;
     align-items: center;
     cursor: pointer;
@@ -458,7 +456,7 @@
 
   .progress-track {
     width: 100%;
-    height: 3px;
+    height: 4px;
     background: rgba(255, 255, 255, 0.1);
     border-radius: 2px;
     overflow: hidden;
@@ -471,12 +469,24 @@
     transition: width 100ms linear;
   }
 
-  /* Controls */
-  .controls-row {
+  /* Bottom Section */
+  .bottom-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .media-controls {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 4px;
+    gap: 2px;
+  }
+
+  .window-controls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
   }
 
   .ctrl-btn {
@@ -507,8 +517,8 @@
   }
 
   .ctrl-btn.play {
-    width: 34px;
-    height: 34px;
+    width: 32px;
+    height: 32px;
     background: rgba(255, 255, 255, 0.1);
   }
 
