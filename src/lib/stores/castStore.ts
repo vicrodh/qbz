@@ -116,6 +116,7 @@ export async function disconnect(): Promise<void> {
   if (!state.isConnected || !state.protocol) return;
 
   try {
+    await castStop();
     switch (state.protocol) {
       case 'chromecast':
         await invoke('cast_disconnect');
@@ -297,7 +298,7 @@ export async function castSeek(positionSecs: number): Promise<void> {
         await invoke('cast_seek', { positionSecs });
         break;
       case 'dlna':
-        // DLNA seek - will implement
+        await invoke('dlna_seek', { positionSecs });
         break;
       case 'airplay':
         // AirPlay seek - not implemented

@@ -83,6 +83,7 @@
     togglePlay,
     seek as playerSeek,
     setVolume as playerSetVolume,
+    stop as stopPlayback,
     setPendingSessionRestore,
     startPolling,
     stopPolling,
@@ -531,7 +532,7 @@
         await playQueueTrack(nextTrackResult);
       } else {
         // No next track - stop playback
-        await invoke('stop_playback');
+        await stopPlayback();
         setIsPlaying(false);
         showToast('Queue ended', 'info');
       }
