@@ -8,6 +8,7 @@ use serde_json::Value;
 
 use crate::playlist_import::errors::PlaylistImportError;
 use crate::playlist_import::models::{ImportPlaylist, ImportProvider, ImportTrack};
+use crate::playlist_import::providers::ProviderCredentials;
 
 const SPOTIFY_TOKEN_URL: &str = "https://accounts.spotify.com/api/token";
 const SPOTIFY_API_BASE: &str = "https://api.spotify.com/v1";
@@ -42,8 +43,11 @@ pub fn parse_playlist_id(url: &str) -> Option<String> {
     None
 }
 
-pub async fn fetch_playlist(playlist_id: &str) -> Result<ImportPlaylist, PlaylistImportError> {
-    if let Ok(token) = get_app_token().await {
+pub async fn fetch_playlist(
+    playlist_id: &str,
+    user_creds: Option<ProviderCredentials>,
+) -> Result<ImportPlaylist, PlaylistImportError> {
+    if let Ok(token) = get_app_token(user_creds).await {
         if let Ok(playlist) = fetch_playlist_with_token(playlist_id, &token).await {
             return Ok(playlist);
         }
@@ -252,14 +256,18 @@ async fn fetch_playlist_from_embed(playlist_id: &str) -> Result<ImportPlaylist, 
     })
 }
 
-async fn get_app_token() -> Result<String, PlaylistImportError> {
-    // Try embedded credentials first, fall back to runtime env vars
-    let client_id = EMBEDDED_CLIENT_ID
-        .map(String::from)
+async fn get_app_token(user_creds: Option<ProviderCredentials>) -> Result<String, PlaylistImportError> {
+    // Priority: user-provided > embedded > runtime env vars
+    let client_id = user_creds
+        .as_ref()
+        .and_then(|c| c.client_id.clone())
+        .or_else(|| EMBEDDED_CLIENT_ID.map(String::from))
         .or_else(|| env::var("SPOTIFY_API_CLIENT_ID").ok())
         .ok_or_else(|| PlaylistImportError::MissingCredentials("SPOTIFY_API_CLIENT_ID".to_string()))?;
-    let client_secret = EMBEDDED_CLIENT_SECRET
-        .map(String::from)
+    let client_secret = user_creds
+        .as_ref()
+        .and_then(|c| c.client_secret.clone())
+        .or_else(|| EMBEDDED_CLIENT_SECRET.map(String::from))
         .or_else(|| env::var("SPOTIFY_API_CLIENT_SECRET").ok())
         .ok_or_else(|| PlaylistImportError::MissingCredentials("SPOTIFY_API_CLIENT_SECRET".to_string()))?;
 

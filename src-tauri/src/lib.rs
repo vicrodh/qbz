@@ -5,6 +5,7 @@
 
 pub mod api;
 pub mod api_cache;
+pub mod api_keys;
 pub mod cache;
 pub mod cast;
 pub mod commands;
@@ -136,6 +137,8 @@ pub fn run() {
     // Initialize audio settings state
     let audio_settings_state = config::audio_settings::AudioSettingsState::new()
         .expect("Failed to initialize audio settings");
+    // Initialize API keys state (for user-provided credentials)
+    let api_keys_state = api_keys::create_api_keys_state();
 
     // Read saved audio device setting for player initialization
     let saved_device = audio_settings_state
@@ -214,6 +217,7 @@ pub fn run() {
         .manage(api_cache_state)
         .manage(session_store_state)
         .manage(audio_settings_state)
+        .manage(api_keys_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -417,6 +421,17 @@ pub fn run() {
             config::audio_settings::set_audio_exclusive_mode,
             config::audio_settings::set_audio_dac_passthrough,
             config::audio_settings::set_audio_sample_rate,
+            // API keys commands (user-provided credentials)
+            api_keys::set_spotify_credentials,
+            api_keys::clear_spotify_credentials,
+            api_keys::has_spotify_user_credentials,
+            api_keys::set_tidal_credentials,
+            api_keys::clear_tidal_credentials,
+            api_keys::has_tidal_user_credentials,
+            api_keys::set_discogs_credentials,
+            api_keys::clear_discogs_credentials,
+            api_keys::has_discogs_user_credentials,
+            api_keys::get_embedded_credentials_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

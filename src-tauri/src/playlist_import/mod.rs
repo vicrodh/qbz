@@ -9,3 +9,4 @@ pub mod providers;
 pub use errors::PlaylistImportError;
 pub use importer::{import_public_playlist, preview_public_playlist};
 pub use models::{ImportPlaylist, ImportProvider, ImportSummary, ImportTrack, TrackMatch};
+pub use providers::ProviderCredentials;

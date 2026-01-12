@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, FolderOpen } from 'lucide-svelte';
+  import { ArrowLeft, FolderOpen, ChevronDown, ChevronRight } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import VolumeSlider from '../VolumeSlider.svelte';
@@ -136,6 +136,17 @@
   let showLastfmConfig = $state(false);
   let hasEmbeddedCredentials = $state(false);
 
+  // API Keys section state
+  let apiKeysExpanded = $state(false);
+  let spotifyClientId = $state('');
+  let spotifyClientSecret = $state('');
+  let tidalClientId = $state('');
+  let tidalClientSecret = $state('');
+  let discogsConsumerKey = $state('');
+  let discogsConsumerSecret = $state('');
+  let embeddedStatus = $state({ spotify: false, tidal: false, discogs: false, lastfm: false });
+  let apiKeysSaving = $state(false);
+
   // Load saved settings on mount
   onMount(() => {
     // Load theme
@@ -172,6 +183,9 @@
 
     // Load Last.fm state
     loadLastfmState();
+
+    // Load API keys state
+    loadApiKeysState();
   });
 
   async function loadLastfmState() {
@@ -298,6 +312,149 @@
   function handleScrobblingChange(enabled: boolean) {
     scrobbling = enabled;
     localStorage.setItem('qbz-lastfm-scrobbling', String(enabled));
+  }
+
+  // API Keys management
+  async function loadApiKeysState() {
+    try {
+      // Get embedded credentials status from backend
+      embeddedStatus = await invoke<typeof embeddedStatus>('get_embedded_credentials_status');
+
+      // Load user-provided credentials from localStorage
+      spotifyClientId = localStorage.getItem('qbz-spotify-client-id') || '';
+      spotifyClientSecret = localStorage.getItem('qbz-spotify-client-secret') || '';
+      tidalClientId = localStorage.getItem('qbz-tidal-client-id') || '';
+      tidalClientSecret = localStorage.getItem('qbz-tidal-client-secret') || '';
+      discogsConsumerKey = localStorage.getItem('qbz-discogs-consumer-key') || '';
+      discogsConsumerSecret = localStorage.getItem('qbz-discogs-consumer-secret') || '';
+
+      // Restore credentials to backend state if we have saved ones
+      if (spotifyClientId && spotifyClientSecret) {
+        await invoke('set_spotify_credentials', {
+          clientId: spotifyClientId,
+          clientSecret: spotifyClientSecret
+        });
+      }
+      if (tidalClientId && tidalClientSecret) {
+        await invoke('set_tidal_credentials', {
+          clientId: tidalClientId,
+          clientSecret: tidalClientSecret
+        });
+      }
+      if (discogsConsumerKey && discogsConsumerSecret) {
+        await invoke('set_discogs_credentials', {
+          consumerKey: discogsConsumerKey,
+          consumerSecret: discogsConsumerSecret
+        });
+      }
+    } catch (err) {
+      console.error('Failed to load API keys state:', err);
+    }
+  }
+
+  async function handleSaveSpotifyCredentials() {
+    if (!spotifyClientId || !spotifyClientSecret) return;
+    apiKeysSaving = true;
+    try {
+      await invoke('set_spotify_credentials', {
+        clientId: spotifyClientId,
+        clientSecret: spotifyClientSecret
+      });
+      localStorage.setItem('qbz-spotify-client-id', spotifyClientId);
+      localStorage.setItem('qbz-spotify-client-secret', spotifyClientSecret);
+    } catch (err) {
+      console.error('Failed to save Spotify credentials:', err);
+    } finally {
+      apiKeysSaving = false;
+    }
+  }
+
+  async function handleClearSpotifyCredentials() {
+    apiKeysSaving = true;
+    try {
+      await invoke('clear_spotify_credentials');
+      localStorage.removeItem('qbz-spotify-client-id');
+      localStorage.removeItem('qbz-spotify-client-secret');
+      spotifyClientId = '';
+      spotifyClientSecret = '';
+    } catch (err) {
+      console.error('Failed to clear Spotify credentials:', err);
+    } finally {
+      apiKeysSaving = false;
+    }
+  }
+
+  async function handleSaveTidalCredentials() {
+    if (!tidalClientId || !tidalClientSecret) return;
+    apiKeysSaving = true;
+    try {
+      await invoke('set_tidal_credentials', {
+        clientId: tidalClientId,
+        clientSecret: tidalClientSecret
+      });
+      localStorage.setItem('qbz-tidal-client-id', tidalClientId);
+      localStorage.setItem('qbz-tidal-client-secret', tidalClientSecret);
+    } catch (err) {
+      console.error('Failed to save Tidal credentials:', err);
+    } finally {
+      apiKeysSaving = false;
+    }
+  }
+
+  async function handleClearTidalCredentials() {
+    apiKeysSaving = true;
+    try {
+      await invoke('clear_tidal_credentials');
+      localStorage.removeItem('qbz-tidal-client-id');
+      localStorage.removeItem('qbz-tidal-client-secret');
+      tidalClientId = '';
+      tidalClientSecret = '';
+    } catch (err) {
+      console.error('Failed to clear Tidal credentials:', err);
+    } finally {
+      apiKeysSaving = false;
+    }
+  }
+
+  async function handleSaveDiscogsCredentials() {
+    if (!discogsConsumerKey || !discogsConsumerSecret) return;
+    apiKeysSaving = true;
+    try {
+      await invoke('set_discogs_credentials', {
+        consumerKey: discogsConsumerKey,
+        consumerSecret: discogsConsumerSecret
+      });
+      localStorage.setItem('qbz-discogs-consumer-key', discogsConsumerKey);
+      localStorage.setItem('qbz-discogs-consumer-secret', discogsConsumerSecret);
+    } catch (err) {
+      console.error('Failed to save Discogs credentials:', err);
+    } finally {
+      apiKeysSaving = false;
+    }
+  }
+
+  async function handleClearDiscogsCredentials() {
+    apiKeysSaving = true;
+    try {
+      await invoke('clear_discogs_credentials');
+      localStorage.removeItem('qbz-discogs-consumer-key');
+      localStorage.removeItem('qbz-discogs-consumer-secret');
+      discogsConsumerKey = '';
+      discogsConsumerSecret = '';
+    } catch (err) {
+      console.error('Failed to clear Discogs credentials:', err);
+    } finally {
+      apiKeysSaving = false;
+    }
+  }
+
+  // Check if any user credentials are configured
+  function hasAnyUserCredentials(): boolean {
+    return !!(
+      (spotifyClientId && spotifyClientSecret) ||
+      (tidalClientId && tidalClientSecret) ||
+      (discogsConsumerKey && discogsConsumerSecret)
+    );
   }
 
   function handleQualityChange(quality: string) {
@@ -836,6 +993,177 @@
       </button>
     </div>
   </section>
+
+  <!-- API Keys Section (collapsible) -->
+  <section class="section api-keys-section">
+    <button
+      class="section-title-btn"
+      onclick={() => apiKeysExpanded = !apiKeysExpanded}
+    >
+      {#if apiKeysExpanded}
+        <ChevronDown size={18} />
+      {:else}
+        <ChevronRight size={18} />
+      {/if}
+      <span>API Keys</span>
+      {#if hasAnyUserCredentials()}
+        <span class="keys-badge">Custom</span>
+      {/if}
+    </button>
+
+    {#if apiKeysExpanded}
+      <div class="api-keys-info">
+        <p>
+          You don't need to configure anything here unless playlist import or album artwork features stop working.
+          If you experience issues, you can provide your own API credentials to restore functionality.
+        </p>
+      </div>
+
+      <!-- Spotify -->
+      <div class="api-key-group">
+        <div class="api-key-header">
+          <span class="api-key-title">Spotify</span>
+          {#if embeddedStatus.spotify}
+            <span class="status-badge active">Active</span>
+          {:else if spotifyClientId && spotifyClientSecret}
+            <span class="status-badge custom">Custom</span>
+          {:else}
+            <span class="status-badge inactive">Not configured</span>
+          {/if}
+        </div>
+        <p class="api-key-desc">
+          Used for importing Spotify playlists.
+          <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">Create an app</a> to get credentials.
+        </p>
+        <div class="api-key-fields">
+          <input
+            type="text"
+            placeholder="Client ID"
+            bind:value={spotifyClientId}
+          />
+          <input
+            type="password"
+            placeholder="Client Secret"
+            bind:value={spotifyClientSecret}
+          />
+          <div class="api-key-actions">
+            <button
+              class="save-btn"
+              onclick={handleSaveSpotifyCredentials}
+              disabled={!spotifyClientId || !spotifyClientSecret || apiKeysSaving}
+            >
+              Save
+            </button>
+            {#if spotifyClientId || spotifyClientSecret}
+              <button
+                class="clear-btn-small"
+                onclick={handleClearSpotifyCredentials}
+                disabled={apiKeysSaving}
+              >
+                Clear
+              </button>
+            {/if}
+          </div>
+        </div>
+      </div>
+
+      <!-- Tidal -->
+      <div class="api-key-group">
+        <div class="api-key-header">
+          <span class="api-key-title">Tidal</span>
+          {#if embeddedStatus.tidal}
+            <span class="status-badge active">Active</span>
+          {:else if tidalClientId && tidalClientSecret}
+            <span class="status-badge custom">Custom</span>
+          {:else}
+            <span class="status-badge inactive">Not configured</span>
+          {/if}
+        </div>
+        <p class="api-key-desc">
+          Used for importing Tidal playlists.
+          <a href="https://developer.tidal.com/" target="_blank" rel="noopener">Register</a> to get API credentials.
+        </p>
+        <div class="api-key-fields">
+          <input
+            type="text"
+            placeholder="Client ID"
+            bind:value={tidalClientId}
+          />
+          <input
+            type="password"
+            placeholder="Client Secret"
+            bind:value={tidalClientSecret}
+          />
+          <div class="api-key-actions">
+            <button
+              class="save-btn"
+              onclick={handleSaveTidalCredentials}
+              disabled={!tidalClientId || !tidalClientSecret || apiKeysSaving}
+            >
+              Save
+            </button>
+            {#if tidalClientId || tidalClientSecret}
+              <button
+                class="clear-btn-small"
+                onclick={handleClearTidalCredentials}
+                disabled={apiKeysSaving}
+              >
+                Clear
+              </button>
+            {/if}
+          </div>
+        </div>
+      </div>
+
+      <!-- Discogs -->
+      <div class="api-key-group last">
+        <div class="api-key-header">
+          <span class="api-key-title">Discogs</span>
+          {#if embeddedStatus.discogs}
+            <span class="status-badge active">Active</span>
+          {:else if discogsConsumerKey && discogsConsumerSecret}
+            <span class="status-badge custom">Custom</span>
+          {:else}
+            <span class="status-badge inactive">Not configured</span>
+          {/if}
+        </div>
+        <p class="api-key-desc">
+          Used for fetching album artwork for local library.
+          <a href="https://www.discogs.com/settings/developers" target="_blank" rel="noopener">Create an application</a> to get credentials.
+        </p>
+        <div class="api-key-fields">
+          <input
+            type="text"
+            placeholder="Consumer Key"
+            bind:value={discogsConsumerKey}
+          />
+          <input
+            type="password"
+            placeholder="Consumer Secret"
+            bind:value={discogsConsumerSecret}
+          />
+          <div class="api-key-actions">
+            <button
+              class="save-btn"
+              onclick={handleSaveDiscogsCredentials}
+              disabled={!discogsConsumerKey || !discogsConsumerSecret || apiKeysSaving}
+            >
+              Save
+            </button>
+            {#if discogsConsumerKey || discogsConsumerSecret}
+              <button
+                class="clear-btn-small"
+                onclick={handleClearDiscogsCredentials}
+                disabled={apiKeysSaving}
+              >
+                Clear
+              </button>
+            {/if}
+          </div>
+        </div>
+      </div>
+    {/if}
+  </section>
 </div>
 
 <style>
@@ -1201,6 +1529,188 @@
   }
 
   .connect-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  /* API Keys section styles */
+  .api-keys-section {
+    padding-bottom: 16px;
+  }
+
+  .section-title-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    background: none;
+    border: none;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    padding: 0;
+    text-align: left;
+  }
+
+  .section-title-btn:hover {
+    color: var(--accent-primary);
+  }
+
+  .keys-badge {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background-color: var(--accent-primary);
+    color: white;
+    margin-left: auto;
+  }
+
+  .api-keys-info {
+    margin: 16px 0;
+    padding: 12px;
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+  }
+
+  .api-keys-info p {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .api-key-group {
+    padding: 16px 0;
+    border-bottom: 1px solid var(--bg-tertiary);
+  }
+
+  .api-key-group.last {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .api-key-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .api-key-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .status-badge {
+    font-size: 10px;
+    font-weight: 500;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .status-badge.active {
+    background-color: rgba(29, 185, 84, 0.2);
+    color: #1db954;
+  }
+
+  .status-badge.custom {
+    background-color: rgba(99, 102, 241, 0.2);
+    color: #6366f1;
+  }
+
+  .status-badge.inactive {
+    background-color: var(--bg-tertiary);
+    color: var(--text-muted);
+  }
+
+  .api-key-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0 0 12px 0;
+  }
+
+  .api-key-desc a {
+    color: var(--accent-primary);
+    text-decoration: none;
+  }
+
+  .api-key-desc a:hover {
+    text-decoration: underline;
+  }
+
+  .api-key-fields {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .api-key-fields input {
+    flex: 1;
+    min-width: 150px;
+    padding: 8px 12px;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .api-key-fields input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+  }
+
+  .api-key-fields input::placeholder {
+    color: var(--text-disabled);
+  }
+
+  .api-key-actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .save-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+    background-color: var(--accent-primary);
+    color: white;
+    border: none;
+  }
+
+  .save-btn:hover:not(:disabled) {
+    background-color: var(--accent-hover);
+  }
+
+  .save-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .clear-btn-small {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+    background: none;
+    border: 1px solid var(--text-muted);
+    color: var(--text-muted);
+  }
+
+  .clear-btn-small:hover:not(:disabled) {
+    border-color: #ff6b6b;
+    color: #ff6b6b;
+  }
+
+  .clear-btn-small:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

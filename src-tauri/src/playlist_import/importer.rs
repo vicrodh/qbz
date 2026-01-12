@@ -4,13 +4,17 @@ use crate::api::QobuzClient;
 use crate::playlist_import::errors::PlaylistImportError;
 use crate::playlist_import::match_qobuz::match_tracks;
 use crate::playlist_import::models::{ImportPlaylist, ImportSummary};
-use crate::playlist_import::providers::{detect_provider, fetch_playlist};
+use crate::playlist_import::providers::{detect_provider, fetch_playlist, ProviderCredentials};
 
 const ADD_CHUNK_SIZE: usize = 50;
 
-pub async fn preview_public_playlist(url: &str) -> Result<ImportPlaylist, PlaylistImportError> {
+pub async fn preview_public_playlist(
+    url: &str,
+    spotify_creds: Option<ProviderCredentials>,
+    tidal_creds: Option<ProviderCredentials>,
+) -> Result<ImportPlaylist, PlaylistImportError> {
     let provider = detect_provider(url)?;
-    fetch_playlist(provider).await
+    fetch_playlist(provider, spotify_creds, tidal_creds).await
 }
 
 pub async fn import_public_playlist(
@@ -18,8 +22,10 @@ pub async fn import_public_playlist(
     client: &QobuzClient,
     name_override: Option<&str>,
     is_public: bool,
+    spotify_creds: Option<ProviderCredentials>,
+    tidal_creds: Option<ProviderCredentials>,
 ) -> Result<ImportSummary, PlaylistImportError> {
-    let playlist = preview_public_playlist(url).await?;
+    let playlist = preview_public_playlist(url, spotify_creds, tidal_creds).await?;
     let matches = match_tracks(client, &playlist.tracks).await?;
 
     let mut matched_track_ids = Vec::new();

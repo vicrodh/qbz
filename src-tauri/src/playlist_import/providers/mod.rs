@@ -8,6 +8,13 @@ pub mod tidal;
 use crate::playlist_import::errors::PlaylistImportError;
 use crate::playlist_import::models::ImportPlaylist;
 
+/// User-provided credentials for a provider
+#[derive(Debug, Clone, Default)]
+pub struct ProviderCredentials {
+    pub client_id: Option<String>,
+    pub client_secret: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderKind {
     Spotify { playlist_id: String },
@@ -33,13 +40,22 @@ pub fn detect_provider(url: &str) -> Result<ProviderKind, PlaylistImportError> {
     Err(PlaylistImportError::UnsupportedProvider(url.to_string()))
 }
 
-pub async fn fetch_playlist(kind: ProviderKind) -> Result<ImportPlaylist, PlaylistImportError> {
+/// Fetch playlist with optional user-provided credentials
+pub async fn fetch_playlist(
+    kind: ProviderKind,
+    spotify_creds: Option<ProviderCredentials>,
+    tidal_creds: Option<ProviderCredentials>,
+) -> Result<ImportPlaylist, PlaylistImportError> {
     match kind {
-        ProviderKind::Spotify { playlist_id } => spotify::fetch_playlist(&playlist_id).await,
+        ProviderKind::Spotify { playlist_id } => {
+            spotify::fetch_playlist(&playlist_id, spotify_creds).await
+        }
         ProviderKind::AppleMusic { storefront, playlist_id } => {
             apple::fetch_playlist(&storefront, &playlist_id).await
         }
-        ProviderKind::Tidal { playlist_id } => tidal::fetch_playlist(&playlist_id).await,
+        ProviderKind::Tidal { playlist_id } => {
+            tidal::fetch_playlist(&playlist_id, tidal_creds).await
+        }
         ProviderKind::Deezer { playlist_id } => deezer::fetch_playlist(&playlist_id).await,
     }
 }

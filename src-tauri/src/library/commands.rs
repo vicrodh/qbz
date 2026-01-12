@@ -5,6 +5,7 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
+use crate::api_keys::ApiKeysState;
 use crate::discogs::DiscogsClient;
 use crate::library::{
     cue_to_tracks, get_artwork_cache_dir, CueParser, LibraryDatabase, LibraryScanner, LibraryStats,
@@ -584,11 +585,21 @@ pub async fn playlist_increment_play_count(
 
 // === Discogs Artwork ===
 
-/// Check if Discogs credentials are configured
+/// Check if Discogs credentials are configured (embedded or user-provided)
 #[tauri::command]
-pub fn discogs_has_credentials() -> bool {
+pub async fn discogs_has_credentials(
+    api_keys: State<'_, ApiKeysState>,
+) -> Result<bool, String> {
+    // Check user-provided credentials first
+    let keys = api_keys.lock().await;
+    if keys.discogs.is_set() {
+        return Ok(true);
+    }
+    drop(keys);
+
+    // Fall back to embedded/env credentials
     let client = DiscogsClient::new();
-    client.has_credentials()
+    Ok(client.has_credentials())
 }
 
 /// Fetch missing artwork from Discogs for albums without artwork
@@ -596,10 +607,18 @@ pub fn discogs_has_credentials() -> bool {
 #[tauri::command]
 pub async fn library_fetch_missing_artwork(
     state: State<'_, LibraryState>,
+    api_keys: State<'_, ApiKeysState>,
 ) -> Result<u32, String> {
     log::info!("Command: library_fetch_missing_artwork");
 
-    let discogs = DiscogsClient::new();
+    // Get user-provided credentials if available
+    let keys = api_keys.lock().await;
+    let discogs = DiscogsClient::with_user_credentials(
+        keys.discogs.client_id.clone(),
+        keys.discogs.client_secret.clone(),
+    );
+    drop(keys);
+
     if !discogs.has_credentials() {
         return Err("Discogs credentials not configured".to_string());
     }
@@ -641,10 +660,18 @@ pub async fn library_fetch_album_artwork(
     artist: String,
     album: String,
     state: State<'_, LibraryState>,
+    api_keys: State<'_, ApiKeysState>,
 ) -> Result<Option<String>, String> {
     log::info!("Command: library_fetch_album_artwork {} - {}", artist, album);
 
-    let discogs = DiscogsClient::new();
+    // Get user-provided credentials if available
+    let keys = api_keys.lock().await;
+    let discogs = DiscogsClient::with_user_credentials(
+        keys.discogs.client_id.clone(),
+        keys.discogs.client_secret.clone(),
+    );
+    drop(keys);
+
     if !discogs.has_credentials() {
         return Err("Discogs credentials not configured".to_string());
     }
