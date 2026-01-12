@@ -1351,6 +1351,8 @@
           onLocalTrackPlay={handleLocalTrackPlay}
           onLocalTrackPlayNext={queueLocalTrackNext}
           onLocalTrackPlayLater={queueLocalTrackLater}
+          onPlaylistUpdated={() => sidebarRef?.refreshPlaylists()}
+          onPlaylistDeleted={() => { sidebarRef?.refreshPlaylists(); navGoBack(); }}
         />
       {:else if activeView === 'favorites'}
         <FavoritesView
@@ -1602,6 +1604,31 @@
     height: calc(100vh - 136px); /* 104px NowPlayingBar + 32px TitleBar */
     overflow-y: auto;
     padding: 24px 32px;
+    padding-right: 8px;
+  }
+
+  /* Custom scrollbar - hidden by default, appears on hover/scroll */
+  .main-content::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .main-content::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .main-content::-webkit-scrollbar-thumb {
+    background: transparent;
+    border-radius: 3px;
+    transition: background 150ms ease;
+  }
+
+  .main-content:hover::-webkit-scrollbar-thumb,
+  .main-content:active::-webkit-scrollbar-thumb {
+    background: var(--text-muted);
+  }
+
+  .main-content::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
   }
 
 </style>

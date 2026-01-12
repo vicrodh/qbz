@@ -264,6 +264,7 @@
   .modal {
     width: 100%;
     max-width: 560px;
+    min-height: 420px;
     max-height: 90vh;
     overflow: hidden;
     display: flex;
@@ -299,6 +300,8 @@
     width: 26px;
     height: 26px;
     object-fit: contain;
+    filter: brightness(0) invert(1);
+    opacity: 0.9;
   }
 
   .close-btn {
@@ -374,7 +377,7 @@
   .sources-logos {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 10px;
     flex-wrap: wrap;
   }
 
@@ -391,6 +394,11 @@
     filter: drop-shadow(0 6px 14px var(--provider-color));
     opacity: 1;
     transform: translateY(-1px) scale(1.02);
+  }
+
+  /* Tidal logo is black, invert it when active for visibility */
+  .provider[data-provider="tidal"] .provider-logo.active {
+    filter: brightness(0) invert(1) drop-shadow(0 6px 14px rgba(255, 255, 255, 0.5));
   }
 
   .progress-panel {
