@@ -52,6 +52,13 @@ pub fn remove_from_queue(index: usize, state: State<'_, AppState>) -> Result<Opt
     Ok(state.queue.remove_track(index))
 }
 
+/// Move a track from one position to another in the queue
+#[tauri::command]
+pub fn move_queue_track(from_index: usize, to_index: usize, state: State<'_, AppState>) -> Result<bool, String> {
+    log::info!("Command: move_queue_track - from {} to {}", from_index, to_index);
+    Ok(state.queue.move_track(from_index, to_index))
+}
+
 /// Get current track in queue
 #[tauri::command]
 pub fn get_current_queue_track(state: State<'_, AppState>) -> Result<Option<QueueTrack>, String> {

@@ -105,6 +105,7 @@
     playQueueIndex,
     nextTrack,
     previousTrack,
+    moveQueueTrack,
     setLocalTrackIds,
     clearLocalTrackIds,
     isLocalTrack,
@@ -368,7 +369,10 @@
         artist: t.artist || selectedAlbum?.artist || 'Unknown Artist',
         album: selectedAlbum?.title || '',
         duration_secs: t.durationSeconds,
-        artwork_url: artwork || null
+        artwork_url: artwork || null,
+        hires: t.hires ?? false,
+        bit_depth: t.bitDepth ?? null,
+        sample_rate: t.samplingRate ?? null
       }));
 
       // Set the queue starting at the clicked track
@@ -484,6 +488,15 @@
     // Reset queue ended flag when playing a new track
     setQueueEnded(false);
 
+    // Determine quality string from track data
+    const quality = isLocal
+      ? 'Local'
+      : track.bit_depth && track.sample_rate
+        ? `${track.bit_depth}bit/${track.sample_rate}kHz`
+        : track.hires
+          ? 'Hi-Res'
+          : 'CD Quality';
+
     // Play track using unified service
     await playTrack({
       id: track.id,
@@ -492,7 +505,9 @@
       album: track.album,
       artwork: track.artwork_url || '',
       duration: track.duration_secs,
-      quality: isLocal ? 'Local' : 'Hi-Res',
+      quality,
+      bitDepth: track.bit_depth ?? undefined,
+      samplingRate: track.sample_rate ?? undefined,
       isLocal
     }, { isLocal, showLoadingToast: false });
   }
@@ -543,6 +558,14 @@
     }
   }
 
+  // Reorder tracks in the queue
+  async function handleQueueReorder(fromIndex: number, toIndex: number) {
+    const success = await moveQueueTrack(fromIndex, toIndex);
+    if (!success) {
+      showToast('Failed to reorder queue', 'error');
+    }
+  }
+
   // Play all tracks from album (starting from first track)
   async function handlePlayAllAlbum() {
     if (!selectedAlbum?.tracks?.length) return;
@@ -581,7 +604,10 @@
         artist: t.artist || selectedAlbum?.artist || 'Unknown Artist',
         album: selectedAlbum?.title || '',
         duration_secs: t.durationSeconds,
-        artwork_url: artwork || null
+        artwork_url: artwork || null,
+        hires: t.hires ?? false,
+        bit_depth: t.bitDepth ?? null,
+        sample_rate: t.samplingRate ?? null
       });
     }
     showToast(`Playing ${selectedAlbum.tracks.length} tracks next`, 'success');
@@ -598,7 +624,10 @@
       artist: t.artist || selectedAlbum?.artist || 'Unknown Artist',
       album: selectedAlbum?.title || '',
       duration_secs: t.durationSeconds,
-      artwork_url: artwork || null
+      artwork_url: artwork || null,
+      hires: t.hires ?? false,
+      bit_depth: t.bitDepth ?? null,
+      sample_rate: t.samplingRate ?? null
     }));
 
     const success = await addTracksToQueue(queueTracks);
@@ -735,9 +764,15 @@
   function handleDisplayTrackPlay(track: DisplayTrack): void {
     console.log('Playing display track:', track);
 
-    const quality = track.hires && track.bitDepth && track.samplingRate
+    // Determine quality string:
+    // - If we have exact bitDepth/samplingRate, show them
+    // - If hires flag is true but no exact values, show "Hi-Res"
+    // - Otherwise "CD Quality"
+    const quality = track.bitDepth && track.samplingRate
       ? `${track.bitDepth}bit/${track.samplingRate}kHz`
-      : 'CD Quality';
+      : track.hires
+        ? 'Hi-Res'
+        : 'CD Quality';
 
     // Fire-and-forget async call
     playTrack({
@@ -841,7 +876,10 @@
           artist: t.artist,
           album: t.album,
           duration_secs: t.duration_secs,
-          artwork_url: t.artwork_url
+          artwork_url: t.artwork_url,
+          hires: t.hires ?? false,
+          bit_depth: t.bit_depth ?? null,
+          sample_rate: t.sample_rate ?? null
         }));
 
         await setQueue(tracks, session.current_index ?? 0, true);
@@ -1404,6 +1442,7 @@
       onPlayTrack={handleQueueTrackPlay}
       onClearQueue={handleClearQueue}
       onSaveAsPlaylist={() => showToast('Save as playlist coming soon', 'info')}
+      onReorderTrack={handleQueueReorder}
     />
 
     <!-- Expanded Player -->

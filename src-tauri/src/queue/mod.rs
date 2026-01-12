@@ -19,6 +19,10 @@ pub struct QueueTrack {
     pub album: String,
     pub duration_secs: u64,
     pub artwork_url: Option<String>,
+    #[serde(default)]
+    pub hires: bool,
+    pub bit_depth: Option<u32>,
+    pub sample_rate: Option<f64>,
 }
 
 /// Repeat mode options
@@ -191,6 +195,34 @@ impl QueueManager {
 
         Self::regenerate_shuffle_order_internal(&mut state);
         Some(removed)
+    }
+
+    /// Move a track from one position to another
+    pub fn move_track(&self, from_index: usize, to_index: usize) -> bool {
+        let mut state = self.state.lock().unwrap();
+        if from_index >= state.tracks.len() || to_index >= state.tracks.len() || from_index == to_index {
+            return false;
+        }
+
+        let track = state.tracks.remove(from_index);
+        state.tracks.insert(to_index, track);
+
+        // Adjust current index if needed
+        if let Some(curr_idx) = state.current_index {
+            if from_index == curr_idx {
+                // The current track was moved
+                state.current_index = Some(to_index);
+            } else if from_index < curr_idx && to_index >= curr_idx {
+                // Track moved from before current to at/after current
+                state.current_index = Some(curr_idx - 1);
+            } else if from_index > curr_idx && to_index <= curr_idx {
+                // Track moved from after current to at/before current
+                state.current_index = Some(curr_idx + 1);
+            }
+        }
+
+        Self::regenerate_shuffle_order_internal(&mut state);
+        true
     }
 
     /// Get current track

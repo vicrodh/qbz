@@ -40,7 +40,10 @@ export function buildQueueTrackFromQobuz(track: QobuzTrack): BackendQueueTrack {
     artist: track.performer?.name || 'Unknown Artist',
     album: track.album?.title || '',
     duration_secs: track.duration,
-    artwork_url: artwork || null
+    artwork_url: artwork || null,
+    hires: track.hires_streamable ?? false,
+    bit_depth: track.maximum_bit_depth ?? null,
+    sample_rate: track.maximum_sampling_rate ?? null
   };
 }
 
@@ -51,7 +54,10 @@ export function buildQueueTrackFromAlbumTrack(track: Track, albumArtwork: string
     artist: track.artist || albumArtist || 'Unknown Artist',
     album: albumTitle || '',
     duration_secs: track.durationSeconds,
-    artwork_url: albumArtwork || null
+    artwork_url: albumArtwork || null,
+    hires: track.hires ?? false,
+    bit_depth: track.bitDepth ?? null,
+    sample_rate: track.samplingRate ?? null
   };
 }
 
@@ -62,19 +68,27 @@ export function buildQueueTrackFromPlaylistTrack(track: PlaylistTrack): BackendQ
     artist: track.artist || 'Unknown Artist',
     album: track.album || 'Playlist',
     duration_secs: track.durationSeconds,
-    artwork_url: track.albumArt || null
+    artwork_url: track.albumArt || null,
+    hires: track.hires ?? false,
+    bit_depth: track.bitDepth ?? null,
+    sample_rate: track.samplingRate ?? null
   };
 }
 
 export function buildQueueTrackFromLocalTrack(track: LocalLibraryTrack): BackendQueueTrack {
   const artwork = track.artwork_path ? `asset://localhost/${encodeURIComponent(track.artwork_path)}` : null;
+  // Local tracks are hi-res if bit_depth > 16 or sample_rate > 44100
+  const isHires = Boolean((track.bit_depth && track.bit_depth > 16) || (track.sample_rate && track.sample_rate > 44100));
   return {
     id: track.id,
     title: track.title,
     artist: track.artist,
     album: track.album,
     duration_secs: track.duration_secs,
-    artwork_url: artwork
+    artwork_url: artwork,
+    hires: isHires,
+    bit_depth: track.bit_depth ?? null,
+    sample_rate: track.sample_rate ?? null
   };
 }
 

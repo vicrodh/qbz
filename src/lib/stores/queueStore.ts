@@ -23,6 +23,9 @@ export interface BackendQueueTrack {
   album: string;
   duration_secs: number;
   artwork_url: string | null;
+  hires: boolean;
+  bit_depth: number | null;
+  sample_rate: number | null;
 }
 
 interface BackendQueueState {
@@ -291,6 +294,22 @@ export async function previousTrack(): Promise<BackendQueueTrack | null> {
   } catch (err) {
     console.error('Failed to get previous track:', err);
     return null;
+  }
+}
+
+/**
+ * Move a track from one position to another in the queue
+ */
+export async function moveQueueTrack(fromIndex: number, toIndex: number): Promise<boolean> {
+  try {
+    const success = await invoke<boolean>('move_queue_track', { fromIndex, toIndex });
+    if (success) {
+      await syncQueueState();
+    }
+    return success;
+  } catch (err) {
+    console.error('Failed to move queue track:', err);
+    return false;
   }
 }
 

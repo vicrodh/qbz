@@ -18,6 +18,7 @@
     onPlayTrack?: (trackId: string) => void;
     onClearQueue?: () => void;
     onSaveAsPlaylist?: () => void;
+    onReorderTrack?: (fromIndex: number, toIndex: number) => void;
   }
 
   let {
@@ -27,11 +28,16 @@
     upcomingTracks,
     onPlayTrack,
     onClearQueue,
-    onSaveAsPlaylist
+    onSaveAsPlaylist,
+    onReorderTrack
   }: Props = $props();
 
   let hoveredTrack = $state<string | null>(null);
   let searchQuery = $state('');
+
+  // Drag state
+  let draggedIndex = $state<number | null>(null);
+  let dragOverIndex = $state<number | null>(null);
 
   // Filter tracks based on search query (searches entire queue)
   const filteredTracks = $derived.by(() => {
@@ -42,6 +48,62 @@
       track.artist.toLowerCase().includes(query)
     );
   });
+
+  // Disable drag when search is active (can't reorder filtered list)
+  const canDrag = $derived(!searchQuery.trim());
+
+  function handleDragStart(e: DragEvent, index: number) {
+    if (!canDrag) {
+      e.preventDefault();
+      return;
+    }
+    draggedIndex = index;
+    // Set drag image and data
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(index));
+    }
+  }
+
+  function handleDragOver(e: DragEvent, index: number) {
+    if (!canDrag || draggedIndex === null) return;
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    dragOverIndex = index;
+  }
+
+  function handleDragLeave() {
+    dragOverIndex = null;
+  }
+
+  function handleDrop(e: DragEvent, toIndex: number) {
+    e.preventDefault();
+    if (!canDrag || draggedIndex === null || draggedIndex === toIndex) {
+      draggedIndex = null;
+      dragOverIndex = null;
+      return;
+    }
+    onReorderTrack?.(draggedIndex, toIndex);
+    draggedIndex = null;
+    dragOverIndex = null;
+  }
+
+  function handleDragEnd() {
+    draggedIndex = null;
+    dragOverIndex = null;
+  }
+
+  // Handle click only on non-drag-handle area
+  function handleTrackClick(e: MouseEvent, trackId: string) {
+    const target = e.target as HTMLElement;
+    // Don't trigger play if clicking on drag handle
+    if (target.closest('.drag-handle')) {
+      return;
+    }
+    onPlayTrack?.(trackId);
+  }
 </script>
 
 {#if isOpen}
@@ -104,15 +166,23 @@
               <div
                 class="queue-track"
                 class:hovered={hoveredTrack === track.id}
+                class:dragging={draggedIndex === originalIndex}
+                class:drag-over={dragOverIndex === originalIndex && draggedIndex !== originalIndex}
+                draggable={canDrag}
                 onmouseenter={() => (hoveredTrack = track.id)}
                 onmouseleave={() => (hoveredTrack = null)}
-                onclick={() => onPlayTrack?.(track.id)}
+                onclick={(e) => handleTrackClick(e, track.id)}
+                ondragstart={(e) => handleDragStart(e, originalIndex)}
+                ondragover={(e) => handleDragOver(e, originalIndex)}
+                ondragleave={handleDragLeave}
+                ondrop={(e) => handleDrop(e, originalIndex)}
+                ondragend={handleDragEnd}
                 role="button"
                 tabindex="0"
                 onkeydown={(e) => e.key === 'Enter' && onPlayTrack?.(track.id)}
               >
                 <!-- Drag Handle -->
-                <div class="drag-handle" class:visible={hoveredTrack === track.id}>
+                <div class="drag-handle" class:visible={hoveredTrack === track.id && canDrag}>
                   <GripVertical size={14} />
                 </div>
 
@@ -382,10 +452,30 @@
     background-color: var(--bg-tertiary);
   }
 
+  .queue-track.dragging {
+    opacity: 0.5;
+    background-color: var(--bg-tertiary);
+  }
+
+  .queue-track.drag-over {
+    border-top: 2px solid var(--accent-primary);
+    margin-top: -2px;
+  }
+
+  .queue-track[draggable="true"] {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
   .drag-handle {
     color: #666666;
     opacity: 0;
     transition: opacity 150ms ease;
+    cursor: grab;
+  }
+
+  .drag-handle:active {
+    cursor: grabbing;
   }
 
   .drag-handle.visible {

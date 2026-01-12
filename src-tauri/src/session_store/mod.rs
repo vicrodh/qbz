@@ -12,6 +12,10 @@ pub struct PersistedQueueTrack {
     pub album: String,
     pub duration_secs: u64,
     pub artwork_url: Option<String>,
+    #[serde(default)]
+    pub hires: bool,
+    pub bit_depth: Option<u32>,
+    pub sample_rate: Option<f64>,
 }
 
 /// Represents the full persisted session state
@@ -84,7 +88,10 @@ impl SessionStore {
                 artist TEXT NOT NULL,
                 album TEXT NOT NULL,
                 duration_secs INTEGER NOT NULL,
-                artwork_url TEXT
+                artwork_url TEXT,
+                hires INTEGER NOT NULL DEFAULT 0,
+                bit_depth INTEGER,
+                sample_rate REAL
             );
 
             -- Insert default row if not exists
@@ -92,6 +99,26 @@ impl SessionStore {
             VALUES (1, 0, 0.75, 0, 'off', 0, 0);
             "
         ).map_err(|e| format!("Failed to create session tables: {}", e))?;
+
+        // Migrate existing queue_tracks table to add new columns if they don't exist
+        // SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we check the schema
+        let has_hires: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('queue_tracks') WHERE name = 'hires'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !has_hires {
+            let _ = conn.execute_batch(
+                "
+                ALTER TABLE queue_tracks ADD COLUMN hires INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE queue_tracks ADD COLUMN bit_depth INTEGER;
+                ALTER TABLE queue_tracks ADD COLUMN sample_rate REAL;
+                "
+            );
+        }
 
         Ok(Self { conn })
     }
@@ -116,8 +143,8 @@ impl SessionStore {
         // Insert queue tracks
         for (pos, track) in session.queue_tracks.iter().enumerate() {
             if let Err(e) = self.conn.execute(
-                "INSERT INTO queue_tracks (position, track_id, title, artist, album, duration_secs, artwork_url)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                "INSERT INTO queue_tracks (position, track_id, title, artist, album, duration_secs, artwork_url, hires, bit_depth, sample_rate)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                 params![
                     pos as i64,
                     track.id as i64,
@@ -126,6 +153,9 @@ impl SessionStore {
                     track.album,
                     track.duration_secs as i64,
                     track.artwork_url,
+                    track.hires as i64,
+                    track.bit_depth.map(|v| v as i64),
+                    track.sample_rate,
                 ],
             ) {
                 let _ = self.conn.execute("ROLLBACK", []);
@@ -187,7 +217,7 @@ impl SessionStore {
 
         // Load queue tracks
         let mut stmt = self.conn
-            .prepare("SELECT track_id, title, artist, album, duration_secs, artwork_url FROM queue_tracks ORDER BY position")
+            .prepare("SELECT track_id, title, artist, album, duration_secs, artwork_url, hires, bit_depth, sample_rate FROM queue_tracks ORDER BY position")
             .map_err(|e| format!("Failed to prepare queue query: {}", e))?;
 
         let tracks: Vec<PersistedQueueTrack> = stmt
@@ -199,6 +229,9 @@ impl SessionStore {
                     album: row.get(3)?,
                     duration_secs: row.get::<_, i64>(4)? as u64,
                     artwork_url: row.get(5)?,
+                    hires: row.get::<_, i64>(6).unwrap_or(0) != 0,
+                    bit_depth: row.get::<_, Option<i64>>(7)?.map(|v| v as u32),
+                    sample_rate: row.get(8)?,
                 })
             })
             .map_err(|e| format!("Failed to query queue tracks: {}", e))?
