@@ -1,10 +1,9 @@
 app-id: com.blitzkriegfc.qbz
 runtime: org.freedesktop.Platform
-runtime-version: '24.08'
+runtime-version: '23.08'
 sdk: org.freedesktop.Sdk
 sdk-extensions:
-  - org.freedesktop.Sdk.Extension.node22
-  - org.freedesktop.Sdk.Extension.rust-stable
+  - org.freedesktop.Sdk.Extension.node20
 command: qbz
 finish-args:
   - --share=ipc
@@ -24,13 +23,18 @@ modules:
   - name: qbz
     buildsystem: simple
     build-options:
-      append-path: /usr/lib/sdk/node22/bin:/usr/lib/sdk/rust-stable/bin
+      append-path: /usr/lib/sdk/node20/bin
+      env:
+        CARGO_HOME: /run/build/qbz/.cargo
+        RUSTUP_HOME: /run/build/qbz/.rustup
       build-args:
         - --share=network
     build-commands:
-      - npm ci
-      - npm run build
-      - cd src-tauri && cargo build --release
+      # Install rustup and latest stable Rust (for edition2024 support)
+      - curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+      - . "$CARGO_HOME/env" && npm ci
+      - . "$CARGO_HOME/env" && npm run build
+      - . "$CARGO_HOME/env" && cd src-tauri && cargo build --release
       - install -Dm755 src-tauri/target/release/qbz-nix /app/bin/qbz
       - install -Dm644 packaging/flatpak/com.blitzkriegfc.qbz.desktop /app/share/applications/com.blitzkriegfc.qbz.desktop
       - install -Dm644 packaging/flatpak/com.blitzkriegfc.qbz.metainfo.xml /app/share/metainfo/com.blitzkriegfc.qbz.metainfo.xml
