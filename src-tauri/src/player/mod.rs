@@ -10,12 +10,14 @@
 //! Uses a dedicated audio thread since rodio's OutputStream is not Send.
 
 use std::io::{BufReader, Cursor};
+use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender, RecvTimeoutError};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use rodio::{Decoder, OutputStream, Sink, Source};
+use rodio::decoder::Mp4Type;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 
 use crate::api::{client::QobuzClient, models::Quality};
@@ -36,6 +38,46 @@ enum AudioCommand {
     Seek(u64),
     /// Reinitialize audio device (releases and re-acquires)
     ReinitDevice { device_name: Option<String> },
+}
+
+fn decode_with_fallback(
+    data: &[u8],
+) -> Result<Decoder<BufReader<Cursor<Vec<u8>>>>, rodio::decoder::DecoderError> {
+    let primary = panic::catch_unwind(AssertUnwindSafe(|| {
+        Decoder::new(BufReader::new(Cursor::new(data.to_vec())))
+    }));
+
+    match primary {
+        Ok(Ok(decoder)) => return Ok(decoder),
+        Ok(Err(err)) => {
+            log::warn!("Primary decode failed, attempting mp4 fallback: {}", err);
+        }
+        Err(_) => {
+            log::warn!("Primary decode panicked, attempting mp4 fallback");
+        }
+    }
+
+    let mp4_attempts = [Mp4Type::M4a, Mp4Type::Mp4];
+    for hint in mp4_attempts {
+        let attempt = panic::catch_unwind(AssertUnwindSafe(|| {
+            Decoder::new_mp4(BufReader::new(Cursor::new(data.to_vec())), hint)
+        }));
+
+        match attempt {
+            Ok(Ok(decoder)) => {
+                log::info!("Decoded audio using mp4 fallback ({:?})", hint);
+                return Ok(decoder);
+            }
+            Ok(Err(err)) => {
+                log::warn!("mp4 fallback ({:?}) failed: {}", hint, err);
+            }
+            Err(_) => {
+                log::warn!("mp4 fallback ({:?}) panicked", hint);
+            }
+        }
+    }
+
+    Err(rodio::decoder::DecoderError::UnrecognizedFormat)
 }
 
 /// Event payload for playback state updates
@@ -374,8 +416,7 @@ impl Player {
                         sink.set_volume(volume);
 
                         // Decode audio
-                        let cursor = Cursor::new(data);
-                        let source = match Decoder::new(BufReader::new(cursor)) {
+                        let source = match decode_with_fallback(&data) {
                             Ok(s) => s,
                             Err(e) => {
                                 log::error!("Failed to decode audio: {}", e);
@@ -469,8 +510,7 @@ impl Player {
                         sink.set_volume(volume);
 
                         // Re-decode audio
-                        let cursor = Cursor::new(audio_data.clone());
-                        let source = match Decoder::new(BufReader::new(cursor)) {
+                        let source = match decode_with_fallback(audio_data) {
                             Ok(s) => s,
                             Err(e) => {
                                 log::error!("Failed to decode audio for seek: {}", e);
