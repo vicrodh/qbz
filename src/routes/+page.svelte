@@ -1483,6 +1483,8 @@
       {:else if activeView === 'album' && selectedAlbum}
         <AlbumDetailView
           album={selectedAlbum}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
           onBack={navGoBack}
           onArtistClick={() => selectedAlbum?.artistId && handleArtistClick(selectedAlbum.artistId)}
           onTrackPlay={handleAlbumTrackPlay}
@@ -1534,6 +1536,8 @@
       {:else if activeView === 'playlist' && selectedPlaylistId}
         <PlaylistDetailView
           playlistId={selectedPlaylistId}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
           onBack={navGoBack}
           onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queuePlaylistTrackNext}

@@ -57,6 +57,8 @@
     onShareAlbumQobuz?: () => void;
     onShareAlbumSonglink?: () => void;
     downloadStateVersion?: number;
+    activeTrackId?: number | null;
+    isPlaybackActive?: boolean;
   }
 
   let {
@@ -82,10 +84,11 @@
     onDownloadAlbum,
     onShareAlbumQobuz,
     onShareAlbumSonglink,
-    downloadStateVersion
+    downloadStateVersion,
+    activeTrackId = null,
+    isPlaybackActive = false
   }: Props = $props();
 
-  let currentTrack = $state<number | null>(null);
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
   let playBtnHovered = $state(false);
@@ -212,18 +215,16 @@
           artist={track.artist}
           duration={track.duration}
           quality={track.quality}
-          isPlaying={currentTrack === track.id}
+          isPlaying={isPlaybackActive && activeTrackId === track.id}
           downloadStatus={downloadInfo.status}
           downloadProgress={downloadInfo.progress}
           onPlay={() => {
-            currentTrack = track.id;
             onTrackPlay?.(track);
           }}
           onDownload={onTrackDownload ? () => onTrackDownload(track) : undefined}
           onRemoveDownload={onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
           menuActions={{
             onPlayNow: () => {
-              currentTrack = track.id;
               onTrackPlay?.(track);
             },
             onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,

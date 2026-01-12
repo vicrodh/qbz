@@ -245,7 +245,8 @@
     width: 3px;
     background-color: var(--accent-primary);
     border-radius: 9999px;
-    animation: pulse 1s ease-in-out infinite;
+    transform-origin: bottom;
+    animation: equalize 1s ease-in-out infinite;
   }
 
   .playing-indicator .bar:nth-child(1) {
@@ -254,20 +255,22 @@
 
   .playing-indicator .bar:nth-child(2) {
     height: 16px;
-    animation-delay: 0.2s;
+    animation-delay: 0.15s;
   }
 
   .playing-indicator .bar:nth-child(3) {
     height: 10px;
-    animation-delay: 0.4s;
+    animation-delay: 0.3s;
   }
 
-  @keyframes pulse {
+  @keyframes equalize {
     0%, 100% {
-      opacity: 1;
+      transform: scaleY(0.5);
+      opacity: 0.7;
     }
     50% {
-      opacity: 0.5;
+      transform: scaleY(1);
+      opacity: 1;
     }
   }
 

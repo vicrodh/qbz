@@ -109,6 +109,8 @@
     onLocalTrackPlayLater?: (track: LocalLibraryTrack) => void;
     onPlaylistUpdated?: () => void;
     onPlaylistDeleted?: (playlistId: number) => void;
+    activeTrackId?: number | null;
+    isPlaybackActive?: boolean;
   }
 
   let {
@@ -131,7 +133,9 @@
     onLocalTrackPlayNext,
     onLocalTrackPlayLater,
     onPlaylistUpdated,
-    onPlaylistDeleted
+    onPlaylistDeleted,
+    activeTrackId = null,
+    isPlaybackActive = false
   }: Props = $props();
 
   let playlist = $state<Playlist | null>(null);
@@ -711,6 +715,11 @@
 
       {#each displayTracks as track, idx (`${track.id}-${downloadStateVersion}`)}
         {@const downloadInfo = track.isLocal ? { status: 'none' as const, progress: 0 } : (getTrackDownloadStatus?.(track.id) ?? { status: 'none' as const, progress: 0 })}
+        {@const isActiveTrack = isPlaybackActive && (
+          track.isLocal
+            ? (track.localTrackId !== undefined && activeTrackId === track.localTrackId)
+            : activeTrackId === track.id
+        )}
         <div class="track-row-wrapper" class:is-local={track.isLocal}>
           {#if track.isLocal}
             <div class="local-indicator" title="Local track">
@@ -729,6 +738,7 @@
               : track.hires
                 ? 'Hi-Res'
                 : '-'}
+            isPlaying={isActiveTrack}
             hideFavorite={track.isLocal}
             hideDownload={track.isLocal}
             downloadStatus={downloadInfo.status}
