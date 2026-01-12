@@ -1,23 +1,9 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { onMount } from 'svelte';
   import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart } from 'lucide-svelte';
+  import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
-
-  interface Album {
-    id: string;
-    title: string;
-    artwork: string;
-    year?: string;
-    quality: string;
-  }
-
-  interface Biography {
-    summary?: string;
-    content?: string;
-    source?: string;
-  }
 
   interface Track {
     id: number;
@@ -57,19 +43,12 @@
   }
 
   interface Props {
-    artist: {
-      id: number;
-      name: string;
-      image?: string;
-      albumsCount?: number;
-      biography?: Biography;
-      albums: Album[];
-      totalAlbums: number;
-    };
+    artist: ArtistDetail;
     onBack: () => void;
     onAlbumClick?: (albumId: string) => void;
     onLoadMore?: () => void;
     isLoadingMore?: boolean;
+    onPlaylistClick?: (playlistId: number) => void;
     onTrackPlay?: (track: DisplayTrack) => void;
     onTrackPlayNext?: (track: Track) => void;
     onTrackPlayLater?: (track: Track) => void;
@@ -87,6 +66,7 @@
     onAlbumClick,
     onLoadMore,
     isLoadingMore = false,
+    onPlaylistClick,
     onTrackPlay,
     onTrackPlayNext,
     onTrackPlayLater,
@@ -104,9 +84,30 @@
   let tracksLoading = $state(false);
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
+  let similarArtists = $state<QobuzArtist[]>([]);
+  let similarArtistsLoading = $state(false);
+  let similarArtistImageErrors = $state<Set<number>>(new Set());
 
-  onMount(() => {
+  interface SimilarArtistsPage {
+    items: QobuzArtist[];
+    total: number;
+    offset: number;
+    limit: number;
+  }
+
+  $effect(() => {
+    const artistId = artist.id;
+    const artistName = artist.name;
+    if (!artistId || !artistName) return;
+
+    bioExpanded = false;
+    imageError = false;
+    topTracks = [];
+    similarArtists = [];
+    similarArtistImageErrors = new Set();
+
     loadTopTracks();
+    loadSimilarArtists();
     checkFavoriteStatus();
   });
 
@@ -165,6 +166,38 @@
     } finally {
       tracksLoading = false;
     }
+  }
+
+  async function loadSimilarArtists() {
+    similarArtistsLoading = true;
+    try {
+      const results = await invoke<SimilarArtistsPage>('get_similar_artists', {
+        artistId: artist.id,
+        limit: 5,
+        offset: 0
+      });
+      similarArtists = results.items
+        .filter(item => item.id !== artist.id)
+        .slice(0, 5);
+    } catch (err) {
+      console.error('Failed to load similar artists:', err);
+      similarArtists = [];
+    } finally {
+      similarArtistsLoading = false;
+    }
+  }
+
+  function getSimilarArtistImage(similar: QobuzArtist): string {
+    return (
+      similar.image?.small ||
+      similar.image?.thumbnail ||
+      similar.image?.large ||
+      ''
+    );
+  }
+
+  function handleSimilarArtistImageError(artistId: number) {
+    similarArtistImageErrors = new Set([...similarArtistImageErrors, artistId]);
   }
 
   function formatDuration(seconds: number): string {
@@ -230,7 +263,7 @@
     bioText && bioText.length > 300 ? bioText.slice(0, 300) + '...' : bioText
   );
 
-  let hasMoreAlbums = $derived(artist.albums.length < artist.totalAlbums);
+  let hasMoreAlbums = $derived(!!onLoadMore && artist.albumsFetched < artist.totalAlbums);
 </script>
 
 <div class="artist-detail">
@@ -300,6 +333,37 @@
           {#if artist.biography?.source}
             <div class="bio-source">Source: {artist.biography.source}</div>
           {/if}
+        </div>
+      {/if}
+
+      {#if similarArtistsLoading}
+        <div class="similar-loading">Loading similar artists...</div>
+      {:else if similarArtists.length > 0}
+        <div class="similar-artists">
+          <div class="similar-title">Similar Artists</div>
+          <div class="similar-list">
+            {#each similarArtists as similar}
+              <button
+                class="similar-artist"
+                onclick={() => onTrackGoToArtist?.(similar.id)}
+                title={similar.name}
+              >
+                {#if similarArtistImageErrors.has(similar.id) || !getSimilarArtistImage(similar)}
+                  <span class="similar-avatar placeholder">
+                    <User size={12} />
+                  </span>
+                {:else}
+                  <img
+                    src={getSimilarArtistImage(similar)}
+                    alt={similar.name}
+                    class="similar-avatar"
+                    onerror={() => handleSimilarArtistImageError(similar.id)}
+                  />
+                {/if}
+                <span class="similar-name">{similar.name}</span>
+              </button>
+            {/each}
+          </div>
         </div>
       {/if}
     </div>
@@ -396,12 +460,90 @@
             onclick={onLoadMore}
             disabled={isLoadingMore}
           >
-            {isLoadingMore ? 'Loading...' : `Load More (${artist.albums.length} of ${artist.totalAlbums})`}
+            {isLoadingMore ? 'Loading...' : `Load More (${artist.albumsFetched} of ${artist.totalAlbums})`}
           </button>
         </div>
       {/if}
     {/if}
   </div>
+
+  {#if artist.epsSingles.length > 0}
+    <div class="divider"></div>
+
+    <div class="discography">
+      <h2 class="section-title">EPs & Singles</h2>
+      <div class="albums-grid">
+        {#each artist.epsSingles as album}
+          <AlbumCard
+            artwork={album.artwork}
+            title={album.title}
+            artist={album.year || ''}
+            quality={album.quality}
+            onclick={() => onAlbumClick?.(album.id)}
+          />
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if artist.compilations.length > 0}
+    <div class="divider"></div>
+
+    <div class="discography">
+      <h2 class="section-title">Compilations</h2>
+      <div class="albums-grid">
+        {#each artist.compilations as album}
+          <AlbumCard
+            artwork={album.artwork}
+            title={album.title}
+            artist={album.year || ''}
+            quality={album.quality}
+            onclick={() => onAlbumClick?.(album.id)}
+          />
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if artist.playlists.length > 0}
+    <div class="divider"></div>
+
+    <div class="playlists-section">
+      <h2 class="section-title">Playlists</h2>
+      <div class="playlists-grid">
+        {#each artist.playlists as playlist}
+          <button
+            class="playlist-card"
+            onclick={() => onPlaylistClick?.(playlist.id)}
+            disabled={!onPlaylistClick}
+          >
+            <div class="playlist-artwork">
+              {#if playlist.artwork}
+                <img src={playlist.artwork} alt={playlist.title} />
+              {:else}
+                <div class="playlist-artwork-placeholder">
+                  <Music size={18} />
+                </div>
+              {/if}
+            </div>
+            <div class="playlist-info">
+              <div class="playlist-title">{playlist.title}</div>
+              <div class="playlist-meta">
+                {#if playlist.trackCount}
+                  {playlist.trackCount} tracks
+                {:else}
+                  Playlist
+                {/if}
+                {#if playlist.owner}
+                  · {playlist.owner}
+                {/if}
+              </div>
+            </div>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -567,6 +709,70 @@
     margin-top: 8px;
   }
 
+  .similar-artists {
+    margin-top: 16px;
+  }
+
+  .similar-title {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .similar-loading {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 8px;
+  }
+
+  .similar-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .similar-artist {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 16px;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .similar-artist:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .similar-avatar {
+    width: 25px;
+    height: 25px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .similar-avatar.placeholder {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-tertiary);
+    color: var(--text-muted);
+  }
+
+  .similar-name {
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .divider {
     height: 1px;
     background-color: var(--bg-tertiary);
@@ -589,6 +795,80 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 24px;
+  }
+
+  .playlists-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 16px;
+  }
+
+  .playlist-card {
+    display: flex;
+    gap: 12px;
+    padding: 10px;
+    border-radius: 10px;
+    border: 1px solid var(--bg-tertiary);
+    background-color: var(--bg-tertiary);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 150ms ease, border-color 150ms ease;
+  }
+
+  .playlist-card:hover:not(:disabled) {
+    background-color: var(--bg-hover);
+    border-color: var(--bg-hover);
+  }
+
+  .playlist-card:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .playlist-artwork {
+    width: 56px;
+    height: 56px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .playlist-artwork img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .playlist-artwork-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: var(--bg-secondary);
+    color: var(--text-muted);
+  }
+
+  .playlist-info {
+    min-width: 0;
+  }
+
+  .playlist-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .playlist-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .load-more-container {

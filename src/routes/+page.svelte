@@ -134,7 +134,8 @@
   import {
     convertQobuzAlbum,
     convertQobuzArtist,
-    formatDuration
+    formatDuration,
+    appendArtistAlbums
   } from '$lib/adapters/qobuzAdapters';
 
   // Services
@@ -236,6 +237,7 @@
   // Album and Artist data are fetched, so kept local
   let selectedAlbum = $state<AlbumDetail | null>(null);
   let selectedArtist = $state<ArtistDetail | null>(null);
+  let isArtistAlbumsLoading = $state(false);
 
   // Overlay States (from uiStore subscription)
   let isQueueOpen = $state(false);
@@ -305,7 +307,7 @@
   async function handleArtistClick(artistId: number) {
     try {
       showToast('Loading artist...', 'info');
-      const artist = await invoke<QobuzArtist>('get_artist', { artistId });
+      const artist = await invoke<QobuzArtist>('get_artist_detail', { artistId });
       console.log('Artist details:', artist);
 
       selectedArtist = convertQobuzArtist(artist);
@@ -314,6 +316,43 @@
     } catch (err) {
       console.error('Failed to load artist:', err);
       showToast('Failed to load artist', 'error');
+    }
+  }
+
+  interface ArtistAlbumsResponse {
+    items: QobuzAlbum[];
+    total: number;
+    offset: number;
+    limit: number;
+  }
+
+  async function loadMoreArtistAlbums() {
+    if (!selectedArtist || isArtistAlbumsLoading) return;
+
+    const offset = selectedArtist.albumsFetched || 0;
+    if (offset >= selectedArtist.totalAlbums) return;
+
+    isArtistAlbumsLoading = true;
+    try {
+      const result = await invoke<ArtistAlbumsResponse>('get_artist_albums', {
+        artistId: selectedArtist.id,
+        limit: 50,
+        offset
+      });
+
+      if (result.items.length === 0) return;
+
+      selectedArtist = appendArtistAlbums(
+        selectedArtist,
+        result.items,
+        result.total,
+        result.offset + result.items.length
+      );
+    } catch (err) {
+      console.error('Failed to load more artist albums:', err);
+      showToast('Failed to load more albums', 'error');
+    } finally {
+      isArtistAlbumsLoading = false;
     }
   }
 
@@ -1314,6 +1353,8 @@
           artist={selectedArtist}
           onBack={navGoBack}
           onAlbumClick={handleAlbumClick}
+          onLoadMore={loadMoreArtistAlbums}
+          isLoadingMore={isArtistAlbumsLoading}
           onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queueQobuzTrackNext}
           onTrackPlayLater={queueQobuzTrackLater}
@@ -1323,6 +1364,7 @@
           onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
+          onPlaylistClick={selectPlaylist}
         />
       {:else if activeView === 'library'}
         <LocalLibraryView
