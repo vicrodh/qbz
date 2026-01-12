@@ -215,6 +215,7 @@
   import PlaylistDetailView from '$lib/components/views/PlaylistDetailView.svelte';
   import FavoritesView from '$lib/components/views/FavoritesView.svelte';
   import LocalLibraryView from '$lib/components/views/LocalLibraryView.svelte';
+  import PlaylistManagerView from '$lib/components/views/PlaylistManagerView.svelte';
 
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
@@ -1242,6 +1243,7 @@
       onPlaylistSelect={selectPlaylist}
       onCreatePlaylist={openCreatePlaylist}
       onImportPlaylist={openImportPlaylist}
+      onPlaylistManagerClick={() => navigateTo('playlist-manager')}
       onSettingsClick={() => navigateTo('settings')}
       onAboutClick={() => isAboutModalOpen = true}
       onLogout={handleLogout}
@@ -1367,6 +1369,11 @@
           onTrackRemoveDownload={handleTrackRemoveDownload}
           getTrackDownloadStatus={getTrackDownloadStatus}
           {downloadStateVersion}
+        />
+      {:else if activeView === 'playlist-manager'}
+        <PlaylistManagerView
+          onBack={navGoBack}
+          onPlaylistSelect={selectPlaylist}
         />
       {/if}
     </main>
