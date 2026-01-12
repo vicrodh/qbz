@@ -58,29 +58,11 @@
       </button>
     </div>
 
-    <!-- Search Bar -->
-    {#if upcomingTracks.length > 0}
-      <div class="search-container">
-        <Search size={14} class="search-icon" />
-        <input
-          type="text"
-          placeholder="Search in queue..."
-          bind:value={searchQuery}
-          class="search-input"
-        />
-        {#if searchQuery}
-          <button class="search-clear" onclick={() => searchQuery = ''}>
-            <X size={12} />
-          </button>
-        {/if}
-      </div>
-    {/if}
-
-    <!-- Content -->
+    <!-- Content with isolated scroll -->
     <div class="content">
       <!-- Now Playing -->
       {#if currentTrack}
-        <div class="section">
+        <div class="section now-playing-section">
           <div class="section-header">Now Playing</div>
           <div class="now-playing-card">
             <img src={currentTrack.artwork} alt={currentTrack.title} />
@@ -89,6 +71,24 @@
               <div class="track-artist">{currentTrack.artist}</div>
             </div>
           </div>
+        </div>
+      {/if}
+
+      <!-- Search Bar (below Now Playing) -->
+      {#if upcomingTracks.length > 0}
+        <div class="search-container">
+          <Search size={14} class="search-icon" />
+          <input
+            type="text"
+            placeholder="Search in queue..."
+            bind:value={searchQuery}
+            class="search-input"
+          />
+          {#if searchQuery}
+            <button class="search-clear" onclick={() => searchQuery = ''}>
+              <X size={12} />
+            </button>
+          {/if}
         </div>
       {/if}
 
@@ -232,7 +232,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 12px 16px;
+    margin-bottom: 16px;
     padding: 8px 10px;
     background-color: var(--bg-tertiary);
     border-radius: 6px;
@@ -275,12 +275,36 @@
   .content {
     flex: 1;
     overflow-y: auto;
+    overflow-x: hidden;
     padding: 12px 16px;
     min-height: 0;
+    overscroll-behavior: contain; /* Prevent scroll chaining to parent */
+  }
+
+  /* Fancy scrollbar */
+  .content::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .content::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .content::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+  }
+
+  .content::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
   }
 
   .section {
-    margin-bottom: 20px;
+    margin-bottom: 16px;
+  }
+
+  .now-playing-section {
+    flex-shrink: 0;
   }
 
   .next-up-section {
