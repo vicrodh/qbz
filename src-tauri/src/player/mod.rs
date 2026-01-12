@@ -103,9 +103,11 @@ fn decode_with_symphonia(data: &[u8]) -> Result<SamplesBuffer<i16>, String> {
         .format
         .default_track()
         .ok_or_else(|| "Symphonia: no supported audio tracks".to_string())?;
+    let track_id = track.id;
+    let codec_params = track.codec_params.clone();
 
     let mut decoder = get_codecs()
-        .make(&track.codec_params, &DecoderOptions::default())
+        .make(&codec_params, &DecoderOptions::default())
         .map_err(|err| format!("Symphonia decoder init failed: {}", err))?;
 
     let mut sample_rate = 0;
@@ -119,7 +121,7 @@ fn decode_with_symphonia(data: &[u8]) -> Result<SamplesBuffer<i16>, String> {
             Err(err) => return Err(format!("Symphonia read error: {}", err)),
         };
 
-        if packet.track_id() != track.id {
+        if packet.track_id() != track_id {
             continue;
         }
 
