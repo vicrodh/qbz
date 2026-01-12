@@ -1,6 +1,6 @@
 # QBZ Launch Roadmap
 
-> Last updated: 2026-01-11
+> Last updated: 2026-01-12
 
 ## Overview
 
@@ -10,19 +10,25 @@
 
 ## 1. Session Persistence
 
-**Status:** Partially Working
+**Status:** Completed
 
 **Description:** Remember playback state, queue, and position when restarting the app.
 
-**Current State:**
-- Basic implementation exists but inconsistent
-- Sometimes restores session, sometimes doesn't
+**Implemented Features:**
+- [x] SQLite-based session storage (~/.local/share/qbz-nix/session.db)
+- [x] Position saved every 5 seconds during playback (debounced)
+- [x] Full session save every 30 seconds during playback
+- [x] Immediate save on pause
+- [x] Volume changes persisted immediately
+- [x] Shuffle/repeat mode changes persisted immediately
+- [x] Queue and current track restored on login
+- [x] Playback position restored accurately
 
-**TODO:**
-- [ ] Debug why persistence is inconsistent
-- [ ] Ensure queue is always saved on app close
-- [ ] Restore playback position accurately
-- [ ] Handle edge cases (empty queue, corrupted state file)
+**Fixed Issues (2026-01-12):**
+- Fixed race condition in beforeunload (async save might not complete)
+- Enabled debouncedSavePosition() which was imported but never called
+- Added periodic full session save during playback
+- Position now saved frequently enough that app crash loses max 5-30 seconds
 
 ---
 
