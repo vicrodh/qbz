@@ -120,12 +120,19 @@ pub async fn dlna_play_track(
     };
 
     // Register with media server to get a URL the DLNA device can access
+    let target_ip = {
+        let connection = dlna_state.connection.lock().await;
+        connection.as_ref().map(|conn| conn.device_ip().to_string())
+    };
+
     let url = {
         let mut server = dlna_state.media_server.lock().await;
         server.register_audio(track_id, audio_data, &content_type);
-        server
-            .get_audio_url(track_id)
-            .ok_or_else(|| "Failed to build media URL".to_string())?
+        let url = match target_ip.as_deref() {
+            Some(ip) => server.get_audio_url_for_target(track_id, ip),
+            None => server.get_audio_url(track_id),
+        };
+        url.ok_or_else(|| "Failed to build media URL".to_string())?
     };
 
     // Load media on DLNA device

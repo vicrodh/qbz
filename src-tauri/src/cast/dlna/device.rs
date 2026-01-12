@@ -102,6 +102,10 @@ impl DlnaConnection {
         }
     }
 
+    pub fn device_ip(&self) -> &str {
+        &self.device.ip
+    }
+
     /// Set the media URI and start playback
     pub async fn load_media(&mut self, uri: &str, metadata: &DlnaMetadata) -> Result<(), DlnaError> {
         if !self.connected {

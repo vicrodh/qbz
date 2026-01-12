@@ -3,7 +3,7 @@
 use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
-use std::net::{SocketAddr, UdpSocket};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -48,8 +48,8 @@ impl MediaServer {
             .map(|addr| addr.port())
             .ok_or_else(|| CastError::Server("Failed to determine HTTP port".to_string()))?;
 
-        let base_ip = local_ip().unwrap_or_else(|| "127.0.0.1".to_string());
-        let base_url = format!("http://{}:{}", base_ip, port);
+        let base_ip = local_ip().unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
+        let base_url = format_base_url(base_ip, port);
 
         let entries = Arc::new(Mutex::new(HashMap::new()));
         let shutdown = Arc::new(AtomicBool::new(false));
@@ -143,6 +143,20 @@ impl MediaServer {
             return Some(format!("{}/audio/{}", self.base_url, id));
         }
         None
+    }
+
+    /// Get full URL for registered audio using the local IP that can reach target_ip.
+    pub fn get_audio_url_for_target(&self, id: u64, target_ip: &str) -> Option<String> {
+        let entries = self.entries.lock().ok()?;
+        if !entries.contains_key(&id) {
+            return None;
+        }
+
+        let base_url = local_ip_for_target(target_ip)
+            .map(|ip| format_base_url(ip, self.port))
+            .unwrap_or_else(|| self.base_url.clone());
+
+        Some(format!("{}/audio/{}", base_url, id))
     }
 
     /// Get server port
@@ -280,12 +294,24 @@ fn header(name: &str, value: &str) -> Header {
     Header::from_bytes(name, value).unwrap()
 }
 
-fn local_ip() -> Option<String> {
+fn local_ip() -> Option<IpAddr> {
     let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
     socket.connect("8.8.8.8:80").ok()?;
-    match socket.local_addr().ok()? {
-        SocketAddr::V4(addr) => Some(addr.ip().to_string()),
-        SocketAddr::V6(addr) => Some(addr.ip().to_string()),
+    socket.local_addr().ok().map(|addr| addr.ip())
+}
+
+fn local_ip_for_target(target_ip: &str) -> Option<IpAddr> {
+    let ip: IpAddr = target_ip.parse().ok()?;
+    let bind_addr = if ip.is_ipv4() { "0.0.0.0:0" } else { "[::]:0" };
+    let socket = UdpSocket::bind(bind_addr).ok()?;
+    socket.connect(SocketAddr::new(ip, 80)).ok()?;
+    socket.local_addr().ok().map(|addr| addr.ip())
+}
+
+fn format_base_url(ip: IpAddr, port: u16) -> String {
+    match ip {
+        IpAddr::V4(addr) => format!("http://{}:{}", addr, port),
+        IpAddr::V6(addr) => format!("http://[{}]:{}", addr, port),
     }
 }
 
