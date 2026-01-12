@@ -10,9 +10,9 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { goto } from '$app/navigation';
 
-// Miniplayer dimensions (with 4px margin on each side)
-const MINIPLAYER_WIDTH = 408;  // 400 content + 8px total margin
-const MINIPLAYER_HEIGHT = 158; // 150 content + 8px total margin
+// Miniplayer dimensions (with 8px margin on each side)
+const MINIPLAYER_WIDTH = 300;
+const MINIPLAYER_HEIGHT = 140;
 
 // LocalStorage key for persisting window state
 const STORAGE_KEY = 'miniplayer_original_state';

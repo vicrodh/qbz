@@ -19,16 +19,16 @@
   :global(html, body) {
     margin: 0;
     padding: 0;
-    background: #0f0f12 !important;
+    background: transparent !important;
     overflow: hidden;
   }
 
   .miniplayer-layout {
     width: 100vw;
     height: 100vh;
-    background: #0f0f12;
+    background: transparent;
     overflow: hidden;
-    padding: 4px;
+    padding: 8px;
     box-sizing: border-box;
   }
 
@@ -38,6 +38,6 @@
     background: #18181b;
     border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.6);
   }
 </style>
