@@ -59,20 +59,21 @@ fn decode_with_fallback(
 
     let mp4_attempts = [Mp4Type::M4a, Mp4Type::Mp4];
     for hint in mp4_attempts {
+        let hint_label = format!("{:?}", hint);
         let attempt = panic::catch_unwind(AssertUnwindSafe(|| {
             Decoder::new_mp4(BufReader::new(Cursor::new(data.to_vec())), hint)
         }));
 
         match attempt {
             Ok(Ok(decoder)) => {
-                log::info!("Decoded audio using mp4 fallback ({:?})", hint);
+                log::info!("Decoded audio using mp4 fallback ({})", hint_label);
                 return Ok(decoder);
             }
             Ok(Err(err)) => {
-                log::warn!("mp4 fallback ({:?}) failed: {}", hint, err);
+                log::warn!("mp4 fallback ({}) failed: {}", hint_label, err);
             }
             Err(_) => {
-                log::warn!("mp4 fallback ({:?}) panicked", hint);
+                log::warn!("mp4 fallback ({}) panicked", hint_label);
             }
         }
     }
