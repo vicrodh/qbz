@@ -105,11 +105,23 @@ jobs:
         run: npm run tauri build -- --bundles deb,rpm,appimage
 
       - name: Collect artifacts
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
           mkdir -p dist
           cp -v src-tauri/target/release/bundle/deb/*.deb dist/ || true
           cp -v src-tauri/target/release/bundle/rpm/*.rpm dist/ || true
           cp -v src-tauri/target/release/bundle/appimage/*.AppImage dist/ || true
+
+          # Create tarball for AUR
+          TARBALL_DIR="qbz_${VERSION:-0.0.0}_amd64"
+          mkdir -p "$TARBALL_DIR/icons/hicolor"
+          cp src-tauri/target/release/qbz-nix "$TARBALL_DIR/qbz"
+          cp packaging/flatpak/com.blitzkriegfc.qbz.desktop "$TARBALL_DIR/qbz.desktop"
+          cp -r src-tauri/icons/* "$TARBALL_DIR/icons/hicolor/" 2>/dev/null || true
+          tar -czvf "dist/qbz_${VERSION:-0.0.0}_amd64.tar.gz" "$TARBALL_DIR"
+          rm -rf "$TARBALL_DIR"
+
           ls -la dist
 
       - name: Upload artifacts
