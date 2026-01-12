@@ -113,12 +113,16 @@ jobs:
           cp -v src-tauri/target/release/bundle/rpm/*.rpm dist/ || true
           cp -v src-tauri/target/release/bundle/appimage/*.AppImage dist/ || true
 
-          # Create tarball for AUR
+          # Create tarball for AUR with freedesktop icon structure
           TARBALL_DIR="qbz_${VERSION:-0.0.0}_amd64"
-          mkdir -p "$TARBALL_DIR/icons/hicolor"
+          mkdir -p "$TARBALL_DIR/icons/hicolor"/{32x32,48x48,64x64,128x128,256x256}/apps
           cp src-tauri/target/release/qbz-nix "$TARBALL_DIR/qbz"
           cp packaging/flatpak/com.blitzkriegfc.qbz.desktop "$TARBALL_DIR/qbz.desktop"
-          cp -r src-tauri/icons/* "$TARBALL_DIR/icons/hicolor/" 2>/dev/null || true
+          cp src-tauri/icons/32x32.png "$TARBALL_DIR/icons/hicolor/32x32/apps/qbz.png"
+          cp src-tauri/icons/48x48.png "$TARBALL_DIR/icons/hicolor/48x48/apps/qbz.png"
+          cp src-tauri/icons/64x64.png "$TARBALL_DIR/icons/hicolor/64x64/apps/qbz.png"
+          cp src-tauri/icons/128x128.png "$TARBALL_DIR/icons/hicolor/128x128/apps/qbz.png"
+          cp src-tauri/icons/256x256.png "$TARBALL_DIR/icons/hicolor/256x256/apps/qbz.png"
           tar -czvf "dist/qbz_${VERSION:-0.0.0}_amd64.tar.gz" "$TARBALL_DIR"
           rm -rf "$TARBALL_DIR"
 
