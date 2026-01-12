@@ -933,6 +933,7 @@
       showToast('Playlist created', 'success');
     }
     sidebarRef?.refreshPlaylists();
+    sidebarRef?.refreshPlaylistSettings();
   }
 
   function openImportPlaylist() {
@@ -941,6 +942,7 @@
 
   function handlePlaylistImported(summary: { qobuz_playlist_id?: number | null }) {
     sidebarRef?.refreshPlaylists();
+    sidebarRef?.refreshPlaylistSettings();
     if (summary.qobuz_playlist_id) {
       selectPlaylist(summary.qobuz_playlist_id);
     }

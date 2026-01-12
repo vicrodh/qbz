@@ -215,6 +215,10 @@
     loadUserPlaylists();
   }
 
+  export function refreshPlaylistSettings() {
+    loadPlaylistSettings();
+  }
+
   // Menu handling functions
   function closeMenu() {
     menuOpen = false;
