@@ -138,6 +138,13 @@ export interface ArtistDetail {
     year?: string;
     quality: string;
   }[];
+  liveAlbums: {
+    id: string;
+    title: string;
+    artwork: string;
+    year?: string;
+    quality: string;
+  }[];
   compilations: {
     id: string;
     title: string;

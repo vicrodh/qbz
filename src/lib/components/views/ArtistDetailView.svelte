@@ -92,6 +92,7 @@
   let topTracksSection = $state<HTMLDivElement | null>(null);
   let discographySection = $state<HTMLDivElement | null>(null);
   let epsSinglesSection = $state<HTMLDivElement | null>(null);
+  let liveAlbumsSection = $state<HTMLDivElement | null>(null);
   let compilationsSection = $state<HTMLDivElement | null>(null);
   let playlistsSection = $state<HTMLDivElement | null>(null);
   let activeJumpSection = $state('about');
@@ -276,6 +277,7 @@
   let hasMoreAlbums = $derived(!!onLoadMore && artist.albumsFetched < artist.totalAlbums);
   let hasTopTracks = $derived(topTracks.length > 0 || tracksLoading);
   let hasEpsSingles = $derived(artist.epsSingles.length > 0);
+  let hasLiveAlbums = $derived(artist.liveAlbums.length > 0);
   let hasCompilations = $derived(artist.compilations.length > 0);
   let hasPlaylists = $derived(artist.playlists.length > 0);
   let jumpSections = $derived.by(() => [
@@ -283,6 +285,7 @@
     { id: 'popular', label: 'Popular Tracks', el: topTracksSection, visible: hasTopTracks },
     { id: 'discography', label: 'Discography', el: discographySection, visible: true },
     { id: 'eps', label: 'EPs & Singles', el: epsSinglesSection, visible: hasEpsSingles },
+    { id: 'live', label: 'Live Albums', el: liveAlbumsSection, visible: hasLiveAlbums },
     { id: 'compilations', label: 'Compilations', el: compilationsSection, visible: hasCompilations },
     { id: 'playlists', label: 'Playlists', el: playlistsSection, visible: hasPlaylists },
   ].filter(section => section.visible));
@@ -565,6 +568,25 @@
       <h2 class="section-title">EPs & Singles</h2>
       <div class="albums-grid">
         {#each artist.epsSingles as album}
+          <AlbumCard
+            artwork={album.artwork}
+            title={album.title}
+            artist={album.year || ''}
+            quality={album.quality}
+            onclick={() => onAlbumClick?.(album.id)}
+          />
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if artist.liveAlbums.length > 0}
+    <div class="divider"></div>
+
+    <div class="discography section-anchor" bind:this={liveAlbumsSection}>
+      <h2 class="section-title">Live Albums</h2>
+      <div class="albums-grid">
+        {#each artist.liveAlbums as album}
           <AlbumCard
             artwork={album.artwork}
             title={album.title}
