@@ -4,15 +4,19 @@
  * Manages toast notifications across the app with auto-hide and queue support.
  */
 
-export type ToastType = 'success' | 'error' | 'info';
+export type ToastType = 'success' | 'error' | 'info' | 'buffering';
 
 export interface Toast {
   message: string;
   type: ToastType;
+  persistent?: boolean;
 }
 
 // Current toast state
 let currentToast: Toast | null = null;
+
+// Track buffering toast specifically so we can dismiss it
+let bufferingToastActive = false;
 
 // Auto-hide timeout
 let hideTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -28,9 +32,16 @@ export function getToast(): Toast | null {
 }
 
 /**
+ * Check if buffering toast is active
+ */
+export function isBufferingActive(): boolean {
+  return bufferingToastActive;
+}
+
+/**
  * Show a toast notification
  * @param message The message to display
- * @param type The type of toast (success, error, info)
+ * @param type The type of toast (success, error, info, buffering)
  * @param duration How long to show the toast in ms (default: varies by type)
  */
 export function showToast(message: string, type: ToastType = 'info', duration?: number): void {
@@ -40,22 +51,44 @@ export function showToast(message: string, type: ToastType = 'info', duration?: 
     hideTimeout = null;
   }
 
+  // Track buffering state
+  if (type === 'buffering') {
+    bufferingToastActive = true;
+  }
+
   // Set the toast
-  currentToast = { message, type };
+  currentToast = {
+    message,
+    type,
+    persistent: type === 'buffering'  // Buffering toasts don't auto-hide
+  };
   notifyListeners();
 
-  // Auto-hide based on type
-  const defaultDurations: Record<ToastType, number> = {
-    success: 3000,
-    error: 5000,
-    info: 3000
-  };
+  // Auto-hide based on type (buffering is persistent, no timeout)
+  if (type !== 'buffering') {
+    const defaultDurations: Record<ToastType, number> = {
+      success: 3000,
+      error: 5000,
+      info: 3000,
+      buffering: 0  // Never used, but needed for type safety
+    };
 
-  const hideAfter = duration ?? defaultDurations[type];
+    const hideAfter = duration ?? defaultDurations[type];
 
-  hideTimeout = setTimeout(() => {
+    hideTimeout = setTimeout(() => {
+      hideToast();
+    }, hideAfter);
+  }
+}
+
+/**
+ * Dismiss buffering toast specifically (called when track loads)
+ */
+export function dismissBuffering(): void {
+  if (bufferingToastActive) {
+    bufferingToastActive = false;
     hideToast();
-  }, hideAfter);
+  }
 }
 
 /**

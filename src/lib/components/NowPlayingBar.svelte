@@ -247,9 +247,7 @@
             {#if artwork}
               <img src={artwork} alt={trackTitle} class="artwork" />
             {:else}
-              <div class="artwork-placeholder">
-                <Play size={14} />
-              </div>
+              <div class="artwork-placeholder"></div>
             {/if}
 
             <!-- Artwork Preview on Hover -->
@@ -558,11 +556,7 @@
     width: 56px;
     height: 56px;
     border-radius: 6px;
-    background: rgba(255, 255, 255, 0.1);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.06);
   }
 
   .artwork-preview {

@@ -14,20 +14,13 @@ import {
 } from '$lib/stores/queueStore';
 import { addTrackToFavorites } from '$lib/services/playbackService';
 import { openPlaylistModal } from '$lib/stores/uiStore';
+import { showToast as storeShowToast, type ToastType } from '$lib/stores/toastStore';
 import type { QobuzTrack, Track, PlaylistTrack, LocalLibraryTrack } from '$lib/types';
 
-// ============ Toast Callback ============
+// ============ Toast Integration ============
 
-let toastCallback: ((message: string, type: 'success' | 'error' | 'info') => void) | null = null;
-
-export function setToastCallback(callback: (message: string, type: 'success' | 'error' | 'info') => void): void {
-  toastCallback = callback;
-}
-
-function showToast(message: string, type: 'success' | 'error' | 'info'): void {
-  if (toastCallback) {
-    toastCallback(message, type);
-  }
+function showToast(message: string, type: ToastType): void {
+  storeShowToast(message, type);
 }
 
 // ============ Queue Builders ============

@@ -34,19 +34,17 @@ export interface MediaMetadata {
   coverUrl: string | null;
 }
 
-// ============ Callbacks ============
-// These are set by the consumer (e.g., +page.svelte) to handle UI feedback
+// ============ Toast Integration ============
+// Use the toast store directly for buffering toast support
 
-let toastCallback: ((message: string, type: 'success' | 'error' | 'info') => void) | null = null;
+import {
+  showToast as storeShowToast,
+  dismissBuffering,
+  type ToastType
+} from '$lib/stores/toastStore';
 
-export function setToastCallback(callback: (message: string, type: 'success' | 'error' | 'info') => void): void {
-  toastCallback = callback;
-}
-
-function showToast(message: string, type: 'success' | 'error' | 'info'): void {
-  if (toastCallback) {
-    toastCallback(message, type);
-  }
+function showToast(message: string, type: ToastType): void {
+  storeShowToast(message, type);
 }
 
 // ============ Core Playback ============
@@ -65,7 +63,7 @@ export async function playTrack(
 
   try {
     if (showLoadingToast) {
-      showToast(`Loading: ${track.title}`, 'info');
+      showToast(track.title, 'buffering');
     }
 
     // Use appropriate playback command
@@ -75,6 +73,8 @@ export async function playTrack(
       await invoke('play_track', { trackId: track.id });
     }
 
+    // Dismiss buffering toast and show success
+    dismissBuffering();
     setIsPlaying(true);
     showToast(`Playing: ${track.title}`, 'success');
 
@@ -125,6 +125,7 @@ export async function playTrack(
     return true;
   } catch (err) {
     console.error('Failed to play track:', err);
+    dismissBuffering();
     showToast(`Playback error: ${err}`, 'error');
     setIsPlaying(false);
     return false;

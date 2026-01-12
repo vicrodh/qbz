@@ -215,9 +215,7 @@
       {#if playerState.currentTrack?.artwork}
         <img src={playerState.currentTrack.artwork} alt="Album art" class="artwork" />
       {:else}
-        <div class="artwork-placeholder">
-          <Play size={24} />
-        </div>
+        <div class="artwork-placeholder"></div>
       {/if}
     </div>
 
@@ -363,11 +361,7 @@
   .artwork-placeholder {
     width: 100%;
     height: 100%;
-    background: linear-gradient(135deg, #27272a 0%, #18181b 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.06);
     border-radius: 6px;
   }
 

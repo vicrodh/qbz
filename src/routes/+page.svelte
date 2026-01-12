@@ -142,7 +142,6 @@
   // Services
   import {
     playTrack,
-    setToastCallback as setPlaybackToastCallback,
     checkTrackFavorite,
     toggleTrackFavorite,
     showTrackNotification,
@@ -151,7 +150,6 @@
   } from '$lib/services/playbackService';
 
   import {
-    setToastCallback as setTrackActionsToastCallback,
     queueTrackNext,
     queueTrackLater,
     buildQueueTrackFromQobuz,
@@ -1165,10 +1163,6 @@
     // Load favorites for global state
     loadFavorites();
 
-    // Set up service toast callbacks
-    setPlaybackToastCallback(showToast);
-    setTrackActionsToastCallback(showToast);
-
     // Subscribe to download state changes to trigger reactivity
     const unsubscribeDownloads = subscribeDownloads(() => {
       downloadStateVersion++;
@@ -1667,6 +1661,7 @@
       <Toast
         message={toast.message}
         type={toast.type}
+        persistent={toast.persistent}
         onClose={hideToast}
       />
     {/if}
