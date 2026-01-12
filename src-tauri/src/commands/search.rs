@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use crate::api::{Album, Artist, SearchResultsPage, Track};
+use crate::api::{Album, Artist, ArtistAlbums, SearchResultsPage, Track};
 use crate::api_cache::ApiCacheState;
 use crate::AppState;
 
@@ -164,4 +164,67 @@ pub async fn get_artist(
     }
 
     Ok(artist)
+}
+
+/// Get artist detail with albums, playlists, and appears-on tracks
+#[tauri::command]
+pub async fn get_artist_detail(
+    artist_id: u64,
+    state: State<'_, AppState>,
+) -> Result<Artist, String> {
+    log::info!("Command: get_artist_detail {}", artist_id);
+
+    let client = state.client.lock().await;
+    client
+        .get_artist_detail(artist_id, Some(50), Some(0))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get artist albums with pagination (for load more)
+#[tauri::command]
+pub async fn get_artist_albums(
+    artist_id: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<ArtistAlbums, String> {
+    log::info!(
+        "Command: get_artist_albums {} limit={:?} offset={:?}",
+        artist_id,
+        limit,
+        offset
+    );
+
+    let client = state.client.lock().await;
+    let artist = client
+        .get_artist_with_pagination(artist_id, true, limit, offset)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    artist
+        .albums
+        .ok_or_else(|| "No albums in response".to_string())
+}
+
+/// Get similar artists for an artist ID
+#[tauri::command]
+pub async fn get_similar_artists(
+    artist_id: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<SearchResultsPage<Artist>, String> {
+    log::info!(
+        "Command: get_similar_artists {} limit={:?} offset={:?}",
+        artist_id,
+        limit,
+        offset
+    );
+
+    let client = state.client.lock().await;
+    client
+        .get_similar_artists(artist_id, limit.unwrap_or(5), offset.unwrap_or(0))
+        .await
+        .map_err(|e| e.to_string())
 }

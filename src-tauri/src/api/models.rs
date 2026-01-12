@@ -164,6 +164,12 @@ pub struct Artist {
     /// Albums (available when fetching with extra=albums)
     #[serde(default)]
     pub albums: Option<ArtistAlbums>,
+    /// Tracks where this artist appears (extra=tracks_appears_on)
+    #[serde(default)]
+    pub tracks_appears_on: Option<TracksContainer>,
+    /// Curated playlists for this artist (extra=playlists)
+    #[serde(default)]
+    pub playlists: Option<Vec<Playlist>>,
 }
 
 /// Artist biography content
