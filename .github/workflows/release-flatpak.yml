@@ -1,0 +1,48 @@
+name: release-flatpak
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-flatpak:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder
+          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+
+      - name: Install runtimes
+        run: |
+          flatpak install -y --noninteractive flathub \
+            org.freedesktop.Platform//23.08 \
+            org.freedesktop.Sdk//23.08 \
+            org.freedesktop.Sdk.Extension.node20//23.08 \
+            org.freedesktop.Sdk.Extension.rust-stable//23.08
+
+      - name: Build Flatpak
+        run: |
+          mkdir -p flatpak-build flatpak-repo dist
+          flatpak-builder --force-clean --repo=flatpak-repo flatpak-build packaging/flatpak/com.blitzkriegfc.qbz.yml
+          flatpak build-bundle flatpak-repo dist/QBZ.flatpak com.blitzkriegfc.qbz
+
+      - name: Upload Flatpak bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: qbz-flatpak
+          path: dist/QBZ.flatpak
+
+      - name: Publish GitHub Release Asset
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/QBZ.flatpak

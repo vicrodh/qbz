@@ -1,0 +1,42 @@
+# Maintainer: QBZ Team
+
+pkgname=qbz
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Native Qobuz client for Linux with bit-perfect playback"
+arch=(x86_64)
+url="https://github.com/vicrodh/qbz"
+license=(MIT)
+depends=(
+  alsa-lib
+  gtk3
+  libappindicator-gtk3
+  libxkbcommon
+  openssl
+  webkit2gtk
+)
+makedepends=(
+  nodejs
+  npm
+  rust
+  cargo
+  pkgconf
+  clang
+)
+source=("https://github.com/vicrodh/qbz/archive/refs/tags/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "${srcdir}/qbz-${pkgver}"
+  npm ci
+  npm run build
+  npm run tauri build -- --bundles none
+}
+
+package() {
+  cd "${srcdir}/qbz-${pkgver}"
+  install -Dm755 src-tauri/target/release/qbz-nix "${pkgdir}/usr/bin/qbz"
+  install -Dm644 packaging/arch/qbz.desktop "${pkgdir}/usr/share/applications/qbz.desktop"
+  install -Dm644 src-tauri/icons/128x128.png "${pkgdir}/usr/share/icons/hicolor/128x128/apps/qbz.png"
+  install -Dm644 LICENSE "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}
