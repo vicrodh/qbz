@@ -1,8 +1,9 @@
 //! DLNA device connection and playback via AVTransport SOAP
 
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use std::time::Duration;
+use rupnp::{Device, Service};
+use rupnp::http::Uri;
+use rupnp::ssdp::URN;
 
 use crate::cast::dlna::{DiscoveredDlnaDevice, DlnaError};
 
@@ -30,10 +31,9 @@ pub struct DlnaStatus {
 pub struct DlnaConnection {
     device: DiscoveredDlnaDevice,
     connected: bool,
-    client: Client,
-    // Service control URLs (discovered from device description)
-    av_transport_url: Option<String>,
-    rendering_control_url: Option<String>,
+    device_url: Uri,
+    av_transport_service: Option<Service>,
+    rendering_control_service: Option<Service>,
     // Current media URI
     current_uri: Option<String>,
     is_playing: bool,
@@ -41,42 +41,36 @@ pub struct DlnaConnection {
 
 impl DlnaConnection {
     /// Connect to a DLNA device and discover service URLs
-    pub fn connect(device: DiscoveredDlnaDevice) -> Result<Self, DlnaError> {
-        let client = Client::builder()
-            .timeout(Duration::from_secs(10))
-            .build()
-            .map_err(|e| DlnaError::Connection(format!("Failed to create HTTP client: {}", e)))?;
+    pub async fn connect(device: DiscoveredDlnaDevice) -> Result<Self, DlnaError> {
+        let device_url: Uri = device
+            .url
+            .parse()
+            .map_err(|e| DlnaError::Connection(format!("Invalid device URL: {}", e)))?;
 
-        // For now, construct URLs based on device URL
-        // The actual control URLs would come from parsing the device description XML
-        let base_url = device.url.trim_end_matches('/');
+        let parsed_device = Device::from_url(device_url.clone())
+            .await
+            .map_err(|e| DlnaError::Connection(format!("Failed to load device description: {}", e)))?;
 
-        // Common UPnP control URL patterns
-        let av_transport_url = if device.has_av_transport {
-            Some(format!("{}/AVTransport/control", base_url))
-        } else {
-            None
-        };
-
-        let rendering_control_url = if device.has_rendering_control {
-            Some(format!("{}/RenderingControl/control", base_url))
-        } else {
-            None
-        };
+        let av_transport_service = parsed_device
+            .find_service(&av_transport_urn())
+            .cloned();
+        let rendering_control_service = parsed_device
+            .find_service(&rendering_control_urn())
+            .cloned();
 
         log::info!(
             "DLNA: Connected to {} (AVT: {:?}, RC: {:?})",
             device.name,
-            av_transport_url.is_some(),
-            rendering_control_url.is_some()
+            av_transport_service.is_some(),
+            rendering_control_service.is_some()
         );
 
         Ok(Self {
             device,
             connected: true,
-            client,
-            av_transport_url,
-            rendering_control_url,
+            device_url,
+            av_transport_service,
+            rendering_control_service,
             current_uri: None,
             is_playing: false,
         })
@@ -112,33 +106,22 @@ impl DlnaConnection {
             return Err(DlnaError::NotConnected);
         }
 
-        let av_url = self.av_transport_url.as_ref()
+        let av_service = self.av_transport_service.as_ref()
             .ok_or_else(|| DlnaError::Playback("Device has no AVTransport service".to_string()))?;
 
         // Build DIDL-Lite metadata
         let didl_metadata = build_didl_metadata(uri, metadata);
 
-        // SetAVTransportURI SOAP action
-        let soap_body = format!(
-            r#"<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-  <s:Body>
-    <u:SetAVTransportURI xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
-      <InstanceID>0</InstanceID>
-      <CurrentURI>{}</CurrentURI>
-      <CurrentURIMetaData>{}</CurrentURIMetaData>
-    </u:SetAVTransportURI>
-  </s:Body>
-</s:Envelope>"#,
+        let payload = format!(
+            "<InstanceID>0</InstanceID><CurrentURI>{}</CurrentURI><CurrentURIMetaData>{}</CurrentURIMetaData>",
             xml_escape(uri),
             xml_escape(&didl_metadata)
         );
 
-        self.send_soap_action(
-            av_url,
-            "urn:schemas-upnp-org:service:AVTransport:1#SetAVTransportURI",
-            &soap_body,
-        ).await?;
+        av_service
+            .action(&self.device_url, "SetAVTransportURI", &payload)
+            .await
+            .map_err(|e| DlnaError::Playback(e.to_string()))?;
 
         self.current_uri = Some(uri.to_string());
         log::info!("DLNA: Set URI to {}", uri);
@@ -152,24 +135,13 @@ impl DlnaConnection {
             return Err(DlnaError::NotConnected);
         }
 
-        let av_url = self.av_transport_url.as_ref()
+        let av_service = self.av_transport_service.as_ref()
             .ok_or_else(|| DlnaError::Playback("Device has no AVTransport service".to_string()))?;
 
-        let soap_body = r#"<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-  <s:Body>
-    <u:Play xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
-      <InstanceID>0</InstanceID>
-      <Speed>1</Speed>
-    </u:Play>
-  </s:Body>
-</s:Envelope>"#;
-
-        self.send_soap_action(
-            av_url,
-            "urn:schemas-upnp-org:service:AVTransport:1#Play",
-            soap_body,
-        ).await?;
+        av_service
+            .action(&self.device_url, "Play", "<InstanceID>0</InstanceID><Speed>1</Speed>")
+            .await
+            .map_err(|e| DlnaError::Playback(e.to_string()))?;
 
         self.is_playing = true;
         log::info!("DLNA: Play");
@@ -182,23 +154,13 @@ impl DlnaConnection {
             return Err(DlnaError::NotConnected);
         }
 
-        let av_url = self.av_transport_url.as_ref()
+        let av_service = self.av_transport_service.as_ref()
             .ok_or_else(|| DlnaError::Playback("Device has no AVTransport service".to_string()))?;
 
-        let soap_body = r#"<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-  <s:Body>
-    <u:Pause xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
-      <InstanceID>0</InstanceID>
-    </u:Pause>
-  </s:Body>
-</s:Envelope>"#;
-
-        self.send_soap_action(
-            av_url,
-            "urn:schemas-upnp-org:service:AVTransport:1#Pause",
-            soap_body,
-        ).await?;
+        av_service
+            .action(&self.device_url, "Pause", "<InstanceID>0</InstanceID>")
+            .await
+            .map_err(|e| DlnaError::Playback(e.to_string()))?;
 
         self.is_playing = false;
         log::info!("DLNA: Pause");
@@ -211,23 +173,13 @@ impl DlnaConnection {
             return Err(DlnaError::NotConnected);
         }
 
-        let av_url = self.av_transport_url.as_ref()
+        let av_service = self.av_transport_service.as_ref()
             .ok_or_else(|| DlnaError::Playback("Device has no AVTransport service".to_string()))?;
 
-        let soap_body = r#"<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-  <s:Body>
-    <u:Stop xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
-      <InstanceID>0</InstanceID>
-    </u:Stop>
-  </s:Body>
-</s:Envelope>"#;
-
-        self.send_soap_action(
-            av_url,
-            "urn:schemas-upnp-org:service:AVTransport:1#Stop",
-            soap_body,
-        ).await?;
+        av_service
+            .action(&self.device_url, "Stop", "<InstanceID>0</InstanceID>")
+            .await
+            .map_err(|e| DlnaError::Playback(e.to_string()))?;
 
         self.is_playing = false;
         self.current_uri = None;
@@ -241,33 +193,23 @@ impl DlnaConnection {
             return Err(DlnaError::NotConnected);
         }
 
-        let av_url = self.av_transport_url.as_ref()
-            .ok_or_else(|| DlnaError::Playback("Device has no AVTransport service".to_string()))?;
-
         let hours = position_secs / 3600;
         let minutes = (position_secs % 3600) / 60;
         let seconds = position_secs % 60;
         let time_str = format!("{:02}:{:02}:{:02}", hours, minutes, seconds);
 
-        let soap_body = format!(
-            r#"<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-  <s:Body>
-    <u:Seek xmlns:u="urn:schemas-upnp-org:service:AVTransport:1">
-      <InstanceID>0</InstanceID>
-      <Unit>REL_TIME</Unit>
-      <Target>{}</Target>
-    </u:Seek>
-  </s:Body>
-</s:Envelope>"#,
+        let av_service = self.av_transport_service.as_ref()
+            .ok_or_else(|| DlnaError::Playback("Device has no AVTransport service".to_string()))?;
+
+        let payload = format!(
+            "<InstanceID>0</InstanceID><Unit>REL_TIME</Unit><Target>{}</Target>",
             time_str
         );
 
-        self.send_soap_action(
-            av_url,
-            "urn:schemas-upnp-org:service:AVTransport:1#Seek",
-            &soap_body,
-        ).await?;
+        av_service
+            .action(&self.device_url, "Seek", &payload)
+            .await
+            .map_err(|e| DlnaError::Playback(e.to_string()))?;
 
         log::info!("DLNA: Seek to {}", time_str);
         Ok(())
@@ -279,63 +221,26 @@ impl DlnaConnection {
             return Err(DlnaError::NotConnected);
         }
 
-        let rc_url = self.rendering_control_url.as_ref()
+        let rc_service = self.rendering_control_service.as_ref()
             .ok_or_else(|| DlnaError::Playback("Device has no RenderingControl service".to_string()))?;
 
         // DLNA volume is typically 0-100
         let dlna_volume = ((volume.clamp(0.0, 1.0) * 100.0) as u32).min(100);
 
-        let soap_body = format!(
-            r#"<?xml version="1.0" encoding="utf-8"?>
-<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
-  <s:Body>
-    <u:SetVolume xmlns:u="urn:schemas-upnp-org:service:RenderingControl:1">
-      <InstanceID>0</InstanceID>
-      <Channel>Master</Channel>
-      <DesiredVolume>{}</DesiredVolume>
-    </u:SetVolume>
-  </s:Body>
-</s:Envelope>"#,
+        let payload = format!(
+            "<InstanceID>0</InstanceID><Channel>Master</Channel><DesiredVolume>{}</DesiredVolume>",
             dlna_volume
         );
 
-        self.send_soap_action(
-            rc_url,
-            "urn:schemas-upnp-org:service:RenderingControl:1#SetVolume",
-            &soap_body,
-        ).await?;
+        rc_service
+            .action(&self.device_url, "SetVolume", &payload)
+            .await
+            .map_err(|e| DlnaError::Playback(e.to_string()))?;
 
         log::info!("DLNA: Set volume to {}", dlna_volume);
         Ok(())
     }
 
-    /// Send a SOAP action request
-    async fn send_soap_action(
-        &self,
-        url: &str,
-        action: &str,
-        body: &str,
-    ) -> Result<String, DlnaError> {
-        let response = self.client
-            .post(url)
-            .header("Content-Type", "text/xml; charset=utf-8")
-            .header("SOAPAction", format!("\"{}\"", action))
-            .body(body.to_string())
-            .send()
-            .await
-            .map_err(|e| DlnaError::Playback(format!("SOAP request failed: {}", e)))?;
-
-        let status = response.status();
-        let body = response.text().await
-            .map_err(|e| DlnaError::Playback(format!("Failed to read response: {}", e)))?;
-
-        if !status.is_success() {
-            log::error!("DLNA SOAP error ({}): {}", status, body);
-            return Err(DlnaError::Playback(format!("SOAP error ({}): {}", status, parse_soap_error(&body))));
-        }
-
-        Ok(body)
-    }
 }
 
 /// Build DIDL-Lite metadata for a track
@@ -382,18 +287,10 @@ fn xml_escape(s: &str) -> String {
         .replace('\'', "&apos;")
 }
 
-/// Parse error message from SOAP fault response
-fn parse_soap_error(body: &str) -> String {
-    // Try to extract faultstring or errorDescription
-    if let Some(start) = body.find("<faultstring>") {
-        if let Some(end) = body.find("</faultstring>") {
-            return body[start + 13..end].to_string();
-        }
-    }
-    if let Some(start) = body.find("<errorDescription>") {
-        if let Some(end) = body.find("</errorDescription>") {
-            return body[start + 18..end].to_string();
-        }
-    }
-    "Unknown error".to_string()
+fn av_transport_urn() -> URN {
+    URN::Service("schemas-upnp-org".into(), "AVTransport".into(), 1)
+}
+
+fn rendering_control_urn() -> URN {
+    URN::Service("schemas-upnp-org".into(), "RenderingControl".into(), 1)
 }

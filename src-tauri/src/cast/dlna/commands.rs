@@ -65,7 +65,7 @@ pub async fn dlna_connect(device_id: String, state: State<'_, DlnaState>) -> Res
             .map_err(|e| e.to_string())?
     };
 
-    let connection = DlnaConnection::connect(device).map_err(|e| e.to_string())?;
+    let connection = DlnaConnection::connect(device).await.map_err(|e| e.to_string())?;
     let mut state_connection = state.connection.lock().await;
     *state_connection = Some(connection);
     Ok(())
