@@ -72,11 +72,11 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder
-          flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
       - name: Install runtimes
         run: |
-          flatpak install -y --noninteractive flathub \
+          flatpak --user install -y --noninteractive flathub \
             org.freedesktop.Platform//23.08 \
             org.freedesktop.Sdk//23.08 \
             org.freedesktop.Sdk.Extension.node20//23.08 \
@@ -85,7 +85,7 @@ jobs:
       - name: Build Flatpak
         run: |
           mkdir -p flatpak-build flatpak-repo dist
-          flatpak-builder --force-clean --repo=flatpak-repo flatpak-build packaging/flatpak/com.blitzkriegfc.qbz.yml
+          flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build packaging/flatpak/com.blitzkriegfc.qbz.yml
           flatpak build-bundle flatpak-repo dist/QBZ.flatpak com.blitzkriegfc.qbz
 
       - name: Upload Flatpak bundle
