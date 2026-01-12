@@ -17,14 +17,14 @@
   :global(html, body) {
     margin: 0;
     padding: 0;
-    background: transparent !important;
+    background: #18181b !important;
     overflow: hidden;
   }
 
   .miniplayer-layout {
     width: 100vw;
     height: 100vh;
-    background: transparent;
+    background: #18181b;
     overflow: hidden;
   }
 </style>
