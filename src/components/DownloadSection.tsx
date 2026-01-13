@@ -1,7 +1,33 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useApp } from '../lib/appContext'
 import { formatBytes, formatDate } from '../lib/format'
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = useCallback(() => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    })
+  }, [text])
+
+  return (
+    <button className="copy-btn" onClick={handleCopy} title="Copy command">
+      {copied ? (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      ) : (
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+          <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+        </svg>
+      )}
+    </button>
+  )
+}
 
 type ReleaseAsset = {
   name: string
@@ -178,26 +204,34 @@ export function DownloadSection() {
                 </div>
               </div>
               <div className="download-list">
-                {downloads.map((item) => (
-                  <div key={item.fileName} className="download-item">
-                    <div className="download-row">
-                      <div className="download-meta">
-                        <div className="download-meta__name">
-                          {item.label} {item.arch ? <span className="pill">{item.arch}</span> : null}
+                {downloads.map((item) => {
+                  const instruction = item.type !== 'unknown' ? t(`downloads.instructions.${item.type}`) : null
+                  return (
+                    <div key={item.fileName} className="download-item">
+                      <div className="download-item__header">
+                        <div className="download-item__info">
+                          <span className="download-item__label">{item.label}</span>
+                          {item.arch && <span className="download-item__arch">{item.arch}</span>}
                         </div>
-                        <div className="download-meta__file">
+                        <span className="download-item__file">
                           {item.type === 'aur' ? 'Arch User Repository' : `${item.fileName} · ${formatBytes(item.size)}`}
-                        </div>
+                        </span>
                       </div>
-                      <a className="btn btn-ghost" href={item.url} target={item.type === 'aur' ? '_blank' : undefined} rel={item.type === 'aur' ? 'noreferrer' : undefined}>
-                        {item.type === 'aur' ? 'AUR' : item.label}
+                      {instruction && (
+                        <div className="terminal">
+                          <code>
+                            <span className="terminal__prompt">$</span>
+                            <span className="terminal__cmd">{instruction}</span>
+                          </code>
+                          <CopyButton text={instruction} />
+                        </div>
+                      )}
+                      <a className="btn btn-ghost btn-sm" href={item.url} target={item.type === 'aur' ? '_blank' : undefined} rel={item.type === 'aur' ? 'noreferrer' : undefined}>
+                        {item.type === 'aur' ? 'View on AUR' : 'Download'}
                       </a>
                     </div>
-                    {item.type !== 'unknown' && (
-                      <code className="install-cmd">{t(`downloads.instructions.${item.type}`)}</code>
-                    )}
-                  </div>
-                ))}
+                  )
+                })}
               </div>
               <a className="btn btn-ghost" href={release.html_url} target="_blank" rel="noreferrer">
                 {t('downloads.viewAll')}

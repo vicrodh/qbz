@@ -680,25 +680,92 @@ p {
 }
 
 .download-item {
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border);
+  padding: 16px;
+  background: var(--surface);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
-.download-item:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+.download-item__header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.install-cmd {
-  display: block;
-  color: var(--accent);
-  margin-top: 10px;
+.download-item__info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.download-item__label {
+  font-weight: 600;
+  font-size: 1rem;
+}
+
+.download-item__arch {
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 2px 8px;
   background: var(--accent-soft);
-  padding: 8px 12px;
+  color: var(--accent);
+  border-radius: 4px;
+}
+
+.download-item__file {
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+
+.terminal {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #0d0d0d;
   border-radius: var(--radius-sm);
-  font-size: 0.8rem;
-  word-break: break-word;
+  padding: 10px 12px;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  font-size: 0.85rem;
+}
+
+.terminal code {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+}
+
+.terminal__prompt {
+  color: #22c55e;
+  user-select: none;
+}
+
+.terminal__cmd {
+  color: #e4e4e7;
+}
+
+.copy-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.copy-btn:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.btn-sm {
+  padding: 8px 16px;
+  font-size: 0.85rem;
 }
 
 .details {

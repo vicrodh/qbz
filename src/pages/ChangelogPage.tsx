@@ -8,7 +8,7 @@ type Release = {
   tag_name: string
   name: string
   published_at: string
-  body: string
+  body: string | null
   html_url: string
 }
 
