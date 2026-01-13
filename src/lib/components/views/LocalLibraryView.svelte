@@ -691,9 +691,9 @@
         </div>
       </div>
 
+      {@const albumSections = buildAlbumSections(albumTracks)}
+      {@const showDiscHeaders = albumSections.length > 1}
       <div class="track-list">
-        {@const albumSections = buildAlbumSections(albumTracks)}
-        {@const showDiscHeaders = albumSections.length > 1}
         {#each albumSections as section (section.disc)}
           {#if showDiscHeaders}
             <div class="disc-header">{section.label}</div>
