@@ -293,6 +293,39 @@ impl MetadataExtractor {
         Some(artwork_path.to_string_lossy().to_string())
     }
 
+    /// Copy an existing artwork file into the cache directory
+    /// Returns path to cached artwork or None
+    pub fn cache_artwork_file(artwork_path: &Path, cache_dir: &Path) -> Option<String> {
+        if !artwork_path.is_file() {
+            return None;
+        }
+
+        let ext = artwork_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|s| s.to_lowercase())
+            .unwrap_or_else(|| "jpg".to_string());
+
+        let normalized_ext = match ext.as_str() {
+            "jpeg" => "jpg",
+            "png" | "jpg" | "gif" | "bmp" => ext.as_str(),
+            _ => "jpg",
+        };
+
+        let hash = Self::simple_hash(&artwork_path.to_string_lossy());
+        let cached_name = format!("local_{:x}.{}", hash, normalized_ext);
+        let cached_path = cache_dir.join(cached_name);
+
+        if cached_path.exists() {
+            return Some(cached_path.to_string_lossy().to_string());
+        }
+
+        fs::create_dir_all(cache_dir).ok()?;
+        fs::copy(artwork_path, &cached_path).ok()?;
+
+        Some(cached_path.to_string_lossy().to_string())
+    }
+
     /// Simple hash function for generating filenames
     fn simple_hash(s: &str) -> u64 {
         let mut hash: u64 = 5381;

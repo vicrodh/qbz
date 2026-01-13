@@ -161,13 +161,20 @@ pub async fn library_scan(state: State<'_, LibraryState>) -> Result<(), String> 
 
             match MetadataExtractor::extract(audio_path) {
                 Ok(mut track) => {
-                    // Try to extract embedded artwork, fallback to folder artwork
+                    // Try to extract embedded artwork, fallback to cached folder artwork
                     let artwork_cache = get_artwork_cache_dir();
-                    if let Some(artwork_path) = MetadataExtractor::extract_artwork(audio_path, &artwork_cache) {
-                        track.artwork_path = Some(artwork_path);
-                    } else if let Some(folder_art) = MetadataExtractor::find_folder_artwork(audio_path) {
-                        track.artwork_path = Some(folder_art);
+                    let mut artwork_path =
+                        MetadataExtractor::extract_artwork(audio_path, &artwork_cache);
+                    if artwork_path.is_none() {
+                        if let Some(folder_art) = MetadataExtractor::find_folder_artwork(audio_path)
+                        {
+                            artwork_path = MetadataExtractor::cache_artwork_file(
+                                Path::new(&folder_art),
+                                &artwork_cache,
+                            );
+                        }
                     }
+                    track.artwork_path = artwork_path;
 
                     let db = state.db.lock().await;
                     if let Err(e) = db.insert_track(&track) {
@@ -223,7 +230,24 @@ async fn process_cue_file(cue_path: &Path, state: &State<'_, LibraryState>) -> R
     let format = MetadataExtractor::detect_format(audio_path);
 
     // Convert CUE to tracks
-    let tracks = cue_to_tracks(&cue, properties.duration_secs, format, &properties);
+    let mut tracks = cue_to_tracks(&cue, properties.duration_secs, format, &properties);
+
+    let artwork_cache = get_artwork_cache_dir();
+    let mut artwork_path =
+        MetadataExtractor::extract_artwork(audio_path, &artwork_cache);
+    if artwork_path.is_none() {
+        if let Some(folder_art) = MetadataExtractor::find_folder_artwork(audio_path) {
+            artwork_path = MetadataExtractor::cache_artwork_file(
+                Path::new(&folder_art),
+                &artwork_cache,
+            );
+        }
+    }
+    if let Some(path) = artwork_path {
+        for track in tracks.iter_mut() {
+            track.artwork_path = Some(path.clone());
+        }
+    }
 
     // Insert tracks
     let db = state.db.lock().await;
