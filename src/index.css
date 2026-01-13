@@ -365,6 +365,55 @@ p {
   gap: 18px;
 }
 
+.capability-scroll {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  padding-bottom: 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.capability-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.capability-scroll::-webkit-scrollbar-track {
+  background: var(--surface);
+  border-radius: 4px;
+}
+
+.capability-scroll::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+
+.capability-card {
+  flex: 0 0 280px;
+  scroll-snap-align: start;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  padding: 20px;
+  background: var(--surface-elev);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.capability-card__title {
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.list--compact {
+  margin: 8px 0 0;
+  gap: 8px;
+}
+
+.list--compact li {
+  font-size: 0.9rem;
+}
+
 .feature-card {
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
@@ -628,6 +677,28 @@ p {
   border-radius: var(--radius-sm);
   font-size: 0.85rem;
   word-break: break-word;
+}
+
+.download-item {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.download-item:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.install-cmd {
+  display: block;
+  color: var(--accent);
+  margin-top: 10px;
+  background: var(--accent-soft);
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+  word-break: break-word;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
 }
 
 .details {

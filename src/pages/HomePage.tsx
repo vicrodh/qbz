@@ -17,12 +17,12 @@ export function HomePage() {
     { icon: '/assets/icons/cast-audio.svg', label: t('hero.stats.casting'), colored: false },
   ]
 
-  const capabilityIcons: Record<CapabilityKey, { icon: string; colored: boolean }> = {
-    audio: { icon: '/assets/icons/hi-res.svg', colored: true },
-    library: { icon: '/assets/icons/nas.svg', colored: false },
-    playlists: { icon: '/assets/icons/playlist.svg', colored: false },
-    desktop: { icon: '/assets/icons/linux-desktop.svg', colored: false },
-    casting: { icon: '/assets/icons/cast-audio.svg', colored: false },
+  const capabilityIcons: Record<CapabilityKey, string> = {
+    audio: '/assets/icons/hi-res.svg',
+    library: '/assets/icons/nas.svg',
+    playlists: '/assets/icons/playlist.svg',
+    desktop: '/assets/icons/linux-desktop.svg',
+    casting: '/assets/icons/cast-audio.svg',
   }
 
   const goals = t('goals.items', { returnObjects: true }) as Array<{ title: string; text: string }>
@@ -102,12 +102,12 @@ export function HomePage() {
         <div className="container">
           <h2 className="section__title">{t('capabilities.title')}</h2>
           <p className="section__subtitle">{t('capabilities.lead')}</p>
-          <div className="feature-grid" style={{ marginTop: 32 }}>
+          <div className="capability-scroll" style={{ marginTop: 32 }}>
             {capabilityCards.map((card) => (
-              <div key={card.key} className="feature-card">
-                <img className={capabilityIcons[card.key].colored ? '' : 'icon-mono'} src={capabilityIcons[card.key].icon} alt="" />
-                <div className="feature-card__title">{card.title}</div>
-                <ul className="list">
+              <div key={card.key} className="capability-card">
+                <img className="icon-mono" src={capabilityIcons[card.key]} alt="" />
+                <div className="capability-card__title">{card.title}</div>
+                <ul className="list list--compact">
                   {card.bullets.map((bullet) => (
                     <li key={bullet}>{bullet}</li>
                   ))}

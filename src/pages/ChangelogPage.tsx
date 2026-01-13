@@ -14,7 +14,9 @@ type Release = {
 
 const RELEASES_URL = 'https://api.github.com/repos/vicrodh/qbz/releases'
 
-const extractHighlights = (body: string) => {
+const extractHighlights = (body: string | null | undefined): string[] => {
+  if (!body) return []
+
   const bullets = body
     .split('\n')
     .map((line) => line.trim())

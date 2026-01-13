@@ -108,19 +108,6 @@ const aurItem: DownloadItem = {
   arch: null,
 }
 
-const findRecommended = (items: DownloadItem[]) => {
-  const platform = detectPlatform()
-  if (!platform.isLinux) {
-    return null
-  }
-
-  const byType = (type: DownloadItem['type']) =>
-    items.find((item) => item.type === type && (!item.arch || item.arch === platform.arch))
-
-  // For Linux users, default to AppImage as universal option
-  // AUR is shown in the full list for Arch users to select manually
-  return byType('appimage') || byType('flatpak') || byType('tarball')
-}
 
 // Get all downloads including AUR for Linux users
 const getDownloadsWithAur = (items: DownloadItem[]) => {
@@ -156,7 +143,6 @@ export function DownloadSection() {
 
   const baseDownloads = useMemo(() => (release ? mapAssets(release.assets) : []), [release])
   const downloads = useMemo(() => getDownloadsWithAur(baseDownloads), [baseDownloads])
-  const recommended = useMemo(() => findRecommended(baseDownloads), [baseDownloads])
   const releaseDate = release ? formatDate(release.published_at, language) : null
 
   return (
@@ -182,87 +168,40 @@ export function DownloadSection() {
 
         {release && (
           <div className="download-grid">
-            <div className="download-row card card--highlight">
-              <div className="download-meta">
-                <span className="pill">{t('downloads.recommendedLabel')}</span>
-                <div className="download-meta__name">
-                  {recommended ? `${recommended.label} ${recommended.arch ? `(${recommended.arch})` : ''}` : t('downloads.allLabel')}
-                </div>
-                <div className="download-meta__file">
-                  {t('downloads.versionLabel')} {release.tag_name} · {releaseDate}
-                </div>
-              </div>
-              {recommended ? (
-                <a className="btn btn-primary" href={recommended.url}>
-                  {recommended.label}
-                </a>
-              ) : (
-                <a className="btn btn-primary" href={release.html_url} target="_blank" rel="noreferrer">
-                  {t('downloads.viewAll')}
-                </a>
-              )}
-            </div>
-
             <div className="card">
               <div className="download-row download-row--stack">
                 <div className="download-meta">
                   <div className="download-meta__name">{t('downloads.allLabel')}</div>
-                  <div className="download-meta__file">{t('downloads.fileCount', { count: release.assets.length })}</div>
+                  <div className="download-meta__file">
+                    {t('downloads.versionLabel')} {release.tag_name} · {releaseDate}
+                  </div>
                 </div>
               </div>
               <div className="download-list">
                 {downloads.map((item) => (
-                  <div key={item.fileName} className="download-row">
-                    <div className="download-meta">
-                      <div className="download-meta__name">
-                        {item.label} {item.arch ? <span className="pill">{item.arch}</span> : null}
+                  <div key={item.fileName} className="download-item">
+                    <div className="download-row">
+                      <div className="download-meta">
+                        <div className="download-meta__name">
+                          {item.label} {item.arch ? <span className="pill">{item.arch}</span> : null}
+                        </div>
+                        <div className="download-meta__file">
+                          {item.type === 'aur' ? 'Arch User Repository' : `${item.fileName} · ${formatBytes(item.size)}`}
+                        </div>
                       </div>
-                      <div className="download-meta__file">
-                        {item.type === 'aur' ? 'Arch User Repository' : `${item.fileName} · ${formatBytes(item.size)}`}
-                      </div>
+                      <a className="btn btn-ghost" href={item.url} target={item.type === 'aur' ? '_blank' : undefined} rel={item.type === 'aur' ? 'noreferrer' : undefined}>
+                        {item.type === 'aur' ? 'AUR' : item.label}
+                      </a>
                     </div>
-                    <a className="btn btn-ghost" href={item.url} target={item.type === 'aur' ? '_blank' : undefined} rel={item.type === 'aur' ? 'noreferrer' : undefined}>
-                      {item.type === 'aur' ? 'AUR' : item.label}
-                    </a>
+                    {item.type !== 'unknown' && (
+                      <code className="install-cmd">{t(`downloads.instructions.${item.type}`)}</code>
+                    )}
                   </div>
                 ))}
               </div>
               <a className="btn btn-ghost" href={release.html_url} target="_blank" rel="noreferrer">
                 {t('downloads.viewAll')}
               </a>
-            </div>
-
-            <div className="card">
-              <div className="download-meta">
-                <div className="download-meta__name">{t('downloads.instructionsTitle')}</div>
-                <div className="download-meta__file">{t('downloads.buildDisclaimer')}</div>
-              </div>
-              <div className="install-grid">
-                <div>
-                  <span className="pill">AUR (Arch)</span>
-                  <code>{t('downloads.instructions.aur')}</code>
-                </div>
-                <div>
-                  <span className="pill">AppImage</span>
-                  <code>{t('downloads.instructions.appimage')}</code>
-                </div>
-                <div>
-                  <span className="pill">Deb</span>
-                  <code>{t('downloads.instructions.deb')}</code>
-                </div>
-                <div>
-                  <span className="pill">RPM</span>
-                  <code>{t('downloads.instructions.rpm')}</code>
-                </div>
-                <div>
-                  <span className="pill">Flatpak</span>
-                  <code>{t('downloads.instructions.flatpak')}</code>
-                </div>
-                <div>
-                  <span className="pill">Tarball</span>
-                  <code>{t('downloads.instructions.tarball')}</code>
-                </div>
-              </div>
             </div>
 
             <div className="card">

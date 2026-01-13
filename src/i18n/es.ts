@@ -49,10 +49,6 @@ export const es = {
         text: 'Lógica visible, depurable y pensada para evitar sorpresas.',
       },
       {
-        title: 'Arquitectura local-first',
-        text: 'Cola, caché y biblioteca viven localmente por defecto.',
-      },
-      {
         title: 'Código abierto por defecto',
         text: 'Licencia MIT, sin telemetría y desarrollo en público.',
       },

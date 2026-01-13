@@ -49,10 +49,6 @@ export const en = {
         text: 'Playback logic is visible, debuggable, and designed to avoid surprises.',
       },
       {
-        title: 'Local-first architecture',
-        text: 'Queue, cache, and library data live locally by default.',
-      },
-      {
         title: 'Open source by default',
         text: 'MIT licensed, no telemetry, and development in the open.',
       },
