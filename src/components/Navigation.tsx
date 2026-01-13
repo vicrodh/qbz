@@ -5,8 +5,6 @@ import { buildPath } from '../lib/routes'
 
 const NAV_ITEMS = ['home', 'changelog', 'licenses'] as const
 
-type NavItem = (typeof NAV_ITEMS)[number]
-
 export function Navigation() {
   const { t } = useTranslation()
   const { language, page, theme, setLanguage, toggleTheme } = useApp()

@@ -2,8 +2,6 @@ import { useTranslation } from 'react-i18next'
 
 const CATEGORY_KEYS = ['core', 'audio', 'casting', 'integrations', 'website'] as const
 
-type CategoryKey = (typeof CATEGORY_KEYS)[number]
-
 export function LicensesPage() {
   const { t } = useTranslation()
 
