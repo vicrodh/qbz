@@ -83,11 +83,12 @@ jobs:
       - name: Generate .SRCINFO
         run: |
           cd /tmp/aur-qbz-bin
-          docker run --rm -v "$PWD":/pkg -w /pkg archlinux:latest bash -c "
+          docker run --rm -v "$PWD":/pkg -w /pkg -e HOST_UID=$(id -u) -e HOST_GID=$(id -g) archlinux:latest bash -c "
             pacman -Sy --noconfirm pacman-contrib sudo
             useradd -m builder
             chown -R builder:builder /pkg
             sudo -u builder makepkg --printsrcinfo > .SRCINFO
+            chown -R \$HOST_UID:\$HOST_GID /pkg
           "
           cat .SRCINFO
 
