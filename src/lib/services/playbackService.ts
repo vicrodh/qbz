@@ -14,8 +14,6 @@ import {
   setCurrentTrack,
   setIsPlaying,
   setIsFavorite,
-  getCurrentTrack,
-  waitForPlaybackStart,
   type PlayingTrack
 } from '$lib/stores/playerStore';
 import { syncQueueState } from '$lib/stores/queueStore';
@@ -34,8 +32,6 @@ export interface PlayTrackOptions {
   isLocal?: boolean;
   showLoadingToast?: boolean;
   showSuccessToast?: boolean;
-  awaitPlaybackStart?: boolean;
-  playbackStartTimeoutMs?: number;
 }
 
 export interface MediaMetadata {
@@ -71,11 +67,8 @@ export async function playTrack(
   const {
     isLocal = false,
     showLoadingToast = true,
-    showSuccessToast = true,
-    awaitPlaybackStart = false,
-    playbackStartTimeoutMs = 6000
+    showSuccessToast = true
   } = options;
-  const shouldAwaitPlayback = awaitPlaybackStart && !isCasting();
 
   // Set current track in store
   setCurrentTrack(track);
@@ -105,26 +98,9 @@ export async function playTrack(
     }
 
     setIsPlaying(true);
-
-    if (shouldAwaitPlayback) {
-      try {
-        await waitForPlaybackStart(track.id, playbackStartTimeoutMs);
-      } catch (waitErr) {
-        if (getCurrentTrack()?.id !== track.id) {
-          return true;
-        }
-        dismissBuffering();
-        setIsPlaying(false);
-        showToast('Audio output recovery failed. Please restart QBZ or check your audio device.', 'error');
-        return false;
-      }
-    }
-
-    if (getCurrentTrack()?.id === track.id) {
-      dismissBuffering();
-      if (showSuccessToast) {
-        showToast(`Playing: ${track.title}`, 'success');
-      }
+    dismissBuffering();
+    if (showSuccessToast) {
+      showToast(`Playing: ${track.title}`, 'success');
     }
 
     // Log play event for recommendations (fire-and-forget)
