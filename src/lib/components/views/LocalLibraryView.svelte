@@ -980,7 +980,7 @@
                               {/if}
                             </div>
                             <div class="album-row-info">
-                              <div class="album-row-title">{album.title}</div>
+                              <div class="album-row-title truncate">{album.title}</div>
                               <div class="album-row-meta">
                                 <span>{album.artist}</span>
                                 {#if album.year}<span>{album.year}</span>{/if}
@@ -1744,12 +1744,9 @@
   }
 
   .album-row-title {
-    font-size: 14px;
-    font-weight: 600;
+    font-size: 13px;
+    font-weight: 500;
     color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     margin-bottom: 4px;
   }
 
