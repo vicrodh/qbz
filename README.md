@@ -1,6 +1,13 @@
 # QBZ Website
 
-Marketing website for [QBZ](https://github.com/vicrodh/qbz) - Native Hi-Fi Qobuz Client for Linux.
+Marketing site for QBZ (native Qobuz client for Linux). Built with React + Vite and deployed as a static site to GitHub Pages.
+
+## Features
+
+- English and Spanish routes (`/` and `/es`)
+- Dark and OLED themes via CSS variables
+- Client-side GitHub Releases integration for latest downloads and changelog
+- No analytics or tracking
 
 ## Development
 
@@ -13,22 +20,25 @@ npm run dev
 
 ```bash
 npm run build
-npm run preview
 ```
 
-## Languages
-
-- English: `/`
-- Spanish: `/es/`
+The output is generated in `dist/` and is ready for GitHub Pages.
 
 ## Deployment
 
-This branch deploys automatically to GitHub Pages via GitHub Actions on push.
+A GitHub Actions workflow builds the site on push to the `website` branch and publishes the output to the `gh-pages` branch.
 
-The built assets are served from the `gh-pages` branch (or via the workflow artifact).
+## Third-party libraries
 
-## DNS Configuration (Cloudflare)
+- React
+- Vite
+- TypeScript
+- i18next
+- react-i18next
 
-1. Add a CNAME record pointing your domain to `vicrodh.github.io`
-2. Enable "Proxied" for SSL/TLS
-3. Create a `public/CNAME` file with your custom domain
+## Notes
+
+- The website pulls release assets from the GitHub Releases API for `vicrodh/qbz`.
+- Production domain: https://qbz.lol
+- QBZ is Linux-first. macOS builds are experimental and may be incomplete.
+- Qobuz is a trademark of its respective owner. QBZ is not affiliated with Qobuz.
