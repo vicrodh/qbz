@@ -5,7 +5,7 @@
  * Reduces prop drilling by providing direct access to track operations.
  */
 
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, convertFileSrc } from '@tauri-apps/api/core';
 import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 import {
   addToQueueNext,
@@ -69,7 +69,7 @@ export function buildQueueTrackFromPlaylistTrack(track: PlaylistTrack): BackendQ
 }
 
 export function buildQueueTrackFromLocalTrack(track: LocalLibraryTrack): BackendQueueTrack {
-  const artwork = track.artwork_path ? `asset://localhost/${encodeURIComponent(track.artwork_path)}` : null;
+  const artwork = track.artwork_path ? convertFileSrc(track.artwork_path) : null;
   // Local tracks are hi-res if bit_depth > 16 or sample_rate > 44100
   const isHires = Boolean((track.bit_depth && track.bit_depth > 16) || (track.sample_rate && track.sample_rate > 44100));
   return {

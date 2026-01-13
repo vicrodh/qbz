@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { listen, emitTo, type UnlistenFn } from '@tauri-apps/api/event';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
@@ -888,7 +888,7 @@
   async function handleLocalTrackPlay(track: LocalLibraryTrack) {
     console.log('Playing local track:', track);
 
-    const artwork = track.artwork_path ? `asset://localhost/${encodeURIComponent(track.artwork_path)}` : '';
+    const artwork = track.artwork_path ? convertFileSrc(track.artwork_path) : '';
     const quality = track.bit_depth && track.sample_rate
       ? (track.bit_depth >= 24 || track.sample_rate > 48000
         ? `${track.bit_depth}bit/${track.sample_rate / 1000}kHz`
