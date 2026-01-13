@@ -1005,10 +1005,9 @@
         // If there was a track playing, restore it (paused)
         if (session.current_index !== null && tracks[session.current_index]) {
           const track = tracks[session.current_index];
-          showToast(`Restoring: ${track.title}`, 'buffering');
+          showToast(`Restored: ${track.title}`, 'info');
 
           // Fetch full track info from Qobuz to get albumId, artistId, and quality
-          let restoredTrack: PlayingTrack | null = null;
           try {
             const fullTrack = await invoke<QobuzTrack>('get_track', { trackId: track.id });
             const artwork = fullTrack.album?.image?.large || fullTrack.album?.image?.thumbnail || track.artwork_url || '';
@@ -1016,7 +1015,7 @@
               ? `${fullTrack.maximum_bit_depth ?? 24}/${fullTrack.maximum_sampling_rate ?? 96}`
               : 'CD';
 
-            restoredTrack = {
+            setCurrentTrack({
               id: track.id,
               title: fullTrack.title || track.title,
               artist: fullTrack.performer?.name || track.artist,
@@ -1028,14 +1027,14 @@
               samplingRate: fullTrack.maximum_sampling_rate,
               albumId: fullTrack.album?.id,
               artistId: fullTrack.performer?.id,
-            };
+            });
           } catch (fetchErr) {
             console.warn('[Session] Failed to fetch track details, using cached data:', fetchErr);
             // Fallback to cached data without albumId/artistId
             const quality = track.hires
               ? `${track.bit_depth ?? 24}/${track.sample_rate ? track.sample_rate / 1000 : 96}`
               : 'CD';
-            restoredTrack = {
+            setCurrentTrack({
               id: track.id,
               title: track.title,
               artist: track.artist,
@@ -1045,42 +1044,12 @@
               quality,
               bitDepth: track.bit_depth ?? undefined,
               samplingRate: track.sample_rate ?? undefined,
-            };
+            });
           }
 
-          if (restoredTrack) {
-            setCurrentTrack(restoredTrack);
-          }
-
-          const restoreTimeoutMs = 20000;
-          try {
-            await Promise.race([
-              invoke('prefetch_track', { trackId: track.id }),
-              new Promise((_, reject) => setTimeout(() => reject(new Error('restore_timeout')), restoreTimeoutMs))
-            ]);
-            dismissBuffering();
-            showToast(`Restored: ${track.title}`, 'info');
-
-            if (session.was_playing && restoredTrack) {
-              await playTrack(restoredTrack, { showLoadingToast: false, showSuccessToast: false });
-              if (session.current_position_secs > 0) {
-                setTimeout(async () => {
-                  try {
-                    await invoke('seek', { position: session.current_position_secs });
-                  } catch (seekErr) {
-                    console.error('[Session] Failed to seek on restore:', seekErr);
-                  }
-                }, 500);
-              }
-            } else {
-              setPendingSessionRestore(track.id, session.current_position_secs);
-              console.log(`[Session] Track ${track.id} pending load, will resume at ${session.current_position_secs}s`);
-            }
-          } catch (restoreErr) {
-            dismissBuffering();
-            showToast('Restore failed. Please restart QBZ or check your audio device.', 'error');
-            setPendingSessionRestore(track.id, session.current_position_secs);
-          }
+          // Mark that this track needs to be loaded when user presses play
+          setPendingSessionRestore(track.id, session.current_position_secs);
+          console.log(`[Session] Track ${track.id} pending load, will resume at ${session.current_position_secs}s`);
         }
 
         console.log('[Session] Session restored successfully');
