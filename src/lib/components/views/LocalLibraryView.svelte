@@ -646,6 +646,8 @@
 
 <div class="library-view">
   {#if selectedAlbum}
+    {@const albumSections = buildAlbumSections(albumTracks)}
+    {@const showDiscHeaders = albumSections.length > 1}
     <!-- Album Detail View -->
     <div class="album-detail">
       <button class="back-btn" onclick={() => (selectedAlbum = null)}>
@@ -691,8 +693,6 @@
         </div>
       </div>
 
-      {@const albumSections = buildAlbumSections(albumTracks)}
-      {@const showDiscHeaders = albumSections.length > 1}
       <div class="track-list">
         {#each albumSections as section (section.disc)}
           {#if showDiscHeaders}
