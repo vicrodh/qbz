@@ -76,7 +76,7 @@ export function ChangelogPage() {
 
         {!loading && releaseCards.length === 0 && <div className="card">{t('changelog.empty')}</div>}
 
-        <div className="grid" style={{ marginTop: 32 }}>
+        <div className="changelog-grid" style={{ marginTop: 32 }}>
           {releaseCards.map((release) => (
             <div key={release.id} className={`card ${release.isLatest ? 'card--highlight' : ''}`}>
               <div className="download-meta">

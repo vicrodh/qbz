@@ -190,6 +190,27 @@ p {
   grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 }
 
+.changelog-grid {
+  display: grid;
+  gap: 24px;
+}
+
+.license-hero {
+  max-width: 480px;
+}
+
+.license-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.license-icon {
+  width: 56px;
+  height: 56px;
+}
+
 .hero {
   padding: 96px 0 120px;
   position: relative;
@@ -440,6 +461,14 @@ p {
   opacity: 0.75;
 }
 
+.logo-row--centered {
+  justify-content: center;
+}
+
+.invert-white {
+  filter: invert(1) brightness(2);
+}
+
 .icon-mono {
   width: 28px;
   height: 28px;
@@ -534,9 +563,10 @@ p {
   border: 1px solid var(--border);
   background: var(--surface);
   padding: 8px 12px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 0.85rem;
+  cursor: pointer;
 }
 
 .lang-switch {
@@ -548,10 +578,11 @@ p {
   border: 1px solid var(--border);
   background: transparent;
   padding: 6px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   text-transform: uppercase;
   font-size: 0.75rem;
+  cursor: pointer;
 }
 
 .lang-btn--active {

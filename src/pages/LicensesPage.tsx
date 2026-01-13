@@ -17,9 +17,9 @@ export function LicensesPage() {
         <h1 className="section__title">{t('licenses.title')}</h1>
         <p className="section__subtitle">{t('licenses.lead')}</p>
 
-        <div className="grid" style={{ marginTop: 32 }}>
-          <div className="card card--highlight">
-            <img className="icon-mono" src="/assets/icons/mit-license.svg" alt="" />
+        <div className="license-hero" style={{ marginTop: 32 }}>
+          <div className="card card--highlight license-card">
+            <img className="icon-mono license-icon" src="/assets/icons/mit-license.svg" alt="" />
             <div className="download-meta">
               <div className="download-meta__name">{t('licenses.qbzLicense')}</div>
               <div className="download-meta__file">{t('licenses.qbzLicenseBody')}</div>

@@ -13,16 +13,16 @@ export function HomePage() {
 
   const stats = [
     { icon: '/assets/icons/hi-res.svg', label: t('hero.stats.audio'), colored: true },
-    { icon: '/assets/icons/home-gear.svg', label: t('hero.stats.dac'), colored: false },
+    { icon: '/assets/icons/dac.svg', label: t('hero.stats.dac'), colored: false },
     { icon: '/assets/icons/cast-audio.svg', label: t('hero.stats.casting'), colored: false },
   ]
 
-  const capabilityIcons: Record<CapabilityKey, string> = {
-    audio: '/assets/icons/hi-res.svg',
-    library: '/assets/icons/cd-music.svg',
-    playlists: '/assets/icons/mp3-player.svg',
-    desktop: '/assets/icons/home-gear.svg',
-    casting: '/assets/icons/cast-audio.svg',
+  const capabilityIcons: Record<CapabilityKey, { icon: string; colored: boolean }> = {
+    audio: { icon: '/assets/icons/hi-res.svg', colored: true },
+    library: { icon: '/assets/icons/nas.svg', colored: false },
+    playlists: { icon: '/assets/icons/playlist.svg', colored: false },
+    desktop: { icon: '/assets/icons/linux-desktop.svg', colored: false },
+    casting: { icon: '/assets/icons/cast-audio.svg', colored: false },
   }
 
   const goals = t('goals.items', { returnObjects: true }) as Array<{ title: string; text: string }>
@@ -80,9 +80,6 @@ export function HomePage() {
           <p className="section__subtitle" style={{ marginTop: 24 }}>
             {t('why.note')}
           </p>
-          <div className="logo-row">
-            <img className="logo-muted" src="/assets/icons/qobuz-logo.svg" alt="Qobuz" />
-          </div>
         </div>
       </section>
 
@@ -108,7 +105,7 @@ export function HomePage() {
           <div className="feature-grid" style={{ marginTop: 32 }}>
             {capabilityCards.map((card) => (
               <div key={card.key} className="feature-card">
-                <img className="icon-mono" src={capabilityIcons[card.key]} alt="" />
+                <img className={capabilityIcons[card.key].colored ? '' : 'icon-mono'} src={capabilityIcons[card.key].icon} alt="" />
                 <div className="feature-card__title">{card.title}</div>
                 <ul className="list">
                   {card.bullets.map((bullet) => (
@@ -116,11 +113,11 @@ export function HomePage() {
                   ))}
                 </ul>
                 {card.key === 'playlists' && (
-                  <div className="logo-row">
-                    <img className="logo-muted" src="/assets/icons/spotify-logo.svg" alt="Spotify" />
-                    <img className="logo-muted" src="/assets/icons/apple-music-logo.svg" alt="Apple Music" />
-                    <img className="logo-muted" src="/assets/icons/tidal-tidal.svg" alt="Tidal" />
-                    <img className="logo-muted" src="/assets/icons/deezer-logo.svg" alt="Deezer" />
+                  <div className="logo-row logo-row--centered">
+                    <img src="/assets/icons/spotify-logo.svg" alt="Spotify" />
+                    <img src="/assets/icons/apple-music-logo.svg" alt="Apple Music" />
+                    <img className="invert-white" src="/assets/icons/tidal-tidal.svg" alt="Tidal" />
+                    <img src="/assets/icons/deezer-logo.svg" alt="Deezer" />
                   </div>
                 )}
               </div>
