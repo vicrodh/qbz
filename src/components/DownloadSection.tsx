@@ -86,27 +86,26 @@ const detectPlatform = () => {
   const ua = navigator.userAgent.toLowerCase()
   const platform = navigator.platform.toLowerCase()
 
-  const isLinux = ua.includes('linux')
+  const isLinux = ua.includes('linux') && !ua.includes('android')
   const isMac = platform.includes('mac') || ua.includes('mac')
   const isWindows = platform.includes('win') || ua.includes('windows')
 
-  let distro: 'arch' | 'debian' | 'rpm' | 'unknown' = 'unknown'
-  // Arch-based distros
-  if (ua.includes('arch') || ua.includes('manjaro') || ua.includes('endeavour') || ua.includes('garuda')) {
-    distro = 'arch'
-  }
-  // Debian-based distros
-  else if (ua.includes('ubuntu') || ua.includes('debian') || ua.includes('mint') || ua.includes('pop')) {
-    distro = 'debian'
-  }
-  // RPM-based distros
-  else if (ua.includes('fedora') || ua.includes('redhat') || ua.includes('rhel') || ua.includes('suse')) {
-    distro = 'rpm'
-  }
+  // Note: Most Linux browsers don't include distro info in user-agent
+  // We show all options and let users choose
 
   const arch = ua.includes('aarch64') || ua.includes('arm64') ? 'arm64' : 'x86_64'
 
-  return { isLinux, isMac, isWindows, distro, arch }
+  return { isLinux, isMac, isWindows, arch }
+}
+
+// AUR download item for Arch users
+const aurItem: DownloadItem = {
+  type: 'aur',
+  label: TYPE_LABELS.aur,
+  fileName: 'qbz-bin',
+  url: AUR_PACKAGE_URL,
+  size: 0,
+  arch: null,
 }
 
 const findRecommended = (items: DownloadItem[]) => {
@@ -118,24 +117,18 @@ const findRecommended = (items: DownloadItem[]) => {
   const byType = (type: DownloadItem['type']) =>
     items.find((item) => item.type === type && (!item.arch || item.arch === platform.arch))
 
-  if (platform.distro === 'arch') {
-    // Return AUR pseudo-item for Arch users
-    return {
-      type: 'aur' as const,
-      label: TYPE_LABELS.aur,
-      fileName: 'qbz-bin',
-      url: AUR_PACKAGE_URL,
-      size: 0,
-      arch: null,
-    }
-  }
-  if (platform.distro === 'debian') {
-    return byType('deb') || byType('appimage')
-  }
-  if (platform.distro === 'rpm') {
-    return byType('rpm') || byType('appimage')
-  }
+  // For Linux users, default to AppImage as universal option
+  // AUR is shown in the full list for Arch users to select manually
   return byType('appimage') || byType('flatpak') || byType('tarball')
+}
+
+// Get all downloads including AUR for Linux users
+const getDownloadsWithAur = (items: DownloadItem[]) => {
+  const platform = detectPlatform()
+  if (platform.isLinux) {
+    return [aurItem, ...items]
+  }
+  return items
 }
 
 export function DownloadSection() {
@@ -161,8 +154,9 @@ export function DownloadSection() {
     }
   }, [])
 
-  const downloads = useMemo(() => (release ? mapAssets(release.assets) : []), [release])
-  const recommended = useMemo(() => findRecommended(downloads), [downloads])
+  const baseDownloads = useMemo(() => (release ? mapAssets(release.assets) : []), [release])
+  const downloads = useMemo(() => getDownloadsWithAur(baseDownloads), [baseDownloads])
+  const recommended = useMemo(() => findRecommended(baseDownloads), [baseDownloads])
   const releaseDate = release ? formatDate(release.published_at, language) : null
 
   return (
@@ -224,11 +218,11 @@ export function DownloadSection() {
                         {item.label} {item.arch ? <span className="pill">{item.arch}</span> : null}
                       </div>
                       <div className="download-meta__file">
-                        {item.fileName} · {formatBytes(item.size)}
+                        {item.type === 'aur' ? 'Arch User Repository' : `${item.fileName} · ${formatBytes(item.size)}`}
                       </div>
                     </div>
-                    <a className="btn btn-ghost" href={item.url}>
-                      {item.label}
+                    <a className="btn btn-ghost" href={item.url} target={item.type === 'aur' ? '_blank' : undefined} rel={item.type === 'aur' ? 'noreferrer' : undefined}>
+                      {item.type === 'aur' ? 'AUR' : item.label}
                     </a>
                   </div>
                 ))}
