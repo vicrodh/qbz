@@ -454,35 +454,12 @@ impl Player {
                 }
             };
 
-            // Initialize audio device with retry logic
-            // PipeWire/ALSA may need time to initialize at app startup
+            // Initialize audio device lazily on first playback to avoid idle CPU usage.
             let mut current_device_name = device_name.clone();
             let mut stream_opt: Option<(OutputStream, rodio::OutputStreamHandle)> = None;
 
             const MAX_INIT_RETRIES: u32 = 5;
             const RETRY_DELAY_MS: u64 = 500;
-
-            for attempt in 1..=MAX_INIT_RETRIES {
-                log::info!("Audio device initialization attempt {}/{}", attempt, MAX_INIT_RETRIES);
-
-                stream_opt = init_device(&current_device_name, &thread_state);
-
-                if stream_opt.is_some() {
-                    log::info!("Audio device initialized successfully on attempt {}", attempt);
-                    thread_state.set_stream_error(false);
-                    break;
-                }
-
-                if attempt < MAX_INIT_RETRIES {
-                    log::warn!("Audio init failed, retrying in {}ms...", RETRY_DELAY_MS);
-                    std::thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
-                }
-            }
-
-            if stream_opt.is_none() {
-                log::error!("Failed to initialize audio after {} attempts. Audio will not work until device is reinitialized.", MAX_INIT_RETRIES);
-                thread_state.set_stream_error(true);
-            }
 
             let mut current_sink: Option<Sink> = None;
             // Store audio data for seeking (we need to re-decode from the beginning)
@@ -502,6 +479,36 @@ impl Player {
                 match command {
                     AudioCommand::Play { data, track_id, duration_secs } => {
                         log::info!("Audio thread: playing track {}", track_id);
+
+                        if stream_opt.is_none() {
+                            for attempt in 1..=MAX_INIT_RETRIES {
+                                log::info!(
+                                    "Audio device init on playback attempt {}/{}",
+                                    attempt,
+                                    MAX_INIT_RETRIES
+                                );
+                                *stream_opt = init_device(current_device_name, &thread_state);
+                                if stream_opt.is_some() {
+                                    thread_state.set_stream_error(false);
+                                    break;
+                                }
+                                if attempt < MAX_INIT_RETRIES {
+                                    log::warn!(
+                                        "Audio init failed, retrying in {}ms...",
+                                        RETRY_DELAY_MS
+                                    );
+                                    std::thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
+                                }
+                            }
+                            if stream_opt.is_none() {
+                                log::error!(
+                                    "Failed to initialize audio after {} attempts.",
+                                    MAX_INIT_RETRIES
+                                );
+                                thread_state.set_stream_error(true);
+                                return;
+                            }
+                        }
 
                         let Some(ref stream) = *stream_opt else {
                             log::error!("Audio thread: no audio device available");
@@ -612,6 +619,8 @@ impl Player {
                         thread_state.position.store(0, Ordering::SeqCst);
                         thread_state.playback_start_millis.store(0, Ordering::SeqCst);
                         thread_state.position_at_start.store(0, Ordering::SeqCst);
+                        // Drop the stream to release the device and stop background CPU use.
+                        drop(stream_opt.take());
                         log::info!("Audio thread: stopped");
                     }
                     AudioCommand::SetVolume(volume) => {
