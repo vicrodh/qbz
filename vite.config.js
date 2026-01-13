@@ -7,6 +7,11 @@ const host = process.env.TAURI_DEV_HOST;
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [sveltekit()],
+  define: {
+    'import.meta.env.VITE_BUILD_DATE': JSON.stringify(
+      new Date().toISOString().split('T')[0]
+    ),
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //

@@ -1,6 +1,8 @@
 <script lang="ts">
   import { X, Github, Globe, ExternalLink } from 'lucide-svelte';
   import { openUrl } from '@tauri-apps/plugin-opener';
+  import { getName, getVersion } from '@tauri-apps/api/app';
+  import { onMount } from 'svelte';
 
   interface Props {
     isOpen: boolean;
@@ -9,8 +11,27 @@
 
   let { isOpen, onClose }: Props = $props();
 
-  const APP_VERSION = '0.1.0';
-  const BUILD_DATE = new Date().toISOString().split('T')[0];
+  const BUILD_DATE = import.meta.env.VITE_BUILD_DATE || new Date().toISOString().split('T')[0];
+
+  let appName = $state('QBZ');
+  let appVersion = $state('0.0.0');
+  const releaseUrl = $derived(
+    appVersion ? `https://github.com/vicrodh/qbz/releases/tag/v${appVersion}` : 'https://github.com/vicrodh/qbz/releases'
+  );
+
+  onMount(async () => {
+    try {
+      appName = await getName();
+    } catch (err) {
+      console.debug('Failed to read app name:', err);
+    }
+
+    try {
+      appVersion = await getVersion();
+    } catch (err) {
+      console.debug('Failed to read app version:', err);
+    }
+  });
 
   // Detect platform for Easter eggs
   const isMac = typeof navigator !== 'undefined' && /Mac/.test(navigator.platform);
@@ -29,8 +50,8 @@
         <div class="app-branding">
           <img src="/icons/AppIcons/android/96x96.png" alt="QBZ" class="app-icon" />
           <div class="app-title">
-            <h2>QBZ</h2>
-            <span class="version">v{APP_VERSION}</span>
+            <h2>{appName}</h2>
+            <span class="version">v{appVersion}</span>
           </div>
         </div>
         <button class="close-btn" onclick={onClose}>
@@ -53,6 +74,11 @@
             <span>GitHub</span>
             <ExternalLink size={12} />
           </button>
+          <button class="link-btn" onclick={() => handleOpenUrl(releaseUrl)}>
+            <ExternalLink size={16} />
+            <span>Release</span>
+            <ExternalLink size={12} />
+          </button>
           <button class="link-btn" onclick={() => handleOpenUrl('https://qbz.lol')}>
             <Globe size={16} />
             <span>Website</span>
@@ -65,7 +91,7 @@
           <h3>Build Info</h3>
           <div class="info-grid">
             <span class="label">Version</span>
-            <span class="value">{APP_VERSION}</span>
+            <span class="value">{appVersion}</span>
             <span class="label">License</span>
             <span class="value">MIT</span>
             <span class="label">Platform</span>
