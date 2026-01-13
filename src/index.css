@@ -125,7 +125,7 @@ p {
   align-items: center;
   gap: 12px;
   padding: 14px 26px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   font-weight: 600;
   cursor: pointer;
@@ -187,6 +187,7 @@ p {
 .grid {
   display: grid;
   gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 }
 
 .hero {
@@ -350,6 +351,7 @@ p {
   background: var(--surface);
   display: grid;
   gap: 12px;
+  align-content: start;
 }
 
 .feature-card__title {

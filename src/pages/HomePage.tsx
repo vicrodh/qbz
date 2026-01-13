@@ -12,9 +12,9 @@ export function HomePage() {
   const { language } = useApp()
 
   const stats = [
-    { icon: '/assets/icons/hi-res.svg', label: t('hero.stats.audio') },
-    { icon: '/assets/icons/home-gear.svg', label: t('hero.stats.dac') },
-    { icon: '/assets/icons/cast-audio.svg', label: t('hero.stats.casting') },
+    { icon: '/assets/icons/hi-res.svg', label: t('hero.stats.audio'), colored: true },
+    { icon: '/assets/icons/home-gear.svg', label: t('hero.stats.dac'), colored: false },
+    { icon: '/assets/icons/cast-audio.svg', label: t('hero.stats.casting'), colored: false },
   ]
 
   const capabilityIcons: Record<CapabilityKey, string> = {
@@ -56,7 +56,7 @@ export function HomePage() {
             <div className="hero__stats">
               {stats.map((stat) => (
                 <div key={stat.label} className="stat">
-                  <img className="stat__icon icon-mono" src={stat.icon} alt="" />
+                  <img className={`stat__icon ${stat.colored ? '' : 'icon-mono'}`} src={stat.icon} alt="" />
                   <div className="stat__label">{stat.label}</div>
                 </div>
               ))}
@@ -204,7 +204,7 @@ export function HomePage() {
           <h2 className="section__title">{t('linuxFirst.title')}</h2>
           <p className="section__subtitle">{t('linuxFirst.lead')}</p>
           <div className="logo-row" style={{ marginTop: 18 }}>
-            <img className="icon-mono" src="/assets/icons/Tux.svg" alt="Linux" />
+            <img src="/assets/icons/Tux.svg" alt="Linux" style={{ width: 64, height: 'auto' }} />
           </div>
           <a className="btn btn-ghost" href={buildPath(language, 'licenses')} style={{ marginTop: 24 }}>
             {t('nav.licenses')}

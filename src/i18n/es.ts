@@ -134,6 +134,7 @@ export const es = {
     fileCount: '{{count}} archivos',
     instructionsTitle: 'Comandos de instalación',
     instructions: {
+      aur: 'yay -S qbz-bin',
       appimage: 'chmod +x QBZ.AppImage && ./QBZ.AppImage',
       deb: 'sudo dpkg -i qbz_*.deb',
       rpm: 'sudo rpm -i qbz-*.rpm',
@@ -201,7 +202,7 @@ export const es = {
     categories: {
       core: {
         title: 'Tecnologías base',
-        items: ['Rust', 'Tauri', 'React', 'Vite', 'SQLite'],
+        items: ['Rust', 'Tauri', 'Svelte', 'Vite', 'SQLite'],
       },
       audio: {
         title: 'Librerías de audio y media',
@@ -210,6 +211,10 @@ export const es = {
       casting: {
         title: 'Casting y networking',
         items: ['rust_cast', 'DLNA/UPnP AVTransport'],
+      },
+      lyrics: {
+        title: 'Proveedores de letras',
+        items: ['LRCLIB', 'Lyricsify', 'Megalobiz', 'Lyrics.com'],
       },
       integrations: {
         title: 'Integraciones y APIs',

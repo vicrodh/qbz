@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 
-const CATEGORY_KEYS = ['core', 'audio', 'casting', 'integrations', 'website'] as const
+const CATEGORY_KEYS = ['core', 'audio', 'casting', 'lyrics', 'integrations', 'website'] as const
 
 export function LicensesPage() {
   const { t } = useTranslation()

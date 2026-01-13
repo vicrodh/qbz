@@ -17,7 +17,7 @@ type ReleaseData = {
 }
 
 type DownloadItem = {
-  type: 'appimage' | 'flatpak' | 'deb' | 'rpm' | 'tarball' | 'unknown'
+  type: 'appimage' | 'flatpak' | 'deb' | 'rpm' | 'tarball' | 'aur' | 'unknown'
   label: string
   fileName: string
   url: string
@@ -28,6 +28,7 @@ type DownloadItem = {
 const RELEASE_URL = 'https://api.github.com/repos/vicrodh/qbz/releases/latest'
 
 const TYPE_LABELS: Record<DownloadItem['type'], string> = {
+  aur: 'AUR (Arch)',
   appimage: 'AppImage',
   flatpak: 'Flatpak',
   deb: 'Debian/Ubuntu',
@@ -37,6 +38,7 @@ const TYPE_LABELS: Record<DownloadItem['type'], string> = {
 }
 
 const TYPE_PRIORITY: Record<DownloadItem['type'], number> = {
+  aur: 0,
   appimage: 1,
   flatpak: 2,
   deb: 3,
@@ -44,6 +46,8 @@ const TYPE_PRIORITY: Record<DownloadItem['type'], number> = {
   tarball: 5,
   unknown: 6,
 }
+
+const AUR_PACKAGE_URL = 'https://aur.archlinux.org/packages/qbz-bin'
 
 const getType = (name: string): DownloadItem['type'] => {
   const lower = name.toLowerCase()
@@ -86,11 +90,17 @@ const detectPlatform = () => {
   const isMac = platform.includes('mac') || ua.includes('mac')
   const isWindows = platform.includes('win') || ua.includes('windows')
 
-  let distro: 'debian' | 'rpm' | 'unknown' = 'unknown'
-  if (ua.includes('ubuntu') || ua.includes('debian') || ua.includes('mint') || ua.includes('pop')) {
+  let distro: 'arch' | 'debian' | 'rpm' | 'unknown' = 'unknown'
+  // Arch-based distros
+  if (ua.includes('arch') || ua.includes('manjaro') || ua.includes('endeavour') || ua.includes('garuda')) {
+    distro = 'arch'
+  }
+  // Debian-based distros
+  else if (ua.includes('ubuntu') || ua.includes('debian') || ua.includes('mint') || ua.includes('pop')) {
     distro = 'debian'
   }
-  if (ua.includes('fedora') || ua.includes('redhat') || ua.includes('rhel') || ua.includes('suse')) {
+  // RPM-based distros
+  else if (ua.includes('fedora') || ua.includes('redhat') || ua.includes('rhel') || ua.includes('suse')) {
     distro = 'rpm'
   }
 
@@ -108,6 +118,17 @@ const findRecommended = (items: DownloadItem[]) => {
   const byType = (type: DownloadItem['type']) =>
     items.find((item) => item.type === type && (!item.arch || item.arch === platform.arch))
 
+  if (platform.distro === 'arch') {
+    // Return AUR pseudo-item for Arch users
+    return {
+      type: 'aur' as const,
+      label: TYPE_LABELS.aur,
+      fileName: 'qbz-bin',
+      url: AUR_PACKAGE_URL,
+      size: 0,
+      arch: null,
+    }
+  }
   if (platform.distro === 'debian') {
     return byType('deb') || byType('appimage')
   }
@@ -223,6 +244,10 @@ export function DownloadSection() {
                 <div className="download-meta__file">{t('downloads.buildDisclaimer')}</div>
               </div>
               <div className="install-grid">
+                <div>
+                  <span className="pill">AUR (Arch)</span>
+                  <code>{t('downloads.instructions.aur')}</code>
+                </div>
                 <div>
                   <span className="pill">AppImage</span>
                   <code>{t('downloads.instructions.appimage')}</code>
