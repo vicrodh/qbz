@@ -1411,6 +1411,10 @@
     } else {
       stopActiveLineUpdates();
     }
+    // Cleanup on effect re-run or component unmount
+    return () => {
+      stopActiveLineUpdates();
+    };
   });
 
   // Derived values for NowPlayingBar

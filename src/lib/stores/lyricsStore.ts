@@ -382,6 +382,14 @@ export function reset(): void {
 // ============ Auto-update ============
 
 let updateInterval: number | null = null;
+let isUpdatesActive = false;
+
+/**
+ * Check if active line updates are currently running
+ */
+export function isActiveLineUpdatesRunning(): boolean {
+  return updateInterval !== null;
+}
 
 /**
  * Start auto-updating active line (call when lyrics are synced and playing)
@@ -389,11 +397,16 @@ let updateInterval: number | null = null;
 export function startActiveLineUpdates(): void {
   if (updateInterval !== null) return;
 
-  console.log('[Lyrics] Starting active line updates, isSynced:', parsedLyrics.isSynced);
+  isUpdatesActive = true;
+  console.log('[Lyrics] Starting active line updates');
   updateInterval = window.setInterval(() => {
-    if (parsedLyrics.isSynced) {
-      updateActiveLine();
+    // Self-check: stop if no longer needed
+    if (!isUpdatesActive || !parsedLyrics.isSynced) {
+      console.log('[Lyrics] Auto-stopping interval (conditions no longer met)');
+      stopActiveLineUpdates();
+      return;
     }
+    updateActiveLine();
   }, 50); // 50ms for smooth progress
 }
 
@@ -401,7 +414,9 @@ export function startActiveLineUpdates(): void {
  * Stop auto-updating active line
  */
 export function stopActiveLineUpdates(): void {
+  isUpdatesActive = false;
   if (updateInterval !== null) {
+    console.log('[Lyrics] Stopping active line updates');
     clearInterval(updateInterval);
     updateInterval = null;
   }

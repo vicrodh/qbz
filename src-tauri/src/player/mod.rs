@@ -494,8 +494,13 @@ impl Player {
             log::info!("Audio thread ready and waiting for commands");
 
             loop {
-                // Use recv_timeout so we can periodically check if sink is empty
-                match rx.recv_timeout(Duration::from_millis(100)) {
+                // Adaptive timeout: fast (100ms) when playing, slow (500ms) when idle
+                let timeout = if thread_state.is_playing.load(Ordering::SeqCst) {
+                    Duration::from_millis(100)
+                } else {
+                    Duration::from_millis(500)
+                };
+                match rx.recv_timeout(timeout) {
                     Ok(AudioCommand::Play { data, track_id, duration_secs }) => {
                         log::info!("Audio thread: playing track {}", track_id);
 

@@ -173,8 +173,18 @@ pub fn run() {
                 let mut last_track_id: u64 = 0;
 
                 loop {
-                    std::thread::sleep(std::time::Duration::from_millis(250));
+                    // Check playing state first to determine sleep duration
+                    let is_playing = player_state.is_playing();
 
+                    // Adaptive polling: fast (250ms) when playing, slow (1000ms) when idle
+                    let sleep_duration = if is_playing {
+                        std::time::Duration::from_millis(250)
+                    } else {
+                        std::time::Duration::from_millis(1000)
+                    };
+                    std::thread::sleep(sleep_duration);
+
+                    // Re-check after sleep (state might have changed)
                     let is_playing = player_state.is_playing();
                     let position = player_state.current_position();
                     let duration = player_state.duration();
