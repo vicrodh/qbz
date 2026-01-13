@@ -173,12 +173,18 @@ pub fn run() {
                 let mut last_track_id: u64 = 0;
 
                 loop {
-                    // Check playing state first to determine sleep duration
+                    // Check playing/track state first to determine sleep duration
                     let is_playing = player_state.is_playing();
+                    let track_id = player_state.current_track_id();
 
-                    // Adaptive polling: fast (250ms) when playing, slow (1000ms) when idle
+                    // Adaptive polling:
+                    // - fast (250ms) when playing
+                    // - slow (1000ms) when paused/stopped with a track loaded
+                    // - very slow (5000ms) when no track is loaded (idle)
                     let sleep_duration = if is_playing {
                         std::time::Duration::from_millis(250)
+                    } else if track_id == 0 {
+                        std::time::Duration::from_millis(5000)
                     } else {
                         std::time::Duration::from_millis(1000)
                     };
