@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=QBZ
+Comment=Native Qobuz client with hi-res audio support
+Exec=qbz
+Type=Application
+Icon=qbz
+Categories=Audio;Music;Player;AudioVideo;
+Terminal=false
+StartupWMClass=qbz-nix
+Keywords=music;audio;qobuz;hifi;streaming;
