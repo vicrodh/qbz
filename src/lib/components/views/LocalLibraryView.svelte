@@ -94,6 +94,9 @@
   let showSettings = $state(false);
   let albumSearch = $state('');
   let albumViewMode = $state<'grid' | 'list'>('grid');
+  type AlbumGroupMode = 'alpha' | 'artist';
+  let albumGroupMode = $state<AlbumGroupMode>('alpha');
+  let showGroupMenu = $state(false);
 
   // Data state
   let albums = $state<LocalAlbum[]>([]);
@@ -441,6 +444,70 @@
       album.artist.toLowerCase().includes(needle)
     );
   }
+
+  const alphaIndexLetters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
+
+  function alphaGroupKey(title: string): string {
+    const trimmed = title.trim();
+    if (!trimmed) return '#';
+    const first = trimmed[0].toUpperCase();
+    return first >= 'A' && first <= 'Z' ? first : '#';
+  }
+
+  function slugify(value: string): string {
+    return value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'group';
+  }
+
+  function groupIdForKey(mode: AlbumGroupMode, key: string): string {
+    if (mode === 'alpha' && key === '#') {
+      return 'alpha-num';
+    }
+    return `${mode}-${slugify(key)}`;
+  }
+
+  function groupAlbums(items: LocalAlbum[], mode: AlbumGroupMode) {
+    const sorted = [...items].sort((a, b) => {
+      if (mode === 'artist') {
+        const artistCmp = a.artist.localeCompare(b.artist);
+        if (artistCmp !== 0) return artistCmp;
+        return a.title.localeCompare(b.title);
+      }
+      return a.title.localeCompare(b.title);
+    });
+
+    const groups = new Map<string, LocalAlbum[]>();
+    for (const album of sorted) {
+      const key = mode === 'artist' ? album.artist : alphaGroupKey(album.title);
+      if (!groups.has(key)) {
+        groups.set(key, []);
+      }
+      groups.get(key)?.push(album);
+    }
+
+    const keys = [...groups.keys()].sort((a, b) => {
+      if (mode === 'alpha') {
+        if (a === '#') return -1;
+        if (b === '#') return 1;
+      }
+      return a.localeCompare(b);
+    });
+
+    return keys.map(key => ({
+      key,
+      id: groupIdForKey(mode, key),
+      albums: groups.get(key) ?? []
+    }));
+  }
+
+  function scrollToGroup(letter: string, available: Set<string>) {
+    if (!available.has(letter)) return;
+    const id = groupIdForKey('alpha', letter);
+    const target = document.getElementById(id);
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 </script>
 
 <div class="library-view">
@@ -683,6 +750,34 @@
               {/if}
             </div>
 
+            <div class="dropdown-container">
+              <button
+                class="control-btn"
+                onclick={() => (showGroupMenu = !showGroupMenu)}
+                title="Group albums"
+              >
+                <span>{albumGroupMode === 'alpha' ? 'Group: A-Z' : 'Group: Artist'}</span>
+              </button>
+              {#if showGroupMenu}
+                <div class="dropdown-menu">
+                  <button
+                    class="dropdown-item"
+                    class:selected={albumGroupMode === 'alpha'}
+                    onclick={() => { albumGroupMode = 'alpha'; showGroupMenu = false; }}
+                  >
+                    Alphabetical (A-Z)
+                  </button>
+                  <button
+                    class="dropdown-item"
+                    class:selected={albumGroupMode === 'artist'}
+                    onclick={() => { albumGroupMode = 'artist'; showGroupMenu = false; }}
+                  >
+                    Artist
+                  </button>
+                </div>
+              {/if}
+            </div>
+
             <button
               class="control-btn icon-only"
               onclick={() => (albumViewMode = albumViewMode === 'list' ? 'grid' : 'list')}
@@ -704,47 +799,80 @@
               <p>No albums match your search</p>
               <p class="empty-hint">Try a different artist or album name</p>
             </div>
-          {:else if albumViewMode === 'grid'}
-            <div class="album-grid">
-              {#each filteredAlbums as album (album.id)}
-                <AlbumCard
-                  artwork={getArtworkUrl(album.artwork_path)}
-                  title={album.title}
-                  artist={album.artist}
-                  quality={getAlbumQualityBadge(album)}
-                  onclick={() => handleAlbumClick(album)}
-                />
-              {/each}
-            </div>
           {:else}
-            <div class="album-list">
-              {#each filteredAlbums as album (album.id)}
-                <div class="album-row" role="button" tabindex="0" onclick={() => handleAlbumClick(album)}>
-                  <div class="album-row-art">
-                    {#if album.artwork_path}
-                      <img src={getArtworkUrl(album.artwork_path)} alt={album.title} loading="lazy" decoding="async" />
+            {@const groupedAlbums = groupAlbums(filteredAlbums, albumGroupMode)}
+            {@const alphaGroups = albumGroupMode === 'alpha'
+              ? new Set(groupedAlbums.map(group => group.key))
+              : new Set<string>()}
+
+            <div class="album-sections">
+              <div class="album-group-list">
+                {#each groupedAlbums as group (group.id)}
+                  <div class="album-group" id={group.id}>
+                    <div class="album-group-header">
+                      <span class="album-group-title">{group.key}</span>
+                      <span class="album-group-count">{group.albums.length}</span>
+                    </div>
+                    {#if albumViewMode === 'grid'}
+                      <div class="album-grid">
+                        {#each group.albums as album (album.id)}
+                          <AlbumCard
+                            artwork={getArtworkUrl(album.artwork_path)}
+                            title={album.title}
+                            artist={album.artist}
+                            quality={getAlbumQualityBadge(album)}
+                            onclick={() => handleAlbumClick(album)}
+                          />
+                        {/each}
+                      </div>
                     {:else}
-                      <div class="artwork-placeholder">
-                        <Disc3 size={28} />
+                      <div class="album-list">
+                        {#each group.albums as album (album.id)}
+                          <div class="album-row" role="button" tabindex="0" onclick={() => handleAlbumClick(album)}>
+                            <div class="album-row-art">
+                              {#if album.artwork_path}
+                                <img src={getArtworkUrl(album.artwork_path)} alt={album.title} loading="lazy" decoding="async" />
+                              {:else}
+                                <div class="artwork-placeholder">
+                                  <Disc3 size={28} />
+                                </div>
+                              {/if}
+                            </div>
+                            <div class="album-row-info">
+                              <div class="album-row-title">{album.title}</div>
+                              <div class="album-row-meta">
+                                <span>{album.artist}</span>
+                                {#if album.year}<span>{album.year}</span>{/if}
+                                <span>{album.track_count} tracks</span>
+                                <span>{formatTotalDuration(album.total_duration_secs)}</span>
+                              </div>
+                            </div>
+                            <div class="album-row-quality">
+                              <span class="quality-badge" class:hires={isAlbumHiRes(album)}>
+                                {getAlbumQualityBadge(album)}
+                              </span>
+                            </div>
+                          </div>
+                        {/each}
                       </div>
                     {/if}
                   </div>
-                  <div class="album-row-info">
-                    <div class="album-row-title">{album.title}</div>
-                    <div class="album-row-meta">
-                      <span>{album.artist}</span>
-                      {#if album.year}<span>{album.year}</span>{/if}
-                      <span>{album.track_count} tracks</span>
-                      <span>{formatTotalDuration(album.total_duration_secs)}</span>
-                    </div>
-                  </div>
-                  <div class="album-row-quality">
-                    <span class="quality-badge" class:hires={isAlbumHiRes(album)}>
-                      {getAlbumQualityBadge(album)}
-                    </span>
-                  </div>
+                {/each}
+              </div>
+
+              {#if albumGroupMode === 'alpha'}
+                <div class="alpha-index">
+                  {#each alphaIndexLetters as letter}
+                    <button
+                      class="alpha-letter"
+                      class:disabled={!alphaGroups.has(letter)}
+                      onclick={() => scrollToGroup(letter, alphaGroups)}
+                    >
+                      {letter}
+                    </button>
+                  {/each}
                 </div>
-              {/each}
+              {/if}
             </div>
           {/if}
         {/if}
@@ -1208,6 +1336,45 @@
     margin-left: auto;
   }
 
+  .dropdown-container {
+    position: relative;
+  }
+
+  .dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 6px;
+    min-width: 180px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    z-index: 20;
+  }
+
+  .dropdown-item {
+    width: 100%;
+    text-align: left;
+    padding: 8px 10px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 150ms ease;
+  }
+
+  .dropdown-item:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .dropdown-item.selected {
+    background: var(--bg-tertiary);
+    font-weight: 600;
+  }
+
   /* Content */
   .content {
     min-height: 200px;
@@ -1258,6 +1425,44 @@
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
     gap: 24px;
+  }
+
+  .album-sections {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .album-group-list {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+  }
+
+  .album-group {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .album-group-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+
+  .album-group-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+
+  .album-group-count {
+    font-size: 12px;
+    color: var(--text-muted);
   }
 
   /* Album List */
@@ -1320,7 +1525,7 @@
   }
 
   .album-row-meta span + span::before {
-    content: "\u2022";
+    content: "\2022";
     margin: 0 8px;
     color: var(--text-muted);
   }
@@ -1344,6 +1549,40 @@
     background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
     color: white;
     border-color: transparent;
+  }
+
+  .alpha-index {
+    position: sticky;
+    top: 120px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 4px;
+    border-radius: 10px;
+    background: rgba(0, 0, 0, 0.2);
+  }
+
+  .alpha-letter {
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    opacity: 0.9;
+  }
+
+  .alpha-letter:hover {
+    color: var(--accent-primary);
+  }
+
+  .alpha-letter.disabled {
+    opacity: 0.25;
+    cursor: default;
+    pointer-events: none;
   }
 
   /* Artist Grid */
