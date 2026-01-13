@@ -15,16 +15,29 @@ use crate::cast::MediaServer;
 pub struct DlnaState {
     pub discovery: Arc<Mutex<DlnaDiscovery>>,
     pub connection: Arc<Mutex<Option<DlnaConnection>>>,
-    pub media_server: Arc<Mutex<MediaServer>>,
+    /// Shared media server (lazily initialized)
+    pub media_server: Arc<Mutex<Option<MediaServer>>>,
 }
 
 impl DlnaState {
-    pub fn new(media_server: Arc<Mutex<MediaServer>>) -> Result<Self, DlnaError> {
+    pub fn new(media_server: Arc<Mutex<Option<MediaServer>>>) -> Result<Self, DlnaError> {
         Ok(Self {
             discovery: Arc::new(Mutex::new(DlnaDiscovery::new())),
             connection: Arc::new(Mutex::new(None)),
             media_server,
         })
+    }
+
+    /// Ensure media server is started (lazy initialization)
+    pub async fn ensure_media_server(&self) -> Result<(), DlnaError> {
+        let mut server_guard = self.media_server.lock().await;
+        if server_guard.is_none() {
+            log::info!("Starting media server on demand for DLNA");
+            *server_guard = Some(MediaServer::start().map_err(|e| {
+                DlnaError::Connection(format!("Failed to start media server: {}", e))
+            })?);
+        }
+        Ok(())
     }
 }
 
@@ -125,8 +138,12 @@ pub async fn dlna_play_track(
         connection.as_ref().map(|conn| conn.device_ip().to_string())
     };
 
+    // Ensure media server is started (lazy init)
+    dlna_state.ensure_media_server().await.map_err(|e| e.to_string())?;
+
     let url = {
-        let mut server = dlna_state.media_server.lock().await;
+        let mut server_guard = dlna_state.media_server.lock().await;
+        let server = server_guard.as_mut().ok_or("Media server not initialized")?;
         server.register_audio(track_id, audio_data, &content_type);
         let url = match target_ip.as_deref() {
             Some(ip) => server.get_audio_url_for_target(track_id, ip),
