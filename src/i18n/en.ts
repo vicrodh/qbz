@@ -210,7 +210,7 @@ export const en = {
       },
       lyrics: {
         title: 'Lyrics providers',
-        items: ['LRCLIB', 'Lyricsify', 'Megalobiz', 'Lyrics.com'],
+        items: ['LRCLIB'],
       },
       integrations: {
         title: 'Integrations and APIs',

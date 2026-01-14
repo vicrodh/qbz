@@ -19,7 +19,7 @@ export function LicensesPage() {
 
         <div className="license-hero" style={{ marginTop: 32 }}>
           <div className="card card--highlight license-card">
-            <img className="icon-mono license-icon" src="/assets/icons/mit-license.svg" alt="" />
+            <img className="license-icon" src="/assets/icons/mit-license.svg" alt="" style={{ width: 56, height: 56 }} />
             <div className="download-meta">
               <div className="download-meta__name">{t('licenses.qbzLicense')}</div>
               <div className="download-meta__file">{t('licenses.qbzLicenseBody')}</div>

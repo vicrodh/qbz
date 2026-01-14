@@ -12,9 +12,9 @@ export function HomePage() {
   const { language } = useApp()
 
   const stats = [
-    { icon: '/assets/icons/hi-res.svg', label: t('hero.stats.audio'), colored: true },
-    { icon: '/assets/icons/dac.svg', label: t('hero.stats.dac'), colored: false },
-    { icon: '/assets/icons/cast-audio.svg', label: t('hero.stats.casting'), colored: false },
+    { icon: '/assets/icons/hi-res.svg', label: t('hero.stats.audio'), colored: true, large: false },
+    { icon: '/assets/icons/dac.svg', label: t('hero.stats.dac'), colored: false, large: true },
+    { icon: '/assets/icons/cast-audio.svg', label: t('hero.stats.casting'), colored: false, large: false },
   ]
 
   const capabilityIcons: Record<CapabilityKey, string> = {
@@ -56,7 +56,11 @@ export function HomePage() {
             <div className="hero__stats">
               {stats.map((stat) => (
                 <div key={stat.label} className="stat">
-                  <img className={`stat__icon ${stat.colored ? '' : 'icon-mono'}`} src={stat.icon} alt="" />
+                  <img
+                    className={`stat__icon ${stat.colored ? '' : 'icon-mono'} ${stat.large ? 'stat__icon--large' : ''}`}
+                    src={stat.icon}
+                    alt=""
+                  />
                   <div className="stat__label">{stat.label}</div>
                 </div>
               ))}

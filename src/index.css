@@ -295,6 +295,11 @@ p {
   height: 28px;
 }
 
+.stat__icon--large {
+  width: 42px;
+  height: 42px;
+}
+
 .stat__label {
   font-size: 0.95rem;
   color: var(--text-secondary);
@@ -686,6 +691,7 @@ p {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  align-items: flex-start;
 }
 
 .download-item__header {
@@ -728,6 +734,7 @@ p {
   padding: 10px 12px;
   font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
   font-size: 0.85rem;
+  align-self: stretch;
 }
 
 .terminal code {
