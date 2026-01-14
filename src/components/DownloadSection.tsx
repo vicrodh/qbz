@@ -51,7 +51,7 @@ type DownloadItem = {
   arch: string | null
 }
 
-const RELEASE_URL = 'https://api.github.com/repos/vicrodh/qbz/releases/latest'
+const RELEASES_URL = 'https://api.github.com/repos/vicrodh/qbz/releases'
 
 const TYPE_LABELS: Record<DownloadItem['type'], string> = {
   aur: 'AUR (Arch)',
@@ -152,11 +152,17 @@ export function DownloadSection() {
 
   useEffect(() => {
     let active = true
-    fetch(RELEASE_URL)
+    fetch(RELEASES_URL)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('release fetch failed'))))
-      .then((data: ReleaseData) => {
+      .then((data: ReleaseData[]) => {
         if (!active) return
-        setRelease(data)
+        // Find the first release that has assets
+        const releaseWithAssets = data.find((r) => r.assets && r.assets.length > 0)
+        if (releaseWithAssets) {
+          setRelease(releaseWithAssets)
+        } else {
+          setError(true)
+        }
       })
       .catch(() => {
         if (!active) return

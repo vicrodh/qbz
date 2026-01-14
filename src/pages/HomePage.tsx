@@ -18,7 +18,7 @@ export function HomePage() {
   ]
 
   const capabilityIcons: Record<CapabilityKey, string> = {
-    audio: '/assets/icons/hi-res.svg',
+    audio: '/assets/icons/audio-spec.svg',
     library: '/assets/icons/nas.svg',
     playlists: '/assets/icons/playlist.svg',
     desktop: '/assets/icons/linux-desktop.svg',
