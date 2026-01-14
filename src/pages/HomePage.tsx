@@ -106,9 +106,12 @@ export function HomePage() {
         <div className="container">
           <h2 className="section__title">{t('capabilities.title')}</h2>
           <p className="section__subtitle">{t('capabilities.lead')}</p>
-          <div className="capability-scroll" style={{ marginTop: 32 }}>
-            {capabilityCards.map((card) => (
-              <div key={card.key} className="capability-card">
+        </div>
+        <div className="carousel-wrapper" style={{ marginTop: 32 }}>
+          <div className="carousel-track">
+            {/* Duplicate cards for seamless infinite loop */}
+            {[...capabilityCards, ...capabilityCards].map((card, index) => (
+              <div key={`${card.key}-${index}`} className="capability-card">
                 <img className="icon-mono" src={capabilityIcons[card.key]} alt="" />
                 <div className="capability-card__title">{card.title}</div>
                 <ul className="list list--compact">

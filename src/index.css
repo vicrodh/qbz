@@ -370,32 +370,33 @@ p {
   gap: 18px;
 }
 
-.capability-scroll {
+.carousel-wrapper {
+  overflow: hidden;
+  width: 100%;
+}
+
+.carousel-track {
   display: flex;
   gap: 16px;
-  overflow-x: auto;
-  scroll-snap-type: x mandatory;
-  padding-bottom: 16px;
-  -webkit-overflow-scrolling: touch;
+  animation: carousel-scroll 30s linear infinite;
+  width: max-content;
 }
 
-.capability-scroll::-webkit-scrollbar {
-  height: 8px;
+.carousel-track:hover {
+  animation-play-state: paused;
 }
 
-.capability-scroll::-webkit-scrollbar-track {
-  background: var(--surface);
-  border-radius: 4px;
-}
-
-.capability-scroll::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
+@keyframes carousel-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(calc(-50% - 8px));
+  }
 }
 
 .capability-card {
   flex: 0 0 280px;
-  scroll-snap-align: start;
   border-radius: var(--radius-md);
   border: 1px solid var(--border);
   padding: 20px;
