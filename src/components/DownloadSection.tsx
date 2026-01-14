@@ -92,6 +92,8 @@ const getArch = (name: string): string | null => {
   return null
 }
 
+const DISABLED_TYPES: DownloadItem['type'][] = ['flatpak'] // Temporarily disabled
+
 const mapAssets = (assets: ReleaseAsset[]): DownloadItem[] =>
   assets
     .filter((asset) => asset.browser_download_url)
@@ -106,6 +108,7 @@ const mapAssets = (assets: ReleaseAsset[]): DownloadItem[] =>
         arch: getArch(asset.name),
       }
     })
+    .filter((item) => !DISABLED_TYPES.includes(item.type))
     .sort((a, b) => TYPE_PRIORITY[a.type] - TYPE_PRIORITY[b.type])
 
 const detectPlatform = () => {
