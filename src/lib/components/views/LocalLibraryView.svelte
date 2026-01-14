@@ -4,7 +4,7 @@
   import { onMount, onDestroy } from 'svelte';
   import {
     HardDrive, Music, Disc3, Mic2, FolderPlus, Trash2, RefreshCw,
-    Settings, X, Play, AlertCircle, ImageDown, Upload, Search, LayoutGrid, List
+    Settings, ArrowLeft, X, Play, AlertCircle, ImageDown, Upload, Search, LayoutGrid, List
   } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
@@ -70,6 +70,7 @@
   interface ArtistSearchResult {
     id: number;
     name: string;
+    image?: { small?: string; thumbnail?: string; large?: string };
   }
 
   interface SearchResults<T> {
@@ -148,6 +149,9 @@
   // Album detail state (for viewing album tracks)
   let selectedAlbum = $state<LocalAlbum | null>(null);
   let albumTracks = $state<LocalTrack[]>([]);
+
+  // Qobuz artist images cache (artist name -> image URL)
+  let artistImages = $state<Map<string, string>>(new Map());
 
   // Playlist modal state
   let showPlaylistModal = $state(false);
@@ -274,6 +278,9 @@
     loading = true;
     try {
       artists = await invoke<LocalArtist[]>('library_get_artists');
+      // Fetch Qobuz artist images in background (best-effort)
+      const artistNames = artists.map(a => a.name);
+      fetchArtistImages(artistNames);
     } catch (err) {
       console.error('Failed to load artists:', err);
       error = String(err);
@@ -820,6 +827,56 @@
     }
   }
 
+  /**
+   * Fetch artist images from Qobuz for local artists.
+   * Does a best-effort match and caches images by artist name.
+   */
+  async function fetchArtistImages(artistNames: string[]): Promise<void> {
+    // Filter out artists we already have images for and "Various Artists"
+    const toFetch = artistNames.filter(name => {
+      const normalized = normalizeArtistName(name);
+      return normalized !== 'various artists' && !artistImages.has(name);
+    });
+
+    if (toFetch.length === 0) return;
+
+    // Fetch in batches of 10 to avoid overwhelming the API
+    const batchSize = 10;
+    for (let i = 0; i < toFetch.length; i += batchSize) {
+      const batch = toFetch.slice(i, i + batchSize);
+      const promises = batch.map(async (name) => {
+        try {
+          const results = await invoke<SearchResults<ArtistSearchResult>>('search_artists', {
+            query: name.trim(),
+            limit: 3,
+            offset: 0
+          });
+
+          if (!results.items.length) return;
+
+          const normalizedQuery = normalizeArtistName(name);
+          const exactMatch = results.items.find(
+            artist => normalizeArtistName(artist.name) === normalizedQuery
+          );
+          const match = exactMatch ?? results.items[0];
+
+          // Get the best available image
+          const imageUrl = match.image?.large || match.image?.thumbnail || match.image?.small;
+          if (imageUrl) {
+            artistImages.set(name, imageUrl);
+          }
+        } catch (err) {
+          // Silently fail for individual artists - it's best-effort
+          console.debug('Failed to fetch image for artist:', name, err);
+        }
+      });
+
+      await Promise.all(promises);
+      // Update state to trigger re-render
+      artistImages = new Map(artistImages);
+    }
+  }
+
   function handleLocalAlbumLink(track: LocalTrack) {
     if (!track.album_group_key) return;
     const album = albums.find(item => item.id === track.album_group_key);
@@ -939,7 +996,7 @@
     <!-- Album Detail View -->
     <div class="album-detail">
       <button class="back-btn" onclick={() => { clearLocalAlbum(); navGoBack(); }}>
-        <X size={20} />
+        <ArrowLeft size={16} />
         <span>Back to Library</span>
       </button>
 
@@ -1366,6 +1423,7 @@
           {:else}
             <div class="artist-grid">
               {#each filteredArtists as artist (artist.name)}
+                {@const artistImage = artistImages.get(artist.name)}
                 <div
                   class="artist-card"
                   role="button"
@@ -1373,8 +1431,12 @@
                   onclick={() => handleLocalArtistClick(artist.name)}
                   onkeydown={(event) => event.key === 'Enter' && handleLocalArtistClick(artist.name)}
                 >
-                  <div class="artist-icon">
-                    <Mic2 size={32} />
+                  <div class="artist-icon" class:has-image={!!artistImage}>
+                    {#if artistImage}
+                      <img src={artistImage} alt={artist.name} class="artist-image" loading="lazy" />
+                    {:else}
+                      <Mic2 size={32} />
+                    {/if}
                   </div>
                   <div class="artist-name">{artist.name}</div>
                   <div class="artist-stats">
@@ -2323,6 +2385,17 @@
     border-radius: 50%;
     margin-bottom: 12px;
     color: var(--text-muted);
+    overflow: hidden;
+  }
+
+  .artist-icon.has-image {
+    background: none;
+  }
+
+  .artist-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .artist-name {
