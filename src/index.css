@@ -373,26 +373,15 @@ p {
 .carousel-wrapper {
   overflow: hidden;
   width: 100%;
+  position: relative;
 }
 
 .carousel-track {
   display: flex;
   gap: 16px;
-  animation: carousel-scroll 30s linear infinite;
+  transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
   width: max-content;
-}
-
-.carousel-track:hover {
-  animation-play-state: paused;
-}
-
-@keyframes carousel-scroll {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(calc(-50% - 8px));
-  }
+  padding: 8px 0;
 }
 
 .capability-card {
@@ -404,6 +393,43 @@ p {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  opacity: 0.5;
+  transform: scale(0.95);
+  transition: opacity 0.5s, transform 0.5s;
+}
+
+.capability-card--active {
+  opacity: 1;
+  transform: scale(1);
+  border-color: var(--accent);
+  box-shadow: 0 0 20px var(--accent-glow);
+}
+
+.carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.carousel-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: none;
+  background: var(--border);
+  cursor: pointer;
+  transition: background 0.3s, transform 0.3s;
+  padding: 0;
+}
+
+.carousel-dot:hover {
+  background: var(--text-tertiary);
+}
+
+.carousel-dot--active {
+  background: var(--accent);
+  transform: scale(1.2);
 }
 
 .capability-card__title {

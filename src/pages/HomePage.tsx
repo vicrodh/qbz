@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next'
+import { useEffect, useState, useRef } from 'react'
 import { DownloadSection } from '../components/DownloadSection'
 import { useApp } from '../lib/appContext'
 import { buildPath } from '../lib/routes'
@@ -6,6 +7,91 @@ import { buildPath } from '../lib/routes'
 const CAPABILITY_KEYS = ['audio', 'library', 'playlists', 'desktop', 'casting'] as const
 
 type CapabilityKey = (typeof CAPABILITY_KEYS)[number]
+
+type CapabilityCard = {
+  key: CapabilityKey
+  title: string
+  bullets: string[]
+}
+
+function CapabilitiesCarousel({
+  capabilityCards,
+  capabilityIcons,
+}: {
+  capabilityCards: CapabilityCard[]
+  capabilityIcons: Record<CapabilityKey, string>
+}) {
+  const { t } = useTranslation()
+  const [currentIndex, setCurrentIndex] = useState(0)
+  const [isPaused, setIsPaused] = useState(false)
+  const trackRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (isPaused) return
+
+    const interval = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % capabilityCards.length)
+    }, 6000) // 6 seconds per slide
+
+    return () => clearInterval(interval)
+  }, [isPaused, capabilityCards.length])
+
+  const cardWidth = 296 // 280px + 16px gap
+
+  return (
+    <section className="section section--muted">
+      <div className="container">
+        <h2 className="section__title">{t('capabilities.title')}</h2>
+        <p className="section__subtitle">{t('capabilities.lead')}</p>
+      </div>
+      <div
+        className="carousel-wrapper"
+        style={{ marginTop: 32 }}
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+      >
+        <div
+          ref={trackRef}
+          className="carousel-track"
+          style={{ transform: `translateX(calc(50vw - ${currentIndex * cardWidth}px - 140px))` }}
+        >
+          {capabilityCards.map((card) => (
+            <div
+              key={card.key}
+              className={`capability-card ${capabilityCards[currentIndex].key === card.key ? 'capability-card--active' : ''}`}
+            >
+              <img className="icon-mono" src={capabilityIcons[card.key]} alt="" />
+              <div className="capability-card__title">{card.title}</div>
+              <ul className="list list--compact">
+                {card.bullets.map((bullet) => (
+                  <li key={bullet}>{bullet}</li>
+                ))}
+              </ul>
+              {card.key === 'playlists' && (
+                <div className="logo-row logo-row--centered">
+                  <img src="/assets/icons/spotify-logo.svg" alt="Spotify" />
+                  <img src="/assets/icons/apple-music-logo.svg" alt="Apple Music" />
+                  <img className="invert-white" src="/assets/icons/tidal-tidal.svg" alt="Tidal" />
+                  <img src="/assets/icons/deezer-logo.svg" alt="Deezer" />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+        <div className="carousel-dots">
+          {capabilityCards.map((card, index) => (
+            <button
+              key={card.key}
+              className={`carousel-dot ${index === currentIndex ? 'carousel-dot--active' : ''}`}
+              onClick={() => setCurrentIndex(index)}
+              aria-label={`Go to ${card.title}`}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  )
+}
 
 export function HomePage() {
   const { t } = useTranslation()
@@ -102,36 +188,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="section section--muted">
-        <div className="container">
-          <h2 className="section__title">{t('capabilities.title')}</h2>
-          <p className="section__subtitle">{t('capabilities.lead')}</p>
-        </div>
-        <div className="carousel-wrapper" style={{ marginTop: 32 }}>
-          <div className="carousel-track">
-            {/* Duplicate cards for seamless infinite loop */}
-            {[...capabilityCards, ...capabilityCards].map((card, index) => (
-              <div key={`${card.key}-${index}`} className="capability-card">
-                <img className="icon-mono" src={capabilityIcons[card.key]} alt="" />
-                <div className="capability-card__title">{card.title}</div>
-                <ul className="list list--compact">
-                  {card.bullets.map((bullet) => (
-                    <li key={bullet}>{bullet}</li>
-                  ))}
-                </ul>
-                {card.key === 'playlists' && (
-                  <div className="logo-row logo-row--centered">
-                    <img src="/assets/icons/spotify-logo.svg" alt="Spotify" />
-                    <img src="/assets/icons/apple-music-logo.svg" alt="Apple Music" />
-                    <img className="invert-white" src="/assets/icons/tidal-tidal.svg" alt="Tidal" />
-                    <img src="/assets/icons/deezer-logo.svg" alt="Deezer" />
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <CapabilitiesCarousel capabilityCards={capabilityCards} capabilityIcons={capabilityIcons} />
 
       <section className="section">
         <div className="container">
