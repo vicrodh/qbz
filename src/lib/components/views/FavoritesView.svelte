@@ -1488,46 +1488,43 @@
 
   .album-group-header {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: var(--text-muted);
-    font-size: 12px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 8px;
+    align-items: baseline;
+    gap: 8px;
   }
 
   .album-group-title {
-    font-weight: 600;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .album-group-count {
     font-size: 12px;
+    color: var(--text-muted);
   }
 
   .album-list {
-    display: grid;
-    grid-template-columns: 56px 1fr auto;
-    gap: 16px;
-    background: var(--bg-secondary);
-    border-radius: 12px;
-    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
   }
 
   .album-row {
-    grid-column: 1 / -1;
     display: grid;
     grid-template-columns: 56px 1fr auto;
-    gap: 16px;
+    gap: 12px;
     align-items: center;
-    padding: 8px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
     border-radius: 10px;
     cursor: pointer;
-    transition: background-color 150ms ease;
+    transition: background 150ms ease;
   }
 
   .album-row:hover {
-    background-color: var(--bg-tertiary);
+    background: var(--bg-tertiary);
   }
 
   .album-row-art {
@@ -1574,8 +1571,8 @@
   }
 
   .album-row-meta span + span::before {
-    content: "/";
-    margin: 0 6px;
+    content: "\2022";
+    margin: 0 8px;
     color: var(--text-muted);
   }
 
