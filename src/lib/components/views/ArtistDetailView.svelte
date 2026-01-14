@@ -46,6 +46,12 @@
     artist: ArtistDetail;
     onBack: () => void;
     onAlbumClick?: (albumId: string) => void;
+    onAlbumPlay?: (albumId: string) => void;
+    onAlbumPlayNext?: (albumId: string) => void;
+    onAlbumPlayLater?: (albumId: string) => void;
+    onAlbumShareQobuz?: (albumId: string) => void;
+    onAlbumShareSonglink?: (albumId: string) => void;
+    onAlbumDownload?: (albumId: string) => void;
     onLoadMore?: () => void;
     isLoadingMore?: boolean;
     onPlaylistClick?: (playlistId: number) => void;
@@ -64,6 +70,12 @@
     artist,
     onBack,
     onAlbumClick,
+    onAlbumPlay,
+    onAlbumPlayNext,
+    onAlbumPlayLater,
+    onAlbumShareQobuz,
+    onAlbumShareSonglink,
+    onAlbumDownload,
     onLoadMore,
     isLoadingMore = false,
     onPlaylistClick,
@@ -552,17 +564,24 @@
     {#if artist.albums.length === 0}
       <div class="no-albums">No albums found</div>
     {:else}
-      <div class="albums-grid">
-        {#each artist.albums as album}
-          <AlbumCard
-            artwork={album.artwork}
-            title={album.title}
-            artist={album.year || ''}
-            quality={album.quality}
-            onclick={() => onAlbumClick?.(album.id)}
-          />
-        {/each}
-      </div>
+        <div class="albums-grid">
+          {#each artist.albums as album}
+            <AlbumCard
+              albumId={album.id}
+              artwork={album.artwork}
+              title={album.title}
+              artist={album.year || ''}
+              quality={album.quality}
+              onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+              onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+              onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+              onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+              onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+              onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+              onclick={() => onAlbumClick?.(album.id)}
+            />
+          {/each}
+        </div>
 
       {#if hasMoreAlbums}
         <div class="load-more-container">
@@ -586,10 +605,17 @@
       <div class="albums-grid">
         {#each artist.epsSingles as album}
           <AlbumCard
+            albumId={album.id}
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
             quality={album.quality}
+            onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+            onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+            onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+            onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+            onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+            onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
             onclick={() => onAlbumClick?.(album.id)}
           />
         {/each}
@@ -605,10 +631,17 @@
       <div class="albums-grid">
         {#each artist.liveAlbums as album}
           <AlbumCard
+            albumId={album.id}
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
             quality={album.quality}
+            onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+            onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+            onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+            onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+            onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+            onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
             onclick={() => onAlbumClick?.(album.id)}
           />
         {/each}
@@ -624,10 +657,17 @@
       <div class="albums-grid">
         {#each artist.compilations as album}
           <AlbumCard
+            albumId={album.id}
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
             quality={album.quality}
+            onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+            onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+            onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+            onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+            onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+            onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
             onclick={() => onAlbumClick?.(album.id)}
           />
         {/each}

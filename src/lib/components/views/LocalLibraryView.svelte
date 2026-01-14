@@ -401,6 +401,11 @@
     }
   }
 
+  async function handleAlbumPlayFromGrid(album: LocalAlbum) {
+    await handleAlbumClick(album);
+    await handlePlayAllAlbum();
+  }
+
   async function handleTrackPlay(track: LocalTrack) {
     try {
       await invoke('library_play_track', { trackId: track.id });
@@ -1141,6 +1146,7 @@
                             title={album.title}
                             artist={album.artist}
                             quality={getAlbumQualityBadge(album)}
+                            onPlay={() => handleAlbumPlayFromGrid(album)}
                             onclick={() => handleAlbumClick(album)}
                           />
                         {/each}

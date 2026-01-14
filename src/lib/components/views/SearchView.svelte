@@ -28,6 +28,12 @@
 
   interface Props {
     onAlbumClick?: (albumId: string) => void;
+    onAlbumPlay?: (albumId: string) => void;
+    onAlbumPlayNext?: (albumId: string) => void;
+    onAlbumPlayLater?: (albumId: string) => void;
+    onAlbumShareQobuz?: (albumId: string) => void;
+    onAlbumShareSonglink?: (albumId: string) => void;
+    onAlbumDownload?: (albumId: string) => void;
     onTrackPlay?: (track: Track) => void;
     onTrackPlayNext?: (track: Track) => void;
     onTrackPlayLater?: (track: Track) => void;
@@ -42,6 +48,12 @@
 
   let {
     onAlbumClick,
+    onAlbumPlay,
+    onAlbumPlayNext,
+    onAlbumPlayLater,
+    onAlbumShareQobuz,
+    onAlbumShareSonglink,
+    onAlbumDownload,
     onTrackPlay,
     onTrackPlayNext,
     onTrackPlayLater,
@@ -346,10 +358,17 @@
         <div class="albums-grid">
           {#each albumResults.items as album}
             <AlbumCard
+              albumId={album.id}
               artwork={getAlbumArtwork(album)}
               title={album.title}
               artist={album.artist?.name || 'Unknown Artist'}
               quality={getQualityLabel(album)}
+              onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+              onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+              onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+              onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+              onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+              onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
               onclick={() => onAlbumClick?.(album.id)}
             />
           {/each}

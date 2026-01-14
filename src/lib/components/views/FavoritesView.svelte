@@ -37,6 +37,12 @@
 
   interface Props {
     onAlbumClick?: (albumId: string) => void;
+    onAlbumPlay?: (albumId: string) => void;
+    onAlbumPlayNext?: (albumId: string) => void;
+    onAlbumPlayLater?: (albumId: string) => void;
+    onAlbumShareQobuz?: (albumId: string) => void;
+    onAlbumShareSonglink?: (albumId: string) => void;
+    onAlbumDownload?: (albumId: string) => void;
     onTrackPlay?: (track: DisplayTrack) => void;
     onArtistClick?: (artistId: number) => void;
     onTrackPlayNext?: (track: DisplayTrack) => void;
@@ -72,6 +78,12 @@
 
   let {
     onAlbumClick,
+    onAlbumPlay,
+    onAlbumPlayNext,
+    onAlbumPlayLater,
+    onAlbumShareQobuz,
+    onAlbumShareSonglink,
+    onAlbumDownload,
     onTrackPlay,
     onArtistClick,
     onTrackPlayNext,
@@ -917,10 +929,17 @@
                   <div class="album-grid">
                     {#each group.albums as album (album.id)}
                       <AlbumCard
+                        albumId={album.id}
                         artwork={album.image?.large || album.image?.thumbnail || ''}
                         title={album.title}
                         artist={album.artist.name}
                         quality={album.hires ? 'Hi-Res' : undefined}
+                        onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                        onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                        onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                        onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                        onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                        onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
                         onclick={() => onAlbumClick?.(album.id)}
                       />
                     {/each}
@@ -977,10 +996,17 @@
           <div class="album-grid">
             {#each filteredAlbums as album (album.id)}
               <AlbumCard
+                albumId={album.id}
                 artwork={album.image?.large || album.image?.thumbnail || ''}
                 title={album.title}
                 artist={album.artist.name}
                 quality={album.hires ? 'Hi-Res' : undefined}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
                 onclick={() => onAlbumClick?.(album.id)}
               />
             {/each}

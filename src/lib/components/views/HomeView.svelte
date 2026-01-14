@@ -47,11 +47,28 @@
   interface Props {
     userName?: string;
     onAlbumClick?: (albumId: string) => void;
+    onAlbumPlay?: (albumId: string) => void;
+    onAlbumPlayNext?: (albumId: string) => void;
+    onAlbumPlayLater?: (albumId: string) => void;
+    onAlbumShareQobuz?: (albumId: string) => void;
+    onAlbumShareSonglink?: (albumId: string) => void;
+    onAlbumDownload?: (albumId: string) => void;
     onArtistClick?: (artistId: number) => void;
     onTrackPlay?: (track: DisplayTrack) => void;
   }
 
-  let { userName = 'User', onAlbumClick, onArtistClick, onTrackPlay }: Props = $props();
+  let {
+    userName = 'User',
+    onAlbumClick,
+    onAlbumPlay,
+    onAlbumPlayNext,
+    onAlbumPlayLater,
+    onAlbumShareQobuz,
+    onAlbumShareSonglink,
+    onAlbumDownload,
+    onArtistClick,
+    onTrackPlay
+  }: Props = $props();
 
   // Home settings state
   let homeSettings = $state<HomeSettings>(getSettings());
@@ -481,10 +498,17 @@
           {#snippet children()}
             {#each newReleases as album}
               <AlbumCard
+                albumId={album.id}
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
                 quality={album.quality}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
                 onclick={() => onAlbumClick?.(album.id)}
               />
             {/each}
@@ -498,10 +522,17 @@
           {#snippet children()}
             {#each pressAwards as album}
               <AlbumCard
+                albumId={album.id}
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
                 quality={album.quality}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
                 onclick={() => onAlbumClick?.(album.id)}
               />
             {/each}
@@ -515,10 +546,17 @@
           {#snippet children()}
             {#each mostStreamed as album}
               <AlbumCard
+                albumId={album.id}
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
                 quality={album.quality}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
                 onclick={() => onAlbumClick?.(album.id)}
               />
             {/each}
@@ -532,10 +570,17 @@
           {#snippet children()}
             {#each qobuzissimes as album}
               <AlbumCard
+                albumId={album.id}
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
                 quality={album.quality}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
                 onclick={() => onAlbumClick?.(album.id)}
               />
             {/each}
@@ -549,10 +594,17 @@
           {#snippet children()}
             {#each editorPicks as album}
               <AlbumCard
+                albumId={album.id}
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
                 quality={album.quality}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
                 onclick={() => onAlbumClick?.(album.id)}
               />
             {/each}
@@ -566,10 +618,17 @@
           {#snippet children()}
             {#each recentAlbums as album}
               <AlbumCard
+                albumId={album.id}
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
                 quality={album.quality}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
                 onclick={() => onAlbumClick?.(album.id)}
               />
             {/each}
@@ -640,10 +699,17 @@
           {#snippet children()}
             {#each favoriteAlbums as album}
               <AlbumCard
+                albumId={album.id}
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
                 quality={album.quality}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
                 onclick={() => onAlbumClick?.(album.id)}
               />
             {/each}

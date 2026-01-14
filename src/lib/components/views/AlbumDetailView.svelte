@@ -1,10 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
   import { ArrowLeft, Play, Shuffle, Heart } from 'lucide-svelte';
   import TrackRow from '../TrackRow.svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import { getDownloadState, type DownloadStatus } from '$lib/stores/downloadState';
+  import {
+    subscribe as subscribeAlbumFavorites,
+    isAlbumFavorite,
+    loadAlbumFavorites,
+    toggleAlbumFavorite
+  } from '$lib/stores/albumFavoritesStore';
 
   interface Track {
     id: number;
@@ -96,21 +101,15 @@
     album.artist?.trim().toLowerCase() === 'various artists'
   );
 
-  interface FavoritesResponse {
-    albums?: { items: Array<{ id: string }>; total: number };
-  }
-
   // Check if album is in favorites on mount
   onMount(async () => {
     try {
-      const response = await invoke<FavoritesResponse>('get_favorites', {
-        favType: 'albums',
-        limit: 500,
-        offset: 0
+      await loadAlbumFavorites();
+      isFavorite = isAlbumFavorite(album.id);
+      const unsubscribe = subscribeAlbumFavorites(() => {
+        isFavorite = isAlbumFavorite(album.id);
       });
-      if (response.albums?.items) {
-        isFavorite = response.albums.items.some(item => item.id === album.id);
-      }
+      return unsubscribe;
     } catch (err) {
       console.error('Failed to check album favorite status:', err);
     }
@@ -121,13 +120,7 @@
 
     isFavoriteLoading = true;
     try {
-      if (isFavorite) {
-        await invoke('remove_favorite', { favType: 'album', itemId: album.id });
-        isFavorite = false;
-      } else {
-        await invoke('add_favorite', { favType: 'album', itemId: album.id });
-        isFavorite = true;
-      }
+      isFavorite = await toggleAlbumFavorite(album.id);
     } catch (err) {
       console.error('Failed to toggle favorite:', err);
     } finally {

@@ -390,6 +390,152 @@
     );
   }
 
+  async function fetchAlbumDetail(albumId: string): Promise<AlbumDetail | null> {
+    try {
+      const album = await invoke<QobuzAlbum>('get_album', { albumId });
+      return convertQobuzAlbum(album);
+    } catch (err) {
+      console.error('Failed to load album:', err);
+      showToast('Failed to load album', 'error');
+      return null;
+    }
+  }
+
+  async function playAlbumById(albumId: string) {
+    const album = await fetchAlbumDetail(albumId);
+    if (!album?.tracks?.length) return;
+
+    const artwork = album.artwork || '';
+    const queueTracks: BackendQueueTrack[] = album.tracks.map(t => ({
+      id: t.id,
+      title: t.title,
+      artist: t.artist || album.artist || 'Unknown Artist',
+      album: album.title || '',
+      duration_secs: t.durationSeconds,
+      artwork_url: artwork || null,
+      hires: t.hires ?? false,
+      bit_depth: t.bitDepth ?? null,
+      sample_rate: t.samplingRate ?? null
+    }));
+
+    await setQueue(queueTracks, 0, true);
+    const firstTrack = album.tracks[0];
+    const quality = firstTrack.hires && firstTrack.bitDepth && firstTrack.samplingRate
+      ? `${firstTrack.bitDepth}bit/${firstTrack.samplingRate}kHz`
+      : firstTrack.hires
+        ? 'Hi-Res'
+        : '-';
+
+    await playTrack({
+      id: firstTrack.id,
+      title: firstTrack.title,
+      artist: firstTrack.artist || album.artist || 'Unknown Artist',
+      album: album.title || '',
+      artwork,
+      duration: firstTrack.durationSeconds,
+      quality,
+      bitDepth: firstTrack.bitDepth,
+      samplingRate: firstTrack.samplingRate,
+      albumId: album.id,
+      artistId: firstTrack.artistId
+    });
+  }
+
+  async function queueAlbumNextById(albumId: string) {
+    const album = await fetchAlbumDetail(albumId);
+    if (!album?.tracks?.length) return;
+
+    const artwork = album.artwork || '';
+    for (let i = album.tracks.length - 1; i >= 0; i--) {
+      const t = album.tracks[i];
+      queueTrackNext({
+        id: t.id,
+        title: t.title,
+        artist: t.artist || album.artist || 'Unknown Artist',
+        album: album.title || '',
+        duration_secs: t.durationSeconds,
+        artwork_url: artwork || null,
+        hires: t.hires ?? false,
+        bit_depth: t.bitDepth ?? null,
+        sample_rate: t.samplingRate ?? null
+      });
+    }
+    showToast(`Playing ${album.tracks.length} tracks next`, 'success');
+  }
+
+  async function queueAlbumLaterById(albumId: string) {
+    const album = await fetchAlbumDetail(albumId);
+    if (!album?.tracks?.length) return;
+
+    const artwork = album.artwork || '';
+    const queueTracks: BackendQueueTrack[] = album.tracks.map(t => ({
+      id: t.id,
+      title: t.title,
+      artist: t.artist || album.artist || 'Unknown Artist',
+      album: album.title || '',
+      duration_secs: t.durationSeconds,
+      artwork_url: artwork || null,
+      hires: t.hires ?? false,
+      bit_depth: t.bitDepth ?? null,
+      sample_rate: t.samplingRate ?? null
+    }));
+
+    const success = await addTracksToQueue(queueTracks);
+    if (success) {
+      showToast(`Added ${queueTracks.length} tracks to queue`, 'success');
+    } else {
+      showToast('Failed to add to queue', 'error');
+    }
+  }
+
+  function shareAlbumQobuzLinkById(albumId: string) {
+    const url = `https://play.qobuz.com/album/${albumId}`;
+    writeText(url);
+    showToast('Album link copied to clipboard', 'success');
+  }
+
+  function shareAlbumSonglinkById(albumId: string) {
+    const qobuzUrl = `https://play.qobuz.com/album/${albumId}`;
+    const songlinkUrl = `https://song.link/${encodeURIComponent(qobuzUrl)}`;
+    writeText(songlinkUrl);
+    showToast('Song.link copied to clipboard', 'success');
+  }
+
+  async function downloadAlbumById(albumId: string) {
+    const album = await fetchAlbumDetail(albumId);
+    if (!album) return;
+
+    const tracksToDownload = album.tracks.filter(track => {
+      const status = getDownloadState(track.id).status;
+      return status === 'none' || status === 'failed';
+    });
+
+    if (tracksToDownload.length === 0) {
+      showToast('All tracks already downloaded', 'info');
+      return;
+    }
+
+    showToast(`Downloading ${tracksToDownload.length} tracks from "${album.title}"`, 'info');
+
+    for (const track of tracksToDownload) {
+      try {
+        await downloadTrack({
+          id: track.id,
+          title: track.title,
+          artist: track.artist || album.artist || 'Unknown',
+          album: album.title,
+          albumId: album.id,
+          durationSecs: track.durationSeconds,
+          quality: track.quality || '-',
+          bitDepth: track.bitDepth,
+          sampleRate: track.samplingRate,
+        });
+      } catch (err) {
+        console.error(`Failed to queue download for "${track.title}":`, err);
+      }
+    }
+  }
+
   // Playback Functions - QobuzTrack from search results
   async function handleTrackPlay(track: QobuzTrack) {
     console.log('Playing track:', track);
@@ -1531,12 +1677,24 @@
         <HomeView
           userName={userInfo?.userName}
           onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
           onArtistClick={handleArtistClick}
           onTrackPlay={handleDisplayTrackPlay}
         />
       {:else if activeView === 'search'}
         <SearchView
           onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
           onTrackPlay={handleTrackPlay}
           onTrackPlayNext={queueQobuzTrackNext}
           onTrackPlayLater={queueQobuzTrackLater}
@@ -1588,6 +1746,12 @@
           artist={selectedArtist}
           onBack={navGoBack}
           onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
           onLoadMore={loadMoreArtistAlbums}
           isLoadingMore={isArtistAlbumsLoading}
           onTrackPlay={handleDisplayTrackPlay}
@@ -1637,6 +1801,12 @@
       {:else if activeView === 'favorites'}
         <FavoritesView
           onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
           onTrackPlay={handleDisplayTrackPlay}
           onArtistClick={handleArtistClick}
           onTrackPlayNext={queuePlaylistTrackNext}

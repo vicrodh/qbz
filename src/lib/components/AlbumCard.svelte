@@ -1,17 +1,45 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { Play, Disc3 } from 'lucide-svelte';
+  import { Play, Disc3, Heart } from 'lucide-svelte';
+  import AlbumMenu from './AlbumMenu.svelte';
+  import {
+    subscribe as subscribeAlbumFavorites,
+    isAlbumFavorite,
+    loadAlbumFavorites,
+    toggleAlbumFavorite
+  } from '$lib/stores/albumFavoritesStore';
 
   interface Props {
+    albumId?: string;
     artwork: string;
     title: string;
     artist: string;
     quality?: string;
     size?: 'standard' | 'large';
     onclick?: () => void;
+    onPlay?: () => void;
+    onPlayNext?: () => void;
+    onPlayLater?: () => void;
+    onShareQobuz?: () => void;
+    onShareSonglink?: () => void;
+    onDownload?: () => void;
   }
 
-  let { artwork, title, artist, quality, size = 'standard', onclick }: Props = $props();
+  let {
+    albumId,
+    artwork,
+    title,
+    artist,
+    quality,
+    size = 'standard',
+    onclick,
+    onPlay,
+    onPlayNext,
+    onPlayLater,
+    onShareQobuz,
+    onShareSonglink,
+    onDownload
+  }: Props = $props();
 
   let imageError = $state(false);
   const cardSize = $derived(size === 'large' ? 180 : 162);
@@ -23,9 +51,28 @@
   let artistOverflow = $state(0);
   const titleOffset = $derived(titleOverflow > 0 ? `-${titleOverflow + 16}px` : '0px');
   const artistOffset = $derived(artistOverflow > 0 ? `-${artistOverflow + 16}px` : '0px');
+  const tickerSpeed = 80;
+  const titleDuration = $derived(titleOverflow > 0 ? `${(titleOverflow + 16) / tickerSpeed}s` : '0s');
+  const artistDuration = $derived(artistOverflow > 0 ? `${(artistOverflow + 16) / tickerSpeed}s` : '0s');
+
+  let favoriteFromStore = $state(false);
+  const isFavorite = $derived(albumId ? favoriteFromStore : false);
+  const hasMenu = $derived(!!(onPlayNext || onPlayLater || onShareQobuz || onShareSonglink || onDownload));
+  const hasOverlay = $derived(!!(albumId || onPlay || hasMenu));
 
   function handleImageError() {
     imageError = true;
+  }
+
+  async function handleToggleFavorite(event: MouseEvent) {
+    event.stopPropagation();
+    if (!albumId) return;
+    await toggleAlbumFavorite(albumId);
+  }
+
+  function handlePlay(event: MouseEvent) {
+    event.stopPropagation();
+    onPlay?.();
   }
 
   function updateOverflow() {
@@ -47,6 +94,18 @@
     }
     if (artistRef) {
       observer.observe(artistRef);
+    }
+
+    if (albumId) {
+      void loadAlbumFavorites();
+      favoriteFromStore = isAlbumFavorite(albumId);
+      const unsubscribe = subscribeAlbumFavorites(() => {
+        favoriteFromStore = isAlbumFavorite(albumId);
+      });
+      return () => {
+        observer.disconnect();
+        unsubscribe();
+      };
     }
     return () => observer.disconnect();
   });
@@ -83,12 +142,40 @@
       <img src={artwork} alt={title} loading="lazy" decoding="async" onerror={handleImageError} />
     {/if}
 
-    <!-- Play Button Overlay (CSS-only hover) -->
-    <div class="play-overlay">
-      <div class="play-button">
-        <Play size={24} fill="white" color="white" />
+    <!-- Action Overlay -->
+    {#if hasOverlay}
+      <div class="action-overlay">
+        <div class="action-buttons">
+          {#if albumId}
+            <button
+              class="overlay-btn"
+              class:is-active={isFavorite}
+              type="button"
+              onclick={handleToggleFavorite}
+              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              <Heart size={18} fill={isFavorite ? 'white' : 'none'} color="white" />
+            </button>
+          {/if}
+          {#if onPlay}
+            <button class="overlay-btn" type="button" onclick={handlePlay} title="Play">
+              <Play size={18} fill="white" color="white" />
+            </button>
+          {/if}
+          {#if hasMenu}
+            <div class="overlay-menu">
+              <AlbumMenu
+                onPlayNext={onPlayNext}
+                onPlayLater={onPlayLater}
+                onShareQobuz={onShareQobuz}
+                onShareSonglink={onShareSonglink}
+                onDownload={onDownload}
+              />
+            </div>
+          {/if}
+        </div>
       </div>
-    </div>
+    {/if}
   </div>
 
   <!-- Text Info -->
@@ -96,7 +183,7 @@
     <div
       class="title"
       class:scrollable={titleOverflow > 0}
-      style="--ticker-offset: {titleOffset};"
+      style="--ticker-offset: {titleOffset}; --ticker-duration: {titleDuration};"
       bind:this={titleRef}
     >
       <span class="title-text" bind:this={titleTextRef}>{title}</span>
@@ -104,7 +191,7 @@
     <div
       class="artist"
       class:scrollable={artistOverflow > 0}
-      style="--ticker-offset: {artistOffset};"
+      style="--ticker-offset: {artistOffset}; --ticker-duration: {artistDuration};"
       bind:this={artistRef}
     >
       <span class="artist-text" bind:this={artistTextRef}>{artist}</span>
@@ -172,19 +259,80 @@
     transition: opacity 150ms ease;
   }
 
-  .album-card:hover .play-overlay {
-    opacity: 1;
-  }
-
-  .play-button {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
+  .action-overlay {
+    position: absolute;
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: rgba(66, 133, 244, 0.9);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    opacity: 0;
+    transition: opacity 150ms ease;
+    background: rgba(10, 10, 10, 0.25);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+
+  .album-card:hover .action-overlay {
+    opacity: 1;
+  }
+
+  .action-buttons {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    pointer-events: auto;
+  }
+
+  .overlay-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    background: transparent;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: transform 150ms ease, background-color 150ms ease;
+  }
+
+  .overlay-btn:hover {
+    transform: scale(1.05);
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+
+  .overlay-btn.is-active {
+    background-color: rgba(255, 255, 255, 0.2);
+  }
+
+  .overlay-menu {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  :global(.album-card .album-menu) {
+    display: flex;
+    align-items: center;
+  }
+
+  :global(.album-card .album-menu .menu-trigger) {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.85);
+    background: transparent;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+  }
+
+  :global(.album-card .album-menu .menu-trigger:hover) {
+    background-color: rgba(255, 255, 255, 0.1);
   }
 
   .info {
@@ -212,7 +360,7 @@
   }
 
   .album-card:hover .title.scrollable .title-text {
-    animation: title-ticker 6s linear infinite;
+    animation: title-ticker var(--ticker-duration) linear infinite;
     will-change: transform;
   }
 
@@ -241,7 +389,7 @@
   }
 
   .album-card:hover .artist.scrollable .artist-text {
-    animation: title-ticker 6s linear infinite;
+    animation: title-ticker var(--ticker-duration) linear infinite;
     will-change: transform;
   }
 </style>
