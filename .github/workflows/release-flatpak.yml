@@ -86,9 +86,27 @@ jobs:
             org.freedesktop.Sdk.Extension.rust-stable//25.08
 
       - name: Build Flatpak
+        env:
+          SPOTIFY_API_CLIENT_ID: ${{ secrets.SPOTIFY_API_CLIENT_ID }}
+          SPOTIFY_API_CLIENT_SECRET: ${{ secrets.SPOTIFY_API_CLIENT_SECRET }}
+          TIDAL_API_CLIENT_ID: ${{ secrets.TIDAL_API_CLIENT_ID }}
+          TIDAL_API_CLIENT_SECRET: ${{ secrets.TIDAL_API_CLIENT_SECRET }}
+          DISCOGS_API_CLIENT_KEY: ${{ secrets.DISCOGS_API_CLIENT_KEY }}
+          DISCOGS_API_CLIENT_SECRET: ${{ secrets.DISCOGS_API_CLIENT_SECRET }}
+          LAST_FM_API_KEY: ${{ secrets.LAST_FM_API_KEY }}
+          LAST_FM_API_SHARED_SECRET: ${{ secrets.LAST_FM_API_SHARED_SECRET }}
         run: |
           mkdir -p flatpak-build flatpak-repo dist
-          flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build packaging/flatpak/com.blitzkriegfc.qbz.yml
+          flatpak-builder --user --force-clean --repo=flatpak-repo \
+            --env-var=SPOTIFY_API_CLIENT_ID="$SPOTIFY_API_CLIENT_ID" \
+            --env-var=SPOTIFY_API_CLIENT_SECRET="$SPOTIFY_API_CLIENT_SECRET" \
+            --env-var=TIDAL_API_CLIENT_ID="$TIDAL_API_CLIENT_ID" \
+            --env-var=TIDAL_API_CLIENT_SECRET="$TIDAL_API_CLIENT_SECRET" \
+            --env-var=DISCOGS_API_CLIENT_KEY="$DISCOGS_API_CLIENT_KEY" \
+            --env-var=DISCOGS_API_CLIENT_SECRET="$DISCOGS_API_CLIENT_SECRET" \
+            --env-var=LAST_FM_API_KEY="$LAST_FM_API_KEY" \
+            --env-var=LAST_FM_API_SHARED_SECRET="$LAST_FM_API_SHARED_SECRET" \
+            flatpak-build packaging/flatpak/com.blitzkriegfc.qbz.yml
           flatpak build-bundle flatpak-repo dist/QBZ.flatpak com.blitzkriegfc.qbz
 
       - name: Upload Flatpak bundle
