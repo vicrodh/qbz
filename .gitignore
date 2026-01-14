@@ -43,6 +43,20 @@ vite.config.ts.timestamp-*
 flatpak-build/
 flatpak-repo/
 .flatpak-builder/
+packaging/flatpak/build/
+packaging/flatpak/repo/
+packaging/flatpak/.flatpak-builder/
+
+# Release artifacts
+*.AppImage
+*.deb
+*.rpm
+*.flatpak
+*.tar.gz
+*.tar.xz
+
+# Image upscaler outputs
+static/*upscayl*
 
 # Local build temp
 /.tmp/
