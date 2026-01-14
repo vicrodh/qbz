@@ -516,7 +516,7 @@
     </div>
 
     <!-- Local Library Section -->
-    <div class="section">
+    <div class="section local-library-section">
       <button class="section-header-btn" onclick={() => localLibraryCollapsed = !localLibraryCollapsed}>
         <span class="section-header">Local Library</span>
         {#if localLibraryCollapsed}
@@ -614,6 +614,10 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+  }
+
+  .local-library-section {
+    flex-shrink: 0;
   }
 
   .section-header {

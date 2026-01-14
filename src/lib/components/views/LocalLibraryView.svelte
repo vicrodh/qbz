@@ -4,7 +4,7 @@
   import { onMount } from 'svelte';
   import {
     HardDrive, Music, Disc3, Mic2, FolderPlus, Trash2, RefreshCw,
-    Settings, X, Play, AlertCircle, ImageDown, Search, LayoutGrid, List
+    Settings, X, Play, AlertCircle, ImageDown, Upload, Search, LayoutGrid, List
   } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
@@ -99,6 +99,7 @@
   type AlbumGroupMode = 'alpha' | 'artist';
   let albumGroupMode = $state<AlbumGroupMode>('alpha');
   let showGroupMenu = $state(false);
+  let artistSearch = $state('');
   let trackSearch = $state('');
   type TrackGroupMode = 'album' | 'artist' | 'name';
   let trackGroupMode = $state<TrackGroupMode>('album');
@@ -118,6 +119,7 @@
   let scanning = $state(false);
   let error = $state<string | null>(null);
   let fetchingArtwork = $state(false);
+  let updatingArtwork = $state(false);
   let hasDiscogsCredentials = $state(false);
 
   // Album detail state (for viewing album tracks)
@@ -333,6 +335,47 @@
     }
   }
 
+  function applyAlbumArtworkUpdate(groupKey: string, artworkPath: string) {
+    albums = albums.map(album =>
+      album.id === groupKey ? { ...album, artwork_path: artworkPath } : album
+    );
+    if (selectedAlbum?.id === groupKey) {
+      selectedAlbum = { ...selectedAlbum, artwork_path: artworkPath };
+    }
+    albumTracks = albumTracks.map(track =>
+      track.album_group_key === groupKey ? { ...track, artwork_path: artworkPath } : track
+    );
+    tracks = tracks.map(track =>
+      track.album_group_key === groupKey ? { ...track, artwork_path: artworkPath } : track
+    );
+  }
+
+  async function handleSetAlbumArtwork() {
+    if (!selectedAlbum || updatingArtwork) return;
+    try {
+      updatingArtwork = true;
+      const selected = await open({
+        title: 'Select Album Artwork',
+        multiple: false,
+        directory: false,
+        filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+      });
+
+      if (!selected || typeof selected !== 'string') return;
+
+      const cachedPath = await invoke<string>('library_set_album_artwork', {
+        albumGroupKey: selectedAlbum.id,
+        artworkPath: selected
+      });
+      applyAlbumArtworkUpdate(selectedAlbum.id, cachedPath);
+    } catch (err) {
+      console.error('Failed to set album artwork:', err);
+      alert(`Failed to set artwork: ${err}`);
+    } finally {
+      updatingArtwork = false;
+    }
+  }
+
   async function handleAlbumClick(album: LocalAlbum) {
     selectedAlbum = album;
     try {
@@ -490,6 +533,12 @@
       album.title.toLowerCase().includes(needle) ||
       album.artist.toLowerCase().includes(needle)
     );
+  }
+
+  function matchesArtistSearch(artist: LocalArtist, query: string): boolean {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return true;
+    return artist.name.toLowerCase().includes(needle);
   }
 
   const alphaIndexLetters = ['#', ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
@@ -735,6 +784,15 @@
             <button class="play-btn" onclick={handlePlayAllAlbum}>
               <Play size={16} fill="white" />
               <span>Play All</span>
+            </button>
+            <button
+              class="secondary-btn"
+              onclick={handleSetAlbumArtwork}
+              disabled={updatingArtwork}
+              title="Set album artwork"
+            >
+              <Upload size={14} />
+              <span>{updatingArtwork ? 'Updating...' : 'Set Cover'}</span>
             </button>
           </div>
         </div>
@@ -1071,19 +1129,45 @@
             <p>No artists in library</p>
           </div>
         {:else}
-          <div class="artist-grid">
-            {#each artists as artist (artist.name)}
-              <div class="artist-card">
-                <div class="artist-icon">
-                  <Mic2 size={32} />
-                </div>
-                <div class="artist-name">{artist.name}</div>
-                <div class="artist-stats">
-                  {artist.album_count} albums &bull; {artist.track_count} tracks
-                </div>
-              </div>
-            {/each}
+          {@const filteredArtists = artists.filter(artist => matchesArtistSearch(artist, artistSearch))}
+          <div class="artist-controls">
+            <div class="search-container">
+              <Search size={16} class="search-icon" />
+              <input
+                type="text"
+                placeholder="Search artists..."
+                bind:value={artistSearch}
+                class="search-input"
+              />
+              {#if artistSearch}
+                <button class="clear-search" onclick={() => (artistSearch = '')}>
+                  <X size={14} />
+                </button>
+              {/if}
+            </div>
+            <span class="album-count">{filteredArtists.length} artists</span>
           </div>
+
+          {#if filteredArtists.length === 0}
+            <div class="empty">
+              <Mic2 size={48} />
+              <p>No artists match your search</p>
+            </div>
+          {:else}
+            <div class="artist-grid">
+              {#each filteredArtists as artist (artist.name)}
+                <div class="artist-card">
+                  <div class="artist-icon">
+                    <Mic2 size={32} />
+                  </div>
+                  <div class="artist-name">{artist.name}</div>
+                  <div class="artist-stats">
+                    {artist.album_count} albums &bull; {artist.track_count} tracks
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
         {/if}
       {:else if activeTab === 'tracks'}
         {#if tracks.length === 0}
@@ -1586,6 +1670,13 @@
 
   /* Album Controls */
   .album-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .artist-controls {
     display: flex;
     align-items: center;
     gap: 12px;
