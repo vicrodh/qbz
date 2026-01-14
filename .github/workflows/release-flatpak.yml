@@ -79,8 +79,8 @@ jobs:
           flatpak install --user -y --noninteractive flathub \
             org.gnome.Platform//49 \
             org.gnome.Sdk//49 \
-            org.freedesktop.Sdk.Extension.node20//24.08 \
-            org.freedesktop.Sdk.Extension.rust-stable//24.08
+            org.freedesktop.Sdk.Extension.node20//25.08 \
+            org.freedesktop.Sdk.Extension.rust-stable//25.08
 
       - name: Build Flatpak
         run: |
