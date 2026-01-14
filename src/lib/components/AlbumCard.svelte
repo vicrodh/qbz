@@ -81,6 +81,15 @@
     onPlay?.();
   }
 
+  function isOverlayAction(target: EventTarget | null) {
+    return target instanceof HTMLElement && !!target.closest('.action-buttons');
+  }
+
+  function handleCardClick(event: MouseEvent) {
+    if (isOverlayAction(event.target)) return;
+    onclick?.();
+  }
+
   function updateOverflow() {
     if (titleRef && titleTextRef) {
       const overflow = titleTextRef.scrollWidth - titleRef.clientWidth;
@@ -130,7 +139,7 @@
 <div
   class="album-card"
   style="width: {cardSize}px"
-  onclick={onclick}
+  onclick={handleCardClick}
   role="button"
   tabindex="0"
   onkeydown={(e) => e.key === 'Enter' && onclick?.()}
