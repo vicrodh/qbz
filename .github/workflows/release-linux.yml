@@ -85,47 +85,20 @@ jobs:
             libgtk-3-dev \
             libappindicator3-dev \
             librsvg2-dev \
-            libasound2-dev \
-            libssl-dev \
             patchelf
 
       - name: Install JS dependencies
         run: npm ci
 
       - name: Build DEB/RPM/AppImage
-        env:
-          LAST_FM_API_KEY: ${{ secrets.LAST_FM_API_KEY }}
-          LAST_FM_API_SHARED_SECRET: ${{ secrets.LAST_FM_API_SHARED_SECRET }}
-          DISCOGS_API_CLIENT_KEY: ${{ secrets.DISCOGS_API_CLIENT_KEY }}
-          DISCOGS_API_CLIENT_SECRET: ${{ secrets.DISCOGS_API_CLIENT_SECRET }}
-          SPOTIFY_API_CLIENT_ID: ${{ secrets.SPOTIFY_API_CLIENT_ID }}
-          SPOTIFY_API_CLIENT_SECRET: ${{ secrets.SPOTIFY_API_CLIENT_SECRET }}
-          TIDAL_API_CLIENT_ID: ${{ secrets.TIDAL_API_CLIENT_ID }}
-          TIDAL_API_CLIENT_SECRET: ${{ secrets.TIDAL_API_CLIENT_SECRET }}
         run: npm run tauri build -- --bundles deb,rpm,appimage
 
       - name: Collect artifacts
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
         run: |
           mkdir -p dist
           cp -v src-tauri/target/release/bundle/deb/*.deb dist/ || true
           cp -v src-tauri/target/release/bundle/rpm/*.rpm dist/ || true
           cp -v src-tauri/target/release/bundle/appimage/*.AppImage dist/ || true
-
-          # Create tarball for AUR with freedesktop icon structure
-          TARBALL_DIR="qbz_${VERSION:-0.0.0}_amd64"
-          mkdir -p "$TARBALL_DIR/icons/hicolor"/{32x32,48x48,64x64,128x128,256x256}/apps
-          cp src-tauri/target/release/qbz-nix "$TARBALL_DIR/qbz"
-          cp packaging/aur/qbz.desktop "$TARBALL_DIR/qbz.desktop"
-          cp src-tauri/icons/32x32.png "$TARBALL_DIR/icons/hicolor/32x32/apps/qbz.png"
-          cp src-tauri/icons/48x48.png "$TARBALL_DIR/icons/hicolor/48x48/apps/qbz.png"
-          cp src-tauri/icons/64x64.png "$TARBALL_DIR/icons/hicolor/64x64/apps/qbz.png"
-          cp src-tauri/icons/128x128.png "$TARBALL_DIR/icons/hicolor/128x128/apps/qbz.png"
-          cp src-tauri/icons/256x256.png "$TARBALL_DIR/icons/hicolor/256x256/apps/qbz.png"
-          tar -czvf "dist/qbz_${VERSION:-0.0.0}_amd64.tar.gz" "$TARBALL_DIR"
-          rm -rf "$TARBALL_DIR"
-
           ls -la dist
 
       - name: Upload artifacts
@@ -139,4 +112,3 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/*
-          token: ${{ secrets.GH_PAT }}

@@ -72,24 +72,20 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y flatpak flatpak-builder
-          flatpak --user remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+          flatpak remote-add --user --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
 
       - name: Install runtimes
         run: |
-          flatpak --user install -y --noninteractive flathub \
-            org.gnome.Platform//48 \
-            org.gnome.Sdk//48
+          # Install GNOME runtime and SDK first
+          flatpak install --user -y --noninteractive flathub \
+            org.gnome.Platform//49 \
+            org.gnome.Sdk//49
+          # Install SDK extensions - flatpak-builder will auto-resolve the correct version based on the SDK
+          flatpak install --user -y --noninteractive flathub \
+            org.freedesktop.Sdk.Extension.node20//25.08 \
+            org.freedesktop.Sdk.Extension.rust-stable//25.08
 
       - name: Build Flatpak
-        env:
-          LAST_FM_API_KEY: ${{ secrets.LAST_FM_API_KEY }}
-          LAST_FM_API_SHARED_SECRET: ${{ secrets.LAST_FM_API_SHARED_SECRET }}
-          DISCOGS_API_CLIENT_KEY: ${{ secrets.DISCOGS_API_CLIENT_KEY }}
-          DISCOGS_API_CLIENT_SECRET: ${{ secrets.DISCOGS_API_CLIENT_SECRET }}
-          SPOTIFY_API_CLIENT_ID: ${{ secrets.SPOTIFY_API_CLIENT_ID }}
-          SPOTIFY_API_CLIENT_SECRET: ${{ secrets.SPOTIFY_API_CLIENT_SECRET }}
-          TIDAL_API_CLIENT_ID: ${{ secrets.TIDAL_API_CLIENT_ID }}
-          TIDAL_API_CLIENT_SECRET: ${{ secrets.TIDAL_API_CLIENT_SECRET }}
         run: |
           mkdir -p flatpak-build flatpak-repo dist
           flatpak-builder --user --force-clean --repo=flatpak-repo flatpak-build packaging/flatpak/com.blitzkriegfc.qbz.yml

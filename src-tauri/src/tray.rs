@@ -3,6 +3,7 @@
 //! Provides system tray integration with playback controls and window management.
 
 use image::GenericImageView;
+use std::path::PathBuf;
 use tauri::{
     image::Image,
     menu::{Menu, MenuItem, PredefinedMenuItem},
@@ -13,8 +14,31 @@ use tauri::{
 // Embed tray icon at compile time (transparent background)
 const TRAY_ICON_PNG: &[u8] = include_bytes!("../icons/tray.png");
 
-/// Decode PNG and convert to RGBA for Tauri Image
+/// Check if running inside Flatpak sandbox
+fn is_flatpak() -> bool {
+    std::env::var("FLATPAK_ID").is_ok() || std::path::Path::new("/.flatpak-info").exists()
+}
+
+/// Get the tray icon - loads from file in Flatpak, embedded data otherwise
 fn load_tray_icon() -> Image<'static> {
+    // In Flatpak, try to use the installed icon file first
+    // This works better with StatusNotifierItem/libayatana-appindicator
+    if is_flatpak() {
+        let icon_path = PathBuf::from("/app/share/icons/hicolor/32x32/apps/com.blitzkriegfc.qbz.png");
+        if icon_path.exists() {
+            log::info!("Flatpak detected, loading tray icon from: {:?}", icon_path);
+            if let Ok(icon_data) = std::fs::read(&icon_path) {
+                if let Ok(img) = image::load_from_memory(&icon_data) {
+                    let (width, height) = img.dimensions();
+                    let rgba = img.into_rgba8().into_raw();
+                    return Image::new_owned(rgba, width, height);
+                }
+            }
+            log::warn!("Failed to load icon from path, falling back to embedded");
+        }
+    }
+
+    // Default: decode embedded PNG
     let img = image::load_from_memory(TRAY_ICON_PNG)
         .expect("Failed to decode tray icon PNG");
     let (width, height) = img.dimensions();
