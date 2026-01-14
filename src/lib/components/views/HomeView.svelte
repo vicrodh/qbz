@@ -909,11 +909,10 @@
     padding: 16px 12px;
     color: var(--text-primary);
     cursor: pointer;
-    transition: transform 150ms ease, border-color 150ms ease, background-color 150ms ease;
+    transition: border-color 150ms ease, background-color 150ms ease;
   }
 
   .artist-card:hover {
-    transform: translateY(-2px);
     border-color: var(--accent-primary);
     background-color: var(--bg-hover);
   }
