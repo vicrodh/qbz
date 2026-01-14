@@ -16,7 +16,6 @@
     onShareQobuz?: () => void;
     onShareSonglink?: () => void;
     onDownload?: () => void;
-    onOpenChange?: (open: boolean) => void;
   }
 
   let {
@@ -24,8 +23,7 @@
     onPlayLater,
     onShareQobuz,
     onShareSonglink,
-    onDownload,
-    onOpenChange
+    onDownload
   }: Props = $props();
 
   let isOpen = $state(false);
@@ -46,7 +44,6 @@
   function closeMenu() {
     isOpen = false;
     shareOpen = false;
-    onOpenChange?.(false);
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -115,6 +112,12 @@
   }
 
   $effect(() => {
+    if (isOpen && menuEl && triggerRef) {
+      setMenuPosition();
+    }
+  });
+
+  $effect(() => {
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       const handleResize = () => setMenuPosition();
@@ -148,7 +151,6 @@
         e.stopPropagation();
         isOpen = !isOpen;
         shareOpen = false;
-        onOpenChange?.(isOpen);
         if (isOpen) setMenuPosition();
       }}
       aria-label="Album actions"
