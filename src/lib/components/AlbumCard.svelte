@@ -55,8 +55,9 @@
   let artistOverflow = $state(0);
   const titleOffset = $derived(titleOverflow > 0 ? `-${titleOverflow + 16}px` : '0px');
   const artistOffset = $derived(artistOverflow > 0 ? `-${artistOverflow + 16}px` : '0px');
-  const titleDuration = $derived(titleOverflow > 0 ? '6s' : '0s');
-  const artistDuration = $derived(artistOverflow > 0 ? '6s' : '0s');
+  const tickerSpeed = 80;
+  const titleDuration = $derived(titleOverflow > 0 ? `${(titleOverflow + 16) / tickerSpeed}s` : '0s');
+  const artistDuration = $derived(artistOverflow > 0 ? `${(artistOverflow + 16) / tickerSpeed}s` : '0s');
 
   let favoriteFromStore = $state(false);
   const isFavorite = $derived(albumId ? favoriteFromStore : false);
@@ -278,7 +279,7 @@
     background: rgba(10, 10, 10, 0.25);
     backdrop-filter: blur(6px);
     -webkit-backdrop-filter: blur(6px);
-    pointer-events: none;
+    pointer-events: auto;
     border-radius: inherit;
   }
 
