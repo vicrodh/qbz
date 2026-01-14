@@ -103,6 +103,27 @@ modules:
         url: https://github.com/AyatanaIndicators/libayatana-appindicator/archive/refs/tags/0.5.93.tar.gz
         sha256: cbefed7a918a227bf71286246e237fcd3a9c8499b3eaac4897811a869409edf0
 
+  # Workaround: Freedesktop 25.08 cmake may install to lib64 despite CMAKE_INSTALL_LIBDIR
+  # Copy any libraries from lib64 to lib so they can be found at runtime
+  - name: fix-lib64
+    buildsystem: simple
+    build-commands:
+      - |
+        if [ -d /app/lib64 ]; then
+          mkdir -p /app/lib
+          cp -a /app/lib64/* /app/lib/ 2>/dev/null || true
+          # Also copy pkgconfig if it exists
+          if [ -d /app/lib64/pkgconfig ]; then
+            mkdir -p /app/lib/pkgconfig
+            cp -a /app/lib64/pkgconfig/* /app/lib/pkgconfig/ 2>/dev/null || true
+          fi
+        fi
+        # List what we have for debugging
+        echo "=== Contents of /app/lib ==="
+        ls -la /app/lib/ || echo "lib is empty"
+        echo "=== Contents of /app/lib64 ==="
+        ls -la /app/lib64/ 2>/dev/null || echo "lib64 does not exist or is empty"
+
   - name: qbz
     buildsystem: simple
     build-options:
