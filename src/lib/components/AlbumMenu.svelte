@@ -30,11 +30,6 @@
   let shareOpen = $state(false);
   let menuRef: HTMLDivElement | null = null;
   let triggerRef: HTMLButtonElement | null = null;
-  let menuEl: HTMLDivElement | null = null;
-  let shareTriggerRef: HTMLDivElement | null = null;
-  let submenuEl: HTMLDivElement | null = null;
-  let menuStyle = $state('');
-  let submenuStyle = $state('');
 
   const hasQueue = $derived(!!(onPlayNext || onPlayLater));
   const hasShare = $derived(!!(onShareQobuz || onShareSonglink));
@@ -52,58 +47,6 @@
     }
   }
 
-  async function setMenuPosition() {
-    await tick();
-    if (!triggerRef || !menuEl) return;
-
-    const triggerRect = triggerRef.getBoundingClientRect();
-    const menuRect = menuEl.getBoundingClientRect();
-    const padding = 8;
-
-    let left = triggerRect.right - menuRect.width;
-    let top = triggerRect.bottom + 6;
-
-    if (left < padding) left = padding;
-    if (left + menuRect.width > window.innerWidth - padding) {
-      left = Math.max(padding, window.innerWidth - menuRect.width - padding);
-    }
-
-    if (top + menuRect.height > window.innerHeight - padding) {
-      top = triggerRect.top - menuRect.height - 6;
-      if (top < padding) top = padding;
-    }
-
-    menuStyle = `left: ${left}px; top: ${top}px;`;
-  }
-
-  async function setSubmenuPosition() {
-    await tick();
-    if (!shareTriggerRef || !submenuEl) return;
-
-    const triggerRect = shareTriggerRef.getBoundingClientRect();
-    const submenuRect = submenuEl.getBoundingClientRect();
-    const padding = 8;
-
-    const spaceRight = window.innerWidth - triggerRect.right;
-    const openRight = spaceRight >= submenuRect.width + padding;
-
-    let left = openRight
-      ? triggerRect.right + 6
-      : triggerRect.left - submenuRect.width - 6;
-    let top = triggerRect.top - 6;
-
-    if (left < padding) left = padding;
-    if (left + submenuRect.width > window.innerWidth - padding) {
-      left = Math.max(padding, window.innerWidth - submenuRect.width - padding);
-    }
-
-    if (top + submenuRect.height > window.innerHeight - padding) {
-      top = window.innerHeight - submenuRect.height - padding;
-    }
-    if (top < padding) top = padding;
-
-    submenuStyle = `left: ${left}px; top: ${top}px;`;
-  }
 
   function handleAction(action?: () => void) {
     if (!action) return;
@@ -112,26 +55,10 @@
   }
 
   $effect(() => {
-    if (isOpen && menuEl && triggerRef) {
-      setMenuPosition();
-    }
-  });
-
-  $effect(() => {
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      const handleResize = () => setMenuPosition();
-      const handleScroll = () => {
-        setMenuPosition();
-        if (shareOpen) setSubmenuPosition();
-      };
-
-      window.addEventListener('resize', handleResize);
-      window.addEventListener('scroll', handleScroll, true);
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
-        window.removeEventListener('resize', handleResize);
-        window.removeEventListener('scroll', handleScroll, true);
       };
     }
   });
@@ -151,7 +78,6 @@
         e.stopPropagation();
         isOpen = !isOpen;
         shareOpen = false;
-        if (isOpen) setMenuPosition();
       }}
       aria-label="Album actions"
     >
@@ -159,7 +85,7 @@
     </button>
 
     {#if isOpen}
-      <div class="menu" bind:this={menuEl} style={menuStyle}>
+      <div class="menu">
         {#if hasQueue}
           {#if onPlayNext}
             <button class="menu-item" onclick={() => handleAction(onPlayNext)}>
@@ -182,21 +108,18 @@
         {#if hasShare}
           <div
             class="menu-item submenu-trigger"
-            bind:this={shareTriggerRef}
             onmouseenter={() => {
               shareOpen = true;
-              setSubmenuPosition();
             }}
             onclick={() => {
               shareOpen = !shareOpen;
-              if (shareOpen) setSubmenuPosition();
             }}
           >
             <Share2 size={14} />
             <span>Share</span>
             <ChevronRight size={14} class="chevron" />
             {#if shareOpen}
-              <div class="submenu" bind:this={submenuEl} style={submenuStyle}>
+              <div class="submenu">
                 {#if onShareQobuz}
                   <button class="menu-item" onclick={() => handleAction(onShareQobuz)}>
                     <Link size={14} />
@@ -255,7 +178,9 @@
   }
 
   .menu {
-    position: fixed;
+    position: absolute;
+    right: 0;
+    top: 44px;
     min-width: 180px;
     background-color: var(--bg-tertiary);
     border-radius: 8px;
@@ -303,7 +228,9 @@
   }
 
   .submenu {
-    position: fixed;
+    position: absolute;
+    top: 0;
+    right: calc(100% + 6px);
     min-width: 160px;
     background-color: var(--bg-tertiary);
     border-radius: 8px;
