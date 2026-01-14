@@ -292,7 +292,8 @@
     border-radius: inherit;
   }
 
-  .album-card:hover .action-overlay {
+  .album-card:hover .action-overlay,
+  .action-overlay:focus-within {
     opacity: 1;
   }
 
