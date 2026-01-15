@@ -169,6 +169,7 @@
   // Library settings
   let fetchQobuzArtistImages = $state(true);
   let showQobuzDownloadsInLibrary = $state(false);
+  let downloadRoot = $state('');
 
   // Last.fm integration state
   let lastfmConnected = $state(false);
@@ -673,8 +674,64 @@
     try {
       const settings = await invoke<{download_root: string, show_in_library: boolean}>('get_download_settings');
       showQobuzDownloadsInLibrary = settings.show_in_library;
+      downloadRoot = settings.download_root;
     } catch (err) {
       console.error('Failed to load download settings:', err);
+    }
+  }
+
+  async function handleChangeDownloadFolder() {
+    try {
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      
+      const result = await open({
+        title: 'Select Downloads Folder',
+        directory: true,
+        defaultPath: downloadRoot || undefined
+      });
+      
+      if (result) {
+        // Validate the path
+        const valid = await invoke<boolean>('validate_download_path', { path: result });
+        if (!valid) {
+          alert('Invalid path or insufficient permissions. Please select a different folder.');
+          return;
+        }
+
+        // Ask if user wants to move existing downloads
+        const hasDownloads = downloadStats && downloadStats.readyTracks > 0;
+        let moveFiles = false;
+        
+        if (hasDownloads) {
+          moveFiles = confirm(
+            `You have ${downloadStats!.readyTracks} downloaded tracks.\n\n` +
+            'Would you like to move them to the new location?\n\n' +
+            'Click OK to move files, or Cancel to keep them in the old location.'
+          );
+        }
+
+        // Update download root
+        const moveResult = await invoke<{moved: number, failed: string[]}>('set_download_root', { 
+          path: result,
+          moveExisting: moveFiles 
+        });
+        
+        downloadRoot = result;
+        
+        if (moveFiles && moveResult.moved > 0) {
+          alert(`Successfully moved ${moveResult.moved} tracks to the new location.`);
+        }
+        
+        if (moveResult.failed.length > 0) {
+          console.error('Failed to move files:', moveResult.failed);
+        }
+
+        // Reload download stats
+        await loadDownloadStats();
+      }
+    } catch (err) {
+      console.error('Failed to change download folder:', err);
+      alert(`Failed to change download folder: ${err}`);
     }
   }
 
@@ -893,10 +950,32 @@
     </div>
   </section>
 
+  <!-- Downloads Section -->
+  <section class="section">
+    <h3 class="section-title">Downloads</h3>
+    <div class="setting-row">
+      <div class="setting-with-description">
+        <span class="setting-label">Download Folder</span>
+        <span class="setting-description">{downloadRoot || 'Default location'}</span>
+      </div>
+      <button class="secondary-btn" onclick={handleChangeDownloadFolder}>
+        <FolderOpen size={14} />
+        <span>Change</span>
+      </button>
+    </div>
+    <div class="setting-row last">
+      <div class="setting-with-description">
+        <span class="setting-label">Show in Local Library</span>
+        <span class="setting-description">Display downloaded Qobuz tracks in your Local Library</span>
+      </div>
+      <Toggle enabled={showQobuzDownloadsInLibrary} onchange={handleShowDownloadsChange} />
+    </div>
+  </section>
+
   <!-- Library Section -->
   <section class="section">
     <h3 class="section-title">{$t('settings.library.title')}</h3>
-    <div class="setting-row">
+    <div class="setting-row last">
       <div class="setting-with-description">
         <span class="setting-label">{$t('settings.library.fetchArtistImages')}</span>
         <span class="setting-description">{$t('settings.library.fetchArtistImagesDesc')}</span>
@@ -905,13 +984,6 @@
         fetchQobuzArtistImages = v;
         localStorage.setItem('qbz-fetch-artist-images', String(v));
       }} />
-    </div>
-    <div class="setting-row last">
-      <div class="setting-with-description">
-        <span class="setting-label">Show Qobuz Downloads in Local Library</span>
-        <span class="setting-description">Display downloaded Qobuz tracks in your Local Library</span>
-      </div>
-      <Toggle enabled={showQobuzDownloadsInLibrary} onchange={handleShowDownloadsChange} />
     </div>
   </section>
 
