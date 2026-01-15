@@ -269,6 +269,10 @@
     color: white;
   }
 
+  :global([data-theme="light"]) .track-number :global(.play-icon) {
+    color: rgba(40, 42, 54, 0.85);
+  }
+
   .playing-indicator {
     display: flex;
     align-items: center;
