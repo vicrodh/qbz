@@ -165,13 +165,14 @@
 
   // Download status tracking
   let albumDownloadStatuses = $state<Map<string, boolean>>(new Map());
+  let downloadStatusTick = $state(0);
 
   async function loadAlbumDownloadStatus(albumId: string) {
     if (!checkAlbumFullyDownloaded) return false;
     try {
       const isDownloaded = await checkAlbumFullyDownloaded(albumId);
       albumDownloadStatuses.set(albumId, isDownloaded);
-      albumDownloadStatuses = albumDownloadStatuses;
+      downloadStatusTick++;
       return isDownloaded;
     } catch {
       return false;
@@ -185,6 +186,7 @@
 
   function isAlbumDownloaded(albumId: string): boolean {
     void downloadStateVersion;
+    void downloadStatusTick;
     return albumDownloadStatuses.get(albumId) || false;
   }
 
