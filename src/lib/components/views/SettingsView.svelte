@@ -27,6 +27,7 @@
   } from '$lib/services/playbackService';
   import { setLocale, locale, t } from '$lib/i18n';
   import { get } from 'svelte/store';
+  import MigrationModal from '../MigrationModal.svelte';
 
   interface Props {
     onBack?: () => void;
@@ -67,6 +68,10 @@
 
   // Lyrics cache state
   let isClearingLyrics = $state(false);
+
+  // Migration state
+  let showMigrationModal = $state(false);
+  let legacyTracksCount = $state(0);
 
   // Audio device state
   let audioDevices = $state<AudioDevice[]>([]);
@@ -257,6 +262,9 @@
     toastsEnabled = getToastsEnabled();
     loadSystemNotificationsPreference();
     systemNotificationsEnabled = getSystemNotificationsEnabled();
+
+    // Check for legacy downloads
+    checkLegacyDownloads();
   });
 
   async function loadLastfmState() {
@@ -678,6 +686,24 @@
     } catch (err) {
       console.error('Failed to load download settings:', err);
     }
+  }
+
+  async function checkLegacyDownloads() {
+    try {
+      const result = await invoke<{has_legacy_files: boolean, total_tracks: number}>('detect_legacy_downloads');
+      if (result.has_legacy_files && result.total_tracks > 0) {
+        legacyTracksCount = result.total_tracks;
+        showMigrationModal = true;
+      }
+    } catch (err) {
+      console.error('Failed to check for legacy downloads:', err);
+    }
+  }
+
+  function closeMigrationModal() {
+    showMigrationModal = false;
+    // Refresh stats after migration
+    loadDownloadStats();
   }
 
   async function handleChangeDownloadFolder() {
@@ -1896,3 +1922,9 @@
     cursor: not-allowed;
   }
 </style>
+
+<MigrationModal
+  isOpen={showMigrationModal}
+  onClose={closeMigrationModal}
+  totalTracks={legacyTracksCount}
+/>
