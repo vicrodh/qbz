@@ -43,17 +43,28 @@ async fn post_process_track(
     
     // 5. ALWAYS insert into local library DB (visibility controlled by toggle)
     let lib_guard = library_db.lock().await;
-    match lib_guard.insert_qobuz_download_direct(
+    
+    // Generate album_group_key: album|album_artist
+    let album_artist = metadata.album_artist.as_ref().unwrap_or(&metadata.artist);
+    let album_group_key = format!("{}|{}", metadata.album, album_artist);
+    
+    match lib_guard.insert_qobuz_download_with_grouping(
         track_id,
         &metadata.title,
         &metadata.artist,
         Some(&metadata.album),
+        metadata.album_artist.as_deref(),
+        metadata.track_number,
+        metadata.disc_number,
+        metadata.year,
         metadata.duration_secs,
         &new_path,
+        &album_group_key,
+        &metadata.album,
         None, // bit_depth not in CompleteTrackMetadata
         None, // sample_rate not in CompleteTrackMetadata
     ) {
-        Ok(_) => log::info!("Track {} inserted to local library DB", track_id),
+        Ok(_) => log::info!("Track {} inserted to local library DB with group key: {}", track_id, album_group_key),
         Err(e) => log::error!("Failed to insert track {} to library DB: {}", track_id, e),
     }
     

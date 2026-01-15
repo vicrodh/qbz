@@ -1438,6 +1438,57 @@ impl LibraryDatabase {
         Ok(())
     }
 
+    /// Insert a Qobuz download with full metadata and album grouping
+    pub fn insert_qobuz_download_with_grouping(
+        &self,
+        track_id: u64,
+        title: &str,
+        artist: &str,
+        album: Option<&str>,
+        album_artist: Option<&str>,
+        track_number: Option<u32>,
+        disc_number: Option<u32>,
+        year: Option<u32>,
+        duration_secs: u64,
+        file_path: &str,
+        album_group_key: &str,
+        album_group_title: &str,
+        bit_depth: Option<u32>,
+        sample_rate: Option<f64>,
+    ) -> Result<(), LibraryError> {
+        self.conn.execute(
+            r#"
+            INSERT INTO local_tracks (
+                file_path, title, artist, album, album_artist,
+                track_number, disc_number, year, duration_secs,
+                format, bit_depth, sample_rate, channels,
+                album_group_key, album_group_title,
+                source, qobuz_track_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 'qobuz_download', ?16)
+            "#,
+            params![
+                file_path,
+                title,
+                artist,
+                album.unwrap_or("Unknown Album"),
+                album_artist.unwrap_or(artist),
+                track_number.map(|v| v as i64),
+                disc_number.map(|v| v as i64),
+                year.map(|v| v as i64),
+                duration_secs as i64,
+                "flac",
+                bit_depth.map(|v| v as i64),
+                sample_rate,
+                2, // Assume stereo
+                album_group_key,
+                album_group_title,
+                track_id as i64,
+            ],
+        )
+        .map_err(|e| LibraryError::Database(format!("Failed to insert Qobuz download: {}", e)))?;
+        Ok(())
+    }
+
     /// Remove a Qobuz download from the library by track_id
     pub fn remove_qobuz_download(&self, qobuz_track_id: u64) -> Result<(), LibraryError> {
         self.conn.execute(
