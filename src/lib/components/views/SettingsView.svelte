@@ -963,12 +963,43 @@
         <span>Change</span>
       </button>
     </div>
-    <div class="setting-row last">
+    <div class="setting-row">
+      <span class="setting-label">Downloaded Tracks</span>
+      <span class="setting-value">
+        {#if downloadStats}
+          {downloadStats.readyTracks} tracks ({formatBytes(downloadStats.totalSizeBytes)})
+        {:else}
+          Loading...
+        {/if}
+      </span>
+    </div>
+    <div class="setting-row">
       <div class="setting-with-description">
         <span class="setting-label">Show in Local Library</span>
         <span class="setting-description">Display downloaded Qobuz tracks in your Local Library</span>
       </div>
       <Toggle enabled={showQobuzDownloadsInLibrary} onchange={handleShowDownloadsChange} />
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">Clear Downloads</span>
+      <button
+        class="clear-btn"
+        onclick={handleClearDownloads}
+        disabled={isClearingDownloads || !downloadStats || downloadStats.readyTracks === 0}
+      >
+        {isClearingDownloads ? 'Clearing...' : 'Clear All'}
+      </button>
+    </div>
+    <div class="setting-row last">
+      <span class="setting-label">Open Folder</span>
+      <button
+        class="folder-btn"
+        onclick={handleOpenDownloadFolder}
+        title="Open download folder"
+      >
+        <FolderOpen size={16} />
+        <span>Open</span>
+      </button>
     </div>
   </section>
 
@@ -1110,42 +1141,6 @@
         disabled={isClearing || !cacheStats || cacheStats.current_size_bytes === 0}
       >
         {isClearing ? $t('settings.storage.clearing') : $t('actions.clear')}
-      </button>
-    </div>
-  </section>
-
-  <!-- Downloads Section (Offline Storage) -->
-  <section class="section">
-    <h3 class="section-title">{$t('settings.downloads.title')}</h3>
-    <div class="setting-row">
-      <span class="setting-label">{$t('settings.downloads.downloadedTracks')}</span>
-      <span class="setting-value">
-        {#if downloadStats}
-          {downloadStats.readyTracks} {$t('album.tracks')} ({formatBytes(downloadStats.totalSizeBytes)})
-        {:else}
-          {$t('actions.loading')}
-        {/if}
-      </span>
-    </div>
-    <div class="setting-row">
-      <span class="setting-label">{$t('settings.downloads.clearDownloads')}</span>
-      <button
-        class="clear-btn"
-        onclick={handleClearDownloads}
-        disabled={isClearingDownloads || !downloadStats || downloadStats.readyTracks === 0}
-      >
-        {isClearingDownloads ? $t('settings.storage.clearing') : $t('actions.clearAll')}
-      </button>
-    </div>
-    <div class="setting-row last">
-      <span class="setting-label">{$t('settings.downloads.openFolder')}</span>
-      <button
-        class="folder-btn"
-        onclick={handleOpenDownloadFolder}
-        title={$t('settings.downloads.openFolder')}
-      >
-        <FolderOpen size={16} />
-        <span>{$t('actions.open')}</span>
       </button>
     </div>
   </section>
