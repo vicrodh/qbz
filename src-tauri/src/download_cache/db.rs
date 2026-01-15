@@ -321,4 +321,22 @@ impl DownloadCacheDb {
 
         Ok(paths)
     }
+
+    /// Update file path for a track (after organizing)
+    pub fn update_file_path(&self, track_id: u64, new_path: &str) -> Result<(), String> {
+        self.conn.execute(
+            "UPDATE cached_tracks SET file_path = ?1 WHERE track_id = ?2",
+            params![new_path, track_id as i64],
+        ).map_err(|e| format!("Failed to update file path: {}", e))?;
+        Ok(())
+    }
+
+    /// Update artwork path for a track
+    pub fn update_artwork_path(&self, track_id: u64, artwork_path: &str) -> Result<(), String> {
+        self.conn.execute(
+            "UPDATE cached_tracks SET artwork_path = ?1 WHERE track_id = ?2",
+            params![artwork_path, track_id as i64],
+        ).map_err(|e| format!("Failed to update artwork path: {}", e))?;
+        Ok(())
+    }
 }
