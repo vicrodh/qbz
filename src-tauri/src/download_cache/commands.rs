@@ -324,3 +324,32 @@ async fn evict_if_needed(
 
     Ok(())
 }
+
+// Path management commands
+
+#[tauri::command]
+pub async fn check_download_root_mounted(
+    cache_state: State<'_, DownloadCacheState>,
+) -> Result<bool, String> {
+    log::info!("Command: check_download_root_mounted");
+    
+    let root_path = cache_state.cache_dir.to_string_lossy().to_string();
+    super::path_validator::is_download_root_available(&root_path)
+}
+
+#[tauri::command]
+pub async fn validate_download_path(path: String) -> Result<super::path_validator::PathValidationResult, String> {
+    log::info!("Command: validate_download_path: {}", path);
+    super::path_validator::validate_path(&path)
+}
+
+#[tauri::command]
+pub async fn move_downloads_to_path(
+    new_path: String,
+    cache_state: State<'_, DownloadCacheState>,
+) -> Result<super::path_validator::MoveReport, String> {
+    log::info!("Command: move_downloads_to_path: {}", new_path);
+    
+    let old_path = cache_state.cache_dir.to_string_lossy().to_string();
+    super::path_validator::move_downloads_to_new_path(&old_path, &new_path)
+}

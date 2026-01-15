@@ -9,6 +9,7 @@
 pub mod commands;
 pub mod db;
 pub mod downloader;
+pub mod path_validator;
 
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -17,6 +18,7 @@ use serde::{Deserialize, Serialize};
 
 pub use db::DownloadCacheDb;
 pub use downloader::Downloader;
+pub use path_validator::{is_download_root_available, validate_path, PathStatus};
 
 /// Download status for a cached track
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

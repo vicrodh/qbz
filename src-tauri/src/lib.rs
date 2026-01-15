@@ -441,6 +441,9 @@ pub fn run() {
             download_cache::commands::clear_download_cache,
             download_cache::commands::set_download_cache_limit,
             download_cache::commands::open_download_cache_folder,
+            download_cache::commands::check_download_root_mounted,
+            download_cache::commands::validate_download_path,
+            download_cache::commands::move_downloads_to_path,
             // Lyrics commands
             lyrics::commands::lyrics_get,
             lyrics::commands::lyrics_clear_cache,
