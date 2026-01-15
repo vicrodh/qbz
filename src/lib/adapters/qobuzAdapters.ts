@@ -89,6 +89,12 @@ function isLiveAlbum(album: QobuzAlbum): boolean {
   return /\blive\b|\blive at\b|\blive in\b|\ben concert\b|\bin concert\b|\bconcert\b|\bunplugged\b|\bsessions?\b/.test(title);
 }
 
+function isOtherAlbum(album: QobuzAlbum): boolean {
+  const title = album.title?.toLowerCase() ?? '';
+  
+  return /\b(greatest hits|best of|anthology|collection|box set|essentials|retrospective|very best)\b/.test(title);
+}
+
 function toArtistAlbumSummary(album: QobuzAlbum): ArtistAlbumSummary {
   const artwork = getQobuzImage(album.image);
   const quality = formatQuality(
@@ -199,6 +205,7 @@ export function convertQobuzArtist(artist: QobuzArtist): ArtistDetail {
   const albums: ArtistAlbumSummary[] = [];
   const epsSingles: ArtistAlbumSummary[] = [];
   const liveAlbums: ArtistAlbumSummary[] = [];
+  const others: ArtistAlbumSummary[] = [];
 
   for (const album of albumItems) {
     const summary = toArtistAlbumSummary(album);
@@ -206,6 +213,8 @@ export function convertQobuzArtist(artist: QobuzArtist): ArtistDetail {
       liveAlbums.push(summary);
     } else if (isEpOrSingle(album)) {
       epsSingles.push(summary);
+    } else if (isOtherAlbum(album)) {
+      others.push(summary);
     } else {
       albums.push(summary);
     }
@@ -221,6 +230,7 @@ export function convertQobuzArtist(artist: QobuzArtist): ArtistDetail {
     epsSingles,
     liveAlbums,
     compilations: buildCompilationAlbums(artist.tracks_appears_on?.items),
+    others,
     playlists: toArtistPlaylists(artist.playlists),
     totalAlbums: artist.albums?.total || artist.albums_count || 0,
     albumsFetched
@@ -238,10 +248,12 @@ export function appendArtistAlbums(
   const existingAlbumIds = new Set(artist.albums.map(album => album.id));
   const existingEpIds = new Set(artist.epsSingles.map(album => album.id));
   const existingLiveIds = new Set(artist.liveAlbums.map(album => album.id));
+  const existingOtherIds = new Set(artist.others.map(album => album.id));
 
   const albums = [...artist.albums];
   const epsSingles = [...artist.epsSingles];
   const liveAlbums = [...artist.liveAlbums];
+  const others = [...artist.others];
 
   for (const album of newAlbums) {
     const summary = toArtistAlbumSummary(album);
@@ -255,6 +267,11 @@ export function appendArtistAlbums(
         epsSingles.push(summary);
         existingEpIds.add(summary.id);
       }
+    } else if (isOtherAlbum(album)) {
+      if (!existingOtherIds.has(summary.id)) {
+        others.push(summary);
+        existingOtherIds.add(summary.id);
+      }
     } else if (!existingAlbumIds.has(summary.id)) {
       albums.push(summary);
       existingAlbumIds.add(summary.id);
@@ -266,6 +283,7 @@ export function appendArtistAlbums(
     albums,
     epsSingles,
     liveAlbums,
+    others,
     totalAlbums: totalAlbums ?? artist.totalAlbums,
     albumsFetched: albumsFetched ?? artist.albumsFetched + newAlbums.length
   };

@@ -152,6 +152,13 @@ export interface ArtistDetail {
     year?: string;
     quality: string;
   }[];
+  others: {
+    id: string;
+    title: string;
+    artwork: string;
+    year?: string;
+    quality: string;
+  }[];
   playlists: {
     id: number;
     title: string;

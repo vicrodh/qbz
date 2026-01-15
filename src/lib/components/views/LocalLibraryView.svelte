@@ -123,11 +123,13 @@
   let albumViewMode = $state<'grid' | 'list'>('grid');
   type AlbumGroupMode = 'alpha' | 'artist';
   let albumGroupMode = $state<AlbumGroupMode>('alpha');
+  let albumGroupingEnabled = $state(false);
   let showGroupMenu = $state(false);
   let artistSearch = $state('');
   let trackSearch = $state('');
   type TrackGroupMode = 'album' | 'artist' | 'name';
   let trackGroupMode = $state<TrackGroupMode>('album');
+  let trackGroupingEnabled = $state(false);
   let showTrackGroupMenu = $state(false);
   let trackSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -1466,21 +1468,32 @@
                 onclick={() => (showGroupMenu = !showGroupMenu)}
                 title="Group albums"
               >
-                <span>{albumGroupMode === 'alpha' ? 'Group: A-Z' : 'Group: Artist'}</span>
+                <span>{!albumGroupingEnabled
+                  ? 'Group: Off'
+                  : albumGroupMode === 'alpha'
+                    ? 'Group: A-Z'
+                    : 'Group: Artist'}</span>
               </button>
               {#if showGroupMenu}
                 <div class="dropdown-menu">
                   <button
                     class="dropdown-item"
-                    class:selected={albumGroupMode === 'alpha'}
-                    onclick={() => { albumGroupMode = 'alpha'; showGroupMenu = false; }}
+                    class:selected={!albumGroupingEnabled}
+                    onclick={() => { albumGroupingEnabled = false; showGroupMenu = false; }}
+                  >
+                    Off
+                  </button>
+                  <button
+                    class="dropdown-item"
+                    class:selected={albumGroupingEnabled && albumGroupMode === 'alpha'}
+                    onclick={() => { albumGroupMode = 'alpha'; albumGroupingEnabled = true; showGroupMenu = false; }}
                   >
                     Alphabetical (A-Z)
                   </button>
                   <button
                     class="dropdown-item"
-                    class:selected={albumGroupMode === 'artist'}
-                    onclick={() => { albumGroupMode = 'artist'; showGroupMenu = false; }}
+                    class:selected={albumGroupingEnabled && albumGroupMode === 'artist'}
+                    onclick={() => { albumGroupMode = 'artist'; albumGroupingEnabled = true; showGroupMenu = false; }}
                   >
                     Artist
                   </button>
@@ -1510,8 +1523,8 @@
               <p class="empty-hint">Try a different artist or album name</p>
             </div>
           {:else}
-          {@const groupedAlbums = groupAlbums(filteredAlbums, albumGroupMode)}
-          {@const alphaGroups = albumGroupMode === 'alpha'
+          {@const groupedAlbums = albumGroupingEnabled ? groupAlbums(filteredAlbums, albumGroupMode) : [{ key: '', id: 'ungrouped', albums: filteredAlbums }]}
+          {@const alphaGroups = albumGroupingEnabled && albumGroupMode === 'alpha'
             ? new Set(groupedAlbums.map(group => group.key))
             : new Set<string>()}
 
@@ -1519,10 +1532,12 @@
               <div class="album-group-list">
                 {#each groupedAlbums as group (group.id)}
                   <div class="album-group" id={group.id}>
+                    {#if albumGroupingEnabled}
                     <div class="album-group-header">
                       <span class="album-group-title">{group.key}</span>
                       <span class="album-group-count">{group.albums.length}</span>
                     </div>
+                    {/if}
                     {#if albumViewMode === 'grid'}
                       <div class="album-grid">
                         {#each group.albums as album (album.id)}
@@ -1575,7 +1590,7 @@
                 {/each}
               </div>
 
-              {#if albumGroupMode === 'alpha'}
+              {#if albumGroupingEnabled && albumGroupMode === 'alpha'}
                 <div class="alpha-index">
                   {#each alphaIndexLetters as letter}
                     <button
@@ -1681,33 +1696,42 @@
                 title="Group tracks"
               >
                 <span>
-                  {trackGroupMode === 'album'
-                    ? 'Group: Album'
-                    : trackGroupMode === 'artist'
-                      ? 'Group: Artist'
-                      : 'Group: Name'}
+                  {!trackGroupingEnabled
+                    ? 'Group: Off'
+                    : trackGroupMode === 'album'
+                      ? 'Group: Album'
+                      : trackGroupMode === 'artist'
+                        ? 'Group: Artist'
+                        : 'Group: Name'}
                 </span>
               </button>
               {#if showTrackGroupMenu}
                 <div class="dropdown-menu">
                   <button
                     class="dropdown-item"
-                    class:selected={trackGroupMode === 'album'}
-                    onclick={() => { trackGroupMode = 'album'; showTrackGroupMenu = false; }}
+                    class:selected={!trackGroupingEnabled}
+                    onclick={() => { trackGroupingEnabled = false; showTrackGroupMenu = false; }}
+                  >
+                    Off
+                  </button>
+                  <button
+                    class="dropdown-item"
+                    class:selected={trackGroupingEnabled && trackGroupMode === 'album'}
+                    onclick={() => { trackGroupMode = 'album'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
                   >
                     Album
                   </button>
                   <button
                     class="dropdown-item"
-                    class:selected={trackGroupMode === 'artist'}
-                    onclick={() => { trackGroupMode = 'artist'; showTrackGroupMenu = false; }}
+                    class:selected={trackGroupingEnabled && trackGroupMode === 'artist'}
+                    onclick={() => { trackGroupMode = 'artist'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
                   >
                     Artist
                   </button>
                   <button
                     class="dropdown-item"
-                    class:selected={trackGroupMode === 'name'}
-                    onclick={() => { trackGroupMode = 'name'; showTrackGroupMenu = false; }}
+                    class:selected={trackGroupingEnabled && trackGroupMode === 'name'}
+                    onclick={() => { trackGroupMode = 'name'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
                   >
                     Name (A-Z)
                   </button>
@@ -1718,8 +1742,8 @@
             <span class="album-count">{tracks.length} tracks</span>
           </div>
 
-          {@const groupedTracks = groupTracks(tracks, trackGroupMode)}
-          {@const trackIndexTargets = trackGroupMode === 'artist'
+          {@const groupedTracks = trackGroupingEnabled ? groupTracks(tracks, trackGroupMode) : [{ id: 'ungrouped', title: '', subtitle: '', tracks, key: '' }]}
+          {@const trackIndexTargets = trackGroupingEnabled && trackGroupMode === 'artist'
             ? (() => {
                 const map = new Map<string, string>();
                 for (const group of groupedTracks) {
@@ -1731,9 +1755,9 @@
                 return map;
               })()
             : new Map<string, string>()}
-          {@const trackAlphaGroups = trackGroupMode === 'name'
+          {@const trackAlphaGroups = trackGroupingEnabled && trackGroupMode === 'name'
             ? new Set(groupedTracks.map(group => group.key))
-            : trackGroupMode === 'artist'
+            : trackGroupingEnabled && trackGroupMode === 'artist'
               ? new Set(trackIndexTargets.keys())
               : new Set<string>()}
 
@@ -1741,6 +1765,7 @@
             <div class="track-group-list">
               {#each groupedTracks as group (group.id)}
                 <div class="track-group" id={group.id}>
+                  {#if trackGroupingEnabled}
                   <div class="track-group-header">
                     <div class="track-group-title">{group.title}</div>
                     {#if group.subtitle}
@@ -1748,9 +1773,10 @@
                     {/if}
                     <div class="track-group-count">{group.tracks.length} tracks</div>
                   </div>
+                  {/if}
 
                   <div class="track-list">
-                    {#if trackGroupMode === 'album'}
+                    {#if trackGroupingEnabled && trackGroupMode === 'album'}
                       {@const trackSections = buildAlbumSections(group.tracks)}
                       {@const showTrackDiscHeaders = trackSections.length > 1}
                       {#each trackSections as section (section.disc)}
@@ -1805,7 +1831,7 @@
               {/each}
             </div>
 
-            {#if trackGroupMode === 'name' || trackGroupMode === 'artist'}
+            {#if trackGroupingEnabled && (trackGroupMode === 'name' || trackGroupMode === 'artist')}
               <div class="alpha-index">
                 {#each alphaIndexLetters as letter}
                   <button

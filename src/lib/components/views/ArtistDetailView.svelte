@@ -114,6 +114,7 @@
   let epsSinglesSection = $state<HTMLDivElement | null>(null);
   let liveAlbumsSection = $state<HTMLDivElement | null>(null);
   let compilationsSection = $state<HTMLDivElement | null>(null);
+  let othersSection = $state<HTMLDivElement | null>(null);
   let playlistsSection = $state<HTMLDivElement | null>(null);
   let activeJumpSection = $state('about');
   let jumpObserver: IntersectionObserver | null = null;
@@ -149,7 +150,8 @@
         ...artist.albums,
         ...artist.epsSingles,
         ...artist.liveAlbums,
-        ...artist.compilations
+        ...artist.compilations,
+        ...artist.others
       ];
       loadAllAlbumDownloadStatuses(allAlbums);
     }
@@ -185,7 +187,8 @@
       ...artist.albums,
       ...artist.epsSingles,
       ...artist.liveAlbums,
-      ...artist.compilations
+      ...artist.compilations,
+      ...artist.others
     ];
     await loadAllAlbumDownloadStatuses(allAlbums);
   }
@@ -339,7 +342,7 @@
 
   // Truncate bio for collapsed view
   let truncatedBio = $derived(
-    bioText && bioText.length > 300 ? bioText.slice(0, 300) + '...' : bioText
+    bioText && bioText.length > 500 ? bioText.slice(0, 500) + '...' : bioText
   );
 
   let hasMoreAlbums = $derived(!!onLoadMore && artist.albumsFetched < artist.totalAlbums);
@@ -347,6 +350,7 @@
   let hasEpsSingles = $derived(artist.epsSingles.length > 0);
   let hasLiveAlbums = $derived(artist.liveAlbums.length > 0);
   let hasCompilations = $derived(artist.compilations.length > 0);
+  let hasOthers = $derived(artist.others.length > 0);
   let hasPlaylists = $derived(artist.playlists.length > 0);
   let jumpSections = $derived.by(() => [
     { id: 'about', label: 'About', el: aboutSection, visible: true },
@@ -355,6 +359,7 @@
     { id: 'eps', label: 'EPs & Singles', el: epsSinglesSection, visible: hasEpsSingles },
     { id: 'live', label: 'Live Albums', el: liveAlbumsSection, visible: hasLiveAlbums },
     { id: 'compilations', label: 'Compilations', el: compilationsSection, visible: hasCompilations },
+    { id: 'others', label: 'Others', el: othersSection, visible: hasOthers },
     { id: 'playlists', label: 'Playlists', el: playlistsSection, visible: hasPlaylists },
   ].filter(section => section.visible));
 
@@ -724,6 +729,36 @@
       <h2 class="section-title">Compilations</h2>
       <div class="albums-grid">
         {#each artist.compilations as album}
+          <AlbumCard
+            albumId={album.id}
+            artwork={album.artwork}
+            title={album.title}
+            artist={album.year || ''}
+            quality={album.quality}
+            onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+            onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+            onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+            onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+            onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+            onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+            isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+            onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+            onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+              {downloadStateVersion}
+            onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+          />
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if artist.others.length > 0}
+    <div class="divider"></div>
+
+    <div class="discography section-anchor" bind:this={othersSection}>
+      <h2 class="section-title">Others</h2>
+      <div class="albums-grid">
+        {#each artist.others as album}
           <AlbumCard
             albumId={album.id}
             artwork={album.artwork}

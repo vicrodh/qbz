@@ -167,7 +167,7 @@ pub async fn get_artist(
 }
 
 /// Get artist detail with albums, playlists, and appears-on tracks
-/// Fetches 100 albums initially to ensure each album type section
+/// Fetches 500 albums initially to ensure each album type section
 /// (Discography, EPs, Live, etc.) has enough albums loaded
 #[tauri::command]
 pub async fn get_artist_detail(
@@ -178,7 +178,7 @@ pub async fn get_artist_detail(
 
     let client = state.client.lock().await;
     client
-        .get_artist_detail(artist_id, Some(100), Some(0))
+        .get_artist_detail(artist_id, Some(500), Some(0))
         .await
         .map_err(|e| e.to_string())
 }

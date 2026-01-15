@@ -107,6 +107,8 @@
     featuredAlbums: 12
   };
 
+  let homeLimits = $state(getSettings().limits);
+
   // Loading states for progressive render
   let isInitializing = $state(true);
   let isOverlayVisible = $state(true); // Overlay that fades out when ALL sections ready
@@ -215,6 +217,7 @@
     // Subscribe to home settings changes
     const unsubscribe = subscribeHomeSettings(() => {
       homeSettings = getSettings();
+      homeLimits = getSettings().limits;
     });
 
     // Load home data
@@ -341,7 +344,7 @@
     return Array.from(counts.entries())
       .map(([artistId, playCount]) => ({ artistId, playCount }))
       .sort((a, b) => b.playCount - a.playCount)
-      .slice(0, LIMITS.topArtists);
+      .slice(0, homeLimits.topArtists);
   }
 
   async function loadHome() {
@@ -373,15 +376,15 @@
 
     // Start ML data loading FIRST (local SQLite) - this gets the seeds
     const mlPromise = invoke<HomeSeeds>('reco_get_home_ml', {
-      limitRecentAlbums: LIMITS.recentAlbums,
-      limitContinueTracks: LIMITS.continueTracks,
-      limitTopArtists: LIMITS.topArtists,
-      limitFavorites: Math.max(LIMITS.favoriteAlbums, LIMITS.favoriteTracks)
+      limitRecentAlbums: homeLimits.recentAlbums,
+      limitContinueTracks: homeLimits.continueTracks,
+      limitTopArtists: homeLimits.topArtists,
+      limitFavorites: Math.max(homeLimits.favoriteAlbums, homeLimits.favoriteTracks)
     });
 
     // Start Qobuz API calls in parallel (don't await)
     if (isSectionVisible('newReleases')) {
-      fetchFeaturedAlbums('new-releases', LIMITS.featuredAlbums).then(async albums => {
+      fetchFeaturedAlbums('new-releases', homeLimits.featuredAlbums).then(async albums => {
         newReleases = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingNewReleases = false;
@@ -392,7 +395,7 @@
     }
 
     if (isSectionVisible('pressAwards')) {
-      fetchFeaturedAlbums('press-awards', LIMITS.featuredAlbums).then(async albums => {
+      fetchFeaturedAlbums('press-awards', homeLimits.featuredAlbums).then(async albums => {
         pressAwards = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingPressAwards = false;
@@ -403,7 +406,7 @@
     }
 
     if (isSectionVisible('mostStreamed')) {
-      fetchFeaturedAlbums('most-streamed', LIMITS.featuredAlbums).then(async albums => {
+      fetchFeaturedAlbums('most-streamed', homeLimits.featuredAlbums).then(async albums => {
         mostStreamed = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingMostStreamed = false;
@@ -414,7 +417,7 @@
     }
 
     if (isSectionVisible('qobuzissimes')) {
-      fetchFeaturedAlbums('qobuzissimes', LIMITS.featuredAlbums).then(async albums => {
+      fetchFeaturedAlbums('qobuzissimes', homeLimits.featuredAlbums).then(async albums => {
         qobuzissimes = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingQobuzissimes = false;
@@ -425,7 +428,7 @@
     }
 
     if (isSectionVisible('editorPicks')) {
-      fetchFeaturedAlbums('editor-picks', LIMITS.featuredAlbums).then(async albums => {
+      fetchFeaturedAlbums('editor-picks', homeLimits.featuredAlbums).then(async albums => {
         editorPicks = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingEditorPicks = false;
@@ -454,7 +457,7 @@
       // Recently Played (albums) - start immediately with seeds
       if (isSectionVisible('recentAlbums')) {
         const recentAlbumIds = normalizeAlbumIds(seeds.recentlyPlayedAlbumIds);
-        fetchAlbums(recentAlbumIds.slice(0, LIMITS.recentAlbums)).then(async albums => {
+        fetchAlbums(recentAlbumIds.slice(0, homeLimits.recentAlbums)).then(async albums => {
           recentAlbums = albums;
           await loadAllAlbumDownloadStatuses(albums);
           loadingRecentAlbums = false;
@@ -466,7 +469,7 @@
 
       // Top Artists
       if (isSectionVisible('topArtists')) {
-        fetchArtists(seeds.topArtistIds.slice(0, LIMITS.topArtists)).then(artists => {
+        fetchArtists(seeds.topArtistIds.slice(0, homeLimits.topArtists)).then(artists => {
           topArtists = artists;
           loadingTopArtists = false;
           markSectionFinished();
@@ -478,12 +481,12 @@
       // Favorite Albums
       if (isSectionVisible('favoriteAlbums')) {
         // Get favorite track details to extract album IDs
-        fetchTracks(seeds.favoriteTrackIds.slice(0, LIMITS.favoriteTracks)).then(async favoriteTrackDetails => {
+        fetchTracks(seeds.favoriteTrackIds.slice(0, homeLimits.favoriteTracks)).then(async favoriteTrackDetails => {
           const favoriteAlbumIds = normalizeAlbumIds([
             ...seeds.favoriteAlbumIds,
             ...favoriteTrackDetails.map(track => track.albumId)
           ]);
-          const albums = await fetchAlbums(favoriteAlbumIds.slice(0, LIMITS.favoriteAlbums));
+          const albums = await fetchAlbums(favoriteAlbumIds.slice(0, homeLimits.favoriteAlbums));
           favoriteAlbums = albums;
           await loadAllAlbumDownloadStatuses(albums);
           loadingFavoriteAlbums = false;
