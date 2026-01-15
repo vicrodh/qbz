@@ -339,15 +339,16 @@ pub async fn library_get_albums(
     log::info!("Command: library_get_albums");
 
     // Get download settings to check if we should include Qobuz downloads
-    let include_qobuz = download_settings_state
+    let _include_qobuz = download_settings_state
         .lock()
         .map_err(|e| format!("Failed to lock download settings: {}", e))?
         .get_settings()
         .map(|s| s.show_in_library)
         .unwrap_or(false);
 
+    // TODO: Use include_qobuz parameter once database method supports filtering
     let db = state.db.lock().await;
-    db.get_albums(include_hidden.unwrap_or(false), include_qobuz)
+    db.get_albums(include_hidden.unwrap_or(false))
         .map_err(|e| e.to_string())
 }
 
@@ -883,21 +884,42 @@ pub async fn library_backfill_downloads(
         failed_tracks: Vec::new(),
     };
 
-    // Get all downloaded tracks
-    let cache_db = download_cache_state.db.lock().await;
-    let downloads = cache_db
-        .get_all_tracks()
-        .map_err(|e| format!("Failed to get downloads: {}", e))?;
+    // Get all ready downloads directly from download cache DB
+    let downloads = {
+        let cache_db = download_cache_state.db.lock().await;
+        
+        let mut stmt = cache_db
+            .conn()
+            .prepare("SELECT track_id, title, artist, album, album_id, duration_secs, file_path, quality, bit_depth, sample_rate FROM cached_tracks WHERE status = 'ready'")
+            .map_err(|e| format!("Failed to query downloads: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)? as u64,           // track_id
+                    row.get::<_, String>(1)?,                // title
+                    row.get::<_, String>(2)?,                // artist
+                    row.get::<_, Option<String>>(3)?,        // album
+                    row.get::<_, i64>(5)? as u64,            // duration_secs
+                    row.get::<_, String>(6)?,                // file_path
+                    row.get::<_, Option<i64>>(8)?.map(|v| v as u32),  // bit_depth
+                    row.get::<_, Option<f64>>(9)?,           // sample_rate
+                ))
+            })
+            .map_err(|e| format!("Failed to map rows: {}", e))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to collect downloads: {}", e))?
+    }; // cache_db lock is dropped here
     
     report.total_downloads = downloads.len();
-    drop(cache_db);
 
     let library_db = state.db.lock().await;
 
-    for download in downloads {
+    for (track_id, title, artist, album, duration_secs, file_path, bit_depth, sample_rate) in downloads {
         // Check if already in library
         let exists = library_db
-            .track_exists_by_qobuz_id(download.track_id)
+            .track_exists_by_qobuz_id(track_id)
             .unwrap_or(false);
 
         if exists {
@@ -906,11 +928,20 @@ pub async fn library_backfill_downloads(
         }
 
         // Insert into library with source = 'qobuz_download'
-        match library_db.insert_qobuz_download(&download) {
+        match library_db.insert_qobuz_download_direct(
+            track_id,
+            &title,
+            &artist,
+            album.as_deref(),
+            duration_secs,
+            &file_path,
+            bit_depth,
+            sample_rate,
+        ) {
             Ok(_) => report.added_tracks += 1,
             Err(e) => {
-                log::warn!("Failed to insert track {}: {}", download.track_id, e);
-                report.failed_tracks.push(download.title);
+                log::warn!("Failed to insert track {}: {}", track_id, e);
+                report.failed_tracks.push(title);
             }
         }
     }

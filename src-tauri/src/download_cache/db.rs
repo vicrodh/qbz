@@ -21,6 +21,11 @@ impl DownloadCacheDb {
         Ok(db)
     }
 
+    /// Get reference to the connection (for direct queries)
+    pub fn conn(&self) -> &Connection {
+        &self.conn
+    }
+
     /// Initialize database schema
     fn init_schema(&self) -> Result<(), String> {
         self.conn.execute_batch(

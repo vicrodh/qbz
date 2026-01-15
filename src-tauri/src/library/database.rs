@@ -1374,9 +1374,16 @@ impl LibraryDatabase {
     }
 
     /// Insert a Qobuz download into the library
-    pub fn insert_qobuz_download(
+    pub fn insert_qobuz_download_direct(
         &self,
-        download: &crate::download_cache::CachedTrackInfo,
+        track_id: u64,
+        title: &str,
+        artist: &str,
+        album: Option<&str>,
+        duration_secs: u64,
+        file_path: &str,
+        bit_depth: Option<u32>,
+        sample_rate: Option<f64>,
     ) -> Result<(), LibraryError> {
         self.conn.execute(
             r#"
@@ -1388,20 +1395,20 @@ impl LibraryDatabase {
             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'qobuz_download', ?14)
             "#,
             params![
-                download.file, 
-                download.title,
-                download.artist,
-                download.album.as_deref().unwrap_or("Unknown Album"),
-                download.album.as_deref().unwrap_or("Unknown Album"), // Use album as album_artist
+                file_path,
+                title,
+                artist,
+                album.unwrap_or("Unknown Album"),
+                album.unwrap_or("Unknown Album"), // Use album as album_artist
                 0, // track_number - will be updated if metadata is available
                 None::<u32>, // disc_number
                 None::<u32>, // year
-                download.duration_secs as i64,
+                duration_secs as i64,
                 "flac", // Default format for downloads
-                download.bit_depth.map(|v| v as i64),
-                download.sample_rate,
+                bit_depth.map(|v| v as i64),
+                sample_rate,
                 2, // Assume stereo
-                download.track_id as i64,
+                track_id as i64,
             ],
         )
         .map_err(|e| LibraryError::Database(format!("Failed to insert Qobuz download: {}", e)))?;

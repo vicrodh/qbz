@@ -389,6 +389,7 @@ pub fn run() {
             library::commands::library_get_album_settings,
             library::commands::library_set_album_hidden,
             library::commands::library_get_hidden_albums,
+            library::commands::library_backfill_downloads,
             // Chromecast casting commands
             cast::commands::cast_start_discovery,
             cast::commands::cast_stop_discovery,
