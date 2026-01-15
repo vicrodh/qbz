@@ -1,12 +1,15 @@
 //! Tauri commands for download cache functionality
 
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::api::models::Quality;
 use crate::AppState;
 
+use crate::download_cache::path_validator::{self, PathValidationResult};
+use crate::download_cache::{DownloadCacheDb, DownloadCacheState};
 use super::{
-    CachedTrackInfo, DownloadCacheState, DownloadCacheStats, DownloadStatus,
+    CachedTrackInfo, DownloadCacheStats, DownloadStatus,
     TrackDownloadInfo,
 };
 
@@ -122,10 +125,16 @@ pub async fn download_track(
                 log::info!("Download complete for track {}: {} bytes", track_id, size);
                 let db_guard = db.lock().await;
                 let _ = db_guard.mark_complete(track_id, size);
+                drop(db_guard);
+                
                 let _ = app.emit("download:completed", serde_json::json!({
                     "trackId": track_id,
                     "size": size
                 }));
+
+                // TODO: Post-processing pipeline
+                // For now, files remain as {track_id}.flac without metadata
+                // Will be implemented with metadata enhancement + file organization
             }
             Err(e) => {
                 log::error!("Download failed for track {}: {}", track_id, e);
