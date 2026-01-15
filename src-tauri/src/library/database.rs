@@ -1463,6 +1463,9 @@ impl LibraryDatabase {
     ) -> Result<(), LibraryError> {
         use std::time::SystemTime;
         
+        // First, remove any existing entry for this qobuz_track_id to prevent duplicates
+        let _ = self.remove_qobuz_download(track_id);
+        
         // Get file size if file exists
         let file_size_bytes = std::fs::metadata(file_path)
             .map(|m| m.len() as i64)
