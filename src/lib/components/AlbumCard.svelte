@@ -282,9 +282,9 @@
   }
   
   [data-theme="light"] .quality-badge {
-    color: rgba(40, 42, 54, 0.85);
-    background: rgba(40, 42, 54, 0.08);
-    border: 1px solid rgba(40, 42, 54, 0.2);
+    color: #ffffff;
+    background: rgba(40, 42, 54, 0.85);
+    border: 1px solid rgba(40, 42, 54, 0.95);
   }
 
   .play-overlay {
