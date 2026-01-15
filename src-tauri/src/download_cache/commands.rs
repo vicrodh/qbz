@@ -8,7 +8,7 @@ use crate::AppState;
 
 use crate::download_cache::path_validator::{self, PathValidationResult};
 use crate::download_cache::{DownloadCacheDb, DownloadCacheState};
-use crate::download_cache::metadata::{fetch_complete_metadata, write_flac_tags, embed_artwork, organize_download};
+use crate::download_cache::metadata::{fetch_complete_metadata, write_flac_tags, embed_artwork, organize_download, save_album_artwork};
 use super::{
     CachedTrackInfo, DownloadCacheStats, DownloadStatus,
     TrackDownloadInfo,
@@ -41,7 +41,17 @@ async fn post_process_track(
     // 4. Organize file into artist/album structure
     let new_path = organize_download(track_id, current_path, download_root, &metadata)?;
     
-    // 5. Extract audio properties from FLAC file
+    // 5. Download and save album cover art as cover.jpg
+    if let Some(artwork_url) = &metadata.artwork_url {
+        // Extract album directory from the new_path
+        if let Some(parent_dir) = std::path::Path::new(&new_path).parent() {
+            if let Err(e) = save_album_artwork(parent_dir, artwork_url).await {
+                log::warn!("Failed to save album artwork for track {}: {}", track_id, e);
+            }
+        }
+    }
+    
+    // 6. Extract audio properties from FLAC file
     use lofty::AudioFile;
     let (bit_depth, sample_rate) = match lofty::read_from_path(&new_path) {
         Ok(tagged_file) => {
@@ -56,7 +66,7 @@ async fn post_process_track(
         }
     };
     
-    // 6. ALWAYS insert into local library DB (visibility controlled by toggle)
+    // 7. ALWAYS insert into local library DB (visibility controlled by toggle)
     let lib_guard = library_db.lock().await;
     
     // Generate album_group_key: album|album_artist

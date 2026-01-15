@@ -268,6 +268,39 @@ pub fn sanitize_filename(name: &str) -> String {
     sanitized
 }
 
+/// Download and save album cover art as a file
+pub async fn save_album_artwork(
+    album_dir: &Path,
+    artwork_url: &str,
+) -> Result<(), String> {
+    log::info!("Downloading album artwork to: {:?}", album_dir);
+
+    let cover_path = album_dir.join("cover.jpg");
+    
+    // Skip if cover already exists
+    if cover_path.exists() {
+        log::debug!("Cover art already exists at {:?}", cover_path);
+        return Ok(());
+    }
+
+    // Download artwork
+    let response = reqwest::get(artwork_url)
+        .await
+        .map_err(|e| format!("Failed to download album artwork: {}", e))?;
+
+    let artwork_bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read album artwork bytes: {}", e))?;
+
+    // Write to file
+    std::fs::write(&cover_path, artwork_bytes)
+        .map_err(|e| format!("Failed to write cover.jpg: {}", e))?;
+
+    log::info!("Album artwork saved to: {:?}", cover_path);
+    Ok(())
+}
+
 /// Organize downloaded file into proper folder structure
 pub fn organize_download(
     track_id: u64,
