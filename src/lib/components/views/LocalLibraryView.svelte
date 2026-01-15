@@ -1049,6 +1049,39 @@
     await fetchMissingArtistImages();
   }
 
+  /**
+   * Upload custom artist image
+   */
+  async function handleUploadArtistImage(artistName: string, event?: Event) {
+    event?.stopPropagation();
+    try {
+      const selected = await open({
+        multiple: false,
+        filters: [{
+          name: 'Image',
+          extensions: ['jpg', 'jpeg', 'png', 'webp']
+        }]
+      });
+
+      if (!selected) return;
+
+      const imagePath = Array.isArray(selected) ? selected[0] : selected;
+      
+      // Save to database
+      await invoke('library_set_custom_artist_image', {
+        artistName,
+        imagePath
+      });
+
+      // Update local state
+      const imageUrl = convertFileSrc(imagePath);
+      artistImages.set(artistName, imageUrl);
+      artistImages = new Map(artistImages);
+    } catch (err) {
+      console.error('Failed to upload custom artist image:', err);
+    }
+  }
+
   function handleLocalAlbumLink(track: LocalTrack) {
     if (!track.album_group_key) return;
     const album = albums.find(item => item.id === track.album_group_key);
@@ -1701,6 +1734,15 @@
                       <Mic2 size={32} />
                     {/if}
                   </div>
+                  {#if showSettings}
+                    <button
+                      class="artist-image-btn"
+                      onclick={(e) => handleUploadArtistImage(artist.name, e)}
+                      title="Upload custom image"
+                    >
+                      <Upload size={14} />
+                    </button>
+                  {/if}
                   <div class="artist-name">{artist.name}</div>
                   <div class="artist-stats">
                     {artist.album_count} albums &bull; {artist.track_count} tracks
@@ -2771,6 +2813,7 @@
   }
 
   .artist-card {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -2783,6 +2826,30 @@
 
   .artist-card:hover {
     background: var(--bg-tertiary);
+  }
+
+  .artist-image-btn {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 6px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 150ms ease;
+    z-index: 2;
+  }
+
+  .artist-image-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
   }
 
   .artist-icon {

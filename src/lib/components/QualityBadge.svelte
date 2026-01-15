@@ -112,6 +112,11 @@
     background: rgba(255, 255, 255, 0.06);
     border: 1px solid rgba(255, 255, 255, 0.1);
   }
+  
+  [data-theme="light"] .quality-badge {
+    background: rgba(40, 42, 54, 0.06);
+    border: 1px solid rgba(40, 42, 54, 0.15);
+  }
 
   .badge-icon {
     width: 16px;

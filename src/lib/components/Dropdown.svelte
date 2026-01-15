@@ -148,7 +148,13 @@
   }
 
   .option.selected {
-    background-color: var(--bg-hover);
+    background-color: rgba(66, 133, 244, 0.15);
     color: var(--text-primary);
+  }
+  
+  [data-theme="light"] .option.selected,
+  [data-theme="warm"] .option.selected {
+    background-color: rgba(var(--accent-primary), 0.15);
+    color: var(--accent-primary);
   }
 </style>

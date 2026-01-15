@@ -280,6 +280,12 @@
     border-radius: 4px;
     padding: 2px 6px;
   }
+  
+  [data-theme="light"] .quality-badge {
+    color: rgba(40, 42, 54, 0.85);
+    background: rgba(40, 42, 54, 0.08);
+    border: 1px solid rgba(40, 42, 54, 0.2);
+  }
 
   .play-overlay {
     position: absolute;
