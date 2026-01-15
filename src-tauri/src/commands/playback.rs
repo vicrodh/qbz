@@ -73,9 +73,9 @@ pub async fn play_track(
 
     let client = state.client.lock().await;
 
-    // Get the stream URL
+    // Get the stream URL with highest quality available
     let stream_url = client
-        .get_stream_url_with_fallback(track_id, Quality::HiRes)
+        .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
         .await
         .map_err(|e| format!("Failed to get stream URL: {}", e))?;
 
@@ -147,7 +147,7 @@ pub async fn prefetch_track(
 
         let client = state.client.lock().await;
         let stream_url = client
-            .get_stream_url_with_fallback(track_id, Quality::HiRes)
+            .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
             .await
             .map_err(|e| format!("Failed to get stream URL: {}", e))?;
         drop(client);
@@ -239,7 +239,7 @@ fn spawn_prefetch(
             let result = async {
                 let client_guard = client_clone.lock().await;
                 let stream_url = client_guard
-                    .get_stream_url_with_fallback(track_id, Quality::HiRes)
+                    .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
                     .await
                     .map_err(|e| format!("Failed to get stream URL: {}", e))?;
                 drop(client_guard);

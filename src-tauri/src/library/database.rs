@@ -509,12 +509,16 @@ impl LibraryDatabase {
                 let group_key: String = row.get(0)?;
                 let album: String = row.get(1)?;
                 let artist: String = row.get(2)?;
+                let artwork_path: Option<String> = row.get(4)?;
+                
+                log::debug!("Album grouping {}: artwork_path = {:?}", group_key, artwork_path);
+                
                 Ok(LocalAlbum {
                     id: group_key.clone(),
                     title: album,
                     artist,
                     year: row.get(3)?,
-                    artwork_path: row.get(4)?,
+                    artwork_path,
                     track_count: row.get(5)?,
                     total_duration_secs: row.get(6)?,
                     format: Self::parse_format(

@@ -46,7 +46,11 @@ async fn post_process_track(
         // Extract album directory from the new_path
         if let Some(parent_dir) = std::path::Path::new(&new_path).parent() {
             match save_album_artwork(parent_dir, artwork_url).await {
-                Ok(_) => Some(parent_dir.join("cover.jpg").to_string_lossy().to_string()),
+                Ok(_) => {
+                    let cover_path = parent_dir.join("cover.jpg").to_string_lossy().to_string();
+                    log::info!("Album artwork saved for track {}: {}", track_id, cover_path);
+                    Some(cover_path)
+                },
                 Err(e) => {
                     log::warn!("Failed to save album artwork for track {}: {}", track_id, e);
                     None
@@ -56,6 +60,7 @@ async fn post_process_track(
             None
         }
     } else {
+        log::warn!("No artwork URL available for track {}", track_id);
         None
     };
     
@@ -98,7 +103,7 @@ async fn post_process_track(
         sample_rate,
         artwork_path.as_deref(),
     ) {
-        Ok(_) => log::info!("Track {} inserted to local library DB with group key: {}", track_id, album_group_key),
+        Ok(_) => log::info!("Track {} inserted to local library DB with group key: {}, artwork: {:?}", track_id, album_group_key, artwork_path),
         Err(e) => log::error!("Failed to insert track {} to library DB: {}", track_id, e),
     }
     
@@ -186,11 +191,11 @@ pub async fn download_track(
             "trackId": track_id
         }));
 
-        // Get stream URL
+        // Get stream URL with highest quality available
         let stream_url = {
             let client_guard = client.lock().await;
             client_guard
-                .get_stream_url_with_fallback(track_id, Quality::HiRes)
+                .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
                 .await
         };
 
