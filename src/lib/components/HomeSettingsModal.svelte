@@ -11,6 +11,7 @@
     setGreetingEnabled,
     setCustomGreeting,
     resetToDefaults,
+    updateLimit,
     type HomeSettings
   } from '$lib/stores/homeSettingsStore';
   import { t } from '$lib/i18n';
@@ -57,6 +58,10 @@
   function handleReset() {
     resetToDefaults();
   }
+
+  function handleLimitChange(key: keyof HomeSettings['limits'], value: number) {
+    updateLimit(key, value);
+  }
 </script>
 
 <Modal {isOpen} {onClose} title={$t('home.customizeHome')}>
@@ -96,6 +101,92 @@
           />
         </div>
       {/if}
+    </div>
+
+    <!-- Item Limits -->
+    <div class="settings-section">
+      <div class="section-title">Item Limits</div>
+      <p class="section-desc">Configure how many items to show in each section</p>
+
+      <div class="limits-grid">
+        <div class="limit-item">
+          <label class="limit-label" for="limit-recent">Recently Played</label>
+          <input
+            id="limit-recent"
+            type="number"
+            class="limit-input"
+            min="1"
+            max="100"
+            value={settings.limits.recentAlbums}
+            onchange={(e) => handleLimitChange('recentAlbums', Number(e.currentTarget.value))}
+          />
+        </div>
+
+        <div class="limit-item">
+          <label class="limit-label" for="limit-continue">Continue Listening</label>
+          <input
+            id="limit-continue"
+            type="number"
+            class="limit-input"
+            min="1"
+            max="100"
+            value={settings.limits.continueTracks}
+            onchange={(e) => handleLimitChange('continueTracks', Number(e.currentTarget.value))}
+          />
+        </div>
+
+        <div class="limit-item">
+          <label class="limit-label" for="limit-artists">Top Artists</label>
+          <input
+            id="limit-artists"
+            type="number"
+            class="limit-input"
+            min="1"
+            max="100"
+            value={settings.limits.topArtists}
+            onchange={(e) => handleLimitChange('topArtists', Number(e.currentTarget.value))}
+          />
+        </div>
+
+        <div class="limit-item">
+          <label class="limit-label" for="limit-fav-albums">Favorite Albums</label>
+          <input
+            id="limit-fav-albums"
+            type="number"
+            class="limit-input"
+            min="1"
+            max="100"
+            value={settings.limits.favoriteAlbums}
+            onchange={(e) => handleLimitChange('favoriteAlbums', Number(e.currentTarget.value))}
+          />
+        </div>
+
+        <div class="limit-item">
+          <label class="limit-label" for="limit-fav-tracks">Favorite Tracks</label>
+          <input
+            id="limit-fav-tracks"
+            type="number"
+            class="limit-input"
+            min="1"
+            max="100"
+            value={settings.limits.favoriteTracks}
+            onchange={(e) => handleLimitChange('favoriteTracks', Number(e.currentTarget.value))}
+          />
+        </div>
+
+        <div class="limit-item">
+          <label class="limit-label" for="limit-featured">Featured Albums</label>
+          <input
+            id="limit-featured"
+            type="number"
+            class="limit-input"
+            min="1"
+            max="100"
+            value={settings.limits.featuredAlbums}
+            onchange={(e) => handleLimitChange('featuredAlbums', Number(e.currentTarget.value))}
+          />
+        </div>
+      </div>
     </div>
 
     <!-- Sections Order -->
@@ -387,5 +478,42 @@
     background: var(--bg-hover);
     border-color: var(--text-muted);
     color: var(--text-primary);
+  }
+
+  .limits-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .limit-item {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .limit-label {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .limit-input {
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    transition: all 150ms ease;
+  }
+
+  .limit-input:focus {
+    outline: none;
+    border-color: var(--accent);
+  }
+
+  .limit-input:hover {
+    border-color: var(--text-muted);
   }
 </style>

@@ -22,6 +22,7 @@ export interface HomeSection {
   label: string;
   visible: boolean;
   source?: 'qobuz' | 'ml'; // qobuz = editorial, ml = ML-powered recommendations
+  limit?: number; // configurable item count
 }
 
 export interface HomeSettings {
@@ -29,6 +30,14 @@ export interface HomeSettings {
   greeting: {
     enabled: boolean;
     customText: string | null; // null = use default time-based greeting
+  };
+  limits: {
+    recentAlbums: number;
+    continueTracks: number;
+    topArtists: number;
+    favoriteAlbums: number;
+    favoriteTracks: number;
+    featuredAlbums: number;
   };
 }
 
@@ -52,6 +61,14 @@ const DEFAULT_SETTINGS: HomeSettings = {
   greeting: {
     enabled: true,
     customText: null
+  },
+  limits: {
+    recentAlbums: 20,
+    continueTracks: 10,
+    topArtists: 20,
+    favoriteAlbums: 12,
+    favoriteTracks: 10,
+    featuredAlbums: 12
   }
 };
 
@@ -88,7 +105,8 @@ function loadSettings(): HomeSettings {
 function mergeWithDefaults(saved: Partial<HomeSettings>): HomeSettings {
   const result: HomeSettings = {
     sections: [],
-    greeting: saved.greeting ?? DEFAULT_SETTINGS.greeting
+    greeting: saved.greeting ?? DEFAULT_SETTINGS.greeting,
+    limits: { ...DEFAULT_SETTINGS.limits, ...(saved.limits || {}) }
   };
 
   // Build section map from saved
@@ -303,4 +321,22 @@ export function resetToDefaults(): void {
   settings = { ...DEFAULT_SETTINGS, sections: DEFAULT_SECTIONS.map(s => ({ ...s })) };
   saveSettings();
   notifyListeners();
+}
+
+/**
+ * Update a specific limit
+ */
+export function updateLimit(key: keyof HomeSettings['limits'], value: number): void {
+  if (value >= 1 && value <= 100) {
+    settings.limits[key] = value;
+    saveSettings();
+    notifyListeners();
+  }
+}
+
+/**
+ * Get current limits
+ */
+export function getLimits(): HomeSettings['limits'] {
+  return settings.limits;
 }
