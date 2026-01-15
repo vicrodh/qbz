@@ -8,10 +8,41 @@ use crate::AppState;
 
 use crate::download_cache::path_validator::{self, PathValidationResult};
 use crate::download_cache::{DownloadCacheDb, DownloadCacheState};
+use crate::download_cache::metadata::{fetch_complete_metadata, write_flac_tags, embed_artwork, organize_download};
 use super::{
     CachedTrackInfo, DownloadCacheStats, DownloadStatus,
     TrackDownloadInfo,
 };
+
+/// Post-process a downloaded track: fetch metadata, tag FLAC, embed artwork, organize files
+async fn post_process_track(
+    track_id: u64,
+    current_path: &str,
+    download_root: &str,
+    qobuz_client: &crate::api::QobuzClient,
+) -> Result<String, String> {
+    log::info!("Post-processing track {}", track_id);
+
+    // 1. Fetch complete metadata from Qobuz
+    let metadata = fetch_complete_metadata(track_id, qobuz_client).await?;
+    
+    // 2. Write FLAC tags
+    write_flac_tags(current_path, &metadata)
+        .map_err(|e| format!("Failed to write tags: {}", e))?;
+    
+    // 3. Embed artwork if available
+    if let Some(artwork_url) = &metadata.artwork_url {
+        if let Err(e) = embed_artwork(current_path, artwork_url).await {
+            log::warn!("Failed to embed artwork for track {}: {}", track_id, e);
+        }
+    }
+    
+    // 4. Organize file into artist/album structure
+    let new_path = organize_download(track_id, current_path, download_root, &metadata)?;
+    
+    log::info!("Track {} organized to: {}", track_id, new_path);
+    Ok(new_path)
+}
 
 /// Download a track for offline listening
 #[tauri::command]
@@ -57,6 +88,7 @@ pub async fn download_track(
     let client = state.client.clone();
     let downloader = cache_state.downloader.clone();
     let db = cache_state.db.clone();
+    let download_root = cache_state.get_cache_path();
     let app = app_handle.clone();
     let semaphore = cache_state.download_semaphore.clone();
 
@@ -123,18 +155,39 @@ pub async fn download_track(
         {
             Ok(size) => {
                 log::info!("Download complete for track {}: {} bytes", track_id, size);
-                let db_guard = db.lock().await;
-                let _ = db_guard.mark_complete(track_id, size);
-                drop(db_guard);
+                {
+                    let db_guard = db.lock().await;
+                    let _ = db_guard.mark_complete(track_id, size);
+                }
                 
                 let _ = app.emit("download:completed", serde_json::json!({
                     "trackId": track_id,
                     "size": size
                 }));
 
-                // TODO: Post-processing pipeline
-                // For now, files remain as {track_id}.flac without metadata
-                // Will be implemented with metadata enhancement + file organization
+                // Post-processing: metadata, tagging, artwork, organization
+                log::info!("Starting post-processing for track {}", track_id);
+                
+                let file_path_str = file_path.to_string_lossy().to_string();
+                let qobuz_client = client.lock().await;
+                match post_process_track(track_id, &file_path_str, &download_root, &*qobuz_client).await {
+                    Ok(new_path) => {
+                        // Update database with new path
+                        let db_guard = db.lock().await;
+                        if let Err(e) = db_guard.update_file_path(track_id, &new_path) {
+                            log::error!("Failed to update path for track {}: {}", track_id, e);
+                        }
+                        
+                        let _ = app.emit("download:processed", serde_json::json!({
+                            "trackId": track_id,
+                            "path": new_path
+                        }));
+                    }
+                    Err(e) => {
+                        log::error!("Post-processing failed for track {}: {}", track_id, e);
+                        // File still exists and is playable, just not organized
+                    }
+                }
             }
             Err(e) => {
                 log::error!("Download failed for track {}: {}", track_id, e);
