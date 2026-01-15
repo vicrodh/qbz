@@ -43,6 +43,10 @@
     onAlbumShareQobuz?: (albumId: string) => void;
     onAlbumShareSonglink?: (albumId: string) => void;
     onAlbumDownload?: (albumId: string) => void;
+    onOpenAlbumFolder?: (albumId: string) => void;
+    onReDownloadAlbum?: (albumId: string) => void;
+    checkAlbumFullyDownloaded?: (albumId: string) => Promise<boolean>;
+    downloadStateVersion?: number;
     onTrackPlay?: (track: DisplayTrack) => void;
     onArtistClick?: (artistId: number) => void;
     onTrackPlayNext?: (track: DisplayTrack) => void;
@@ -56,7 +60,6 @@
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
     getTrackDownloadStatus?: (trackId: number) => { status: DownloadStatus; progress: number };
-    downloadStateVersion?: number;
   }
 
   interface DisplayTrack {
@@ -84,6 +87,10 @@
     onAlbumShareQobuz,
     onAlbumShareSonglink,
     onAlbumDownload,
+    onOpenAlbumFolder,
+    onReDownloadAlbum,
+    checkAlbumFullyDownloaded,
+    downloadStateVersion,
     onTrackPlay,
     onArtistClick,
     onTrackPlayNext,
@@ -96,8 +103,7 @@
     onTrackGoToArtist,
     onTrackDownload,
     onTrackRemoveDownload,
-    getTrackDownloadStatus,
-    downloadStateVersion
+    getTrackDownloadStatus
   }: Props = $props();
 
   type TabType = 'tracks' | 'albums' | 'artists';
@@ -108,6 +114,26 @@
   let favoriteArtists = $state<FavoriteArtist[]>([]);
 
   let loading = $state(false);
+
+  // Download status tracking
+  let albumDownloadStatuses = $state<Map<string, boolean>>(new Map());
+
+  async function loadAlbumDownloadStatus(albumId: string) {
+    if (!checkAlbumFullyDownloaded) return false;
+    try {
+      const isDownloaded = await checkAlbumFullyDownloaded(albumId);
+      albumDownloadStatuses.set(albumId, isDownloaded);
+      return isDownloaded;
+    } catch {
+      return false;
+    }
+  }
+
+  function isAlbumDownloaded(albumId: string): boolean {
+    void downloadStateVersion;
+    return albumDownloadStatuses.get(albumId) || false;
+  }
+
   let error = $state<string | null>(null);
 
   // Search state for each tab
@@ -940,7 +966,10 @@
                         onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
                         onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
                         onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                        onclick={() => onAlbumClick?.(album.id)}
+                        isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                        onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+                        onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+                        onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
                       />
                     {/each}
                   </div>
@@ -1007,7 +1036,10 @@
                 onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
                 onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
                 onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                onclick={() => onAlbumClick?.(album.id)}
+                isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+                onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+                onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
               />
             {/each}
           </div>
