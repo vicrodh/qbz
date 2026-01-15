@@ -334,11 +334,20 @@ pub async fn library_stop_scan(state: State<'_, LibraryState>) -> Result<(), Str
 pub async fn library_get_albums(
     include_hidden: Option<bool>,
     state: State<'_, LibraryState>,
+    download_settings_state: State<'_, crate::config::DownloadSettingsState>,
 ) -> Result<Vec<LocalAlbum>, String> {
     log::info!("Command: library_get_albums");
 
+    // Get download settings to check if we should include Qobuz downloads
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .get_settings()
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
     let db = state.db.lock().await;
-    db.get_albums(include_hidden.unwrap_or(false))
+    db.get_albums(include_hidden.unwrap_or(false), include_qobuz)
         .map_err(|e| e.to_string())
 }
 
@@ -848,4 +857,63 @@ pub async fn library_get_hidden_albums(
     let db = state.db.lock().await;
     db.get_hidden_albums()
         .map_err(|e| e.to_string())
+}
+
+// === Qobuz Downloads Integration ===
+
+#[derive(serde::Serialize)]
+pub struct BackfillReport {
+    pub total_downloads: usize,
+    pub added_tracks: usize,
+    pub skipped_tracks: usize,
+    pub failed_tracks: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn library_backfill_downloads(
+    state: State<'_, LibraryState>,
+    download_cache_state: State<'_, crate::download_cache::DownloadCacheState>,
+) -> Result<BackfillReport, String> {
+    log::info!("Command: library_backfill_downloads");
+
+    let mut report = BackfillReport {
+        total_downloads: 0,
+        added_tracks: 0,
+        skipped_tracks: 0,
+        failed_tracks: Vec::new(),
+    };
+
+    // Get all downloaded tracks
+    let cache_db = download_cache_state.db.lock().await;
+    let downloads = cache_db
+        .get_all_tracks()
+        .map_err(|e| format!("Failed to get downloads: {}", e))?;
+    
+    report.total_downloads = downloads.len();
+    drop(cache_db);
+
+    let library_db = state.db.lock().await;
+
+    for download in downloads {
+        // Check if already in library
+        let exists = library_db
+            .track_exists_by_qobuz_id(download.track_id)
+            .unwrap_or(false);
+
+        if exists {
+            report.skipped_tracks += 1;
+            continue;
+        }
+
+        // Insert into library with source = 'qobuz_download'
+        match library_db.insert_qobuz_download(&download) {
+            Ok(_) => report.added_tracks += 1,
+            Err(e) => {
+                log::warn!("Failed to insert track {}: {}", download.track_id, e);
+                report.failed_tracks.push(download.title);
+            }
+        }
+    }
+
+    Ok(report)
 }

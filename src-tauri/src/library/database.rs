@@ -478,7 +478,7 @@ impl LibraryDatabase {
 
         let mut stmt = self
             .conn
-            .prepare(query)
+            .prepare(&query)
             .map_err(|e| LibraryError::Database(e.to_string()))?;
 
         let rows = stmt
@@ -1356,5 +1356,55 @@ impl LibraryDatabase {
 
         rows.collect::<Result<Vec<_>, _>>()
             .map_err(|e| LibraryError::Database(e.to_string()))
+    }
+
+    // === Qobuz Downloads Integration ===
+
+    /// Check if a track exists by Qobuz track ID
+    pub fn track_exists_by_qobuz_id(&self, qobuz_track_id: u64) -> Result<bool, LibraryError> {
+        let count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM local_tracks WHERE qobuz_track_id = ?1",
+                params![qobuz_track_id as i64],
+                |row| row.get(0),
+            )
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+        Ok(count > 0)
+    }
+
+    /// Insert a Qobuz download into the library
+    pub fn insert_qobuz_download(
+        &self,
+        download: &crate::download_cache::CachedTrackInfo,
+    ) -> Result<(), LibraryError> {
+        self.conn.execute(
+            r#"
+            INSERT INTO local_tracks (
+                file_path, title, artist, album, album_artist,
+                track_number, disc_number, year, duration_secs,
+                format, bit_depth, sample_rate, channels,
+                source, qobuz_track_id
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'qobuz_download', ?14)
+            "#,
+            params![
+                download.file, 
+                download.title,
+                download.artist,
+                download.album.as_deref().unwrap_or("Unknown Album"),
+                download.album.as_deref().unwrap_or("Unknown Album"), // Use album as album_artist
+                0, // track_number - will be updated if metadata is available
+                None::<u32>, // disc_number
+                None::<u32>, // year
+                download.duration_secs as i64,
+                "flac", // Default format for downloads
+                download.bit_depth.map(|v| v as i64),
+                download.sample_rate,
+                2, // Assume stereo
+                download.track_id as i64,
+            ],
+        )
+        .map_err(|e| LibraryError::Database(format!("Failed to insert Qobuz download: {}", e)))?;
+        Ok(())
     }
 }
