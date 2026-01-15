@@ -178,6 +178,25 @@ When building from source, you need to provide your own API keys. Copy the examp
 cp .env.example .env
 ```
 
+Edit `.env` with your API keys, then use the development script that properly loads them:
+
+```bash
+# Use this command for development with API keys
+npm run dev:tauri
+```
+
+**Important**: API keys are embedded at compile-time using Rust's `option_env!()` macro. The `.env` file must be loaded into your shell environment before compilation. The `npm run dev:tauri` script does this automatically. If you prefer manual control:
+
+```bash
+# Load .env into current shell (once per terminal session)
+set -a
+source .env
+set +a
+
+# Now run dev
+npm run tauri dev
+```
+
 #### Last.fm Integration
 
 1. Go to [Last.fm API Account](https://www.last.fm/api/account/create)
