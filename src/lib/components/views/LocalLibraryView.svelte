@@ -447,9 +447,22 @@
   }
 
   async function handleClearLibrary() {
-    if (!confirm('Clear entire library? This will remove all indexed tracks. Your files will not be deleted.')) {
-      return;
-    }
+    const firstConfirm = confirm(
+      'Clear entire library?\n\n' +
+      'This will remove ALL indexed tracks from the database.\n' +
+      'Your audio files will NOT be deleted.\n\n' +
+      'You will need to re-scan your folders after this.'
+    );
+    
+    if (!firstConfirm) return;
+
+    const secondConfirm = confirm(
+      'Are you absolutely sure?\n\n' +
+      'This action cannot be undone.\n' +
+      'Type OK to confirm or Cancel to abort.'
+    );
+    
+    if (!secondConfirm) return;
 
     try {
       await invoke('library_clear');
@@ -459,6 +472,7 @@
       tracks = [];
     } catch (err) {
       console.error('Failed to clear library:', err);
+      alert(`Failed to clear library: ${err}`);
     }
   }
 
@@ -1312,9 +1326,13 @@
               <span>Configure Discogs API for automatic artwork fetching</span>
             </div>
           {/if}
-          <button class="danger-btn" onclick={handleClearLibrary}>
-            <Trash2 size={14} />
-            <span>Clear Library</span>
+        </div>
+
+        <div class="danger-zone">
+          <div class="danger-zone-label">Danger Zone</div>
+          <button class="danger-btn-small" onclick={handleClearLibrary}>
+            <Trash2 size={12} />
+            <span>Clear Library Database</span>
           </button>
         </div>
       </div>
@@ -2204,6 +2222,41 @@
     background: var(--bg-tertiary);
     border-radius: 6px;
     flex: 1;
+  }
+
+  .danger-zone {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 2px solid var(--bg-tertiary);
+  }
+
+  .danger-zone-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #ef4444;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+  }
+
+  .danger-btn-small {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: transparent;
+    color: #ef4444;
+    border: 1px solid #ef4444;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .danger-btn-small:hover {
+    background: #ef4444;
+    color: white;
   }
 
   .danger-btn {
