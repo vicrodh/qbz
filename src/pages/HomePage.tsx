@@ -296,14 +296,16 @@ export function HomePage() {
 
       <section className="section section--muted">
         <div className="container">
-          <h2 className="section__title">{t('linuxFirst.title')}</h2>
-          <p className="section__subtitle" style={{ maxWidth: 'none' }}>{t('linuxFirst.lead')}</p>
-          <div className="logo-row" style={{ marginTop: 18 }}>
-            <img src="/assets/icons/Tux.svg" alt="Linux Tux mascot - QBZ is Linux first" title="Linux first" style={{ width: 64, height: 'auto' }} />
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 32 }}>
+            <img src="/assets/icons/Tux.svg" alt="Linux Tux mascot - QBZ is Linux first" title="Linux first" style={{ width: 128, height: 'auto', flexShrink: 0 }} />
+            <div>
+              <h2 className="section__title">{t('linuxFirst.title')}</h2>
+              <p className="section__subtitle" style={{ maxWidth: 'none' }}>{t('linuxFirst.lead')}</p>
+              <a className="btn btn-ghost" href={buildPath(language, 'licenses')} style={{ marginTop: 24 }}>
+                {t('nav.licenses')}
+              </a>
+            </div>
           </div>
-          <a className="btn btn-ghost" href={buildPath(language, 'licenses')} style={{ marginTop: 24 }}>
-            {t('nav.licenses')}
-          </a>
         </div>
       </section>
     </>
