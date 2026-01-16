@@ -52,10 +52,17 @@ pub struct AppState {
 
 impl AppState {
     pub fn new() -> Self {
-        Self::with_device(None)
+        Self::with_device_and_settings(None, config::audio_settings::AudioSettings::default())
     }
 
     pub fn with_device(device_name: Option<String>) -> Self {
+        Self::with_device_and_settings(device_name, config::audio_settings::AudioSettings::default())
+    }
+
+    pub fn with_device_and_settings(
+        device_name: Option<String>,
+        audio_settings: config::audio_settings::AudioSettings,
+    ) -> Self {
         // Create playback cache (L2 - disk, 500MB)
         let playback_cache = match PlaybackCache::new(500 * 1024 * 1024) {
             Ok(cache) => Some(Arc::new(cache)),
@@ -74,7 +81,7 @@ impl AppState {
 
         Self {
             client: Arc::new(Mutex::new(QobuzClient::default())),
-            player: Player::new(device_name),
+            player: Player::new(device_name, audio_settings),
             queue: QueueManager::new(),
             media_controls: MediaControlsManager::new(),
             audio_cache,
@@ -164,23 +171,36 @@ pub fn run() {
     let offline_state = offline::OfflineState::new()
         .expect("Failed to initialize offline state");
 
-    // Read saved audio device setting for player initialization
-    let saved_device = audio_settings_state
+    // Read saved audio device and settings for player initialization
+    let (saved_device, audio_settings) = audio_settings_state
         .store
         .lock()
         .ok()
-        .and_then(|store| store.get_settings().ok())
-        .and_then(|settings| settings.output_device);
+        .and_then(|store| {
+            store.get_settings().ok().map(|settings| {
+                (settings.output_device.clone(), settings)
+            })
+        })
+        .unwrap_or_else(|| {
+            log::info!("No saved audio settings found, using defaults");
+            (None, config::audio_settings::AudioSettings::default())
+        });
 
     if let Some(ref device) = saved_device {
         log::info!("Initializing player with saved device: {}", device);
     }
+    log::info!(
+        "Audio settings: exclusive_mode={}, dac_passthrough={}, sample_rate={:?}",
+        audio_settings.exclusive_mode,
+        audio_settings.dac_passthrough,
+        audio_settings.preferred_sample_rate
+    );
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(AppState::with_device(saved_device))
+        .manage(AppState::with_device_and_settings(saved_device, audio_settings))
         .setup(|app| {
             // Initialize system tray icon
             if let Err(e) = tray::init_tray(app.handle()) {

@@ -13,13 +13,14 @@ use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender, RecvTimeoutError};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use rodio::{Decoder, OutputStream, Sink, Source};
 use rodio::buffer::SamplesBuffer;
 use rodio::decoder::Mp4Type;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
+use rodio::cpal::{StreamConfig, SampleRate, BufferSize, SupportedStreamConfig, SupportedBufferSize, SampleFormat};
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::errors::Error as SymphoniaError;
@@ -30,11 +31,18 @@ use symphonia::core::probe::Hint;
 use symphonia::default::{get_codecs, get_probe};
 
 use crate::api::{client::QobuzClient, models::Quality};
+use crate::config::audio_settings::AudioSettings;
 
 /// Commands sent to the audio thread
 enum AudioCommand {
-    /// Play audio data with track ID and duration
-    Play { data: Vec<u8>, track_id: u64, duration_secs: u64 },
+    /// Play audio data with track ID, duration, and audio specs
+    Play {
+        data: Vec<u8>,
+        track_id: u64,
+        duration_secs: u64,
+        sample_rate: u32,
+        channels: u16,
+    },
     /// Pause playback
     Pause,
     /// Resume playback
@@ -83,7 +91,14 @@ impl Seek for CursorMediaSource {
     }
 }
 
-fn decode_with_symphonia(data: &[u8]) -> Result<SamplesBuffer<i16>, String> {
+/// Audio specifications extracted from decoded audio
+struct AudioSpecs {
+    samples: SamplesBuffer<i16>,
+    sample_rate: u32,
+    channels: u16,
+}
+
+fn decode_with_symphonia(data: &[u8]) -> Result<AudioSpecs, String> {
     let source = Box::new(CursorMediaSource::new(data.to_vec())) as Box<dyn MediaSource>;
     let mss = MediaSourceStream::new(source, Default::default());
 
@@ -150,7 +165,11 @@ fn decode_with_symphonia(data: &[u8]) -> Result<SamplesBuffer<i16>, String> {
         return Err("Symphonia decode produced no audio".to_string());
     }
 
-    Ok(SamplesBuffer::new(channels, sample_rate, samples))
+    Ok(AudioSpecs {
+        samples: SamplesBuffer::new(channels, sample_rate, samples),
+        sample_rate,
+        channels,
+    })
 }
 
 fn is_isomp4(data: &[u8]) -> bool {
@@ -166,9 +185,9 @@ fn decode_with_fallback(
 ) -> Result<Box<dyn Source<Item = i16> + Send>, String> {
     if is_isomp4(data) {
         return decode_with_symphonia(data)
-            .map(|buffer| {
+            .map(|specs| {
                 log::info!("Decoded audio using symphonia fallback (isomp4)");
-                Box::new(buffer) as Box<dyn Source<Item = i16> + Send>
+                Box::new(specs.samples) as Box<dyn Source<Item = i16> + Send>
             });
     }
 
@@ -208,11 +227,86 @@ fn decode_with_fallback(
     }
 
     match decode_with_symphonia(data) {
-        Ok(buffer) => {
+        Ok(specs) => {
             log::info!("Decoded audio using symphonia fallback");
-            Ok(Box::new(buffer))
+            Ok(Box::new(specs.samples))
         }
         Err(err) => Err(err),
+    }
+}
+
+/// Create OutputStream with custom sample rate configuration
+fn create_output_stream_with_config(
+    device: &rodio::cpal::Device,
+    sample_rate: u32,
+    channels: u16,
+    exclusive_mode: bool,
+) -> Result<(OutputStream, rodio::OutputStreamHandle), String> {
+    log::info!(
+        "Creating OutputStream: {}Hz, {} channels, exclusive: {}",
+        sample_rate,
+        channels,
+        exclusive_mode
+    );
+
+    // Create StreamConfig with desired sample rate
+    let config = StreamConfig {
+        channels,
+        sample_rate: SampleRate(sample_rate),
+        buffer_size: if exclusive_mode {
+            BufferSize::Fixed(512)  // Lower latency for exclusive mode
+        } else {
+            BufferSize::Default
+        },
+    };
+
+    // Check if device supports this configuration
+    let supported_configs = device
+        .supported_output_configs()
+        .map_err(|e| format!("Failed to get supported configs: {}", e))?;
+
+    let mut found_matching = false;
+    for range in supported_configs {
+        if range.channels() == channels
+            && sample_rate >= range.min_sample_rate().0
+            && sample_rate <= range.max_sample_rate().0
+        {
+            found_matching = true;
+            log::info!(
+                "Device supports {}Hz (range: {}-{}Hz)",
+                sample_rate,
+                range.min_sample_rate().0,
+                range.max_sample_rate().0
+            );
+            break;
+        }
+    }
+
+    if !found_matching {
+        log::warn!(
+            "Device may not support {}Hz, attempting anyway",
+            sample_rate
+        );
+    }
+
+    // Create SupportedStreamConfig
+    let supported_config = SupportedStreamConfig::new(
+        config.channels,
+        config.sample_rate,
+        SupportedBufferSize::Range { min: 64, max: 8192 },
+        SampleFormat::F32,
+    );
+
+    // Create OutputStream with custom config
+    match OutputStream::try_from_device_config(device, supported_config) {
+        Ok((stream, handle)) => {
+            log::info!("✅ OutputStream created successfully at {}Hz", sample_rate);
+            Ok((stream, handle))
+        }
+        Err(e) => {
+            log::error!("❌ Failed to create OutputStream at {}Hz: {}", sample_rate, e);
+            Err(format!("Failed to create output stream: {}", e))
+        }
     }
 }
 
@@ -358,21 +452,27 @@ pub struct Player {
     tx: Sender<AudioCommand>,
     /// Shared state accessible from any thread
     pub state: SharedState,
+    /// Audio settings (exclusive mode, DAC passthrough, etc.)
+    audio_settings: Arc<Mutex<AudioSettings>>,
 }
 
 impl Default for Player {
     fn default() -> Self {
-        Self::new(None)
+        Self::new(None, AudioSettings::default())
     }
 }
 
 impl Player {
-    /// Create a new player with an optional specific output device
+    /// Create a new player with an optional specific output device and audio settings
     /// If device_name is None, uses the system default device
-    pub fn new(device_name: Option<String>) -> Self {
+    pub fn new(device_name: Option<String>, audio_settings: AudioSettings) -> Self {
         let (tx, rx) = mpsc::channel::<AudioCommand>();
         let state = SharedState::new();
         let thread_state = state.clone();
+
+        // Clone settings for thread
+        let settings = Arc::new(Mutex::new(audio_settings.clone()));
+        let thread_settings = settings.clone();
 
         // Spawn dedicated audio thread
         thread::spawn(move || {
@@ -457,6 +557,8 @@ impl Player {
             // Initialize audio device lazily on first playback to avoid idle CPU usage.
             let mut current_device_name = device_name.clone();
             let mut stream_opt: Option<(OutputStream, rodio::OutputStreamHandle)> = None;
+            let mut current_sample_rate: Option<u32> = None;
+            let mut current_channels: Option<u16> = None;
 
             const MAX_INIT_RETRIES: u32 = 5;
             const RETRY_DELAY_MS: u64 = 500;
@@ -480,39 +582,120 @@ impl Player {
                                       stream_opt: &mut Option<(OutputStream, rodio::OutputStreamHandle)>,
                                       current_device_name: &mut Option<String>,
                                       consecutive_sink_failures: &mut u32,
-                                      pause_suspend_deadline: &mut Option<Instant>| {
+                                      pause_suspend_deadline: &mut Option<Instant>,
+                                      current_sample_rate: &mut Option<u32>,
+                                      current_channels: &mut Option<u16>| {
                 match command {
-                    AudioCommand::Play { data, track_id, duration_secs } => {
-                        log::info!("Audio thread: playing track {}", track_id);
+                    AudioCommand::Play { data, track_id, duration_secs, sample_rate, channels } => {
+                        log::info!(
+                            "Audio thread: playing track {} ({}Hz, {} channels)",
+                            track_id,
+                            sample_rate,
+                            channels
+                        );
                         *pause_suspend_deadline = None;
 
-                        if stream_opt.is_none() {
-                            for attempt in 1..=MAX_INIT_RETRIES {
+                        // Check if we need to recreate the stream
+                        let needs_new_stream = stream_opt.is_none()
+                            || *current_sample_rate != Some(sample_rate)
+                            || *current_channels != Some(channels);
+
+                        if needs_new_stream {
+                            if stream_opt.is_some() {
                                 log::info!(
-                                    "Audio device init on playback attempt {}/{}",
-                                    attempt,
-                                    MAX_INIT_RETRIES
+                                    "Sample rate changed from {:?}Hz to {}Hz - recreating OutputStream",
+                                    *current_sample_rate,
+                                    sample_rate
                                 );
-                                *stream_opt = init_device(current_device_name, &thread_state);
-                                if stream_opt.is_some() {
-                                    thread_state.set_stream_error(false);
-                                    break;
-                                }
-                                if attempt < MAX_INIT_RETRIES {
-                                    log::warn!(
-                                        "Audio init failed, retrying in {}ms...",
-                                        RETRY_DELAY_MS
-                                    );
-                                    std::thread::sleep(Duration::from_millis(RETRY_DELAY_MS));
-                                }
+                                // Drop old stream
+                                drop(stream_opt.take());
                             }
-                            if stream_opt.is_none() {
-                                log::error!(
-                                    "Failed to initialize audio after {} attempts.",
-                                    MAX_INIT_RETRIES
-                                );
+
+                            // Get audio settings (exclusive mode / DAC passthrough)
+                            let dac_passthrough = thread_settings
+                                .lock()
+                                .ok()
+                                .map(|s| s.dac_passthrough)
+                                .unwrap_or(false);
+
+                            log::info!("DAC passthrough enabled: {}", dac_passthrough);
+
+                            // Get the audio device
+                            let device = if let Some(ref name) = *current_device_name {
+                                log::info!("Looking for audio device: {}", name);
+                                let found = host.output_devices()
+                                    .ok()
+                                    .and_then(|mut devices| {
+                                        devices.find(|d| d.name().ok().as_ref() == Some(name))
+                                    });
+
+                                match found {
+                                    Some(d) if is_device_valid(&d) => {
+                                        log::info!("Found and validated device: {}", name);
+                                        Some(d)
+                                    }
+                                    Some(_) => {
+                                        log::warn!("Device '{}' found but has no valid output configs, using default", name);
+                                        host.default_output_device()
+                                    }
+                                    None => {
+                                        log::warn!("Device '{}' not found, using default", name);
+                                        host.default_output_device()
+                                    }
+                                }
+                            } else {
+                                log::info!("Using default audio device");
+                                host.default_output_device()
+                            };
+
+                            let Some(device) = device else {
+                                log::error!("No audio output device available");
+                                thread_state.set_current_device(None);
                                 thread_state.set_stream_error(true);
                                 return;
+                            };
+
+                            // Set current device name
+                            if let Ok(name) = device.name() {
+                                log::info!("Using audio device: {}", name);
+                                thread_state.set_current_device(Some(name));
+                            }
+
+                            // Create OutputStream with custom sample rate
+                            match create_output_stream_with_config(
+                                &device,
+                                sample_rate,
+                                channels,
+                                dac_passthrough,
+                            ) {
+                                Ok(stream) => {
+                                    *stream_opt = Some(stream);
+                                    *current_sample_rate = Some(sample_rate);
+                                    *current_channels = Some(channels);
+                                    thread_state.set_stream_error(false);
+                                    log::info!("✅ Audio stream ready at {}Hz", sample_rate);
+                                }
+                                Err(e) => {
+                                    log::error!("❌ Failed to create stream at {}Hz: {}", sample_rate, e);
+                                    log::warn!("Attempting fallback to default device config...");
+
+                                    // Try fallback to default config
+                                    match OutputStream::try_from_device(&device) {
+                                        Ok(stream) => {
+                                            log::warn!("Using default device config as fallback");
+                                            *stream_opt = Some(stream);
+                                            *current_sample_rate = Some(sample_rate);
+                                            *current_channels = Some(channels);
+                                            thread_state.set_stream_error(false);
+                                        }
+                                        Err(e2) => {
+                                            log::error!("Fallback also failed: {}", e2);
+                                            thread_state.set_stream_error(true);
+                                            thread_state.set_current_device(None);
+                                            return;
+                                        }
+                                    }
+                                }
                             }
                         }
 
@@ -796,6 +979,8 @@ impl Player {
                             &mut current_device_name,
                             &mut consecutive_sink_failures,
                             &mut pause_suspend_deadline,
+                            &mut current_sample_rate,
+                            &mut current_channels,
                         ),
                         Err(RecvTimeoutError::Timeout) => {
                             let now = Instant::now();
@@ -844,6 +1029,8 @@ impl Player {
                                     &mut current_device_name,
                                     &mut consecutive_sink_failures,
                                     &mut pause_suspend_deadline,
+                                    &mut current_sample_rate,
+                                    &mut current_channels,
                                 ),
                                 Err(RecvTimeoutError::Timeout) => {}
                                 Err(RecvTimeoutError::Disconnected) => {
@@ -865,6 +1052,8 @@ impl Player {
                             &mut current_device_name,
                             &mut consecutive_sink_failures,
                             &mut pause_suspend_deadline,
+                            &mut current_sample_rate,
+                            &mut current_channels,
                         ),
                         Err(_) => {
                             log::info!("Audio thread: channel closed, exiting");
@@ -875,7 +1064,7 @@ impl Player {
             }
         });
 
-        Self { tx, state }
+        Self { tx, state, audio_settings: settings }
     }
 
     /// Play a track by ID (downloads audio)
@@ -915,11 +1104,27 @@ impl Player {
     pub fn play_data(&self, data: Vec<u8>, track_id: u64) -> Result<(), String> {
         log::info!("Player: Playing {} bytes of audio data for track {}", data.len(), track_id);
 
+        // Extract audio metadata (sample rate and channels)
+        // We decode to get metadata, then the audio thread will decode again for playback
+        let audio_specs = decode_with_symphonia(&data)
+            .map_err(|e| format!("Failed to extract audio metadata: {}", e))?;
+
+        let sample_rate = audio_specs.sample_rate;
+        let channels = audio_specs.channels;
+
+        log::info!(
+            "Player: Detected audio format - {}Hz, {} channels",
+            sample_rate,
+            channels
+        );
+
         self.tx
             .send(AudioCommand::Play {
                 data,
                 track_id,
                 duration_secs: 0, // Will be determined by decoder
+                sample_rate,
+                channels,
             })
             .map_err(|e| {
                 log::error!("Player: Failed to send to audio thread: {}", e);

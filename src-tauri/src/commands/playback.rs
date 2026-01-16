@@ -392,8 +392,50 @@ pub fn get_playback_state(state: State<'_, AppState>) -> Result<PlaybackState, S
 /// Audio device information
 #[derive(serde::Serialize)]
 pub struct AudioDevice {
-    pub name: String,
+    pub name: String,           // Technical name (internal use)
+    pub display_name: String,   // Friendly name for UI
     pub is_default: bool,
+    pub device_type: Option<String>,  // "USB", "PCI", "HDMI", etc.
+}
+
+/// Get friendly device names from PipeWire/PulseAudio
+#[cfg(target_os = "linux")]
+fn get_pipewire_device_descriptions() -> std::collections::HashMap<String, String> {
+    use std::process::Command;
+
+    let mut map = std::collections::HashMap::new();
+
+    // Try pactl (PipeWire/PulseAudio)
+    if let Ok(output) = Command::new("pactl").args(&["list", "sinks"]).output() {
+        if let Ok(text) = String::from_utf8(output.stdout) {
+            let mut current_name: Option<String> = None;
+
+            for line in text.lines() {
+                let line = line.trim();
+
+                // Extract Name: field
+                if let Some(name) = line.strip_prefix("Name: ") {
+                    current_name = Some(name.to_string());
+                }
+
+                // Extract Description: field
+                if let Some(desc) = line.strip_prefix("Description: ") {
+                    if let Some(name) = &current_name {
+                        map.insert(name.clone(), desc.to_string());
+                        log::debug!("Device mapping: {} -> {}", name, desc);
+                    }
+                }
+            }
+        }
+    }
+
+    log::info!("Found {} device descriptions from PipeWire/PulseAudio", map.len());
+    map
+}
+
+#[cfg(not(target_os = "linux"))]
+fn get_pipewire_device_descriptions() -> std::collections::HashMap<String, String> {
+    std::collections::HashMap::new()
 }
 
 /// Get available audio output devices
@@ -409,13 +451,56 @@ pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
         .default_output_device()
         .and_then(|d| d.name().ok());
 
+    // Get friendly names from PipeWire/PulseAudio
+    let friendly_names = get_pipewire_device_descriptions();
+
     let devices: Vec<AudioDevice> = host
         .output_devices()
         .map_err(|e| format!("Failed to enumerate devices: {}", e))?
         .filter_map(|device| {
             device.name().ok().map(|name| {
                 let is_default = default_device_name.as_ref().map(|d| d == &name).unwrap_or(false);
-                AudioDevice { name, is_default }
+
+                // Try to get friendly name from PipeWire/PulseAudio
+                let display_name = friendly_names
+                    .get(&name)
+                    .cloned()
+                    .unwrap_or_else(|| {
+                        // Fallback: clean up technical name slightly
+                        name.replace("alsa_output.", "")
+                            .replace("_", " ")
+                            .replace("pro-output", "")
+                            .trim()
+                            .to_string()
+                    });
+
+                // Detect device type from technical name
+                let device_type = if name.contains("usb") || name.contains("USB") {
+                    Some("USB".to_string())
+                } else if name.contains("hdmi") || name.contains("HDMI") {
+                    Some("HDMI".to_string())
+                } else if name.contains("pci") || name.contains("PCI") {
+                    Some("PCI".to_string())
+                } else if name.contains("bluetooth") || name.contains("bluez") {
+                    Some("Bluetooth".to_string())
+                } else {
+                    None
+                };
+
+                log::debug!(
+                    "Device: {} -> {} (type: {:?}, default: {})",
+                    name,
+                    display_name,
+                    device_type,
+                    is_default
+                );
+
+                AudioDevice {
+                    name,
+                    display_name,
+                    is_default,
+                    device_type,
+                }
             })
         })
         .collect();
