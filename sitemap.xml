@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+
+  <!-- Home pages -->
+  <url>
+    <loc>https://qbz.lol/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://qbz.lol/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://qbz.lol/es/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://qbz.lol/"/>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <url>
+    <loc>https://qbz.lol/es/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://qbz.lol/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://qbz.lol/es/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://qbz.lol/"/>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+
+  <!-- Changelog pages -->
+  <url>
+    <loc>https://qbz.lol/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://qbz.lol/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://qbz.lol/es/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://qbz.lol/changelog/"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://qbz.lol/es/changelog/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://qbz.lol/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://qbz.lol/es/changelog/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://qbz.lol/changelog/"/>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <!-- Licenses pages -->
+  <url>
+    <loc>https://qbz.lol/licenses/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://qbz.lol/licenses/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://qbz.lol/es/licenses/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://qbz.lol/licenses/"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <url>
+    <loc>https://qbz.lol/es/licenses/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://qbz.lol/licenses/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://qbz.lol/es/licenses/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://qbz.lol/licenses/"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+</urlset>

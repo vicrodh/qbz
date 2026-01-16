@@ -1,0 +1,33 @@
+# QBZ Website - robots.txt
+# https://qbz.lol
+
+User-agent: *
+Allow: /
+
+# Sitemap location
+Sitemap: https://qbz.lol/sitemap.xml
+
+# AI Crawlers - explicitly allow
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Perplexity-User
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Bingbot
+Allow: /
