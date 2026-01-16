@@ -185,7 +185,7 @@ export function HomePage() {
             </div>
           </div>
           <div className="hero__image">
-            <img src="/assets/screenshots/qbz-home.png" alt="QBZ home view" />
+            <img src="/assets/screenshots/qbz-home.webp" alt="QBZ home view" width={756} height={472} />
           </div>
         </div>
       </section>
@@ -232,12 +232,15 @@ export function HomePage() {
                 <img
                   src={
                     index === 0
-                      ? '/assets/screenshots/qbz-playlist-view.png'
+                      ? '/assets/screenshots/qbz-playlist-view.webp'
                       : index === 1
-                        ? '/assets/screenshots/qbz-fullpage.png'
-                        : '/assets/screenshots/qbz-locallibrary.png'
+                        ? '/assets/screenshots/qbz-fullpage.webp'
+                        : '/assets/screenshots/qbz-locallibrary.webp'
                   }
                   alt={shot.title}
+                  width={756}
+                  height={472}
+                  loading="lazy"
                 />
                 <div className="screenshot__caption">
                   <div className="screenshot__title">{shot.title}</div>
