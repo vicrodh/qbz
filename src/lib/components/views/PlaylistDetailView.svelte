@@ -494,6 +494,8 @@
         });
         await loadPlaylist();
       }
+      // Notify parent to refresh sidebar counts
+      onPlaylistUpdated?.();
     } catch (err) {
       console.error('Failed to remove track from playlist:', err);
     }

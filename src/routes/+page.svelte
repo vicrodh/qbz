@@ -1235,6 +1235,7 @@
     }
     sidebarRef?.refreshPlaylists();
     sidebarRef?.refreshPlaylistSettings();
+    sidebarRef?.refreshLocalTrackCounts();
   }
 
   function openImportPlaylist() {
@@ -2014,7 +2015,10 @@
           onLocalTrackPlay={handleLocalTrackPlay}
           onLocalTrackPlayNext={queueLocalTrackNext}
           onLocalTrackPlayLater={queueLocalTrackLater}
-          onPlaylistUpdated={() => sidebarRef?.refreshPlaylists()}
+          onPlaylistUpdated={() => {
+            sidebarRef?.refreshPlaylists();
+            sidebarRef?.refreshLocalTrackCounts();
+          }}
           onPlaylistDeleted={() => { sidebarRef?.refreshPlaylists(); navGoBack(); }}
         />
       {:else if activeView === 'favorites'}

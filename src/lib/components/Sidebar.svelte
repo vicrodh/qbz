@@ -140,18 +140,27 @@
         }
 
         const artists = Array.from(artistNames).slice(0, 5);
-        const songText = `${trackCount} ${trackCount === 1 ? 'Song' : 'Songs'}`;
+        const trackText = `${trackCount} ${trackCount === 1 ? 'Track' : 'Tracks'}`;
 
         if (artists.length > 0) {
-          return `${artists.join('\n')}\n${songText}`;
+          return `${artists.join('\n')}\n${trackText}`;
         }
-        return songText;
+        return trackText;
       }
     } catch (err) {
       console.debug('Failed to fetch playlist artists:', err);
     }
 
-    return `${trackCount} ${trackCount === 1 ? 'Song' : 'Songs'}`;
+    return `${trackCount} ${trackCount === 1 ? 'Track' : 'Tracks'}`;
+  }
+
+  // Format track count text with proper plural
+  function formatTrackCount(total: number, localCount: number): string {
+    const plural = total === 1 ? 'Track' : 'Tracks';
+    if (localCount > 0) {
+      return `${total} ${plural} (${localCount} local)`;
+    }
+    return `${total} ${plural}`;
   }
 
   // Get basic tooltip (no state mutation during render)
@@ -162,10 +171,7 @@
     // Return basic tooltip with combined count
     const totalCount = getTotalTrackCount(playlist);
     const localCount = localTrackCounts.get(playlist.id) ?? 0;
-    const countText = localCount > 0
-      ? `${totalCount} Songs (${localCount} local)`
-      : `${totalCount} ${totalCount === 1 ? 'Song' : 'Songs'}`;
-    return countText;
+    return formatTrackCount(totalCount, localCount);
   }
 
   // Load artist info for tooltip (called on hover, not during render)
@@ -176,14 +182,19 @@
 
     const totalCount = getTotalTrackCount(playlist);
     const localCount = localTrackCounts.get(playlist.id) ?? 0;
-    fetchPlaylistArtists(playlist.id, totalCount).then(tooltip => {
-      // Append local count info if there are local tracks
-      const finalTooltip = localCount > 0
-        ? tooltip.replace(/(\d+) (Song|Songs)/, `$1 $2 (${localCount} local)`)
-        : tooltip;
+    fetchPlaylistArtists(playlist.id, totalCount).then(baseTooltip => {
+      // Replace the song count line with properly formatted one including local count
+      const countText = formatTrackCount(totalCount, localCount);
+      const finalTooltip = baseTooltip.replace(/\d+ (Track|Tracks)/, countText);
       playlistTooltipCache.set(playlist.id, finalTooltip);
       tooltipLoadingIds.delete(playlist.id);
     });
+  }
+
+  // Invalidate tooltip cache for a specific playlist (call when tracks change)
+  function invalidatePlaylistTooltip(playlistId: number) {
+    playlistTooltipCache.delete(playlistId);
+    tooltipLoadingIds.delete(playlistId);
   }
 
   // Load sort preference from localStorage
@@ -257,6 +268,7 @@
   }
 
   export function refreshPlaylists() {
+    playlistTooltipCache.clear();
     loadUserPlaylists();
   }
 
@@ -265,6 +277,13 @@
   }
 
   export function refreshLocalTrackCounts() {
+    loadLocalTrackCounts();
+  }
+
+  // Call this when tracks are added/removed from a playlist
+  export function onPlaylistTracksChanged(playlistId: number) {
+    invalidatePlaylistTooltip(playlistId);
+    loadUserPlaylists();
     loadLocalTrackCounts();
   }
 
