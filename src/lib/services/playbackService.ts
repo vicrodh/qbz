@@ -25,7 +25,13 @@ import {
   castPause,
   castStop
 } from '$lib/stores/castStore';
-import { isOffline as checkIsOffline } from '$lib/stores/offlineStore';
+import {
+  isOffline as checkIsOffline,
+  queueScrobble,
+  getQueuedScrobbles,
+  markScrobblesSent,
+  cleanupSentScrobbles
+} from '$lib/stores/offlineStore';
 
 // ============ Types ============
 
@@ -279,38 +285,51 @@ export async function updateLastfmNowPlaying(
   durationSecs: number,
   trackId: number
 ): Promise<void> {
-  // Skip scrobbling when offline
-  if (checkIsOffline()) {
-    console.log('Last.fm: Skipping scrobble (offline mode)');
-    return;
-  }
-
   // Check if scrobbling is enabled
   const scrobblingEnabled = localStorage.getItem('qbz-lastfm-scrobbling') !== 'false';
   const sessionKey = localStorage.getItem('qbz-lastfm-session-key');
 
   if (!scrobblingEnabled || !sessionKey) return;
 
-  try {
-    // Update "now playing"
-    await invoke('lastfm_now_playing', {
-      artist,
-      track: title,
-      album: album || null
-    });
-    console.log('Last.fm: Updated now playing');
+  const isOffline = checkIsOffline();
 
-    // Schedule scrobble after 50% of track or 4 minutes (whichever is shorter)
-    if (scrobbleTimeout) {
-      clearTimeout(scrobbleTimeout);
+  // Skip "now playing" update when offline (requires network)
+  if (!isOffline) {
+    try {
+      await invoke('lastfm_now_playing', {
+        artist,
+        track: title,
+        album: album || null
+      });
+      console.log('Last.fm: Updated now playing');
+    } catch (err) {
+      console.error('Last.fm now playing failed:', err);
     }
+  }
 
-    const scrobbleDelay = Math.min(durationSecs * 0.5, 240) * 1000; // in ms
+  // Schedule scrobble after 50% of track or 4 minutes (whichever is shorter)
+  if (scrobbleTimeout) {
+    clearTimeout(scrobbleTimeout);
+  }
 
-    scrobbleTimeout = setTimeout(async () => {
-      if (lastScrobbledTrackId !== trackId) {
+  const scrobbleDelay = Math.min(durationSecs * 0.5, 240) * 1000; // in ms
+
+  scrobbleTimeout = setTimeout(async () => {
+    if (lastScrobbledTrackId !== trackId) {
+      const timestamp = Math.floor(Date.now() / 1000);
+
+      // If offline, queue the scrobble for later
+      if (checkIsOffline()) {
         try {
-          const timestamp = Math.floor(Date.now() / 1000);
+          await queueScrobble(artist, title, album || null, timestamp);
+          lastScrobbledTrackId = trackId;
+          console.log('Last.fm: Queued scrobble for later (offline)');
+        } catch (err) {
+          console.error('Failed to queue scrobble:', err);
+        }
+      } else {
+        // Online - scrobble immediately
+        try {
           await invoke('lastfm_scrobble', {
             artist,
             track: title,
@@ -323,9 +342,83 @@ export async function updateLastfmNowPlaying(
           console.error('Last.fm scrobble failed:', err);
         }
       }
-    }, scrobbleDelay);
+    }
+  }, scrobbleDelay);
+}
+
+/**
+ * Flush queued scrobbles to Last.fm
+ * Call this when transitioning from offline to online
+ */
+export async function flushScrobbleQueue(): Promise<{ sent: number; failed: number }> {
+  // Check if scrobbling is enabled
+  const scrobblingEnabled = localStorage.getItem('qbz-lastfm-scrobbling') !== 'false';
+  const sessionKey = localStorage.getItem('qbz-lastfm-session-key');
+
+  if (!scrobblingEnabled || !sessionKey) {
+    return { sent: 0, failed: 0 };
+  }
+
+  // Don't try to flush if still offline
+  if (checkIsOffline()) {
+    console.log('Last.fm: Cannot flush queue (still offline)');
+    return { sent: 0, failed: 0 };
+  }
+
+  try {
+    const queued = await getQueuedScrobbles(50); // Last.fm batch limit
+    if (queued.length === 0) {
+      return { sent: 0, failed: 0 };
+    }
+
+    console.log(`Last.fm: Flushing ${queued.length} queued scrobbles`);
+
+    let sent = 0;
+    let failed = 0;
+    const sentIds: number[] = [];
+
+    // Send scrobbles one by one (could be optimized to batch later)
+    for (const scrobble of queued) {
+      // Check if timestamp is too old (>14 days)
+      const now = Math.floor(Date.now() / 1000);
+      const fourteenDaysAgo = now - (14 * 24 * 60 * 60);
+
+      if (scrobble.timestamp < fourteenDaysAgo) {
+        console.log(`Last.fm: Skipping old scrobble (>14 days): ${scrobble.artist} - ${scrobble.track}`);
+        sentIds.push(scrobble.id); // Mark as sent to remove from queue
+        failed++;
+        continue;
+      }
+
+      try {
+        await invoke('lastfm_scrobble', {
+          artist: scrobble.artist,
+          track: scrobble.track,
+          album: scrobble.album,
+          timestamp: scrobble.timestamp
+        });
+        sentIds.push(scrobble.id);
+        sent++;
+        console.log(`Last.fm: Flushed scrobble: ${scrobble.artist} - ${scrobble.track}`);
+      } catch (err) {
+        console.error(`Last.fm: Failed to flush scrobble: ${scrobble.artist} - ${scrobble.track}`, err);
+        failed++;
+      }
+    }
+
+    // Mark successfully sent scrobbles
+    if (sentIds.length > 0) {
+      await markScrobblesSent(sentIds);
+    }
+
+    // Cleanup old sent scrobbles
+    await cleanupSentScrobbles(7);
+
+    console.log(`Last.fm: Flush complete - sent: ${sent}, failed: ${failed}`);
+    return { sent, failed };
   } catch (err) {
-    console.error('Last.fm now playing failed:', err);
+    console.error('Last.fm: Failed to flush scrobble queue:', err);
+    return { sent: 0, failed: 0 };
   }
 }
 

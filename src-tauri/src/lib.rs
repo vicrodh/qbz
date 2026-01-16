@@ -518,6 +518,12 @@ pub fn run() {
             offline::commands::get_pending_playlist_count,
             offline::commands::mark_pending_playlist_synced,
             offline::commands::delete_pending_playlist,
+            // Scrobble queue commands (for offline Last.fm scrobbling)
+            offline::commands::queue_scrobble,
+            offline::commands::get_queued_scrobbles,
+            offline::commands::mark_scrobbles_sent,
+            offline::commands::get_queued_scrobble_count,
+            offline::commands::cleanup_sent_scrobbles,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

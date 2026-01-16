@@ -53,10 +53,20 @@ let eventUnlisten: UnlistenFn | null = null;
 // Listeners
 const listeners = new Set<() => void>();
 
+// Callback for online transition (to flush scrobble queue, etc.)
+let onOnlineTransitionCallback: (() => void) | null = null;
+
 function notifyListeners(): void {
   for (const listener of listeners) {
     listener();
   }
+}
+
+/**
+ * Register a callback to be called when transitioning from offline to online
+ */
+export function onOnlineTransition(callback: () => void): void {
+  onOnlineTransitionCallback = callback;
 }
 
 /**
@@ -93,11 +103,17 @@ export function getOfflineReason(): OfflineReason | null {
  */
 async function fetchStatus(): Promise<void> {
   try {
+    const wasOffline = status.isOffline;
     const newStatus = await invoke<OfflineStatus>('get_offline_status');
     const changed = JSON.stringify(status) !== JSON.stringify(newStatus);
     status = newStatus;
     if (changed) {
       notifyListeners();
+      // Check for offline -> online transition
+      if (wasOffline && !newStatus.isOffline && onOnlineTransitionCallback) {
+        console.log('[Offline] Transitioning to online - triggering callback');
+        onOnlineTransitionCallback();
+      }
     }
   } catch (error) {
     console.error('Failed to fetch offline status:', error);
@@ -171,8 +187,14 @@ export async function initOfflineStore(): Promise<void> {
 
   // Listen for backend events (from manual toggle)
   eventUnlisten = await listen<OfflineStatus>('offline-status-changed', (event) => {
+    const wasOffline = status.isOffline;
     status = event.payload;
     notifyListeners();
+    // Check for offline -> online transition
+    if (wasOffline && !event.payload.isOffline && onOnlineTransitionCallback) {
+      console.log('[Offline] Transitioning to online via event - triggering callback');
+      onOnlineTransitionCallback();
+    }
   });
 
   initialized = true;
@@ -241,6 +263,63 @@ export async function markPendingPlaylistSynced(
  */
 export async function deletePendingPlaylist(pendingId: number): Promise<void> {
   await invoke('delete_pending_playlist', { pendingId });
+}
+
+// ============ Scrobble Queue ============
+
+export interface QueuedScrobble {
+  id: number;
+  artist: string;
+  track: string;
+  album: string | null;
+  timestamp: number;
+  createdAt: number;
+  sent: boolean;
+}
+
+/**
+ * Queue a scrobble for later submission to Last.fm
+ */
+export async function queueScrobble(
+  artist: string,
+  track: string,
+  album: string | null,
+  timestamp: number
+): Promise<number> {
+  return invoke<number>('queue_scrobble', {
+    artist,
+    track,
+    album,
+    timestamp,
+  });
+}
+
+/**
+ * Get queued scrobbles (up to limit)
+ */
+export async function getQueuedScrobbles(limit?: number): Promise<QueuedScrobble[]> {
+  return invoke<QueuedScrobble[]>('get_queued_scrobbles', { limit });
+}
+
+/**
+ * Mark scrobbles as sent after successful Last.fm submission
+ */
+export async function markScrobblesSent(ids: number[]): Promise<void> {
+  await invoke('mark_scrobbles_sent', { ids });
+}
+
+/**
+ * Get count of queued (unsent) scrobbles
+ */
+export async function getQueuedScrobbleCount(): Promise<number> {
+  return invoke<number>('get_queued_scrobble_count');
+}
+
+/**
+ * Cleanup old sent scrobbles
+ */
+export async function cleanupSentScrobbles(olderThanDays?: number): Promise<number> {
+  return invoke<number>('cleanup_sent_scrobbles', { olderThanDays });
 }
 
 // ============ State Getter ============

@@ -9,8 +9,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { goBack, goForward } from '$lib/stores/navigationStore';
 import { loadToastsPreference } from '$lib/stores/toastStore';
-import { loadSystemNotificationsPreference } from '$lib/services/playbackService';
-import { initOfflineStore, cleanupOfflineStore } from '$lib/stores/offlineStore';
+import { loadSystemNotificationsPreference, flushScrobbleQueue } from '$lib/services/playbackService';
+import { initOfflineStore, cleanupOfflineStore, onOnlineTransition } from '$lib/stores/offlineStore';
 
 // ============ Theme Management ============
 
@@ -121,6 +121,16 @@ export function bootstrapApp(): BootstrapResult {
 
   // Initialize offline store (async, fire-and-forget)
   initOfflineStore();
+
+  // Register callback to flush scrobble queue when transitioning to online
+  onOnlineTransition(() => {
+    console.log('[Bootstrap] Online transition detected - flushing scrobble queue');
+    flushScrobbleQueue().then(({ sent, failed }) => {
+      if (sent > 0 || failed > 0) {
+        console.log(`[Bootstrap] Scrobble queue flush complete: ${sent} sent, ${failed} failed`);
+      }
+    });
+  });
 
   return {
     cleanup: () => {

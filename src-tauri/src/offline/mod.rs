@@ -53,6 +53,19 @@ pub struct PendingPlaylist {
     pub qobuz_playlist_id: Option<u64>,
 }
 
+/// A scrobble queued while offline, pending sync to Last.fm
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueuedScrobble {
+    pub id: i64,
+    pub artist: String,
+    pub track: String,
+    pub album: Option<String>,
+    pub timestamp: i64,
+    pub created_at: i64,
+    pub sent: bool,
+}
+
 /// SQLite-backed storage for offline settings
 pub struct OfflineStore {
     conn: Connection,
@@ -90,7 +103,18 @@ impl OfflineStore {
                 synced INTEGER NOT NULL DEFAULT 0,
                 qobuz_playlist_id INTEGER
             );
-            CREATE INDEX IF NOT EXISTS idx_pending_playlist_synced ON pending_playlist_sync(synced);"
+            CREATE INDEX IF NOT EXISTS idx_pending_playlist_synced ON pending_playlist_sync(synced);
+
+            CREATE TABLE IF NOT EXISTS scrobble_queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                artist TEXT NOT NULL,
+                track TEXT NOT NULL,
+                album TEXT,
+                timestamp INTEGER NOT NULL,
+                created_at INTEGER NOT NULL,
+                sent INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_scrobble_queue_sent ON scrobble_queue(sent);"
         ).map_err(|e| format!("Failed to create offline settings table: {}", e))?;
 
         Ok(Self { conn })
@@ -224,6 +248,113 @@ impl OfflineStore {
             )
             .map(|count| count as u32)
             .map_err(|e| format!("Failed to count pending playlists: {}", e))
+    }
+
+    // === Scrobble Queue Methods ===
+
+    /// Queue a scrobble for later submission to Last.fm
+    pub fn queue_scrobble(
+        &self,
+        artist: &str,
+        track: &str,
+        album: Option<&str>,
+        timestamp: i64,
+    ) -> Result<i64, String> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        self.conn
+            .execute(
+                "INSERT INTO scrobble_queue (artist, track, album, timestamp, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![artist, track, album, timestamp, now],
+            )
+            .map_err(|e| format!("Failed to queue scrobble: {}", e))?;
+
+        Ok(self.conn.last_insert_rowid())
+    }
+
+    /// Get all unsent scrobbles (up to 50 for Last.fm batch limit)
+    pub fn get_queued_scrobbles(&self, limit: u32) -> Result<Vec<QueuedScrobble>, String> {
+        let mut stmt = self.conn
+            .prepare(
+                "SELECT id, artist, track, album, timestamp, created_at, sent
+                 FROM scrobble_queue WHERE sent = 0 ORDER BY timestamp ASC LIMIT ?1"
+            )
+            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+        let scrobbles = stmt
+            .query_map(params![limit], |row| {
+                Ok(QueuedScrobble {
+                    id: row.get(0)?,
+                    artist: row.get(1)?,
+                    track: row.get(2)?,
+                    album: row.get(3)?,
+                    timestamp: row.get(4)?,
+                    created_at: row.get(5)?,
+                    sent: row.get::<_, i64>(6)? != 0,
+                })
+            })
+            .map_err(|e| format!("Failed to query queued scrobbles: {}", e))?;
+
+        scrobbles
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to collect queued scrobbles: {}", e))
+    }
+
+    /// Mark scrobbles as sent
+    pub fn mark_scrobbles_sent(&self, ids: &[i64]) -> Result<(), String> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+
+        let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
+        let sql = format!(
+            "UPDATE scrobble_queue SET sent = 1 WHERE id IN ({})",
+            placeholders.join(",")
+        );
+
+        let mut stmt = self.conn
+            .prepare(&sql)
+            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+        let params: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        stmt.execute(params.as_slice())
+            .map_err(|e| format!("Failed to mark scrobbles as sent: {}", e))?;
+
+        Ok(())
+    }
+
+    /// Delete old sent scrobbles (cleanup)
+    pub fn cleanup_sent_scrobbles(&self, older_than_days: u32) -> Result<u32, String> {
+        let cutoff = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0)
+            - (older_than_days as i64 * 24 * 60 * 60);
+
+        let deleted = self.conn
+            .execute(
+                "DELETE FROM scrobble_queue WHERE sent = 1 AND created_at < ?1",
+                params![cutoff],
+            )
+            .map_err(|e| format!("Failed to cleanup sent scrobbles: {}", e))?;
+
+        Ok(deleted as u32)
+    }
+
+    /// Get count of queued (unsent) scrobbles
+    pub fn get_queued_scrobble_count(&self) -> Result<u32, String> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM scrobble_queue WHERE sent = 0",
+                [],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|count| count as u32)
+            .map_err(|e| format!("Failed to count queued scrobbles: {}", e))
     }
 }
 
@@ -409,5 +540,59 @@ pub mod commands {
     ) -> Result<(), String> {
         let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
         store.delete_pending_playlist(pending_id)
+    }
+
+    // === Scrobble Queue Commands ===
+
+    /// Queue a scrobble for later submission (when offline)
+    #[tauri::command]
+    pub fn queue_scrobble(
+        artist: String,
+        track: String,
+        album: Option<String>,
+        timestamp: i64,
+        state: State<'_, OfflineState>,
+    ) -> Result<i64, String> {
+        let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        store.queue_scrobble(&artist, &track, album.as_deref(), timestamp)
+    }
+
+    /// Get queued scrobbles (up to limit, default 50 for Last.fm batch)
+    #[tauri::command]
+    pub fn get_queued_scrobbles(
+        limit: Option<u32>,
+        state: State<'_, OfflineState>,
+    ) -> Result<Vec<QueuedScrobble>, String> {
+        let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        store.get_queued_scrobbles(limit.unwrap_or(50))
+    }
+
+    /// Mark scrobbles as sent after successful Last.fm submission
+    #[tauri::command]
+    pub fn mark_scrobbles_sent(
+        ids: Vec<i64>,
+        state: State<'_, OfflineState>,
+    ) -> Result<(), String> {
+        let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        store.mark_scrobbles_sent(&ids)
+    }
+
+    /// Get count of queued (unsent) scrobbles
+    #[tauri::command]
+    pub fn get_queued_scrobble_count(
+        state: State<'_, OfflineState>,
+    ) -> Result<u32, String> {
+        let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        store.get_queued_scrobble_count()
+    }
+
+    /// Cleanup old sent scrobbles
+    #[tauri::command]
+    pub fn cleanup_sent_scrobbles(
+        older_than_days: Option<u32>,
+        state: State<'_, OfflineState>,
+    ) -> Result<u32, String> {
+        let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        store.cleanup_sent_scrobbles(older_than_days.unwrap_or(7))
     }
 }
