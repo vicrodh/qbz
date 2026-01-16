@@ -116,23 +116,8 @@ impl LastFmClient {
         !self.api_key.is_empty() && !self.api_secret.is_empty()
     }
 
-    pub fn set_credentials(&mut self, api_key: String, api_secret: String) {
+    pub fn set_credentials(&mut self, api_key: String) {
         self.api_key = api_key;
-        self.api_secret = api_secret;
-    }
-
-    /// Generate API signature for authenticated requests
-    fn generate_signature(&self, params: &BTreeMap<&str, &str>) -> String {
-        let mut sig_string = String::new();
-        for (key, value) in params {
-            sig_string.push_str(key);
-            sig_string.push_str(value);
-        }
-        sig_string.push_str(&self.api_secret);
-
-        let mut hasher = Md5::new();
-        hasher.update(sig_string.as_bytes());
-        format!("{:x}", hasher.finalize())
     }
 
     /// Get authorization URL for user to visit
