@@ -179,11 +179,9 @@
   <!-- Quality (always render to maintain column alignment) -->
   <div class="track-quality">{quality ?? ''}</div>
 
-  <!-- Favorite Button / Local Indicator -->
+  <!-- Favorite Button (placeholder for local tracks to maintain column width) -->
   {#if isLocal}
-    <div class="local-indicator" title="Local library track">
-      <HardDrive size={14} />
-    </div>
+    <div class="favorite-placeholder"></div>
   {:else if !hideFavorite}
     <button
       class="favorite-btn"
@@ -199,8 +197,12 @@
     </button>
   {/if}
 
-  <!-- Download Indicator -->
-  {#if !hideDownload}
+  <!-- Download Indicator / Local Indicator -->
+  {#if isLocal}
+    <div class="local-indicator" title="Local track - only available on this device">
+      <HardDrive size={14} />
+    </div>
+  {:else if !hideDownload}
     <div class="download-indicator" class:has-download={downloadStatus !== 'none'}>
       <DownloadButton
         status={downloadStatus}
@@ -394,6 +396,11 @@
     color: #666666;
     width: 80px;
     text-align: right;
+  }
+
+  .favorite-placeholder {
+    width: 28px;
+    height: 28px;
   }
 
   .local-indicator {

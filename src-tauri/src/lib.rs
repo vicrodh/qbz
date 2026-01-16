@@ -387,6 +387,7 @@ pub fn run() {
             library::commands::playlist_add_local_track,
             library::commands::playlist_remove_local_track,
             library::commands::playlist_get_local_tracks,
+            library::commands::playlist_get_all_local_track_counts,
             library::commands::playlist_clear_local_tracks,
             // Playlist management commands
             library::commands::playlist_get_all_settings,
@@ -478,6 +479,7 @@ pub fn run() {
             download_cache::commands::move_downloads_to_path,
             download_cache::commands::detect_legacy_downloads,
             download_cache::commands::start_legacy_migration,
+            download_cache::commands::sync_downloads_to_library,
             // Lyrics commands
             lyrics::commands::lyrics_get,
             lyrics::commands::lyrics_clear_cache,

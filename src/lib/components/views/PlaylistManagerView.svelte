@@ -51,6 +51,7 @@
   let playlists = $state<Playlist[]>([]);
   let playlistSettings = $state<Map<number, PlaylistSettings>>(new Map());
   let playlistStats = $state<Map<number, PlaylistStats>>(new Map());
+  let localTrackCounts = $state<Map<number, number>>(new Map());
   let loading = $state(true);
 
   // Offline state
@@ -190,10 +191,11 @@
   async function loadData() {
     loading = true;
     try {
-      const [playlistsResult, settingsResult, statsResult] = await Promise.all([
+      const [playlistsResult, settingsResult, statsResult, localCountsResult] = await Promise.all([
         invoke<Playlist[]>('get_user_playlists'),
         invoke<PlaylistSettings[]>('playlist_get_all_settings'),
-        invoke<PlaylistStats[]>('playlist_get_all_stats')
+        invoke<PlaylistStats[]>('playlist_get_all_stats'),
+        invoke<Record<string, number>>('playlist_get_all_local_track_counts')
       ]);
 
       playlists = playlistsResult;
@@ -209,11 +211,28 @@
         statsMap.set(s.qobuz_playlist_id, s);
       }
       playlistStats = statsMap;
+
+      const localCountsMap = new Map<number, number>();
+      for (const [id, count] of Object.entries(localCountsResult)) {
+        localCountsMap.set(Number(id), count);
+      }
+      localTrackCounts = localCountsMap;
     } catch (err) {
       console.error('Failed to load playlists:', err);
     } finally {
       loading = false;
     }
+  }
+
+  // Get total track count including local tracks
+  function getTotalTrackCount(playlist: Playlist): number {
+    const localCount = localTrackCounts.get(playlist.id) ?? 0;
+    return playlist.tracks_count + localCount;
+  }
+
+  // Get local track count for a playlist
+  function getLocalTrackCount(playlistId: number): number {
+    return localTrackCounts.get(playlistId) ?? 0;
   }
 
   function formatDuration(seconds: number): string {
@@ -514,7 +533,7 @@
             </div>
             <div class="info">
               <span class="name">{playlist.name}</span>
-              <span class="meta">{playlist.tracks_count} tracks</span>
+              <span class="meta">{getTotalTrackCount(playlist)} tracks{#if getLocalTrackCount(playlist.id) > 0} <span class="local-count">({getLocalTrackCount(playlist.id)} local)</span>{/if}</span>
             </div>
           </div>
         </div>
@@ -556,7 +575,7 @@
           <div class="info">
             <span class="name">{playlist.name}</span>
             <span class="meta">
-              {playlist.tracks_count} tracks
+              {getTotalTrackCount(playlist)} tracks{#if getLocalTrackCount(playlist.id) > 0} <span class="local-count">({getLocalTrackCount(playlist.id)} local)</span>{/if}
               {#if playlist.duration > 0}
                 <span class="dot">.</span>
                 {formatDuration(playlist.duration)}
@@ -1063,6 +1082,11 @@
   .list-item .meta {
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .local-count {
+    color: var(--text-muted);
+    opacity: 0.8;
   }
 
   .dot {

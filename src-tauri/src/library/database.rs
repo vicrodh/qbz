@@ -1561,6 +1561,29 @@ impl LibraryDatabase {
         Ok(count)
     }
 
+    /// Get local track counts for all playlists
+    pub fn get_all_playlist_local_track_counts(&self) -> Result<std::collections::HashMap<u64, u32>, LibraryError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT qobuz_playlist_id, COUNT(*) as count
+             FROM playlist_local_tracks
+             GROUP BY qobuz_playlist_id"
+        ).map_err(|e| LibraryError::Database(format!("Failed to prepare query: {}", e)))?;
+
+        let rows = stmt.query_map([], |row| {
+            let playlist_id: i64 = row.get(0)?;
+            let count: u32 = row.get(1)?;
+            Ok((playlist_id as u64, count))
+        }).map_err(|e| LibraryError::Database(format!("Failed to query: {}", e)))?;
+
+        let mut result = std::collections::HashMap::new();
+        for row in rows {
+            let (playlist_id, count) = row.map_err(|e| LibraryError::Database(format!("Failed to read row: {}", e)))?;
+            result.insert(playlist_id, count);
+        }
+
+        Ok(result)
+    }
+
     /// Update position of a local track in a playlist
     pub fn update_local_track_position(&self, qobuz_playlist_id: u64, local_track_id: i64, new_position: i32) -> Result<(), LibraryError> {
         self.conn.execute(
@@ -1664,29 +1687,46 @@ impl LibraryDatabase {
         bit_depth: Option<u32>,
         sample_rate: Option<f64>,
     ) -> Result<(), LibraryError> {
+        use std::time::SystemTime;
+
+        // Get file size if file exists
+        let file_size_bytes = std::fs::metadata(file_path)
+            .map(|m| m.len() as i64)
+            .unwrap_or(0);
+
+        // Get current timestamp
+        let now = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs() as i64;
+
         self.conn.execute(
             r#"
             INSERT INTO local_tracks (
                 file_path, title, artist, album, album_artist,
                 track_number, disc_number, year, duration_secs,
                 format, bit_depth, sample_rate, channels,
+                file_size_bytes, last_modified, indexed_at,
                 source, qobuz_track_id
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, 'qobuz_download', ?14)
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 'qobuz_download', ?17)
             "#,
             params![
                 file_path,
                 title,
                 artist,
                 album.unwrap_or("Unknown Album"),
-                album.unwrap_or("Unknown Album"), // Use album as album_artist
+                artist, // Use artist as album_artist for proper grouping
                 0, // track_number - will be updated if metadata is available
                 None::<u32>, // disc_number
                 None::<u32>, // year
                 duration_secs as i64,
                 "flac", // Default format for downloads
                 bit_depth.map(|v| v as i64),
-                sample_rate,
+                sample_rate.map(|v| v as i64).unwrap_or(44100),
                 2, // Assume stereo
+                file_size_bytes,
+                now,
+                now,
                 track_id as i64,
             ],
         )

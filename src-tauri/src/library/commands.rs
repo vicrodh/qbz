@@ -1031,6 +1031,18 @@ pub async fn playlist_get_local_tracks(
         .map_err(|e| e.to_string())
 }
 
+/// Get local track counts for all playlists
+#[tauri::command]
+pub async fn playlist_get_all_local_track_counts(
+    state: State<'_, LibraryState>,
+) -> Result<std::collections::HashMap<u64, u32>, String> {
+    log::info!("Command: playlist_get_all_local_track_counts");
+
+    let db = state.db.lock().await;
+    db.get_all_playlist_local_track_counts()
+        .map_err(|e| e.to_string())
+}
+
 /// Clear all local tracks from a playlist
 #[tauri::command]
 pub async fn playlist_clear_local_tracks(

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ImagePlus, Info, Edit3, BarChart2, WifiOff } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ImagePlus, Edit3, BarChart2, WifiOff } from 'lucide-svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
@@ -152,6 +152,12 @@
   let localTracks = $state<LocalLibraryTrack[]>([]);
   let localTracksMap = $state<Map<number, LocalLibraryTrack>>(new Map());
   let hasLocalTracks = $derived(localTracks.length > 0);
+
+  // Total counts including local tracks
+  let totalTrackCount = $derived((playlist?.tracks_count ?? 0) + localTracks.length);
+  let localTracksDuration = $derived(localTracks.reduce((sum, t) => sum + t.duration_secs, 0));
+  let totalDuration = $derived((playlist?.duration ?? 0) + localTracksDuration);
+
   let loading = $state(true);
   let error = $state<string | null>(null);
   let playBtnHovered = $state(false);
@@ -669,9 +675,9 @@
         <div class="playlist-info">
           <span class="owner">{playlist.owner.name}</span>
           <span class="separator">•</span>
-          <span>{playlist.tracks_count} tracks</span>
+          <span>{totalTrackCount} tracks{#if hasLocalTracks} <span class="local-count">({localTracks.length} local)</span>{/if}</span>
           <span class="separator">•</span>
-          <span>{formatTotalDuration(playlist.duration)}</span>
+          <span>{formatTotalDuration(totalDuration)}</span>
           {#if playlistStats && playlistStats.play_count > 0}
             <span class="separator">•</span>
             <span class="play-count" title="Times played">
@@ -761,21 +767,7 @@
         {/if}
       </div>
 
-      <span class="track-count">
-        {displayTracks.length}{searchQuery ? ` / ${tracks.length + localTracks.length}` : ''} tracks
-        {#if hasLocalTracks}
-          <span class="local-count">({localTracks.length} local)</span>
-        {/if}
-      </span>
     </div>
-
-    <!-- Local tracks notice -->
-    {#if hasLocalTracks}
-      <div class="local-notice">
-        <Info size={14} />
-        <span>Local tracks are only available on this device</span>
-      </div>
-    {/if}
 
     <!-- Track List -->
     <div class="track-list">
@@ -1345,12 +1337,6 @@
     margin: 4px 0;
   }
 
-  .track-count {
-    margin-left: auto;
-    font-size: 13px;
-    color: var(--text-muted);
-  }
-
   .no-results {
     padding: 48px;
     text-align: center;
@@ -1361,29 +1347,11 @@
     margin: 0;
   }
 
-  /* Local tracks styles */
   .local-count {
-    color: var(--accent-primary);
-    margin-left: 4px;
+    color: var(--text-muted);
+    font-size: 0.9em;
   }
 
-  .local-notice {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    margin-bottom: 16px;
-    background-color: rgba(var(--accent-primary-rgb, 139, 92, 246), 0.1);
-    border: 1px solid rgba(var(--accent-primary-rgb, 139, 92, 246), 0.2);
-    border-radius: 8px;
-    color: var(--text-secondary);
-    font-size: 13px;
-  }
-
-  .local-notice :global(svg) {
-    color: var(--accent-primary);
-    flex-shrink: 0;
-  }
 
   .track-row-wrapper {
     display: flex;

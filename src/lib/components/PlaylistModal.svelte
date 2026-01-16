@@ -43,7 +43,30 @@
   let selectedPlaylistId = $state<number | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
+
+  // Local track counts for playlists
+  let localTrackCounts = $state<Map<number, number>>(new Map());
   let showDeleteConfirm = $state(false);
+
+  // Load local track counts
+  async function loadLocalTrackCounts() {
+    try {
+      const counts = await invoke<Record<string, number>>('playlist_get_all_local_track_counts');
+      const map = new Map<number, number>();
+      for (const [id, count] of Object.entries(counts)) {
+        map.set(Number(id), count);
+      }
+      localTrackCounts = map;
+    } catch (err) {
+      console.debug('Failed to load local track counts:', err);
+    }
+  }
+
+  // Get total track count for a playlist
+  function getTotalTrackCount(pl: Playlist): number {
+    const localCount = localTrackCounts.get(pl.id) ?? 0;
+    return pl.tracks_count + localCount;
+  }
 
   // Reset form when modal opens
   $effect(() => {
@@ -63,6 +86,7 @@
         hidden = false;
       } else if (mode === 'addTrack') {
         selectedPlaylistId = null;
+        loadLocalTrackCounts();
       }
     }
   });
@@ -298,7 +322,7 @@
               <option value={null}>Select a playlist...</option>
               <option value={-1}>+ Create new playlist</option>
               {#each userPlaylists as pl (pl.id)}
-                <option value={pl.id}>{pl.name} ({pl.tracks_count} tracks)</option>
+                <option value={pl.id}>{pl.name} ({getTotalTrackCount(pl)} tracks)</option>
               {/each}
             </select>
           </div>

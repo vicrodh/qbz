@@ -66,6 +66,7 @@
 
   let userPlaylists = $state<Playlist[]>([]);
   let playlistSettings = $state<Map<number, PlaylistSettings>>(new Map());
+  let localTrackCounts = $state<Map<number, number>>(new Map());
   let playlistsLoading = $state(false);
   let playlistsCollapsed = $state(false);
   let localLibraryCollapsed = $state(false);
@@ -110,6 +111,12 @@
   const playlistTooltipCache = new Map<number, string>();
   const tooltipLoadingIds = new Set<number>();
 
+  // Get total track count including local tracks
+  function getTotalTrackCount(playlist: Playlist): number {
+    const localCount = localTrackCounts.get(playlist.id) ?? 0;
+    return playlist.tracks_count + localCount;
+  }
+
   // Fetch playlist artists for tooltip
   async function fetchPlaylistArtists(playlistId: number, trackCount: number): Promise<string> {
     interface PlaylistDetails {
@@ -152,8 +159,13 @@
     const cached = playlistTooltipCache.get(playlist.id);
     if (cached) return cached;
 
-    // Return basic tooltip - fetch will happen on hover
-    return `${playlist.tracks_count} ${playlist.tracks_count === 1 ? 'Song' : 'Songs'}`;
+    // Return basic tooltip with combined count
+    const totalCount = getTotalTrackCount(playlist);
+    const localCount = localTrackCounts.get(playlist.id) ?? 0;
+    const countText = localCount > 0
+      ? `${totalCount} Songs (${localCount} local)`
+      : `${totalCount} ${totalCount === 1 ? 'Song' : 'Songs'}`;
+    return countText;
   }
 
   // Load artist info for tooltip (called on hover, not during render)
@@ -162,8 +174,14 @@
 
     tooltipLoadingIds.add(playlist.id);
 
-    fetchPlaylistArtists(playlist.id, playlist.tracks_count).then(tooltip => {
-      playlistTooltipCache.set(playlist.id, tooltip);
+    const totalCount = getTotalTrackCount(playlist);
+    const localCount = localTrackCounts.get(playlist.id) ?? 0;
+    fetchPlaylistArtists(playlist.id, totalCount).then(tooltip => {
+      // Append local count info if there are local tracks
+      const finalTooltip = localCount > 0
+        ? tooltip.replace(/(\d+) (Song|Songs)/, `$1 $2 (${localCount} local)`)
+        : tooltip;
+      playlistTooltipCache.set(playlist.id, finalTooltip);
       tooltipLoadingIds.delete(playlist.id);
     });
   }
@@ -244,6 +262,10 @@
 
   export function refreshPlaylistSettings() {
     loadPlaylistSettings();
+  }
+
+  export function refreshLocalTrackCounts() {
+    loadLocalTrackCounts();
   }
 
   // Menu handling functions
@@ -349,6 +371,7 @@
     loadSortPreference();
     loadUserPlaylists();
     loadPlaylistSettings();
+    loadLocalTrackCounts();
 
     // Subscribe to offline state changes
     const unsubscribeOffline = subscribeOffline(() => {
@@ -384,6 +407,19 @@
     } catch (err) {
       // Command might not exist yet, that's ok
       console.debug('Failed to load playlist settings:', err);
+    }
+  }
+
+  async function loadLocalTrackCounts() {
+    try {
+      const counts = await invoke<Record<string, number>>('playlist_get_all_local_track_counts');
+      const map = new Map<number, number>();
+      for (const [id, count] of Object.entries(counts)) {
+        map.set(Number(id), count);
+      }
+      localTrackCounts = map;
+    } catch (err) {
+      console.debug('Failed to load local track counts:', err);
     }
   }
 
