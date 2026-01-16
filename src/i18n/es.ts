@@ -12,6 +12,7 @@ export const es = {
   },
   hero: {
     kicker: 'Cliente nativo de Qobuz para Linux',
+    heading: 'QBZ',
     title: 'Reproducción bit-perfect, control nativo, sin límites de navegador.',
     lead: 'Qobuz transmite hasta 192 kHz. QBZ es un cliente no oficial nativo para Linux con un motor de audio en Rust que preserva el sample rate y la profundidad de bits, soporta passthrough al DAC y mantiene la reproducción transparente.',
     primaryCta: 'Descargar',

@@ -248,8 +248,15 @@ p {
 }
 
 .hero__title {
-  font-size: clamp(2.8rem, 5vw, 4.2rem);
-  margin: 18px 0 12px;
+  font-size: clamp(3.2rem, 6vw, 5rem);
+  margin: 18px 0 8px;
+}
+
+.hero__subtitle {
+  font-size: clamp(1.4rem, 2.5vw, 1.8rem);
+  color: var(--text-primary);
+  font-weight: 500;
+  margin-bottom: 12px;
 }
 
 .hero__lead {

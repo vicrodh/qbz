@@ -160,7 +160,8 @@ export function HomePage() {
         <div className="container hero__grid">
           <div>
             <span className="kicker">{t('hero.kicker')}</span>
-            <h1 className="hero__title">{t('hero.title')}</h1>
+            <h1 className="hero__title">{t('hero.heading')}</h1>
+            <p className="hero__subtitle">{t('hero.title')}</p>
             <p className="hero__lead">{t('hero.lead')}</p>
             <div className="hero__cta">
               <a className="btn btn-primary" href="#downloads">

@@ -12,6 +12,7 @@ export const en = {
   },
   hero: {
     kicker: 'Native Linux Qobuz client',
+    heading: 'QBZ',
     title: 'Bit-perfect playback, native control, no browser limits.',
     lead: 'Qobuz streams up to 192 kHz. QBZ is an unofficial native Linux client with a Rust audio engine that preserves sample rate and bit depth, supports DAC passthrough, and keeps playback transparent.',
     primaryCta: 'Download',
