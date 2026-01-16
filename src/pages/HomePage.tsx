@@ -185,7 +185,7 @@ export function HomePage() {
             </div>
           </div>
           <div className="hero__image">
-            <img src="/assets/screenshots/qbz-home.webp" alt="QBZ home view" width={756} height={472} />
+            <img src="/assets/screenshots/qbz-home.webp" alt="QBZ home view" />
           </div>
         </div>
       </section>
@@ -238,8 +238,6 @@ export function HomePage() {
                         : '/assets/screenshots/qbz-locallibrary.webp'
                   }
                   alt={shot.title}
-                  width={756}
-                  height={472}
                   loading="lazy"
                 />
                 <div className="screenshot__caption">

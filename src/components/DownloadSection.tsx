@@ -51,6 +51,7 @@ type DownloadItem = {
   arch: string | null
   installCmd?: string
   depsCmd?: string
+  helperCmds?: { label: string; cmds: string[] }
 }
 
 const RELEASES_URL = 'https://api.github.com/repos/vicrodh/qbz/releases'
@@ -100,7 +101,7 @@ const DISABLED_TYPES: DownloadItem['type'][] = [] // All types enabled
 const getInstallCmd = (type: DownloadItem['type'], fileName: string): string | undefined => {
   switch (type) {
     case 'aur':
-      return 'yay -S qbz-bin'
+      return 'git clone https://aur.archlinux.org/qbz-bin.git && cd qbz-bin && makepkg -si'
     case 'appimage':
       return `chmod +x ${fileName} && ./${fileName}`
     case 'deb':
@@ -114,6 +115,17 @@ const getInstallCmd = (type: DownloadItem['type'], fileName: string): string | u
     default:
       return undefined
   }
+}
+
+// AUR helper commands
+const getHelperCmds = (type: DownloadItem['type']): { label: string; cmds: string[] } | undefined => {
+  if (type === 'aur') {
+    return {
+      label: 'Or using a Helper?',
+      cmds: ['yay -Syu qbz-bin', 'paru -Syu qbz-bin']
+    }
+  }
+  return undefined
 }
 
 // Dependency commands for distros that need them
@@ -142,6 +154,7 @@ const mapAssets = (assets: ReleaseAsset[]): DownloadItem[] =>
         arch: getArch(asset.name),
         installCmd: getInstallCmd(type, asset.name),
         depsCmd: getDepsCmd(type),
+        helperCmds: getHelperCmds(type),
       }
     })
     .filter((item) => !DISABLED_TYPES.includes(item.type))
@@ -171,6 +184,8 @@ const aurItem: DownloadItem = {
   url: AUR_PACKAGE_URL,
   size: 0,
   arch: null,
+  installCmd: getInstallCmd('aur', 'qbz-bin'),
+  helperCmds: getHelperCmds('aur'),
 }
 
 
@@ -279,6 +294,20 @@ export function DownloadSection() {
                           </code>
                           <CopyButton text={item.depsCmd} />
                         </div>
+                      </details>
+                    )}
+                    {item.helperCmds && (
+                      <details className="deps-details">
+                        <summary className="deps-summary">{item.helperCmds.label}</summary>
+                        {item.helperCmds.cmds.map((cmd) => (
+                          <div key={cmd} className="terminal terminal--deps">
+                            <code>
+                              <span className="terminal__prompt">$</span>
+                              <span className="terminal__cmd">{cmd}</span>
+                            </code>
+                            <CopyButton text={cmd} />
+                          </div>
+                        ))}
                       </details>
                     )}
                     <a className="btn btn-ghost btn-sm" href={item.url} target={item.type === 'aur' ? '_blank' : undefined} rel={item.type === 'aur' ? 'noreferrer' : undefined}>
