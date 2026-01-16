@@ -194,24 +194,35 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
     Ok(bytes.to_vec())
 }
 
-/// Number of tracks to prefetch ahead
-const PREFETCH_COUNT: usize = 3;
+/// Number of Qobuz tracks to prefetch (not total tracks, just Qobuz)
+const QOBUZ_PREFETCH_COUNT: usize = 3;
 
-/// Spawn background tasks to prefetch upcoming tracks
+/// How far ahead to look for tracks to prefetch (to handle mixed playlists)
+const PREFETCH_LOOKAHEAD: usize = 15;
+
+/// Spawn background tasks to prefetch upcoming Qobuz tracks
+/// For mixed playlists, we look further ahead to find Qobuz tracks past local ones
 fn spawn_prefetch(
     client: Arc<Mutex<QobuzClient>>,
     cache: Arc<AudioCache>,
     queue: &QueueManager,
 ) {
-    // Get upcoming tracks from queue
-    let upcoming_tracks = queue.peek_upcoming(PREFETCH_COUNT);
+    // Look further ahead to find Qobuz tracks in mixed playlists
+    let upcoming_tracks = queue.peek_upcoming(PREFETCH_LOOKAHEAD);
 
     if upcoming_tracks.is_empty() {
         log::debug!("No upcoming tracks to prefetch");
         return;
     }
 
+    let mut qobuz_prefetched = 0;
+
     for track in upcoming_tracks {
+        // Stop once we've prefetched enough Qobuz tracks
+        if qobuz_prefetched >= QOBUZ_PREFETCH_COUNT {
+            break;
+        }
+
         let track_id = track.id;
         let track_title = track.title.clone();
 
@@ -224,16 +235,19 @@ fn spawn_prefetch(
         // Check if already cached or being fetched
         if cache.contains(track_id) {
             log::debug!("Track {} already cached", track_id);
+            qobuz_prefetched += 1; // Count as "handled"
             continue;
         }
 
         if cache.is_fetching(track_id) {
             log::debug!("Track {} already being fetched", track_id);
+            qobuz_prefetched += 1; // Count as "handled"
             continue;
         }
 
         // Mark as fetching
         cache.mark_fetching(track_id);
+        qobuz_prefetched += 1;
 
         let client_clone = client.clone();
         let cache_clone = cache.clone();
