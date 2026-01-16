@@ -213,19 +213,6 @@ impl LastFmClient {
         let timestamp_str = timestamp.to_string();
         let api_key = &self.api_key;
 
-        let mut params = BTreeMap::new();
-        params.insert("method", "track.scrobble");
-        params.insert("api_key", api_key.as_str());
-        params.insert("sk", session_key.as_str());
-        params.insert("artist", artist);
-        params.insert("track", track);
-        params.insert("timestamp", &timestamp_str);
-        if let Some(album_name) = album {
-            params.insert("album", album_name);
-        }
-
-        let sig = self.generate_signature(&params);
-
         let mut form_params = vec![
             ("method", "track.scrobble"),
             ("api_key", api_key.as_str()),
@@ -233,7 +220,6 @@ impl LastFmClient {
             ("artist", artist),
             ("track", track),
             ("timestamp", &timestamp_str),
-            ("api_sig", &sig),
             ("format", "json"),
         ];
         if let Some(album_name) = album {
