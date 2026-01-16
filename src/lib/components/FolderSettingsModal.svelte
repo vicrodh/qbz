@@ -38,6 +38,7 @@
   let pathChanged = $state(false);
   let enabled = $state(true);
   let isNetwork = $state(false);
+  let detectedIsNetwork = $state(false); // What the system detected
   let networkFsType = $state('');
   let userOverrideNetwork = $state(false);
   let loading = $state(false);
@@ -73,8 +74,20 @@
       loading = false;
       scanning = false;
       checkAccessibility();
+      detectNetworkStatus();
     }
   });
+
+  // Detect if the current path is on a network mount
+  async function detectNetworkStatus() {
+    try {
+      const info = await invoke<{ isNetwork: boolean }>('check_network_path', { path: currentPath });
+      detectedIsNetwork = info.isNetwork;
+    } catch (err) {
+      console.error('Failed to detect network status:', err);
+      detectedIsNetwork = false;
+    }
+  }
 
   async function checkAccessibility() {
     if (!folder) return;
@@ -293,7 +306,21 @@
               {$t('library.isNetworkFolder')}
             </span>
           </label>
-          {#if userOverrideNetwork}
+          {#if userOverrideNetwork && isNetwork !== detectedIsNetwork}
+            {#if isNetwork && !detectedIsNetwork}
+              <!-- User marked as network, but not detected -->
+              <span class="form-hint override-hint warning">
+                <AlertTriangle size={12} />
+                {$t('library.networkOverrideMarkedNetwork')}
+              </span>
+            {:else}
+              <!-- User marked as local, but detected as network -->
+              <span class="form-hint override-hint danger">
+                <AlertTriangle size={12} />
+                {$t('library.networkOverrideMarkedLocal')}
+              </span>
+            {/if}
+          {:else if userOverrideNetwork}
             <span class="form-hint override-hint">
               <AlertTriangle size={12} />
               {$t('library.networkOverrideHint')}
@@ -362,7 +389,7 @@
 
   .modal {
     width: 100%;
-    max-width: 480px;
+    max-width: 560px;
     max-height: 90vh;
     overflow: hidden;
     display: flex;
@@ -402,7 +429,7 @@
   }
 
   .modal-body {
-    padding: 24px;
+    padding: 28px 32px;
     overflow-y: auto;
   }
 
@@ -567,6 +594,14 @@
     align-items: center;
     gap: 4px;
     color: var(--text-warning, #f59e0b);
+  }
+
+  .override-hint.warning {
+    color: #f59e0b;
+  }
+
+  .override-hint.danger {
+    color: #ef4444;
   }
 
   .form-group.checkbox label {

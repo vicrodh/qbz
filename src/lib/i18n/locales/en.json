@@ -104,6 +104,8 @@
     "isNetworkFolder": "Network Folder",
     "networkFolderHint": "Detected automatically. Enable if this is a network location (NAS, shared drive, etc.)",
     "networkOverrideHint": "You have manually changed this setting",
+    "networkOverrideMarkedNetwork": "Marked as network folder, but not detected as one. Content will be hidden in offline mode.",
+    "networkOverrideMarkedLocal": "Marked as local, but detected as network folder. May be unavailable in offline mode.",
     "networkFsType": "Filesystem Type",
     "networkFsTypeHint": "Usually detected automatically. Set manually if needed.",
     "lastScanned": "Last scanned",
