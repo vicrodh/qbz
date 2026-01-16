@@ -1095,6 +1095,32 @@ pub async fn playlist_set_hidden(
         .map_err(|e| e.to_string())
 }
 
+/// Set playlist favorite status
+#[tauri::command]
+pub async fn playlist_set_favorite(
+    playlist_id: u64,
+    favorite: bool,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("Command: playlist_set_favorite {} {}", playlist_id, favorite);
+
+    let db = state.db.lock().await;
+    db.set_playlist_favorite(playlist_id, favorite)
+        .map_err(|e| e.to_string())
+}
+
+/// Get all favorite playlist IDs
+#[tauri::command]
+pub async fn playlist_get_favorites(
+    state: State<'_, LibraryState>,
+) -> Result<Vec<u64>, String> {
+    log::info!("Command: playlist_get_favorites");
+
+    let db = state.db.lock().await;
+    db.get_favorite_playlist_ids()
+        .map_err(|e| e.to_string())
+}
+
 /// Set playlist position (for custom ordering)
 #[tauri::command]
 pub async fn playlist_set_position(

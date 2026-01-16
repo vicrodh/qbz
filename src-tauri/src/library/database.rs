@@ -309,6 +309,24 @@ impl LibraryDatabase {
             ).map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
         }
 
+        // Migration: Add is_favorite column to playlist_settings
+        let has_is_favorite: bool = self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('playlist_settings') WHERE name = 'is_favorite'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_is_favorite {
+            log::info!("Running migration: adding is_favorite column to playlist_settings");
+            self.conn.execute_batch(
+                "ALTER TABLE playlist_settings ADD COLUMN is_favorite INTEGER DEFAULT 0;
+                 CREATE INDEX IF NOT EXISTS idx_playlist_favorite ON playlist_settings(is_favorite);"
+            ).map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
+        }
+
         Ok(())
     }
 
@@ -1038,6 +1056,7 @@ pub struct PlaylistSettings {
     pub hidden: bool,
     pub position: i32,
     pub has_local_content: LocalContentStatus,
+    pub is_favorite: bool,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -1104,6 +1123,7 @@ impl Default for PlaylistSettings {
             hidden: false,
             position: 0,
             has_local_content: LocalContentStatus::Unknown,
+            is_favorite: false,
             created_at: now,
             updated_at: now,
         }
@@ -1133,7 +1153,7 @@ impl LibraryDatabase {
     pub fn get_playlist_settings(&self, qobuz_playlist_id: u64) -> Result<Option<PlaylistSettings>, LibraryError> {
         let result = self.conn.query_row(
             "SELECT qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                    last_search_query, notes, hidden, position, has_local_content, created_at, updated_at
+                    last_search_query, notes, hidden, position, has_local_content, is_favorite, created_at, updated_at
              FROM playlist_settings WHERE qobuz_playlist_id = ?1",
             params![qobuz_playlist_id as i64],
             |row| {
@@ -1147,8 +1167,9 @@ impl LibraryDatabase {
                     hidden: row.get::<_, i32>(6)? != 0,
                     position: row.get(7)?,
                     has_local_content: LocalContentStatus::from_str(&row.get::<_, Option<String>>(8)?.unwrap_or_default()),
-                    created_at: row.get(9)?,
-                    updated_at: row.get(10)?,
+                    is_favorite: row.get::<_, i32>(9).unwrap_or(0) != 0,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
                 })
             },
         ).optional()
@@ -1167,8 +1188,8 @@ impl LibraryDatabase {
         self.conn.execute(
             "INSERT INTO playlist_settings
                 (qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                 last_search_query, notes, hidden, position, has_local_content, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                 last_search_query, notes, hidden, position, has_local_content, is_favorite, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
              ON CONFLICT(qobuz_playlist_id) DO UPDATE SET
                 custom_artwork_path = excluded.custom_artwork_path,
                 sort_by = excluded.sort_by,
@@ -1178,6 +1199,7 @@ impl LibraryDatabase {
                 hidden = excluded.hidden,
                 position = excluded.position,
                 has_local_content = excluded.has_local_content,
+                is_favorite = excluded.is_favorite,
                 updated_at = excluded.updated_at",
             params![
                 settings.qobuz_playlist_id as i64,
@@ -1189,6 +1211,7 @@ impl LibraryDatabase {
                 settings.hidden as i32,
                 settings.position,
                 settings.has_local_content.as_str(),
+                settings.is_favorite as i32,
                 settings.created_at,
                 now,
             ],
@@ -1287,7 +1310,7 @@ impl LibraryDatabase {
     pub fn get_all_playlist_settings(&self) -> Result<Vec<PlaylistSettings>, LibraryError> {
         let mut stmt = self.conn.prepare(
             "SELECT qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                    last_search_query, notes, hidden, position, has_local_content, created_at, updated_at
+                    last_search_query, notes, hidden, position, has_local_content, is_favorite, created_at, updated_at
              FROM playlist_settings ORDER BY position ASC, updated_at DESC"
         ).map_err(|e| LibraryError::Database(format!("Failed to prepare statement: {}", e)))?;
 
@@ -1302,8 +1325,9 @@ impl LibraryDatabase {
                 hidden: row.get::<_, i32>(6)? != 0,
                 position: row.get(7)?,
                 has_local_content: LocalContentStatus::from_str(&row.get::<_, Option<String>>(8)?.unwrap_or_default()),
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+                is_favorite: row.get::<_, i32>(9).unwrap_or(0) != 0,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         }).map_err(|e| LibraryError::Database(format!("Failed to query playlist settings: {}", e)))?;
 
@@ -1334,6 +1358,45 @@ impl LibraryDatabase {
         ).map_err(|e| LibraryError::Database(format!("Failed to update playlist hidden: {}", e)))?;
 
         Ok(())
+    }
+
+    /// Update favorite status for a playlist
+    pub fn set_playlist_favorite(&self, qobuz_playlist_id: u64, favorite: bool) -> Result<(), LibraryError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        // First check if settings exist, if not create default
+        let existing = self.get_playlist_settings(qobuz_playlist_id)?;
+        if existing.is_none() {
+            let mut settings = PlaylistSettings::default();
+            settings.qobuz_playlist_id = qobuz_playlist_id;
+            settings.is_favorite = favorite;
+            return self.save_playlist_settings(&settings);
+        }
+
+        self.conn.execute(
+            "UPDATE playlist_settings SET is_favorite = ?1, updated_at = ?2
+             WHERE qobuz_playlist_id = ?3",
+            params![favorite as i32, now, qobuz_playlist_id as i64],
+        ).map_err(|e| LibraryError::Database(format!("Failed to update playlist favorite: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Get all playlist IDs that are marked as favorites
+    pub fn get_favorite_playlist_ids(&self) -> Result<Vec<u64>, LibraryError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT qobuz_playlist_id FROM playlist_settings WHERE is_favorite = 1 ORDER BY updated_at DESC"
+        ).map_err(|e| LibraryError::Database(format!("Failed to prepare statement: {}", e)))?;
+
+        let ids = stmt.query_map([], |row| {
+            Ok(row.get::<_, i64>(0)? as u64)
+        }).map_err(|e| LibraryError::Database(format!("Failed to query favorite playlists: {}", e)))?;
+
+        ids.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| LibraryError::Database(format!("Failed to collect favorite playlist IDs: {}", e)))
     }
 
     /// Update position for a playlist
@@ -2061,13 +2124,13 @@ impl LibraryDatabase {
     ) -> Result<Vec<PlaylistSettings>, LibraryError> {
         let query = if include_partial {
             "SELECT qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                    last_search_query, notes, hidden, position, has_local_content, created_at, updated_at
+                    last_search_query, notes, hidden, position, has_local_content, is_favorite, created_at, updated_at
              FROM playlist_settings
              WHERE has_local_content IN ('some_local', 'all_local')
              ORDER BY position ASC, updated_at DESC"
         } else {
             "SELECT qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                    last_search_query, notes, hidden, position, has_local_content, created_at, updated_at
+                    last_search_query, notes, hidden, position, has_local_content, is_favorite, created_at, updated_at
              FROM playlist_settings
              WHERE has_local_content = 'all_local'
              ORDER BY position ASC, updated_at DESC"
@@ -2087,8 +2150,9 @@ impl LibraryDatabase {
                 hidden: row.get::<_, i32>(6)? != 0,
                 position: row.get(7)?,
                 has_local_content: LocalContentStatus::from_str(&row.get::<_, Option<String>>(8)?.unwrap_or_default()),
-                created_at: row.get(9)?,
-                updated_at: row.get(10)?,
+                is_favorite: row.get::<_, i32>(9).unwrap_or(0) != 0,
+                created_at: row.get(10)?,
+                updated_at: row.get(11)?,
             })
         }).map_err(|e| LibraryError::Database(format!("Failed to query playlists by local content: {}", e)))?;
 

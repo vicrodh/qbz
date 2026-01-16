@@ -409,6 +409,8 @@ pub fn run() {
             // Playlist management commands
             library::commands::playlist_get_all_settings,
             library::commands::playlist_set_hidden,
+            library::commands::playlist_set_favorite,
+            library::commands::playlist_get_favorites,
             library::commands::playlist_set_position,
             library::commands::playlist_reorder,
             library::commands::playlist_get_stats,
