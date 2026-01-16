@@ -1026,7 +1026,7 @@
   </nav>
 
   <!-- Audio Section -->
-  <section class="section" bind:this={audioSection}
+  <section class="section" bind:this={audioSection}>
     <h3 class="section-title">{$t('settings.audio.title')}</h3>
     <div class="setting-row">
       <span class="setting-label">{$t('settings.audio.streamingQuality')}</span>
