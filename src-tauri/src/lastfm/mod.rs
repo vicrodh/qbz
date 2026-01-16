@@ -257,25 +257,12 @@ impl LastFmClient {
 
         let api_key = &self.api_key;
 
-        let mut params = BTreeMap::new();
-        params.insert("method", "track.updateNowPlaying");
-        params.insert("api_key", api_key.as_str());
-        params.insert("sk", session_key.as_str());
-        params.insert("artist", artist);
-        params.insert("track", track);
-        if let Some(album_name) = album {
-            params.insert("album", album_name);
-        }
-
-        let sig = self.generate_signature(&params);
-
         let mut form_params = vec![
             ("method", "track.updateNowPlaying"),
             ("api_key", api_key.as_str()),
             ("sk", session_key.as_str()),
             ("artist", artist),
             ("track", track),
-            ("api_sig", &sig),
             ("format", "json"),
         ];
         if let Some(album_name) = album {
