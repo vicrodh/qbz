@@ -296,8 +296,8 @@ p {
 }
 
 .stat__icon--large {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
 }
 
 .stat__label {
@@ -583,8 +583,8 @@ p {
 }
 
 .icon-mono {
-  width: 28px;
-  height: 28px;
+  width: 30px;
+  height: 30px;
   filter: var(--icon-filter);
 }
 
