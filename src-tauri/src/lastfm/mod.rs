@@ -85,9 +85,9 @@ impl Default for LastFmClient {
 }
 
 impl LastFmClient {
-    /// Check if embedded (build-time or runtime) credentials are available
+    /// Check if embedded (build-time or runtime) API key is available
     pub fn has_embedded_credentials() -> bool {
-        get_api_key().is_some() && get_api_secret().is_some()
+        get_api_key().is_some()
     }
 }
 
@@ -109,7 +109,7 @@ impl LastFmClient {
     }
 
     pub fn has_credentials(&self) -> bool {
-        !self.api_key.is_empty() && !self.api_secret.is_empty()
+        !self.api_key.is_empty()
     }
 
     pub fn set_credentials(&mut self, api_key: String) {
