@@ -11,7 +11,7 @@ export function Footer() {
       <div className="container footer__grid">
         <div>
           <div className="nav__brand">
-            <img src="/assets/brand/logo-64.webp" alt="QBZ logo" width={28} height={28} />
+            <img src="/assets/brand/logo-64.webp" alt="QBZ - Native Qobuz client for Linux" title="QBZ" width={28} height={28} />
             <span>QBZ</span>
           </div>
           <p className="footer__small">{t('footer.rights')}</p>

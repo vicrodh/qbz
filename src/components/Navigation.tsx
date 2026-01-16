@@ -25,7 +25,7 @@ export function Navigation() {
     <nav className="nav">
       <div className="container nav__inner">
         <a className="nav__brand" href={buildPath(language, 'home')}>
-          <img src="/assets/brand/logo-64.webp" alt="QBZ logo" width={32} height={32} />
+          <img src="/assets/brand/logo-64.webp" alt="QBZ - Native Qobuz client for Linux" title="QBZ" width={32} height={32} />
           <span>QBZ</span>
         </a>
         <div className="nav__links">

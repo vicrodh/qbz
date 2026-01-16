@@ -70,7 +70,7 @@ function CapabilitiesCarousel({
                 className={`capability-card ${isActive ? 'capability-card--active' : ''}`}
                 onClick={() => setCurrentIndex(realIndex)}
               >
-                <img className="icon-mono" src={capabilityIcons[card.key]} alt="" />
+                <img className="icon-mono" src={capabilityIcons[card.key]} alt={card.title} />
                 <div className="capability-card__title">{card.title}</div>
                 <ul className="list list--compact">
                   {card.bullets.map((bullet) => (
@@ -177,7 +177,7 @@ export function HomePage() {
                   <img
                     className={`stat__icon ${stat.colored ? '' : 'icon-mono'} ${stat.large ? 'stat__icon--large' : ''}`}
                     src={stat.icon}
-                    alt=""
+                    alt={stat.label}
                   />
                   <div className="stat__label">{stat.label}</div>
                 </div>
@@ -185,7 +185,7 @@ export function HomePage() {
             </div>
           </div>
           <div className="hero__image">
-            <img src="/assets/screenshots/qbz-home.webp" alt="QBZ home view" />
+            <img src="/assets/screenshots/qbz-home.webp" alt="QBZ application interface showing home view with queue and playback controls" title="QBZ home view" />
           </div>
         </div>
       </section>
@@ -237,7 +237,8 @@ export function HomePage() {
                         ? '/assets/screenshots/qbz-fullpage.webp'
                         : '/assets/screenshots/qbz-locallibrary.webp'
                   }
-                  alt={shot.title}
+                  alt={`QBZ screenshot: ${shot.title}`}
+                  title={shot.title}
                   loading="lazy"
                 />
                 <div className="screenshot__caption">
@@ -298,7 +299,7 @@ export function HomePage() {
           <h2 className="section__title">{t('linuxFirst.title')}</h2>
           <p className="section__subtitle">{t('linuxFirst.lead')}</p>
           <div className="logo-row" style={{ marginTop: 18 }}>
-            <img src="/assets/icons/Tux.svg" alt="Linux" style={{ width: 64, height: 'auto' }} />
+            <img src="/assets/icons/Tux.svg" alt="Linux Tux mascot - QBZ is Linux first" title="Linux first" style={{ width: 64, height: 'auto' }} />
           </div>
           <a className="btn btn-ghost" href={buildPath(language, 'licenses')} style={{ marginTop: 24 }}>
             {t('nav.licenses')}
