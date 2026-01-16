@@ -1,6 +1,8 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import TitleBar from '../TitleBar.svelte';
+  import { t } from '$lib/i18n';
+  import { setManualOffline } from '$lib/stores/offlineStore';
 
   interface UserInfo {
     userName: string;
@@ -9,9 +11,10 @@
 
   interface Props {
     onLoginSuccess: (userInfo: UserInfo) => void;
+    onStartOffline?: () => void;
   }
 
-  let { onLoginSuccess }: Props = $props();
+  let { onLoginSuccess, onStartOffline }: Props = $props();
 
   let email = $state('');
   let password = $state('');
@@ -128,6 +131,16 @@
       isLoading = false;
     }
   }
+
+  async function handleStartOffline() {
+    try {
+      await setManualOffline(true);
+      onStartOffline?.();
+    } catch (err) {
+      console.error('Failed to enable offline mode:', err);
+      error = String(err);
+    }
+  }
 </script>
 
 <div class="login-wrapper">
@@ -202,6 +215,14 @@
       <p class="disclaimer">
         QBZ requires an active Qobuz subscription.
         Your credentials are sent directly to Qobuz and stored securely in your system's keyring.
+      </p>
+
+      <p class="offline-link">
+        <small>
+          <button type="button" class="link-button" onclick={handleStartOffline}>
+            {$t('offline.startWithoutLogin')}
+          </button>
+        </small>
       </p>
     {/if}
     </div>
@@ -409,6 +430,26 @@
     color: var(--text-muted);
     text-align: center;
     line-height: 1.5;
+  }
+
+  .offline-link {
+    margin-top: 16px;
+    text-align: center;
+  }
+
+  .link-button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    text-decoration: underline;
+    font-size: inherit;
+    padding: 0;
+    transition: color 150ms ease;
+  }
+
+  .link-button:hover {
+    color: var(--accent-primary);
   }
 
   .spinner {

@@ -443,6 +443,7 @@
     "someLocal": "Partially Available Offline",
     "notAvailable": "Not Available Offline",
     "trackNotAvailable": "This track is not available offline",
-    "featureDisabled": "This feature requires internet connection"
+    "featureDisabled": "This feature requires internet connection",
+    "startWithoutLogin": "Start in offline mode without logging in"
   }
 }

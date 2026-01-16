@@ -255,6 +255,7 @@
     getStatus as getOfflineStatus,
     isOffline as checkIsOffline,
     getOfflineReason,
+    setManualOffline,
     type OfflineStatus
   } from '$lib/stores/offlineStore';
 
@@ -1203,6 +1204,17 @@
   }
 
   // Auth Handlers
+  async function handleStartOffline() {
+    // Enable manual offline mode and enter app without authentication
+    await setManualOffline(true);
+    setLoggedIn({
+      userName: 'Offline User',
+      subscription: 'Local Library Only'
+    });
+    navigateTo('library');
+    showToast('Started in offline mode', 'info');
+  }
+
   async function handleLoginSuccess(info: UserInfo) {
     setLoggedIn(info);
     showToast(`Welcome, ${info.userName}!`, 'success');
@@ -1771,7 +1783,7 @@
 </script>
 
 {#if !isLoggedIn}
-  <LoginView onLoginSuccess={handleLoginSuccess} />
+  <LoginView onLoginSuccess={handleLoginSuccess} onStartOffline={handleStartOffline} />
 {:else}
   <div class="app">
     <!-- Custom Title Bar (CSD) -->
