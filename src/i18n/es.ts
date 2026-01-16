@@ -140,6 +140,17 @@ export const es = {
     },
     buildTitle: 'Compilar desde el código (avanzado)',
     buildBody: 'QBZ está enfocado en Linux. En macOS puede compilar, pero funciones como PipeWire, casting y control de dispositivos pueden estar incompletas o inestables.',
+    buildInstructions: {
+      summary: 'Mostrar instrucciones de compilación',
+      prereqTitle: 'Requisitos previos',
+      nodeNote: 'Se requiere Node.js 20+. Usa nvm, fnm o el gestor de paquetes de tu distro.',
+      cloneTitle: 'Clonar y compilar',
+      apiTitle: 'API keys (opcional)',
+      apiLead: 'Las API keys se integran en tiempo de compilación. Copia el archivo de ejemplo y agrega tus keys:',
+      apiBody: 'Edita .env con tus API keys, luego ejecuta npm run dev:tauri para cargarlas automáticamente.',
+      apiKeysTitle: 'Dónde obtener API keys',
+      apiOptional: 'Todas las integraciones son opcionales. La app funciona sin ellas, pero las funciones correspondientes estarán deshabilitadas.',
+    },
     buildDisclaimer: 'Si generas tus propios binarios, tú administras las API keys y dependencias de plataforma.',
   },
   audience: {

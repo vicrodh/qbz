@@ -326,6 +326,105 @@ export function DownloadSection() {
                 <div className="download-meta__name">{t('downloads.buildTitle')}</div>
                 <div className="download-meta__file">{t('downloads.buildBody')}</div>
               </div>
+              <details className="details" style={{ marginTop: 16 }}>
+                <summary>{t('downloads.buildInstructions.summary')}</summary>
+                <div style={{ marginTop: 16 }}>
+                  <div className="download-meta__name" style={{ fontSize: 14, marginBottom: 8 }}>{t('downloads.buildInstructions.prereqTitle')}</div>
+                  <details className="deps-details">
+                    <summary className="deps-summary">Arch Linux</summary>
+                    <div className="terminal terminal--deps">
+                      <code>
+                        <span className="terminal__prompt">$</span>
+                        <span className="terminal__cmd">sudo pacman -S base-devel rust nodejs npm webkit2gtk-4.1 gtk3</span>
+                      </code>
+                      <CopyButton text="sudo pacman -S base-devel rust nodejs npm webkit2gtk-4.1 gtk3" />
+                    </div>
+                  </details>
+                  <details className="deps-details">
+                    <summary className="deps-summary">Debian / Ubuntu</summary>
+                    <div className="terminal terminal--deps">
+                      <code>
+                        <span className="terminal__prompt">$</span>
+                        <span className="terminal__cmd">sudo apt install build-essential curl libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev</span>
+                      </code>
+                      <CopyButton text="sudo apt install build-essential curl libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev" />
+                    </div>
+                  </details>
+                  <details className="deps-details">
+                    <summary className="deps-summary">Fedora</summary>
+                    <div className="terminal terminal--deps">
+                      <code>
+                        <span className="terminal__prompt">$</span>
+                        <span className="terminal__cmd">sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel</span>
+                      </code>
+                      <CopyButton text="sudo dnf install webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel librsvg2-devel" />
+                    </div>
+                  </details>
+                  <details className="deps-details">
+                    <summary className="deps-summary">Rust + Node.js</summary>
+                    <div className="terminal terminal--deps">
+                      <code>
+                        <span className="terminal__prompt">$</span>
+                        <span className="terminal__cmd">curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh</span>
+                      </code>
+                      <CopyButton text="curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh" />
+                    </div>
+                    <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 8 }}>{t('downloads.buildInstructions.nodeNote')}</p>
+                  </details>
+
+                  <div className="download-meta__name" style={{ fontSize: 14, marginBottom: 8, marginTop: 16 }}>{t('downloads.buildInstructions.cloneTitle')}</div>
+                  <div className="terminal">
+                    <code>
+                      <span className="terminal__prompt">$</span>
+                      <span className="terminal__cmd">git clone https://github.com/vicrodh/qbz.git && cd qbz</span>
+                    </code>
+                    <CopyButton text="git clone https://github.com/vicrodh/qbz.git && cd qbz" />
+                  </div>
+                  <div className="terminal" style={{ marginTop: 8 }}>
+                    <code>
+                      <span className="terminal__prompt">$</span>
+                      <span className="terminal__cmd">npm install</span>
+                    </code>
+                    <CopyButton text="npm install" />
+                  </div>
+                  <div className="terminal" style={{ marginTop: 8 }}>
+                    <code>
+                      <span className="terminal__prompt">$</span>
+                      <span className="terminal__cmd">npm run tauri dev</span>
+                    </code>
+                    <CopyButton text="npm run tauri dev" />
+                  </div>
+                  <div className="terminal" style={{ marginTop: 8 }}>
+                    <code>
+                      <span className="terminal__prompt">$</span>
+                      <span className="terminal__cmd">npm run tauri build</span>
+                    </code>
+                    <CopyButton text="npm run tauri build" />
+                  </div>
+
+                  <div className="download-meta__name" style={{ fontSize: 14, marginBottom: 8, marginTop: 16 }}>{t('downloads.buildInstructions.apiTitle')}</div>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 12 }}>{t('downloads.buildInstructions.apiLead')}</p>
+                  <div className="terminal">
+                    <code>
+                      <span className="terminal__prompt">$</span>
+                      <span className="terminal__cmd">cp .env.example .env</span>
+                    </code>
+                    <CopyButton text="cp .env.example .env" />
+                  </div>
+                  <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 12 }}>{t('downloads.buildInstructions.apiBody')}</p>
+                  <details className="deps-details" style={{ marginTop: 12 }}>
+                    <summary className="deps-summary">{t('downloads.buildInstructions.apiKeysTitle')}</summary>
+                    <ul className="list list--compact" style={{ marginTop: 8 }}>
+                      <li><strong>Last.fm</strong> — <a href="https://www.last.fm/api/account/create" target="_blank" rel="noreferrer">last.fm/api/account/create</a></li>
+                      <li><strong>Discogs</strong> — <a href="https://www.discogs.com/settings/developers" target="_blank" rel="noreferrer">discogs.com/settings/developers</a></li>
+                      <li><strong>Spotify</strong> — <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noreferrer">developer.spotify.com/dashboard</a></li>
+                      <li><strong>Tidal</strong> — <a href="https://developer.tidal.com/" target="_blank" rel="noreferrer">developer.tidal.com</a></li>
+                    </ul>
+                    <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 8 }}>{t('downloads.buildInstructions.apiOptional')}</p>
+                  </details>
+                </div>
+              </details>
+              <p style={{ fontSize: 13, color: 'var(--text-tertiary)', marginTop: 16 }}>{t('downloads.buildDisclaimer')}</p>
             </div>
           </div>
         )}

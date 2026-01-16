@@ -140,6 +140,17 @@ export const en = {
     },
     buildTitle: 'Build from source (advanced)',
     buildBody: 'QBZ targets Linux. macOS builds may work, but features like PipeWire, casting, and device control can be incomplete or unstable.',
+    buildInstructions: {
+      summary: 'Show build instructions',
+      prereqTitle: 'Prerequisites',
+      nodeNote: 'Node.js 20+ required. Use nvm, fnm, or your distro package manager.',
+      cloneTitle: 'Clone and build',
+      apiTitle: 'API keys (optional)',
+      apiLead: 'API keys are embedded at compile-time. Copy the example file and add your keys:',
+      apiBody: 'Edit .env with your API keys, then run npm run dev:tauri to load them automatically.',
+      apiKeysTitle: 'Where to get API keys',
+      apiOptional: 'All integrations are optional. The app works without them, but corresponding features will be disabled.',
+    },
     buildDisclaimer: 'If you build your own binaries, you are responsible for API keys and platform-specific dependencies.',
   },
   audience: {

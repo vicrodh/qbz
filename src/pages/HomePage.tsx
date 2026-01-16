@@ -297,7 +297,7 @@ export function HomePage() {
       <section className="section section--muted">
         <div className="container">
           <h2 className="section__title">{t('linuxFirst.title')}</h2>
-          <p className="section__subtitle">{t('linuxFirst.lead')}</p>
+          <p className="section__subtitle" style={{ maxWidth: 'none' }}>{t('linuxFirst.lead')}</p>
           <div className="logo-row" style={{ marginTop: 18 }}>
             <img src="/assets/icons/Tux.svg" alt="Linux Tux mascot - QBZ is Linux first" title="Linux first" style={{ width: 64, height: 'auto' }} />
           </div>
