@@ -357,6 +357,12 @@ p {
   background: var(--surface);
 }
 
+.screenshot img {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
 .screenshot__caption {
   padding: 16px 18px 20px;
 }
