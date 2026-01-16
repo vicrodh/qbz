@@ -511,7 +511,12 @@
             <span>{$t('actions.refresh')}</span>
           </button>
 
-          <button class="menu-item" onclick={() => handleMenuAction(onImportPlaylist ?? (() => {}))}>
+          <button
+            class="menu-item"
+            class:disabled={offlineStatus.isOffline}
+            onclick={() => !offlineStatus.isOffline && handleMenuAction(onImportPlaylist ?? (() => {}))}
+            title={offlineStatus.isOffline ? $t('offline.featureDisabled') : undefined}
+          >
             <Import size={14} />
             <span>{$t('playlist.import')}</span>
           </button>
@@ -792,6 +797,16 @@
 
   .menu-item.selected {
     color: var(--accent-primary);
+  }
+
+  .menu-item.disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .menu-item.disabled:hover {
+    background: none;
+    color: var(--text-secondary);
   }
 
   .menu-item.has-submenu {

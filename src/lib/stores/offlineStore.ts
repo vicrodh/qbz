@@ -33,6 +33,9 @@ export interface OfflineStatus {
 export interface OfflineSettings {
   manualOfflineMode: boolean;
   showPartialPlaylists: boolean;
+  allowCastWhileOffline: boolean;
+  allowImmediateScrobbling: boolean;
+  allowAccumulatedScrobbling: boolean;
 }
 
 // Store state
@@ -45,6 +48,9 @@ let status: OfflineStatus = {
 let settings: OfflineSettings = {
   manualOfflineMode: false,
   showPartialPlaylists: true,
+  allowCastWhileOffline: false,
+  allowImmediateScrobbling: false,
+  allowAccumulatedScrobbling: true,
 };
 
 let initialized = false;
@@ -184,6 +190,48 @@ export async function setShowPartialPlaylists(enabled: boolean): Promise<void> {
     notifyListeners();
   } catch (error) {
     console.error('Failed to set show partial playlists:', error);
+    throw error;
+  }
+}
+
+/**
+ * Set whether to allow Chromecast while in manual offline mode
+ */
+export async function setAllowCastWhileOffline(enabled: boolean): Promise<void> {
+  try {
+    await invoke('set_allow_cast_while_offline', { enabled });
+    settings.allowCastWhileOffline = enabled;
+    notifyListeners();
+  } catch (error) {
+    console.error('Failed to set allow cast while offline:', error);
+    throw error;
+  }
+}
+
+/**
+ * Set whether to allow immediate scrobbling to Last.fm in manual offline mode
+ */
+export async function setAllowImmediateScrobbling(enabled: boolean): Promise<void> {
+  try {
+    await invoke('set_allow_immediate_scrobbling', { enabled });
+    settings.allowImmediateScrobbling = enabled;
+    notifyListeners();
+  } catch (error) {
+    console.error('Failed to set allow immediate scrobbling:', error);
+    throw error;
+  }
+}
+
+/**
+ * Set whether to queue scrobbles for later submission when back online
+ */
+export async function setAllowAccumulatedScrobbling(enabled: boolean): Promise<void> {
+  try {
+    await invoke('set_allow_accumulated_scrobbling', { enabled });
+    settings.allowAccumulatedScrobbling = enabled;
+    notifyListeners();
+  } catch (error) {
+    console.error('Failed to set allow accumulated scrobbling:', error);
     throw error;
   }
 }

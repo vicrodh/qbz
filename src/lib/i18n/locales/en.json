@@ -450,7 +450,14 @@
     "available": "Available Offline",
     "partiallyAvailable": "Partially Available",
     "notAvailableOffline": "Not Available Offline",
-    "viewOnly": "View Only (Offline)"
+    "viewOnly": "View Only (Offline)",
+    "allowCast": "Allow Chromecast",
+    "allowCastDesc": "Enable Chromecast streaming while in manual offline mode",
+    "allowImmediateScrobbling": "Immediate Scrobbling",
+    "allowImmediateScrobblingDesc": "Send scrobbles to Last.fm immediately while in manual offline mode",
+    "allowAccumulatedScrobbling": "Accumulated Scrobbling",
+    "allowAccumulatedScrobblingDesc": "Queue scrobbles for later when back online",
+    "scrobbleTimeLimit": "Last.fm accepts scrobbles up to 2 weeks old"
   },
   "filter": {
     "all": "All"

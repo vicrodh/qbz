@@ -513,6 +513,9 @@ pub fn run() {
             offline::commands::get_offline_settings,
             offline::commands::set_manual_offline,
             offline::commands::set_show_partial_playlists,
+            offline::commands::set_allow_cast_while_offline,
+            offline::commands::set_allow_immediate_scrobbling,
+            offline::commands::set_allow_accumulated_scrobbling,
             offline::commands::check_network,
             // Offline playlist sync queue commands
             offline::commands::create_pending_playlist,

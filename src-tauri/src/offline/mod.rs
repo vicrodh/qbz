@@ -37,6 +37,12 @@ pub struct OfflineStatus {
 pub struct OfflineSettings {
     pub manual_offline_mode: bool,
     pub show_partial_playlists: bool,
+    /// Allow Chromecast while in manual offline mode
+    pub allow_cast_while_offline: bool,
+    /// Allow immediate scrobbling to Last.fm in manual offline mode
+    pub allow_immediate_scrobbling: bool,
+    /// Queue scrobbles for later submission when back online
+    pub allow_accumulated_scrobbling: bool,
 }
 
 /// A playlist created offline, pending sync to Qobuz
@@ -88,10 +94,13 @@ impl OfflineStore {
             "CREATE TABLE IF NOT EXISTS offline_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 manual_offline_mode INTEGER NOT NULL DEFAULT 0,
-                show_partial_playlists INTEGER NOT NULL DEFAULT 1
+                show_partial_playlists INTEGER NOT NULL DEFAULT 1,
+                allow_cast_while_offline INTEGER NOT NULL DEFAULT 0,
+                allow_immediate_scrobbling INTEGER NOT NULL DEFAULT 0,
+                allow_accumulated_scrobbling INTEGER NOT NULL DEFAULT 1
             );
-            INSERT OR IGNORE INTO offline_settings (id, manual_offline_mode, show_partial_playlists)
-            VALUES (1, 0, 1);
+            INSERT OR IGNORE INTO offline_settings (id, manual_offline_mode, show_partial_playlists, allow_cast_while_offline, allow_immediate_scrobbling, allow_accumulated_scrobbling)
+            VALUES (1, 0, 1, 0, 0, 1);
 
             CREATE TABLE IF NOT EXISTS pending_playlist_sync (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -117,18 +126,28 @@ impl OfflineStore {
             CREATE INDEX IF NOT EXISTS idx_scrobble_queue_sent ON scrobble_queue(sent);"
         ).map_err(|e| format!("Failed to create offline settings table: {}", e))?;
 
+        // Migration: Add new columns if they don't exist (for existing databases)
+        let _ = conn.execute_batch(
+            "ALTER TABLE offline_settings ADD COLUMN allow_cast_while_offline INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE offline_settings ADD COLUMN allow_immediate_scrobbling INTEGER NOT NULL DEFAULT 0;
+             ALTER TABLE offline_settings ADD COLUMN allow_accumulated_scrobbling INTEGER NOT NULL DEFAULT 1;"
+        );
+
         Ok(Self { conn })
     }
 
     pub fn get_settings(&self) -> Result<OfflineSettings, String> {
         self.conn
             .query_row(
-                "SELECT manual_offline_mode, show_partial_playlists FROM offline_settings WHERE id = 1",
+                "SELECT manual_offline_mode, show_partial_playlists, allow_cast_while_offline, allow_immediate_scrobbling, allow_accumulated_scrobbling FROM offline_settings WHERE id = 1",
                 [],
                 |row| {
                     Ok(OfflineSettings {
                         manual_offline_mode: row.get::<_, i64>(0)? != 0,
                         show_partial_playlists: row.get::<_, i64>(1)? != 0,
+                        allow_cast_while_offline: row.get::<_, i64>(2)? != 0,
+                        allow_immediate_scrobbling: row.get::<_, i64>(3)? != 0,
+                        allow_accumulated_scrobbling: row.get::<_, i64>(4)? != 0,
                     })
                 },
             )
@@ -152,6 +171,36 @@ impl OfflineStore {
                 params![enabled as i64],
             )
             .map_err(|e| format!("Failed to set show partial playlists: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_allow_cast_while_offline(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE offline_settings SET allow_cast_while_offline = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set allow cast while offline: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_allow_immediate_scrobbling(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE offline_settings SET allow_immediate_scrobbling = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set allow immediate scrobbling: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_allow_accumulated_scrobbling(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE offline_settings SET allow_accumulated_scrobbling = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set allow accumulated scrobbling: {}", e))?;
         Ok(())
     }
 
@@ -471,6 +520,36 @@ pub mod commands {
     ) -> Result<(), String> {
         let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
         store.set_show_partial_playlists(enabled)
+    }
+
+    /// Set whether to allow Chromecast while in manual offline mode
+    #[tauri::command]
+    pub fn set_allow_cast_while_offline(
+        enabled: bool,
+        state: State<'_, OfflineState>,
+    ) -> Result<(), String> {
+        let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        store.set_allow_cast_while_offline(enabled)
+    }
+
+    /// Set whether to allow immediate scrobbling to Last.fm in manual offline mode
+    #[tauri::command]
+    pub fn set_allow_immediate_scrobbling(
+        enabled: bool,
+        state: State<'_, OfflineState>,
+    ) -> Result<(), String> {
+        let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        store.set_allow_immediate_scrobbling(enabled)
+    }
+
+    /// Set whether to queue scrobbles for later submission when back online
+    #[tauri::command]
+    pub fn set_allow_accumulated_scrobbling(
+        enabled: bool,
+        state: State<'_, OfflineState>,
+    ) -> Result<(), String> {
+        let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        store.set_allow_accumulated_scrobbling(enabled)
     }
 
     /// Check if network connectivity is available

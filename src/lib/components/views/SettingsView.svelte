@@ -34,6 +34,9 @@
     getSettings as getOfflineSettings,
     setManualOffline,
     setShowPartialPlaylists,
+    setAllowCastWhileOffline,
+    setAllowImmediateScrobbling,
+    setAllowAccumulatedScrobbling,
     checkNetwork,
     type OfflineStatus,
     type OfflineSettings
@@ -695,6 +698,30 @@
     }
   }
 
+  async function handleAllowCastChange(enabled: boolean) {
+    try {
+      await setAllowCastWhileOffline(enabled);
+    } catch (error) {
+      console.error('Failed to set allow cast while offline:', error);
+    }
+  }
+
+  async function handleAllowImmediateScrobblingChange(enabled: boolean) {
+    try {
+      await setAllowImmediateScrobbling(enabled);
+    } catch (error) {
+      console.error('Failed to set allow immediate scrobbling:', error);
+    }
+  }
+
+  async function handleAllowAccumulatedScrobblingChange(enabled: boolean) {
+    try {
+      await setAllowAccumulatedScrobbling(enabled);
+    } catch (error) {
+      console.error('Failed to set allow accumulated scrobbling:', error);
+    }
+  }
+
   async function handleLanguageChange(lang: string) {
     language = lang;
     const localeCode = languageToLocale[lang];
@@ -1136,13 +1163,39 @@
       </div>
       <Toggle enabled={offlineSettings.manualOfflineMode} onchange={handleManualOfflineChange} />
     </div>
-    <div class="setting-row last">
+    <div class="setting-row" class:last={!offlineSettings.manualOfflineMode}>
       <div class="setting-info">
         <span class="setting-label">{$t('offline.showPartialPlaylists')}</span>
         <span class="setting-desc">{$t('offline.showPartialPlaylistsDesc')}</span>
       </div>
       <Toggle enabled={offlineSettings.showPartialPlaylists} onchange={handleShowPartialPlaylistsChange} />
     </div>
+
+    <!-- Manual offline mode specific settings -->
+    {#if offlineSettings.manualOfflineMode}
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('offline.allowCast')}</span>
+          <span class="setting-desc">{$t('offline.allowCastDesc')}</span>
+        </div>
+        <Toggle enabled={offlineSettings.allowCastWhileOffline} onchange={handleAllowCastChange} />
+      </div>
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('offline.allowImmediateScrobbling')}</span>
+          <span class="setting-desc">{$t('offline.allowImmediateScrobblingDesc')}</span>
+        </div>
+        <Toggle enabled={offlineSettings.allowImmediateScrobbling} onchange={handleAllowImmediateScrobblingChange} />
+      </div>
+      <div class="setting-row last">
+        <div class="setting-info">
+          <span class="setting-label">{$t('offline.allowAccumulatedScrobbling')}</span>
+          <span class="setting-desc">{$t('offline.allowAccumulatedScrobblingDesc')}</span>
+          <small class="setting-note">{$t('offline.scrobbleTimeLimit')}</small>
+        </div>
+        <Toggle enabled={offlineSettings.allowAccumulatedScrobbling} onchange={handleAllowAccumulatedScrobblingChange} />
+      </div>
+    {/if}
   </section>
 
   <!-- Appearance Section -->
@@ -1766,6 +1819,31 @@
   .setting-description {
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .setting-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+  }
+
+  .setting-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .setting-note {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.8;
+    margin-top: 4px;
+  }
+
+  .setting-row:has(.setting-note) {
+    height: auto;
+    min-height: 48px;
+    padding: 12px 0;
   }
 
   .setting-value {
