@@ -28,6 +28,15 @@
   import { setLocale, locale, t } from '$lib/i18n';
   import { get } from 'svelte/store';
   import MigrationModal from '../MigrationModal.svelte';
+  import {
+    subscribe as subscribeOffline,
+    getStatus as getOfflineStatus,
+    getSettings as getOfflineSettings,
+    setManualOffline,
+    setShowPartialPlaylists,
+    type OfflineStatus,
+    type OfflineSettings
+  } from '$lib/stores/offlineStore';
 
   interface Props {
     onBack?: () => void;
@@ -72,6 +81,10 @@
   // Migration state
   let showMigrationModal = $state(false);
   let legacyTracksCount = $state(0);
+
+  // Offline mode state
+  let offlineStatus = $state<OfflineStatus>(getOfflineStatus());
+  let offlineSettings = $state<OfflineSettings>(getOfflineSettings());
 
   // Audio device state
   let audioDevices = $state<AudioDevice[]>([]);
@@ -265,6 +278,16 @@
 
     // Check for legacy downloads
     checkLegacyDownloads();
+
+    // Subscribe to offline state changes
+    const unsubscribeOffline = subscribeOffline(() => {
+      offlineStatus = getOfflineStatus();
+      offlineSettings = getOfflineSettings();
+    });
+
+    return () => {
+      unsubscribeOffline();
+    };
   });
 
   async function loadLastfmState() {
@@ -553,6 +576,23 @@
   function handlePreferHighestChange(enabled: boolean) {
     preferHighest = enabled;
     localStorage.setItem('qbz-prefer-highest', String(enabled));
+  }
+
+  // Offline mode handlers
+  async function handleManualOfflineChange(enabled: boolean) {
+    try {
+      await setManualOffline(enabled);
+    } catch (error) {
+      console.error('Failed to set manual offline mode:', error);
+    }
+  }
+
+  async function handleShowPartialPlaylistsChange(enabled: boolean) {
+    try {
+      await setShowPartialPlaylists(enabled);
+    } catch (error) {
+      console.error('Failed to set show partial playlists:', error);
+    }
   }
 
   async function handleLanguageChange(lang: string) {
@@ -950,6 +990,45 @@
     <div class="setting-row last">
       <span class="setting-label">{$t('settings.playback.normalizeVolume')}</span>
       <Toggle enabled={normalizeVolume} onchange={(v) => (normalizeVolume = v)} />
+    </div>
+  </section>
+
+  <!-- Offline Mode Section -->
+  <section class="section">
+    <h3 class="section-title">{$t('offline.title')}</h3>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('offline.status')}</span>
+        <span class="setting-desc status-indicator" class:offline={offlineStatus.isOffline}>
+          {#if offlineStatus.isOffline}
+            {#if offlineStatus.reason === 'no_network'}
+              {$t('offline.noNetwork')}
+            {:else if offlineStatus.reason === 'not_logged_in'}
+              {$t('offline.notLoggedIn')}
+            {:else if offlineStatus.reason === 'manual_override'}
+              {$t('offline.manualMode')}
+            {:else}
+              {$t('offline.offlineReason')}
+            {/if}
+          {:else}
+            {$t('offline.online')}
+          {/if}
+        </span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('offline.enableManual')}</span>
+        <span class="setting-desc">{$t('offline.enableManualDesc')}</span>
+      </div>
+      <Toggle enabled={offlineSettings.manualOfflineMode} onchange={handleManualOfflineChange} />
+    </div>
+    <div class="setting-row last">
+      <div class="setting-info">
+        <span class="setting-label">{$t('offline.showPartialPlaylists')}</span>
+        <span class="setting-desc">{$t('offline.showPartialPlaylistsDesc')}</span>
+      </div>
+      <Toggle enabled={offlineSettings.showPartialPlaylists} onchange={handleShowPartialPlaylistsChange} />
     </div>
   </section>
 
@@ -1934,6 +2013,16 @@
   .clear-btn-small:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  /* Offline status indicator */
+  .status-indicator {
+    font-weight: 500;
+    color: #4ade80;
+  }
+
+  .status-indicator.offline {
+    color: #fbbf24;
   }
 </style>
 
