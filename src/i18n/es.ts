@@ -217,6 +217,10 @@ export const es = {
         title: 'Integraciones y APIs',
         items: ['Qobuz', 'Last.fm API', 'Discogs API', 'Spotify API', 'Tidal API', 'Song.link (Odesli)'],
       },
+      inspiration: {
+        title: 'Inspiración',
+        items: ['qobuz-dl por vitiko98'],
+      },
       website: {
         title: 'Stack del sitio',
         items: ['React', 'Vite', 'TypeScript', 'i18next', 'react-i18next'],
@@ -224,5 +228,18 @@ export const es = {
     },
     acknowledgments: 'Gracias a los proyectos open source y proveedores de APIs que hacen posible QBZ.',
     qobuzDisclaimer: 'Qobuz es una marca registrada de su respectivo propietario. QBZ no está afiliado a Qobuz.',
+  },
+  about: {
+    title: '¿Por qué QBZ?',
+    content: `QBZ es un proyecto personal que vio la luz hace poco más de {{years}} años. Comenzó cuando usé el código de qobuz-dl para crear un backend API local que me permitiera buscar música y escucharla en mi equipo. Meses —quizás un año— después, ante el hype de migrar todo a Rust y como experimento para aprender un lenguaje nuevo y agregarlo a mi stack tecnológico, migré dicho backend a Rust. También hice una interfaz web bastante artesanal que al menos me permitía obtener mis playlists de Qobuz y usarlo como media player sin distracciones. Aún confiaba en que pronto habría un cliente oficial. Francamente, con todo y que me declaro entusiasta de Linux, no soy fan de los music players en terminal —uso tanto la terminal que a veces la cierro sin más, y eso causa que me quede sin música por cerrar la ventana equivocada.
+
+Como mucha gente en 2025, integré el uso de agentes de código en mi flujo de trabajo (el real, el que paga las facturas). Esto me hizo pensar en desbloquear este proyecto de mi stack personal. Tomé ideas de los reproductores de música que uso normalmente, features que creo que a gente como yo le gustarían y —sí, si se lo preguntan, "¿Esta app está vibecodeada?"— la respuesta es sí, sin vergüenza. Pero cabe aclarar: soy ingeniero de software, así que he procurado incorporar las mejores prácticas, estructuras de diseño y arquitectura adecuada. Solo la planeación, escritura de prompts, plan de arquitectura y orquestación me tomó un par de semanas. Este proyecto no es un "Hice un nuevo ERP en 3 días sin escribir una sola línea de código". Cada bloque de código ha sido revisado como si se tratara de revisar el código de un becario. No creo en el zero-code, pero tampoco odio el vibecoding. Creo en adaptarse o morir, y que toda herramienta es útil si se usa con responsabilidad. Si tienen curiosidad de qué herramientas fueron usadas: Claude Code, GPT Codex, Copilot y Figma AI me han tenido que tolerar a mí y a mis cambios de humor y de decisiones —se las recomiendo.`,
+    donationsTitle: 'Donativos',
+    donationsContent: `Gracias, las ofertas son halagadoras y muy satisfactorias. Pero hay proyectos que lo merecen mucho más que este: KDE Plasma, Neovim y por supuesto Arch Linux (I use Arch BTW). Si has pensado en colaborar con este proyecto, un donativo a nombre de QBZ a esas herramientas sería mucho más apreciado. Por el momento me siento satisfecho con tu feedback y buenos comentarios —me sirven mucho. Ojos frescos siempre son lo mejor para el QA de un desarrollador en solitario.`,
+    donationLinks: {
+      kde: 'KDE Plasma',
+      neovim: 'Neovim',
+      arch: 'Arch Linux',
+    },
   },
 }

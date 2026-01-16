@@ -1,6 +1,18 @@
 import { useTranslation } from 'react-i18next'
 
-const CATEGORY_KEYS = ['core', 'audio', 'casting', 'lyrics', 'integrations', 'website'] as const
+const CATEGORY_KEYS = ['core', 'audio', 'casting', 'lyrics', 'integrations', 'inspiration', 'website'] as const
+
+const DONATION_LINKS = {
+  kde: 'https://kde.org/community/donations/',
+  neovim: 'https://neovim.io/sponsors/',
+  arch: 'https://archlinux.org/donate/',
+}
+
+function getProjectYears(): number {
+  const startYear = 2023
+  const currentYear = new Date().getFullYear()
+  return currentYear - startYear
+}
 
 export function LicensesPage() {
   const { t } = useTranslation()
@@ -46,6 +58,27 @@ export function LicensesPage() {
         <div className="card" style={{ marginTop: 32 }}>
           <p>{t('licenses.acknowledgments')}</p>
           <p style={{ marginTop: 12 }}>{t('licenses.qobuzDisclaimer')}</p>
+        </div>
+
+        <div className="about-section" style={{ marginTop: 48 }}>
+          <h2 className="section__title">{t('about.title')}</h2>
+          <div className="about-content" style={{ marginTop: 16 }}>
+            <p style={{ whiteSpace: 'pre-line' }}>{t('about.content', { years: getProjectYears() })}</p>
+          </div>
+
+          <h3 className="feature-card__title" style={{ marginTop: 32 }}>{t('about.donationsTitle')}</h3>
+          <p style={{ marginTop: 8 }}>{t('about.donationsContent')}</p>
+          <div className="donation-links" style={{ marginTop: 16, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <a className="btn btn-ghost" href={DONATION_LINKS.kde} target="_blank" rel="noreferrer">
+              {t('about.donationLinks.kde')}
+            </a>
+            <a className="btn btn-ghost" href={DONATION_LINKS.neovim} target="_blank" rel="noreferrer">
+              {t('about.donationLinks.neovim')}
+            </a>
+            <a className="btn btn-ghost" href={DONATION_LINKS.arch} target="_blank" rel="noreferrer">
+              {t('about.donationLinks.arch')}
+            </a>
+          </div>
         </div>
       </div>
     </section>
