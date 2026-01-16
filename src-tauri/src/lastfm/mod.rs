@@ -130,19 +130,12 @@ impl LastFmClient {
             return Err("Last.fm API credentials not configured".to_string());
         }
 
-        let mut params = BTreeMap::new();
-        params.insert("method", "auth.getToken");
-        params.insert("api_key", &self.api_key);
-
-        let sig = self.generate_signature(&params);
-
         let response = self
             .client
             .get(LASTFM_API_URL)
             .query(&[
                 ("method", "auth.getToken"),
                 ("api_key", &self.api_key),
-                ("api_sig", &sig),
                 ("format", "json"),
             ])
             .send()
