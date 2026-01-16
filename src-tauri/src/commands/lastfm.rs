@@ -28,12 +28,11 @@ pub async fn lastfm_open_auth_url(url: String) -> Result<(), String> {
 #[tauri::command]
 pub async fn lastfm_set_credentials(
     api_key: String,
-    api_secret: String,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
     log::info!("Command: lastfm_set_credentials");
     let mut client = state.lastfm.lock().await;
-    client.set_credentials(api_key, api_secret);
+    client.set_credentials(api_key);
     Ok(())
 }
 
@@ -51,7 +50,7 @@ pub async fn lastfm_get_auth_url(state: State<'_, AppState>) -> Result<(String, 
     let client = state.lastfm.lock().await;
 
     if !client.has_credentials() {
-        return Err("Last.fm API credentials not configured. Please set API key and secret in settings.".to_string());
+        return Err("Last.fm API key not configured. Please set API key in settings.".to_string());
     }
 
     let token = client.get_token().await?;
