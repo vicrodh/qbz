@@ -80,10 +80,7 @@ pub struct LastFmClient {
 
 impl Default for LastFmClient {
     fn default() -> Self {
-        Self::new(
-            get_api_key().unwrap_or_default(),
-            get_api_secret().unwrap_or_default(),
-        )
+        Self::new(get_api_key().unwrap_or_default())
     }
 }
 
@@ -95,11 +92,10 @@ impl LastFmClient {
 }
 
 impl LastFmClient {
-    pub fn new(api_key: String, api_secret: String) -> Self {
+    pub fn new(api_key: String) -> Self {
         Self {
             client: Client::new(),
             api_key,
-            api_secret,
             session_key: None,
         }
     }
