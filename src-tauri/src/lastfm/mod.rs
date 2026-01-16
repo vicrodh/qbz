@@ -75,7 +75,6 @@ enum LastFmResponse<T> {
 pub struct LastFmClient {
     client: Client,
     api_key: String,
-    api_secret: String,
     session_key: Option<String>,
 }
 
