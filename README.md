@@ -7,7 +7,21 @@ Marketing site for QBZ (native Qobuz client for Linux). Built with React + Vite 
 - English and Spanish routes (`/` and `/es`)
 - Dark and OLED themes via CSS variables
 - Client-side GitHub Releases integration for latest downloads and changelog
+- Dynamic install commands based on actual release filenames
+- Dependency commands for Debian/Ubuntu and Fedora/RHEL
+- Infinite carousel for key capabilities section
 - No analytics or tracking
+
+## Download Section
+
+The download section dynamically generates install commands based on actual release filenames from GitHub Releases:
+
+- **AUR (Arch)**: `yay -S qbz-bin`
+- **AppImage**: Dynamic filename from release
+- **Flatpak**: Dynamic filename from release
+- **Debian/Ubuntu**: Shows dependency install command + dpkg install
+- **Fedora/RHEL**: Shows dependency install command + rpm install
+- **Tarball**: Dynamic filename from release
 
 ## Development
 

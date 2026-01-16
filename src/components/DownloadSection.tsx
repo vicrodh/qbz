@@ -49,6 +49,8 @@ type DownloadItem = {
   url: string
   size: number
   arch: string | null
+  installCmd?: string
+  depsCmd?: string
 }
 
 const RELEASES_URL = 'https://api.github.com/repos/vicrodh/qbz/releases'
@@ -92,7 +94,39 @@ const getArch = (name: string): string | null => {
   return null
 }
 
-const DISABLED_TYPES: DownloadItem['type'][] = ['flatpak'] // Temporarily disabled
+const DISABLED_TYPES: DownloadItem['type'][] = [] // All types enabled
+
+// Generate install command based on actual filename
+const getInstallCmd = (type: DownloadItem['type'], fileName: string): string | undefined => {
+  switch (type) {
+    case 'aur':
+      return 'yay -S qbz-bin'
+    case 'appimage':
+      return `chmod +x ${fileName} && ./${fileName}`
+    case 'deb':
+      return `sudo dpkg -i ${fileName}`
+    case 'rpm':
+      return `sudo rpm -i ${fileName}`
+    case 'flatpak':
+      return `flatpak install --user ./${fileName}`
+    case 'tarball':
+      return `tar -xzf ${fileName} && ./qbz`
+    default:
+      return undefined
+  }
+}
+
+// Dependency commands for distros that need them
+const getDepsCmd = (type: DownloadItem['type']): string | undefined => {
+  switch (type) {
+    case 'deb':
+      return 'sudo apt install -y libwebkit2gtk-4.1-0 libgtk-3-0 libayatana-appindicator3-1 gstreamer1.0-plugins-base gstreamer1.0-plugins-good'
+    case 'rpm':
+      return 'sudo dnf install -y webkit2gtk4.1 gtk3 libappindicator-gtk3 gstreamer1-plugins-base gstreamer1-plugins-good'
+    default:
+      return undefined
+  }
+}
 
 const mapAssets = (assets: ReleaseAsset[]): DownloadItem[] =>
   assets
@@ -106,6 +140,8 @@ const mapAssets = (assets: ReleaseAsset[]): DownloadItem[] =>
         url: asset.browser_download_url,
         size: asset.size,
         arch: getArch(asset.name),
+        installCmd: getInstallCmd(type, asset.name),
+        depsCmd: getDepsCmd(type),
       }
     })
     .filter((item) => !DISABLED_TYPES.includes(item.type))
@@ -213,34 +249,43 @@ export function DownloadSection() {
                 </div>
               </div>
               <div className="download-list">
-                {downloads.map((item) => {
-                  const instruction = item.type !== 'unknown' ? t(`downloads.instructions.${item.type}`) : null
-                  return (
-                    <div key={item.fileName} className="download-item">
-                      <div className="download-item__header">
-                        <div className="download-item__info">
-                          <span className="download-item__label">{item.label}</span>
-                          {item.arch && <span className="download-item__arch">{item.arch}</span>}
-                        </div>
-                        <span className="download-item__file">
-                          {item.type === 'aur' ? 'Arch User Repository' : `${item.fileName} · ${formatBytes(item.size)}`}
-                        </span>
+                {downloads.map((item) => (
+                  <div key={item.fileName} className="download-item">
+                    <div className="download-item__header">
+                      <div className="download-item__info">
+                        <span className="download-item__label">{item.label}</span>
+                        {item.arch && <span className="download-item__arch">{item.arch}</span>}
                       </div>
-                      {instruction && (
-                        <div className="terminal">
-                          <code>
-                            <span className="terminal__prompt">$</span>
-                            <span className="terminal__cmd">{instruction}</span>
-                          </code>
-                          <CopyButton text={instruction} />
-                        </div>
-                      )}
-                      <a className="btn btn-ghost btn-sm" href={item.url} target={item.type === 'aur' ? '_blank' : undefined} rel={item.type === 'aur' ? 'noreferrer' : undefined}>
-                        {item.type === 'aur' ? 'View on AUR' : 'Download'}
-                      </a>
+                      <span className="download-item__file">
+                        {item.type === 'aur' ? 'Arch User Repository' : `${item.fileName} · ${formatBytes(item.size)}`}
+                      </span>
                     </div>
-                  )
-                })}
+                    {item.installCmd && (
+                      <div className="terminal">
+                        <code>
+                          <span className="terminal__prompt">$</span>
+                          <span className="terminal__cmd">{item.installCmd}</span>
+                        </code>
+                        <CopyButton text={item.installCmd} />
+                      </div>
+                    )}
+                    {item.depsCmd && (
+                      <details className="deps-details">
+                        <summary className="deps-summary">Missing dependencies?</summary>
+                        <div className="terminal terminal--deps">
+                          <code>
+                            <span className="terminal__prompt">#</span>
+                            <span className="terminal__cmd">{item.depsCmd}</span>
+                          </code>
+                          <CopyButton text={item.depsCmd} />
+                        </div>
+                      </details>
+                    )}
+                    <a className="btn btn-ghost btn-sm" href={item.url} target={item.type === 'aur' ? '_blank' : undefined} rel={item.type === 'aur' ? 'noreferrer' : undefined}>
+                      {item.type === 'aur' ? 'View on AUR' : 'Download'}
+                    </a>
+                  </div>
+                ))}
               </div>
               <a className="btn btn-ghost" href={release.html_url} target="_blank" rel="noreferrer">
                 {t('downloads.viewAll')}

@@ -432,6 +432,38 @@ p {
   transform: scale(1.2);
 }
 
+.carousel-nav {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.carousel-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.carousel-arrow:hover {
+  border-color: var(--accent);
+  color: var(--text-primary);
+  background: var(--surface-elev);
+}
+
+.capability-card {
+  cursor: pointer;
+}
+
 .capability-card__title {
   font-size: 1.1rem;
   font-weight: 600;
@@ -777,6 +809,39 @@ p {
 
 .terminal__cmd {
   color: #e4e4e7;
+}
+
+.terminal--deps {
+  background: #0a1014;
+  border: 1px dashed var(--border);
+}
+
+.terminal--deps .terminal__prompt {
+  color: #f59e0b;
+}
+
+.deps-details {
+  width: 100%;
+}
+
+.deps-summary {
+  cursor: pointer;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+  padding: 4px 0;
+  user-select: none;
+}
+
+.deps-summary:hover {
+  color: var(--text-secondary);
+}
+
+.deps-details[open] .deps-summary {
+  margin-bottom: 8px;
+}
+
+.deps-details .terminal--deps {
+  margin-top: 0;
 }
 
 .copy-btn {
