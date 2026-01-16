@@ -20,5 +20,32 @@ fn main() {
         }
     }
 
+    // Wayland and WebKit compatibility fixes for Linux
+    // Addresses: https://github.com/vicrodh/qbz/issues/6
+    #[cfg(target_os = "linux")]
+    {
+        let is_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some();
+
+        // Only apply Wayland-specific fixes if running under Wayland
+        // and the user hasn't explicitly set GDK_BACKEND
+        if is_wayland && std::env::var_os("GDK_BACKEND").is_none() {
+            // Force Wayland backend to avoid fallback issues
+            std::env::set_var("GDK_BACKEND", "wayland");
+
+            // Disable WebKit's compositing mode which can cause protocol errors
+            // with transparent windows on Wayland
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+
+            // Prefer client-side decorations (we use custom titlebar anyway)
+            std::env::set_var("GTK_CSD", "1");
+        }
+
+        // Hardware acceleration fixes for WebKit on both X11 and Wayland
+        // Helps with GBM buffer errors on some GPU drivers
+        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+    }
+
     qbz_nix_lib::run()
 }
