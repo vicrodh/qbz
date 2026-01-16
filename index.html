@@ -11,13 +11,106 @@
       gtag('js', new Date());
       gtag('config', 'G-CJTF3ZSR75');
     </script>
+    <title>QBZ — Native Qobuz client for Linux</title>
     <meta
       name="description"
       content="QBZ is a native Qobuz client for Linux focused on bit-perfect playback, DAC passthrough, and transparent audio control."
     />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+
+    <!-- Canonical & Language Alternates -->
+    <link rel="canonical" href="https://qbz.lol/" />
+    <link rel="alternate" hreflang="en" href="https://qbz.lol/" />
+    <link rel="alternate" hreflang="es" href="https://qbz.lol/es/" />
+    <link rel="alternate" hreflang="x-default" href="https://qbz.lol/" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="QBZ" />
+    <meta property="og:title" content="QBZ — Native Qobuz client for Linux" />
+    <meta property="og:description" content="QBZ is a native Qobuz client for Linux focused on bit-perfect playback, DAC passthrough, and transparent audio control." />
+    <meta property="og:url" content="https://qbz.lol/" />
+    <meta property="og:image" content="https://qbz.lol/assets/brand/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:locale:alternate" content="es_ES" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="QBZ — Native Qobuz client for Linux" />
+    <meta name="twitter:description" content="QBZ is a native Qobuz client for Linux focused on bit-perfect playback, DAC passthrough, and transparent audio control." />
+    <meta name="twitter:image" content="https://qbz.lol/assets/brand/og-image.png" />
+
+    <!-- Favicons -->
     <link rel="icon" type="image/png" href="/assets/brand/favicon.png" />
     <link rel="apple-touch-icon" href="/assets/brand/192x192.png" />
-    <title>QBZ — Native Qobuz client for Linux</title>
+
+    <!-- JSON-LD Structured Data -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://qbz.lol/#organization",
+          "name": "QBZ",
+          "url": "https://qbz.lol",
+          "logo": {
+            "@type": "ImageObject",
+            "url": "https://qbz.lol/assets/brand/192x192.png"
+          },
+          "sameAs": [
+            "https://github.com/vicrodh/qbz"
+          ]
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://qbz.lol/#website",
+          "url": "https://qbz.lol",
+          "name": "QBZ",
+          "publisher": {"@id": "https://qbz.lol/#organization"},
+          "inLanguage": ["en", "es"]
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://qbz.lol/#software",
+          "name": "QBZ",
+          "description": "Native Qobuz client for Linux with bit-perfect playback, DAC passthrough, and transparent audio control.",
+          "applicationCategory": "MultimediaApplication",
+          "operatingSystem": "Linux",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "downloadUrl": "https://github.com/vicrodh/qbz/releases",
+          "softwareVersion": "latest",
+          "author": {"@id": "https://qbz.lol/#organization"},
+          "license": "https://opensource.org/licenses/MIT",
+          "featureList": [
+            "Bit-perfect audio playback",
+            "DAC passthrough support",
+            "Native FLAC, ALAC, AAC, MP3 decoding",
+            "Local music library management",
+            "Chromecast and DLNA streaming",
+            "MPRIS and media key integration",
+            "Playlist import from Spotify, Apple Music, Tidal, Deezer"
+          ]
+        },
+        {
+          "@type": "WebPage",
+          "@id": "https://qbz.lol/#webpage",
+          "url": "https://qbz.lol/",
+          "name": "QBZ — Native Qobuz client for Linux",
+          "description": "QBZ is a native Qobuz client for Linux focused on bit-perfect playback, DAC passthrough, and transparent audio control.",
+          "isPartOf": {"@id": "https://qbz.lol/#website"},
+          "about": {"@id": "https://qbz.lol/#software"},
+          "inLanguage": "en"
+        }
+      ]
+    }
+    </script>
   </head>
   <body>
     <div id="root"></div>
