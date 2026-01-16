@@ -23,9 +23,9 @@
   const icon = $derived(getIcon(reason));
 </script>
 
-<div class="offline-placeholder">
+<div class="offline-placeholder" role="alert" aria-live="polite">
   <div class="content">
-    <div class="icon-container">
+    <div class="icon-container" aria-hidden="true">
       <svelte:component this={icon} size={64} strokeWidth={1.5} />
     </div>
     <h2>

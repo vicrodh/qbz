@@ -329,8 +329,13 @@
     <!-- Right: Actions & Volume -->
     <div class="right-section">
       {#if isOffline}
-        <div class="offline-indicator" title={getOfflineReasonText(offlineReason)}>
-          <img src="/offline-small.svg" alt="Offline" class="offline-icon" />
+        <div
+          class="offline-indicator"
+          title={getOfflineReasonText(offlineReason)}
+          role="status"
+          aria-label={getOfflineReasonText(offlineReason)}
+        >
+          <img src="/offline-small.svg" alt="" class="offline-icon" aria-hidden="true" />
         </div>
       {/if}
 
@@ -350,8 +355,9 @@
         onclick={isOffline ? undefined : onToggleLyrics}
         disabled={isOffline}
         title={isOffline ? $t('offline.featureDisabled') : $t('player.lyrics')}
+        aria-label={isOffline ? $t('offline.featureDisabled') : $t('player.lyrics')}
       >
-        <Mic2 size={16} />
+        <Mic2 size={16} aria-hidden="true" />
       </button>
 
       <button class="control-btn" onclick={onOpenQueue} title={$t('player.queue')}>

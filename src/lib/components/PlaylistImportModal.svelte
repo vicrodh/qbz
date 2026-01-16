@@ -194,8 +194,8 @@
 
       <div class="modal-body">
         {#if isOffline}
-          <div class="offline-warning">
-            <CloudOff size={16} />
+          <div class="offline-warning" role="alert" aria-live="polite">
+            <CloudOff size={16} aria-hidden="true" />
             <span>{$t('offline.featureDisabled')}</span>
           </div>
         {/if}

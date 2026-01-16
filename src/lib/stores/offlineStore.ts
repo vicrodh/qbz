@@ -8,6 +8,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { showToast } from './toastStore';
 
 // Types matching Rust backend
 export type OfflineReason = 'no_network' | 'not_logged_in' | 'manual_override';
@@ -109,6 +110,14 @@ async function fetchStatus(): Promise<void> {
     status = newStatus;
     if (changed) {
       notifyListeners();
+      // Show toast for status change (skip on initial load)
+      if (initialized) {
+        if (!wasOffline && newStatus.isOffline) {
+          showToast('Offline mode activated', 'info');
+        } else if (wasOffline && !newStatus.isOffline) {
+          showToast('Back online', 'success');
+        }
+      }
       // Check for offline -> online transition
       if (wasOffline && !newStatus.isOffline && onOnlineTransitionCallback) {
         console.log('[Offline] Transitioning to online - triggering callback');
@@ -196,6 +205,12 @@ export async function initOfflineStore(): Promise<void> {
     const wasOffline = status.isOffline;
     status = event.payload;
     notifyListeners();
+    // Show toast for status change
+    if (!wasOffline && event.payload.isOffline) {
+      showToast('Offline mode activated', 'info');
+    } else if (wasOffline && !event.payload.isOffline) {
+      showToast('Back online', 'success');
+    }
     // Check for offline -> online transition
     if (wasOffline && !event.payload.isOffline && onOnlineTransitionCallback) {
       console.log('[Offline] Transitioning to online via event - triggering callback');

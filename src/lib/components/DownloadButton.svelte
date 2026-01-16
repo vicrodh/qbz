@@ -78,6 +78,7 @@
   class:offline={isOffline && status !== 'ready'}
   onclick={handleClick}
   title={title}
+  aria-label={title}
   disabled={isDisabled}
 >
   {#if status === 'ready'}
