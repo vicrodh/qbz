@@ -256,6 +256,7 @@
     isOffline as checkIsOffline,
     getOfflineReason,
     setManualOffline,
+    refreshStatus as refreshOfflineStatus,
     type OfflineStatus
   } from '$lib/stores/offlineStore';
 
@@ -1218,6 +1219,9 @@
   async function handleLoginSuccess(info: UserInfo) {
     setLoggedIn(info);
     showToast(`Welcome, ${info.userName}!`, 'success');
+
+    // Refresh offline status now that we're logged in
+    await refreshOfflineStatus();
 
     // Train recommendation scores in background (fire-and-forget)
     trainScores().then(() => {
