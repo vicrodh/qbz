@@ -586,6 +586,7 @@
       hires: t.hires ?? false,
       bit_depth: t.bitDepth ?? null,
       sample_rate: t.samplingRate != null ? (t.isLocal ? t.samplingRate * 1000 : t.samplingRate) : null,
+      is_local: t.isLocal ?? false,
     }));
 
     // Collect local track IDs (original positive IDs)
@@ -667,6 +668,7 @@
             hires: t.hires ?? false,
             bit_depth: t.bitDepth ?? null,
             sample_rate: t.samplingRate != null ? (t.isLocal ? t.samplingRate * 1000 : t.samplingRate) : null,
+            is_local: t.isLocal ?? false,
           }
         });
       } catch (err) {
@@ -694,6 +696,7 @@
       hires: t.hires ?? false,
       bit_depth: t.bitDepth ?? null,
       sample_rate: t.samplingRate != null ? (t.isLocal ? t.samplingRate * 1000 : t.samplingRate) : null,
+      is_local: t.isLocal ?? false,
     }));
 
     // Collect local track IDs

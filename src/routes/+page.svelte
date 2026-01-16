@@ -433,7 +433,8 @@
       artwork_url: artwork || null,
       hires: t.hires ?? false,
       bit_depth: t.bitDepth ?? null,
-      sample_rate: t.samplingRate ?? null
+      sample_rate: t.samplingRate ?? null,
+      is_local: false
     }));
 
     await setQueue(queueTracks, 0, true);
@@ -475,7 +476,8 @@
         artwork_url: artwork || null,
         hires: t.hires ?? false,
         bit_depth: t.bitDepth ?? null,
-        sample_rate: t.samplingRate ?? null
+        sample_rate: t.samplingRate ?? null,
+        is_local: false
       });
     }
     showToast(`Playing ${album.tracks.length} tracks next`, 'success');
@@ -495,7 +497,8 @@
       artwork_url: artwork || null,
       hires: t.hires ?? false,
       bit_depth: t.bitDepth ?? null,
-      sample_rate: t.samplingRate ?? null
+      sample_rate: t.samplingRate ?? null,
+      is_local: false
     }));
 
     const success = await addTracksToQueue(queueTracks);
@@ -603,7 +606,8 @@
         artwork_url: artwork || null,
         hires: t.hires ?? false,
         bit_depth: t.bitDepth ?? null,
-        sample_rate: t.samplingRate ?? null
+        sample_rate: t.samplingRate ?? null,
+        is_local: false
       }));
 
       // Set the queue starting at the clicked track
@@ -923,7 +927,8 @@
         artwork_url: artwork || null,
         hires: t.hires ?? false,
         bit_depth: t.bitDepth ?? null,
-        sample_rate: t.samplingRate ?? null
+        sample_rate: t.samplingRate ?? null,
+        is_local: false
       });
     }
     showToast(`Playing ${selectedAlbum.tracks.length} tracks next`, 'success');
@@ -943,7 +948,8 @@
       artwork_url: artwork || null,
       hires: t.hires ?? false,
       bit_depth: t.bitDepth ?? null,
-      sample_rate: t.samplingRate ?? null
+      sample_rate: t.samplingRate ?? null,
+      is_local: false
     }));
 
     const success = await addTracksToQueue(queueTracks);
@@ -1295,7 +1301,8 @@
           artwork_url: t.artwork_url,
           hires: t.hires ?? false,
           bit_depth: t.bit_depth ?? null,
-          sample_rate: t.sample_rate ?? null
+          sample_rate: t.sample_rate ?? null,
+          is_local: t.is_local ?? false
         }));
 
         await setQueue(tracks, session.current_index ?? 0, true);

@@ -215,6 +215,12 @@ fn spawn_prefetch(
         let track_id = track.id;
         let track_title = track.title.clone();
 
+        // Skip local tracks - they don't need prefetching from Qobuz
+        if track.is_local {
+            log::debug!("Skipping prefetch for local track: {} - {}", track_id, track_title);
+            continue;
+        }
+
         // Check if already cached or being fetched
         if cache.contains(track_id) {
             log::debug!("Track {} already cached", track_id);

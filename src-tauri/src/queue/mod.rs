@@ -23,6 +23,9 @@ pub struct QueueTrack {
     pub hires: bool,
     pub bit_depth: Option<u32>,
     pub sample_rate: Option<f64>,
+    /// Whether this is a local library track (not from Qobuz)
+    #[serde(default)]
+    pub is_local: bool,
 }
 
 /// Repeat mode options

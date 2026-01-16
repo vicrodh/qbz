@@ -27,6 +27,7 @@ export interface BackendQueueTrack {
   hires: boolean;
   bit_depth: number | null;
   sample_rate: number | null;
+  is_local?: boolean;
 }
 
 interface BackendQueueState {

@@ -81,7 +81,21 @@ export async function playTrack(
   setCurrentTrack(track);
 
   try {
-    if (showLoadingToast) {
+    // For Qobuz tracks: stop current playback immediately and show buffering
+    // This prevents the previous track from continuing while we download
+    // Local tracks load instantly so they don't need this
+    if (!isLocal && !isCasting()) {
+      // Stop current playback immediately
+      try {
+        await invoke('stop_playback');
+      } catch {
+        // Ignore errors - player might not be playing
+      }
+      // Show buffering indicator
+      if (showLoadingToast) {
+        showToast(track.title, 'buffering');
+      }
+    } else if (showLoadingToast && !isLocal) {
       showToast(track.title, 'buffering');
     }
 
