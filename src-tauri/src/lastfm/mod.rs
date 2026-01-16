@@ -161,14 +161,6 @@ impl LastFmClient {
 
         log::info!("Getting Last.fm session with token: {}...", &token[..token.len().min(8)]);
 
-        let mut params = BTreeMap::new();
-        params.insert("method", "auth.getSession");
-        params.insert("api_key", &self.api_key);
-        params.insert("token", token);
-
-        let sig = self.generate_signature(&params);
-        log::debug!("Generated signature for auth.getSession");
-
         let response = self
             .client
             .get(LASTFM_API_URL)
@@ -176,7 +168,6 @@ impl LastFmClient {
                 ("method", "auth.getSession"),
                 ("api_key", &self.api_key),
                 ("token", token),
-                ("api_sig", &sig),
                 ("format", "json"),
             ])
             .send()
