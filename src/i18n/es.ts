@@ -211,7 +211,7 @@ export const es = {
       },
       lyrics: {
         title: 'Proveedores de letras',
-        items: ['LRCLIB'],
+        items: ['LRCLIB', 'lyrics.ovh'],
       },
       integrations: {
         title: 'Integraciones y APIs',
@@ -219,7 +219,7 @@ export const es = {
       },
       inspiration: {
         title: 'Inspiración',
-        items: ['qobuz-dl por vitiko98'],
+        items: ['qobuz-dl por vitiko98', 'qobuz-api-rust'],
       },
       website: {
         title: 'Stack del sitio',
