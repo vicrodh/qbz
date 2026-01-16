@@ -2,10 +2,8 @@
 //!
 //! Handles Last.fm authentication and scrobbling
 
-use md5::{Digest, Md5};
 use reqwest::Client;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::collections::BTreeMap;
 
 /// Deserialize integer (0/1) as boolean - Last.fm API returns subscriber as number
 fn deserialize_int_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
@@ -28,7 +26,6 @@ const LASTFM_API_URL: &str = "https://ws.audioscrobbler.com/2.0/";
 // 2. Runtime environment variables (for development with .env)
 // Note: Supports both LAST_FM_* and LASTFM_* naming conventions
 const DEFAULT_API_KEY: Option<&str> = option_env!("LAST_FM_API_KEY");
-const DEFAULT_API_SECRET: Option<&str> = option_env!("LAST_FM_API_SHARED_SECRET");
 
 /// Get API key from compile-time or runtime environment
 fn get_api_key() -> Option<String> {
@@ -36,14 +33,6 @@ fn get_api_key() -> Option<String> {
         .map(String::from)
         .or_else(|| std::env::var("LAST_FM_API_KEY").ok())
         .or_else(|| std::env::var("LASTFM_API_KEY").ok())
-}
-
-/// Get API secret from compile-time or runtime environment
-fn get_api_secret() -> Option<String> {
-    DEFAULT_API_SECRET
-        .map(String::from)
-        .or_else(|| std::env::var("LAST_FM_API_SHARED_SECRET").ok())
-        .or_else(|| std::env::var("LASTFM_API_SECRET").ok())
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
