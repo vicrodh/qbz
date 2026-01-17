@@ -545,6 +545,10 @@ pub fn run() {
             config::audio_settings::set_audio_exclusive_mode,
             config::audio_settings::set_audio_dac_passthrough,
             config::audio_settings::set_audio_sample_rate,
+            // Audio backend commands
+            commands::get_available_backends,
+            commands::get_devices_for_backend,
+            commands::get_alsa_plugins,
             // Download settings commands
             config::download_settings::get_download_settings,
             config::download_settings::set_download_root,

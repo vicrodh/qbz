@@ -2,6 +2,7 @@
 //!
 //! Exposes backend functionality to the frontend via IPC
 
+pub mod audio_backends;
 pub mod audio_diagnostics;
 pub mod auth;
 pub mod cache;
@@ -15,6 +16,7 @@ pub mod queue;
 pub mod search;
 pub mod share;
 
+pub use audio_backends::*;
 pub use audio_diagnostics::*;
 pub use auth::*;
 pub use cache::*;
