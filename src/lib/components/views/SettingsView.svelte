@@ -14,7 +14,6 @@
     type DownloadCacheStats
   } from '$lib/stores/downloadState';
   import { clearCache as clearLyricsCache } from '$lib/stores/lyricsStore';
-  import { getDevicePrettyName } from '$lib/utils/audioDeviceNames';
   import {
     getToastsEnabled,
     setToastsEnabled,
@@ -57,11 +56,6 @@
     current_size_bytes: number;
     max_size_bytes: number;
     fetching_count: number;
-  }
-
-  interface AudioDevice {
-    name: string;
-    is_default: boolean;
   }
 
   interface PipewireSink {
@@ -145,12 +139,20 @@
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  // Audio device state
-  let audioDevices = $state<AudioDevice[]>([]);
+  // Audio device state - use PipeWire sinks directly for friendly names
   let pipewireSinks = $state<PipewireSink[]>([]);
 
-  // Map of ALSA name -> PipeWire description (for pretty names)
-  const pipewireNameMap = $derived.by(() => {
+  // Map of description -> sink name (for looking up sink name when user selects)
+  const sinkDescriptionToName = $derived.by(() => {
+    const map = new Map<string, string>();
+    for (const sink of pipewireSinks) {
+      map.set(sink.description, sink.name);
+    }
+    return map;
+  });
+
+  // Map of sink name -> description (for displaying current selection)
+  const sinkNameToDescription = $derived.by(() => {
     const map = new Map<string, string>();
     for (const sink of pipewireSinks) {
       map.set(sink.name, sink.description);
@@ -158,28 +160,8 @@
     return map;
   });
 
-  // Get pretty name: prefer PipeWire description, fall back to heuristic
-  function getPrettyName(alsaName: string): string {
-    // Try PipeWire description first
-    const pwDesc = pipewireNameMap.get(alsaName);
-    if (pwDesc) return pwDesc;
-    // Fall back to heuristic
-    return getDevicePrettyName(alsaName);
-  }
-
-  // Map of pretty name -> raw name
-  const deviceNameMap = $derived.by(() => {
-    const map = new Map<string, string>();
-    map.set('System Default', 'System Default');
-    for (const d of audioDevices) {
-      const pretty = getPrettyName(d.name);
-      map.set(pretty, d.name);
-    }
-    return map;
-  });
-
-  // Options for dropdown (pretty names from PipeWire when available)
-  let audioDeviceOptions = $derived(['System Default', ...audioDevices.map(d => getPrettyName(d.name))]);
+  // Options for dropdown - use PipeWire descriptions directly (already friendly names)
+  let audioDeviceOptions = $derived(['System Default', ...pipewireSinks.map(s => s.description)]);
 
   // Theme mapping: display name -> data-theme value
   const themeMap: Record<string, string> = {
@@ -778,22 +760,11 @@
 
   async function loadAudioDevices() {
     try {
-      // Load both ALSA devices and PipeWire sinks in parallel
-      const [devices, sinks] = await Promise.all([
-        invoke<AudioDevice[]>('get_audio_devices'),
-        invoke<PipewireSink[]>('get_pipewire_sinks').catch(() => [] as PipewireSink[])
-      ]);
-
-      audioDevices = devices;
+      // Load PipeWire sinks - these have friendly descriptions already
+      const sinks = await invoke<PipewireSink[]>('get_pipewire_sinks').catch(() => [] as PipewireSink[]);
       pipewireSinks = sinks;
 
-      // Debug: log raw names and their pretty versions
-      console.log('[Audio] ALSA devices:', devices.map(d => d.name));
       console.log('[Audio] PipeWire sinks:', sinks.map(s => ({ name: s.name, desc: s.description })));
-      console.log('[Audio] Final device options:', devices.map(d => ({
-        raw: d.name,
-        pretty: getPrettyName(d.name)
-      })));
     } catch (err) {
       console.error('Failed to load audio devices:', err);
     }
@@ -802,9 +773,11 @@
   async function loadAudioSettings() {
     try {
       const settings = await invoke<AudioSettings>('get_audio_settings');
-      // Convert raw name to pretty name for display (uses PipeWire when available)
+      // Convert stored sink name to description for display
       if (settings.output_device) {
-        outputDevice = getPrettyName(settings.output_device);
+        // Look up the friendly description from the sink name
+        const description = sinkNameToDescription.get(settings.output_device);
+        outputDevice = description ?? settings.output_device;
       } else {
         outputDevice = 'System Default';
       }
@@ -815,22 +788,26 @@
     }
   }
 
-  // Get current raw device name for reinit
-  function getCurrentRawDevice(): string | null {
-    const rawName = deviceNameMap.get(outputDevice) ?? outputDevice;
-    return rawName === 'System Default' ? null : rawName;
-  }
+  async function handleOutputDeviceChange(description: string) {
+    outputDevice = description;
 
-  async function handleOutputDeviceChange(prettyName: string) {
-    outputDevice = prettyName;
-    // Convert pretty name back to raw name for saving
-    const rawName = deviceNameMap.get(prettyName) ?? prettyName;
-    const deviceToUse = rawName === 'System Default' ? null : rawName;
+    // Convert description back to sink name for storage
+    const sinkName = sinkDescriptionToName.get(description);
+    const deviceToStore = description === 'System Default' ? null : sinkName;
+
     try {
-      await invoke('set_audio_output_device', { device: deviceToUse });
-      // Reinitialize audio to apply the change immediately
-      await invoke('reinit_audio_device', { device: deviceToUse });
-      console.log('Audio output device changed and reinitialized:', rawName, '(displayed as:', prettyName, ')');
+      // Save the preference
+      await invoke('set_audio_output_device', { device: deviceToStore });
+
+      // If a specific device was selected, set it as the PipeWire default
+      if (sinkName) {
+        await invoke('set_pipewire_default_sink', { sinkName });
+      }
+
+      // Reinitialize audio to use the new default
+      await invoke('reinit_audio_device', { device: null });
+
+      console.log('Audio output device changed:', description, '(sink:', sinkName ?? 'default', ')');
     } catch (err) {
       console.error('Failed to change audio output device:', err);
     }
@@ -840,8 +817,8 @@
     exclusiveMode = enabled;
     try {
       await invoke('set_audio_exclusive_mode', { enabled });
-      // Reinitialize audio to apply/release exclusive mode immediately
-      await invoke('reinit_audio_device', { device: getCurrentRawDevice() });
+      // Reinitialize audio to apply/release exclusive mode (uses PipeWire default)
+      await invoke('reinit_audio_device', { device: null });
       console.log('Exclusive mode changed and audio reinitialized:', enabled);
     } catch (err) {
       console.error('Failed to change exclusive mode:', err);
@@ -852,8 +829,8 @@
     dacPassthrough = enabled;
     try {
       await invoke('set_audio_dac_passthrough', { enabled });
-      // DAC passthrough may also require reinit for proper effect
-      await invoke('reinit_audio_device', { device: getCurrentRawDevice() });
+      // DAC passthrough may also require reinit for proper effect (uses PipeWire default)
+      await invoke('reinit_audio_device', { device: null });
       console.log('DAC passthrough changed and audio reinitialized:', enabled);
     } catch (err) {
       console.error('Failed to change DAC passthrough:', err);

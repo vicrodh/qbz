@@ -677,3 +677,34 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
     log::info!("Found {} audio output devices", sinks.len());
     Ok(sinks)
 }
+
+/// Set the default PipeWire/PulseAudio sink
+/// This is used when the user selects an audio device in settings
+#[cfg(target_os = "linux")]
+#[tauri::command]
+pub fn set_pipewire_default_sink(sink_name: String) -> Result<(), String> {
+    use std::process::Command;
+
+    log::info!("Command: set_pipewire_default_sink {}", sink_name);
+
+    let output = Command::new("pactl")
+        .args(["set-default-sink", &sink_name])
+        .output()
+        .map_err(|e| format!("Failed to run pactl: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("pactl set-default-sink failed: {}", stderr));
+    }
+
+    log::info!("Set default sink to: {}", sink_name);
+    Ok(())
+}
+
+/// Set the default sink (no-op on non-Linux)
+#[cfg(not(target_os = "linux"))]
+#[tauri::command]
+pub fn set_pipewire_default_sink(_sink_name: String) -> Result<(), String> {
+    log::info!("Command: set_pipewire_default_sink (no-op on non-Linux)");
+    Ok(())
+}
