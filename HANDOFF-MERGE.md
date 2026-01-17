@@ -4,7 +4,7 @@
 **Branch:** `feature/api-keys-refactor`
 **Status:** ✅ Ready for merge to `main`
 **Working Tree:** Clean (verified)
-**Commits:** 13 commits ahead of main
+**Commits:** 14 commits ahead of main
 
 ---
 
@@ -25,16 +25,34 @@ git status
 
 # Verify commits ready
 git log --oneline origin/main..HEAD
-# Should show 13 commits
+# Should show 14 commits
 ```
 
 **All checks passed:** ✅
 
 ---
 
-## 📋 Commits to Merge (13 total)
+## 🚨 POST-MERGE ACTION REQUIRED
+
+**After merging and testing, you MUST remove the API Keys UI from Settings.**
+
+**Why?** The UI is non-functional - it accepts user credentials but completely ignores them. All API requests go through the Cloudflare Workers proxy. Leaving this UI visible will confuse users and create unnecessary support requests.
+
+**What to do:**
+1. Merge this branch ✅
+2. Test all integrations ✅
+3. **Follow `POST-MERGE-CLEANUP.md`** (30-45 min, removes ~715 lines)
+4. Commit the cleanup
+5. Done!
+
+**Document:** See `POST-MERGE-CLEANUP.md` for step-by-step instructions with exact line numbers.
+
+---
+
+## 📋 Commits to Merge (14 total)
 
 ```
+59e7562 Add merge handoff document with copy-pasteable commands
 34ab753 Add post-merge cleanup instructions for API Keys UI
 7d07f9a Add merge preparation documentation
 81b65bd Add comprehensive CHANGELOG for API keys refactor
@@ -199,7 +217,13 @@ git worktree remove /home/blitzkriegfc/Personal/qbz/qbz-worktrees/feature-api-ke
 - Cloudflare Workers proxy deployed: `https://qbz-api-proxy.blitzkriegfc.workers.dev`
 - Database migration adds `catalog_number` column (automatic, non-destructive)
 - URI scheme `qbz://` registered for OAuth
-- ~715 lines of legacy code documented for removal (POST-MERGE-CLEANUP.md)
+
+### 🧹 Post-Merge Cleanup Required
+- ⚠️ **API Keys UI section in Settings must be removed** (non-functional)
+- 📄 Complete instructions in `POST-MERGE-CLEANUP.md`
+- 🗑️ Removes ~715 lines of dead code
+- ⏱️ Estimated time: 30-45 minutes
+- 🎯 **Do this within 1-2 days after merge**
 
 ---
 
@@ -212,11 +236,15 @@ git worktree remove /home/blitzkriegfc/Personal/qbz/qbz-worktrees/feature-api-ke
 - **Status:** Acceptable (transient error)
 - **User Experience:** Works on retry
 
-### 2. API Keys UI Still Visible
-- **Why:** Legacy code, avoids conflicts with audio config changes
-- **Status:** Documented for removal
-- **Action:** Follow `POST-MERGE-CLEANUP.md` after merge
-- **Note:** UI accepts input but credentials are ignored (all goes through proxy)
+### 2. 🚨 API Keys UI Still Visible (REQUIRES CLEANUP)
+- **Severity:** Medium (confusing to users)
+- **Why:** Legacy code left to avoid merge conflicts with audio config changes
+- **Status:** **MUST be removed after merge** (see POST-MERGE-CLEANUP.md)
+- **Impact:** Users see non-functional settings section
+- **What it does:** Accepts input but credentials are completely ignored
+- **Reality:** All requests go through Cloudflare Workers proxy
+- **Action Required:** Follow `POST-MERGE-CLEANUP.md` within 1-2 days of merge
+- **Estimated effort:** 30-45 minutes, removes ~715 lines of dead code
 
 ---
 
@@ -403,10 +431,60 @@ curl -s https://qbz-api-proxy.blitzkriegfc.workers.dev | grep service
 
 ## 🎯 Next Steps After Merge
 
-1. ✅ **Immediate:** Test all integrations (checklist above)
-2. 📢 **Within 24h:** Announce release with release notes
-3. 🧹 **When convenient:** Follow `POST-MERGE-CLEANUP.md` to remove API Keys UI
-4. 🚀 **Future:** Submit to Flathub!
+### Immediate (Required)
+1. ✅ **Test all integrations** - Use checklist above (critical)
+
+### Short-term (Within 1-2 days)
+2. 🧹 **REMOVE API Keys UI** - Follow `POST-MERGE-CLEANUP.md`
+   - **Why:** UI is non-functional (accepts input but ignores it)
+   - **Impact:** Removes ~715 lines of confusing dead code
+   - **Time:** 30-45 minutes
+   - **File:** See detailed instructions in `POST-MERGE-CLEANUP.md`
+   - **Note:** Left in this merge to avoid conflicts with audio config changes
+
+3. 📢 **Announce release** - Use release notes template above
+
+### Future
+4. 🚀 **Submit to Flathub** - Now possible with no embedded secrets!
+
+---
+
+## ⚠️ IMPORTANT: API Keys UI Cleanup
+
+**The API Keys section in Settings must be removed after merge.**
+
+**Current State:**
+- ✅ UI exists and looks functional
+- ❌ User can enter credentials
+- ❌ Credentials are saved to state
+- ❌ **BUT credentials are completely ignored**
+- ❌ All requests go through proxy (user keys never used)
+
+**Why it's confusing to users:**
+- Promises functionality that doesn't work
+- Makes users think they need to configure something
+- Wastes support time explaining "it doesn't actually do anything"
+
+**Action Required:**
+```bash
+# After merge and testing, run:
+cd /home/blitzkriegfc/Personal/qbz/qbz-nix
+
+# Follow step-by-step instructions in:
+cat POST-MERGE-CLEANUP.md
+
+# Creates one commit removing ~715 lines of dead code
+# Estimated time: 30-45 minutes
+```
+
+**What gets removed:**
+- `src-tauri/src/api_keys.rs` - Entire module (175 lines)
+- Settings UI section - API Keys collapsible section (~350 lines)
+- Command registrations - 10 Tauri commands
+- Provider parameters - Unused `ApiKeysState` params in 11 files
+- Translations - API Keys strings in en.json and es.json
+
+**Document:** `POST-MERGE-CLEANUP.md` has exact line numbers and before/after code.
 
 ---
 
@@ -417,6 +495,7 @@ curl -s https://qbz-api-proxy.blitzkriegfc.workers.dev | grep service
 - CHANGELOG files will be in main after merge
 - No user data affected by this merge
 - All changes are backward compatible
+- **API Keys UI removal is documented but not automated** (manual cleanup required)
 
 ---
 
@@ -425,3 +504,5 @@ curl -s https://qbz-api-proxy.blitzkriegfc.workers.dev | grep service
 **Status:** ✅ READY TO MERGE
 
 🚀 **You're all set! Just run the merge commands above.**
+
+⚠️ **Don't forget:** Remove API Keys UI after testing (see POST-MERGE-CLEANUP.md)
