@@ -7,7 +7,6 @@ use std::sync::Arc;
 use tauri::State;
 use tokio::sync::Mutex;
 
-use crate::api_keys::ApiKeysState;
 use crate::discogs::DiscogsClient;
 use crate::library::{
     cue_to_tracks, get_artwork_cache_dir, CueParser, LibraryDatabase, LibraryFolder, LibraryScanner, LibraryStats,
@@ -1188,21 +1187,11 @@ pub async fn playlist_increment_play_count(
 
 // === Discogs Artwork ===
 
-/// Check if Discogs credentials are configured (embedded or user-provided)
+/// Check if Discogs credentials are configured (proxy handles credentials)
 #[tauri::command]
-pub async fn discogs_has_credentials(
-    api_keys: State<'_, ApiKeysState>,
-) -> Result<bool, String> {
-    // Check user-provided credentials first
-    let keys = api_keys.lock().await;
-    if keys.discogs.is_set() {
-        return Ok(true);
-    }
-    drop(keys);
-
-    // Fall back to embedded/env credentials
-    let client = DiscogsClient::new();
-    Ok(client.has_credentials())
+pub async fn discogs_has_credentials() -> Result<bool, String> {
+    // Proxy always provides credentials
+    Ok(true)
 }
 
 /// Fetch missing artwork from Discogs for albums without artwork
@@ -1210,21 +1199,11 @@ pub async fn discogs_has_credentials(
 #[tauri::command]
 pub async fn library_fetch_missing_artwork(
     state: State<'_, LibraryState>,
-    api_keys: State<'_, ApiKeysState>,
 ) -> Result<u32, String> {
     log::info!("Command: library_fetch_missing_artwork");
 
-    // Get user-provided credentials if available
-    let keys = api_keys.lock().await;
-    let discogs = DiscogsClient::with_user_credentials(
-        keys.discogs.client_id.clone(),
-        keys.discogs.client_secret.clone(),
-    );
-    drop(keys);
-
-    if !discogs.has_credentials() {
-        return Err("Discogs credentials not configured".to_string());
-    }
+    // Get Discogs client (proxy handles credentials)
+    let discogs = DiscogsClient::new();
 
     let artwork_cache = get_artwork_cache_dir();
     let mut updated_count = 0u32;
@@ -1263,21 +1242,11 @@ pub async fn library_fetch_album_artwork(
     artist: String,
     album: String,
     state: State<'_, LibraryState>,
-    api_keys: State<'_, ApiKeysState>,
 ) -> Result<Option<String>, String> {
     log::info!("Command: library_fetch_album_artwork {} - {}", artist, album);
 
-    // Get user-provided credentials if available
-    let keys = api_keys.lock().await;
-    let discogs = DiscogsClient::with_user_credentials(
-        keys.discogs.client_id.clone(),
-        keys.discogs.client_secret.clone(),
-    );
-    drop(keys);
-
-    if !discogs.has_credentials() {
-        return Err("Discogs credentials not configured".to_string());
-    }
+    // Get Discogs client (proxy handles credentials)
+    let discogs = DiscogsClient::new();
 
     let artwork_cache = get_artwork_cache_dir();
 
@@ -1335,21 +1304,11 @@ pub async fn library_set_album_artwork(
 #[tauri::command]
 pub async fn discogs_search_artist(
     query: String,
-    api_keys: State<'_, ApiKeysState>,
 ) -> Result<crate::discogs::SearchResponse, String> {
     log::info!("Command: discogs_search_artist query={}", query);
 
-    // Get user-provided credentials if available
-    let keys = api_keys.lock().await;
-    let discogs = DiscogsClient::with_user_credentials(
-        keys.discogs.client_id.clone(),
-        keys.discogs.client_secret.clone(),
-    );
-    drop(keys);
-
-    if !discogs.has_credentials() {
-        return Err("Discogs credentials not configured".to_string());
-    }
+    // Get Discogs client (proxy handles credentials)
+    let discogs = DiscogsClient::new();
 
     discogs.search_artist(&query).await
 }

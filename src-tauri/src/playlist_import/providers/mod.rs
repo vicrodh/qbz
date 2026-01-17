@@ -40,21 +40,19 @@ pub fn detect_provider(url: &str) -> Result<ProviderKind, PlaylistImportError> {
     Err(PlaylistImportError::UnsupportedProvider(url.to_string()))
 }
 
-/// Fetch playlist with optional user-provided credentials
+/// Fetch playlist (proxy handles credentials)
 pub async fn fetch_playlist(
     kind: ProviderKind,
-    spotify_creds: Option<ProviderCredentials>,
-    tidal_creds: Option<ProviderCredentials>,
 ) -> Result<ImportPlaylist, PlaylistImportError> {
     match kind {
         ProviderKind::Spotify { playlist_id } => {
-            spotify::fetch_playlist(&playlist_id, spotify_creds).await
+            spotify::fetch_playlist(&playlist_id).await
         }
         ProviderKind::AppleMusic { storefront, playlist_id } => {
             apple::fetch_playlist(&storefront, &playlist_id).await
         }
         ProviderKind::Tidal { playlist_id } => {
-            tidal::fetch_playlist(&playlist_id, tidal_creds).await
+            tidal::fetch_playlist(&playlist_id).await
         }
         ProviderKind::Deezer { playlist_id } => deezer::fetch_playlist(&playlist_id).await,
     }

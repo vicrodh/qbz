@@ -38,9 +38,8 @@ pub fn parse_playlist_id(url: &str) -> Option<String> {
 
 pub async fn fetch_playlist(
     playlist_id: &str,
-    user_creds: Option<ProviderCredentials>,
 ) -> Result<ImportPlaylist, PlaylistImportError> {
-    if let Ok(token) = get_app_token(user_creds).await {
+    if let Ok(token) = get_app_token().await {
         if let Ok(playlist) = fetch_playlist_with_token(playlist_id, &token).await {
             return Ok(playlist);
         }
@@ -249,8 +248,8 @@ async fn fetch_playlist_from_embed(playlist_id: &str) -> Result<ImportPlaylist, 
     })
 }
 
-async fn get_app_token(_user_creds: Option<ProviderCredentials>) -> Result<String, PlaylistImportError> {
-    // Proxy handles credentials - user_creds ignored (compatibility)
+async fn get_app_token() -> Result<String, PlaylistImportError> {
+    // Proxy handles credentials
     let url = format!("{}/token", SPOTIFY_PROXY_URL);
 
     let response: Value = reqwest::Client::builder()

@@ -345,12 +345,7 @@
       "connect": "Connect",
       "disconnect": "Disconnect",
       "scrobbling": "Scrobbling",
-      "configureApi": "Configure API",
-      "apiKeys": "API Keys",
-      "clientId": "Client ID",
-      "clientSecret": "Client Secret",
-      "consumerKey": "Consumer Key",
-      "consumerSecret": "Consumer Secret"
+      "configureApi": "Configure API"
     },
     "storage": {
       "title": "Storage",

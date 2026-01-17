@@ -66,14 +66,6 @@ struct ReleaseImage {
 impl DiscogsClient {
     /// Create a new Discogs client (proxy handles credentials)
     pub fn new() -> Self {
-        Self::with_user_credentials(None, None)
-    }
-
-    /// Create a new Discogs client - compatibility method (proxy handles credentials)
-    pub fn with_user_credentials(
-        _user_key: Option<String>,
-        _user_secret: Option<String>,
-    ) -> Self {
         let mut headers = reqwest::header::HeaderMap::new();
         headers.insert(
             reqwest::header::USER_AGENT,

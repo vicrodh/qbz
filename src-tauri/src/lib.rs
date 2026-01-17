@@ -5,7 +5,6 @@
 
 pub mod api;
 pub mod api_cache;
-pub mod api_keys;
 pub mod audio;
 pub mod cache;
 pub mod cast;
@@ -166,8 +165,6 @@ pub fn run() {
     // Initialize download settings state
     let download_settings_state = config::download_settings::create_download_settings_state()
         .expect("Failed to initialize download settings");
-    // Initialize API keys state (for user-provided credentials)
-    let api_keys_state = api_keys::create_api_keys_state();
     // Initialize offline mode state
     let offline_state = offline::OfflineState::new()
         .expect("Failed to initialize offline state");
@@ -294,7 +291,6 @@ pub fn run() {
         .manage(session_store_state)
         .manage(audio_settings_state)
         .manage(download_settings_state)
-        .manage(api_keys_state)
         .manage(offline_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
@@ -558,17 +554,6 @@ pub fn run() {
             config::download_settings::set_download_root,
             config::download_settings::set_show_downloads_in_library,
             config::download_settings::validate_download_root,
-            // API keys commands (user-provided credentials)
-            api_keys::set_spotify_credentials,
-            api_keys::clear_spotify_credentials,
-            api_keys::has_spotify_user_credentials,
-            api_keys::set_tidal_credentials,
-            api_keys::clear_tidal_credentials,
-            api_keys::has_tidal_user_credentials,
-            api_keys::set_discogs_credentials,
-            api_keys::clear_discogs_credentials,
-            api_keys::has_discogs_user_credentials,
-            api_keys::get_embedded_credentials_status,
             // Offline mode commands
             offline::commands::get_offline_status,
             offline::commands::get_offline_settings,

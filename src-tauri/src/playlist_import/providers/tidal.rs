@@ -39,9 +39,8 @@ pub fn parse_playlist_id(url: &str) -> Option<String> {
 
 pub async fn fetch_playlist(
     playlist_id: &str,
-    user_creds: Option<ProviderCredentials>,
 ) -> Result<ImportPlaylist, PlaylistImportError> {
-    let token = get_app_token(user_creds).await?;
+    let token = get_app_token().await?;
     let country_code = env::var("TIDAL_COUNTRY_CODE").unwrap_or_else(|_| "US".to_string());
 
     let client = reqwest::Client::new();
@@ -331,8 +330,8 @@ fn parse_duration_ms(value: &str) -> Option<u64> {
     }
 }
 
-async fn get_app_token(_user_creds: Option<ProviderCredentials>) -> Result<String, PlaylistImportError> {
-    // Proxy handles credentials - user_creds ignored (compatibility)
+async fn get_app_token() -> Result<String, PlaylistImportError> {
+    // Proxy handles credentials
     let url = format!("{}/token", TIDAL_PROXY_URL);
 
     let response: Value = reqwest::Client::builder()
