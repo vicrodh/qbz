@@ -1,11 +1,10 @@
 //! Last.fm integration module
 //!
-//! Handles Last.fm authentication and scrobbling
+//! Handles Last.fm authentication and scrobbling via Cloudflare Workers proxy
 
-use md5::{Digest, Md5};
 use reqwest::Client;
 use serde::{Deserialize, Deserializer, Serialize};
-use std::collections::BTreeMap;
+use serde_json::json;
 
 /// Deserialize integer (0/1) as boolean - Last.fm API returns subscriber as number
 fn deserialize_int_bool<'de, D>(deserializer: D) -> Result<bool, D::Error>
@@ -20,23 +19,8 @@ where
     }
 }
 
-const LASTFM_API_URL: &str = "https://ws.audioscrobbler.com/2.0/";
-
-// Last.fm API credentials
-// Only API key can be embedded - secret must be user-provided for Flathub compliance
-// Checked in order:
-// 1. Compile-time environment variables (for release builds)
-// 2. Runtime environment variables (for development with .env)
-// Note: Supports both LAST_FM_* and LASTFM_* naming conventions
-const DEFAULT_API_KEY: Option<&str> = option_env!("LAST_FM_API_KEY");
-
-/// Get API key from compile-time or runtime environment
-fn get_api_key() -> Option<String> {
-    DEFAULT_API_KEY
-        .map(String::from)
-        .or_else(|| std::env::var("LAST_FM_API_KEY").ok())
-        .or_else(|| std::env::var("LASTFM_API_KEY").ok())
-}
+// Cloudflare Workers proxy URL - handles API credentials and signature generation
+const LASTFM_PROXY_URL: &str = "https://qbz-api-proxy.blitzkriegfc.workers.dev/lastfm";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LastFmSession {
@@ -54,6 +38,8 @@ struct AuthGetSessionResponse {
 #[derive(Debug, Deserialize)]
 struct AuthGetTokenResponse {
     token: String,
+    #[serde(rename = "authUrl")]
+    auth_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,37 +50,36 @@ enum LastFmResponse<T> {
 }
 
 /// Last.fm API client
+/// Uses Cloudflare Workers proxy to handle API credentials and signature generation
 pub struct LastFmClient {
     client: Client,
-    api_key: String,
-    api_secret: String,
     session_key: Option<String>,
 }
 
 impl Default for LastFmClient {
     fn default() -> Self {
-        // API key can be embedded, but secret must be user-provided
-        Self::new(
-            get_api_key().unwrap_or_default(),
-            String::new(), // Empty secret - user must provide via set_credentials
-        )
+        Self::new()
     }
 }
 
 impl LastFmClient {
-    /// Check if embedded API key is available
-    /// Note: API secret is never embedded and must be user-provided
+    /// Check if embedded credentials are available (always true - proxy handles them)
     pub fn has_embedded_credentials() -> bool {
-        get_api_key().is_some()
+        true
     }
-}
 
-impl LastFmClient {
-    pub fn new(api_key: String, api_secret: String) -> Self {
+    pub fn new() -> Self {
+        let mut headers = reqwest::header::HeaderMap::new();
+        headers.insert(
+            reqwest::header::USER_AGENT,
+            reqwest::header::HeaderValue::from_static("QBZ/1.0.0"),
+        );
+
         Self {
-            client: Client::new(),
-            api_key,
-            api_secret,
+            client: Client::builder()
+                .default_headers(headers)
+                .build()
+                .unwrap_or_else(|_| Client::new()),
             session_key: None,
         }
     }
@@ -104,61 +89,28 @@ impl LastFmClient {
     }
 
     pub fn is_authenticated(&self) -> bool {
-        self.session_key.is_some() && !self.api_key.is_empty()
+        self.session_key.is_some()
     }
 
+    /// Compatibility: proxy handles credentials, this is a no-op
     pub fn has_credentials(&self) -> bool {
-        !self.api_key.is_empty() && !self.api_secret.is_empty()
+        true
     }
 
-    pub fn set_credentials(&mut self, api_key: String, api_secret: String) {
-        self.api_key = api_key;
-        self.api_secret = api_secret;
+    /// Compatibility: proxy handles credentials, this is a no-op
+    pub fn set_credentials(&mut self, _api_key: String, _api_secret: String) {
+        // No-op: proxy handles credentials
     }
 
-    /// Generate API signature for authenticated requests
-    fn generate_signature(&self, params: &BTreeMap<&str, &str>) -> String {
-        let mut sig_string = String::new();
-        for (key, value) in params {
-            sig_string.push_str(key);
-            sig_string.push_str(value);
-        }
-        sig_string.push_str(&self.api_secret);
-
-        let mut hasher = Md5::new();
-        hasher.update(sig_string.as_bytes());
-        format!("{:x}", hasher.finalize())
-    }
-
-    /// Get authorization URL for user to visit
-    pub fn get_auth_url(&self, token: &str) -> String {
-        format!(
-            "https://www.last.fm/api/auth/?api_key={}&token={}",
-            self.api_key, token
-        )
-    }
-
-    /// Get a request token for authentication
-    pub async fn get_token(&self) -> Result<String, String> {
-        if !self.has_credentials() {
-            return Err("Last.fm API credentials not configured".to_string());
-        }
-
-        let mut params = BTreeMap::new();
-        params.insert("method", "auth.getToken");
-        params.insert("api_key", &self.api_key);
-
-        let sig = self.generate_signature(&params);
+    /// Get a request token and authorization URL for authentication
+    /// Returns: (token, auth_url)
+    pub async fn get_token(&self) -> Result<(String, String), String> {
+        let url = format!("{}/auth.getToken", LASTFM_PROXY_URL);
 
         let response = self
             .client
-            .get(LASTFM_API_URL)
-            .query(&[
-                ("method", "auth.getToken"),
-                ("api_key", &self.api_key),
-                ("api_sig", &sig),
-                ("format", "json"),
-            ])
+            .post(&url)
+            .json(&json!({}))
             .send()
             .await
             .map_err(|e| format!("Failed to get token: {}", e))?;
@@ -169,37 +121,26 @@ impl LastFmClient {
             .map_err(|e| format!("Failed to parse response: {}", e))?;
 
         match data {
-            LastFmResponse::Success(r) => Ok(r.token),
+            LastFmResponse::Success(r) => {
+                let auth_url = r.auth_url.unwrap_or_else(|| {
+                    format!("https://www.last.fm/api/auth/?token={}", r.token)
+                });
+                Ok((r.token, auth_url))
+            }
             LastFmResponse::Error { message, .. } => Err(message),
         }
     }
 
     /// Get session key after user has authorized
     pub async fn get_session(&mut self, token: &str) -> Result<LastFmSession, String> {
-        if !self.has_credentials() {
-            return Err("Last.fm API credentials not configured".to_string());
-        }
-
         log::info!("Getting Last.fm session with token: {}...", &token[..token.len().min(8)]);
 
-        let mut params = BTreeMap::new();
-        params.insert("method", "auth.getSession");
-        params.insert("api_key", &self.api_key);
-        params.insert("token", token);
-
-        let sig = self.generate_signature(&params);
-        log::debug!("Generated signature for auth.getSession");
+        let url = format!("{}/auth.getSession", LASTFM_PROXY_URL);
 
         let response = self
             .client
-            .get(LASTFM_API_URL)
-            .query(&[
-                ("method", "auth.getSession"),
-                ("api_key", &self.api_key),
-                ("token", token),
-                ("api_sig", &sig),
-                ("format", "json"),
-            ])
+            .post(&url)
+            .json(&json!({ "token": token }))
             .send()
             .await
             .map_err(|e| format!("Failed to get session: {}", e))?;
@@ -240,40 +181,23 @@ impl LastFmClient {
             .as_ref()
             .ok_or("Not authenticated with Last.fm")?;
 
-        let timestamp_str = timestamp.to_string();
-        let api_key = &self.api_key;
+        let url = format!("{}/track.scrobble", LASTFM_PROXY_URL);
 
-        let mut params = BTreeMap::new();
-        params.insert("method", "track.scrobble");
-        params.insert("api_key", api_key.as_str());
-        params.insert("sk", session_key.as_str());
-        params.insert("artist", artist);
-        params.insert("track", track);
-        params.insert("timestamp", &timestamp_str);
+        let mut body = json!({
+            "sk": session_key,
+            "artist": artist,
+            "track": track,
+            "timestamp": timestamp.to_string(),
+        });
+
         if let Some(album_name) = album {
-            params.insert("album", album_name);
-        }
-
-        let sig = self.generate_signature(&params);
-
-        let mut form_params = vec![
-            ("method", "track.scrobble"),
-            ("api_key", api_key.as_str()),
-            ("sk", session_key.as_str()),
-            ("artist", artist),
-            ("track", track),
-            ("timestamp", &timestamp_str),
-            ("api_sig", &sig),
-            ("format", "json"),
-        ];
-        if let Some(album_name) = album {
-            form_params.push(("album", album_name));
+            body["album"] = json!(album_name);
         }
 
         let response = self
             .client
-            .post(LASTFM_API_URL)
-            .form(&form_params)
+            .post(&url)
+            .json(&body)
             .send()
             .await
             .map_err(|e| format!("Failed to scrobble: {}", e))?;
@@ -299,37 +223,22 @@ impl LastFmClient {
             .as_ref()
             .ok_or("Not authenticated with Last.fm")?;
 
-        let api_key = &self.api_key;
+        let url = format!("{}/track.updateNowPlaying", LASTFM_PROXY_URL);
 
-        let mut params = BTreeMap::new();
-        params.insert("method", "track.updateNowPlaying");
-        params.insert("api_key", api_key.as_str());
-        params.insert("sk", session_key.as_str());
-        params.insert("artist", artist);
-        params.insert("track", track);
+        let mut body = json!({
+            "sk": session_key,
+            "artist": artist,
+            "track": track,
+        });
+
         if let Some(album_name) = album {
-            params.insert("album", album_name);
-        }
-
-        let sig = self.generate_signature(&params);
-
-        let mut form_params = vec![
-            ("method", "track.updateNowPlaying"),
-            ("api_key", api_key.as_str()),
-            ("sk", session_key.as_str()),
-            ("artist", artist),
-            ("track", track),
-            ("api_sig", &sig),
-            ("format", "json"),
-        ];
-        if let Some(album_name) = album {
-            form_params.push(("album", album_name));
+            body["album"] = json!(album_name);
         }
 
         let response = self
             .client
-            .post(LASTFM_API_URL)
-            .form(&form_params)
+            .post(&url)
+            .json(&body)
             .send()
             .await
             .map_err(|e| format!("Failed to update now playing: {}", e))?;

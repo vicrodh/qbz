@@ -50,13 +50,8 @@ pub async fn lastfm_get_auth_url(state: State<'_, AppState>) -> Result<(String, 
     log::info!("Command: lastfm_get_auth_url");
     let client = state.lastfm.lock().await;
 
-    if !client.has_credentials() {
-        return Err("Last.fm API credentials not configured. Please set API key and secret in settings.".to_string());
-    }
-
-    let token = client.get_token().await?;
-    let url = client.get_auth_url(&token);
-    Ok((token, url))
+    // Proxy handles credentials, always available
+    client.get_token().await
 }
 
 /// Complete Last.fm authentication with token

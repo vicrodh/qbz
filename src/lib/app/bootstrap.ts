@@ -47,19 +47,9 @@ export async function applySavedZoom(): Promise<void> {
  */
 export async function restoreLastfmSession(): Promise<void> {
   try {
-    const savedApiKey = localStorage.getItem('qbz-lastfm-api-key');
-    const savedApiSecret = localStorage.getItem('qbz-lastfm-api-secret');
     const savedSessionKey = localStorage.getItem('qbz-lastfm-session-key');
 
-    // Restore credentials if user-provided
-    if (savedApiKey && savedApiSecret) {
-      await invoke('lastfm_set_credentials', {
-        apiKey: savedApiKey,
-        apiSecret: savedApiSecret
-      });
-    }
-
-    // Restore session if available
+    // Restore session if available (proxy handles credentials)
     if (savedSessionKey) {
       await invoke('lastfm_set_session', { sessionKey: savedSessionKey });
       console.log('Last.fm session restored on startup');
