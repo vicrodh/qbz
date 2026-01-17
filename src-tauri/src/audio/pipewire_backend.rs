@@ -122,30 +122,52 @@ impl AudioBackend for PipeWireBackend {
         &self,
         config: &BackendConfig,
     ) -> BackendResult<(OutputStream, OutputStreamHandle)> {
-        // CRITICAL: Set PULSE_SINK environment variable BEFORE creating new host
-        // This tells PulseAudio/PipeWire which sink to use for THIS process only
-        if let Some(device_id) = &config.device_id {
-            log::info!("[PipeWire Backend] Setting PULSE_SINK={}", device_id);
-            std::env::set_var("PULSE_SINK", device_id);
+        let target_sink = config.device_id.clone();
 
-            // Verify it was set correctly
-            match std::env::var("PULSE_SINK") {
-                Ok(val) => log::info!("[PipeWire Backend] ✓ PULSE_SINK confirmed: {}", val),
-                Err(e) => log::error!("[PipeWire Backend] ✗ PULSE_SINK verification failed: {:?}", e),
-            }
+        // Save current default sink (to restore later)
+        let original_default = if target_sink.is_some() {
+            Command::new("pactl")
+                .args(["get-default-sink"])
+                .output()
+                .ok()
+                .and_then(|o| {
+                    if o.status.success() {
+                        String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+                    } else {
+                        None
+                    }
+                })
         } else {
-            // Clear PULSE_SINK to use system default
-            log::info!("[PipeWire Backend] Clearing PULSE_SINK (using system default)");
-            std::env::remove_var("PULSE_SINK");
+            None
+        };
+
+        // Temporarily set default sink to target (if specified)
+        if let Some(sink_name) = &target_sink {
+            log::info!("[PipeWire Backend] Temporarily setting default sink to: {}", sink_name);
+
+            let set_result = Command::new("pactl")
+                .args(["set-default-sink", sink_name])
+                .output();
+
+            match set_result {
+                Ok(output) if output.status.success() => {
+                    log::info!("[PipeWire Backend] ✓ Default sink changed to {}", sink_name);
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::warn!("[PipeWire Backend] Failed to set default sink: {}", stderr);
+                }
+                Err(e) => {
+                    log::warn!("[PipeWire Backend] Error executing pactl set-default-sink: {}", e);
+                }
+            }
         }
 
-        // CRITICAL: Create a NEW host AFTER setting PULSE_SINK
-        // The host connects to PulseAudio/PipeWire when created and reads PULSE_SINK at that time
-        log::info!("[PipeWire Backend] Creating fresh CPAL host to pick up PULSE_SINK...");
+        // Create a NEW host (will use current default sink)
+        log::info!("[PipeWire Backend] Creating fresh CPAL host...");
         let fresh_host = rodio::cpal::default_host();
 
-        // Find the "pulse" or "pipewire" CPAL device from the fresh host
-        // These are ALSA PCM devices that route to PulseAudio/PipeWire
+        // Find the "pulse" or "pipewire" CPAL device
         let device = fresh_host
             .output_devices()
             .map_err(|e| format!("Failed to enumerate CPAL devices: {}", e))?
@@ -162,12 +184,33 @@ impl AudioBackend for PipeWireBackend {
         let device_name = device.name().unwrap_or_else(|_| "unknown".to_string());
         log::info!("[PipeWire Backend] Using CPAL device: {}", device_name);
 
-        // Create output stream
-        // CPAL will route to the sink specified in PULSE_SINK
+        // Create output stream (will route to current default sink)
         let stream = OutputStream::try_from_device(&device)
             .map_err(|e| format!("Failed to create output stream: {}", e))?;
 
         log::info!("[PipeWire Backend] ✓ Output stream created successfully");
+
+        // Restore original default sink (if we changed it)
+        if let Some(original) = original_default {
+            log::info!("[PipeWire Backend] Restoring original default sink: {}", original);
+
+            let restore_result = Command::new("pactl")
+                .args(["set-default-sink", &original])
+                .output();
+
+            match restore_result {
+                Ok(output) if output.status.success() => {
+                    log::info!("[PipeWire Backend] ✓ Default sink restored to {}", original);
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::warn!("[PipeWire Backend] Failed to restore default sink: {}", stderr);
+                }
+                Err(e) => {
+                    log::warn!("[PipeWire Backend] Error restoring default sink: {}", e);
+                }
+            }
+        }
 
         Ok(stream)
     }
