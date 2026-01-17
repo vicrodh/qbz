@@ -157,7 +157,6 @@
     class:active={dacBadgeState === 'active'}
     class:warning={dacBadgeState === 'warning'}
     class:off={dacBadgeState === 'off'}
-    title={showTooltips ? dacTooltip : undefined}
   >
     <span class="badge-label">DAC</span>
   </div>
@@ -166,23 +165,58 @@
   <div
     class="badge"
     class:active={exclusiveModeActive}
-    title={showTooltips ? (exclusiveModeActive ? 'Exclusive Mode active' : 'Exclusive Mode inactive') : undefined}
   >
     <span class="badge-label">EXC</span>
   </div>
 
-  <!-- Device Tooltip on hover -->
+  <!-- Unified Tooltip on hover -->
   {#if isHovering && showTooltips}
     <div class="device-tooltip">
-      <div class="tooltip-label">Output Device</div>
-      <div class="tooltip-device">{prettyDeviceName}</div>
-      {#if currentDevice && currentDevice !== prettyDeviceName}
-        <div class="tooltip-raw">{currentDevice}</div>
-      {/if}
-      {#if currentVolume !== null}
-        <div class="tooltip-volume">
-          <span class="volume-label">Volume:</span>
-          <span class="volume-value">{currentVolume}%</span>
+      <!-- Output Device -->
+      <div class="tooltip-section">
+        <div class="tooltip-label">Output Device</div>
+        <div class="tooltip-device">{prettyDeviceName}</div>
+        {#if currentDevice && currentDevice !== prettyDeviceName}
+          <div class="tooltip-raw">{currentDevice}</div>
+        {/if}
+        {#if currentVolume !== null}
+          <div class="tooltip-volume">
+            <span class="volume-label">Volume:</span>
+            <span class="volume-value">{currentVolume}%</span>
+          </div>
+        {/if}
+      </div>
+
+      <!-- DAC Status -->
+      {#if settings?.dac_passthrough || settings?.exclusive_mode}
+        <div class="tooltip-section">
+          <div class="tooltip-label">Audio Settings</div>
+          {#if settings.dac_passthrough}
+            <div class="tooltip-setting" class:warning={dacBadgeState === 'warning'}>
+              <span class="setting-icon" class:active={dacBadgeState === 'active'} class:warning={dacBadgeState === 'warning'}>●</span>
+              <span class="setting-text">
+                {#if dacBadgeState === 'warning'}
+                  ⚠ DAC Passthrough: Resampling detected
+                  {#if hardwareStatus?.hardware_sample_rate && samplingRate}
+                    <br><span class="setting-detail">{samplingRate} kHz → {(hardwareStatus.hardware_sample_rate / 1000).toFixed(1)} kHz</span>
+                  {/if}
+                {:else if dacBadgeState === 'active'}
+                  DAC Passthrough: Bit-perfect
+                  {#if hardwareStatus?.hardware_sample_rate}
+                    <br><span class="setting-detail">{(hardwareStatus.hardware_sample_rate / 1000).toFixed(1)} kHz</span>
+                  {/if}
+                {:else}
+                  DAC Passthrough: Off
+                {/if}
+              </span>
+            </div>
+          {/if}
+          {#if settings.exclusive_mode}
+            <div class="tooltip-setting">
+              <span class="setting-icon" class:active={exclusiveModeActive}>●</span>
+              <span class="setting-text">Exclusive Mode</span>
+            </div>
+          {/if}
         </div>
       {/if}
     </div>
@@ -311,5 +345,50 @@
     font-size: 11px;
     font-weight: 500;
     color: rgba(255, 255, 255, 0.8);
+  }
+
+  .tooltip-section {
+    margin-bottom: 8px;
+  }
+
+  .tooltip-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .tooltip-setting {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 11px;
+  }
+
+  .setting-icon {
+    font-size: 8px;
+    color: rgba(255, 255, 255, 0.3);
+    line-height: 1.4;
+  }
+
+  .setting-icon.active {
+    color: #22c55e;
+  }
+
+  .setting-icon.warning {
+    color: #eab308;
+  }
+
+  .setting-text {
+    color: rgba(255, 255, 255, 0.7);
+    line-height: 1.4;
+  }
+
+  .tooltip-setting.warning .setting-text {
+    color: #eab308;
+  }
+
+  .setting-detail {
+    font-size: 10px;
+    color: rgba(255, 255, 255, 0.5);
+    font-family: var(--font-mono, monospace);
   }
 </style>

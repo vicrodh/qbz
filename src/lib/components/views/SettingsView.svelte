@@ -795,6 +795,18 @@
       }
       exclusiveMode = settings.exclusive_mode;
       dacPassthrough = settings.dac_passthrough;
+
+      // Validate mutual exclusion: DAC Passthrough disables Gapless + Crossfade
+      if (dacPassthrough) {
+        if (gaplessPlayback) {
+          console.warn('DAC Passthrough and Gapless both enabled - disabling Gapless');
+          gaplessPlayback = false;
+        }
+        if (crossfade > 0) {
+          console.warn('DAC Passthrough and Crossfade both enabled - disabling Crossfade');
+          crossfade = 0;
+        }
+      }
     } catch (err) {
       console.error('Failed to load audio settings:', err);
     }
