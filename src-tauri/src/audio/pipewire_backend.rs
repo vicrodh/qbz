@@ -122,20 +122,31 @@ impl AudioBackend for PipeWireBackend {
         &self,
         config: &BackendConfig,
     ) -> BackendResult<(OutputStream, OutputStreamHandle)> {
-        // CRITICAL: Set PULSE_SINK environment variable
+        // CRITICAL: Set PULSE_SINK environment variable BEFORE creating new host
         // This tells PulseAudio/PipeWire which sink to use for THIS process only
         if let Some(device_id) = &config.device_id {
             log::info!("[PipeWire Backend] Setting PULSE_SINK={}", device_id);
             std::env::set_var("PULSE_SINK", device_id);
+
+            // Verify it was set correctly
+            match std::env::var("PULSE_SINK") {
+                Ok(val) => log::info!("[PipeWire Backend] ✓ PULSE_SINK confirmed: {}", val),
+                Err(e) => log::error!("[PipeWire Backend] ✗ PULSE_SINK verification failed: {:?}", e),
+            }
         } else {
             // Clear PULSE_SINK to use system default
             log::info!("[PipeWire Backend] Clearing PULSE_SINK (using system default)");
             std::env::remove_var("PULSE_SINK");
         }
 
-        // Find the "pulse" or "pipewire" CPAL device
+        // CRITICAL: Create a NEW host AFTER setting PULSE_SINK
+        // The host connects to PulseAudio/PipeWire when created and reads PULSE_SINK at that time
+        log::info!("[PipeWire Backend] Creating fresh CPAL host to pick up PULSE_SINK...");
+        let fresh_host = rodio::cpal::default_host();
+
+        // Find the "pulse" or "pipewire" CPAL device from the fresh host
         // These are ALSA PCM devices that route to PulseAudio/PipeWire
-        let device = self.host
+        let device = fresh_host
             .output_devices()
             .map_err(|e| format!("Failed to enumerate CPAL devices: {}", e))?
             .find(|d| {
@@ -156,7 +167,7 @@ impl AudioBackend for PipeWireBackend {
         let stream = OutputStream::try_from_device(&device)
             .map_err(|e| format!("Failed to create output stream: {}", e))?;
 
-        log::info!("[PipeWire Backend] Output stream created successfully");
+        log::info!("[PipeWire Backend] ✓ Output stream created successfully");
 
         Ok(stream)
     }
