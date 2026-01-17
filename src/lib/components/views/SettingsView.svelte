@@ -27,6 +27,7 @@
   import { setLocale, locale, t } from '$lib/i18n';
   import { get } from 'svelte/store';
   import MigrationModal from '../MigrationModal.svelte';
+  import { getDevicePrettyName } from '$lib/utils/audioDeviceNames';
   import {
     subscribe as subscribeOffline,
     getStatus as getOfflineStatus,
@@ -215,7 +216,17 @@
   let backendOptions = $derived(['Auto', ...availableBackends.filter(b => b.is_available).map(b => b.name)]);
 
   // Device options based on selected backend (derived)
-  let deviceOptions = $derived(['System Default', ...backendDevices.map(d => d.name)]);
+  // Apply pretty names for ALSA devices (PipeWire names pass through unchanged)
+  let deviceOptions = $derived(['System Default', ...backendDevices.map(d => getDevicePrettyName(d.name))]);
+
+  // Map pretty name -> device for lookup when user selects
+  let deviceByPrettyName = $derived.by(() => {
+    const map = new Map<string, AudioDevice>();
+    for (const device of backendDevices) {
+      map.set(getDevicePrettyName(device.name), device);
+    }
+    return map;
+  });
 
   // ALSA plugin options (derived)
   let alsaPluginOptions = $derived(alsaPlugins.map(p => p.name));
@@ -748,7 +759,7 @@
           // Set selected device from backend devices
           if (settings.output_device) {
             const device = backendDevices.find(d => d.id === settings.output_device);
-            outputDevice = device?.name ?? 'System Default';
+            outputDevice = device ? getDevicePrettyName(device.name) : 'System Default';
           }
         }
       } else {
@@ -896,8 +907,8 @@
   async function handleBackendDeviceChange(deviceName: string) {
     outputDevice = deviceName;
 
-    // Get device ID from backendDevices
-    const device = backendDevices.find(d => d.name === deviceName);
+    // Get device ID from backendDevices using pretty name mapping
+    const device = deviceByPrettyName.get(deviceName);
     const deviceId = deviceName === 'System Default' ? null : device?.id ?? null;
 
     try {
