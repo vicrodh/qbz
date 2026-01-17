@@ -157,6 +157,28 @@ impl AudioBackend for PipeWireBackend {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
 
+        // Force PipeWire to use the requested sample rate (for bit-perfect playback)
+        log::info!("[PipeWire Backend] Forcing sample rate to {}Hz via pw-metadata", config.sample_rate);
+        let metadata_result = Command::new("pw-metadata")
+            .args(["-n", "settings", "0", "clock.force-rate", &config.sample_rate.to_string()])
+            .output();
+
+        match metadata_result {
+            Ok(output) if output.status.success() => {
+                log::info!("[PipeWire Backend] ✓ Sample rate forced to {}Hz", config.sample_rate);
+            }
+            Ok(output) => {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                log::warn!("[PipeWire Backend] Failed to force sample rate: {}", stderr);
+            }
+            Err(e) => {
+                log::warn!("[PipeWire Backend] Error executing pw-metadata: {}", e);
+            }
+        }
+
+        // Wait for PipeWire to apply the sample rate change
+        std::thread::sleep(std::time::Duration::from_millis(300));
+
         // Create a NEW host (will use current default sink)
         log::info!("[PipeWire Backend] Creating fresh CPAL host...");
         let fresh_host = rodio::cpal::default_host();
