@@ -206,6 +206,25 @@
   let outputDevice = $state('System Default');
   let exclusiveMode = $state(false);
   let dacPassthrough = $state(false);
+  let selectedBackend = $state<string>('Auto');
+  let selectedAlsaPlugin = $state<string>('Hw (Direct Hardware)');
+
+  // Backend system state
+  let availableBackends = $state<BackendInfo[]>([]);
+  let backendDevices = $state<AudioDevice[]>([]);
+  let alsaPlugins = $state<AlsaPluginInfo[]>([]);
+
+  // Backend selector options (derived)
+  let backendOptions = $derived(['Auto', ...availableBackends.filter(b => b.is_available).map(b => b.name)]);
+
+  // Device options based on selected backend (derived)
+  let deviceOptions = $derived(['System Default', ...backendDevices.map(d => d.name)]);
+
+  // ALSA plugin options (derived)
+  let alsaPluginOptions = $derived(alsaPlugins.map(p => p.name));
+
+  // Show ALSA plugin selector only when ALSA backend is selected (derived)
+  let showAlsaPluginSelector = $derived(selectedBackend === 'ALSA Direct');
 
   // Playback settings
   let gaplessPlayback = $state(true);
@@ -310,7 +329,12 @@
     loadDownloadStats();
 
     // Load audio devices first (includes PipeWire sinks), then settings
-    loadAudioDevices().then(() => loadAudioSettings());
+    // Also load backends and ALSA plugins
+    Promise.all([
+      loadAudioDevices(),
+      loadBackends(),
+      loadAlsaPlugins()
+    ]).then(() => loadAudioSettings());
 
     // Load Last.fm state
     loadLastfmState();
@@ -763,6 +787,29 @@
     exclusive_mode: boolean;
     dac_passthrough: boolean;
     preferred_sample_rate: number | null;
+    backend_type: 'PipeWire' | 'Alsa' | 'Pulse' | null;
+    alsa_plugin: 'Hw' | 'PlugHw' | 'Pcm' | null;
+  }
+
+  interface BackendInfo {
+    backend_type: 'PipeWire' | 'Alsa' | 'Pulse';
+    name: string;
+    description: string;
+    is_available: boolean;
+  }
+
+  interface AudioDevice {
+    id: string;
+    name: string;
+    description: string | null;
+    is_default: boolean;
+    max_sample_rate: number | null;
+  }
+
+  interface AlsaPluginInfo {
+    plugin: 'Hw' | 'PlugHw' | 'Pcm';
+    name: string;
+    description: string;
   }
 
   // Helper to get the current selected device sink name (or null for system default)
@@ -790,6 +837,37 @@
     }
   }
 
+  async function loadBackends() {
+    try {
+      const backends = await invoke<BackendInfo[]>('get_available_backends');
+      availableBackends = backends;
+      console.log('[Audio] Available backends:', backends);
+    } catch (err) {
+      console.error('Failed to load backends:', err);
+    }
+  }
+
+  async function loadAlsaPlugins() {
+    try {
+      const plugins = await invoke<AlsaPluginInfo[]>('get_alsa_plugins');
+      alsaPlugins = plugins;
+      console.log('[Audio] ALSA plugins:', plugins);
+    } catch (err) {
+      console.error('Failed to load ALSA plugins:', err);
+    }
+  }
+
+  async function loadBackendDevices(backendType: 'PipeWire' | 'Alsa' | 'Pulse') {
+    try {
+      const devices = await invoke<AudioDevice[]>('get_devices_for_backend', { backendType });
+      backendDevices = devices;
+      console.log(`[Audio] Devices for ${backendType}:`, devices);
+    } catch (err) {
+      console.error(`Failed to load devices for ${backendType}:`, err);
+      backendDevices = [];
+    }
+  }
+
   async function loadAudioSettings() {
     try {
       const settings = await invoke<AudioSettings>('get_audio_settings');
@@ -803,6 +881,32 @@
       }
       exclusiveMode = settings.exclusive_mode;
       dacPassthrough = settings.dac_passthrough;
+
+      // Load backend and plugin settings
+      if (settings.backend_type) {
+        const backend = availableBackends.find(b => b.backend_type === settings.backend_type);
+        selectedBackend = backend?.name ?? 'Auto';
+
+        // Load devices for selected backend
+        if (settings.backend_type) {
+          await loadBackendDevices(settings.backend_type);
+
+          // Set selected device from backend devices
+          if (settings.output_device) {
+            const device = backendDevices.find(d => d.id === settings.output_device);
+            outputDevice = device?.name ?? 'System Default';
+          }
+        }
+      } else {
+        selectedBackend = 'Auto';
+      }
+
+      if (settings.alsa_plugin) {
+        const plugin = alsaPlugins.find(p => p.plugin === settings.alsa_plugin);
+        selectedAlsaPlugin = plugin?.name ?? 'Hw (Direct Hardware)';
+      } else {
+        selectedAlsaPlugin = 'Hw (Direct Hardware)';
+      }
 
       // Validate mutual exclusion: DAC Passthrough disables Gapless + Crossfade
       if (dacPassthrough) {
@@ -875,6 +979,70 @@
       console.log('[Audio] DAC passthrough changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change DAC passthrough:', err);
+    }
+  }
+
+  async function handleBackendChange(backendName: string) {
+    selectedBackend = backendName;
+
+    // Map UI name to backend type
+    const backend = availableBackends.find(b => b.name === backendName);
+    const backendType = backendName === 'Auto' ? null : backend?.backend_type ?? null;
+
+    try {
+      // Save backend preference
+      await invoke('set_audio_backend_type', { backendType });
+      console.log('[Audio] Backend changed:', backendName, '(type:', backendType ?? 'auto', ')');
+
+      // Load devices for new backend
+      if (backendType) {
+        await loadBackendDevices(backendType);
+        // Reset to default device when switching backends
+        outputDevice = 'System Default';
+        await invoke('set_audio_output_device', { device: null });
+      }
+
+      // Reinitialize audio
+      await invoke('reinit_audio_device', { device: null });
+    } catch (err) {
+      console.error('[Audio] Failed to change backend:', err);
+    }
+  }
+
+  async function handleAlsaPluginChange(pluginName: string) {
+    selectedAlsaPlugin = pluginName;
+
+    // Map UI name to plugin type
+    const pluginInfo = alsaPlugins.find(p => p.name === pluginName);
+    const plugin = pluginInfo?.plugin ?? null;
+
+    try {
+      await invoke('set_audio_alsa_plugin', { plugin });
+      console.log('[Audio] ALSA plugin changed:', pluginName, '(type:', plugin ?? 'none', ')');
+
+      // Reinitialize audio if ALSA backend is active
+      if (selectedBackend === 'ALSA Direct') {
+        const deviceName = getCurrentDeviceSinkName();
+        await invoke('reinit_audio_device', { device: deviceName });
+      }
+    } catch (err) {
+      console.error('[Audio] Failed to change ALSA plugin:', err);
+    }
+  }
+
+  async function handleBackendDeviceChange(deviceName: string) {
+    outputDevice = deviceName;
+
+    // Get device ID from backendDevices
+    const device = backendDevices.find(d => d.name === deviceName);
+    const deviceId = deviceName === 'System Default' ? null : device?.id ?? null;
+
+    try {
+      await invoke('set_audio_output_device', { device: deviceId });
+      await invoke('reinit_audio_device', { device: deviceId });
+      console.log('[Audio] Backend device changed:', deviceName, '(id:', deviceId ?? 'default', ')');
+    } catch (err) {
+      console.error('[Audio] Failed to change backend device:', err);
     }
   }
 
@@ -1172,18 +1340,48 @@
     </div>
     <div class="setting-row">
       <div class="label-with-tooltip">
-        <span class="setting-label">{$t('settings.audio.outputDevice')}</span>
-        <Tooltip text="Select your preferred audio output device. Changes take effect on app restart." />
+        <span class="setting-label">Audio Backend</span>
+        <Tooltip text="Choose audio system: Auto (recommended), PipeWire (modern), ALSA Direct (bit-perfect, exclusive), or PulseAudio (legacy)" />
       </div>
       <Dropdown
-        value={outputDevice}
-        options={audioDeviceOptions.length > 1 ? audioDeviceOptions : ['System Default']}
-        onchange={handleOutputDeviceChange}
+        value={selectedBackend}
+        options={backendOptions}
+        onchange={handleBackendChange}
         wide
         expandLeft
         compact
       />
     </div>
+    <div class="setting-row">
+      <div class="label-with-tooltip">
+        <span class="setting-label">{$t('settings.audio.outputDevice')}</span>
+        <Tooltip text="Select your preferred audio output device. Devices shown are from the selected backend." />
+      </div>
+      <Dropdown
+        value={outputDevice}
+        options={selectedBackend === 'Auto' ? (audioDeviceOptions.length > 1 ? audioDeviceOptions : ['System Default']) : deviceOptions}
+        onchange={selectedBackend === 'Auto' ? handleOutputDeviceChange : handleBackendDeviceChange}
+        wide
+        expandLeft
+        compact
+      />
+    </div>
+    {#if showAlsaPluginSelector}
+    <div class="setting-row">
+      <div class="label-with-tooltip">
+        <span class="setting-label">ALSA Plugin</span>
+        <Tooltip text="hw: Bit-perfect, exclusive. plughw: Auto-convert. pcm: Most compatible." />
+      </div>
+      <Dropdown
+        value={selectedAlsaPlugin}
+        options={alsaPluginOptions}
+        onchange={handleAlsaPluginChange}
+        wide
+        expandLeft
+        compact
+      />
+    </div>
+    {/if}
     <div class="setting-row">
       <div class="label-with-tooltip">
         <span class="setting-label">{$t('settings.audio.exclusiveMode')}</span>
