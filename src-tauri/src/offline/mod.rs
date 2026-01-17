@@ -437,10 +437,12 @@ impl OfflineState {
     }
 }
 
-/// Check network connectivity by attempting to reach Qobuz API
+/// Check network connectivity by attempting to reach Qobuz API.
+/// Uses a longer timeout (15s) and retries once before declaring offline
+/// to avoid false positives from temporary latency spikes.
 pub async fn check_network_connectivity() -> bool {
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(15))
         .build();
 
     let client = match client {
@@ -448,11 +450,27 @@ pub async fn check_network_connectivity() -> bool {
         Err(_) => return false,
     };
 
-    // Use HEAD request for minimal data transfer
-    match client.head("https://www.qobuz.com").send().await {
-        Ok(response) => response.status().is_success() || response.status().is_redirection(),
-        Err(_) => false,
+    // Try up to 2 times before declaring offline
+    for attempt in 1..=2 {
+        match client.head("https://www.qobuz.com").send().await {
+            Ok(response) => {
+                if response.status().is_success() || response.status().is_redirection() {
+                    return true;
+                }
+            }
+            Err(e) => {
+                log::warn!("Network check attempt {} failed: {}", attempt, e);
+            }
+        }
+
+        // Wait 2 seconds before retry
+        if attempt < 2 {
+            tokio::time::sleep(Duration::from_secs(2)).await;
+        }
     }
+
+    log::info!("Network connectivity check failed after 2 attempts");
+    false
 }
 
 // Tauri commands
