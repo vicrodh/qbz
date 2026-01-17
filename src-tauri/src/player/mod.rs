@@ -591,14 +591,16 @@ impl Player {
 
             // Helper to find and initialize audio device
             // Try backend system first, fall back to legacy CPAL
-            let init_device = |name: &Option<String>, state: &SharedState| -> Option<(OutputStream, rodio::OutputStreamHandle)> {
+            // Takes desired sample_rate and channels to maintain DAC passthrough
+            let init_device = |name: &Option<String>, state: &SharedState, sample_rate: u32, channels: u16| -> Option<(OutputStream, rodio::OutputStreamHandle)> {
                 // Try backend system if configured
                 if let Ok(settings) = thread_settings.lock() {
                     if settings.backend_type.is_some() {
-                        // Use a dummy sample rate/channels for reinit (will be set on next play)
-                        match try_init_stream_with_backend(&settings, 48000, 2) {
+                        // Use provided sample rate/channels to maintain DAC passthrough
+                        log::info!("Initializing backend system with {}Hz/{}ch", sample_rate, channels);
+                        match try_init_stream_with_backend(&settings, sample_rate, channels) {
                             Some(Ok(stream)) => {
-                                log::info!("Audio output initialized via backend system");
+                                log::info!("Audio output initialized via backend system at {}Hz", sample_rate);
                                 return Some(stream);
                             }
                             Some(Err(e)) => {
@@ -893,9 +895,12 @@ impl Player {
                                     drop(stream_opt.take());
                                     std::thread::sleep(Duration::from_millis(200));
 
-                                    *stream_opt = init_device(current_device_name, &thread_state);
+                                    // Use last known sample rate/channels to maintain DAC passthrough
+                                    let sr = current_sample_rate.unwrap_or(48000);
+                                    let ch = current_channels.unwrap_or(2);
+                                    *stream_opt = init_device(current_device_name, &thread_state, sr, ch);
                                     if stream_opt.is_some() {
-                                        log::info!("Audio stream auto-reinitialized successfully");
+                                        log::info!("Audio stream auto-reinitialized successfully at {}Hz", sr);
                                         *consecutive_sink_failures = 0;
                                         thread_state.set_stream_error(false);
                                     } else {
@@ -960,7 +965,11 @@ impl Player {
                             };
 
                             if stream_opt.is_none() {
-                                *stream_opt = init_device(current_device_name, &thread_state);
+                                // Use last known sample rate/channels to maintain DAC passthrough
+                                let sr = current_sample_rate.unwrap_or(48000);
+                                let ch = current_channels.unwrap_or(2);
+                                log::info!("Resume: reinitializing stream at {}Hz/{}ch", sr, ch);
+                                *stream_opt = init_device(current_device_name, &thread_state, sr, ch);
                             }
 
                             let Some(ref stream) = *stream_opt else {
@@ -1110,7 +1119,11 @@ impl Player {
                         std::thread::sleep(Duration::from_millis(100));
 
                         *current_device_name = new_device;
-                        *stream_opt = init_device(current_device_name, &thread_state);
+                        // Use last known sample rate/channels to maintain DAC passthrough
+                        let sr = current_sample_rate.unwrap_or(48000);
+                        let ch = current_channels.unwrap_or(2);
+                        log::info!("ReinitDevice: reinitializing at {}Hz/{}ch", sr, ch);
+                        *stream_opt = init_device(current_device_name, &thread_state, sr, ch);
 
                         if stream_opt.is_some() {
                             log::info!("Audio thread: device reinitialized successfully");
