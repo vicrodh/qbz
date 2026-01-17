@@ -793,20 +793,11 @@
   async function loadAudioSettings() {
     try {
       const settings = await invoke<AudioSettings>('get_audio_settings');
-      // Convert stored sink name to description for display
+      // Convert stored device name to description for display
       if (settings.output_device) {
-        // Look up the friendly description from the sink name
+        // Look up the friendly description from the device name
         const description = sinkNameToDescription.get(settings.output_device);
         outputDevice = description ?? settings.output_device;
-
-        // CRITICAL: Establish the saved device as PipeWire default on app start
-        // This ensures CPAL uses the correct device when playback begins
-        try {
-          await invoke('set_pipewire_default_sink', { sinkName: settings.output_device });
-          console.log('[Audio] Restored saved device as PipeWire default:', settings.output_device);
-        } catch (err) {
-          console.error('[Audio] Failed to set saved device as default:', err);
-        }
       } else {
         outputDevice = 'System Default';
       }
@@ -832,27 +823,22 @@
   async function handleOutputDeviceChange(description: string) {
     outputDevice = description;
 
-    // Convert description back to sink name for storage
-    const sinkName = sinkDescriptionToName.get(description);
-    const deviceToStore = description === 'System Default' ? null : sinkName;
+    // Convert description back to device name for storage
+    const deviceName = sinkDescriptionToName.get(description);
+    const deviceToStore = description === 'System Default' ? null : deviceName;
 
     try {
       // Save the preference
       await invoke('set_audio_output_device', { device: deviceToStore });
 
-      // CRITICAL: CPAL/Rodio cannot open PipeWire sinks by name directly
-      // We must set the sink as PipeWire default, then QBZ uses "default"
-      // This is a limitation of CPAL - it only sees ALSA devices, not PipeWire sinks
-      if (sinkName) {
-        await invoke('set_pipewire_default_sink', { sinkName });
-      }
+      // Reinitialize audio with the selected device
+      // CRITICAL: Pass the actual CPAL device name, not null
+      // CPAL can now find this device because we're using CPAL names
+      await invoke('reinit_audio_device', { device: deviceToStore });
 
-      // Reinitialize audio with default device (which now points to selected sink)
-      await invoke('reinit_audio_device', { device: null });
-
-      console.log('Audio output device changed:', description, '(sink:', sinkName ?? 'default', ')');
+      console.log('[Audio] Output device changed:', description, '(device:', deviceName ?? 'default', ')');
     } catch (err) {
-      console.error('Failed to change audio output device:', err);
+      console.error('[Audio] Failed to change audio output device:', err);
     }
   }
 
@@ -861,17 +847,12 @@
     try {
       await invoke('set_audio_exclusive_mode', { enabled });
 
-      // Restore the currently selected device as PipeWire default
-      const sinkName = getCurrentDeviceSinkName();
-      if (sinkName) {
-        await invoke('set_pipewire_default_sink', { sinkName });
-      }
-
-      // Reinitialize audio (uses PipeWire default)
-      await invoke('reinit_audio_device', { device: null });
-      console.log('Exclusive mode changed and audio reinitialized:', enabled);
+      // Reinitialize audio with currently selected device
+      const deviceName = getCurrentDeviceSinkName();
+      await invoke('reinit_audio_device', { device: deviceName });
+      console.log('[Audio] Exclusive mode changed:', enabled);
     } catch (err) {
-      console.error('Failed to change exclusive mode:', err);
+      console.error('[Audio] Failed to change exclusive mode:', err);
     }
   }
 
@@ -882,23 +863,18 @@
     if (enabled) {
       gaplessPlayback = false;
       crossfade = 0;
-      console.log('DAC passthrough enabled: disabled gapless playback and crossfade');
+      console.log('[Audio] DAC passthrough enabled: disabled gapless playback and crossfade');
     }
 
     try {
       await invoke('set_audio_dac_passthrough', { enabled });
 
-      // Restore the currently selected device as PipeWire default
-      const sinkName = getCurrentDeviceSinkName();
-      if (sinkName) {
-        await invoke('set_pipewire_default_sink', { sinkName });
-      }
-
-      // DAC passthrough may also require reinit for proper effect
-      await invoke('reinit_audio_device', { device: null });
-      console.log('DAC passthrough changed and audio reinitialized:', enabled);
+      // Reinitialize audio with currently selected device
+      const deviceName = getCurrentDeviceSinkName();
+      await invoke('reinit_audio_device', { device: deviceName });
+      console.log('[Audio] DAC passthrough changed:', enabled);
     } catch (err) {
-      console.error('Failed to change DAC passthrough:', err);
+      console.error('[Audio] Failed to change DAC passthrough:', err);
     }
   }
 
@@ -908,19 +884,15 @@
     // Auto-disable DAC passthrough if incompatible
     if (enabled && dacPassthrough) {
       dacPassthrough = false;
-      console.log('Gapless playback enabled: disabled DAC passthrough');
+      console.log('[Audio] Gapless playback enabled: disabled DAC passthrough');
       try {
         await invoke('set_audio_dac_passthrough', { enabled: false });
 
-        // Restore the currently selected device as PipeWire default
-        const sinkName = getCurrentDeviceSinkName();
-        if (sinkName) {
-          await invoke('set_pipewire_default_sink', { sinkName });
-        }
-
-        await invoke('reinit_audio_device', { device: null });
+        // Reinitialize audio with currently selected device
+        const deviceName = getCurrentDeviceSinkName();
+        await invoke('reinit_audio_device', { device: deviceName });
       } catch (err) {
-        console.error('Failed to disable DAC passthrough:', err);
+        console.error('[Audio] Failed to disable DAC passthrough:', err);
       }
     }
   }
@@ -931,19 +903,15 @@
     // Auto-disable DAC passthrough if crossfade > 0
     if (value > 0 && dacPassthrough) {
       dacPassthrough = false;
-      console.log('Crossfade enabled: disabled DAC passthrough');
+      console.log('[Audio] Crossfade enabled: disabled DAC passthrough');
       try {
         await invoke('set_audio_dac_passthrough', { enabled: false });
 
-        // Restore the currently selected device as PipeWire default
-        const sinkName = getCurrentDeviceSinkName();
-        if (sinkName) {
-          await invoke('set_pipewire_default_sink', { sinkName });
-        }
-
-        await invoke('reinit_audio_device', { device: null });
+        // Reinitialize audio with currently selected device
+        const deviceName = getCurrentDeviceSinkName();
+        await invoke('reinit_audio_device', { device: deviceName });
       } catch (err) {
-        console.error('Failed to disable DAC passthrough:', err);
+        console.error('[Audio] Failed to disable DAC passthrough:', err);
       }
     }
   }
