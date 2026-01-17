@@ -31,6 +31,7 @@ use symphonia::core::probe::Hint;
 use symphonia::default::{get_codecs, get_probe};
 
 use crate::api::{client::QobuzClient, models::Quality};
+use crate::audio::{AudioBackendType, BackendConfig, BackendManager};
 use crate::config::audio_settings::AudioSettings;
 
 /// Commands sent to the audio thread
@@ -350,6 +351,62 @@ fn create_output_stream_with_config(
         Err(e) => {
             log::error!("❌ Failed to create OutputStream at {}Hz: {}", sample_rate, e);
             Err(format!("Failed to create output stream: {}", e))
+        }
+    }
+}
+
+/// Try to create output stream using the backend system (if configured)
+/// Returns None if backend system is not configured (backend_type = None)
+fn try_init_stream_with_backend(
+    audio_settings: &AudioSettings,
+    sample_rate: u32,
+    channels: u16,
+) -> Option<Result<(OutputStream, rodio::OutputStreamHandle), String>> {
+    // Check if backend system is configured
+    let backend_type = audio_settings.backend_type?;
+
+    log::info!(
+        "Using backend system: {:?} (device: {:?}, plugin: {:?})",
+        backend_type,
+        audio_settings.output_device,
+        audio_settings.alsa_plugin
+    );
+
+    // Create backend
+    let backend = match BackendManager::create_backend(backend_type) {
+        Ok(b) => b,
+        Err(e) => {
+            log::error!("Failed to create backend {:?}: {}", backend_type, e);
+            return Some(Err(e));
+        }
+    };
+
+    // Check availability
+    if !backend.is_available() {
+        let msg = format!("Backend {:?} is not available on this system", backend_type);
+        log::error!("{}", msg);
+        return Some(Err(msg));
+    }
+
+    // Build backend config
+    let config = BackendConfig {
+        backend_type,
+        device_id: audio_settings.output_device.clone(),
+        sample_rate,
+        channels,
+        exclusive_mode: audio_settings.exclusive_mode,
+        alsa_plugin: audio_settings.alsa_plugin,
+    };
+
+    // Create output stream via backend
+    match backend.create_output_stream(&config) {
+        Ok(stream) => {
+            log::info!("✅ Stream created via {:?} backend at {}Hz", backend_type, sample_rate);
+            Some(Ok(stream))
+        }
+        Err(e) => {
+            log::error!("❌ Backend stream creation failed: {}", e);
+            Some(Err(e))
         }
     }
 }
@@ -713,13 +770,33 @@ impl Player {
                                 thread_state.set_current_device(Some(name));
                             }
 
-                            // Create OutputStream with custom sample rate
-                            match create_output_stream_with_config(
-                                &device,
-                                sample_rate,
-                                channels,
-                                dac_passthrough,
-                            ) {
+                            // Try backend system first (if configured), then fall back to legacy CPAL
+                            let stream_result = if let Some(settings) = thread_settings.lock().ok() {
+                                match try_init_stream_with_backend(&settings, sample_rate, channels) {
+                                    Some(result) => result,
+                                    None => {
+                                        // Backend system not configured, use legacy CPAL path
+                                        log::info!("Backend system not configured, using legacy CPAL path");
+                                        create_output_stream_with_config(
+                                            &device,
+                                            sample_rate,
+                                            channels,
+                                            dac_passthrough,
+                                        )
+                                    }
+                                }
+                            } else {
+                                // Failed to lock settings, use legacy path
+                                create_output_stream_with_config(
+                                    &device,
+                                    sample_rate,
+                                    channels,
+                                    dac_passthrough,
+                                )
+                            };
+
+                            // Handle stream creation result
+                            match stream_result {
                                 Ok(stream) => {
                                     *stream_opt = Some(stream);
                                     *current_sample_rate = Some(sample_rate);
