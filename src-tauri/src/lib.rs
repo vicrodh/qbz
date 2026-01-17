@@ -333,6 +333,7 @@ pub fn run() {
             commands::get_audio_devices,
             commands::get_audio_output_status,
             commands::get_pipewire_sinks,
+            commands::set_pipewire_default_sink,
             commands::reinit_audio_device,
             // Queue commands
             commands::add_to_queue,
