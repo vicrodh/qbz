@@ -543,10 +543,8 @@ pub fn reinit_audio_device(
     // Reload settings from database to ensure Player has latest config (including backend_type)
     if let Ok(store) = audio_settings_state.store.lock() {
         if let Ok(fresh_settings) = store.get_settings() {
-            if let Ok(mut player_settings) = state.player.audio_settings.lock() {
-                *player_settings = fresh_settings;
-                log::info!("Reloaded audio settings before reinit (backend_type: {:?})", player_settings.backend_type);
-            }
+            log::info!("Reloading audio settings before reinit (backend_type: {:?})", fresh_settings.backend_type);
+            let _ = state.player.reload_settings(fresh_settings);
         }
     }
 

@@ -1376,6 +1376,17 @@ impl Player {
             .map_err(|e| format!("Failed to send reinit command: {}", e))
     }
 
+    /// Reload audio settings from fresh config (e.g., after database update)
+    /// Call this before reinit_device() to ensure Player uses latest settings
+    pub fn reload_settings(&self, settings: AudioSettings) -> Result<(), String> {
+        if let Ok(mut current_settings) = self.audio_settings.lock() {
+            *current_settings = settings;
+            Ok(())
+        } else {
+            Err("Failed to lock audio settings".to_string())
+        }
+    }
+
     /// Get current playback state with real-time position
     pub fn get_state(&self) -> Result<PlaybackState, String> {
         Ok(PlaybackState {
