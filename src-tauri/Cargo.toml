@@ -95,6 +95,9 @@ futures-util = "0.3"
 # Note: xdg-portal feature disabled due to ashpd/zbus version incompatibility
 tauri-plugin-dialog = { version = "2.5.0" }
 
+# Direct ALSA access for bit-perfect playback (bypasses CPAL limitations)
+alsa = "0.9"
+
 [target.'cfg(target_os = "macos")'.dependencies]
 tauri-plugin-dialog = { version = "2.5.0" }
 
