@@ -555,7 +555,6 @@
     justify-content: flex-end;
     gap: 12px;
     padding-top: 24px;
-    border-top: 1px solid var(--bg-tertiary);
   }
 
   .btn {

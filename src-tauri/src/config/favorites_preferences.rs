@@ -48,12 +48,24 @@ impl FavoritesPreferencesStore {
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 custom_icon_path TEXT,
                 custom_icon_preset TEXT,
-                icon_background TEXT,
                 tab_order TEXT NOT NULL
             )",
             [],
         )
         .map_err(|e| format!("Failed to create favorites preferences table: {}", e))?;
+
+        // Migration: Add icon_background column if it doesn't exist
+        let has_icon_background = conn
+            .prepare("SELECT icon_background FROM favorites_preferences LIMIT 1")
+            .is_ok();
+        
+        if !has_icon_background {
+            conn.execute(
+                "ALTER TABLE favorites_preferences ADD COLUMN icon_background TEXT",
+                [],
+            )
+            .map_err(|e| format!("Failed to add icon_background column: {}", e))?;
+        }
 
         Ok(Self { conn })
     }
@@ -148,11 +160,23 @@ pub fn create_table(conn: &Connection) -> Result<()> {
             id INTEGER PRIMARY KEY CHECK (id = 1),
             custom_icon_path TEXT,
             custom_icon_preset TEXT,
-            icon_background TEXT,
             tab_order TEXT NOT NULL
         )",
         [],
     )?;
+    
+    // Migration: Add icon_background column if it doesn't exist
+    let has_icon_background = conn
+        .prepare("SELECT icon_background FROM favorites_preferences LIMIT 1")
+        .is_ok();
+    
+    if !has_icon_background {
+        conn.execute(
+            "ALTER TABLE favorites_preferences ADD COLUMN icon_background TEXT",
+            [],
+        )?;
+    }
+    
     Ok(())
 }
 
