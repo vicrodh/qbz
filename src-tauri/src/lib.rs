@@ -19,6 +19,7 @@ pub mod lyrics;
 pub mod media_controls;
 pub mod network;
 pub mod offline;
+pub mod playback_context;
 pub mod player;
 pub mod playlist_import;
 pub mod queue;
@@ -35,6 +36,7 @@ use api::QobuzClient;
 use cache::{AudioCache, PlaybackCache};
 use lastfm::LastFmClient;
 use media_controls::{MediaControlsManager, TrackInfo};
+use playback_context::ContextManager;
 use player::Player;
 use queue::QueueManager;
 use share::SongLinkClient;
@@ -44,6 +46,7 @@ pub struct AppState {
     pub client: Arc<Mutex<QobuzClient>>,
     pub player: Player,
     pub queue: QueueManager,
+    pub context: ContextManager,
     pub media_controls: MediaControlsManager,
     pub audio_cache: Arc<AudioCache>,
     pub lastfm: Arc<Mutex<LastFmClient>>,
@@ -83,6 +86,7 @@ impl AppState {
             client: Arc::new(Mutex::new(QobuzClient::default())),
             player: Player::new(device_name, audio_settings),
             queue: QueueManager::new(),
+            context: ContextManager::new(),
             media_controls: MediaControlsManager::new(),
             audio_cache,
             lastfm: Arc::new(Mutex::new(LastFmClient::default())),
@@ -352,6 +356,11 @@ pub fn run() {
             commands::set_repeat,
             commands::get_repeat,
             commands::get_queue_state,
+            // Playback context commands
+            commands::get_playback_context,
+            commands::set_playback_context,
+            commands::clear_playback_context,
+            commands::has_playback_context,
             // Playlist commands
             commands::get_user_playlists,
             commands::get_playlist,
