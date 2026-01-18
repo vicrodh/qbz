@@ -6,6 +6,7 @@
   import TrackRow from '../TrackRow.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import { type DownloadStatus } from '$lib/stores/downloadState';
+  import { setPlaybackContext } from '$lib/stores/playbackContextStore';
 
   interface FavoriteAlbum {
     id: string;
@@ -592,6 +593,22 @@
   }
 
   function handleTrackClick(track: FavoriteTrack, index: number) {
+    // Create favorites context
+    if (filteredTracks.length > 0) {
+      const trackIds = filteredTracks.map(t => t.id);
+      
+      setPlaybackContext(
+        'favorites',
+        'favorites',
+        'Favorites',
+        'qobuz',
+        trackIds,
+        index
+      );
+      console.log(`[Favorites] Context created: ${trackIds.length} tracks, starting at ${index}`);
+    }
+
+    // Play track
     if (onTrackPlay) {
       onTrackPlay(buildDisplayTrack(track, index));
     }
