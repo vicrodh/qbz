@@ -260,7 +260,7 @@
 <style>
   .modal-columns {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 65fr 35fr;
     gap: 32px;
   }
 
@@ -338,8 +338,8 @@
 
   .color-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(8, 1fr);
+    gap: 8px;
   }
 
   .color-btn {
@@ -348,6 +348,7 @@
     align-items: center;
     justify-content: center;
     background: transparent;
+    font-size: 0;
     border: 2px solid transparent;
     border-radius: 8px;
     cursor: pointer;
@@ -367,7 +368,7 @@
   .color-swatch {
     width: 100%;
     height: 100%;
-    border-radius: 6px;
+    border-radius: 4px;
     border: 1px solid var(--bg-tertiary);
   }
 
