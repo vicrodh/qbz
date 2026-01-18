@@ -128,13 +128,7 @@
 
   type TabType = 'tracks' | 'albums' | 'artists' | 'playlists';
   let activeTab = $state<TabType>('tracks');
-
-  // Sync activeTab with navigation store when parent passes currentTab
-  $effect(() => {
-    if (currentTab && currentTab !== activeTab) {
-      activeTab = currentTab;
-    }
-  });
+  let isInitialMount = $state(true);
 
   const tabLabels: Record<TabType, string> = {
     tracks: 'Tracks',
@@ -312,8 +306,15 @@
     albumGroupingEnabled = loadStoredBool('qbz-favorites-album-group-enabled', false);
     trackGroupingEnabled = loadStoredBool('qbz-favorites-track-group-enabled', false);
     artistGroupingEnabled = loadStoredBool('qbz-favorites-artist-group-enabled', false);
-    loadFavorites('tracks');
     loadFavoritesPreferences();
+    
+    // On initial mount, sync with navigation store to load configured first tab
+    if (isInitialMount && currentTab) {
+      activeTab = currentTab;
+      isInitialMount = false;
+    }
+    
+    loadFavorites(activeTab);
   });
 
   async function loadFavoritesPreferences() {
