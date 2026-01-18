@@ -12,6 +12,7 @@
 pub mod audio_settings;
 pub mod download_settings;
 pub mod playback_preferences;
+pub mod favorites_preferences;
 
 pub use audio_settings::{
     AudioSettings,
@@ -38,4 +39,11 @@ pub use playback_preferences::{
     PlaybackPreferencesState,
     get_playback_preferences,
     set_autoplay_mode,
+};
+
+pub use favorites_preferences::{
+    FavoritesPreferences,
+    FavoritesPreferencesState,
+    get_favorites_preferences,
+    save_favorites_preferences,
 };

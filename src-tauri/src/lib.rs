@@ -175,6 +175,9 @@ pub fn run() {
     // Initialize playback preferences state
     let playback_prefs_state = config::playback_preferences::PlaybackPreferencesState::new()
         .expect("Failed to initialize playback preferences");
+    // Initialize favorites preferences state
+    let favorites_prefs_state = config::favorites_preferences::FavoritesPreferencesState::new()
+        .expect("Failed to initialize favorites preferences");
 
     // Read saved audio device and settings for player initialization
     let (saved_device, audio_settings) = audio_settings_state
@@ -300,6 +303,7 @@ pub fn run() {
         .manage(download_settings_state)
         .manage(offline_state)
         .manage(playback_prefs_state)
+        .manage(favorites_prefs_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -577,6 +581,8 @@ pub fn run() {
             config::playback_preferences::get_playback_preferences,
             config::playback_preferences::set_autoplay_mode,
             config::playback_preferences::set_show_context_icon,
+            config::favorites_preferences::get_favorites_preferences,
+            config::favorites_preferences::save_favorites_preferences,
             offline::commands::set_allow_immediate_scrobbling,
             offline::commands::set_allow_accumulated_scrobbling,
             offline::commands::set_show_network_folders_in_manual_offline,
