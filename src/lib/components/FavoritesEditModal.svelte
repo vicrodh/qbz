@@ -339,7 +339,7 @@
   .color-grid {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
-    gap: 4px;
+    gap: 2px;
   }
 
   .color-btn {
