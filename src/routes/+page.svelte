@@ -598,32 +598,22 @@
   async function handleAlbumTrackPlay(track: Track) {
     console.log('Playing album track:', track);
 
-    // Check autoplay preference and create/clear context
-    const prefs = getCachedPreferences();
-    console.log('[Album] Autoplay preference:', prefs.autoplay_mode);
-    
+    // ALWAYS create context when playing from an album
+    // The setting only affects menu options visibility, not implicit behavior
     if (selectedAlbum?.tracks) {
       const trackIndex = selectedAlbum.tracks.findIndex(t => t.id === track.id);
-      console.log('[Album] Track index:', trackIndex, 'of', selectedAlbum.tracks.length);
+      const trackIds = selectedAlbum.tracks.map(t => t.id);
       
-      if (prefs.autoplay_mode === 'continue') {
-        // Create album context
-        const trackIds = selectedAlbum.tracks.map(t => t.id);
-        console.log('[Album] Creating context with', trackIds.length, 'tracks, starting at', trackIndex);
-        await setPlaybackContext(
-          'album',
-          selectedAlbum.id,
-          selectedAlbum.title,
-          'qobuz',
-          trackIds,
-          trackIndex >= 0 ? trackIndex : 0
-        );
-        console.log('[Album] Context created for continuous playback');
-      } else {
-        // Clear context for single track playback
-        await clearPlaybackContext();
-        console.log('[Album] Context cleared for single track playback');
-      }
+      console.log('[Album] Creating context with', trackIds.length, 'tracks, starting at', trackIndex);
+      await setPlaybackContext(
+        'album',
+        selectedAlbum.id,
+        selectedAlbum.title,
+        'qobuz',
+        trackIds,
+        trackIndex >= 0 ? trackIndex : 0
+      );
+      console.log('[Album] Context created - stack icon should appear');
     } else {
       console.log('[Album] No album tracks found, cannot create context');
     }

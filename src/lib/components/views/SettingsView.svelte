@@ -1120,11 +1120,13 @@
   }
 
   async function handleAutoplayModeChange(mode: AutoplayMode) {
+    console.log('[Settings] Changing autoplay mode to:', mode);
     try {
       await setAutoplayMode(mode);
       autoplayMode = mode;
+      console.log('[Settings] Autoplay mode saved successfully');
     } catch (err) {
-      console.error('Failed to set autoplay mode:', err);
+      console.error('[Settings] Failed to set autoplay mode:', err);
       showToast('Failed to save autoplay preference', 'error');
     }
   }
