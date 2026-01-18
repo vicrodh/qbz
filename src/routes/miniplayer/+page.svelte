@@ -231,11 +231,9 @@
         <Maximize2 size={14} />
       </button>
       <div class="track-info">
-        <div class="title-row">
-          <StackIcon size={14} class="stack-icon" />
-          <div class="title">{playerState.currentTrack?.title ?? 'No track'}</div>
-        </div>
+        <div class="title">{playerState.currentTrack?.title ?? 'No track'}</div>
         <div class="artist-album">
+          <StackIcon size={12} class="stack-icon" />
           {playerState.currentTrack?.artist ?? '—'}
           {#if playerState.currentTrack?.album}
             <span class="separator">—</span>
@@ -412,18 +410,6 @@
     padding-right: 30px;
   }
 
-  .title-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    white-space: nowrap;
-    overflow: hidden;
-  }
-
-  .title-row :global(.stack-icon) {
-    flex-shrink: 0;
-  }
-
   .title {
     font-weight: 600;
     font-size: 14px;
@@ -432,17 +418,22 @@
     text-overflow: ellipsis;
     color: #fff;
     line-height: 1.4;
-    flex: 1;
-    min-width: 0;
   }
 
   .artist-album {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 12px;
     color: rgba(255, 255, 255, 0.5);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     margin-top: 2px;
+  }
+
+  .artist-album :global(.stack-icon) {
+    flex-shrink: 0;
   }
 
   .separator {

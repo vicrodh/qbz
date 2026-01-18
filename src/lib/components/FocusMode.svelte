@@ -185,11 +185,11 @@
       <div class="track-info">
         <img src={artwork} alt="" class="mini-artwork" />
         <div class="track-meta">
-          <div class="track-title-row">
-            <StackIcon size={14} class="stack-icon" />
-            <div class="track-title">{trackTitle}</div>
+          <div class="track-title">{trackTitle}</div>
+          <div class="track-artist-row">
+            <StackIcon size={12} class="stack-icon" />
+            <div class="track-artist">{artist}</div>
           </div>
-          <div class="track-artist">{artist}</div>
         </div>
       </div>
 
@@ -487,8 +487,17 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex: 1;
-    min-width: 0;
+  }
+
+  .track-artist-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .track-artist-row :global(.stack-icon) {
+    flex-shrink: 0;
   }
 
   .track-artist {
@@ -497,7 +506,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-top: 2px;
   }
 
   /* Playback Section */
