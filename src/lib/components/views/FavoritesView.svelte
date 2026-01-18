@@ -306,7 +306,7 @@
     albumGroupingEnabled = loadStoredBool('qbz-favorites-album-group-enabled', false);
     trackGroupingEnabled = loadStoredBool('qbz-favorites-track-group-enabled', false);
     artistGroupingEnabled = loadStoredBool('qbz-favorites-artist-group-enabled', false);
-    loadFavoritesPreferences();
+    await loadFavoritesPreferences();
     
     // On initial mount, sync with navigation store to load configured first tab
     if (isInitialMount && currentTab) {
