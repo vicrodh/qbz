@@ -70,7 +70,13 @@ impl AlsaBackend {
                 let device_id = line.to_string();
 
                 // Skip blacklisted devices
-                if device_id == "null"
+                // Only keep useful devices for audiophile playback:
+                // - default, sysdefault:CARD= (system defaults)
+                // - front:CARD= (stereo/front output - most common for DACs)
+                // - hdmi:CARD= (HDMI outputs)
+                // - iec958:CARD= (S/PDIF digital)
+                // Skip surround variants, usbstream, plugins, etc.
+                let is_blacklisted = device_id == "null"
                     || device_id.starts_with("lavrate")
                     || device_id.starts_with("samplerate")
                     || device_id.starts_with("speexrate")
@@ -79,7 +85,13 @@ impl AlsaBackend {
                     || device_id == "speex"
                     || device_id == "upmix"
                     || device_id == "vdownmix"
-                {
+                    || device_id.starts_with("surround")  // Skip surround21, surround40, surround51, etc.
+                    || device_id.starts_with("usbstream:")  // Skip USB stream devices
+                    || device_id == "pipewire"  // Skip - use PipeWire backend instead
+                    || device_id == "pulse"  // Skip - use PulseAudio backend instead
+                    || device_id == "sysdefault";  // Skip bare sysdefault (keep sysdefault:CARD= only)
+
+                if is_blacklisted {
                     // Skip this device and its description lines
                     i += 1;
                     while i < lines.len() && lines[i].starts_with(' ') {
@@ -134,7 +146,66 @@ impl AlsaBackend {
             }
         }
 
-        log::info!("[ALSA Backend] Enumerated {} devices via aplay -L", devices.len());
+        // Add hw: devices for bit-perfect playback (not listed by aplay -L)
+        // Extract unique CARD names from devices we found
+        let mut cards: Vec<String> = Vec::new();
+        for device in &devices {
+            if let Some(card_match) = device.name.strip_prefix("front:CARD=") {
+                if let Some(card_name) = card_match.split(',').next() {
+                    if !cards.contains(&card_name.to_string()) {
+                        cards.push(card_name.to_string());
+                    }
+                }
+            } else if let Some(card_match) = device.name.strip_prefix("sysdefault:CARD=") {
+                if !cards.contains(&card_match.to_string()) {
+                    cards.push(card_match.to_string());
+                }
+            }
+        }
+
+        // For each card, add hw:CARD=XXX,DEV=0 device (bit-perfect, no plugins)
+        for card in &cards {
+            let hw_device_id = format!("hw:CARD={},DEV=0", card);
+
+            // Get max sample rate from CPAL
+            let max_sample_rate = self.host
+                .output_devices()
+                .ok()
+                .and_then(|mut devs| {
+                    devs.find(|d| d.name().ok().as_deref() == Some(&hw_device_id))
+                })
+                .and_then(|device| {
+                    device
+                        .supported_output_configs()
+                        .ok()
+                        .and_then(|mut configs| {
+                            configs
+                                .max_by_key(|c| c.max_sample_rate().0)
+                                .map(|c| c.max_sample_rate().0)
+                        })
+                });
+
+            // Find the friendly description from front: or sysdefault: device
+            let base_description = devices.iter()
+                .find(|d| d.name.starts_with(&format!("front:CARD={}", card)) ||
+                         d.name == format!("sysdefault:CARD={}", card))
+                .and_then(|d| d.description.as_ref())
+                .map(|desc| {
+                    // Extract just the card name (first line before comma)
+                    desc.split(',').next().unwrap_or(desc).trim().to_string()
+                })
+                .unwrap_or_else(|| card.clone());
+
+            devices.push(AudioDevice {
+                id: hw_device_id.clone(),
+                name: hw_device_id.clone(),
+                description: Some(format!("{} (Direct Hardware - Bit-perfect)", base_description)),
+                is_default: false,
+                max_sample_rate,
+            });
+        }
+
+        log::info!("[ALSA Backend] Enumerated {} devices via aplay -L (+ {} hw: devices)", devices.len() - cards.len(), cards.len());
         for (idx, dev) in devices.iter().enumerate() {
             log::info!(
                 "  [{}] {} - {} (max_rate: {:?})",

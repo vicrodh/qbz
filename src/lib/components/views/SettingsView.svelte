@@ -211,6 +211,7 @@
   let availableBackends = $state<BackendInfo[]>([]);
   let backendDevices = $state<AudioDevice[]>([]);
   let alsaPlugins = $state<AlsaPluginInfo[]>([]);
+  let isLoadingDevices = $state(false);
 
   // Backend selector options (derived)
   let backendOptions = $derived(['Auto', ...availableBackends.filter(b => b.is_available).map(b => b.name)]);
@@ -755,6 +756,7 @@
   }
 
   async function loadBackendDevices(backendType: 'PipeWire' | 'Alsa' | 'Pulse') {
+    isLoadingDevices = true;
     try {
       const devices = await invoke<AudioDevice[]>('get_devices_for_backend', { backendType });
       backendDevices = devices;
@@ -762,6 +764,8 @@
     } catch (err) {
       console.error(`Failed to load devices for ${backendType}:`, err);
       backendDevices = [];
+    } finally {
+      isLoadingDevices = false;
     }
   }
 
@@ -980,6 +984,14 @@
       await invoke('set_audio_output_device', { device: deviceId });
       await invoke('reinit_audio_device', { device: deviceId });
       console.log('[Audio] Backend device changed:', deviceName, '(id:', deviceId ?? 'default', ')');
+
+      // Stop current playback to prevent stuck/dead streams
+      try {
+        await invoke('stop_playback');
+        console.log('[Audio] Stopped playback after device change');
+      } catch (err) {
+        console.log('[Audio] No playback to stop');
+      }
     } catch (err) {
       console.error('[Audio] Failed to change backend device:', err);
     }
@@ -1296,14 +1308,18 @@
         <span class="setting-label">{$t('settings.audio.outputDevice')}</span>
         <Tooltip text="Select your preferred audio output device. Devices shown are from the selected backend." />
       </div>
-      <Dropdown
-        value={outputDevice}
-        options={deviceOptions}
-        onchange={handleBackendDeviceChange}
-        wide
-        expandLeft
-        compact
-      />
+      {#if isLoadingDevices}
+        <span class="loading-text">Loading devices...</span>
+      {:else}
+        <Dropdown
+          value={outputDevice}
+          options={deviceOptions}
+          onchange={handleBackendDeviceChange}
+          wide
+          expandLeft
+          compact
+        />
+      {/if}
     </div>
     {#if showAlsaPluginSelector}
     <div class="setting-row">
@@ -1733,6 +1749,12 @@
 
   .settings-view::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.4);
+  }
+
+  .loading-text {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 14px;
+    font-style: italic;
   }
 
   .header {
