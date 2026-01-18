@@ -5,6 +5,7 @@
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import { getSearchState, setSearchState, type SearchResults, type SearchAllResults, type SearchTab } from '$lib/stores/searchState';
+  import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { t } from '$lib/i18n';
 
   let searchInput: HTMLInputElement | null = null;
@@ -375,6 +376,28 @@
     return track.album?.image?.large || track.album?.image?.thumbnail || track.album?.image?.small || '';
   }
 
+  function handleSearchTrackPlay(track: Track, trackIndex: number) {
+    // Create search results context
+    if (trackResults && trackResults.items.length > 0) {
+      const trackIds = trackResults.items.map(t => t.id);
+      
+      setPlaybackContext(
+        'search',
+        currentQuery,
+        `Search: ${currentQuery}`,
+        'qobuz',
+        trackIds,
+        trackIndex
+      );
+      console.log(`[Search] Context created: "${currentQuery}", ${trackIds.length} tracks, starting at ${trackIndex}`);
+    }
+
+    // Play track
+    if (onTrackPlay) {
+      onTrackPlay(track);
+    }
+  }
+
   function getArtistImage(artist: Artist): string {
     return artist.image?.large || artist.image?.thumbnail || artist.image?.small || '';
   }
@@ -725,8 +748,8 @@
                     class="track-row"
                     role="button"
                     tabindex="0"
-                    onclick={() => onTrackPlay?.(track)}
-                    onkeydown={(e) => e.key === 'Enter' && onTrackPlay?.(track)}
+                    onclick={() => handleSearchTrackPlay(track, index)}
+                    onkeydown={(e) => e.key === 'Enter' && handleSearchTrackPlay(track, index)}
                   >
                     <div class="track-number">{index + 1}</div>
                     {#if failedTrackImages.has(track.id) || !getTrackArtwork(track)}
@@ -738,7 +761,7 @@
                         <img src={getTrackArtwork(track)} alt={track.title} class="track-artwork" onerror={() => handleTrackImageError(track.id)} />
                         <button 
                           class="track-play-overlay"
-                          onclick={(e) => { e.stopPropagation(); onTrackPlay?.(track); }}
+                          onclick={(e) => { e.stopPropagation(); handleSearchTrackPlay(track, index); }}
                           aria-label="Play track"
                         >
                           <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
@@ -768,7 +791,7 @@
                     <div class="track-duration">{formatDuration(track.duration)}</div>
                     <div class="track-actions">
                       <TrackMenu
-                        onPlayNow={() => onTrackPlay?.(track)}
+                        onPlayNow={() => handleSearchTrackPlay(track, index)}
                         onPlayNext={onTrackPlayNext ? () => onTrackPlayNext(track) : undefined}
                         onPlayLater={onTrackPlayLater ? () => onTrackPlayLater(track) : undefined}
                         onAddFavorite={onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined}
@@ -830,8 +853,8 @@
               class="track-row"
               role="button"
               tabindex="0"
-              onclick={() => onTrackPlay?.(track)}
-              onkeydown={(e) => e.key === 'Enter' && onTrackPlay?.(track)}
+              onclick={() => handleSearchTrackPlay(track, index)}
+              onkeydown={(e) => e.key === 'Enter' && handleSearchTrackPlay(track, index)}
             >
               <div class="track-number">{index + 1}</div>
               {#if failedTrackImages.has(track.id) || !getTrackArtwork(track)}
@@ -862,7 +885,7 @@
               <div class="track-duration">{formatDuration(track.duration)}</div>
               <div class="track-actions">
                 <TrackMenu
-                  onPlayNow={() => onTrackPlay?.(track)}
+                  onPlayNow={() => handleSearchTrackPlay(track, index)}
                   onPlayNext={onTrackPlayNext ? () => onTrackPlayNext(track) : undefined}
                   onPlayLater={onTrackPlayLater ? () => onTrackPlayLater(track) : undefined}
                   onAddFavorite={onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined}
