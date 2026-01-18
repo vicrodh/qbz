@@ -324,6 +324,7 @@
   async function loadFavoritesPreferences() {
     try {
       const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      console.log('[FavoritesView] Loaded preferences:', prefs);
       favoritesPreferences = prefs;
     } catch (err) {
       console.error('Failed to load favorites preferences:', err);
@@ -345,6 +346,22 @@
       localStorage.setItem('qbz-favorites-artist-group-enabled', String(artistGroupingEnabled));
     } catch {
       // localStorage not available
+    }
+  });
+
+  // Sync activeTab when navigating back/forward
+  $effect(() => {
+    if (!isInitialMount && currentTab && currentTab !== activeTab) {
+      activeTab = currentTab;
+      if (activeTab === 'tracks' && favoriteTracks.length === 0) {
+        loadFavorites(activeTab);
+      } else if (activeTab === 'albums' && favoriteAlbums.length === 0) {
+        loadFavorites(activeTab);
+      } else if (activeTab === 'artists' && favoriteArtists.length === 0) {
+        loadFavorites(activeTab);
+      } else if (activeTab === 'playlists' && favoritePlaylists.length === 0) {
+        loadFavorites(activeTab);
+      }
     }
   });
 
