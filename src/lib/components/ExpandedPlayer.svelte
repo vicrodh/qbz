@@ -318,6 +318,7 @@
 
         <!-- Volume Control -->
         <div class="volume-container">
+          <div class="volume-value" class:visible={isDraggingVolume}>{volume}</div>
           <div
             class="volume-bar"
             bind:this={volumeRef}
@@ -686,6 +687,7 @@
     width: 100%;
     max-width: 180px;
     margin-bottom: 24px;
+    position: relative;
   }
 
   .volume-bar {
@@ -716,6 +718,27 @@
 
   .volume-bar:hover .volume-thumb {
     opacity: 1;
+  }
+
+  .volume-value {
+    position: absolute;
+    right: 0;
+    top: -26px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 120ms ease, transform 120ms ease;
+    pointer-events: none;
+  }
+
+  .volume-value.visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 
   /* Bottom Actions */

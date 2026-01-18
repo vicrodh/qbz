@@ -378,6 +378,7 @@
 
       <!-- Volume Control -->
       <div class="volume-control">
+        <div class="volume-value" class:visible={isDraggingVolume}>{volume}</div>
         <button
           class="control-btn volume-btn"
           onclick={() => onVolumeChange?.(volume === 0 ? 70 : 0)}
@@ -765,6 +766,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    position: relative;
   }
 
   .volume-slider {
@@ -809,5 +811,26 @@
 
   .volume-slider:hover .volume-thumb {
     opacity: 1;
+  }
+
+  .volume-value {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 120ms ease, transform 120ms ease;
+    pointer-events: none;
+  }
+
+  .volume-value.visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 </style>
