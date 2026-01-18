@@ -244,3 +244,11 @@ export interface SongLinkResponse {
   identifier: string;
   contentType: string;
 }
+
+// ============ Preferences Types ============
+
+export interface FavoritesPreferences {
+  custom_icon_path: string | null;
+  custom_icon_preset: string | null;
+  tab_order: string[];
+}

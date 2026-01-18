@@ -1,12 +1,14 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
-  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic } from 'lucide-svelte';
+  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3 } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
+  import FavoritesEditModal from '../FavoritesEditModal.svelte';
   import { type DownloadStatus } from '$lib/stores/downloadState';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
+  import type { FavoritesPreferences } from '$lib/types';
 
   interface FavoriteAlbum {
     id: string;
@@ -131,6 +133,12 @@
 
   let loading = $state(false);
   let loadingPlaylists = $state(false);
+  let editModalOpen = $state(false);
+  let favoritesPreferences = $state<FavoritesPreferences>({
+    custom_icon_path: null,
+    custom_icon_preset: 'heart',
+    tab_order: ['tracks', 'albums', 'artists', 'playlists'],
+  });
 
   // Download status tracking
   let albumDownloadStatuses = $state<Map<string, boolean>>(new Map());
@@ -249,7 +257,22 @@
     trackGroupingEnabled = loadStoredBool('qbz-favorites-track-group-enabled', false);
     artistGroupingEnabled = loadStoredBool('qbz-favorites-artist-group-enabled', false);
     loadFavorites('tracks');
+    loadFavoritesPreferences();
   });
+
+  async function loadFavoritesPreferences() {
+    try {
+      const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      favoritesPreferences = prefs;
+    } catch (err) {
+      console.error('Failed to load favorites preferences:', err);
+    }
+  }
+
+  function handlePreferencesSaved(prefs: FavoritesPreferences) {
+    favoritesPreferences = prefs;
+  }
+
 
   $effect(() => {
     try {
@@ -649,6 +672,9 @@
       <h1>Favorites</h1>
       <p class="subtitle">Your liked tracks, albums, and artists</p>
     </div>
+    <button class="edit-btn" onclick={() => editModalOpen = true} title="Edit Favorites settings">
+      <Edit3 size={16} />
+    </button>
   </div>
 
   <!-- Tabs -->
@@ -1298,6 +1324,13 @@
   </div>
 </div>
 
+<FavoritesEditModal
+  isOpen={editModalOpen}
+  onClose={() => editModalOpen = false}
+  onSave={handlePreferencesSaved}
+  initialPreferences={favoritesPreferences}
+/>
+
 <style>
   .favorites-view {
     padding: 24px;
@@ -1330,6 +1363,7 @@
     align-items: center;
     gap: 20px;
     margin-bottom: 32px;
+    position: relative;
   }
 
   .header-icon {
@@ -1340,6 +1374,10 @@
     justify-content: center;
     background: linear-gradient(135deg, var(--accent-primary) 0%, #ff6b9d 100%);
     border-radius: 16px;
+  }
+
+  .header-content {
+    flex: 1;
   }
 
   .header-content h1 {
@@ -1353,6 +1391,29 @@
     font-size: 14px;
     color: var(--text-muted);
     margin: 0;
+  }
+
+  .edit-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .edit-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-color: var(--accent-primary);
   }
 
   .tabs {

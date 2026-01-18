@@ -196,7 +196,25 @@
     "artists": "Artistas",
     "noFavorites": "Aún no hay favoritos",
     "addedToFavorites": "Agregado a favoritos",
-    "removedFromFavorites": "Eliminado de favoritos"
+    "removedFromFavorites": "Eliminado de favoritos",
+    "editSettings": "Editar configuracion de Favoritos",
+    "settingsModalTitle": "Configuracion de Favoritos",
+    "iconSectionTitle": "Icono",
+    "iconSectionDescription": "Elige un icono para el encabezado de la pagina de Favoritos",
+    "uploadCustomImage": "Subir imagen personalizada",
+    "tabOrderSectionTitle": "Orden de pestanas",
+    "tabOrderSectionDescription": "Reordena las pestanas en la navegacion de Favoritos",
+    "tabLabels": {
+      "tracks": "Pistas",
+      "albums": "Albumes",
+      "artists": "Artistas",
+      "playlists": "Listas"
+    },
+    "moveUp": "Subir",
+    "moveDown": "Bajar",
+    "save": "Guardar",
+    "saving": "Guardando...",
+    "cancel": "Cancelar"
   },
   "player": {
     "nowPlaying": "Reproduciendo",
