@@ -467,6 +467,15 @@
     };
   });
 
+  // Reload playback preferences each time the view becomes visible
+  // This ensures settings are fresh when navigating back to settings
+  $effect(() => {
+    // This effect runs whenever the component is rendered
+    // We reload preferences to ensure they're in sync with backend
+    console.log('[Settings] Component rendered, reloading playback preferences');
+    loadPlaybackPreferences();
+  });
+
   async function loadLastfmState() {
     try {
       // Check if embedded (build-time) credentials are available
