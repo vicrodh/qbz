@@ -44,8 +44,8 @@ impl AlsaBackend {
         Ok(Self { host })
     }
 
-    /// Enumerate ALSA devices via aplay -L
-    fn enumerate_alsa_devices(&self) -> BackendResult<Vec<AudioDevice>> {
+    /// Enumerate ALSA devices via aplay -L (preferred - has real descriptions)
+    fn enumerate_via_aplay(&self) -> BackendResult<Vec<AudioDevice>> {
         let mut devices = Vec::new();
 
         // Run aplay -L to get device list with descriptions
@@ -146,6 +146,85 @@ impl AlsaBackend {
         }
 
         Ok(devices)
+    }
+
+    /// Enumerate ALSA devices via CPAL (fallback - no descriptions)
+    fn enumerate_via_cpal(&self) -> BackendResult<Vec<AudioDevice>> {
+        let mut devices = Vec::new();
+
+        // Get all output devices from ALSA host
+        let output_devices = self.host
+            .output_devices()
+            .map_err(|e| format!("Failed to enumerate ALSA devices: {}", e))?;
+
+        for (idx, device) in output_devices.enumerate() {
+            let name = device.name().unwrap_or_else(|_| format!("ALSA Device {}", idx));
+
+            // Skip non-useful devices
+            if name == "null"
+                || name.starts_with("lavrate")
+                || name.starts_with("samplerate")
+                || name.starts_with("speexrate")
+                || name == "jack"
+                || name == "oss"
+                || name == "speex"
+                || name == "upmix"
+                || name == "vdownmix"
+            {
+                continue;
+            }
+
+            // ID is the device name
+            let id = name.clone();
+
+            // Check if this is the default device
+            let is_default = self.host
+                .default_output_device()
+                .and_then(|d| d.name().ok())
+                .map(|default_name| default_name == name)
+                .unwrap_or(false);
+
+            // Try to get max sample rate from supported configs
+            let max_sample_rate = device
+                .supported_output_configs()
+                .ok()
+                .and_then(|mut configs| {
+                    configs
+                        .max_by_key(|c| c.max_sample_rate().0)
+                        .map(|c| c.max_sample_rate().0)
+                });
+
+            devices.push(AudioDevice {
+                id: id.clone(),
+                name: name.clone(),
+                description: None,  // CPAL doesn't provide descriptions
+                is_default,
+                max_sample_rate,
+            });
+        }
+
+        log::info!("[ALSA Backend] Enumerated {} devices via CPAL (fallback)", devices.len());
+        for (idx, dev) in devices.iter().enumerate() {
+            log::info!("  [{}] {} (max_rate: {:?})", idx, dev.name, dev.max_sample_rate);
+        }
+
+        Ok(devices)
+    }
+
+    /// Enumerate ALSA devices with fallback
+    fn enumerate_alsa_devices(&self) -> BackendResult<Vec<AudioDevice>> {
+        // Try aplay -L first (preferred - has real hardware descriptions)
+        match self.enumerate_via_aplay() {
+            Ok(devices) => Ok(devices),
+            Err(e) => {
+                log::warn!(
+                    "[ALSA Backend] aplay -L failed: {}. Falling back to CPAL enumeration (no descriptions). \
+                    Install alsa-utils package for better device names.",
+                    e
+                );
+                self.enumerate_via_cpal()
+            }
+        }
     }
 }
 

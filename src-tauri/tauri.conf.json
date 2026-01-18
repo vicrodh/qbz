@@ -52,6 +52,16 @@
     ],
     "category": "Music",
     "shortDescription": "Native Qobuz client for Linux",
-    "longDescription": "QBZ is a native Qobuz streaming client for Linux, designed for audiophiles who need bit-perfect playback without browser sample rate limitations."
+    "longDescription": "QBZ is a native Qobuz streaming client for Linux, designed for audiophiles who need bit-perfect playback without browser sample rate limitations.",
+    "linux": {
+      "deb": {
+        "depends": [],
+        "recommends": ["alsa-utils"]
+      },
+      "rpm": {
+        "depends": [],
+        "recommends": ["alsa-utils"]
+      }
+    }
   }
 }
