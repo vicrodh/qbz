@@ -1223,6 +1223,32 @@
     });
   }
 
+  /**
+   * Helper: Create context and play display track
+   */
+  async function createContextAndPlayDisplayTrack(
+    track: DisplayTrack,
+    contextType: ContextType,
+    contextId: string,
+    contextLabel: string,
+    trackIds: number[],
+    startIndex: number
+  ) {
+    // Create context
+    await setPlaybackContext(
+      contextType,
+      contextId,
+      contextLabel,
+      'qobuz',
+      trackIds,
+      startIndex
+    );
+    console.log(`[Context] Created for ${contextType}: ${contextLabel}, starting at index ${startIndex}`);
+    
+    // Play track
+    handleDisplayTrackPlay(track);
+  }
+
   async function handleLocalTrackPlay(track: LocalLibraryTrack) {
     console.log('Playing local track:', track);
 
