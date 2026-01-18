@@ -8,6 +8,7 @@
   import FavoritesEditModal from '../FavoritesEditModal.svelte';
   import { type DownloadStatus } from '$lib/stores/downloadState';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
+  import { setFavoritesTab } from '$lib/stores/navigationStore';
   import type { FavoritesPreferences } from '$lib/types';
 
   interface FavoriteAlbum {
@@ -76,6 +77,7 @@
     onTrackRemoveDownload?: (trackId: number) => void;
     getTrackDownloadStatus?: (trackId: number) => { status: DownloadStatus; progress: number };
     onPlaylistSelect?: (playlistId: number) => void;
+    currentTab?: TabType; // For syncing with navigation store
   }
 
   interface DisplayTrack {
@@ -120,11 +122,19 @@
     onTrackDownload,
     onTrackRemoveDownload,
     getTrackDownloadStatus,
-    onPlaylistSelect
+    onPlaylistSelect,
+    currentTab
   }: Props = $props();
 
   type TabType = 'tracks' | 'albums' | 'artists' | 'playlists';
   let activeTab = $state<TabType>('tracks');
+
+  // Sync activeTab with navigation store when parent passes currentTab
+  $effect(() => {
+    if (currentTab && currentTab !== activeTab) {
+      activeTab = currentTab;
+    }
+  });
 
   const tabLabels: Record<TabType, string> = {
     tracks: 'Tracks',
@@ -427,6 +437,9 @@
   }
 
   function handleTabChange(tab: TabType) {
+    // Push to navigation history for back button support
+    setFavoritesTab(tab);
+    
     activeTab = tab;
     showAlbumGroupMenu = false;
     showTrackGroupMenu = false;

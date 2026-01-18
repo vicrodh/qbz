@@ -80,8 +80,10 @@
     goForward as navGoForward,
     selectPlaylist,
     getNavigationState,
+    getSelectedFavoritesTab,
     type ViewType,
-    type NavigationState
+    type NavigationState,
+    type FavoritesTab
   } from '$lib/stores/navigationStore';
 
   // Player state management
@@ -2194,6 +2196,7 @@
             onTrackRemoveDownload={handleTrackRemoveDownload}
             getTrackDownloadStatus={getTrackDownloadStatus}
             onPlaylistSelect={selectPlaylist}
+            currentTab={getSelectedFavoritesTab()}
           />
         {/if}
       {:else if activeView === 'playlist-manager'}
