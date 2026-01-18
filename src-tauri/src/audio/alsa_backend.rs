@@ -44,23 +44,31 @@ impl AlsaBackend {
         Ok(Self { host })
     }
 
-    /// Enumerate ALSA devices via aplay -L (preferred - has real descriptions)
+    /// Enumerate ALSA devices via CPAL with descriptions from aplay -L
     fn enumerate_via_aplay(&self) -> BackendResult<Vec<AudioDevice>> {
-        let mut devices = Vec::new();
+        // First: Get devices from CPAL (these are the device IDs that actually work)
+        let cpal_devices_result = self.enumerate_via_cpal();
+        if cpal_devices_result.is_err() {
+            return cpal_devices_result;
+        }
+        let mut devices = cpal_devices_result.unwrap();
 
-        // Run aplay -L to get device list with descriptions
+        // Second: Build description map from aplay -L
         let output = Command::new("aplay")
             .arg("-L")
             .output()
             .map_err(|e| format!("Failed to run aplay -L: {}", e))?;
 
         if !output.status.success() {
-            return Err("aplay -L command failed".to_string());
+            log::warn!("[ALSA Backend] aplay -L failed, using CPAL names only");
+            return Ok(devices);
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         let lines: Vec<&str> = stdout.lines().collect();
 
+        // Build map: device_id -> friendly description
+        let mut description_map = std::collections::HashMap::new();
         let mut i = 0;
         while i < lines.len() {
             let line = lines[i].trim_end();
@@ -69,37 +77,6 @@ impl AlsaBackend {
             if !line.starts_with(' ') && !line.is_empty() {
                 let device_id = line.to_string();
 
-                // Skip blacklisted devices
-                // Only keep useful devices for audiophile playback:
-                // - default, sysdefault:CARD= (system defaults)
-                // - front:CARD= (stereo/front output - most common for DACs)
-                // - hdmi:CARD= (HDMI outputs)
-                // - iec958:CARD= (S/PDIF digital)
-                // Skip surround variants, usbstream, plugins, etc.
-                let is_blacklisted = device_id == "null"
-                    || device_id.starts_with("lavrate")
-                    || device_id.starts_with("samplerate")
-                    || device_id.starts_with("speexrate")
-                    || device_id == "jack"
-                    || device_id == "oss"
-                    || device_id == "speex"
-                    || device_id == "upmix"
-                    || device_id == "vdownmix"
-                    || device_id.starts_with("surround")  // Skip surround21, surround40, surround51, etc.
-                    || device_id.starts_with("usbstream:")  // Skip USB stream devices
-                    || device_id == "pipewire"  // Skip - use PipeWire backend instead
-                    || device_id == "pulse"  // Skip - use PulseAudio backend instead
-                    || device_id == "sysdefault";  // Skip bare sysdefault (keep sysdefault:CARD= only)
-
-                if is_blacklisted {
-                    // Skip this device and its description lines
-                    i += 1;
-                    while i < lines.len() && lines[i].starts_with(' ') {
-                        i += 1;
-                    }
-                    continue;
-                }
-
                 // Get description from next line (if it exists and is indented)
                 let description = if i + 1 < lines.len() && lines[i + 1].starts_with(' ') {
                     Some(lines[i + 1].trim().to_string())
@@ -107,34 +84,9 @@ impl AlsaBackend {
                     None
                 };
 
-                // Check if this is the default device
-                let is_default = device_id == "default" || device_id.starts_with("default:");
-
-                // Try to get max sample rate by testing with CPAL
-                let max_sample_rate = self.host
-                    .output_devices()
-                    .ok()
-                    .and_then(|mut devs| {
-                        devs.find(|d| d.name().ok().as_deref() == Some(&device_id))
-                    })
-                    .and_then(|device| {
-                        device
-                            .supported_output_configs()
-                            .ok()
-                            .and_then(|mut configs| {
-                                configs
-                                    .max_by_key(|c| c.max_sample_rate().0)
-                                    .map(|c| c.max_sample_rate().0)
-                            })
-                    });
-
-                devices.push(AudioDevice {
-                    id: device_id.clone(),
-                    name: device_id.clone(),
-                    description,
-                    is_default,
-                    max_sample_rate,
-                });
+                if let Some(desc) = description {
+                    description_map.insert(device_id, desc);
+                }
 
                 // Skip description lines
                 i += 1;
@@ -146,87 +98,14 @@ impl AlsaBackend {
             }
         }
 
-        // Add hw:X,Y devices for bit-perfect playback
-        // Parse aplay -l to get card numbers (CPAL requires hw:0,0 format, not hw:CARD=name)
-        let aplay_l_output = Command::new("aplay")
-            .arg("-l")
-            .output()
-            .ok()
-            .and_then(|o| if o.status.success() { Some(o) } else { None });
-
-        if let Some(output) = aplay_l_output {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-
-            // Parse card numbers and names from "card N: NAME [DESCRIPTION]" lines
-            // Example: card 4: C20 [Cambridge Audio USB Audio 2.0], device 0: USB Audio [USB Audio]
-            for line in stdout.lines() {
-                if let Some(card_info) = line.strip_prefix("card ") {
-                    // Extract card number and name
-                    let parts: Vec<&str> = card_info.splitn(2, ':').collect();
-                    if parts.len() == 2 {
-                        let card_num_str = parts[0].trim();
-                        let rest = parts[1].trim();
-
-                        // Extract card name (before space or bracket)
-                        let card_name = rest.split_whitespace().next().unwrap_or("");
-
-                        // Extract device number if present
-                        if let Some(device_info) = line.find(", device ") {
-                            if let Some(dev_start) = line[device_info..].find("device ") {
-                                let dev_part = &line[device_info + dev_start + 7..];
-                                if let Some(dev_num_str) = dev_part.split(':').next() {
-                                    // Create hw:X,Y device
-                                    let hw_device_id = format!("hw:{},{}", card_num_str, dev_num_str.trim());
-
-                                    // Skip if we already added this device
-                                    if devices.iter().any(|d| d.name == hw_device_id) {
-                                        continue;
-                                    }
-
-                                    // Get max sample rate from CPAL
-                                    let max_sample_rate = self.host
-                                        .output_devices()
-                                        .ok()
-                                        .and_then(|mut devs| {
-                                            devs.find(|d| d.name().ok().as_deref() == Some(&hw_device_id))
-                                        })
-                                        .and_then(|device| {
-                                            device
-                                                .supported_output_configs()
-                                                .ok()
-                                                .and_then(|mut configs| {
-                                                    configs
-                                                        .max_by_key(|c| c.max_sample_rate().0)
-                                                        .map(|c| c.max_sample_rate().0)
-                                                })
-                                        });
-
-                                    // Find the friendly description from aplay -L for this card
-                                    let base_description = devices.iter()
-                                        .find(|d| d.name.contains(&format!("CARD={}", card_name)))
-                                        .and_then(|d| d.description.as_ref())
-                                        .map(|desc| {
-                                            desc.split(',').next().unwrap_or(desc).trim().to_string()
-                                        })
-                                        .unwrap_or_else(|| card_name.to_string());
-
-                                    devices.push(AudioDevice {
-                                        id: hw_device_id.clone(),
-                                        name: hw_device_id.clone(),
-                                        description: Some(format!("{} (Direct Hardware - Bit-perfect)", base_description)),
-                                        is_default: false,
-                                        max_sample_rate,
-                                    });
-                                }
-                            }
-                        }
-                    }
-                }
+        // Third: Update device descriptions from aplay -L map
+        for device in &mut devices {
+            if let Some(desc) = description_map.get(&device.name) {
+                device.description = Some(desc.clone());
             }
         }
 
-        let hw_device_count = devices.iter().filter(|d| d.name.starts_with("hw:")).count();
-        log::info!("[ALSA Backend] Enumerated {} devices via aplay -L (+ {} hw: devices)", devices.len() - hw_device_count, hw_device_count);
+        log::info!("[ALSA Backend] Enumerated {} ALSA devices", devices.len());
         for (idx, dev) in devices.iter().enumerate() {
             log::info!(
                 "  [{}] {} - {} (max_rate: {:?})",

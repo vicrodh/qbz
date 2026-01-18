@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
-  import { ArrowLeft, FolderOpen, ChevronDown, ChevronRight } from 'lucide-svelte';
+  import { ArrowLeft, FolderOpen, ChevronDown, ChevronRight, Loader2 } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import VolumeSlider from '../VolumeSlider.svelte';
@@ -1234,6 +1234,17 @@
 </script>
 
 <div class="settings-view" bind:this={settingsViewEl}>
+  <!-- Loading Overlay for Device Enumeration -->
+  {#if isLoadingDevices}
+    <div class="loading-overlay">
+      <div class="loading-content">
+        <Loader2 size={48} class="spinner" />
+        <p>Loading audio devices...</p>
+        <p class="loading-subtitle">Parsing hardware information</p>
+      </div>
+    </div>
+  {/if}
+
   <!-- Header -->
   <div class="header">
     {#if onBack}
@@ -1755,6 +1766,52 @@
     color: rgba(255, 255, 255, 0.6);
     font-size: 14px;
     font-style: italic;
+  }
+
+  .loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(4px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+  }
+
+  .loading-content {
+    text-align: center;
+    color: white;
+  }
+
+  .loading-content :global(.spinner) {
+    animation: spin 1s linear infinite;
+    margin: 0 auto 16px auto;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .loading-content p {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 500;
+  }
+
+  .loading-subtitle {
+    margin-top: 8px !important;
+    font-size: 14px !important;
+    opacity: 0.7;
+    font-weight: 400 !important;
   }
 
   .header {
