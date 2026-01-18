@@ -295,11 +295,9 @@
           </button>
 
           <div class="song-info">
-            <div class="song-title-row">
-              <StackIcon size={14} class="stack-icon" />
-              <span class="song-title" title={trackTitle}>{trackTitle}</span>
-            </div>
+            <span class="song-title" title={trackTitle}>{trackTitle}</span>
             <div class="song-meta">
+              <StackIcon size={12} class="stack-icon" />
               {#if artist}
                 <button class="meta-link" onclick={onArtistClick} title={$t('actions.goToArtist')}>
                   {artist}
@@ -701,8 +699,6 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    flex: 1;
-    min-width: 0;
   }
 
   .song-meta {
@@ -713,6 +709,11 @@
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
+  }
+
+  .song-meta :global(.stack-icon) {
+    flex-shrink: 0;
+    margin-right: 2px;
   }
 
   .meta-link {

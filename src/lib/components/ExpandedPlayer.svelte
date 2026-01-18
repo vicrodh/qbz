@@ -245,12 +245,13 @@
         </div>
 
         <div class="track-info">
-          <div class="title-row">
-            <StackIcon size={18} class="stack-icon" />
-            <h1 class="title">{trackTitle}</h1>
+          <h1 class="title">{trackTitle}</h1>
+          <div class="artist-album-row">
+            <StackIcon size={16} class="stack-icon" />
+            <h2 class="artist">{artist}</h2>
+            <span class="separator">·</span>
+            <h3 class="album">{album}</h3>
           </div>
-          <h2 class="artist">{artist}</h2>
-          <h3 class="album">{album}</h3>
           <div class="quality-info">
             <QualityBadge {quality} {bitDepth} samplingRate={displaySamplingRate} />
           </div>
@@ -527,26 +528,41 @@
     font-size: 22px;
     font-weight: 600;
     color: white;
-    margin: 0;
+    margin: 0 0 6px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    flex: 1;
-    min-width: 0;
+  }
+
+  .artist-album-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .artist-album-row :global(.stack-icon) {
+    flex-shrink: 0;
+  }
+
+  .artist-album-row .separator {
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0 2px;
   }
 
   .artist {
     font-size: 16px;
     font-weight: 400;
     color: rgba(255, 255, 255, 0.7);
-    margin: 0 0 4px;
+    margin: 0;
   }
 
   .album {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 400;
     color: rgba(255, 255, 255, 0.5);
     margin: 0;
+  }
   }
 
   .quality-info {
