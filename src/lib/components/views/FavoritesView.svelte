@@ -126,6 +126,13 @@
   type TabType = 'tracks' | 'albums' | 'artists' | 'playlists';
   let activeTab = $state<TabType>('tracks');
 
+  const tabLabels: Record<TabType, string> = {
+    tracks: 'Tracks',
+    albums: 'Albums',
+    artists: 'Artists',
+    playlists: 'Playlists',
+  };
+
   let favoriteAlbums = $state<FavoriteAlbum[]>([]);
   let favoriteTracks = $state<FavoriteTrack[]>([]);
   let favoriteArtists = $state<FavoriteArtist[]>([]);
@@ -172,6 +179,7 @@
   let albumSearch = $state('');
   let artistSearch = $state('');
   let playlistSearch = $state('');
+  let searchExpanded = $state(false);
 
   let albumViewMode = $state<'grid' | 'list'>('grid');
   type AlbumGroupMode = 'alpha' | 'artist';
@@ -248,6 +256,42 @@
       return fallback;
     }
     return fallback;
+  }
+
+  function getCurrentSearchValue(): string {
+    switch (activeTab) {
+      case 'tracks': return trackSearch;
+      case 'albums': return albumSearch;
+      case 'artists': return artistSearch;
+      case 'playlists': return playlistSearch;
+      default: return '';
+    }
+  }
+
+  function setCurrentSearchValue(value: string) {
+    switch (activeTab) {
+      case 'tracks': trackSearch = value; break;
+      case 'albums': albumSearch = value; break;
+      case 'artists': artistSearch = value; break;
+      case 'playlists': playlistSearch = value; break;
+    }
+  }
+
+  function clearCurrentSearch() {
+    setCurrentSearchValue('');
+  }
+
+  function getTabIcon(tab: TabType) {
+    switch (tab) {
+      case 'tracks': return Music;
+      case 'albums': return Disc3;
+      case 'artists': return Mic2;
+      case 'playlists': return ListMusic;
+    }
+  }
+
+  function getTabLabel(tab: TabType): string {
+    return tabLabels[tab] || tab.charAt(0).toUpperCase() + tab.slice(1);
   }
 
   onMount(() => {
