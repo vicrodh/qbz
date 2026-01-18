@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Play, Heart, HardDrive } from 'lucide-svelte';
+  import { Play, Pause, Heart, HardDrive } from 'lucide-svelte';
   import TrackMenu from './TrackMenu.svelte';
   import DownloadButton from './DownloadButton.svelte';
   import {
@@ -8,6 +8,7 @@
     isTrackFavorite,
     toggleTrackFavorite
   } from '$lib/stores/favoritesStore';
+  import { togglePlay } from '$lib/stores/playerStore';
 
   type DownloadStatus = 'none' | 'queued' | 'downloading' | 'ready' | 'failed';
 
@@ -110,6 +111,11 @@
     e.stopPropagation();
     albumClickAction?.();
   }
+
+  function handlePauseClick(e: MouseEvent) {
+    e.stopPropagation();
+    void togglePlay();
+  }
 </script>
 
 <div
@@ -126,14 +132,20 @@
 >
   <!-- Track Number / Play Button -->
   <div class="track-number">
-    {#if isHovered && !isPlaying}
+    {#if isPlaying}
+      {#if isHovered}
+        <button class="pause-btn" type="button" onclick={handlePauseClick} aria-label="Pause">
+          <Pause size={16} class="pause-icon" />
+        </button>
+      {:else}
+        <div class="playing-indicator">
+          <div class="bar"></div>
+          <div class="bar"></div>
+          <div class="bar"></div>
+        </div>
+      {/if}
+    {:else if isHovered}
       <Play size={16} class="play-icon" fill="white" />
-    {:else if isPlaying}
-      <div class="playing-indicator">
-        <div class="bar"></div>
-        <div class="bar"></div>
-        <div class="bar"></div>
-      </div>
     {:else}
       <span>{number}</span>
     {/if}
@@ -284,6 +296,26 @@
   }
 
   :global([data-theme="light"]) .track-number :global(.play-icon) {
+    color: rgba(40, 42, 54, 0.85);
+  }
+
+  .pause-btn {
+    width: 24px;
+    height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .pause-btn :global(.pause-icon) {
+    color: white;
+  }
+
+  :global([data-theme="light"]) .pause-btn :global(.pause-icon) {
     color: rgba(40, 42, 54, 0.85);
   }
 
