@@ -48,6 +48,8 @@
   let lockedProvider = $state<ProviderKey | null>(null);
   let logEntries = $state<{ message: string; status: 'info' | 'success' | 'error' }[]>([]);
   let isOffline = $state(checkIsOffline());
+  let importCompleted = $state(false);
+  let lastImportedUrl = $state('');
 
   // Subscribe to offline state changes
   $effect(() => {
@@ -76,6 +78,20 @@
       summary = null;
       lockedProvider = null;
       logEntries = [];
+      importCompleted = false;
+      lastImportedUrl = '';
+    }
+  });
+
+  $effect(() => {
+    if (!importCompleted) return;
+    const trimmed = url.trim();
+    if (trimmed !== lastImportedUrl) {
+      error = null;
+      summary = null;
+      lockedProvider = null;
+      logEntries = [];
+      importCompleted = false;
     }
   });
 
@@ -127,6 +143,8 @@
       });
 
       summary = result;
+      importCompleted = true;
+      lastImportedUrl = url.trim();
       pushLog(`Imported ${result.matched_tracks} of ${result.total_tracks} tracks into QBZ.`, 'success');
 
       if (result.qobuz_playlist_id) {
@@ -259,7 +277,7 @@
 
       <div class="modal-footer">
         <button class="btn-secondary" onclick={onClose} disabled={loading}>Close</button>
-        <button class="btn-primary" onclick={handleImport} disabled={!isValid || loading}>
+        <button class="btn-primary" onclick={handleImport} disabled={!isValid || loading || importCompleted}>
           {#if loading}
             Importing...
           {:else}
