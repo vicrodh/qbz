@@ -250,5 +250,6 @@ export interface SongLinkResponse {
 export interface FavoritesPreferences {
   custom_icon_path: string | null;
   custom_icon_preset: string | null;
+  icon_background: string | null;
   tab_order: string[];
 }

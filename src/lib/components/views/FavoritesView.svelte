@@ -137,6 +137,7 @@
   let favoritesPreferences = $state<FavoritesPreferences>({
     custom_icon_path: null,
     custom_icon_preset: 'heart',
+    icon_background: null,
     tab_order: ['tracks', 'albums', 'artists', 'playlists'],
   });
 
@@ -1402,18 +1403,15 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: var(--bg-secondary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 8px;
+    background: transparent;
+    border: none;
     color: var(--text-secondary);
     cursor: pointer;
     transition: all 150ms ease;
   }
 
   .edit-btn:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border-color: var(--accent-primary);
+    color: var(--accent-primary);
   }
 
   .tabs {

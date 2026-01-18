@@ -6,6 +6,7 @@ use std::sync::{Arc, Mutex};
 pub struct FavoritesPreferences {
     pub custom_icon_path: Option<String>,
     pub custom_icon_preset: Option<String>,
+    pub icon_background: Option<String>,
     pub tab_order: Vec<String>,
 }
 
@@ -14,6 +15,7 @@ impl Default for FavoritesPreferences {
         Self {
             custom_icon_path: None,
             custom_icon_preset: Some("heart".to_string()),
+            icon_background: None,
             tab_order: vec![
                 "tracks".to_string(),
                 "albums".to_string(),
@@ -46,6 +48,7 @@ impl FavoritesPreferencesStore {
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 custom_icon_path TEXT,
                 custom_icon_preset TEXT,
+                icon_background TEXT,
                 tab_order TEXT NOT NULL
             )",
             [],
@@ -56,13 +59,14 @@ impl FavoritesPreferencesStore {
     }
 
     pub fn get_preferences(&self) -> Result<FavoritesPreferences, String> {
-        let mut stmt = self.conn.prepare("SELECT custom_icon_path, custom_icon_preset, tab_order FROM favorites_preferences WHERE id = 1")
+        let mut stmt = self.conn.prepare("SELECT custom_icon_path, custom_icon_preset, icon_background, tab_order FROM favorites_preferences WHERE id = 1")
             .map_err(|e| format!("Failed to prepare select: {}", e))?;
         
         let result = stmt.query_row([], |row| {
             let custom_icon_path: Option<String> = row.get(0)?;
             let custom_icon_preset: Option<String> = row.get(1)?;
-            let tab_order_str: String = row.get(2)?;
+            let icon_background: Option<String> = row.get(2)?;
+            let tab_order_str: String = row.get(3)?;
             
             let tab_order: Vec<String> = serde_json::from_str(&tab_order_str).unwrap_or_else(|_| {
                 vec![
@@ -76,6 +80,7 @@ impl FavoritesPreferencesStore {
             Ok(FavoritesPreferences {
                 custom_icon_path,
                 custom_icon_preset,
+                icon_background,
                 tab_order,
             })
         });
@@ -92,9 +97,9 @@ impl FavoritesPreferencesStore {
             .map_err(|e| format!("Failed to serialize tab_order: {}", e))?;
         
         self.conn.execute(
-            "INSERT OR REPLACE INTO favorites_preferences (id, custom_icon_path, custom_icon_preset, tab_order)
-             VALUES (1, ?1, ?2, ?3)",
-            params![prefs.custom_icon_path, prefs.custom_icon_preset, tab_order_str],
+            "INSERT OR REPLACE INTO favorites_preferences (id, custom_icon_path, custom_icon_preset, icon_background, tab_order)
+             VALUES (1, ?1, ?2, ?3, ?4)",
+            params![prefs.custom_icon_path, prefs.custom_icon_preset, prefs.icon_background, tab_order_str],
         )
         .map_err(|e| format!("Failed to save preferences: {}", e))?;
         Ok(())
@@ -143,6 +148,7 @@ pub fn create_table(conn: &Connection) -> Result<()> {
             id INTEGER PRIMARY KEY CHECK (id = 1),
             custom_icon_path TEXT,
             custom_icon_preset TEXT,
+            icon_background TEXT,
             tab_order TEXT NOT NULL
         )",
         [],
@@ -151,12 +157,13 @@ pub fn create_table(conn: &Connection) -> Result<()> {
 }
 
 pub fn load_preferences(conn: &Connection) -> Result<FavoritesPreferences> {
-    let mut stmt = conn.prepare("SELECT custom_icon_path, custom_icon_preset, tab_order FROM favorites_preferences WHERE id = 1")?;
+    let mut stmt = conn.prepare("SELECT custom_icon_path, custom_icon_preset, icon_background, tab_order FROM favorites_preferences WHERE id = 1")?;
     
     let result = stmt.query_row([], |row| {
         let custom_icon_path: Option<String> = row.get(0)?;
         let custom_icon_preset: Option<String> = row.get(1)?;
-        let tab_order_str: String = row.get(2)?;
+        let icon_background: Option<String> = row.get(2)?;
+        let tab_order_str: String = row.get(3)?;
         
         let tab_order: Vec<String> = serde_json::from_str(&tab_order_str).unwrap_or_else(|_| {
             vec![
@@ -170,6 +177,7 @@ pub fn load_preferences(conn: &Connection) -> Result<FavoritesPreferences> {
         Ok(FavoritesPreferences {
             custom_icon_path,
             custom_icon_preset,
+            icon_background,
             tab_order,
         })
     });
@@ -185,9 +193,9 @@ pub fn save_preferences(conn: &Connection, prefs: &FavoritesPreferences) -> Resu
     let tab_order_str = serde_json::to_string(&prefs.tab_order).unwrap();
     
     conn.execute(
-        "INSERT OR REPLACE INTO favorites_preferences (id, custom_icon_path, custom_icon_preset, tab_order)
-         VALUES (1, ?1, ?2, ?3)",
-        params![prefs.custom_icon_path, prefs.custom_icon_preset, tab_order_str],
+        "INSERT OR REPLACE INTO favorites_preferences (id, custom_icon_path, custom_icon_preset, icon_background, tab_order)
+         VALUES (1, ?1, ?2, ?3, ?4)",
+        params![prefs.custom_icon_path, prefs.custom_icon_preset, prefs.icon_background, tab_order_str],
     )?;
     Ok(())
 }
