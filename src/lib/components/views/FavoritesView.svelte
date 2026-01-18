@@ -306,15 +306,19 @@
     albumGroupingEnabled = loadStoredBool('qbz-favorites-album-group-enabled', false);
     trackGroupingEnabled = loadStoredBool('qbz-favorites-track-group-enabled', false);
     artistGroupingEnabled = loadStoredBool('qbz-favorites-artist-group-enabled', false);
-    await loadFavoritesPreferences();
-    
-    // On initial mount, sync with navigation store to load configured first tab
-    if (isInitialMount && currentTab) {
-      activeTab = currentTab;
-      isInitialMount = false;
-    }
-    
-    loadFavorites(activeTab);
+    loadFavoritesPreferences().then(() => {
+      // On initial mount, sync with navigation store to load configured first tab
+      if (isInitialMount && currentTab) {
+        activeTab = currentTab;
+        isInitialMount = false;
+      } else if (isInitialMount) {
+        // Load first tab from preferences
+        activeTab = favoritesPreferences.tab_order[0] as TabType;
+        isInitialMount = false;
+      }
+      
+      loadFavorites(activeTab);
+    });
   });
 
   async function loadFavoritesPreferences() {
