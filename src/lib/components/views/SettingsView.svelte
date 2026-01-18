@@ -215,20 +215,33 @@
   // Backend selector options (derived)
   let backendOptions = $derived(['Auto', ...availableBackends.filter(b => b.is_available).map(b => b.name)]);
 
+  // Helper to check if a device name looks like raw ALSA (needs translation)
+  function needsTranslation(name: string): boolean {
+    return name.startsWith('hw:')
+      || name.startsWith('plughw:')
+      || name.startsWith('sysdefault:CARD=')
+      || name.startsWith('default:CARD=')
+      || name.startsWith('front:CARD=')
+      || name.startsWith('surround')
+      || name.startsWith('hdmi:')
+      || name.startsWith('iec958:')
+      || name === 'default';
+  }
+
   // Device options based on selected backend (derived)
-  // Apply pretty names for ALSA devices only (PipeWire already has friendly names)
+  // Apply pretty names only to raw ALSA device names (Auto may use ALSA or PipeWire)
   let deviceOptions = $derived.by(() => {
-    const shouldTranslate = selectedBackend === 'ALSA Direct' || selectedBackend === 'Auto';
-    const names = backendDevices.map(d => shouldTranslate ? getDevicePrettyName(d.name) : d.name);
+    const names = backendDevices.map(d =>
+      needsTranslation(d.name) ? getDevicePrettyName(d.name) : d.name
+    );
     return ['System Default', ...names];
   });
 
   // Map display name -> device for lookup when user selects
   let deviceByDisplayName = $derived.by(() => {
     const map = new Map<string, AudioDevice>();
-    const shouldTranslate = selectedBackend === 'ALSA Direct' || selectedBackend === 'Auto';
     for (const device of backendDevices) {
-      const displayName = shouldTranslate ? getDevicePrettyName(device.name) : device.name;
+      const displayName = needsTranslation(device.name) ? getDevicePrettyName(device.name) : device.name;
       map.set(displayName, device);
     }
     return map;
@@ -766,8 +779,7 @@
           if (settings.output_device) {
             const device = backendDevices.find(d => d.id === settings.output_device);
             if (device) {
-              const shouldTranslate = settings.backend_type === 'Alsa' || !settings.backend_type;
-              outputDevice = shouldTranslate ? getDevicePrettyName(device.name) : device.name;
+              outputDevice = needsTranslation(device.name) ? getDevicePrettyName(device.name) : device.name;
             } else {
               outputDevice = 'System Default';
             }
