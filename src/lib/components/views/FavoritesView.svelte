@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
-  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3 } from 'lucide-svelte';
+  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
@@ -666,8 +666,29 @@
 <div class="favorites-view">
   <!-- Header -->
   <div class="header">
-    <div class="header-icon">
-      <Heart size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
+    <div
+      class="header-icon"
+      style={favoritesPreferences.icon_background ? `background: ${favoritesPreferences.icon_background};` : ''}
+    >
+      {#if favoritesPreferences.custom_icon_path}
+        <img src="asset://localhost/{favoritesPreferences.custom_icon_path}" alt="Custom Icon" class="custom-icon-img" />
+      {:else if favoritesPreferences.custom_icon_preset}
+        {#if favoritesPreferences.custom_icon_preset === 'heart'}
+          <Heart size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
+        {:else if favoritesPreferences.custom_icon_preset === 'star'}
+          <svelte:component this={Star} size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
+        {:else if favoritesPreferences.custom_icon_preset === 'music'}
+          <Music size={32} color="var(--accent-primary)" />
+        {:else if favoritesPreferences.custom_icon_preset === 'folder'}
+          <svelte:component this={Folder} size={32} color="var(--accent-primary)" />
+        {:else if favoritesPreferences.custom_icon_preset === 'disc'}
+          <Disc3 size={32} color="var(--accent-primary)" />
+        {:else if favoritesPreferences.custom_icon_preset === 'library'}
+          <svelte:component this={Library} size={32} color="var(--accent-primary)" />
+        {/if}
+      {:else}
+        <Heart size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
+      {/if}
     </div>
     <div class="header-content">
       <h1>Favorites</h1>
@@ -1375,6 +1396,13 @@
     justify-content: center;
     background: linear-gradient(135deg, var(--accent-primary) 0%, #ff6b9d 100%);
     border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .custom-icon-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
   }
 
   .header-content {
