@@ -49,12 +49,12 @@ pub fn get_hardware_audio_status() -> Result<HardwareAudioStatus, String> {
             
             // If we found both, return it
             if sample_rate.is_some() {
-                log::info!(
+                log::debug!(
                     "Hardware audio status: {}Hz, format: {:?}",
                     sample_rate.unwrap_or(0),
                     format
                 );
-                
+
                 return Ok(HardwareAudioStatus {
                     hardware_sample_rate: sample_rate,
                     hardware_format: format,
