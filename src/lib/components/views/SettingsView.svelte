@@ -43,6 +43,12 @@
     type OfflineSettings
   } from '$lib/stores/offlineStore';
   import { showToast } from '$lib/stores/toastStore';
+  import {
+    getPlaybackPreferences,
+    setAutoplayMode,
+    setShowContextIcon,
+    type AutoplayMode
+  } from '$lib/stores/playbackPreferencesStore';
 
   interface Props {
     onBack?: () => void;
@@ -173,14 +179,32 @@
     'Dark': '',
     'Light': 'light',
     'OLED Black': 'oled',
-    'Warm': 'warm'
+    'Warm': 'warm',
+    'Nord': 'nord',
+    'Dracula': 'dracula',
+    'Tokyo Night': 'tokyo-night',
+    'Catppuccin Mocha': 'catppuccin-mocha',
+    'Rose Pine Dawn': 'rose-pine-dawn',
+    'Breeze Dark': 'breeze-dark',
+    'Breeze Light': 'breeze-light',
+    'Adwaita Dark': 'adwaita-dark',
+    'Adwaita Light': 'adwaita-light'
   };
 
   const themeReverseMap: Record<string, string> = {
     '': 'Dark',
     'light': 'Light',
     'oled': 'OLED Black',
-    'warm': 'Warm'
+    'warm': 'Warm',
+    'nord': 'Nord',
+    'dracula': 'Dracula',
+    'tokyo-night': 'Tokyo Night',
+    'catppuccin-mocha': 'Catppuccin Mocha',
+    'rose-pine-dawn': 'Rose Pine Dawn',
+    'breeze-dark': 'Breeze Dark',
+    'breeze-light': 'Breeze Light',
+    'adwaita-dark': 'Adwaita Dark',
+    'adwaita-light': 'Adwaita Light'
   };
 
   // Language mapping: display name -> locale code
@@ -316,6 +340,8 @@
   );
 
   // Playback settings
+  let autoplayMode = $state<AutoplayMode>('continue');
+  let showContextIcon = $state(true);
   let gaplessPlayback = $state(true);
   let crossfade = $state(0);
   let normalizeVolume = $state(false);
@@ -423,6 +449,9 @@
     loadSystemNotificationsPreference();
     systemNotificationsEnabled = getSystemNotificationsEnabled();
 
+    // Load playback preferences
+    loadPlaybackPreferences();
+
     // Check for legacy downloads
     checkLegacyDownloads();
 
@@ -460,6 +489,15 @@
       unsubscribeOffline();
       settingsViewEl?.removeEventListener('scroll', handleScroll);
     };
+  });
+
+  // Reload playback preferences each time the view becomes visible
+  // This ensures settings are fresh when navigating back to settings
+  $effect(() => {
+    // This effect runs whenever the component is rendered
+    // We reload preferences to ensure they're in sync with backend
+    console.log('[Settings] Component rendered, reloading playback preferences');
+    loadPlaybackPreferences();
   });
 
   async function loadLastfmState() {
@@ -1110,6 +1148,44 @@
     }
   }
 
+  async function loadPlaybackPreferences() {
+    console.log('[Settings] Loading playback preferences...');
+    try {
+      const prefs = await getPlaybackPreferences();
+      console.log('[Settings] Loaded preferences:', prefs);
+      autoplayMode = prefs.autoplay_mode;
+      showContextIcon = prefs.show_context_icon;
+      console.log('[Settings] Set autoplayMode to:', autoplayMode);
+      console.log('[Settings] Set showContextIcon to:', showContextIcon);
+    } catch (err) {
+      console.error('Failed to load playback preferences:', err);
+    }
+  }
+
+  async function handleAutoplayModeChange(mode: AutoplayMode) {
+    console.log('[Settings] Changing autoplay mode to:', mode);
+    try {
+      await setAutoplayMode(mode);
+      autoplayMode = mode;
+      console.log('[Settings] Autoplay mode saved successfully');
+    } catch (err) {
+      console.error('[Settings] Failed to set autoplay mode:', err);
+      showToast('Failed to save autoplay preference', 'error');
+    }
+  }
+
+  async function handleShowContextIconChange(show: boolean) {
+    console.log('[Settings] Changing show context icon to:', show);
+    try {
+      await setShowContextIcon(show);
+      showContextIcon = show;
+      console.log('[Settings] Show context icon saved successfully');
+    } catch (err) {
+      console.error('[Settings] Failed to set show context icon:', err);
+      showToast('Failed to save icon visibility preference', 'error');
+    }
+  }
+
   async function checkLegacyDownloads() {
     try {
       const result = await invoke<{has_legacy_files: boolean, total_tracks: number}>('detect_legacy_downloads');
@@ -1439,6 +1515,20 @@
   <section class="section" bind:this={playbackSection}>
     <h3 class="section-title">{$t('settings.playback.title')}</h3>
     <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.playback.autoplayBehavior')}</span>
+        <span class="setting-desc">{$t('settings.playback.autoplayBehaviorDesc')}</span>
+      </div>
+      <Toggle enabled={autoplayMode === 'continue'} onchange={(enabled) => handleAutoplayModeChange(enabled ? 'continue' : 'track_only')} />
+    </div>
+    <div class="setting-row">
+      <div class="label-with-tooltip">
+        <span class="setting-label">{$t('settings.playback.showContextIcon')}</span>
+        <Tooltip text={$t('settings.playback.showContextIconTooltip')} />
+      </div>
+      <Toggle enabled={showContextIcon} onchange={handleShowContextIconChange} />
+    </div>
+    <div class="setting-row">
       <div class="label-with-tooltip">
         <span class="setting-label">{$t('settings.playback.gapless')}</span>
         {#if gaplessTooltipOverride}
@@ -1538,7 +1628,21 @@
       <span class="setting-label">{$t('settings.appearance.theme')}</span>
       <Dropdown
         value={theme}
-        options={['Dark', 'Light', 'OLED Black', 'Warm']}
+        options={[
+          'Dark',
+          'Light',
+          'OLED Black',
+          'Warm',
+          'Nord',
+          'Dracula',
+          'Tokyo Night',
+          'Catppuccin Mocha',
+          'Rose Pine Dawn',
+          'Breeze Dark',
+          'Breeze Light',
+          'Adwaita Dark',
+          'Adwaita Light'
+        ]}
         onchange={handleThemeChange}
       />
     </div>
@@ -2060,6 +2164,13 @@
     padding: 12px 0;
   }
 
+  .setting-row:has(.radio-group) {
+    height: auto;
+    min-height: 48px;
+    padding: 12px 0;
+    align-items: flex-start;
+  }
+
   .setting-value {
     font-size: 14px;
     color: var(--text-muted);
@@ -2084,6 +2195,39 @@
 
   .slider-container {
     width: 240px;
+  }
+
+  .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .radio-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 6px;
+    transition: background 0.15s;
+  }
+
+  .radio-option:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .radio-option input[type="radio"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+    accent-color: var(--accent-color, #1db954);
+  }
+
+  .radio-option span {
+    font-size: 14px;
+    color: var(--text-primary);
+    user-select: none;
   }
 
   .connect-btn {

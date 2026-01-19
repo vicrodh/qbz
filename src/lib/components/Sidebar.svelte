@@ -511,7 +511,7 @@
     <nav class="nav-section">
       <NavigationItem
         label={$t('nav.favorites')}
-        active={activeView === 'favorites'}
+        active={activeView.startsWith('favorites-')}
         onclick={() => handleViewChange('favorites')}
       >
         {#snippet icon()}<Heart size={14} />{/snippet}

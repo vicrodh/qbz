@@ -1,9 +1,12 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Pause, Music, Heart, Search, X, ChevronLeft, ChevronRight } from 'lucide-svelte';
   import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
+  import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
+  import { togglePlay } from '$lib/stores/playerStore';
+  import { tick } from 'svelte';
 
   interface Track {
     id: number;
@@ -68,6 +71,8 @@
     onTrackShareSonglink?: (track: Track) => void;
     onTrackGoToAlbum?: (albumId: string) => void;
     onTrackGoToArtist?: (artistId: number) => void;
+    activeTrackId?: number | null;
+    isPlaybackActive?: boolean;
   }
 
   let {
@@ -95,7 +100,9 @@
     onTrackShareQobuz,
     onTrackShareSonglink,
     onTrackGoToAlbum,
-    onTrackGoToArtist
+    onTrackGoToArtist,
+    activeTrackId = null,
+    isPlaybackActive = false
   }: Props = $props();
 
   let bioExpanded = $state(false);
@@ -297,7 +304,51 @@
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
-  function handleTrackPlay(track: Track) {
+  function handlePausePlayback(event: MouseEvent) {
+    event.stopPropagation();
+    void togglePlay();
+  }
+
+  function buildTopTracksQueue(tracks: Track[]) {
+    return tracks.map(t => ({
+      id: t.id,
+      title: t.title,
+      artist: t.performer?.name || artist.name,
+      album: t.album?.title || '',
+      duration_secs: t.duration,
+      artwork_url: t.album?.image?.large || t.album?.image?.thumbnail || '',
+      hires: t.hires_streamable ?? false,
+      bit_depth: t.maximum_bit_depth ?? null,
+      sample_rate: t.maximum_sampling_rate ?? null,
+    }));
+  }
+
+  async function handleTrackPlay(track: Track, trackIndex?: number) {
+    // Create artist top tracks context
+    if (topTracks.length > 0) {
+      const trackIds = topTracks.map(t => t.id);
+      const index = trackIndex !== undefined ? trackIndex : trackIds.indexOf(track.id);
+      
+      if (index >= 0) {
+        setPlaybackContext(
+          'artist_top',
+          artist.id.toString(),
+          artist.name,
+          'qobuz',
+          trackIds,
+          index
+        );
+        console.log(`[Artist] Context created: "${artist.name}" top tracks, ${trackIds.length} tracks, starting at ${index}`);
+        try {
+          const queueTracks = buildTopTracksQueue(topTracks);
+          await invoke('set_queue', { tracks: queueTracks, startIndex: index });
+        } catch (err) {
+          console.error('Failed to set queue:', err);
+        }
+      }
+    }
+
+    // Play track
     if (onTrackPlay) {
       onTrackPlay({
         id: track.id,
@@ -320,21 +371,8 @@
   async function handlePlayAllTracks() {
     if (topTracks.length === 0 || !onTrackPlay) return;
 
-    const queueTracks = topTracks.map(t => ({
-      id: t.id,
-      title: t.title,
-      artist: t.performer?.name || artist.name,
-      album: t.album?.title || '',
-      duration_secs: t.duration,
-      artwork_url: t.album?.image?.large || t.album?.image?.thumbnail || '',
-      hires: t.hires_streamable ?? false,
-      bit_depth: t.maximum_bit_depth ?? null,
-      sample_rate: t.maximum_sampling_rate ?? null,
-    }));
-
     try {
-      await invoke('set_queue', { tracks: queueTracks, startIndex: 0 });
-      handleTrackPlay(topTracks[0]);
+      await handleTrackPlay(topTracks[0], 0);
     } catch (err) {
       console.error('Failed to set queue:', err);
     }
@@ -494,6 +532,20 @@
     activeJumpSection = id;
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
+
+  async function scrollToTrack(trackId: number) {
+    await tick();
+    const target = artistDetailEl?.querySelector<HTMLElement>(`[data-track-id="${trackId}"]`);
+    target?.scrollIntoView({ block: 'center' });
+  }
+
+  $effect(() => {
+    if (!artistDetailEl || topTracks.length === 0) return;
+    const targetId = consumeContextTrackFocus('artist_top', artist.id.toString());
+    if (targetId !== null) {
+      void scrollToTrack(targetId);
+    }
+  });
 
   $effect(() => {
     if (!artistDetailEl) return;
@@ -743,12 +795,14 @@
       {:else}
         <div class="tracks-list">
           {#each topTracks as track, index}
+            {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
             <div
               class="track-row"
+              class:playing={isActiveTrack}
               role="button"
               tabindex="0"
-              onclick={() => handleTrackPlay(track)}
-              onkeydown={(e) => e.key === 'Enter' && handleTrackPlay(track)}
+              onclick={() => handleTrackPlay(track, index)}
+              onkeydown={(e) => e.key === 'Enter' && handleTrackPlay(track, index)}
             >
               <div class="track-number">{index + 1}</div>
               <div class="track-artwork">
@@ -759,6 +813,29 @@
                     <Music size={16} />
                   </div>
                 {/if}
+                <button
+                  class="track-play-overlay"
+                  class:is-playing={isActiveTrack}
+                  onclick={(event) => {
+                    if (isActiveTrack) {
+                      handlePausePlayback(event);
+                    } else {
+                      event.stopPropagation();
+                      handleTrackPlay(track, index);
+                    }
+                  }}
+                  aria-label={isActiveTrack ? 'Pause track' : 'Play track'}
+                >
+                  <span class="play-icon" aria-hidden="true">
+                    <Play size={18} />
+                  </span>
+                  <div class="playing-indicator" aria-hidden="true">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                  </div>
+                  <Pause size={18} class="pause-icon" aria-hidden="true" />
+                </button>
               </div>
               <div class="track-info">
                 <div class="track-title">{track.title}</div>
@@ -780,7 +857,7 @@
               <div class="track-duration">{formatDuration(track.duration)}</div>
               <div class="track-actions">
                 <TrackMenu
-                  onPlayNow={() => handleTrackPlay(track)}
+                  onPlayNow={() => handleTrackPlay(track, index)}
                   onPlayNext={onTrackPlayNext ? () => onTrackPlayNext(track) : undefined}
                   onPlayLater={onTrackPlayLater ? () => onTrackPlayLater(track) : undefined}
                   onAddFavorite={onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined}
@@ -1651,6 +1728,7 @@
     border-radius: 4px;
     overflow: hidden;
     flex-shrink: 0;
+    position: relative;
   }
 
   .track-artwork img {
@@ -1667,6 +1745,90 @@
     justify-content: center;
     background-color: var(--bg-tertiary);
     color: var(--text-muted);
+  }
+
+  .track-play-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.6);
+    border: none;
+    cursor: pointer;
+    transition: background 150ms ease;
+  }
+
+  .track-row:hover .track-play-overlay {
+    display: flex;
+  }
+
+  .track-row.playing .track-play-overlay {
+    display: flex;
+  }
+
+  .track-play-overlay:hover {
+    background: rgba(0, 0, 0, 0.75);
+  }
+
+  .track-play-overlay .playing-indicator,
+  .track-play-overlay .pause-icon {
+    display: none;
+  }
+
+  .track-row.playing .track-play-overlay .play-icon {
+    display: none;
+  }
+
+  .track-row.playing .track-play-overlay .playing-indicator {
+    display: flex;
+  }
+
+  .track-row.playing:hover .track-play-overlay .playing-indicator {
+    display: none;
+  }
+
+  .track-row.playing:hover .track-play-overlay .pause-icon {
+    display: inline-flex;
+  }
+
+  .playing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .playing-indicator .bar {
+    width: 3px;
+    background-color: var(--accent-primary);
+    border-radius: 9999px;
+    transform-origin: bottom;
+    animation: artist-equalize 1s ease-in-out infinite;
+  }
+
+  .playing-indicator .bar:nth-child(1) {
+    height: 10px;
+  }
+
+  .playing-indicator .bar:nth-child(2) {
+    height: 14px;
+    animation-delay: 0.15s;
+  }
+
+  .playing-indicator .bar:nth-child(3) {
+    height: 8px;
+    animation-delay: 0.3s;
+  }
+
+  @keyframes artist-equalize {
+    0%, 100% {
+      transform: scaleY(0.5);
+      opacity: 0.7;
+    }
+    50% {
+      transform: scaleY(1);
+      opacity: 1;
+    }
   }
 
   .track-info {

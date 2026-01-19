@@ -131,6 +131,8 @@
     onTrackPlayLater?: (track: LocalTrack) => void;
     onTrackAddToPlaylist?: (trackId: number) => void;
     onSetLocalQueue?: (trackIds: number[]) => void;
+    activeTrackId?: number | null;
+    isPlaybackActive?: boolean;
   }
 
   let {
@@ -140,7 +142,9 @@
     onTrackPlayNext,
     onTrackPlayLater,
     onTrackAddToPlaylist,
-    onSetLocalQueue
+    onSetLocalQueue,
+    activeTrackId = null,
+    isPlaybackActive = false
   }: Props = $props();
 
   // View state
@@ -710,6 +714,15 @@
 
   async function handleTrackPlay(track: LocalTrack) {
     try {
+      if (selectedAlbum && albumTracks.length > 0) {
+        const trackIndex = albumTracks.findIndex(t => t.id === track.id);
+        await setQueueForAlbumTracks(albumTracks, trackIndex >= 0 ? trackIndex : 0);
+      } else if (activeTab === 'tracks' && tracks.length > 0) {
+        const orderedTracks = getDisplayedTrackOrder();
+        const trackIndex = orderedTracks.findIndex(t => t.id === track.id);
+        await setQueueForLocalTracks(orderedTracks, trackIndex >= 0 ? trackIndex : 0);
+      }
+
       await invoke('library_play_track', { trackId: track.id });
       onTrackPlay?.(track);
     } catch (err) {
@@ -722,7 +735,6 @@
     if (!selectedAlbum || albumTracks.length === 0) return;
 
     try {
-      await setQueueForAlbumTracks(albumTracks);
       await handleTrackPlay(albumTracks[0]);
     } catch (err) {
       console.error('Failed to play album:', err);
@@ -740,7 +752,7 @@
     }
   }
 
-  async function setQueueForAlbumTracks(tracks: LocalTrack[]) {
+  async function setQueueForLocalTracks(tracks: LocalTrack[], startIndex = 0) {
     const queueTracks = tracks.map(t => ({
       id: t.id,
       title: t.title,
@@ -753,8 +765,12 @@
       sample_rate: t.sample_rate ?? null,
     }));
 
-    await invoke('set_queue', { tracks: queueTracks, startIndex: 0 });
+    await invoke('set_queue', { tracks: queueTracks, startIndex });
     onSetLocalQueue?.(tracks.map(t => t.id));
+  }
+
+  async function setQueueForAlbumTracks(tracks: LocalTrack[], startIndex = 0) {
+    await setQueueForLocalTracks(tracks, startIndex);
   }
 
   function formatDuration(seconds: number): string {
@@ -1424,6 +1440,22 @@
       tracks: groups.get(key)?.tracks ?? []
     }));
   }
+
+  function getDisplayedTrackOrder(): LocalTrack[] {
+    if (!trackGroupingEnabled) return tracks;
+    const grouped = groupTracks(tracks, trackGroupMode);
+    if (trackGroupMode === 'album') {
+      const ordered: LocalTrack[] = [];
+      for (const group of grouped) {
+        const sections = buildAlbumSections(group.tracks);
+        for (const section of sections) {
+          ordered.push(...section.tracks);
+        }
+      }
+      return ordered;
+    }
+    return grouped.flatMap(group => group.tracks);
+  }
 </script>
 
 <div class="library-view">
@@ -1499,6 +1531,7 @@
               artist={track.artist !== selectedAlbum?.artist ? track.artist : undefined}
               duration={formatDuration(track.duration_secs)}
               quality={getQualityBadge(track)}
+              isPlaying={isPlaybackActive && activeTrackId === track.id}
               isLocal={true}
               hideDownload={true}
               hideFavorite={true}
@@ -2139,6 +2172,7 @@
                             artist={track.artist}
                             duration={formatDuration(track.duration_secs)}
                             quality={getQualityBadge(track)}
+                            isPlaying={isPlaybackActive && activeTrackId === track.id}
                             isLocal={true}
                             hideDownload={true}
                             hideFavorite={true}
@@ -2162,6 +2196,7 @@
                           artist={track.artist}
                           duration={formatDuration(track.duration_secs)}
                           quality={getQualityBadge(track)}
+                          isPlaying={isPlaybackActive && activeTrackId === track.id}
                           isLocal={true}
                           hideDownload={true}
                           hideFavorite={true}

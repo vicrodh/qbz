@@ -77,6 +77,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    padding-left: 140px; /* Half of sidebar width (280px) for visual center */
     z-index: 1000;
     animation: fade-in 150ms ease;
   }

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { SkipBack, Play, Pause, SkipForward, ChevronDown } from 'lucide-svelte';
+  import StackIcon from './StackIcon.svelte';
   import LyricsLines from './lyrics/LyricsLines.svelte';
   import { startActiveLineUpdates, stopActiveLineUpdates } from '$lib/stores/lyricsStore';
   import { t } from '$lib/i18n';
@@ -21,6 +22,9 @@
     currentTime: number;
     duration: number;
     onSeek: (time: number) => void;
+    volume: number;
+    onVolumeChange: (volume: number) => void;
+    onContextClick?: () => void;
     // Lyrics props
     lyricsLines?: LyricsLine[];
     lyricsActiveIndex?: number;
@@ -43,6 +47,9 @@
     currentTime,
     duration,
     onSeek,
+    volume,
+    onVolumeChange,
+    onContextClick,
     lyricsLines = [],
     lyricsActiveIndex = -1,
     lyricsActiveProgress = 0,
@@ -64,6 +71,8 @@
   let showControls = $state(true);
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
   let progressRef: HTMLDivElement | null = $state(null);
+  let volumeRef: HTMLDivElement | null = $state(null);
+  let isDraggingVolume = $state(false);
 
   const progress = $derived((currentTime / duration) * 100 || 0);
   const hasLyrics = $derived(lyricsLines.length > 0);
@@ -91,6 +100,31 @@
     } else if (e.key === 'ArrowLeft') {
       onSeek(Math.max(0, currentTime - step));
     }
+  }
+
+  function handleVolumeMouseDown(e: MouseEvent) {
+    e.stopPropagation();
+    isDraggingVolume = true;
+    updateVolume(e);
+    document.addEventListener('mousemove', handleVolumeMouseMove);
+    document.addEventListener('mouseup', handleVolumeMouseUp);
+  }
+
+  function handleVolumeMouseMove(e: MouseEvent) {
+    if (isDraggingVolume) updateVolume(e);
+  }
+
+  function handleVolumeMouseUp() {
+    isDraggingVolume = false;
+    document.removeEventListener('mousemove', handleVolumeMouseMove);
+    document.removeEventListener('mouseup', handleVolumeMouseUp);
+  }
+
+  function updateVolume(e: MouseEvent) {
+    if (!volumeRef) return;
+    const rect = volumeRef.getBoundingClientRect();
+    const percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    onVolumeChange(Math.round(percentage));
   }
 
   function showControlsTemporarily() {
@@ -185,7 +219,10 @@
         <img src={artwork} alt="" class="mini-artwork" />
         <div class="track-meta">
           <div class="track-title">{trackTitle}</div>
-          <div class="track-artist">{artist}</div>
+          <div class="track-artist-row">
+            <StackIcon size={12} class="stack-icon" onClick={onContextClick} />
+            <div class="track-artist">{artist}</div>
+          </div>
         </div>
       </div>
 
@@ -233,8 +270,26 @@
         </div>
       </div>
 
-      <!-- Right: Spacer for balance -->
-      <div class="right-spacer"></div>
+      <!-- Right: Volume Control -->
+      <div class="right-controls">
+        <div class="volume-control">
+          <div class="volume-value" class:visible={isDraggingVolume}>{volume}</div>
+          <div
+            class="volume-bar"
+            bind:this={volumeRef}
+            onmousedown={handleVolumeMouseDown}
+            role="slider"
+            tabindex="0"
+            aria-valuenow={volume}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            title={$t('player.volume')}
+          >
+            <div class="volume-fill" style="width: {volume}%"></div>
+            <div class="volume-thumb" style="left: {volume}%"></div>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 {/if}
@@ -464,6 +519,18 @@
     flex: 1;
   }
 
+  .track-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .track-title-row :global(.stack-icon) {
+    flex-shrink: 0;
+  }
+
   .track-title {
     font-size: 14px;
     font-weight: 600;
@@ -473,13 +540,23 @@
     text-overflow: ellipsis;
   }
 
+  .track-artist-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+  }
+
+  .track-artist-row :global(.stack-icon) {
+    flex-shrink: 0;
+  }
+
   .track-artist {
     font-size: 12px;
     color: rgba(255, 255, 255, 0.6);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-top: 2px;
   }
 
   /* Playback Section */
@@ -592,8 +669,66 @@
     opacity: 1;
   }
 
-  .right-spacer {
+  .right-controls {
     min-width: 200px;
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .volume-control {
+    position: relative;
+    display: flex;
+    align-items: center;
+  }
+
+  .volume-bar {
+    width: 140px;
+    height: 6px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.15);
+    cursor: pointer;
+    position: relative;
+  }
+
+  .volume-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.7);
+  }
+
+  .volume-thumb {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #fff;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .volume-bar:hover .volume-thumb {
+    opacity: 1;
+  }
+
+  .volume-value {
+    position: absolute;
+    right: 0;
+    top: -26px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    font-size: 12px;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 150ms ease, transform 150ms ease;
+  }
+
+  .volume-value.visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 
   /* Responsive Breakpoints */
@@ -639,7 +774,7 @@
       display: none;
     }
 
-    .right-spacer {
+    .right-controls {
       display: none;
     }
 

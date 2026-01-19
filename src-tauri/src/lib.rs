@@ -19,6 +19,7 @@ pub mod lyrics;
 pub mod media_controls;
 pub mod network;
 pub mod offline;
+pub mod playback_context;
 pub mod player;
 pub mod playlist_import;
 pub mod queue;
@@ -35,6 +36,7 @@ use api::QobuzClient;
 use cache::{AudioCache, PlaybackCache};
 use lastfm::LastFmClient;
 use media_controls::{MediaControlsManager, TrackInfo};
+use playback_context::ContextManager;
 use player::Player;
 use queue::QueueManager;
 use share::SongLinkClient;
@@ -44,6 +46,7 @@ pub struct AppState {
     pub client: Arc<Mutex<QobuzClient>>,
     pub player: Player,
     pub queue: QueueManager,
+    pub context: ContextManager,
     pub media_controls: MediaControlsManager,
     pub audio_cache: Arc<AudioCache>,
     pub lastfm: Arc<Mutex<LastFmClient>>,
@@ -83,6 +86,7 @@ impl AppState {
             client: Arc::new(Mutex::new(QobuzClient::default())),
             player: Player::new(device_name, audio_settings),
             queue: QueueManager::new(),
+            context: ContextManager::new(),
             media_controls: MediaControlsManager::new(),
             audio_cache,
             lastfm: Arc::new(Mutex::new(LastFmClient::default())),
@@ -168,6 +172,12 @@ pub fn run() {
     // Initialize offline mode state
     let offline_state = offline::OfflineState::new()
         .expect("Failed to initialize offline state");
+    // Initialize playback preferences state
+    let playback_prefs_state = config::playback_preferences::PlaybackPreferencesState::new()
+        .expect("Failed to initialize playback preferences");
+    // Initialize favorites preferences state
+    let favorites_prefs_state = config::favorites_preferences::FavoritesPreferencesState::new()
+        .expect("Failed to initialize favorites preferences");
 
     // Read saved audio device and settings for player initialization
     let (saved_device, audio_settings) = audio_settings_state
@@ -292,6 +302,8 @@ pub fn run() {
         .manage(audio_settings_state)
         .manage(download_settings_state)
         .manage(offline_state)
+        .manage(playback_prefs_state)
+        .manage(favorites_prefs_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -352,6 +364,11 @@ pub fn run() {
             commands::set_repeat,
             commands::get_repeat,
             commands::get_queue_state,
+            // Playback context commands
+            commands::get_playback_context,
+            commands::set_playback_context,
+            commands::clear_playback_context,
+            commands::has_playback_context,
             // Playlist commands
             commands::get_user_playlists,
             commands::get_playlist,
@@ -561,6 +578,12 @@ pub fn run() {
             offline::commands::set_manual_offline,
             offline::commands::set_show_partial_playlists,
             offline::commands::set_allow_cast_while_offline,
+            // Playback preferences commands
+            config::playback_preferences::get_playback_preferences,
+            config::playback_preferences::set_autoplay_mode,
+            config::playback_preferences::set_show_context_icon,
+            config::favorites_preferences::get_favorites_preferences,
+            config::favorites_preferences::save_favorites_preferences,
             offline::commands::set_allow_immediate_scrobbling,
             offline::commands::set_allow_accumulated_scrobbling,
             offline::commands::set_show_network_folders_in_manual_offline,

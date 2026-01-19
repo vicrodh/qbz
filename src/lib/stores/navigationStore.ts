@@ -6,7 +6,21 @@
  * fetched data, but selectedPlaylistId is managed here as it's just an ID.
  */
 
-export type ViewType = 'home' | 'search' | 'library' | 'library-album' | 'settings' | 'album' | 'artist' | 'playlist' | 'playlist-manager' | 'favorites';
+export type ViewType =
+  | 'home'
+  | 'search'
+  | 'library'
+  | 'library-album'
+  | 'settings'
+  | 'album'
+  | 'artist'
+  | 'playlist'
+  | 'playlist-manager'
+  | 'favorites-tracks'
+  | 'favorites-albums'
+  | 'favorites-artists'
+  | 'favorites-playlists';
+export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'playlists';
 
 // Navigation state
 let activeView: ViewType = 'home';
@@ -18,6 +32,39 @@ let selectedPlaylistId: number | null = null;
 
 // Selected local album ID (for library-album view)
 let selectedLocalAlbumId: string | null = null;
+
+// Last visited Favorites tab (used as default when navigating to Favorites)
+let lastFavoritesTab: FavoritesTab = 'tracks';
+
+const favoritesViewMap: Record<FavoritesTab, ViewType> = {
+  tracks: 'favorites-tracks',
+  albums: 'favorites-albums',
+  artists: 'favorites-artists',
+  playlists: 'favorites-playlists'
+};
+
+export function isFavoritesView(view: ViewType): boolean {
+  return view.startsWith('favorites-');
+}
+
+export function favoritesViewForTab(tab: FavoritesTab): ViewType {
+  return favoritesViewMap[tab];
+}
+
+export function getFavoritesTabFromView(view: ViewType): FavoritesTab | null {
+  switch (view) {
+    case 'favorites-tracks':
+      return 'tracks';
+    case 'favorites-albums':
+      return 'albums';
+    case 'favorites-artists':
+      return 'artists';
+    case 'favorites-playlists':
+      return 'playlists';
+    default:
+      return null;
+  }
+}
 
 // Listeners
 const listeners = new Set<() => void>();
@@ -47,6 +94,12 @@ export function navigateTo(view: ViewType): void {
     viewHistory = [...viewHistory, view];
     forwardHistory = [];
     activeView = view;
+
+    const tab = getFavoritesTabFromView(view);
+    if (tab) {
+      lastFavoritesTab = tab;
+    }
+
     notifyListeners();
   }
 }
@@ -61,6 +114,10 @@ export function goBack(): boolean {
     viewHistory = viewHistory.slice(0, -1);
     forwardHistory = [...forwardHistory, lastView];
     activeView = viewHistory[viewHistory.length - 1];
+    const tab = getFavoritesTabFromView(activeView);
+    if (tab) {
+      lastFavoritesTab = tab;
+    }
     notifyListeners();
     return true;
   }
@@ -77,6 +134,10 @@ export function goForward(): boolean {
     forwardHistory = forwardHistory.slice(0, -1);
     viewHistory = [...viewHistory, nextView];
     activeView = nextView;
+    const tab = getFavoritesTabFromView(activeView);
+    if (tab) {
+      lastFavoritesTab = tab;
+    }
     notifyListeners();
     return true;
   }
@@ -150,6 +211,12 @@ export function clearLocalAlbum(): void {
  */
 export function getSelectedLocalAlbumId(): string | null {
   return selectedLocalAlbumId;
+}
+
+// ============ Favorites Navigation ============
+export function navigateToFavorites(tab?: FavoritesTab): void {
+  const targetTab = tab ?? lastFavoritesTab;
+  navigateTo(favoritesViewForTab(targetTab));
 }
 
 // ============ Getters ============

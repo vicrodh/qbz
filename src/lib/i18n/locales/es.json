@@ -196,7 +196,25 @@
     "artists": "Artistas",
     "noFavorites": "Aún no hay favoritos",
     "addedToFavorites": "Agregado a favoritos",
-    "removedFromFavorites": "Eliminado de favoritos"
+    "removedFromFavorites": "Eliminado de favoritos",
+    "editSettings": "Editar configuracion de Favoritos",
+    "settingsModalTitle": "Configuracion de Favoritos",
+    "iconSectionTitle": "Icono",
+    "iconSectionDescription": "Elige un icono para el encabezado de la pagina de Favoritos",
+    "uploadCustomImage": "Subir imagen personalizada",
+    "tabOrderSectionTitle": "Orden de pestanas",
+    "tabOrderSectionDescription": "Reordena las pestanas en la navegacion de Favoritos",
+    "tabLabels": {
+      "tracks": "Pistas",
+      "albums": "Albumes",
+      "artists": "Artistas",
+      "playlists": "Listas"
+    },
+    "moveUp": "Subir",
+    "moveDown": "Bajar",
+    "save": "Guardar",
+    "saving": "Guardando...",
+    "cancel": "Cancelar"
   },
   "player": {
     "nowPlaying": "Reproduciendo",
@@ -311,7 +329,13 @@
       "gapless": "Reproducción Sin Pausas",
       "crossfade": "Crossfade",
       "crossfadeSeconds": "{seconds}s",
-      "normalizeVolume": "Normalizar Volumen"
+      "normalizeVolume": "Normalizar Volumen",
+      "autoplayBehavior": "Continuar reproducción al finalizar pista",
+      "autoplayBehaviorDesc": "Cuando está activado, reproduce la siguiente pista del contexto. Cuando está desactivado, se detiene después de cada pista",
+      "continueWithinSource": "Continuar dentro del contexto",
+      "playOnlySelectedTrack": "Reproducir solo la pista seleccionada",
+      "showContextIcon": "Mostrar contexto de reproducción en el reproductor",
+      "showContextIconTooltip": "Muestra el contexto desde donde se reproduce la pista actual (álbum, artista, playlist, etc.)"
     },
     "appearance": {
       "title": "Apariencia",

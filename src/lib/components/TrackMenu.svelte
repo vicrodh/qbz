@@ -17,6 +17,8 @@
 
   interface Props {
     onPlayNow?: () => void;
+    onPlayTrackOnly?: () => void;
+    onPlayFromHere?: () => void;
     onPlayNext?: () => void;
     onPlayLater?: () => void;
     onAddFavorite?: () => void;
@@ -30,6 +32,8 @@
 
   let {
     onPlayNow,
+    onPlayTrackOnly,
+    onPlayFromHere,
     onPlayNext,
     onPlayLater,
     onAddFavorite,
@@ -63,7 +67,7 @@
     };
   }
 
-  const hasPlayback = $derived(!!(onPlayNow || onPlayNext || onPlayLater));
+  const hasPlayback = $derived(!!(onPlayNow || onPlayTrackOnly || onPlayFromHere || onPlayNext || onPlayLater));
   const hasLibrary = $derived(!!(onAddFavorite || onAddToPlaylist || onRemoveFromPlaylist));
   const hasShare = $derived(!!(onShareQobuz || onShareSonglink));
   const hasNav = $derived(!!(onGoToAlbum || onGoToArtist));
@@ -191,6 +195,18 @@
             <button class="menu-item" onclick={() => handleAction(onPlayNow)}>
               <Play size={14} />
               <span>Play now</span>
+            </button>
+          {/if}
+          {#if onPlayTrackOnly}
+            <button class="menu-item" onclick={() => handleAction(onPlayTrackOnly)}>
+              <Play size={14} />
+              <span>Play track only</span>
+            </button>
+          {/if}
+          {#if onPlayFromHere}
+            <button class="menu-item" onclick={() => handleAction(onPlayFromHere)}>
+              <Play size={14} />
+              <span>Play from here</span>
             </button>
           {/if}
           {#if onPlayNext}

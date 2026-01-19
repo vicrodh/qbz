@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { ArrowLeft, Play, Shuffle, Heart } from 'lucide-svelte';
   import TrackRow from '../TrackRow.svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import { getDownloadState, type DownloadStatus, isAlbumFullyDownloaded } from '$lib/stores/downloadState';
+  import { consumeContextTrackFocus } from '$lib/stores/playbackContextStore';
   import {
     subscribe as subscribeAlbumFavorites,
     isAlbumFavorite,
@@ -101,6 +102,7 @@
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
   let playBtnHovered = $state(false);
+  let scrollContainer: HTMLDivElement | null = $state(null);
   
   const albumFullyDownloaded = $derived(
     isAlbumFullyDownloaded(album.tracks.map(t => t.id))
@@ -109,6 +111,12 @@
   const isVariousArtists = $derived(
     album.artist?.trim().toLowerCase() === 'various artists'
   );
+
+  async function scrollToTrack(trackId: number) {
+    await tick();
+    const target = scrollContainer?.querySelector<HTMLElement>(`[data-track-id="${trackId}"]`);
+    target?.scrollIntoView({ block: 'center' });
+  }
 
   // Check if album is in favorites on mount
   onMount(() => {
@@ -130,6 +138,14 @@
     };
   });
 
+  $effect(() => {
+    if (!album.tracks?.length) return;
+    const targetId = consumeContextTrackFocus('album', album.id);
+    if (targetId !== null) {
+      void scrollToTrack(targetId);
+    }
+  });
+
   async function toggleFavorite() {
     if (isFavoriteLoading) return;
 
@@ -144,7 +160,7 @@
   }
 </script>
 
-<div class="album-detail">
+<div class="album-detail" bind:this={scrollContainer}>
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
@@ -224,7 +240,7 @@
 
     <!-- Track Rows -->
     <div class="tracks">
-      {#each album.tracks as track (`${track.id}-${downloadStateVersion}`)}
+      {#each album.tracks as track, trackIndex (`${track.id}-${downloadStateVersion}`)}
         {@const downloadInfo = getTrackDownloadStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
         <TrackRow
           trackId={track.id}

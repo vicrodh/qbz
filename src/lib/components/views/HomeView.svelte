@@ -15,6 +15,7 @@
     type HomeSettings,
     type HomeSectionId
   } from '$lib/stores/homeSettingsStore';
+  import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import type { QobuzAlbum, QobuzArtist, QobuzTrack, DisplayTrack } from '$lib/types';
 
   interface TopArtistSeed {
@@ -60,6 +61,8 @@
     downloadStateVersion?: number;
     onArtistClick?: (artistId: number) => void;
     onTrackPlay?: (track: DisplayTrack) => void;
+    activeTrackId?: number | null;
+    isPlaybackActive?: boolean;
   }
 
   let {
@@ -76,7 +79,9 @@
     checkAlbumFullyDownloaded,
     downloadStateVersion,
     onArtistClick,
-    onTrackPlay
+    onTrackPlay,
+    activeTrackId = null,
+    isPlaybackActive = false
   }: Props = $props();
 
   // Home settings state
@@ -332,6 +337,51 @@
 
   function getTrackQuality(track: DisplayTrack): string {
     return formatQuality(track.hires, track.bitDepth, track.samplingRate);
+  }
+
+  function buildContinueQueueTracks(tracks: DisplayTrack[]) {
+    return tracks.map(t => ({
+      id: t.id,
+      title: t.title,
+      artist: t.artist || 'Unknown Artist',
+      album: t.album || '',
+      duration_secs: t.durationSeconds,
+      artwork_url: t.albumArt || '',
+      hires: t.hires ?? false,
+      bit_depth: t.bitDepth ?? null,
+      sample_rate: t.samplingRate ?? null,
+    }));
+  }
+
+  async function handleContinueTrackPlay(track: DisplayTrack, trackIndex: number) {
+    // Create continue listening context
+    if (continueTracks.length > 0) {
+      const trackIds = continueTracks.map(t => t.id);
+      
+      setPlaybackContext(
+        'home_list',
+        'continue_listening',
+        'Continue Listening',
+        'qobuz',
+        trackIds,
+        trackIndex
+      );
+      console.log(`[Home] Context created: Continue Listening, ${trackIds.length} tracks, starting at ${trackIndex}`);
+    }
+
+    if (continueTracks.length > 0) {
+      try {
+        const queueTracks = buildContinueQueueTracks(continueTracks);
+        await invoke('set_queue', { tracks: queueTracks, startIndex: trackIndex });
+      } catch (err) {
+        console.error('Failed to set queue:', err);
+      }
+    }
+
+    // Play track
+    if (onTrackPlay) {
+      onTrackPlay(track);
+    }
   }
 
   function buildTopArtistSeedsFromTracks(tracks: DisplayTrack[]): TopArtistSeed[] {
@@ -729,6 +779,7 @@
           </div>
           <div class="track-list compact">
             {#each continueTracks as track, index}
+              {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
               <TrackRow
                 trackId={track.id}
                 number={index + 1}
@@ -737,13 +788,14 @@
                 album={track.album}
                 duration={track.duration}
                 quality={getTrackQuality(track)}
+                isPlaying={isActiveTrack}
                 hideDownload={true}
                 compact={true}
                 onArtistClick={track.artistId && onArtistClick ? () => onArtistClick(track.artistId!) : undefined}
                 onAlbumClick={track.albumId && onAlbumClick ? () => onAlbumClick(track.albumId!) : undefined}
-                onPlay={() => onTrackPlay?.(track)}
+                onPlay={() => handleContinueTrackPlay(track, index)}
                 menuActions={{
-                  onPlayNow: () => onTrackPlay?.(track)
+                  onPlayNow: () => handleContinueTrackPlay(track, index)
                 }}
               />
             {/each}

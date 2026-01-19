@@ -2,6 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { X, Shuffle, SkipBack, Play, Pause, SkipForward, Repeat, Heart, List, Maximize2, MoreHorizontal, Cast } from 'lucide-svelte';
   import QualityBadge from './QualityBadge.svelte';
+  import StackIcon from './StackIcon.svelte';
   import LyricsLines from './lyrics/LyricsLines.svelte';
   import { startActiveLineUpdates } from '$lib/stores/lyricsStore';
 
@@ -49,6 +50,7 @@
     onOpenFocusMode?: () => void;
     onCast?: () => void;
     isCastConnected?: boolean;
+    onContextClick?: () => void;
     // Lyrics props
     lyricsLines?: LyricsLine[];
     lyricsActiveIndex?: number;
@@ -88,6 +90,7 @@
     onOpenFocusMode,
     onCast,
     isCastConnected = false,
+    onContextClick,
     lyricsLines = [],
     lyricsActiveIndex = -1,
     lyricsActiveProgress = 0,
@@ -245,8 +248,12 @@
 
         <div class="track-info">
           <h1 class="title">{trackTitle}</h1>
-          <h2 class="artist">{artist}</h2>
-          <h3 class="album">{album}</h3>
+          <div class="artist-album-row">
+            <StackIcon size={16} class="stack-icon" onClick={onContextClick} />
+            <h2 class="artist">{artist}</h2>
+            <span class="separator">·</span>
+            <h3 class="album">{album}</h3>
+          </div>
           <div class="quality-info">
             <QualityBadge {quality} {bitDepth} samplingRate={displaySamplingRate} />
           </div>
@@ -311,6 +318,7 @@
 
         <!-- Volume Control -->
         <div class="volume-container">
+          <div class="volume-value" class:visible={isDraggingVolume}>{volume}</div>
           <div
             class="volume-bar"
             bind:this={volumeRef}
@@ -508,6 +516,17 @@
     width: 100%;
   }
 
+  .title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+  }
+
+  .title-row :global(.stack-icon) {
+    flex-shrink: 0;
+  }
+
   .title {
     font-size: 22px;
     font-weight: 600;
@@ -518,15 +537,31 @@
     white-space: nowrap;
   }
 
+  .artist-album-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .artist-album-row :global(.stack-icon) {
+    flex-shrink: 0;
+  }
+
+  .artist-album-row .separator {
+    color: rgba(255, 255, 255, 0.5);
+    margin: 0 2px;
+  }
+
   .artist {
     font-size: 16px;
     font-weight: 400;
     color: rgba(255, 255, 255, 0.7);
-    margin: 0 0 4px;
+    margin: 0;
   }
 
   .album {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 400;
     color: rgba(255, 255, 255, 0.5);
     margin: 0;
@@ -652,6 +687,7 @@
     width: 100%;
     max-width: 180px;
     margin-bottom: 24px;
+    position: relative;
   }
 
   .volume-bar {
@@ -682,6 +718,27 @@
 
   .volume-bar:hover .volume-thumb {
     opacity: 1;
+  }
+
+  .volume-value {
+    position: absolute;
+    right: 0;
+    top: -26px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.6);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 120ms ease, transform 120ms ease;
+    pointer-events: none;
+  }
+
+  .volume-value.visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 
   /* Bottom Actions */

@@ -25,6 +25,20 @@
     type Toast as ToastData
   } from '$lib/stores/toastStore';
 
+  // Playback context and preferences
+  import { 
+    initPlaybackContextStore,
+    setPlaybackContext,
+    clearPlaybackContext,
+    getCurrentContext,
+    requestContextTrackFocus
+  } from '$lib/stores/playbackContextStore';
+  import { 
+    initPlaybackPreferences,
+    getCachedPreferences,
+    isAutoplayEnabled
+  } from '$lib/stores/playbackPreferencesStore';
+
   // UI state management
   import {
     subscribe as subscribeUI,
@@ -59,17 +73,23 @@
 
   // Favorites state management
   import { loadFavorites } from '$lib/stores/favoritesStore';
+  import { getDefaultFavoritesTab } from '$lib/utils/favorites';
+  import type { FavoritesPreferences } from '$lib/types';
 
   // Navigation state management
   import {
     subscribe as subscribeNav,
     navigateTo as navTo,
+    navigateToFavorites,
     goBack as navGoBack,
     goForward as navGoForward,
     selectPlaylist,
     getNavigationState,
+    getFavoritesTabFromView,
+    isFavoritesView,
     type ViewType,
-    type NavigationState
+    type NavigationState,
+    type FavoritesTab
   } from '$lib/stores/navigationStore';
 
   // Player state management
@@ -323,9 +343,26 @@
   let lyricsActiveProgress = $state(0);
   let lyricsSidebarVisible = $state(false);
 
+  let favoritesDefaultTab = $state<FavoritesTab>('tracks');
+
+  async function loadFavoritesDefaultTab(): Promise<void> {
+    try {
+      const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      favoritesDefaultTab = getDefaultFavoritesTab(prefs.tab_order);
+    } catch (err) {
+      console.error('Failed to load favorites preferences:', err);
+      favoritesDefaultTab = 'tracks';
+    }
+  }
+
   // Navigation wrapper (keeps debug logging)
-  function navigateTo(view: string) {
+  async function navigateTo(view: string) {
     console.log('navigateTo called with:', view, 'current activeView:', activeView);
+    if (view === 'favorites') {
+      await loadFavoritesDefaultTab();
+      navigateToFavorites(favoritesDefaultTab);
+      return;
+    }
     navTo(view as ViewType);
   }
 
@@ -357,6 +394,77 @@
     } catch (err) {
       console.error('Failed to load artist:', err);
       showToast('Failed to load artist', 'error');
+    }
+  }
+
+  /**
+   * Navigate to the source of current playback context
+   */
+  async function handleContextNavigation() {
+    const context = getCurrentContext();
+    if (!context) {
+      console.log('[ContextNav] No context available');
+      return;
+    }
+
+    console.log('[ContextNav] Navigating to:', context);
+
+    const focusTrackId = currentTrack?.id;
+    const requestFocus = (contextType: typeof context.type, contextId: string) => {
+      if (typeof focusTrackId === 'number') {
+        requestContextTrackFocus(contextType, contextId, focusTrackId);
+      }
+    };
+
+    try {
+      switch (context.type) {
+        case 'album':
+          // Navigate to album page
+          requestFocus('album', context.id);
+          await handleAlbumClick(context.id);
+          break;
+
+        case 'playlist':
+          // Navigate to playlist page
+          const playlistId = parseInt(context.id);
+          if (!isNaN(playlistId)) {
+            requestFocus('playlist', context.id);
+            selectedPlaylistId = playlistId;
+            navigateTo('playlist');
+          }
+          break;
+
+        case 'artist_top':
+          // Navigate to artist page
+          const artistId = parseInt(context.id);
+          if (!isNaN(artistId)) {
+            requestFocus('artist_top', context.id);
+            await handleArtistClick(artistId);
+          }
+          break;
+
+        case 'favorites':
+          // Navigate to favorites page
+          requestFocus('favorites', 'favorites');
+          navigateToFavorites('tracks');
+          break;
+
+        case 'home_list':
+          // Navigate to home page
+          navigateTo('home');
+          break;
+
+        case 'search':
+          // Navigate to search (could restore query if needed)
+          navigateTo('search');
+          break;
+
+        default:
+          console.warn('[ContextNav] Unknown context type:', context.type);
+      }
+    } catch (err) {
+      console.error('[ContextNav] Navigation failed:', err);
+      showToast('Failed to navigate to source', 'error');
     }
   }
 
@@ -586,6 +694,26 @@
   // Handle track play from album detail view
   async function handleAlbumTrackPlay(track: Track) {
     console.log('Playing album track:', track);
+
+    // ALWAYS create context when playing from an album
+    // The setting only affects menu options visibility, not implicit behavior
+    if (selectedAlbum?.tracks) {
+      const trackIndex = selectedAlbum.tracks.findIndex(t => t.id === track.id);
+      const trackIds = selectedAlbum.tracks.map(t => t.id);
+      
+      console.log('[Album] Creating context with', trackIds.length, 'tracks, starting at', trackIndex);
+      await setPlaybackContext(
+        'album',
+        selectedAlbum.id,
+        selectedAlbum.title,
+        'qobuz',
+        trackIds,
+        trackIndex >= 0 ? trackIndex : 0
+      );
+      console.log('[Album] Context created - stack icon should appear');
+    } else {
+      console.log('[Album] No album tracks found, cannot create context');
+    }
 
     const artwork = selectedAlbum?.artwork || '';
     const quality = track.hires && track.bitDepth && track.samplingRate
@@ -1192,8 +1320,35 @@
     });
   }
 
+  /**
+   * Helper: Create context and play display track
+   */
+  async function createContextAndPlayDisplayTrack(
+    track: DisplayTrack,
+    contextType: ContextType,
+    contextId: string,
+    contextLabel: string,
+    trackIds: number[],
+    startIndex: number
+  ) {
+    // Create context
+    await setPlaybackContext(
+      contextType,
+      contextId,
+      contextLabel,
+      'qobuz',
+      trackIds,
+      startIndex
+    );
+    console.log(`[Context] Created for ${contextType}: ${contextLabel}, starting at index ${startIndex}`);
+    
+    // Play track
+    handleDisplayTrackPlay(track);
+  }
+
   async function handleLocalTrackPlay(track: LocalLibraryTrack) {
     console.log('Playing local track:', track);
+    await clearPlaybackContext();
 
     const artwork = track.artwork_path ? convertFileSrc(track.artwork_path) : '';
     const quality = track.bit_depth && track.sample_rate
@@ -1579,6 +1734,10 @@
     initDownloadStates();
     startDownloadEventListeners();
 
+    // Initialize playback context and preferences stores
+    initPlaybackContextStore();
+    initPlaybackPreferences();
+
     // Note: loadFavorites() is called in handleLoginSuccess after login is confirmed
     // This prevents API calls before authentication is complete
 
@@ -1696,6 +1855,10 @@
 
     // Set up track ended callback for auto-advance
     setOnTrackEnded(async () => {
+      if (!isAutoplayEnabled()) {
+        setQueueEnded(true);
+        return;
+      }
       const nextTrackResult = await nextTrack();
       if (nextTrackResult) {
         await playQueueTrack(nextTrackResult);
@@ -1896,6 +2059,8 @@
             {downloadStateVersion}
             onArtistClick={handleArtistClick}
             onTrackPlay={handleDisplayTrackPlay}
+            activeTrackId={currentTrack?.id ?? null}
+            isPlaybackActive={isPlaying}
           />
         {/if}
       {:else if activeView === 'search'}
@@ -1927,6 +2092,8 @@
             onTrackGoToAlbum={handleAlbumClick}
             onTrackGoToArtist={handleArtistClick}
             onArtistClick={handleArtistClick}
+            activeTrackId={currentTrack?.id ?? null}
+            isPlaybackActive={isPlaying}
           />
         {/if}
       {:else if activeView === 'settings'}
@@ -1993,6 +2160,8 @@
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
           onPlaylistClick={selectPlaylist}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
         />
       {:else if activeView === 'library' || activeView === 'library-album'}
         <LocalLibraryView
@@ -2002,6 +2171,8 @@
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId], true)}
           onSetLocalQueue={handleSetLocalQueue}
           onQobuzArtistClick={handleArtistClick}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
         />
       {:else if activeView === 'playlist' && selectedPlaylistId}
         <PlaylistDetailView
@@ -2035,7 +2206,7 @@
           }}
           onPlaylistDeleted={() => { sidebarRef?.refreshPlaylists(); navGoBack(); }}
         />
-      {:else if activeView === 'favorites'}
+      {:else if isFavoritesView(activeView)}
         {#if offlineStatus.isOffline}
           <OfflinePlaceholder
             reason={offlineStatus.reason}
@@ -2068,6 +2239,10 @@
             onTrackRemoveDownload={handleTrackRemoveDownload}
             getTrackDownloadStatus={getTrackDownloadStatus}
             onPlaylistSelect={selectPlaylist}
+            selectedTab={getFavoritesTabFromView(activeView) ?? favoritesDefaultTab}
+            onTabNavigate={(tab) => navigateToFavorites(tab)}
+            activeTrackId={currentTrack?.id ?? null}
+            isPlaybackActive={isPlaying}
           />
         {/if}
       {:else if activeView === 'playlist-manager'}
@@ -2092,6 +2267,7 @@
       />
     {/if}
     </div>
+    </div><!-- end app-body -->
 
     <!-- Now Playing Bar -->
     {#if currentTrack}
@@ -2140,6 +2316,7 @@
             handleAlbumClick(currentTrack.albumId);
           }
         }}
+        onContextClick={handleContextNavigation}
       />
     {:else}
       <NowPlayingBar
@@ -2150,7 +2327,6 @@
         {isCastConnected}
       />
     {/if}
-    </div><!-- end app-body -->
 
     <!-- Queue Panel -->
     <QueuePanel
@@ -2202,6 +2378,7 @@
         }}
         onCast={openCastPicker}
         {isCastConnected}
+        onContextClick={handleContextNavigation}
         lyricsLines={lyricsLines.map(l => ({ text: l.text }))}
         lyricsActiveIndex={lyricsActiveIndex}
         lyricsActiveProgress={lyricsActiveProgress}
@@ -2226,12 +2403,15 @@
         {currentTime}
         {duration}
         onSeek={handleSeek}
+        {volume}
+        onVolumeChange={handleVolumeChange}
         lyricsLines={lyricsLines.map(l => ({ text: l.text }))}
         lyricsActiveIndex={lyricsActiveIndex}
         lyricsActiveProgress={lyricsActiveProgress}
         lyricsSynced={lyricsIsSynced}
         lyricsLoading={lyricsStatus === 'loading'}
         lyricsError={lyricsStatus === 'error' ? lyricsError : (lyricsStatus === 'not_found' ? 'No lyrics found' : null)}
+        onContextClick={handleContextNavigation}
       />
     {/if}
 

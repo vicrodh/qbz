@@ -12,6 +12,7 @@
     Maximize2,
     ListMusic
   } from 'lucide-svelte';
+  import StackIcon from '$lib/components/StackIcon.svelte';
   import {
     subscribe as subscribePlayer,
     getPlayerState,
@@ -39,10 +40,12 @@
   let repeatMode = $state<RepeatMode>('off');
   let isDragging = $state(false);
   let isDraggingProgress = $state(false);
+  let isDraggingVolume = $state(false);
   let queueCount = $state(0);
 
   // Refs
   let progressRef: HTMLDivElement;
+  let volumeRef: HTMLDivElement | null = null;
 
   // Derived state
   const progress = $derived(playerState.duration > 0 ? (playerState.currentTime / playerState.duration) * 100 : 0);
@@ -163,6 +166,31 @@
     }
   }
 
+  function handleVolumeMouseDown(e: MouseEvent): void {
+    e.stopPropagation();
+    isDraggingVolume = true;
+    updateVolume(e);
+    document.addEventListener('mousemove', handleVolumeMouseMove);
+    document.addEventListener('mouseup', handleVolumeMouseUp);
+  }
+
+  function handleVolumeMouseMove(e: MouseEvent): void {
+    if (isDraggingVolume) updateVolume(e);
+  }
+
+  function handleVolumeMouseUp(): void {
+    isDraggingVolume = false;
+    document.removeEventListener('mousemove', handleVolumeMouseMove);
+    document.removeEventListener('mouseup', handleVolumeMouseUp);
+  }
+
+  function updateVolume(e: MouseEvent): void {
+    if (!volumeRef) return;
+    const rect = volumeRef.getBoundingClientRect();
+    const percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
+    playerSetVolume(Math.round(percentage));
+  }
+
   // Window controls - stop propagation to prevent drag from capturing
   async function handleRestore(e: MouseEvent): Promise<void> {
     e.stopPropagation();
@@ -232,6 +260,7 @@
       <div class="track-info">
         <div class="title">{playerState.currentTrack?.title ?? 'No track'}</div>
         <div class="artist-album">
+          <StackIcon size={12} class="stack-icon" />
           {playerState.currentTrack?.artist ?? '—'}
           {#if playerState.currentTrack?.album}
             <span class="separator">—</span>
@@ -300,6 +329,24 @@
           <Repeat size={14} />
         {/if}
       </button>
+    </div>
+
+    <div class="volume-control">
+      <div class="volume-value" class:visible={isDraggingVolume}>{Math.round(playerState.volume)}</div>
+      <div
+        class="volume-bar"
+        bind:this={volumeRef}
+        onmousedown={handleVolumeMouseDown}
+        role="slider"
+        tabindex="0"
+        aria-valuenow={playerState.volume}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        title="Volume"
+      >
+        <div class="volume-fill" style="width: {playerState.volume}%"></div>
+        <div class="volume-thumb" style="left: {playerState.volume}%"></div>
+      </div>
     </div>
 
     <div class="window-controls">
@@ -419,12 +466,19 @@
   }
 
   .artist-album {
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 12px;
     color: rgba(255, 255, 255, 0.5);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     margin-top: 2px;
+  }
+
+  .artist-album :global(.stack-icon) {
+    flex-shrink: 0;
   }
 
   .separator {
@@ -470,6 +524,7 @@
     justify-content: space-between;
     align-items: center;
     flex-shrink: 0;
+    gap: 12px;
   }
 
   .media-controls {
@@ -482,6 +537,63 @@
     display: flex;
     align-items: center;
     gap: 2px;
+  }
+
+  .volume-control {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .volume-bar {
+    width: 90px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 999px;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .volume-fill {
+    height: 100%;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.8);
+  }
+
+  .volume-thumb {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #fff;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .volume-bar:hover .volume-thumb {
+    opacity: 1;
+  }
+
+  .volume-value {
+    position: absolute;
+    right: 0;
+    top: -22px;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.6);
+    color: #fff;
+    font-size: 11px;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 150ms ease, transform 150ms ease;
+  }
+
+  .volume-value.visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 
   .ctrl-btn {

@@ -20,6 +20,7 @@
   } from 'lucide-svelte';
   import QualityBadge from './QualityBadge.svelte';
   import AudioOutputBadges from './AudioOutputBadges.svelte';
+  import StackIcon from './StackIcon.svelte';
   import { t } from '$lib/i18n';
   import {
     subscribe as subscribeOffline,
@@ -62,6 +63,7 @@
     isCastConnected?: boolean;
     onArtistClick?: () => void;
     onAlbumClick?: () => void;
+    onContextClick?: () => void;
   }
 
   let {
@@ -97,7 +99,8 @@
     lyricsActive = false,
     isCastConnected = false,
     onArtistClick,
-    onAlbumClick
+    onAlbumClick,
+    onContextClick
   }: Props = $props();
 
   let progressRef: HTMLDivElement;
@@ -296,6 +299,7 @@
           <div class="song-info">
             <span class="song-title" title={trackTitle}>{trackTitle}</span>
             <div class="song-meta">
+              <StackIcon size={12} class="stack-icon" onClick={onContextClick} />
               {#if artist}
                 <button class="meta-link" onclick={onArtistClick} title={$t('actions.goToArtist')}>
                   {artist}
@@ -374,6 +378,7 @@
 
       <!-- Volume Control -->
       <div class="volume-control">
+        <div class="volume-value" class:visible={isDraggingVolume}>{volume}</div>
         <button
           class="control-btn volume-btn"
           onclick={() => onVolumeChange?.(volume === 0 ? 70 : 0)}
@@ -676,6 +681,20 @@
     align-self: center;
   }
 
+  .song-title-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    overflow: hidden;
+    width: 100%;
+  }
+
+  .song-title-row :global(.stack-icon) {
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
   .song-title {
     font-size: 13px;
     font-weight: 500;
@@ -693,6 +712,11 @@
     color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
+  }
+
+  .song-meta :global(.stack-icon) {
+    flex-shrink: 0;
+    margin-right: 2px;
   }
 
   .meta-link {
@@ -743,6 +767,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    position: relative;
   }
 
   .volume-slider {
@@ -787,5 +812,26 @@
 
   .volume-slider:hover .volume-thumb {
     opacity: 1;
+  }
+
+  .volume-value {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 6px);
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    font-size: 11px;
+    font-weight: 600;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 120ms ease, transform 120ms ease;
+    pointer-events: none;
+  }
+
+  .volume-value.visible {
+    opacity: 1;
+    transform: translateY(0);
   }
 </style>

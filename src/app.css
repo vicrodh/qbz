@@ -19,6 +19,10 @@
   --border-subtle: #2a2a2a;
   --border-strong: #3a3a3a;
 
+  /* Layout */
+  --sidebar-width: 240px;
+  --now-playing-height: 80px;
+
   /* Spacing System */
   --spacing-micro: 4px;
   --spacing-tight: 8px;
@@ -33,24 +37,20 @@
   --font-mono: 'JetBrains Mono', monospace;
 }
 
-/* Light Theme (Alucard - soft cream tones inspired by Dracula inverted) */
+/* Light Theme */
 [data-theme="light"] {
-  --bg-primary: #F8F8F2;
-  --bg-secondary: #EEF0F5;
-  --bg-tertiary: #E2E5EB;
-  --bg-hover: #D8DCE5;
+  --bg-primary: #ffffff;
+  --bg-secondary: #f5f5f5;
+  --bg-tertiary: #e8e8e8;
+  --bg-hover: #f0f0f0;
 
-  --text-primary: #282A36;
-  --text-secondary: #44475A;
-  --text-muted: #6272A4;
-  --text-disabled: #9CA3C0;
+  --text-primary: #0f0f0f;
+  --text-secondary: #444444;
+  --text-muted: #666666;
+  --text-disabled: #999999;
 
-  --accent-primary: #8B5CF6;
-  --accent-hover: #7C3AED;
-  --accent-active: #6D28D9;
-
-  --border-subtle: #D8DCE5;
-  --border-strong: #C8CCD5;
+  --border-subtle: #e0e0e0;
+  --border-strong: #cccccc;
 }
 
 /* OLED Theme */
@@ -63,14 +63,194 @@
 
 /* Warm Theme */
 [data-theme="warm"] {
-  --bg-primary: #1a1512;
-  --bg-secondary: #231d18;
-  --bg-tertiary: #2d2520;
-  --bg-hover: #28211c;
+  --bg-primary: #1a1814;
+  --bg-secondary: #242018;
+  --bg-tertiary: #2e2820;
+  --bg-hover: #282218;
 
-  --accent-primary: #e89b5a;
-  --accent-hover: #f0ab6e;
-  --accent-active: #d88b4a;
+  --accent-primary: #d4a574;
+  --accent-hover: #e0b888;
+  --accent-active: #c49460;
+}
+
+/* Nord Theme */
+[data-theme="nord"] {
+  --bg-primary: #2e3440;
+  --bg-secondary: #3b4252;
+  --bg-tertiary: #434c5e;
+  --bg-hover: #4c566a;
+
+  --text-primary: #eceff4;
+  --text-secondary: #e5e9f0;
+  --text-muted: #d8dee9;
+  --text-disabled: #4c566a;
+
+  --accent-primary: #88c0d0;
+  --accent-hover: #81a1c1;
+  --accent-active: #5e81ac;
+
+  --border-subtle: #434c5e;
+  --border-strong: #4c566a;
+}
+
+/* Dracula Theme */
+[data-theme="dracula"] {
+  --bg-primary: #282a36;
+  --bg-secondary: #343746;
+  --bg-tertiary: #44475a;
+  --bg-hover: #6272a4;
+
+  --text-primary: #f8f8f2;
+  --text-secondary: #e4e8f2;
+  --text-muted: #9da5c0;
+  --text-disabled: #6272a4;
+
+  --accent-primary: #bd93f9;
+  --accent-hover: #ff79c6;
+  --accent-active: #8be9fd;
+
+  --border-subtle: #44475a;
+  --border-strong: #6272a4;
+}
+
+/* Tokyo Night Theme */
+[data-theme="tokyo-night"] {
+  --bg-primary: #1a1b26;
+  --bg-secondary: #1f2335;
+  --bg-tertiary: #292e42;
+  --bg-hover: #414868;
+
+  --text-primary: #c0caf5;
+  --text-secondary: #a9b1d6;
+  --text-muted: #565f89;
+  --text-disabled: #414868;
+
+  --accent-primary: #7aa2f7;
+  --accent-hover: #bb9af7;
+  --accent-active: #2ac3de;
+
+  --border-subtle: #292e42;
+  --border-strong: #414868;
+}
+
+/* Catppuccin Mocha Theme */
+[data-theme="catppuccin-mocha"] {
+  --bg-primary: #11111b;
+  --bg-secondary: #181825;
+  --bg-tertiary: #1e1e2e;
+  --bg-hover: #313244;
+
+  --text-primary: #cdd6f4;
+  --text-secondary: #bac2de;
+  --text-muted: #6c7086;
+  --text-disabled: #313244;
+
+  --accent-primary: #89b4fa;
+  --accent-hover: #74c7ec;
+  --accent-active: #b4befe;
+
+  --border-subtle: #1e1e2e;
+  --border-strong: #313244;
+}
+
+/* Rose Pine Dawn Theme */
+[data-theme="rose-pine-dawn"] {
+  --bg-primary: #faf4ed;
+  --bg-secondary: #fffaf3;
+  --bg-tertiary: #f2e9e1;
+  --bg-hover: #dfdad9;
+
+  --text-primary: #575279;
+  --text-secondary: #797593;
+  --text-muted: #9893a5;
+  --text-disabled: #dfdad9;
+
+  --accent-primary: #907aa9;
+  --accent-hover: #286983;
+  --accent-active: #d7827e;
+
+  --border-subtle: #f2e9e1;
+  --border-strong: #dfdad9;
+}
+
+/* Breeze Dark Theme */
+[data-theme="breeze-dark"] {
+  --bg-primary: #141618;
+  --bg-secondary: #202326;
+  --bg-tertiary: #292c30;
+  --bg-hover: #31363b;
+
+  --text-primary: #ffffff;
+  --text-secondary: #fcfcfc;
+  --text-muted: #a1a9b1;
+  --text-disabled: #31363b;
+
+  --accent-primary: #3daee9;
+  --accent-hover: #9b59b6;
+  --accent-active: #1d99f3;
+
+  --border-subtle: #292c30;
+  --border-strong: #31363b;
+}
+
+/* Breeze Light Theme */
+[data-theme="breeze-light"] {
+  --bg-primary: #ffffff;
+  --bg-secondary: #eff0f1;
+  --bg-tertiary: #dee0e2;
+  --bg-hover: #c8cdd3;
+
+  --text-primary: #1b1f23;
+  --text-secondary: #232629;
+  --text-muted: #5f6a75;
+  --text-disabled: #c8cdd3;
+
+  --accent-primary: #3daee9;
+  --accent-hover: #9b59b6;
+  --accent-active: #2980b9;
+
+  --border-subtle: #dee0e2;
+  --border-strong: #c8cdd3;
+}
+
+/* Adwaita Dark Theme */
+[data-theme="adwaita-dark"] {
+  --bg-primary: #1d1d20;
+  --bg-secondary: #222226;
+  --bg-tertiary: #28282c;
+  --bg-hover: #2e2e32;
+
+  --text-primary: #ffffff;
+  --text-secondary: #ffffff;
+  --text-muted: #b3b3b8;
+  --text-disabled: #2e2e32;
+
+  --accent-primary: #3584e4;
+  --accent-hover: #1c71d8;
+  --accent-active: #1a5fb4;
+
+  --border-subtle: #28282c;
+  --border-strong: #2e2e32;
+}
+
+/* Adwaita Light Theme */
+[data-theme="adwaita-light"] {
+  --bg-primary: #fafafb;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #f3f3f5;
+  --bg-hover: #deddda;
+
+  --text-primary: #241f31;
+  --text-secondary: #333338;
+  --text-muted: #5e5c64;
+  --text-disabled: #deddda;
+
+  --accent-primary: #3584e4;
+  --accent-hover: #1c71d8;
+  --accent-active: #1a5fb4;
+
+  --border-subtle: #f3f3f5;
+  --border-strong: #deddda;
 }
 
 * {
@@ -81,34 +261,69 @@
 
 html {
   font-size: 16px;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
 }
 
 body {
   font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
   background-color: var(--bg-primary);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 /* Scrollbar Styling */
 ::-webkit-scrollbar {
-  width: 12px;
-  height: 12px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--bg-secondary);
+  background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--bg-tertiary);
-  border-radius: 6px;
+  border-radius: 9999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--border-strong);
+  background: var(--text-muted);
+}
+
+::selection {
+  background-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
 }
 
 /* Hide scrollbar for horizontal scroll containers */

@@ -1,11 +1,15 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
-  import { onMount } from 'svelte';
-  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic } from 'lucide-svelte';
+  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { onMount, tick } from 'svelte';
+  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
+  import FavoritesEditModal from '../FavoritesEditModal.svelte';
   import { type DownloadStatus } from '$lib/stores/downloadState';
+  import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
+  import { normalizeFavoritesTabOrder } from '$lib/utils/favorites';
+  import type { FavoritesPreferences } from '$lib/types';
 
   interface FavoriteAlbum {
     id: string;
@@ -73,6 +77,10 @@
     onTrackRemoveDownload?: (trackId: number) => void;
     getTrackDownloadStatus?: (trackId: number) => { status: DownloadStatus; progress: number };
     onPlaylistSelect?: (playlistId: number) => void;
+    selectedTab?: TabType;
+    onTabNavigate?: (tab: TabType) => void;
+    activeTrackId?: number | null;
+    isPlaybackActive?: boolean;
   }
 
   interface DisplayTrack {
@@ -117,11 +125,23 @@
     onTrackDownload,
     onTrackRemoveDownload,
     getTrackDownloadStatus,
-    onPlaylistSelect
+    onPlaylistSelect,
+    selectedTab,
+    onTabNavigate,
+    activeTrackId = null,
+    isPlaybackActive = false
   }: Props = $props();
 
   type TabType = 'tracks' | 'albums' | 'artists' | 'playlists';
   let activeTab = $state<TabType>('tracks');
+  let preferencesLoaded = $state(false);
+
+  const tabLabels: Record<TabType, string> = {
+    tracks: 'Tracks',
+    albums: 'Albums',
+    artists: 'Artists',
+    playlists: 'Playlists',
+  };
 
   let favoriteAlbums = $state<FavoriteAlbum[]>([]);
   let favoriteTracks = $state<FavoriteTrack[]>([]);
@@ -130,6 +150,14 @@
 
   let loading = $state(false);
   let loadingPlaylists = $state(false);
+  let editModalOpen = $state(false);
+  let scrollContainer: HTMLDivElement | null = $state(null);
+  let favoritesPreferences = $state<FavoritesPreferences>({
+    custom_icon_path: null,
+    custom_icon_preset: 'heart',
+    icon_background: null,
+    tab_order: ['tracks', 'albums', 'artists', 'playlists'],
+  });
 
   // Download status tracking
   let albumDownloadStatuses = $state<Map<string, boolean>>(new Map());
@@ -162,6 +190,7 @@
   let albumSearch = $state('');
   let artistSearch = $state('');
   let playlistSearch = $state('');
+  let searchExpanded = $state(false);
 
   let albumViewMode = $state<'grid' | 'list'>('grid');
   type AlbumGroupMode = 'alpha' | 'artist';
@@ -176,6 +205,24 @@
 
   let showArtistGroupMenu = $state(false);
   let artistGroupingEnabled = $state(false);
+  function resolveCustomIconSrc(path: string | null): string | null {
+    if (!path) return null;
+    if (path.startsWith('asset://') || path.startsWith('http://asset.localhost') || path.startsWith('https://asset.localhost')) {
+      return path;
+    }
+    if (path.startsWith('file://')) {
+      return path;
+    }
+    return convertFileSrc(path);
+  }
+
+  let customIconSrc = $derived.by(() => resolveCustomIconSrc(favoritesPreferences.custom_icon_path));
+
+  async function scrollToTrack(trackId: number) {
+    await tick();
+    const target = scrollContainer?.querySelector<HTMLElement>(`[data-track-id="${trackId}"]`);
+    target?.scrollIntoView({ block: 'center' });
+  }
 
   // Filtered lists based on search
   let filteredTracks = $derived.by(() => {
@@ -240,6 +287,43 @@
     return fallback;
   }
 
+  function getCurrentSearchValue(): string {
+    switch (activeTab) {
+      case 'tracks': return trackSearch;
+      case 'albums': return albumSearch;
+      case 'artists': return artistSearch;
+      case 'playlists': return playlistSearch;
+      default: return '';
+    }
+  }
+
+  function setCurrentSearchValue(value: string) {
+    switch (activeTab) {
+      case 'tracks': trackSearch = value; break;
+      case 'albums': albumSearch = value; break;
+      case 'artists': artistSearch = value; break;
+      case 'playlists': playlistSearch = value; break;
+    }
+  }
+
+  function clearCurrentSearch() {
+    setCurrentSearchValue('');
+    searchExpanded = false;
+  }
+
+  function getTabIcon(tab: TabType) {
+    switch (tab) {
+      case 'tracks': return Music;
+      case 'albums': return Disc3;
+      case 'artists': return Mic2;
+      case 'playlists': return ListMusic;
+    }
+  }
+
+  function getTabLabel(tab: TabType): string {
+    return tabLabels[tab] || tab.charAt(0).toUpperCase() + tab.slice(1);
+  }
+
   onMount(() => {
     albumViewMode = loadStoredString('qbz-favorites-album-view', 'grid', ['grid', 'list']);
     albumGroupMode = loadStoredString('qbz-favorites-album-group', 'alpha', ['alpha', 'artist']);
@@ -247,8 +331,40 @@
     albumGroupingEnabled = loadStoredBool('qbz-favorites-album-group-enabled', false);
     trackGroupingEnabled = loadStoredBool('qbz-favorites-track-group-enabled', false);
     artistGroupingEnabled = loadStoredBool('qbz-favorites-artist-group-enabled', false);
-    loadFavorites('tracks');
+    loadFavoritesPreferences().then(() => {
+      preferencesLoaded = true;
+      if (selectedTab) {
+        activeTab = selectedTab;
+      } else {
+        activeTab = favoritesPreferences.tab_order[0] as TabType;
+      }
+      loadTabIfNeeded(activeTab);
+    });
   });
+
+  async function loadFavoritesPreferences() {
+    try {
+      const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      favoritesPreferences = {
+        ...prefs,
+        tab_order: normalizeFavoritesTabOrder(prefs.tab_order)
+      };
+    } catch (err) {
+      console.error('Failed to load favorites preferences:', err);
+      favoritesPreferences = {
+        ...favoritesPreferences,
+        tab_order: normalizeFavoritesTabOrder(favoritesPreferences.tab_order)
+      };
+    }
+  }
+
+  function handlePreferencesSaved(prefs: FavoritesPreferences) {
+    favoritesPreferences = {
+      ...prefs,
+      tab_order: normalizeFavoritesTabOrder(prefs.tab_order)
+    };
+  }
+
 
   $effect(() => {
     try {
@@ -260,6 +376,21 @@
       localStorage.setItem('qbz-favorites-artist-group-enabled', String(artistGroupingEnabled));
     } catch {
       // localStorage not available
+    }
+  });
+
+  $effect(() => {
+    if (preferencesLoaded && selectedTab && selectedTab !== activeTab) {
+      activeTab = selectedTab;
+      loadTabIfNeeded(activeTab);
+    }
+  });
+
+  $effect(() => {
+    if (!preferencesLoaded || activeTab !== 'tracks' || favoriteTracks.length === 0) return;
+    const targetId = consumeContextTrackFocus('favorites', 'favorites');
+    if (targetId !== null) {
+      void scrollToTrack(targetId);
     }
   });
 
@@ -356,11 +487,7 @@
     }
   }
 
-  function handleTabChange(tab: TabType) {
-    activeTab = tab;
-    showAlbumGroupMenu = false;
-    showTrackGroupMenu = false;
-    showArtistGroupMenu = false;
+  function loadTabIfNeeded(tab: TabType) {
     if (tab === 'tracks' && favoriteTracks.length === 0) {
       loadFavorites(tab);
     } else if (tab === 'albums' && favoriteAlbums.length === 0) {
@@ -370,6 +497,15 @@
     } else if (tab === 'playlists' && favoritePlaylists.length === 0) {
       loadFavoritePlaylists();
     }
+  }
+
+  function handleTabChange(tab: TabType) {
+    activeTab = tab;
+    showAlbumGroupMenu = false;
+    showTrackGroupMenu = false;
+    showArtistGroupMenu = false;
+    onTabNavigate?.(tab);
+    loadTabIfNeeded(tab);
   }
 
   function formatDuration(seconds: number): string {
@@ -591,16 +727,8 @@
     };
   }
 
-  function handleTrackClick(track: FavoriteTrack, index: number) {
-    if (onTrackPlay) {
-      onTrackPlay(buildDisplayTrack(track, index));
-    }
-  }
-
-  async function handlePlayAllTracks() {
-    if (filteredTracks.length === 0 || !onTrackPlay) return;
-
-    const queueTracks = filteredTracks.map(t => ({
+  function buildFavoritesQueueTracks(tracks: FavoriteTrack[]) {
+    return tracks.map(t => ({
       id: t.id,
       title: t.title,
       artist: t.performer?.name || 'Unknown Artist',
@@ -611,10 +739,48 @@
       bit_depth: t.maximum_bit_depth ?? null,
       sample_rate: t.maximum_sampling_rate ?? null,
     }));
+  }
+
+  function setFavoritesContext(trackIds: number[], index: number) {
+    if (trackIds.length === 0) return;
+    setPlaybackContext(
+      'favorites',
+      'favorites',
+      'Favorites',
+      'qobuz',
+      trackIds,
+      index
+    );
+  }
+
+  async function setFavoritesQueue(startIndex: number) {
+    if (filteredTracks.length === 0) return;
+    const queueTracks = buildFavoritesQueueTracks(filteredTracks);
+    await invoke('set_queue', { tracks: queueTracks, startIndex });
+  }
+
+  async function handleTrackClick(track: FavoriteTrack, index: number) {
+    const trackIds = filteredTracks.map(t => t.id);
+    setFavoritesContext(trackIds, index);
 
     try {
-      await invoke('set_queue', { tracks: queueTracks, startIndex: 0 });
-      handleTrackClick(filteredTracks[0], 0);
+      await setFavoritesQueue(index);
+    } catch (err) {
+      console.error('Failed to set queue:', err);
+    }
+
+    if (onTrackPlay) {
+      onTrackPlay(buildDisplayTrack(track, index));
+    }
+  }
+
+  async function handlePlayAllTracks() {
+    if (filteredTracks.length === 0 || !onTrackPlay) return;
+
+    try {
+      await setFavoritesQueue(0);
+      setFavoritesContext(filteredTracks.map(t => t.id), 0);
+      onTrackPlay(buildDisplayTrack(filteredTracks[0], 0));
     } catch (err) {
       console.error('Failed to set queue:', err);
     }
@@ -622,110 +788,88 @@
 
 </script>
 
-<div class="favorites-view">
+<div class="favorites-view" bind:this={scrollContainer}>
   <!-- Header -->
   <div class="header">
-    <div class="header-icon">
-      <Heart size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
+    <div
+      class="header-icon"
+      style={favoritesPreferences.icon_background ? `background: ${favoritesPreferences.icon_background};` : ''}
+    >
+      {#if customIconSrc}
+        <img
+          src={customIconSrc}
+          alt="Custom Icon"
+          class="custom-icon-img"
+        />
+      {:else if favoritesPreferences.custom_icon_preset}
+        {#if favoritesPreferences.custom_icon_preset === 'heart'}
+          <Heart size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
+        {:else if favoritesPreferences.custom_icon_preset === 'star'}
+          <svelte:component this={Star} size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
+        {:else if favoritesPreferences.custom_icon_preset === 'music'}
+          <Music size={32} color="var(--accent-primary)" />
+        {:else if favoritesPreferences.custom_icon_preset === 'folder'}
+          <svelte:component this={Folder} size={32} color="var(--accent-primary)" />
+        {:else if favoritesPreferences.custom_icon_preset === 'disc'}
+          <Disc3 size={32} color="var(--accent-primary)" />
+        {:else if favoritesPreferences.custom_icon_preset === 'library'}
+          <svelte:component this={Library} size={32} color="var(--accent-primary)" />
+        {/if}
+      {:else}
+        <Heart size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
+      {/if}
     </div>
     <div class="header-content">
       <h1>Favorites</h1>
       <p class="subtitle">Your liked tracks, albums, and artists</p>
     </div>
-  </div>
-
-  <!-- Tabs -->
-  <div class="tabs">
-    <button
-      class="tab"
-      class:active={activeTab === 'tracks'}
-      onclick={() => handleTabChange('tracks')}
-    >
-      <Music size={16} />
-      <span>Tracks</span>
-    </button>
-    <button
-      class="tab"
-      class:active={activeTab === 'albums'}
-      onclick={() => handleTabChange('albums')}
-    >
-      <Disc3 size={16} />
-      <span>Albums</span>
-    </button>
-    <button
-      class="tab"
-      class:active={activeTab === 'artists'}
-      onclick={() => handleTabChange('artists')}
-    >
-      <Mic2 size={16} />
-      <span>Artists</span>
-    </button>
-    <button
-      class="tab"
-      class:active={activeTab === 'playlists'}
-      onclick={() => handleTabChange('playlists')}
-    >
-      <ListMusic size={16} />
-      <span>Playlists</span>
+    <button class="edit-btn" onclick={() => editModalOpen = true} title="Edit Favorites settings">
+      <Edit3 size={16} />
     </button>
   </div>
 
-  <!-- Toolbar with search and actions -->
-  <div class="toolbar">
-    <!-- Search input -->
-    <div class="search-container">
-      <Search size={16} class="search-icon" />
-      {#if activeTab === 'tracks'}
-        <input
-          type="text"
-          placeholder="Search tracks..."
-          bind:value={trackSearch}
-          class="search-input"
-        />
-        {#if trackSearch}
-          <button class="search-clear" onclick={() => trackSearch = ''}>
-            <X size={14} />
-          </button>
-        {/if}
-      {:else if activeTab === 'albums'}
-        <input
-          type="text"
-          placeholder="Search albums..."
-          bind:value={albumSearch}
-          class="search-input"
-        />
-        {#if albumSearch}
-          <button class="search-clear" onclick={() => albumSearch = ''}>
-            <X size={14} />
-          </button>
-        {/if}
-      {:else if activeTab === 'artists'}
-        <input
-          type="text"
-          placeholder="Search artists..."
-          bind:value={artistSearch}
-          class="search-input"
-        />
-        {#if artistSearch}
-          <button class="search-clear" onclick={() => artistSearch = ''}>
-            <X size={14} />
-          </button>
-        {/if}
+  <!-- Navigation Bar (Artist-style) -->
+  <div class="favorites-nav">
+    <div class="nav-left">
+      {#each favoritesPreferences.tab_order as tab}
+        <button
+          class="nav-link"
+          class:active={activeTab === tab}
+          onclick={() => handleTabChange(tab as TabType)}
+        >
+          <svelte:component this={getTabIcon(tab as TabType)} size={16} />
+          <span>{getTabLabel(tab as TabType)}</span>
+        </button>
+      {/each}
+    </div>
+    <div class="nav-right">
+      {#if !searchExpanded}
+        <button class="search-icon-btn" onclick={() => searchExpanded = true} title="Search">
+          <Search size={16} />
+        </button>
       {:else}
-        <input
-          type="text"
-          placeholder="Search playlists..."
-          bind:value={playlistSearch}
-          class="search-input"
-        />
-        {#if playlistSearch}
-          <button class="search-clear" onclick={() => playlistSearch = ''}>
-            <X size={14} />
-          </button>
-        {/if}
+        <div class="search-expanded">
+          <Search size={16} class="search-icon-inline" />
+          <input
+            type="text"
+            placeholder={`Search ${getTabLabel(activeTab).toLowerCase()}...`}
+            value={getCurrentSearchValue()}
+            oninput={(e) => setCurrentSearchValue(e.currentTarget.value)}
+            class="search-input-inline"
+            autofocus
+          />
+          {#if getCurrentSearchValue()}
+            <button class="search-clear-btn" onclick={clearCurrentSearch} title="Clear">
+              <X size={14} />
+            </button>
+          {/if}
+        </div>
       {/if}
     </div>
+  </div>
 
+  <!-- Toolbar with actions -->
+  <div class="toolbar">
     {#if activeTab === 'albums'}
       <div class="toolbar-controls">
         <div class="dropdown-container">
@@ -890,7 +1034,7 @@
       <div class="error">
         <p>Failed to load favorites</p>
         <p class="error-detail">{error}</p>
-        <button class="retry-btn" onclick={() => loadFavorites(activeTab)}>Retry</button>
+        <button class="retry-btn" onclick={() => loadTabIfNeeded(activeTab)}>Retry</button>
       </div>
     {:else if activeTab === 'tracks'}
       {#if favoriteTracks.length === 0}
@@ -941,6 +1085,7 @@
                     {@const globalIndex = trackIndexMap.get(track.id) ?? index}
                     {@const displayTrack = buildDisplayTrack(track, globalIndex)}
                     {@const downloadInfo = getTrackDownloadStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
+                    {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
                     <TrackRow
                       trackId={track.id}
                       number={track.track_number || index + 1}
@@ -948,6 +1093,7 @@
                       artist={track.performer?.name}
                       duration={formatDuration(track.duration)}
                       quality={getQualityLabel(track)}
+                      isPlaying={isActiveTrack}
                       isFavoriteOverride={true}
                       downloadStatus={downloadInfo.status}
                       downloadProgress={downloadInfo.progress}
@@ -990,6 +1136,7 @@
           {#each filteredTracks as track, index (`${track.id}-${downloadStateVersion}`)}
             {@const displayTrack = buildDisplayTrack(track, index)}
             {@const downloadInfo = getTrackDownloadStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
+            {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
             <TrackRow
               trackId={track.id}
               number={index + 1}
@@ -997,6 +1144,7 @@
               artist={track.performer?.name}
               duration={formatDuration(track.duration)}
               quality={getQualityLabel(track)}
+              isPlaying={isActiveTrack}
               isFavoriteOverride={true}
               downloadStatus={downloadInfo.status}
               downloadProgress={downloadInfo.progress}
@@ -1281,6 +1429,13 @@
   </div>
 </div>
 
+<FavoritesEditModal
+  isOpen={editModalOpen}
+  onClose={() => editModalOpen = false}
+  onSave={handlePreferencesSaved}
+  initialPreferences={favoritesPreferences}
+/>
+
 <style>
   .favorites-view {
     padding: 24px;
@@ -1313,6 +1468,7 @@
     align-items: center;
     gap: 20px;
     margin-bottom: 32px;
+    position: relative;
   }
 
   .header-icon {
@@ -1323,6 +1479,17 @@
     justify-content: center;
     background: linear-gradient(135deg, var(--accent-primary) 0%, #ff6b9d 100%);
     border-radius: 16px;
+    overflow: hidden;
+  }
+
+  .custom-icon-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .header-content {
+    flex: 1;
   }
 
   .header-content h1 {
@@ -1338,37 +1505,147 @@
     margin: 0;
   }
 
-  .tabs {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 24px;
-    border-bottom: 1px solid var(--bg-tertiary);
-    padding-bottom: 16px;
-  }
-
-  .tab {
+  .edit-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: none;
+    justify-content: center;
+    background: transparent;
     border: none;
-    border-radius: 8px;
-    color: var(--text-muted);
-    font-size: 14px;
-    font-weight: 500;
+    color: var(--text-secondary);
     cursor: pointer;
     transition: all 150ms ease;
   }
 
-  .tab:hover {
-    color: var(--text-primary);
-    background-color: var(--bg-tertiary);
+  .edit-btn:hover {
+    color: var(--accent-primary);
   }
 
-  .tab.active {
+  .favorites-nav {
+    position: sticky;
+    top: -24px;
+    z-index: 4;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 24px;
+    margin: 0 -32px 16px -32px;
+    background-color: var(--bg-primary);
+    border-bottom: 1px solid var(--bg-tertiary);
+  }
+
+  .nav-left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 150ms ease, border-color 150ms ease;
+  }
+
+  .nav-link:hover {
+    color: var(--text-secondary);
+  }
+
+  .nav-link.active {
     color: var(--text-primary);
-    background-color: var(--bg-tertiary);
+    border-bottom-color: var(--accent-primary);
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .search-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 150ms ease;
+  }
+
+  .search-icon-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+  }
+
+  .search-expanded {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    min-width: 240px;
+  }
+
+  .search-icon-inline {
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .search-input-inline {
+    flex: 1;
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 13px;
+  }
+
+  .search-input-inline::placeholder {
+    color: var(--text-muted);
+  }
+
+  .search-clear-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .search-clear-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+  }
+
+  .search-clear-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
   }
 
   .toolbar {
