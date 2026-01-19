@@ -545,6 +545,7 @@ pub fn run() {
             config::audio_settings::set_audio_sample_rate,
             config::audio_settings::set_audio_backend_type,
             config::audio_settings::set_audio_alsa_plugin,
+            config::audio_settings::set_audio_alsa_hardware_volume,
             // Audio backend commands
             commands::get_available_backends,
             commands::get_devices_for_backend,

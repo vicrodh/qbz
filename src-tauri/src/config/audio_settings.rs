@@ -258,3 +258,12 @@ pub fn set_audio_alsa_plugin(
     let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
     store.set_alsa_plugin(plugin)
 }
+
+#[tauri::command]
+pub fn set_audio_alsa_hardware_volume(
+    state: tauri::State<'_, AudioSettingsState>,
+    enabled: bool,
+) -> Result<(), String> {
+    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    store.set_alsa_hardware_volume(enabled)
+}

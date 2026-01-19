@@ -206,6 +206,7 @@
   let dacPassthrough = $state(false);
   let selectedBackend = $state<string>('Auto');
   let selectedAlsaPlugin = $state<string>('Hw (Direct Hardware)');
+  let alsaHardwareVolume = $state(false);
 
   // Backend system state
   let availableBackends = $state<BackendInfo[]>([]);
@@ -288,6 +289,11 @@
 
   // Show ALSA plugin selector only when ALSA backend is selected (derived)
   let showAlsaPluginSelector = $derived(selectedBackend === 'ALSA Direct');
+
+  // Show hardware volume control only for ALSA Direct + Hw plugin (bit-perfect)
+  let showAlsaHardwareVolume = $derived(
+    selectedBackend === 'ALSA Direct' && selectedAlsaPlugin === 'Hw (Direct Hardware)'
+  );
 
   // Smart toggle states - auto-disable incompatible features
   let exclusiveModeDisabled = $derived(selectedBackend === 'PipeWire' || selectedBackend === 'Auto' || selectedBackend === 'PulseAudio');
@@ -715,6 +721,7 @@
     preferred_sample_rate: number | null;
     backend_type: 'PipeWire' | 'Alsa' | 'Pulse' | null;
     alsa_plugin: 'Hw' | 'PlugHw' | 'Pcm' | null;
+    alsa_hardware_volume: boolean;
   }
 
   interface BackendInfo {
@@ -847,6 +854,8 @@
       } else {
         selectedAlsaPlugin = 'Hw (Direct Hardware)';
       }
+
+      alsaHardwareVolume = settings.alsa_hardware_volume ?? false;
 
       // Validate mutual exclusion: DAC Passthrough disables Gapless + Crossfade
       if (dacPassthrough) {
@@ -1000,6 +1009,16 @@
       }
     } catch (err) {
       console.error('[Audio] Failed to change ALSA plugin:', err);
+    }
+  }
+
+  async function handleAlsaHardwareVolumeChange(enabled: boolean) {
+    alsaHardwareVolume = enabled;
+    try {
+      await invoke('set_audio_alsa_hardware_volume', { enabled });
+      console.log('[Audio] ALSA hardware volume changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change ALSA hardware volume:', err);
     }
   }
 
@@ -1376,6 +1395,15 @@
         expandLeft
         compact
       />
+    </div>
+    {/if}
+    {#if showAlsaHardwareVolume}
+    <div class="setting-row">
+      <div class="label-with-tooltip">
+        <span class="setting-label">Enable Hardware Volume Control</span>
+        <Tooltip text="Try to control DAC volume via ALSA mixer. Some DACs don't support this - disable for maximum compatibility or enable experimentally. Failure doesn't break playback." />
+      </div>
+      <Toggle enabled={alsaHardwareVolume} onchange={handleAlsaHardwareVolumeChange} />
     </div>
     {/if}
     <div class="setting-row">
