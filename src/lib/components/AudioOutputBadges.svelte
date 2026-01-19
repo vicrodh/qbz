@@ -412,7 +412,7 @@
     white-space: nowrap;
   }
 
-  .device-tooltip:hover .tooltip-device.scrollable .device-name-text {
+  .tooltip-device.scrollable .device-name-text {
     animation: device-name-ticker var(--ticker-duration) linear infinite;
     will-change: transform;
   }
