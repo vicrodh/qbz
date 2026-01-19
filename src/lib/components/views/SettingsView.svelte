@@ -179,14 +179,32 @@
     'Dark': '',
     'Light': 'light',
     'OLED Black': 'oled',
-    'Warm': 'warm'
+    'Warm': 'warm',
+    'Nord': 'nord',
+    'Dracula': 'dracula',
+    'Tokyo Night': 'tokyo-night',
+    'Catppuccin Mocha': 'catppuccin-mocha',
+    'Rose Pine Dawn': 'rose-pine-dawn',
+    'Breeze Dark': 'breeze-dark',
+    'Breeze Light': 'breeze-light',
+    'Adwaita Dark': 'adwaita-dark',
+    'Adwaita Light': 'adwaita-light'
   };
 
   const themeReverseMap: Record<string, string> = {
     '': 'Dark',
     'light': 'Light',
     'oled': 'OLED Black',
-    'warm': 'Warm'
+    'warm': 'Warm',
+    'nord': 'Nord',
+    'dracula': 'Dracula',
+    'tokyo-night': 'Tokyo Night',
+    'catppuccin-mocha': 'Catppuccin Mocha',
+    'rose-pine-dawn': 'Rose Pine Dawn',
+    'breeze-dark': 'Breeze Dark',
+    'breeze-light': 'Breeze Light',
+    'adwaita-dark': 'Adwaita Dark',
+    'adwaita-light': 'Adwaita Light'
   };
 
   // Language mapping: display name -> locale code
@@ -1592,7 +1610,21 @@
       <span class="setting-label">{$t('settings.appearance.theme')}</span>
       <Dropdown
         value={theme}
-        options={['Dark', 'Light', 'OLED Black', 'Warm']}
+        options={[
+          'Dark',
+          'Light',
+          'OLED Black',
+          'Warm',
+          'Nord',
+          'Dracula',
+          'Tokyo Night',
+          'Catppuccin Mocha',
+          'Rose Pine Dawn',
+          'Breeze Dark',
+          'Breeze Light',
+          'Adwaita Dark',
+          'Adwaita Light'
+        ]}
         onchange={handleThemeChange}
       />
     </div>
