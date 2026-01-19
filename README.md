@@ -37,6 +37,37 @@ paru -S qbz-bin
 flatpak install ./QBZ.flatpak
 ```
 
+#### Important for Audiophiles
+
+Due to Flatpak sandbox restrictions, **PipeWire backend cannot guarantee bit-perfect playback**. The sandbox prevents QBZ from controlling the PipeWire daemon's sample rate configuration.
+
+**For bit-perfect audio in Flatpak:**
+- Use **ALSA Direct backend** in Settings → Audio → Audio Backend
+- Select your DAC from the device list
+- Enable DAC Passthrough
+
+**For full PipeWire bit-perfect support:**
+- Install via native packages (.deb, .rpm) or build from source
+
+The app will display a warning in Settings when this limitation affects your configuration.
+
+#### NAS/Network Storage Access
+
+If your music library is on a NAS or network mount, grant filesystem access:
+
+```bash
+# CIFS/Samba mount
+flatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz
+
+# SSHFS mount
+flatpak override --user --filesystem=/home/$USER/music-nas com.blitzfc.qbz
+
+# Custom mount point
+flatpak override --user --filesystem=/path/to/music com.blitzfc.qbz
+```
+
+This permission persists across reboots and updates.
+
 ### AppImage
 
 Download the latest release from the [Releases](https://github.com/vicrodh/qbz/releases) page.
@@ -312,6 +343,7 @@ qbz/
 **PipeWire DAC Passthrough**
 - Requires PipeWire configuration for automatic sample rate switching
 - See [AUDIO_BACKENDS.md](qbz-nix-docs/AUDIO_BACKENDS.md) for setup instructions
+- **Flatpak users:** PipeWire bit-perfect is not available due to sandbox restrictions - use ALSA Direct backend instead
 
 ## Contributing
 
