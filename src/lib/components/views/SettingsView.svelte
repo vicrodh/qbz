@@ -1399,9 +1399,9 @@
     {/if}
     {#if showAlsaHardwareVolume}
     <div class="setting-row">
-      <div class="label-with-tooltip">
+      <div class="setting-info">
         <span class="setting-label">Enable Hardware Volume Control</span>
-        <Tooltip text="Try to control DAC volume via ALSA mixer. Some DACs don't support this - disable for maximum compatibility or enable experimentally. Failure doesn't break playback." />
+        <span class="setting-desc">Experimental: Controls DAC volume via ALSA mixer. Some DACs don't support this - disable for maximum compatibility. If it fails, playback continues normally.</span>
       </div>
       <Toggle enabled={alsaHardwareVolume} onchange={handleAlsaHardwareVolumeChange} />
     </div>

@@ -8,6 +8,8 @@
     exclusive_mode: boolean;
     dac_passthrough: boolean;
     preferred_sample_rate: number | null;
+    backend_type: 'PipeWire' | 'Alsa' | 'Pulse' | null;
+    alsa_plugin: 'Hw' | 'PlugHw' | 'Pcm' | null;
   }
 
   interface AudioOutputStatus {
@@ -67,6 +69,11 @@
 
   const isExternal = $derived(currentDevice ? isExternalDevice(currentDevice) : false);
 
+  // ALSA Direct mode detection (bit-perfect hardware access)
+  const isAlsaDirect = $derived(
+    settings?.backend_type === 'Alsa' && settings?.alsa_plugin === 'Hw'
+  );
+
   // DAC badge state logic - 3 states: green, yellow, gray
   const dacBadgeState = $derived.by(() => {
     if (!settings?.dac_passthrough) {
@@ -120,7 +127,7 @@
 
   // Whether to show badges at all (only if at least one setting is enabled or device is external)
   const shouldShowBadges = $derived(
-    settings?.dac_passthrough || settings?.exclusive_mode || isExternal
+    settings?.dac_passthrough || settings?.exclusive_mode || isExternal || isAlsaDirect
   );
 
   async function loadStatus() {
@@ -166,15 +173,23 @@
   onmouseenter={() => { isHovering = true; loadStatus(); }}
   onmouseleave={() => isHovering = false}
 >
-  <!-- DAC Badge -->
-  <div
-    class="badge dac-badge"
-    class:active={dacBadgeState === 'active'}
-    class:warning={dacBadgeState === 'warning'}
-    class:off={dacBadgeState === 'off'}
-  >
-    <span class="badge-label">DAC</span>
-  </div>
+  <!-- DAC Badge or HW Badge (mutually exclusive) -->
+  {#if isAlsaDirect}
+    <!-- Hardware Direct Badge (ALSA Direct mode) -->
+    <div class="badge hw-badge active">
+      <span class="badge-label">HW</span>
+    </div>
+  {:else}
+    <!-- DAC Passthrough Badge (PipeWire mode) -->
+    <div
+      class="badge dac-badge"
+      class:active={dacBadgeState === 'active'}
+      class:warning={dacBadgeState === 'warning'}
+      class:off={dacBadgeState === 'off'}
+    >
+      <span class="badge-label">DAC</span>
+    </div>
+  {/if}
 
   <!-- Exclusive Mode Badge -->
   <div
@@ -202,10 +217,22 @@
         {/if}
       </div>
 
-      <!-- DAC Status -->
-      {#if settings?.dac_passthrough || settings?.exclusive_mode}
+      <!-- Audio Settings -->
+      {#if isAlsaDirect || settings?.dac_passthrough || settings?.exclusive_mode}
         <div class="tooltip-section">
           <div class="tooltip-label">Audio Settings</div>
+          {#if isAlsaDirect}
+            <div class="tooltip-setting">
+              <span class="setting-icon hw-icon">●</span>
+              <span class="setting-text">
+                ✓ Hardware Direct: Bit-perfect ALSA
+                {#if hardwareStatus?.hardware_sample_rate}
+                  <br><span class="setting-detail">{(hardwareStatus.hardware_sample_rate / 1000).toFixed(1)} kHz native</span>
+                {/if}
+                <br><span class="setting-detail">{prettyDeviceName}</span>
+              </span>
+            </div>
+          {/if}
           {#if settings.dac_passthrough}
             <div class="tooltip-setting" class:warning={dacBadgeState === 'warning'}>
               <span class="setting-icon" class:active={dacBadgeState === 'active'} class:warning={dacBadgeState === 'warning'}>●</span>
@@ -283,6 +310,13 @@
     background: transparent;
     color: rgba(255, 255, 255, 0.15);
     border-color: rgba(255, 255, 255, 0.06);
+  }
+
+  /* HW Badge (ALSA Direct) - Blue like audio equipment LED */
+  .badge.hw-badge.active {
+    background: rgba(59, 130, 246, 0.2);
+    color: #3b82f6;
+    border-color: rgba(59, 130, 246, 0.4);
   }
 
   .badge-label {
@@ -391,6 +425,10 @@
 
   .setting-icon.warning {
     color: #eab308;
+  }
+
+  .setting-icon.hw-icon {
+    color: #3b82f6;
   }
 
   .setting-text {
