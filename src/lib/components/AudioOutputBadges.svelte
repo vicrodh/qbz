@@ -44,6 +44,7 @@
   let pipewireSinks = $state<PipewireSink[]>([]);
   let hardwareStatus = $state<HardwareAudioStatus | null>(null);
   let isHovering = $state(false);
+  let previousSamplingRate = $state<number | undefined>(undefined);
 
   // Derived state
   const currentDevice = $derived(outputStatus?.device_name ?? null);
@@ -147,24 +148,23 @@
     }
   }
 
+  // Update hardware status when sampling rate changes (new song with different rate)
+  $effect(() => {
+    if (samplingRate !== undefined && samplingRate !== previousSamplingRate) {
+      // Sampling rate changed - new song or format change
+      previousSamplingRate = samplingRate;
+
+      // Update hardware status to verify bit-perfect playback
+      if (settings?.dac_passthrough || settings?.backend_type === 'Alsa') {
+        invoke<HardwareAudioStatus>('get_hardware_audio_status')
+          .then(status => hardwareStatus = status)
+          .catch(() => hardwareStatus = null);
+      }
+    }
+  });
+
   onMount(() => {
     loadStatus();
-
-    // Auto-refresh hardware status when DAC passthrough is active
-    // Fast polling (1s) for instant badge updates without needing hover
-    const pollInterval = setInterval(async () => {
-      // Only poll if DAC passthrough is enabled (otherwise wastes resources)
-      if (settings?.dac_passthrough) {
-        try {
-          hardwareStatus = await invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null);
-        } catch (err) {
-          // Silently fail - don't spam console
-        }
-      }
-    }, 1000); // 1 second - fast enough for instant feedback, light enough not to impact performance
-
-    // Cleanup on unmount
-    return () => clearInterval(pollInterval);
   });
 </script>
 
