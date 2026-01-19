@@ -1514,6 +1514,16 @@
       </div>
       <Toggle enabled={dacPassthrough} onchange={handleDacPassthroughChange} disabled={dacPassthroughDisabled} />
     </div>
+    {#if isFlatpak && selectedBackend === 'PipeWire' && dacPassthrough}
+    <div class="flatpak-warning">
+      <div class="warning-icon">⚠️</div>
+      <div class="warning-content">
+        <strong>Flatpak Limitation:</strong> PipeWire cannot guarantee bit-perfect playback in sandboxed environments due to daemon access restrictions.
+        <br />
+        <strong>Recommended:</strong> Switch to ALSA Direct backend for true bit-perfect audio.
+      </div>
+    </div>
+    {/if}
     <div class="setting-row last">
       <span class="setting-label">{$t('settings.audio.currentSampleRate')}</span>
       <span class="setting-value" class:muted={!hardwareStatus?.is_active}>
@@ -2579,6 +2589,36 @@ flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
 
   .flatpak-note strong {
     color: var(--text-secondary);
+    font-weight: 600;
+  }
+
+  /* Flatpak warning banner */
+  .flatpak-warning {
+    display: flex;
+    gap: 12px;
+    background-color: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 8px;
+    padding: 16px;
+    margin: 16px 0;
+    align-items: flex-start;
+  }
+
+  .warning-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    line-height: 1;
+  }
+
+  .warning-content {
+    flex: 1;
+    font-size: 13px;
+    line-height: 1.6;
+    color: var(--text-primary);
+  }
+
+  .warning-content strong {
+    color: rgb(251, 191, 36);
     font-weight: 600;
   }
 </style>
