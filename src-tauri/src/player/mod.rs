@@ -8,6 +8,9 @@
 //! - Real-time position tracking via events
 //!
 //! Uses a dedicated audio thread since rodio's OutputStream is not Send.
+//! Supports both rodio (PipeWire/Pulse) and direct ALSA (hw: devices).
+
+mod playback_engine;
 
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::panic::{self, AssertUnwindSafe};
@@ -33,6 +36,7 @@ use symphonia::default::{get_codecs, get_probe};
 use crate::api::{client::QobuzClient, models::Quality};
 use crate::audio::{AudioBackendType, BackendConfig, BackendManager};
 use crate::config::audio_settings::AudioSettings;
+use playback_engine::PlaybackEngine;
 
 /// Commands sent to the audio thread
 enum AudioCommand {
@@ -355,13 +359,22 @@ fn create_output_stream_with_config(
     }
 }
 
+/// Output stream type - either rodio or ALSA Direct
+enum StreamType {
+    Rodio(OutputStream, rodio::OutputStreamHandle),
+    #[cfg(target_os = "linux")]
+    AlsaDirect(crate::audio::AlsaDirectStream),
+}
+
 /// Try to create output stream using the backend system (if configured)
 /// Returns None if backend system is not configured (backend_type = None)
+///
+/// For ALSA backend with hw: devices, may return AlsaDirect instead of Rodio stream.
 fn try_init_stream_with_backend(
     audio_settings: &AudioSettings,
     sample_rate: u32,
     channels: u16,
-) -> Option<Result<(OutputStream, rodio::OutputStreamHandle), String>> {
+) -> Option<Result<StreamType, String>> {
     // Check if backend system is configured
     let backend_type = audio_settings.backend_type?;
 
@@ -398,11 +411,29 @@ fn try_init_stream_with_backend(
         alsa_plugin: audio_settings.alsa_plugin,
     };
 
-    // Create output stream via backend
+    // For ALSA backend with hw: devices, try direct ALSA first (Linux only)
+    #[cfg(target_os = "linux")]
+    if backend_type == AudioBackendType::Alsa {
+        // Check if device is hw: or plughw:
+        if let Some(ref device_id) = config.device_id {
+            if crate::audio::AlsaDirectStream::is_hw_device(device_id) {
+                log::info!("🎵 Detected hw: device, using ALSA Direct for bit-perfect playback");
+
+                // Downcast backend to AlsaBackend to access try_create_direct_stream
+                if let Some(alsa_backend) = backend.as_any().downcast_ref::<crate::audio::alsa_backend::AlsaBackend>() {
+                    if let Some(result) = alsa_backend.try_create_direct_stream(&config) {
+                        return Some(result.map(StreamType::AlsaDirect));
+                    }
+                }
+            }
+        }
+    }
+
+    // Fallback to regular rodio stream (PipeWire, Pulse, ALSA via CPAL)
     match backend.create_output_stream(&config) {
         Ok(stream) => {
             log::info!("✅ Stream created via {:?} backend at {}Hz", backend_type, sample_rate);
-            Some(Ok(stream))
+            Some(Ok(StreamType::Rodio(stream.0, stream.1)))
         }
         Err(e) => {
             log::error!("❌ Backend stream creation failed: {}", e);
@@ -680,14 +711,14 @@ impl Player {
 
             // Initialize audio device lazily on first playback to avoid idle CPU usage.
             let mut current_device_name = device_name.clone();
-            let mut stream_opt: Option<(OutputStream, rodio::OutputStreamHandle)> = None;
+            let mut stream_opt: Option<StreamType> = None;
             let mut current_sample_rate: Option<u32> = None;
             let mut current_channels: Option<u16> = None;
 
             const MAX_INIT_RETRIES: u32 = 5;
             const RETRY_DELAY_MS: u64 = 500;
 
-            let mut current_sink: Option<Sink> = None;
+            let mut current_engine: Option<PlaybackEngine> = None;
             // Store audio data for seeking (we need to re-decode from the beginning)
             let mut current_audio_data: Option<Vec<u8>> = None;
             // Track consecutive sink creation failures to detect broken streams
@@ -701,9 +732,9 @@ impl Player {
             log::info!("Audio thread ready and waiting for commands");
 
             let mut handle_command = |command: AudioCommand,
-                                      current_sink: &mut Option<Sink>,
+                                      current_engine: &mut Option<PlaybackEngine>,
                                       current_audio_data: &mut Option<Vec<u8>>,
-                                      stream_opt: &mut Option<(OutputStream, rodio::OutputStreamHandle)>,
+                                      stream_opt: &mut Option<StreamType>,
                                       current_device_name: &mut Option<String>,
                                       consecutive_sink_failures: &mut u32,
                                       pause_suspend_deadline: &mut Option<Instant>,
