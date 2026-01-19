@@ -952,7 +952,12 @@ impl Player {
                             StreamType::AlsaDirect(alsa_stream) => {
                                 *consecutive_sink_failures = 0;
                                 thread_state.set_stream_error(false);
-                                PlaybackEngine::new_alsa_direct(alsa_stream.clone())
+                                let hardware_volume = thread_settings
+                                    .lock()
+                                    .ok()
+                                    .map(|s| s.alsa_hardware_volume)
+                                    .unwrap_or(false);
+                                PlaybackEngine::new_alsa_direct(alsa_stream.clone(), hardware_volume)
                             }
                         };
 
@@ -1035,7 +1040,12 @@ impl Player {
                                 }
                                 #[cfg(target_os = "linux")]
                                 StreamType::AlsaDirect(alsa_stream) => {
-                                    PlaybackEngine::new_alsa_direct(alsa_stream.clone())
+                                    let hardware_volume = thread_settings
+                                        .lock()
+                                        .ok()
+                                        .map(|s| s.alsa_hardware_volume)
+                                        .unwrap_or(false);
+                                    PlaybackEngine::new_alsa_direct(alsa_stream.clone(), hardware_volume)
                                 }
                             };
 
@@ -1130,7 +1140,12 @@ impl Player {
                             }
                             #[cfg(target_os = "linux")]
                             StreamType::AlsaDirect(alsa_stream) => {
-                                PlaybackEngine::new_alsa_direct(alsa_stream.clone())
+                                let hardware_volume = thread_settings
+                                    .lock()
+                                    .ok()
+                                    .map(|s| s.alsa_hardware_volume)
+                                    .unwrap_or(false);
+                                PlaybackEngine::new_alsa_direct(alsa_stream.clone(), hardware_volume)
                             }
                         };
 

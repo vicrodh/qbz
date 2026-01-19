@@ -235,6 +235,11 @@ impl AlsaDirectStream {
         self.channels
     }
 
+    /// Get device ID
+    pub fn device_id(&self) -> &str {
+        &self.device_id
+    }
+
     /// Try to set hardware volume via ALSA mixer
     ///
     /// Returns error if:

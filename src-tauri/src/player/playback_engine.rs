@@ -26,6 +26,7 @@ pub enum PlaybackEngine {
         position_frames: Arc<AtomicU64>,
         duration_frames: Arc<AtomicU64>,
         playback_thread: Option<thread::JoinHandle<()>>,
+        hardware_volume: bool,  // Use ALSA mixer for volume control
     },
 }
 
@@ -39,13 +40,14 @@ impl PlaybackEngine {
     }
 
     /// Create ALSA Direct engine
-    pub fn new_alsa_direct(stream: Arc<AlsaDirectStream>) -> Self {
+    pub fn new_alsa_direct(stream: Arc<AlsaDirectStream>, hardware_volume: bool) -> Self {
         Self::AlsaDirect {
             stream,
             is_playing: Arc::new(AtomicBool::new(false)),
             position_frames: Arc::new(AtomicU64::new(0)),
             duration_frames: Arc::new(AtomicU64::new(0)),
             playback_thread: None,
+            hardware_volume,
         }
     }
 
@@ -65,6 +67,7 @@ impl PlaybackEngine {
                 position_frames,
                 duration_frames,
                 playback_thread,
+                hardware_volume: _,
             } => {
                 // For ALSA Direct, we need to spawn a thread that:
                 // 1. Streams samples from source (no buffering entire file)
@@ -195,10 +198,19 @@ impl PlaybackEngine {
     pub fn set_volume(&self, volume: f32) {
         match self {
             Self::Rodio { sink } => sink.set_volume(volume),
-            Self::AlsaDirect { .. } => {
-                // TODO: Implement software volume or ALSA mixer control
-                // For now, ALSA Direct uses hardware volume
-                log::warn!("[ALSA Direct Engine] Software volume not yet implemented");
+            Self::AlsaDirect { stream, hardware_volume, .. } => {
+                if *hardware_volume {
+                    // Try hardware mixer control
+                    #[cfg(target_os = "linux")]
+                    {
+                        if let Err(e) = stream.set_hardware_volume(volume) {
+                            log::warn!("[ALSA Direct Engine] Hardware volume failed: {}. Volume slider may not work.", e);
+                        }
+                    }
+                } else {
+                    // Hardware volume disabled - volume control is handled by DAC/amplifier
+                    log::debug!("[ALSA Direct Engine] Hardware volume control disabled (use DAC/amplifier)");
+                }
             }
         }
     }
