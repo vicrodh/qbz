@@ -924,7 +924,7 @@
 
       {#each displayTracks as track, idx (`${track.id}-${downloadStateVersion}`)}
         {@const downloadInfo = track.isLocal ? { status: 'none' as const, progress: 0 } : (getTrackDownloadStatus?.(track.id) ?? { status: 'none' as const, progress: 0 })}
-        {@const isActiveTrack = isPlaybackActive && (
+        {@const isActiveTrack = (
           track.isLocal
             ? (track.localTrackId !== undefined && activeTrackId === track.localTrackId)
             : activeTrackId === track.id
