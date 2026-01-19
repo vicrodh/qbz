@@ -899,7 +899,19 @@ impl Player {
                                     *current_sample_rate = Some(sample_rate);
                                     *current_channels = Some(channels);
                                     thread_state.set_stream_error(false);
-                                    log::info!("✅ Audio stream ready at {}Hz", sample_rate);
+
+                                    // Set current device name from settings (for backend system)
+                                    if let Some(settings) = thread_settings.lock().ok() {
+                                        if let Some(ref device_name) = settings.output_device {
+                                            thread_state.set_current_device(Some(device_name.clone()));
+                                            log::info!("✅ Audio stream ready at {}Hz on device: {}", sample_rate, device_name);
+                                        } else {
+                                            thread_state.set_current_device(Some("Default".to_string()));
+                                            log::info!("✅ Audio stream ready at {}Hz on default device", sample_rate);
+                                        }
+                                    } else {
+                                        log::info!("✅ Audio stream ready at {}Hz", sample_rate);
+                                    }
 
                                     // Small delay to ensure stream is fully initialized before decoder starts
                                     // This prevents sync gaps when changing sample rates
