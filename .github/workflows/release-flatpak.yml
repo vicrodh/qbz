@@ -89,8 +89,8 @@ jobs:
         run: |
           mkdir -p flatpak-build flatpak-repo dist
           flatpak-builder --user --force-clean --repo=flatpak-repo \
-            flatpak-build packaging/flatpak/com.blitzkriegfc.qbz.yml
-          flatpak build-bundle flatpak-repo dist/QBZ.flatpak com.blitzkriegfc.qbz
+            flatpak-build packaging/flatpak/com.blitzfc.qbz.yml
+          flatpak build-bundle flatpak-repo dist/QBZ.flatpak com.blitzfc.qbz
 
       - name: Upload Flatpak bundle
         uses: actions/upload-artifact@v4

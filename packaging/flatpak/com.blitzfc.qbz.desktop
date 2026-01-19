@@ -2,7 +2,7 @@
 Name=QBZ
 Exec=qbz %u
 Type=Application
-Icon=com.blitzkriegfc.qbz
+Icon=com.blitzfc.qbz
 Categories=Audio;Music;Player;
 Terminal=false
 StartupWMClass=QBZ

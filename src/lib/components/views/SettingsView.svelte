@@ -98,6 +98,10 @@
   // Offline mode state
   let offlineStatus = $state<OfflineStatus>(getOfflineStatus());
   let offlineSettings = $state<OfflineSettings>(getOfflineSettings());
+
+  // Flatpak detection state
+  let isFlatpak = $state(false);
+  let flatpakHelpText = $state('');
   let isCheckingNetwork = $state(false);
 
   // Section navigation
@@ -451,6 +455,9 @@
 
     // Load playback preferences
     loadPlaybackPreferences();
+
+    // Detect if running in Flatpak
+    loadFlatpakStatus();
 
     // Check for legacy downloads
     checkLegacyDownloads();
@@ -839,6 +846,17 @@
       backendDevices = [];
     } finally {
       isLoadingDevices = false;
+    }
+  }
+
+  async function loadFlatpakStatus() {
+    try {
+      isFlatpak = await invoke<boolean>('is_running_in_flatpak');
+      if (isFlatpak) {
+        flatpakHelpText = await invoke<string>('get_flatpak_help_text');
+      }
+    } catch (err) {
+      console.error('Failed to check Flatpak status:', err);
     }
   }
 
@@ -1885,6 +1903,32 @@
       </button>
     </div>
   </section>
+
+  <!-- Flatpak Section (only shown when running in Flatpak) -->
+  {#if isFlatpak}
+    <section class="section flatpak-section">
+      <h3 class="section-title">Flatpak Sandbox</h3>
+      <div class="flatpak-info">
+        <p class="flatpak-intro">
+          QBZ is running inside a Flatpak sandbox. For offline libraries on NAS, network mounts, or external disks, direct filesystem access is required.
+        </p>
+        <div class="flatpak-guide">
+          <h4>Grant Filesystem Access</h4>
+          <p>Use <strong>Flatseal</strong> (GUI) or run this command:</p>
+          <pre class="code-block">flatpak override --user --filesystem=/path/to/music com.blitzfc.qbz</pre>
+          <h4>Examples</h4>
+          <pre class="code-block"># CIFS / Samba mount
+flatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz
+
+# SSHFS mount
+flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
+          <p class="flatpak-note">
+            <strong>Note:</strong> This setting is persistent and survives reboots and updates.
+          </p>
+        </div>
+      </div>
+    </section>
+  {/if}
 </div>
 
 {#if isCheckingNetwork}
@@ -2474,6 +2518,68 @@
     to {
       transform: rotate(360deg);
     }
+  }
+
+  /* Flatpak section styles */
+  .flatpak-section {
+    background-color: var(--bg-tertiary);
+    border: 1px solid rgba(99, 102, 241, 0.2);
+    border-radius: 8px;
+    padding: 20px;
+  }
+
+  .flatpak-info {
+    color: var(--text-secondary);
+  }
+
+  .flatpak-intro {
+    font-size: 14px;
+    line-height: 1.6;
+    margin-bottom: 20px;
+    color: var(--text-primary);
+  }
+
+  .flatpak-guide h4 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+    margin-top: 16px;
+  }
+
+  .flatpak-guide h4:first-child {
+    margin-top: 0;
+  }
+
+  .flatpak-guide p {
+    font-size: 13px;
+    line-height: 1.5;
+    margin-bottom: 8px;
+  }
+
+  .code-block {
+    background-color: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    padding: 12px;
+    font-family: 'Fira Code', 'Courier New', monospace;
+    font-size: 12px;
+    color: var(--accent-primary);
+    overflow-x: auto;
+    margin: 8px 0 16px 0;
+    white-space: pre;
+  }
+
+  .flatpak-note {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
+    margin-top: 12px;
+  }
+
+  .flatpak-note strong {
+    color: var(--text-secondary);
+    font-weight: 600;
   }
 </style>
 

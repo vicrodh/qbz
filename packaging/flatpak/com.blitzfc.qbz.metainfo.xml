@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <component type="desktop-application">
-  <id>com.blitzkriegfc.qbz</id>
+  <id>com.blitzfc.qbz</id>
   <name>QBZ</name>
   <summary>Native Qobuz client for Linux</summary>
   <description>
@@ -14,5 +14,5 @@
     <category>Audio</category>
     <category>Music</category>
   </categories>
-  <launchable type="desktop-id">com.blitzkriegfc.qbz.desktop</launchable>
+  <launchable type="desktop-id">com.blitzfc.qbz.desktop</launchable>
 </component>

@@ -13,6 +13,7 @@ pub mod config;
 pub mod credentials;
 pub mod discogs;
 pub mod download_cache;
+pub mod flatpak;
 pub mod lastfm;
 pub mod library;
 pub mod lyrics;
@@ -132,6 +133,13 @@ pub fn run() {
         .init();
 
     log::info!("QBZ starting...");
+
+    // Migrate data from old App ID if needed
+    match flatpak::migrate_app_id_data() {
+        Ok(true) => log::info!("App ID migration completed successfully"),
+        Ok(false) => log::debug!("No App ID migration needed"),
+        Err(e) => log::error!("App ID migration failed: {}", e),
+    }
 
     // Initialize library state
     let library_state = library::init_library_state()
@@ -605,6 +613,9 @@ pub fn run() {
             network::commands::get_network_mounts_cmd,
             network::commands::check_mount_accessible,
             network::commands::check_network_paths_batch,
+            // Flatpak detection commands
+            flatpak::is_running_in_flatpak,
+            flatpak::get_flatpak_help_text,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
