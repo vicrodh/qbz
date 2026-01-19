@@ -55,7 +55,7 @@ modules:
     sources:
       - type: archive
         url: https://www.alsa-project.org/files/pub/utils/alsa-utils-1.2.12.tar.bz2
-        sha256: 5f0faf83775ce9a7ad6ddcca7b19b54917e7c1a3d10e96a9e0cda29a288c49e3
+        sha256: 98bc6677d0c0074006679051822324a0ab0879aea558a8f68b511780d30cd924
 
   # intltool required for libdbusmenu
   - name: intltool
