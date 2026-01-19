@@ -117,12 +117,22 @@ const getInstallCmd = (type: DownloadItem['type'], fileName: string): string | u
   }
 }
 
-// AUR helper commands
+// AUR helper commands and Flatpak additional info
 const getHelperCmds = (type: DownloadItem['type']): { label: string; cmds: string[] } | undefined => {
   if (type === 'aur') {
     return {
       label: 'Or using a Helper?',
       cmds: ['yay -Syu qbz-bin', 'paru -Syu qbz-bin']
+    }
+  }
+  if (type === 'flatpak') {
+    return {
+      label: 'Audiophile Setup (Bit-Perfect Audio)',
+      cmds: [
+        '# After install, open QBZ → Settings → Audio',
+        '# Select "ALSA Direct" as Audio Backend',
+        '# Note: PipeWire bit-perfect unavailable in Flatpak due to sandbox'
+      ]
     }
   }
   return undefined
