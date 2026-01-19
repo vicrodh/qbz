@@ -67,57 +67,76 @@ impl PlaybackEngine {
                 playback_thread,
             } => {
                 // For ALSA Direct, we need to spawn a thread that:
-                // 1. Converts i16 samples to f32
-                // 2. Writes to ALSA PCM
-                // 3. Tracks position
+                // 1. Streams samples from source (no buffering entire file)
+                // 2. Converts i16 samples to f32
+                // 3. Writes to ALSA PCM
+                // 4. Tracks position
 
                 let stream_clone = stream.clone();
                 let is_playing_clone = is_playing.clone();
                 let position_clone = position_frames.clone();
                 let duration_clone = duration_frames.clone();
 
-                let sample_rate = stream.sample_rate();
                 let channels = stream.channels();
 
                 is_playing.store(true, Ordering::SeqCst);
                 position_clone.store(0, Ordering::SeqCst);
 
+                log::info!("[ALSA Direct Engine] Starting streaming playback thread");
+
                 let handle = thread::spawn(move || {
-                    // Collect all samples from source
-                    let samples_i16: Vec<i16> = source.collect();
-
-                    // Convert i16 to f32 (normalize to -1.0..1.0)
-                    let samples_f32: Vec<f32> = samples_i16
-                        .iter()
-                        .map(|&s| s as f32 / 32768.0)
-                        .collect();
-
-                    // Store duration in frames
-                    let total_frames = samples_f32.len() as u64 / channels as u64;
-                    duration_clone.store(total_frames, Ordering::SeqCst);
-
-                    // Write in chunks to allow for control (pause/stop)
-                    const CHUNK_SIZE: usize = 4096; // frames
+                    // Stream samples in chunks (no pre-buffering entire file)
+                    const CHUNK_SIZE: usize = 8192; // frames per chunk
                     let chunk_samples = CHUNK_SIZE * channels as usize;
 
-                    let mut offset = 0;
-                    while offset < samples_f32.len() && is_playing_clone.load(Ordering::SeqCst) {
-                        let end = (offset + chunk_samples).min(samples_f32.len());
-                        let chunk = &samples_f32[offset..end];
+                    let mut buffer_i16 = Vec::with_capacity(chunk_samples);
+                    let mut buffer_f32 = Vec::with_capacity(chunk_samples);
 
-                        if let Err(e) = stream_clone.write(chunk) {
+                    let mut total_frames: u64 = 0;
+                    let mut source_iter = source.into_iter();
+
+                    loop {
+                        // Check if we should stop
+                        if !is_playing_clone.load(Ordering::SeqCst) {
+                            log::info!("[ALSA Direct Engine] Playback paused/stopped");
+                            break;
+                        }
+
+                        // Fill buffer from source
+                        buffer_i16.clear();
+                        for _ in 0..chunk_samples {
+                            match source_iter.next() {
+                                Some(sample) => buffer_i16.push(sample),
+                                None => break, // End of stream
+                            }
+                        }
+
+                        if buffer_i16.is_empty() {
+                            // End of stream
+                            log::info!("[ALSA Direct Engine] Stream ended (total frames: {})", total_frames);
+                            break;
+                        }
+
+                        // Convert i16 to f32 (normalize to -1.0..1.0)
+                        buffer_f32.clear();
+                        for &sample in &buffer_i16 {
+                            buffer_f32.push(sample as f32 / 32768.0);
+                        }
+
+                        // Write to ALSA
+                        if let Err(e) = stream_clone.write(&buffer_f32) {
                             log::error!("[ALSA Direct Engine] Write failed: {}", e);
                             break;
                         }
 
                         // Update position
-                        let frames_written = (end - offset) / channels as usize;
-                        position_clone.fetch_add(frames_written as u64, Ordering::SeqCst);
-
-                        offset = end;
+                        let frames_written = buffer_f32.len() / channels as usize;
+                        total_frames += frames_written as u64;
+                        position_clone.store(total_frames, Ordering::SeqCst);
+                        duration_clone.store(total_frames, Ordering::SeqCst);
                     }
 
-                    // Drain PCM buffer
+                    // Drain PCM buffer to ensure all samples are played
                     if let Err(e) = stream_clone.drain() {
                         log::warn!("[ALSA Direct Engine] Drain failed: {}", e);
                     }
