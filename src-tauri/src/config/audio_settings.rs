@@ -60,8 +60,8 @@ impl AudioSettingsStore {
                 alsa_plugin TEXT,
                 alsa_hardware_volume INTEGER NOT NULL DEFAULT 0
             );
-            INSERT OR IGNORE INTO audio_settings (id, exclusive_mode, dac_passthrough, alsa_hardware_volume)
-            VALUES (1, 0, 0, 0);"
+            INSERT OR IGNORE INTO audio_settings (id, exclusive_mode, dac_passthrough)
+            VALUES (1, 0, 0);"
         ).map_err(|e| format!("Failed to create audio settings table: {}", e))?;
 
         // Migration: Add new columns if they don't exist (for existing databases)
