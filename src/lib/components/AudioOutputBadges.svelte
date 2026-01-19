@@ -177,7 +177,7 @@
 
 <div
   class="audio-badges"
-  onmouseenter={() => { isHovering = true; loadStatus(); }}
+  onmouseenter={() => isHovering = true}
   onmouseleave={() => isHovering = false}
 >
   <!-- DAC Badge or HW Badge (mutually exclusive) -->
