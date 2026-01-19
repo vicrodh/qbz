@@ -70,7 +70,7 @@
   let artistOverflow = $state(0);
   const titleOffset = $derived(titleOverflow > 0 ? `-${titleOverflow + 16}px` : '0px');
   const artistOffset = $derived(artistOverflow > 0 ? `-${artistOverflow + 16}px` : '0px');
-  const tickerSpeed = 80;
+  const tickerSpeed = 40;
   const titleDuration = $derived(titleOverflow > 0 ? `${(titleOverflow + 16) / tickerSpeed}s` : '0s');
   const artistDuration = $derived(artistOverflow > 0 ? `${(artistOverflow + 16) / tickerSpeed}s` : '0s');
 
@@ -424,8 +424,9 @@
   }
 
   @keyframes title-ticker {
-    from { transform: translateX(0); }
-    to { transform: translateX(var(--ticker-offset)); }
+    0%, 20% { transform: translateX(0); }
+    70%, 80% { transform: translateX(var(--ticker-offset)); }
+    90%, 100% { transform: translateX(0); }
   }
 
   .artist {
