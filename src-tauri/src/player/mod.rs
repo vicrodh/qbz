@@ -913,9 +913,10 @@ impl Player {
                                         log::info!("✅ Audio stream ready at {}Hz", sample_rate);
                                     }
 
-                                    // Small delay to ensure stream is fully initialized before decoder starts
-                                    // This prevents sync gaps when changing sample rates
-                                    std::thread::sleep(Duration::from_millis(50));
+                                    // Delay to ensure stream is fully initialized before decoder starts
+                                    // This prevents sync gaps and allows hardware to stabilize after sample rate changes
+                                    // Extra time needed for large sample rate changes (e.g., 88.2kHz → 44.1kHz)
+                                    std::thread::sleep(Duration::from_millis(150));
                                 }
                                 Err(e) => {
                                     log::error!("❌ Failed to create stream at {}Hz: {}", sample_rate, e);
