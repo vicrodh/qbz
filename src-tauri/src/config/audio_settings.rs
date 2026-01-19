@@ -15,6 +15,7 @@ pub struct AudioSettings {
     pub preferred_sample_rate: Option<u32>,  // None = auto
     pub backend_type: Option<AudioBackendType>,  // None = auto-detect
     pub alsa_plugin: Option<AlsaPlugin>,  // Only used when backend is ALSA
+    pub alsa_hardware_volume: bool,  // Use ALSA mixer for volume (only with hw: devices)
 }
 
 impl Default for AudioSettings {
@@ -26,6 +27,7 @@ impl Default for AudioSettings {
             preferred_sample_rate: None,
             backend_type: None,  // Auto-detect (PipeWire if available, else ALSA)
             alsa_plugin: Some(AlsaPlugin::Hw),  // Default to hw (bit-perfect)
+            alsa_hardware_volume: false,  // Disabled by default (maximum compatibility)
         }
     }
 }
@@ -55,15 +57,17 @@ impl AudioSettingsStore {
                 dac_passthrough INTEGER NOT NULL DEFAULT 0,
                 preferred_sample_rate INTEGER,
                 backend_type TEXT,
-                alsa_plugin TEXT
+                alsa_plugin TEXT,
+                alsa_hardware_volume INTEGER NOT NULL DEFAULT 0
             );
-            INSERT OR IGNORE INTO audio_settings (id, exclusive_mode, dac_passthrough)
-            VALUES (1, 0, 0);"
+            INSERT OR IGNORE INTO audio_settings (id, exclusive_mode, dac_passthrough, alsa_hardware_volume)
+            VALUES (1, 0, 0, 0);"
         ).map_err(|e| format!("Failed to create audio settings table: {}", e))?;
 
         // Migration: Add new columns if they don't exist (for existing databases)
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN backend_type TEXT", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN alsa_plugin TEXT", []);
+        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN alsa_hardware_volume INTEGER NOT NULL DEFAULT 0", []);
 
         Ok(Self { conn })
     }
@@ -71,7 +75,7 @@ impl AudioSettingsStore {
     pub fn get_settings(&self) -> Result<AudioSettings, String> {
         self.conn
             .query_row(
-                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin FROM audio_settings WHERE id = 1",
+                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume FROM audio_settings WHERE id = 1",
                 [],
                 |row| {
                     // Parse backend_type from JSON string
@@ -91,6 +95,7 @@ impl AudioSettingsStore {
                         preferred_sample_rate: row.get(3)?,
                         backend_type,
                         alsa_plugin,
+                        alsa_hardware_volume: row.get::<_, i64>(6)? != 0,
                     })
                 },
             )
@@ -164,6 +169,16 @@ impl AudioSettingsStore {
                 params![plugin_json],
             )
             .map_err(|e| format!("Failed to set ALSA plugin: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_alsa_hardware_volume(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET alsa_hardware_volume = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set ALSA hardware volume: {}", e))?;
         Ok(())
     }
 }
