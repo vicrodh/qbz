@@ -233,7 +233,7 @@
           artist={track.artist}
           duration={track.duration}
           quality={track.quality}
-          isPlaying={isPlaybackActive && activeTrackId === track.id}
+          isPlaying={activeTrackId === track.id}
           downloadStatus={downloadInfo.status}
           downloadProgress={downloadInfo.progress}
           onPlay={() => {
