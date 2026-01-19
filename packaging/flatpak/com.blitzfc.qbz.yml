@@ -25,6 +25,11 @@ finish-args:
   - --filesystem=/media
   - --filesystem=/run/media
 
+  # Migration: Read-only access to old App ID data for one-time migration
+  # This allows copying user data from com.blitzkriegfc.qbz to com.blitzfc.qbz
+  # Can be removed in a future release after users have migrated
+  - --filesystem=~/.var/app/com.blitzkriegfc.qbz:ro
+
   # Required for tray icon to be visible (Tauri writes icon to temp location)
   - --filesystem=xdg-run/tray-icon:create
 

@@ -194,10 +194,11 @@ impl BackendManager {
 
     #[cfg(target_os = "linux")]
     fn is_pipewire_available() -> bool {
-        // Check if PipeWire is running by trying to execute pw-cli
-        std::process::Command::new("pw-cli")
+        // Check if PipeWire/PulseAudio is available using pactl
+        // PipeWire provides PulseAudio compatibility, so pactl works for both
+        // This is more reliable than pw-cli, especially in sandboxed environments (Flatpak)
+        std::process::Command::new("pactl")
             .arg("info")
-            .arg("0")
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)

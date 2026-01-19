@@ -14,35 +14,54 @@ pub fn is_flatpak() -> bool {
 /// Migrate data from old App ID to new App ID
 ///
 /// This migrates user data from:
-/// - `~/.config/com.blitzkriegfc.qbz/` → `~/.config/qbz/`
-/// - `~/.local/share/com.blitzkriegfc.qbz/` → `~/.local/share/qbz/`
-/// - `~/.cache/com.blitzkriegfc.qbz/` → `~/.cache/qbz/`
+/// - `~/.config/com.blitzkriegfc.qbz/` → `~/.config/qbz/` (non-Flatpak)
+/// - `~/.var/app/com.blitzkriegfc.qbz/config/com.blitzkriegfc.qbz/` → `~/.var/app/com.blitzfc.qbz/config/qbz/` (Flatpak)
 ///
 /// Returns Ok(true) if migration was performed, Ok(false) if not needed
 pub fn migrate_app_id_data() -> Result<bool, String> {
-    let old_config = dirs::config_dir()
-        .ok_or("Could not determine config directory")?
-        .join("com.blitzkriegfc.qbz");
+    let (old_config, old_data, old_cache, new_config, new_data, new_cache) = if is_flatpak() {
+        // In Flatpak, we need to migrate from the OLD sandbox to the NEW sandbox
+        // dirs::config_dir() returns ~/.var/app/com.blitzfc.qbz/config/ (new sandbox)
+        // We need to access ~/.var/app/com.blitzkriegfc.qbz/ (old sandbox) which is outside our current sandbox
 
-    let old_data = dirs::data_dir()
-        .ok_or("Could not determine data directory")?
-        .join("com.blitzkriegfc.qbz");
+        let home = std::env::var("HOME")
+            .map_err(|_| "Could not determine HOME directory")?;
+        let home_path = PathBuf::from(home);
 
-    let old_cache = dirs::cache_dir()
-        .ok_or("Could not determine cache directory")?
-        .join("com.blitzkriegfc.qbz");
+        let old_sandbox = home_path.join(".var/app/com.blitzkriegfc.qbz");
+        let new_sandbox = home_path.join(".var/app/com.blitzfc.qbz");
 
-    let new_config = dirs::config_dir()
-        .ok_or("Could not determine config directory")?
-        .join("qbz");
-
-    let new_data = dirs::data_dir()
-        .ok_or("Could not determine data directory")?
-        .join("qbz");
-
-    let new_cache = dirs::cache_dir()
-        .ok_or("Could not determine cache directory")?
-        .join("qbz");
+        (
+            old_sandbox.join("config/com.blitzkriegfc.qbz"),
+            old_sandbox.join("data/com.blitzkriegfc.qbz"),
+            old_sandbox.join("cache/com.blitzkriegfc.qbz"),
+            new_sandbox.join("config/qbz"),
+            new_sandbox.join("data/qbz"),
+            new_sandbox.join("cache/qbz"),
+        )
+    } else {
+        // Non-Flatpak: migrate from ~/.config/com.blitzkriegfc.qbz to ~/.config/qbz
+        (
+            dirs::config_dir()
+                .ok_or("Could not determine config directory")?
+                .join("com.blitzkriegfc.qbz"),
+            dirs::data_dir()
+                .ok_or("Could not determine data directory")?
+                .join("com.blitzkriegfc.qbz"),
+            dirs::cache_dir()
+                .ok_or("Could not determine cache directory")?
+                .join("com.blitzkriegfc.qbz"),
+            dirs::config_dir()
+                .ok_or("Could not determine config directory")?
+                .join("qbz"),
+            dirs::data_dir()
+                .ok_or("Could not determine data directory")?
+                .join("qbz"),
+            dirs::cache_dir()
+                .ok_or("Could not determine cache directory")?
+                .join("qbz"),
+        )
+    };
 
     let mut migrated = false;
 
