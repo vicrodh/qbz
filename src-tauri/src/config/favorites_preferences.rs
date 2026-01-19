@@ -1,6 +1,10 @@
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
+use chrono::Utc;
+use md5::{Md5, Digest};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FavoritesPreferences {
@@ -70,6 +74,56 @@ impl FavoritesPreferencesStore {
         Ok(Self { conn })
     }
 
+    fn favorites_icon_dir() -> Result<PathBuf, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz")
+            .join("favorites");
+
+        fs::create_dir_all(&data_dir)
+            .map_err(|e| format!("Failed to create favorites icon directory: {}", e))?;
+
+        Ok(data_dir)
+    }
+
+    fn normalize_custom_icon_path(&self, path: String) -> Result<String, String> {
+        let trimmed = path.trim();
+        if trimmed.is_empty() {
+            return Ok(String::new());
+        }
+
+        let source = Path::new(trimmed);
+        if !source.exists() {
+            return Err(format!("Source icon does not exist: {}", trimmed));
+        }
+
+        let icon_dir = Self::favorites_icon_dir()?;
+        if source.starts_with(&icon_dir) {
+            return Ok(trimmed.to_string());
+        }
+
+        let extension = source
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("png");
+
+        let mut hasher = Md5::new();
+        hasher.update(trimmed.as_bytes());
+        let hash = format!("{:x}", hasher.finalize());
+        let filename = format!(
+            "favorites_icon_{}_{}.{}",
+            hash,
+            Utc::now().timestamp(),
+            extension
+        );
+        let dest_path = icon_dir.join(filename);
+
+        fs::copy(source, &dest_path)
+            .map_err(|e| format!("Failed to copy favorites icon: {}", e))?;
+
+        Ok(dest_path.to_string_lossy().to_string())
+    }
+
     pub fn get_preferences(&self) -> Result<FavoritesPreferences, String> {
         let mut stmt = self.conn.prepare("SELECT custom_icon_path, custom_icon_preset, icon_background, tab_order FROM favorites_preferences WHERE id = 1")
             .map_err(|e| format!("Failed to prepare select: {}", e))?;
@@ -79,6 +133,9 @@ impl FavoritesPreferencesStore {
             let custom_icon_preset: Option<String> = row.get(1)?;
             let icon_background: Option<String> = row.get(2)?;
             let tab_order_str: String = row.get(3)?;
+
+            let custom_icon_path = custom_icon_path
+                .and_then(|value| if value.trim().is_empty() { None } else { Some(value) });
             
             let tab_order: Vec<String> = serde_json::from_str(&tab_order_str).unwrap_or_else(|_| {
                 vec![
@@ -104,7 +161,16 @@ impl FavoritesPreferencesStore {
         }
     }
 
-    pub fn save_preferences(&self, prefs: &FavoritesPreferences) -> Result<(), String> {
+    pub fn save_preferences(&self, mut prefs: FavoritesPreferences) -> Result<FavoritesPreferences, String> {
+        if let Some(path) = prefs.custom_icon_path.clone() {
+            let resolved = self.normalize_custom_icon_path(path)?;
+            if resolved.is_empty() {
+                prefs.custom_icon_path = None;
+            } else {
+                prefs.custom_icon_path = Some(resolved);
+            }
+        }
+
         let tab_order_str = serde_json::to_string(&prefs.tab_order)
             .map_err(|e| format!("Failed to serialize tab_order: {}", e))?;
         
@@ -114,7 +180,7 @@ impl FavoritesPreferencesStore {
             params![prefs.custom_icon_path, prefs.custom_icon_preset, prefs.icon_background, tab_order_str],
         )
         .map_err(|e| format!("Failed to save preferences: {}", e))?;
-        Ok(())
+        Ok(prefs)
     }
 }
 
@@ -146,12 +212,12 @@ pub fn get_favorites_preferences(
 pub fn save_favorites_preferences(
     prefs: FavoritesPreferences,
     state: tauri::State<FavoritesPreferencesState>,
-) -> Result<(), String> {
+) -> Result<FavoritesPreferences, String> {
     let store = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites preferences store".to_string())?;
-    store.save_preferences(&prefs)
+    store.save_preferences(prefs)
 }
 
 pub fn create_table(conn: &Connection) -> Result<()> {
@@ -188,6 +254,9 @@ pub fn load_preferences(conn: &Connection) -> Result<FavoritesPreferences> {
         let custom_icon_preset: Option<String> = row.get(1)?;
         let icon_background: Option<String> = row.get(2)?;
         let tab_order_str: String = row.get(3)?;
+
+        let custom_icon_path = custom_icon_path
+            .and_then(|value| if value.trim().is_empty() { None } else { Some(value) });
         
         let tab_order: Vec<String> = serde_json::from_str(&tab_order_str).unwrap_or_else(|_| {
             vec![
@@ -223,4 +292,3 @@ pub fn save_preferences(conn: &Connection, prefs: &FavoritesPreferences) -> Resu
     )?;
     Ok(())
 }
-

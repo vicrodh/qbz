@@ -94,6 +94,14 @@
     customIconPath = null;
   }
 
+  function syncFromPreferences() {
+    customIconPath = initialPreferences.custom_icon_path || null;
+    customIconPreset = initialPreferences.custom_icon_preset || 'heart';
+    iconBackground = initialPreferences.icon_background || null;
+    tabOrder = [...initialPreferences.tab_order];
+    useCustomImage = !!initialPreferences.custom_icon_path;
+  }
+
   async function handleUploadClick() {
     try {
       const selected = await open({
@@ -138,8 +146,8 @@
         tab_order: tabOrder,
       };
 
-      await invoke('save_favorites_preferences', { prefs });
-      onSave(prefs);
+      const saved = await invoke<FavoritesPreferences>('save_favorites_preferences', { prefs });
+      onSave(saved);
       onClose();
     } catch (err) {
       console.error('Failed to save favorites preferences:', err);
@@ -149,13 +157,15 @@
   }
 
   function handleCancel() {
-    customIconPath = initialPreferences.custom_icon_path || null;
-    customIconPreset = initialPreferences.custom_icon_preset || 'heart';
-    iconBackground = initialPreferences.icon_background || null;
-    tabOrder = [...initialPreferences.tab_order];
-    useCustomImage = !!initialPreferences.custom_icon_path;
+    syncFromPreferences();
     onClose();
   }
+
+  $effect(() => {
+    if (isOpen) {
+      syncFromPreferences();
+    }
+  });
 </script>
 
 <Modal {isOpen} onClose={handleCancel} title="Favorites Settings" maxWidth="736px">
