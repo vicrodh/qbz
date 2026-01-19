@@ -45,6 +45,14 @@
   let hardwareStatus = $state<HardwareAudioStatus | null>(null);
   let isHovering = $state(false);
 
+  // Ticker animation for long device names
+  let deviceNameRef: HTMLDivElement | null = $state(null);
+  let deviceNameTextRef: HTMLSpanElement | null = $state(null);
+  let deviceNameOverflow = $state(0);
+  const deviceNameOffset = $derived(deviceNameOverflow > 0 ? `-${deviceNameOverflow + 16}px` : '0px');
+  const tickerSpeed = 80; // pixels per second
+  const deviceNameDuration = $derived(deviceNameOverflow > 0 ? `${(deviceNameOverflow + 16) / tickerSpeed}s` : '0s');
+
   // Derived state
   const currentDevice = $derived(outputStatus?.device_name ?? null);
 
@@ -147,6 +155,23 @@
     }
   }
 
+  // Update outputStatus when hovering to get fresh device name
+  $effect(() => {
+    if (isHovering && !outputStatus) {
+      invoke<AudioOutputStatus>('get_audio_output_status')
+        .then(status => outputStatus = status)
+        .catch(() => {});
+    }
+  });
+
+  // Calculate overflow for ticker animation when tooltip is visible
+  $effect(() => {
+    if (isHovering && deviceNameRef && deviceNameTextRef) {
+      const overflow = deviceNameTextRef.scrollWidth - deviceNameRef.clientWidth;
+      deviceNameOverflow = overflow > 0 ? overflow : 0;
+    }
+  });
+
   onMount(() => {
     loadStatus();
 
@@ -170,6 +195,8 @@
 
 <div
   class="audio-badges"
+  role="group"
+  aria-label="Audio output indicators"
   onmouseenter={() => isHovering = true}
   onmouseleave={() => isHovering = false}
 >
@@ -205,7 +232,16 @@
       <!-- Output Device -->
       <div class="tooltip-section">
         <div class="tooltip-label">Output Device</div>
-        <div class="tooltip-device">{prettyDeviceName}</div>
+        <div
+          class="tooltip-device"
+          class:scrollable={deviceNameOverflow > 0}
+          style="--ticker-offset: {deviceNameOffset}; --ticker-duration: {deviceNameDuration};"
+          bind:this={deviceNameRef}
+        >
+          <span class="device-name-text" bind:this={deviceNameTextRef}>
+            {prettyDeviceName}
+          </span>
+        </div>
         {#if currentDevice && currentDevice !== prettyDeviceName}
           <div class="tooltip-raw">{currentDevice}</div>
         {/if}
@@ -365,6 +401,25 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .tooltip-device.scrollable {
+    text-overflow: clip;
+  }
+
+  .device-name-text {
+    display: inline-block;
+    white-space: nowrap;
+  }
+
+  .device-tooltip:hover .tooltip-device.scrollable .device-name-text {
+    animation: device-name-ticker var(--ticker-duration) linear infinite;
+    will-change: transform;
+  }
+
+  @keyframes device-name-ticker {
+    from { transform: translateX(0); }
+    to { transform: translateX(var(--ticker-offset)); }
   }
 
   .tooltip-raw {
