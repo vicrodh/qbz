@@ -96,6 +96,7 @@ impl PlaybackEngine {
 
                     let mut total_frames: u64 = 0;
                     let mut source_iter = source.into_iter();
+                    let mut natural_end = false;
 
                     loop {
                         // Check if we should stop
@@ -116,6 +117,7 @@ impl PlaybackEngine {
                         if buffer_i16.is_empty() {
                             // End of stream
                             log::info!("[ALSA Direct Engine] Stream ended (total frames: {})", total_frames);
+                            natural_end = true;
                             break;
                         }
 
@@ -132,9 +134,15 @@ impl PlaybackEngine {
                         duration_clone.store(total_frames, Ordering::SeqCst);
                     }
 
-                    // Drain PCM buffer to ensure all samples are played
-                    if let Err(e) = stream_clone.drain() {
-                        log::warn!("[ALSA Direct Engine] Drain failed: {}", e);
+                    // Only drain if song ended naturally (not skipped/stopped)
+                    // This prevents 2-5s delay when rapidly changing tracks
+                    if natural_end {
+                        log::info!("[ALSA Direct Engine] Song ended naturally, draining buffer");
+                        if let Err(e) = stream_clone.drain() {
+                            log::warn!("[ALSA Direct Engine] Drain failed: {}", e);
+                        }
+                    } else {
+                        log::info!("[ALSA Direct Engine] Playback interrupted, skipping drain for faster response");
                     }
 
                     is_playing_clone.store(false, Ordering::SeqCst);
