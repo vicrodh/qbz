@@ -25,6 +25,7 @@ pub mod player;
 pub mod playlist_import;
 pub mod queue;
 pub mod reco_store;
+pub mod radio_engine;
 pub mod session_store;
 pub mod share;
 pub mod tray;
