@@ -772,10 +772,19 @@
     if (!selectedAlbum || albumTracks.length === 0) return;
 
     try {
+      console.log('[LocalLibrary Shuffle] Starting shuffle with', albumTracks.length, 'tracks');
+
       // Enable shuffle mode first
       await invoke('set_shuffle', { enabled: true });
-      // Then play from first track (queue will be shuffled by backend)
-      await handlePlayAllAlbum();
+
+      // Pick a random track to start with
+      const randomIndex = Math.floor(Math.random() * albumTracks.length);
+      const randomTrack = albumTracks[randomIndex];
+
+      console.log('[LocalLibrary Shuffle] Starting from random track index:', randomIndex, 'track:', randomTrack.title);
+
+      // Play from random track (queue will be shuffled by backend)
+      await handleTrackPlay(randomTrack);
     } catch (err) {
       console.error('Failed to shuffle album:', err);
     }
@@ -793,6 +802,8 @@
   }
 
   async function setQueueForLocalTracks(tracks: LocalTrack[], startIndex = 0) {
+    console.log('[LocalLibrary Queue] Setting queue with', tracks.length, 'tracks, startIndex:', startIndex);
+
     const queueTracks = tracks.map(t => ({
       id: t.id,
       title: t.title,
@@ -805,8 +816,13 @@
       sample_rate: t.sample_rate ?? null,
     }));
 
+    console.log('[LocalLibrary Queue] Mapped to', queueTracks.length, 'queue tracks');
+    console.log('[LocalLibrary Queue] Track IDs:', queueTracks.map(t => t.id));
+
     await invoke('set_queue', { tracks: queueTracks, startIndex });
     onSetLocalQueue?.(tracks.map(t => t.id));
+
+    console.log('[LocalLibrary Queue] Queue set successfully');
   }
 
   async function setQueueForAlbumTracks(tracks: LocalTrack[], startIndex = 0) {
