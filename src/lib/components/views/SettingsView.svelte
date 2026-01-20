@@ -27,7 +27,8 @@
   import { get } from 'svelte/store';
   import MigrationModal from '../MigrationModal.svelte';
   import { getDevicePrettyName } from '$lib/utils/audioDeviceNames';
-  import { ZOOM_OPTIONS, clampZoom, findZoomOption, getZoomLevelFromOption } from '$lib/utils/zoom';
+  import { ZOOM_OPTIONS, findZoomOption, getZoomLevelFromOption } from '$lib/utils/zoom';
+  import { getZoom, setZoom, subscribeZoom } from '$lib/stores/zoomStore';
   import {
     subscribe as subscribeOffline,
     getStatus as getOfflineStatus,
@@ -403,19 +404,15 @@
       language = 'Auto';
     }
 
-    // Load UI zoom level
-    const savedZoom = localStorage.getItem('qbz-zoom-level');
-    if (savedZoom) {
-      const parsed = Number.parseFloat(savedZoom);
-      if (Number.isFinite(parsed)) {
-        const clamped = clampZoom(parsed);
-        const match = findZoomOption(clamped);
-        zoomLevel = match ?? '100%';
-        if (clamped !== parsed) {
-          localStorage.setItem('qbz-zoom-level', String(clamped));
-        }
+    const updateZoomLevel = (value: number) => {
+      const match = findZoomOption(value);
+      if (match) {
+        zoomLevel = match;
       }
-    }
+    };
+
+    updateZoomLevel(getZoom());
+    const unsubscribeZoom = subscribeZoom(updateZoomLevel);
 
     // Load library settings
     const savedFetchArtistImages = localStorage.getItem('qbz-fetch-artist-images');
@@ -488,22 +485,10 @@
 
     settingsViewEl?.addEventListener('scroll', handleScroll);
 
-    const handleZoomUpdate = (event: Event) => {
-      const detail = (event as CustomEvent).detail as { zoom?: number } | undefined;
-      if (!detail || typeof detail.zoom !== 'number') return;
-      const clamped = clampZoom(detail.zoom);
-      const match = findZoomOption(clamped);
-      if (match) {
-        zoomLevel = match;
-      }
-    };
-
-    window.addEventListener('qbz:zoom-change', handleZoomUpdate);
-
     return () => {
       unsubscribeOffline();
+      unsubscribeZoom();
       settingsViewEl?.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('qbz:zoom-change', handleZoomUpdate);
     };
   });
 
@@ -1375,8 +1360,7 @@
 
   async function handleZoomChange(value: string) {
     zoomLevel = value;
-    const zoom = getZoomLevelFromOption(value);
-    localStorage.setItem('qbz-zoom-level', String(zoom));
+    const zoom = setZoom(getZoomLevelFromOption(value));
     try {
       await getCurrentWebview().setZoom(zoom);
     } catch (err) {

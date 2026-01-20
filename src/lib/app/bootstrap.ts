@@ -11,7 +11,8 @@ import { goBack, goForward } from '$lib/stores/navigationStore';
 import { loadToastsPreference } from '$lib/stores/toastStore';
 import { loadSystemNotificationsPreference, flushScrobbleQueue } from '$lib/services/playbackService';
 import { initOfflineStore, cleanupOfflineStore, onOnlineTransition } from '$lib/stores/offlineStore';
-import { clampZoom, getNextZoomLevel } from '$lib/utils/zoom';
+import { getNextZoomLevel } from '$lib/utils/zoom';
+import { getZoom, setZoom } from '$lib/stores/zoomStore';
 
 // ============ Theme Management ============
 
@@ -35,36 +36,17 @@ export async function applySavedZoom(): Promise<void> {
   if (!Number.isFinite(zoom) || zoom <= 0) return;
 
   try {
-    const clamped = clampZoom(zoom);
-    if (clamped !== zoom) {
-      localStorage.setItem('qbz-zoom-level', String(clamped));
-    }
+    const clamped = setZoom(zoom);
     await getCurrentWebview().setZoom(clamped);
-    notifyZoomChange(clamped);
   } catch (err) {
     console.warn('Failed to apply saved zoom:', err);
   }
 }
 
-function notifyZoomChange(zoom: number): void {
-  window.dispatchEvent(new CustomEvent('qbz:zoom-change', { detail: { zoom } }));
-}
-
-function getStoredZoom(): number {
-  const savedZoom = localStorage.getItem('qbz-zoom-level');
-  const parsed = Number.parseFloat(savedZoom ?? '');
-  if (!Number.isFinite(parsed) || parsed <= 0) {
-    return 1;
-  }
-  return clampZoom(parsed);
-}
-
 async function applyZoomLevel(zoom: number): Promise<void> {
-  const clamped = clampZoom(zoom);
-  localStorage.setItem('qbz-zoom-level', String(clamped));
+  const clamped = setZoom(zoom);
   try {
     await getCurrentWebview().setZoom(clamped);
-    notifyZoomChange(clamped);
   } catch (err) {
     console.warn('Failed to set zoom level:', err);
   }
@@ -76,7 +58,7 @@ function handleZoomWheel(event: WheelEvent): void {
 
   event.preventDefault();
   const direction = event.deltaY < 0 ? 'in' : 'out';
-  const nextZoom = getNextZoomLevel(getStoredZoom(), direction);
+  const nextZoom = getNextZoomLevel(getZoom(), direction);
   void applyZoomLevel(nextZoom);
 }
 
