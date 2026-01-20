@@ -10,32 +10,8 @@
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tauri::{AppHandle, Emitter};
-use tokio::net::TcpStream;
-
-const TCP_PROBES: [&str; 4] = [
-    "1.1.1.1:53",
-    "8.8.8.8:53",
-    "9.9.9.9:53",
-    "208.67.222.222:53",
-];
-
-const HTTP_PROBES: [&str; 2] = [
-    "https://www.google.com/generate_204",
-    "https://1.1.1.1/cdn-cgi/trace",
-];
-
-const QOBUZ_URL: &str = "https://www.qobuz.com";
-
-const TCP_TIMEOUT: Duration = Duration::from_secs(3);
-const HTTP_TIMEOUT: Duration = Duration::from_secs(4);
-const QOBUZ_TIMEOUT: Duration = Duration::from_secs(8);
-
-const OFFLINE_FAILURE_THRESHOLD: u32 = 2;
-const ONLINE_SUCCESS_THRESHOLD: u32 = 2;
-const QOBUZ_CHECK_EVERY: u32 = 10;
-const QOBUZ_CHECK_INTERVAL: Duration = Duration::from_secs(300);
 
 /// Reason why the app is in offline mode
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -451,89 +427,22 @@ impl OfflineStore {
 /// Thread-safe wrapper for OfflineStore
 pub struct OfflineState {
     pub store: Arc<Mutex<OfflineStore>>,
-    network_state: Arc<Mutex<NetworkCheckState>>,
 }
 
 impl OfflineState {
     pub fn new() -> Result<Self, String> {
         Ok(Self {
             store: Arc::new(Mutex::new(OfflineStore::new()?)),
-            network_state: Arc::new(Mutex::new(NetworkCheckState::default())),
         })
     }
 }
 
-#[derive(Debug, Default)]
-struct NetworkCheckState {
-    consecutive_failures: u32,
-    consecutive_successes: u32,
-    is_offline: bool,
-    checks_since_qobuz: u32,
-    last_qobuz_check: Option<Instant>,
-}
-
-impl NetworkCheckState {
-    fn should_check_qobuz(&self) -> bool {
-        if self.last_qobuz_check.is_none() {
-            return true;
-        }
-        if self.checks_since_qobuz >= QOBUZ_CHECK_EVERY {
-            return true;
-        }
-        if let Some(last_check) = self.last_qobuz_check {
-            return last_check.elapsed() >= QOBUZ_CHECK_INTERVAL;
-        }
-        false
-    }
-
-    fn note_qobuz_skipped(&mut self) {
-        self.checks_since_qobuz = self.checks_since_qobuz.saturating_add(1);
-    }
-
-    fn record_qobuz_check(&mut self) {
-        self.last_qobuz_check = Some(Instant::now());
-        self.checks_since_qobuz = 0;
-    }
-
-    fn update_offline_state(&mut self, tier1_ok: bool) -> bool {
-        if tier1_ok {
-            self.consecutive_successes = self.consecutive_successes.saturating_add(1);
-            self.consecutive_failures = 0;
-
-            if self.is_offline && self.consecutive_successes >= ONLINE_SUCCESS_THRESHOLD {
-                self.is_offline = false;
-                self.consecutive_successes = 0;
-            }
-        } else {
-            self.consecutive_failures = self.consecutive_failures.saturating_add(1);
-            self.consecutive_successes = 0;
-
-            if !self.is_offline && self.consecutive_failures >= OFFLINE_FAILURE_THRESHOLD {
-                self.is_offline = true;
-                self.consecutive_failures = 0;
-            }
-        }
-
-        self.is_offline
-    }
-}
-
-async fn check_tcp_connectivity() -> bool {
-    for address in TCP_PROBES {
-        match tokio::time::timeout(TCP_TIMEOUT, TcpStream::connect(address)).await {
-            Ok(Ok(_)) => return true,
-            Ok(Err(_)) => continue,
-            Err(_) => continue,
-        }
-    }
-
-    log::warn!("TCP connectivity check failed for all endpoints");
-    false
-}
-
-async fn check_http_fallback() -> bool {
+/// Check network connectivity by attempting to reach Qobuz API.
+/// Uses a longer timeout (15s) and retries once before declaring offline
+/// to avoid false positives from temporary latency spikes.
+pub async fn check_network_connectivity() -> bool {
     let client = reqwest::Client::builder()
-        .timeout(HTTP_TIMEOUT)
+        .timeout(Duration::from_secs(15))
         .build();
 
     let client = match client {
@@ -541,47 +450,27 @@ async fn check_http_fallback() -> bool {
         Err(_) => return false,
     };
 
-    for url in HTTP_PROBES {
-        match client.get(url).send().await {
+    // Try up to 2 times before declaring offline
+    for attempt in 1..=2 {
+        match client.head("https://www.qobuz.com").send().await {
             Ok(response) => {
                 if response.status().is_success() || response.status().is_redirection() {
                     return true;
                 }
             }
             Err(e) => {
-                log::warn!("HTTP connectivity check failed for {}: {}", url, e);
+                log::warn!("Network check attempt {} failed: {}", attempt, e);
             }
         }
-    }
 
-    log::warn!("HTTP fallback connectivity check failed");
-    false
-}
-
-async fn check_tier1_connectivity() -> bool {
-    if check_tcp_connectivity().await {
-        return true;
-    }
-    check_http_fallback().await
-}
-
-async fn check_qobuz_connectivity() -> bool {
-    let client = reqwest::Client::builder()
-        .timeout(QOBUZ_TIMEOUT)
-        .build();
-
-    let client = match client {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-
-    match client.head(QOBUZ_URL).send().await {
-        Ok(response) => response.status().is_success() || response.status().is_redirection(),
-        Err(e) => {
-            log::warn!("Qobuz connectivity check failed: {}", e);
-            false
+        // Wait 2 seconds before retry
+        if attempt < 2 {
+            tokio::time::sleep(Duration::from_secs(2)).await;
         }
     }
+
+    log::info!("Network connectivity check failed after 2 attempts");
+    false
 }
 
 // Tauri commands
@@ -610,47 +499,10 @@ pub mod commands {
             });
         }
 
-        let tier1_ok = check_tier1_connectivity().await;
+        // Check network connectivity
+        let has_network = check_network_connectivity().await;
 
-        let should_check_qobuz = if tier1_ok {
-            let mut state = offline_state
-                .network_state
-                .lock()
-                .map_err(|e| format!("Lock error: {}", e))?;
-            let should_check = state.should_check_qobuz();
-            if !should_check {
-                state.note_qobuz_skipped();
-            }
-            should_check
-        } else {
-            false
-        };
-
-        let qobuz_ok = if should_check_qobuz {
-            Some(check_qobuz_connectivity().await)
-        } else {
-            None
-        };
-
-        if tier1_ok {
-            if let Some(false) = qobuz_ok {
-                log::warn!("Qobuz check failed while internet appears reachable");
-            }
-        }
-
-        let is_offline = {
-            let mut state = offline_state
-                .network_state
-                .lock()
-                .map_err(|e| format!("Lock error: {}", e))?;
-            let offline = state.update_offline_state(tier1_ok);
-            if qobuz_ok.is_some() {
-                state.record_qobuz_check();
-            }
-            offline
-        };
-
-        if is_offline {
+        if !has_network {
             return Ok(OfflineStatus {
                 is_offline: true,
                 reason: Some(OfflineReason::NoNetwork),
@@ -748,7 +600,7 @@ pub mod commands {
     /// Check if network connectivity is available
     #[tauri::command]
     pub async fn check_network() -> bool {
-        super::check_tier1_connectivity().await
+        super::check_network_connectivity().await
     }
 
     // === Pending Playlist Sync Commands ===
