@@ -76,7 +76,13 @@ impl RadioEngine {
         }
 
         if total_weight == 0 {
-            return Err("Radio session exhausted: all candidate weights are zero".to_string());
+            let chosen = candidates
+                .first()
+                .cloned()
+                .ok_or_else(|| "Radio selection failed: no candidates".to_string())?;
+            self.db
+                .mark_played(session_id, session.selection_count, &chosen)?;
+            return Ok(chosen);
         }
 
         let r = Self::splitmix64(session.rng_seed ^ (next_index as u64));
