@@ -181,6 +181,26 @@
   let folders = $state<LibraryFolder[]>([]);
   let scanProgress = $state<ScanProgress | null>(null);
 
+  // Reactive counters based on filtered data
+  let filteredAlbumCount = $derived(albums.length);
+  let filteredArtistCount = $derived(artists.length);
+  let filteredTrackCount = $derived(() => {
+    // When in tracks view with search results, use actual filtered count
+    if (currentView === 'tracks' && tracks.length > 0) {
+      return tracks.length;
+    }
+    // When in albums view, calculate from filtered albums
+    if (currentView === 'albums' && albums.length > 0) {
+      return albums.reduce((sum, album) => sum + album.track_count, 0);
+    }
+    // When in artists view, calculate from filtered artists
+    if (currentView === 'artists' && artists.length > 0) {
+      return artists.reduce((sum, artist) => sum + artist.track_count, 0);
+    }
+    // Fallback to stats if available
+    return stats ? stats.track_count : 0;
+  });
+
   // Loading state
   let loading = $state(false);
   let scanning = $state(false);
@@ -409,7 +429,9 @@
   async function loadArtists() {
     loading = true;
     try {
-      artists = await invoke<LocalArtist[]>('library_get_artists');
+      artists = await invoke<LocalArtist[]>('library_get_artists', {
+        excludeNetworkFolders: shouldExcludeNetworkFolders()
+      });
       // Load cached artist images from database
       await loadCachedArtistImages();
       // Fetch missing images in background if enabled
@@ -428,7 +450,11 @@
   async function loadTracks(query = '') {
     loading = true;
     try {
-      tracks = await invoke<LocalTrack[]>('library_search', { query, limit: 1000 });
+      tracks = await invoke<LocalTrack[]>('library_search', {
+        query,
+        limit: 1000,
+        excludeNetworkFolders: shouldExcludeNetworkFolders()
+      });
     } catch (err) {
       console.error('Failed to load tracks:', err);
       error = String(err);
@@ -1849,7 +1875,7 @@
       >
         <Disc3 size={16} />
         <span>Albums</span>
-        {#if stats}<span class="count">({stats.album_count})</span>{/if}
+        <span class="count">({filteredAlbumCount})</span>
       </button>
       <button
         class="tab"
@@ -1858,7 +1884,7 @@
       >
         <Mic2 size={16} />
         <span>Artists</span>
-        {#if stats}<span class="count">({stats.artist_count})</span>{/if}
+        <span class="count">({filteredArtistCount})</span>
       </button>
       <button
         class="tab"
@@ -1867,7 +1893,7 @@
       >
         <Music size={16} />
         <span>Tracks</span>
-        {#if stats}<span class="count">({stats.track_count})</span>{/if}
+        <span class="count">({filteredTrackCount})</span>
       </button>
     </div>
 

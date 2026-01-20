@@ -1218,6 +1218,8 @@ impl LibraryDatabase {
             artwork_path: row.get(19)?,
             last_modified: row.get(20)?,
             indexed_at: row.get(21)?,
+            source: row.get(24).ok().flatten(),
+            qobuz_track_id: row.get(25).ok().flatten(),
         })
     }
 
@@ -1788,7 +1790,8 @@ impl LibraryDatabase {
                     t.album_group_key, t.album_group_title, t.track_number, t.disc_number,
                     t.year, t.genre, t.duration_secs, t.format, t.bit_depth, t.sample_rate,
                     t.channels, t.file_size_bytes, t.cue_file_path, t.cue_start_secs,
-                    t.cue_end_secs, t.artwork_path, t.last_modified, t.indexed_at, plt.position
+                    t.cue_end_secs, t.artwork_path, t.last_modified, t.indexed_at, t.source,
+                    t.qobuz_track_id, plt.position
              FROM playlist_local_tracks plt
              JOIN local_tracks t ON plt.local_track_id = t.id
              WHERE plt.qobuz_playlist_id = ?1
@@ -1822,6 +1825,8 @@ impl LibraryDatabase {
                 artwork_path: row.get(21)?,
                 last_modified: row.get(22)?,
                 indexed_at: row.get(23)?,
+                source: row.get(24)?,
+                qobuz_track_id: row.get(25)?,
             })
         }).map_err(|e| LibraryError::Database(format!("Failed to query playlist local tracks: {}", e)))?;
 
@@ -1836,7 +1841,8 @@ impl LibraryDatabase {
                     t.album_group_key, t.album_group_title, t.track_number, t.disc_number,
                     t.year, t.genre, t.duration_secs, t.format, t.bit_depth, t.sample_rate,
                     t.channels, t.file_size_bytes, t.cue_file_path, t.cue_start_secs,
-                    t.cue_end_secs, t.artwork_path, t.last_modified, t.indexed_at, plt.position
+                    t.cue_end_secs, t.artwork_path, t.last_modified, t.indexed_at, t.source,
+                    t.qobuz_track_id, plt.position
              FROM playlist_local_tracks plt
              JOIN local_tracks t ON plt.local_track_id = t.id
              WHERE plt.qobuz_playlist_id = ?1
@@ -1871,8 +1877,10 @@ impl LibraryDatabase {
                     artwork_path: row.get(21)?,
                     last_modified: row.get(22)?,
                     indexed_at: row.get(23)?,
+                    source: row.get(24)?,
+                    qobuz_track_id: row.get(25)?,
                 },
-                playlist_position: row.get(24)?,
+                playlist_position: row.get(26)?,
             })
         }).map_err(|e| LibraryError::Database(format!("Failed to query playlist local tracks with position: {}", e)))?;
 

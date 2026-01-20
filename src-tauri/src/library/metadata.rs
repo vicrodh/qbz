@@ -341,6 +341,8 @@ impl MetadataExtractor {
                     .duration_since(UNIX_EPOCH)
                     .map(|d| d.as_secs() as i64)
                     .unwrap_or(0),
+                source: None,
+                qobuz_track_id: None,
             }
         } else {
             // No tag found, use defaults
@@ -380,6 +382,8 @@ impl MetadataExtractor {
                     .duration_since(UNIX_EPOCH)
                     .map(|d| d.as_secs() as i64)
                     .unwrap_or(0),
+                source: None,
+                qobuz_track_id: None,
             }
         };
 

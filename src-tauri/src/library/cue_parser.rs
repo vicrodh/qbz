@@ -270,6 +270,8 @@ pub fn cue_to_tracks(
             artwork_path: None,
             last_modified: 0,
             indexed_at: now,
+            source: None,
+            qobuz_track_id: None,
         });
     }
 

@@ -72,6 +72,10 @@ pub struct LocalTrack {
     // Indexing
     pub last_modified: i64,
     pub indexed_at: i64,
+
+    // Download tracking
+    pub source: Option<String>,
+    pub qobuz_track_id: Option<i64>,
 }
 
 impl Default for LocalTrack {
@@ -102,6 +106,8 @@ impl Default for LocalTrack {
             artwork_path: None,
             last_modified: 0,
             indexed_at: 0,
+            source: None,
+            qobuz_track_id: None,
         }
     }
 }

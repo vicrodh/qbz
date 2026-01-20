@@ -848,24 +848,116 @@ pub async fn library_get_album_tracks(
 }
 
 #[tauri::command]
-pub async fn library_get_artists(state: State<'_, LibraryState>) -> Result<Vec<LocalArtist>, String> {
-    log::info!("Command: library_get_artists");
+pub async fn library_get_artists(
+    exclude_network_folders: Option<bool>,
+    state: State<'_, LibraryState>,
+    download_settings_state: State<'_, crate::config::DownloadSettingsState>,
+) -> Result<Vec<LocalArtist>, String> {
+    log::info!("Command: library_get_artists (exclude_network: {:?})", exclude_network_folders);
+
+    // Get download settings
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .get_settings()
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
 
     let db = state.db.lock().await;
-    db.get_artists().map_err(|e| e.to_string())
+    let mut artists = db.get_artists().map_err(|e| e.to_string())?;
+
+    // Filter artists based on their tracks
+    if exclude_network_folders.unwrap_or(false) || !include_qobuz {
+        let network_folders = if exclude_network_folders.unwrap_or(false) {
+            db.get_network_folder_paths().map_err(|e| e.to_string())?
+        } else {
+            Vec::new()
+        };
+
+        artists.retain(|artist| {
+            // Get all tracks for this artist
+            if let Ok(tracks) = db.search(&artist.name, 10000) {
+                // Check if artist has at least one valid track
+                tracks.iter().any(|track| {
+                    // Check download filter
+                    let passes_download_filter = if include_qobuz {
+                        true
+                    } else {
+                        // Only include if NOT a qobuz download
+                        track.source.as_deref() != Some("qobuz_download")
+                    };
+
+                    // Check network folder filter
+                    let passes_network_filter = if exclude_network_folders.unwrap_or(false) && !network_folders.is_empty() {
+                        // Only include if NOT in network folder
+                        !network_folders.iter().any(|folder_path| track.file_path.starts_with(folder_path))
+                    } else {
+                        true
+                    };
+
+                    passes_download_filter && passes_network_filter
+                })
+            } else {
+                false
+            }
+        });
+    }
+
+    Ok(artists)
 }
 
 #[tauri::command]
 pub async fn library_search(
     query: String,
     limit: Option<u32>,
+    exclude_network_folders: Option<bool>,
     state: State<'_, LibraryState>,
+    download_settings_state: State<'_, crate::config::DownloadSettingsState>,
 ) -> Result<Vec<LocalTrack>, String> {
-    log::info!("Command: library_search \"{}\"", query);
+    log::info!("Command: library_search \"{}\" (exclude_network: {:?})", query, exclude_network_folders);
+
+    // Get download settings
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .get_settings()
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
 
     let db = state.db.lock().await;
-    db.search(&query, limit.unwrap_or(50))
-        .map_err(|e| e.to_string())
+    let mut tracks = db.search(&query, limit.unwrap_or(50))
+        .map_err(|e| e.to_string())?;
+
+    // Filter tracks
+    if exclude_network_folders.unwrap_or(false) || !include_qobuz {
+        let network_folders = if exclude_network_folders.unwrap_or(false) {
+            db.get_network_folder_paths().map_err(|e| e.to_string())?
+        } else {
+            Vec::new()
+        };
+
+        tracks.retain(|track| {
+            // Check download filter
+            let passes_download_filter = if include_qobuz {
+                true
+            } else {
+                // Only include if NOT a qobuz download
+                track.source.as_deref() != Some("qobuz_download")
+            };
+
+            // Check network folder filter
+            let passes_network_filter = if exclude_network_folders.unwrap_or(false) && !network_folders.is_empty() {
+                // Only include if NOT in network folder
+                !network_folders.iter().any(|folder_path| track.file_path.starts_with(folder_path))
+            } else {
+                true
+            };
+
+            passes_download_filter && passes_network_filter
+        });
+    }
+
+    Ok(tracks)
 }
 
 #[tauri::command]
