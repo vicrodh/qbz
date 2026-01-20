@@ -222,9 +222,12 @@ fn extract_audio_metadata(data: &[u8]) -> Result<(u32, u16), String> {
 
     let sample_rate = track.codec_params.sample_rate
         .ok_or_else(|| "No sample rate in codec params".to_string())?;
+
+    // ALAC and some other formats don't include channel info in initial codec params
+    // Default to stereo (2 channels) which is the most common case
     let channels = track.codec_params.channels
         .map(|c| c.count() as u16)
-        .ok_or_else(|| "No channel info in codec params".to_string())?;
+        .unwrap_or(2);
 
     Ok((sample_rate, channels))
 }
