@@ -19,7 +19,8 @@ export interface PendingPlaylist {
   description: string | null;
   isPublic: boolean;
   trackIds: number[];
-  localTrackIds: number[];
+  localTrackIds: number[]; // DEPRECATED: Use localTrackPaths instead
+  localTrackPaths: string[]; // File paths - stable across re-scans
   createdAt: number;
   synced: boolean;
   qobuzPlaylistId: number | null;
@@ -168,14 +169,29 @@ export async function checkNetwork(): Promise<boolean> {
 export async function setManualOffline(enabled: boolean): Promise<void> {
   try {
     const wasOffline = status.isOffline;
+    console.log('[Offline] ========================================');
+    console.log('[Offline] setManualOffline called with enabled:', enabled);
+    console.log('[Offline] wasOffline:', wasOffline);
+    console.log('[Offline] ========================================');
+
     const newStatus = await invoke<OfflineStatus>('set_manual_offline', { enabled });
     status = newStatus;
     settings.manualOfflineMode = enabled;
+
+    console.log('[Offline] After invoke:');
+    console.log('[Offline]   newStatus.isOffline:', newStatus.isOffline);
+    console.log('[Offline]   wasOffline:', wasOffline);
+    console.log('[Offline]   hasCallback:', !!onOnlineTransitionCallback);
+    console.log('[Offline]   will trigger?:', wasOffline && !newStatus.isOffline && !!onOnlineTransitionCallback);
+
     notifyListeners();
     // Check for offline -> online transition when disabling manual mode
     if (wasOffline && !newStatus.isOffline && onOnlineTransitionCallback) {
-      console.log('[Offline] Transitioning to online after disabling manual mode');
+      console.log('[Offline] ✓✓✓ TRIGGERING ONLINE TRANSITION CALLBACK ✓✓✓');
       onOnlineTransitionCallback();
+      console.log('[Offline] ✓✓✓ CALLBACK EXECUTED ✓✓✓');
+    } else {
+      console.log('[Offline] ✗✗✗ NOT triggering callback');
     }
   } catch (error) {
     console.error('Failed to set manual offline mode:', error);
@@ -323,14 +339,14 @@ export async function createPendingPlaylist(
   description: string | null,
   isPublic: boolean,
   trackIds: number[],
-  localTrackIds: number[]
+  localTrackPaths: string[]
 ): Promise<number> {
   return invoke<number>('create_pending_playlist', {
     name,
     description,
     isPublic,
     trackIds,
-    localTrackIds,
+    localTrackPaths,
   });
 }
 
@@ -441,15 +457,29 @@ export async function syncPendingPlaylists(): Promise<void> {
       try {
         console.log(`[Offline] Syncing playlist: ${playlist.name}`);
 
-        // Create playlist on Qobuz
-        const createdPlaylist = await invoke<{ id: number }>('create_playlist', {
-          name: playlist.name,
-          description: playlist.description,
-          isPublic: playlist.isPublic
-        });
+        let qobuzPlaylistId: number;
 
-        const qobuzPlaylistId = createdPlaylist.id;
-        console.log(`[Offline] Created playlist on Qobuz with ID: ${qobuzPlaylistId}`);
+        // Check if this playlist was already partially synced
+        if (playlist.qobuzPlaylistId) {
+          qobuzPlaylistId = playlist.qobuzPlaylistId;
+          console.log(`[Offline] Using existing Qobuz playlist ID: ${qobuzPlaylistId}`);
+        } else {
+          // Create playlist on Qobuz
+          const createdPlaylist = await invoke<{ id: number }>('create_playlist', {
+            name: playlist.name,
+            description: playlist.description,
+            isPublic: playlist.isPublic
+          });
+
+          qobuzPlaylistId = createdPlaylist.id;
+          console.log(`[Offline] Created playlist on Qobuz with ID: ${qobuzPlaylistId}`);
+
+          // Save the Qobuz ID immediately (but keep synced=0 until fully complete)
+          await invoke('update_pending_playlist_qobuz_id', {
+            pendingId: playlist.id,
+            qobuzPlaylistId
+          });
+        }
 
         // Add Qobuz tracks if any
         if (playlist.trackIds.length > 0) {
@@ -461,23 +491,85 @@ export async function syncPendingPlaylists(): Promise<void> {
         }
 
         // Add local tracks if any
-        if (playlist.localTrackIds.length > 0) {
-          console.log(`[Offline] Adding ${playlist.localTrackIds.length} local tracks`);
-          for (let i = 0; i < playlist.localTrackIds.length; i++) {
-            console.log(`[Offline] Adding local track ${playlist.localTrackIds[i]} at position ${playlist.trackIds.length + i}`);
+        // Prefer localTrackPaths (new system), fall back to localTrackIds (migration)
+        const localTracks = playlist.localTrackPaths?.length > 0
+          ? playlist.localTrackPaths
+          : playlist.localTrackIds;
+
+        if (localTracks && localTracks.length > 0) {
+          const usePathSystem = playlist.localTrackPaths?.length > 0;
+          console.log(`[Offline] ======================================`);
+          console.log(`[Offline] Adding ${localTracks.length} local tracks to playlist ${qobuzPlaylistId}`);
+          console.log(`[Offline] Using ${usePathSystem ? 'PATH-based' : 'ID-based (legacy)'} system`);
+          console.log(`[Offline] Local tracks:`, localTracks);
+          console.log(`[Offline] Qobuz tracks count:`, playlist.trackIds.length);
+          console.log(`[Offline] ======================================`);
+
+          for (let i = 0; i < localTracks.length; i++) {
+            const trackIdentifier = localTracks[i];
+            const position = playlist.trackIds.length + i;
+
+            console.log(`[Offline] ------ Track ${i + 1}/${localTracks.length} ------`);
+
             try {
+              let localTrackId: number;
+
+              if (usePathSystem) {
+                // NEW SYSTEM: Resolve file path to current track ID
+                const filePath = trackIdentifier as string;
+                console.log(`[Offline] Resolving path: ${filePath}`);
+
+                // Get track ID from file path
+                const trackInfo = await invoke<{ id: number } | null>('get_track_by_path', {
+                  filePath
+                });
+
+                if (!trackInfo) {
+                  console.warn(`[Offline] ⚠️ File not found in library: ${filePath}`);
+                  console.warn(`[Offline] Skipping - file may have been moved or deleted`);
+                  continue;
+                }
+
+                localTrackId = trackInfo.id;
+                console.log(`[Offline] Resolved to track ID: ${localTrackId}`);
+              } else {
+                // OLD SYSTEM: Use ID directly (for migration)
+                localTrackId = trackIdentifier as number;
+                console.log(`[Offline] Using legacy track ID: ${localTrackId}`);
+              }
+
+              console.log(`[Offline] Position: ${position}`);
+              console.log(`[Offline] Calling playlist_add_local_track with params:`, {
+                playlistId: qobuzPlaylistId,
+                localTrackId: localTrackId,
+                position: position
+              });
+
               await invoke('playlist_add_local_track', {
                 playlistId: qobuzPlaylistId,
-                localTrackId: playlist.localTrackIds[i],
-                position: playlist.trackIds.length + i // Position after Qobuz tracks
+                localTrackId: localTrackId,
+                position: position
               });
-              console.log(`[Offline] Successfully added local track ${playlist.localTrackIds[i]}`);
+              console.log(`[Offline] ✓✓✓ SUCCESS: Local track ${localTrackId} added at position ${position}`);
             } catch (localTrackErr) {
-              console.error(`[Offline] Failed to add local track ${playlist.localTrackIds[i]}:`, localTrackErr);
-              // Re-throw to prevent marking as synced
-              throw new Error(`Failed to add local track: ${localTrackErr}`);
+              console.error(`[Offline] ✗✗✗ ERROR: Failed to add track`);
+              console.error(`[Offline] Error:`, localTrackErr);
+
+              // Check if it's a FOREIGN KEY error (track doesn't exist in library)
+              const errorStr = String(localTrackErr);
+              if (errorStr.includes('FOREIGN KEY constraint')) {
+                console.warn(`[Offline] ⚠️ Track no longer exists in library - skipping`);
+                // Don't throw - continue with next track
+              } else {
+                // Other errors should fail the sync
+                throw new Error(`Failed to add local track: ${localTrackErr}`);
+              }
             }
           }
+
+          console.log(`[Offline] ======================================`);
+          console.log(`[Offline] All local tracks processed`);
+          console.log(`[Offline] ======================================`);
         }
 
         // Mark as synced ONLY if everything succeeded

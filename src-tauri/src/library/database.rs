@@ -269,18 +269,13 @@ impl LibraryDatabase {
             .unwrap_or(false);
 
         if !has_file_nocue_index {
-            log::info!("Running migration: dedupe non-CUE tracks and add unique index");
+            log::warn!("Skipping deduplication migration to prevent data loss");
+            log::info!("Creating unique index for non-CUE tracks (INSERT OR REPLACE will handle duplicates)");
+            // CHANGED: Don't delete duplicates automatically - let INSERT OR REPLACE handle it
+            // This prevents accidental data loss from aggressive deduplication
             self.conn
                 .execute_batch(
                     r#"
-                DELETE FROM local_tracks
-                WHERE cue_file_path IS NULL
-                  AND rowid NOT IN (
-                    SELECT MAX(rowid)
-                    FROM local_tracks
-                    WHERE cue_file_path IS NULL
-                    GROUP BY file_path
-                  );
                 CREATE UNIQUE INDEX IF NOT EXISTS idx_tracks_file_nocue
                   ON local_tracks(file_path)
                   WHERE cue_file_path IS NULL;

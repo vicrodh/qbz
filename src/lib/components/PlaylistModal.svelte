@@ -210,12 +210,21 @@
       if (selectedPlaylistId < 0) {
         const pendingId = -selectedPlaylistId; // Convert back to positive
         const qobuzTrackIds = isLocalTracks ? [] : trackIds;
-        const localTrackIds = isLocalTracks ? trackIds : [];
+
+        // For local tracks, fetch file paths instead of using IDs
+        let localTrackPaths: string[] = [];
+        if (isLocalTracks && trackIds.length > 0) {
+          // Fetch tracks to get their file paths
+          const tracks = await invoke<Array<{ id: number; file_path: string }>>('library_get_tracks_by_ids', {
+            trackIds
+          });
+          localTrackPaths = tracks.map(t => t.file_path);
+        }
 
         await invoke('add_tracks_to_pending_playlist', {
           pendingId,
           qobuzTrackIds,
-          localTrackIds
+          localTrackPaths
         });
       } else if (isLocalTracks) {
         // Regular playlist with local tracks
@@ -264,7 +273,16 @@
       if (isOffline()) {
         // In offline mode, create pending playlist with both Qobuz and local tracks
         const qobuzTrackIds = isLocalTracks ? [] : trackIds;
-        const localTrackIds = isLocalTracks ? trackIds : [];
+
+        // For local tracks, fetch file paths instead of using IDs
+        let localTrackPaths: string[] = [];
+        if (isLocalTracks && trackIds.length > 0) {
+          // Fetch tracks to get their file paths
+          const tracks = await invoke<Array<{ id: number; file_path: string }>>('library_get_tracks_by_ids', {
+            trackIds
+          });
+          localTrackPaths = tracks.map(t => t.file_path);
+        }
 
         // Create pending playlist for sync when back online
         const pendingId = await createPendingPlaylist(
@@ -272,7 +290,7 @@
           description.trim() || null,
           false,
           qobuzTrackIds,
-          localTrackIds
+          localTrackPaths
         );
         showToast(`Playlist "${name.trim()}" created offline - will sync when back online`, 'info');
 

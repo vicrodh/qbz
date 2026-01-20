@@ -386,6 +386,7 @@ pub fn run() {
             commands::add_tracks_to_playlist,
             commands::remove_tracks_from_playlist,
             commands::update_playlist,
+            commands::get_tracks_by_ids,
             // Playlist import commands
             commands::playlist_import_preview,
             commands::playlist_import_execute,
@@ -439,7 +440,9 @@ pub fn run() {
             library::commands::library_get_stats,
             library::commands::library_clear,
             library::commands::library_get_track,
+            library::commands::get_track_by_path,
             library::commands::library_play_track,
+            library::commands::library_get_tracks_by_ids,
             // Playlist local settings commands
             library::commands::playlist_get_settings,
             library::commands::playlist_save_settings,
@@ -602,6 +605,7 @@ pub fn run() {
             offline::commands::get_pending_playlists,
             offline::commands::add_tracks_to_pending_playlist,
             offline::commands::get_pending_playlist_count,
+            offline::commands::update_pending_playlist_qobuz_id,
             offline::commands::mark_pending_playlist_synced,
             offline::commands::delete_pending_playlist,
             // Scrobble queue commands (for offline Last.fm scrobbling)

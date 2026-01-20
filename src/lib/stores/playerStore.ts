@@ -234,8 +234,17 @@ export async function togglePlay(): Promise<void> {
         console.log('[Player] Loading restored track:', pendingSessionRestore.trackId);
         const savedPosition = pendingSessionRestore.position;
         pendingSessionRestore = null; // Clear before loading
-        // Load the track from Qobuz
-        await invoke('play_track', { trackId: currentTrack.id });
+
+        // Check if this is a local track (negative ID) or Qobuz track
+        if (currentTrack.id < 0) {
+          // Local track - use library_play_track with positive ID
+          const localTrackId = Math.abs(currentTrack.id);
+          console.log('[Player] Restoring local track:', localTrackId);
+          await invoke('library_play_track', { trackId: localTrackId });
+        } else {
+          // Qobuz track - use play_track
+          await invoke('play_track', { trackId: currentTrack.id });
+        }
 
         // Seek to saved position after a short delay to let audio load
         if (savedPosition > 0) {

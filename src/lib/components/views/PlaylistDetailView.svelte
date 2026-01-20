@@ -292,12 +292,39 @@
 
   async function loadLocalTracks() {
     try {
-      const result = await invoke<PlaylistLocalTrack[]>('playlist_get_local_tracks_with_position', { playlistId });
-      localTracks = result;
-      // Create a map for quick lookup
-      localTracksMap = new Map(result.map(t => [t.id, t]));
+      // Check if this is a pending playlist (negative ID)
+      if (playlistId < 0) {
+        // For pending playlists, load local tracks from the pending playlist data
+        const pendingId = -playlistId;
+        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists');
+        const pending = pendingPlaylists.find(p => p.id === pendingId);
+
+        if (pending && pending.localTrackIds.length > 0) {
+          // Load the actual local track data
+          const localTrackData = await invoke<LocalLibraryTrack[]>('library_get_tracks_by_ids', {
+            trackIds: pending.localTrackIds
+          });
+
+          // Convert to PlaylistLocalTrack format with positions
+          localTracks = localTrackData.map((track, idx) => ({
+            ...track,
+            playlist_position: pending.trackIds.length + idx // Local tracks come after Qobuz tracks
+          }));
+          localTracksMap = new Map(localTracks.map(t => [t.id, t]));
+        } else {
+          localTracks = [];
+          localTracksMap = new Map();
+        }
+      } else {
+        // Regular playlist - use existing command
+        const result = await invoke<PlaylistLocalTrack[]>('playlist_get_local_tracks_with_position', { playlistId });
+        localTracks = result;
+        localTracksMap = new Map(result.map(t => [t.id, t]));
+      }
     } catch (err) {
       console.error('Failed to load local tracks:', err);
+      localTracks = [];
+      localTracksMap = new Map();
     }
   }
 
@@ -305,27 +332,87 @@
     loading = true;
     error = null;
     try {
-      const result = await invoke<Playlist>('get_playlist', { playlistId });
-      playlist = result;
+      // Check if this is a pending playlist (negative ID)
+      if (playlistId < 0) {
+        // Load pending playlist data
+        const pendingId = -playlistId;
+        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists');
+        const pending = pendingPlaylists.find(p => p.id === pendingId);
 
-      if (result.tracks?.items) {
-        tracks = result.tracks.items.map((t, idx) => ({
-          id: t.id,
-          number: idx + 1,
-          title: t.title,
-          artist: t.performer?.name,
-          album: t.album?.title,
-          albumArt: t.album?.image?.large || t.album?.image?.thumbnail || t.album?.image?.small,
-          albumId: t.album?.id,
-          artistId: t.performer?.id,
-          duration: formatDuration(t.duration),
-          durationSeconds: t.duration,
-          hires: t.hires,
-          bitDepth: t.maximum_bit_depth,
-          samplingRate: t.maximum_sampling_rate,
-          isrc: t.isrc,
-          playlistTrackId: t.playlist_track_id,
-        }));
+        if (!pending) {
+          throw new Error('Pending playlist not found');
+        }
+
+        // Build playlist object from pending data
+        playlist = {
+          id: playlistId, // Keep negative ID
+          name: pending.name,
+          description: pending.description || undefined,
+          owner: { id: 0, name: 'You (Offline)' },
+          images: [],
+          tracks_count: pending.trackIds.length,
+          duration: 0,
+          is_public: pending.isPublic,
+          tracks: { items: [], total: 0 }
+        };
+
+        // Load Qobuz tracks if any
+        if (pending.trackIds.length > 0) {
+          try {
+            const qobuzTracks = await invoke<PlaylistTrack[]>('get_tracks_by_ids', {
+              trackIds: pending.trackIds
+            });
+
+            tracks = qobuzTracks.map((t, idx) => ({
+              id: t.id,
+              number: idx + 1,
+              title: t.title,
+              artist: t.performer?.name,
+              album: t.album?.title,
+              albumArt: t.album?.image?.large || t.album?.image?.thumbnail || t.album?.image?.small,
+              albumId: t.album?.id,
+              artistId: t.performer?.id,
+              duration: formatDuration(t.duration),
+              durationSeconds: t.duration,
+              hires: t.hires,
+              bitDepth: t.maximum_bit_depth,
+              samplingRate: t.maximum_sampling_rate,
+              isrc: t.isrc,
+            }));
+
+            // Update duration
+            playlist.duration = qobuzTracks.reduce((sum, t) => sum + t.duration, 0);
+          } catch (err) {
+            console.error('Failed to load Qobuz tracks for pending playlist:', err);
+            tracks = [];
+          }
+        } else {
+          tracks = [];
+        }
+      } else {
+        // Regular playlist - use existing command
+        const result = await invoke<Playlist>('get_playlist', { playlistId });
+        playlist = result;
+
+        if (result.tracks?.items) {
+          tracks = result.tracks.items.map((t, idx) => ({
+            id: t.id,
+            number: idx + 1,
+            title: t.title,
+            artist: t.performer?.name,
+            album: t.album?.title,
+            albumArt: t.album?.image?.large || t.album?.image?.thumbnail || t.album?.image?.small,
+            albumId: t.album?.id,
+            artistId: t.performer?.id,
+            duration: formatDuration(t.duration),
+            durationSeconds: t.duration,
+            hires: t.hires,
+            bitDepth: t.maximum_bit_depth,
+            samplingRate: t.maximum_sampling_rate,
+            isrc: t.isrc,
+            playlistTrackId: t.playlist_track_id,
+          }));
+        }
       }
     } catch (err) {
       console.error('Failed to load playlist:', err);
@@ -344,6 +431,11 @@
     playlistSettings = null;
     isFavorite = false;
 
+    // Skip loading settings for pending playlists
+    if (playlistId < 0) {
+      return;
+    }
+
     try {
       const settings = await invoke<PlaylistSettings | null>('playlist_get_settings', { playlistId });
       playlistSettings = settings;
@@ -360,6 +452,12 @@
   }
 
   async function loadStats() {
+    // Skip loading stats for pending playlists
+    if (playlistId < 0) {
+      playlistStats = null;
+      return;
+    }
+
     try {
       const stats = await invoke<PlaylistStats | null>('playlist_get_stats', { playlistId });
       playlistStats = stats;

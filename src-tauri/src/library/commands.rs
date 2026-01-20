@@ -991,6 +991,19 @@ pub async fn library_get_track(
         .ok_or_else(|| "Track not found".to_string())
 }
 
+/// Get a track by file path (for offline playlist sync)
+#[tauri::command]
+pub async fn get_track_by_path(
+    file_path: String,
+    state: State<'_, LibraryState>,
+) -> Result<Option<LocalTrack>, String> {
+    log::info!("Command: get_track_by_path {}", file_path);
+
+    let db = state.db.lock().await;
+    db.get_track_by_path(&file_path)
+        .map_err(|e| e.to_string())
+}
+
 /// Play a local track by ID
 #[tauri::command]
 pub async fn library_play_track(
@@ -1921,4 +1934,24 @@ pub async fn discogs_download_artwork(
     let client = DiscogsClient::new();
 
     client.download_artwork_from_url(&image_url, &cache_dir, &artist, &album).await
+}
+
+/// Get multiple tracks by their IDs
+#[tauri::command]
+pub async fn library_get_tracks_by_ids(
+    track_ids: Vec<i64>,
+    state: State<'_, LibraryState>,
+) -> Result<Vec<LocalTrack>, String> {
+    log::info!("Command: library_get_tracks_by_ids ({} tracks)", track_ids.len());
+
+    let db = state.db.lock().await;
+    let mut tracks = Vec::new();
+
+    for track_id in track_ids {
+        if let Some(track) = db.get_track(track_id).map_err(|e| e.to_string())? {
+            tracks.push(track);
+        }
+    }
+
+    Ok(tracks)
 }

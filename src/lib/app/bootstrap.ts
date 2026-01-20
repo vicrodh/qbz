@@ -152,7 +152,7 @@ export function bootstrapApp(): BootstrapResult {
       }
     });
 
-    // Sync pending playlists
+    // Sync pending playlists (with detailed logging enabled)
     syncPendingPlaylists().catch(err => {
       console.error('[Bootstrap] Failed to sync pending playlists:', err);
     });

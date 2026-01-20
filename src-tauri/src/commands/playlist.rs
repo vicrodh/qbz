@@ -131,3 +131,27 @@ pub async fn update_playlist(
         .await
         .map_err(|e| format!("Failed to update playlist: {}", e))
 }
+
+/// Get multiple tracks by their IDs
+#[tauri::command]
+pub async fn get_tracks_by_ids(
+    track_ids: Vec<u64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::api::models::Track>, String> {
+    log::info!("Command: get_tracks_by_ids ({} tracks)", track_ids.len());
+
+    let client = state.client.lock().await;
+    let mut tracks = Vec::new();
+
+    for track_id in track_ids {
+        match client.get_track(track_id).await {
+            Ok(track) => tracks.push(track),
+            Err(e) => {
+                log::warn!("Failed to get track {}: {}", track_id, e);
+                // Continue with other tracks even if one fails
+            }
+        }
+    }
+
+    Ok(tracks)
+}

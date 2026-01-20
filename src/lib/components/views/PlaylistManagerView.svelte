@@ -53,6 +53,7 @@
   let playlistSettings = $state<Map<number, PlaylistSettings>>(new Map());
   let playlistStats = $state<Map<number, PlaylistStats>>(new Map());
   let localTrackCounts = $state<Map<number, number>>(new Map());
+  let pendingPlaylistsMap = $state<Map<number, import('$lib/stores/offlineStore').PendingPlaylist>>(new Map());
   let loading = $state(true);
 
   // Offline state
@@ -203,32 +204,95 @@
   async function loadData() {
     loading = true;
     try {
-      const [playlistsResult, settingsResult, statsResult, localCountsResult] = await Promise.all([
-        invoke<Playlist[]>('get_user_playlists'),
-        invoke<PlaylistSettings[]>('playlist_get_all_settings'),
-        invoke<PlaylistStats[]>('playlist_get_all_stats'),
-        invoke<Record<string, number>>('playlist_get_all_local_track_counts')
-      ]);
+      if (offlineStatus.isOffline) {
+        // Offline mode: Load both regular playlists AND pending playlists
+        const [playlistsResult, pendingPlaylistsResult, settingsResult, statsResult, localCountsResult] = await Promise.all([
+          invoke<Playlist[]>('get_user_playlists'),
+          invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists'),
+          invoke<PlaylistSettings[]>('playlist_get_all_settings'),
+          invoke<PlaylistStats[]>('playlist_get_all_stats'),
+          invoke<Record<string, number>>('playlist_get_all_local_track_counts')
+        ]);
 
-      playlists = playlistsResult;
+        // Process regular playlists
+        playlists = playlistsResult;
 
-      const settingsMap = new Map<number, PlaylistSettings>();
-      for (const s of settingsResult) {
-        settingsMap.set(s.qobuz_playlist_id, s);
+        // Process pending playlists and add them to the playlists array
+        const newPendingMap = new Map<number, import('$lib/stores/offlineStore').PendingPlaylist>();
+        const pendingAsPlaylists: Playlist[] = pendingPlaylistsResult.map(p => {
+          const negativeId = -p.id;
+          newPendingMap.set(negativeId, p);
+
+          return {
+            id: negativeId,
+            name: p.name,
+            tracks_count: p.trackIds.length, // Only Qobuz tracks for correct filtering
+            images: [],
+            duration: 0,
+            owner: { id: 0, name: 'You (Offline)' }
+          };
+        });
+
+        // Combine regular and pending playlists
+        playlists = [...playlistsResult, ...pendingAsPlaylists];
+        pendingPlaylistsMap = newPendingMap;
+
+        // Process settings
+        const settingsMap = new Map<number, PlaylistSettings>();
+        for (const s of settingsResult) {
+          settingsMap.set(s.qobuz_playlist_id, s);
+        }
+        playlistSettings = settingsMap;
+
+        // Process stats
+        const statsMap = new Map<number, PlaylistStats>();
+        for (const s of statsResult) {
+          statsMap.set(s.qobuz_playlist_id, s);
+        }
+        playlistStats = statsMap;
+
+        // Process local track counts for regular playlists
+        const localCountsMap = new Map<number, number>();
+        for (const [id, count] of Object.entries(localCountsResult)) {
+          localCountsMap.set(Number(id), count);
+        }
+
+        // Add local track counts for pending playlists
+        for (const [negativeId, pending] of newPendingMap.entries()) {
+          localCountsMap.set(negativeId, pending.localTrackIds.length);
+        }
+
+        localTrackCounts = localCountsMap;
+      } else {
+        // Online mode: Load only regular playlists
+        const [playlistsResult, settingsResult, statsResult, localCountsResult] = await Promise.all([
+          invoke<Playlist[]>('get_user_playlists'),
+          invoke<PlaylistSettings[]>('playlist_get_all_settings'),
+          invoke<PlaylistStats[]>('playlist_get_all_stats'),
+          invoke<Record<string, number>>('playlist_get_all_local_track_counts')
+        ]);
+
+        playlists = playlistsResult;
+        pendingPlaylistsMap = new Map(); // Clear pending playlists when online
+
+        const settingsMap = new Map<number, PlaylistSettings>();
+        for (const s of settingsResult) {
+          settingsMap.set(s.qobuz_playlist_id, s);
+        }
+        playlistSettings = settingsMap;
+
+        const statsMap = new Map<number, PlaylistStats>();
+        for (const s of statsResult) {
+          statsMap.set(s.qobuz_playlist_id, s);
+        }
+        playlistStats = statsMap;
+
+        const localCountsMap = new Map<number, number>();
+        for (const [id, count] of Object.entries(localCountsResult)) {
+          localCountsMap.set(Number(id), count);
+        }
+        localTrackCounts = localCountsMap;
       }
-      playlistSettings = settingsMap;
-
-      const statsMap = new Map<number, PlaylistStats>();
-      for (const s of statsResult) {
-        statsMap.set(s.qobuz_playlist_id, s);
-      }
-      playlistStats = statsMap;
-
-      const localCountsMap = new Map<number, number>();
-      for (const [id, count] of Object.entries(localCountsResult)) {
-        localCountsMap.set(Number(id), count);
-      }
-      localTrackCounts = localCountsMap;
     } catch (err) {
       console.error('Failed to load playlists:', err);
     } finally {
