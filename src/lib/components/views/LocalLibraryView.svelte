@@ -5,7 +5,7 @@
   import {
     HardDrive, Music, Disc3, Mic2, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, AlertCircle, ImageDown, Upload, Search, LayoutGrid, List, Edit3,
-    Network, Power, PowerOff, ChevronLeft, ChevronRight
+    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle
   } from 'lucide-svelte';
   import FolderSettingsModal from '../FolderSettingsModal.svelte';
   import { t } from '$lib/i18n';
@@ -738,6 +738,19 @@
       await handleTrackPlay(albumTracks[0]);
     } catch (err) {
       console.error('Failed to play album:', err);
+    }
+  }
+
+  async function handleShuffleAllAlbum() {
+    if (!selectedAlbum || albumTracks.length === 0) return;
+
+    try {
+      // Enable shuffle mode first
+      await invoke('set_shuffle', { enabled: true });
+      // Then play from first track (queue will be shuffled by backend)
+      await handlePlayAllAlbum();
+    } catch (err) {
+      console.error('Failed to shuffle album:', err);
     }
   }
 
@@ -1514,6 +1527,10 @@
             <button class="play-btn" onclick={handlePlayAllAlbum}>
               <Play size={16} fill="white" />
               <span>Play All</span>
+            </button>
+            <button class="shuffle-btn" onclick={handleShuffleAllAlbum}>
+              <Shuffle size={16} />
+              <span>Shuffle</span>
             </button>
           </div>
         </div>
@@ -3513,6 +3530,26 @@
 
   .play-btn:hover {
     background: var(--accent-hover);
+  }
+
+  .shuffle-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 24px;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .shuffle-btn:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-muted);
   }
 
   /* Nav row for album detail */
