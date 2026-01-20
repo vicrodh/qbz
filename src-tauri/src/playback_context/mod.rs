@@ -23,6 +23,7 @@ pub enum ContextType {
     HomeList,
     Favorites,
     LocalLibrary,
+    Radio,
 }
 
 /// Source of the content (Qobuz or Local Library)
@@ -122,6 +123,7 @@ impl PlaybackContext {
             ContextType::HomeList => "Home List",
             ContextType::Favorites => "Favorites",
             ContextType::LocalLibrary => "Local Library",
+            ContextType::Radio => "Radio",
         };
         format!("{} · {}", type_str, self.label)
     }

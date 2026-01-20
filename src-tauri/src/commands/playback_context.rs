@@ -29,6 +29,7 @@ pub fn set_playback_context(
         "home_list" => ContextType::HomeList,
         "favorites" => ContextType::Favorites,
         "local_library" => ContextType::LocalLibrary,
+        "radio" => ContextType::Radio,
         _ => return Err(format!("Invalid context type: {}", context_type)),
     };
 
