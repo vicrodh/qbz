@@ -786,6 +786,7 @@
               <div class="tracks-list-compact">
                 {#each allResults.tracks.items.slice(0, 6) as track, index}
                   {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
+                  {@const isTrackDownloaded = checkTrackDownloaded?.(track.id) || false}
                   <div
                     class="track-row"
                     class:playing={isActiveTrack}
@@ -876,7 +877,6 @@
                     <div class="track-quality">{getQualityLabel(track)}</div>
                     <div class="track-duration">{formatDuration(track.duration)}</div>
                     <div class="track-actions">
-                      {@const isTrackDownloaded = checkTrackDownloaded?.(track.id) || false}
                       <TrackMenu
                         onPlayNow={() => handleSearchTrackPlay(track, index)}
                         onPlayNext={onTrackPlayNext ? () => onTrackPlayNext(track) : undefined}
@@ -941,6 +941,7 @@
         <div class="tracks-list">
           {#each trackResults.items as track, index}
             {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
+            {@const isTrackDownloaded = checkTrackDownloaded?.(track.id) || false}
             <div
               class="track-row"
               class:playing={isActiveTrack}
@@ -1031,7 +1032,6 @@
               <div class="track-quality">{getQualityLabel(track)}</div>
               <div class="track-duration">{formatDuration(track.duration)}</div>
               <div class="track-actions">
-                {@const isTrackDownloaded = checkTrackDownloaded?.(track.id) || false}
                 <TrackMenu
                   onPlayNow={() => handleSearchTrackPlay(track, index)}
                   onPlayNext={onTrackPlayNext ? () => onTrackPlayNext(track) : undefined}
