@@ -109,7 +109,8 @@
           name.trim(),
           description.trim() || null,
           isPublic,
-          []
+          [], // No Qobuz tracks for empty playlist
+          []  // No local tracks for empty playlist
         );
         showToast('Playlist created offline - will sync when back online', 'info');
         // Create a temporary playlist object for UI
@@ -245,19 +246,17 @@
 
     try {
       if (isOffline()) {
-        // In offline mode, can only create pending playlists with Qobuz tracks
-        if (isLocalTracks) {
-          error = 'Cannot create playlist with local tracks in offline mode';
-          loading = false;
-          return;
-        }
+        // In offline mode, create pending playlist with both Qobuz and local tracks
+        const qobuzTrackIds = isLocalTracks ? [] : trackIds;
+        const localTrackIds = isLocalTracks ? trackIds : [];
 
-        // Create pending playlist with Qobuz tracks for sync when back online
+        // Create pending playlist for sync when back online
         const pendingId = await createPendingPlaylist(
           name.trim(),
           description.trim() || null,
           false,
-          trackIds
+          qobuzTrackIds,
+          localTrackIds
         );
         showToast(`Playlist "${name.trim()}" created offline - will sync when back online`, 'info');
 

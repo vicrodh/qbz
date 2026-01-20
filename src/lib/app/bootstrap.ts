@@ -10,7 +10,7 @@ import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { goBack, goForward } from '$lib/stores/navigationStore';
 import { loadToastsPreference } from '$lib/stores/toastStore';
 import { loadSystemNotificationsPreference, flushScrobbleQueue } from '$lib/services/playbackService';
-import { initOfflineStore, cleanupOfflineStore, onOnlineTransition } from '$lib/stores/offlineStore';
+import { initOfflineStore, cleanupOfflineStore, onOnlineTransition, syncPendingPlaylists } from '$lib/stores/offlineStore';
 import { getNextZoomLevel } from '$lib/utils/zoom';
 import { getZoom, setZoom } from '$lib/stores/zoomStore';
 
@@ -141,13 +141,20 @@ export function bootstrapApp(): BootstrapResult {
   // Initialize offline store (async, fire-and-forget)
   initOfflineStore();
 
-  // Register callback to flush scrobble queue when transitioning to online
+  // Register callback to flush scrobble queue and sync playlists when transitioning to online
   onOnlineTransition(() => {
-    console.log('[Bootstrap] Online transition detected - flushing scrobble queue');
+    console.log('[Bootstrap] Online transition detected - flushing scrobble queue and syncing playlists');
+
+    // Flush scrobble queue
     flushScrobbleQueue().then(({ sent, failed }) => {
       if (sent > 0 || failed > 0) {
         console.log(`[Bootstrap] Scrobble queue flush complete: ${sent} sent, ${failed} failed`);
       }
+    });
+
+    // Sync pending playlists
+    syncPendingPlaylists().catch(err => {
+      console.error('[Bootstrap] Failed to sync pending playlists:', err);
     });
   });
 

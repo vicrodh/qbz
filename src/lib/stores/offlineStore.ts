@@ -19,6 +19,7 @@ export interface PendingPlaylist {
   description: string | null;
   isPublic: boolean;
   trackIds: number[];
+  localTrackIds: number[];
   createdAt: number;
   synced: boolean;
   qobuzPlaylistId: number | null;
@@ -321,13 +322,15 @@ export async function createPendingPlaylist(
   name: string,
   description: string | null,
   isPublic: boolean,
-  trackIds: number[]
+  trackIds: number[],
+  localTrackIds: number[]
 ): Promise<number> {
   return invoke<number>('create_pending_playlist', {
     name,
     description,
     isPublic,
     trackIds,
+    localTrackIds,
   });
 }
 
@@ -417,6 +420,73 @@ export async function getQueuedScrobbleCount(): Promise<number> {
  */
 export async function cleanupSentScrobbles(olderThanDays?: number): Promise<number> {
   return invoke<number>('cleanup_sent_scrobbles', { olderThanDays });
+}
+
+/**
+ * Sync all pending playlists to Qobuz when back online
+ */
+export async function syncPendingPlaylists(): Promise<void> {
+  try {
+    console.log('[Offline] Syncing pending playlists...');
+    const pending = await getPendingPlaylists();
+
+    if (pending.length === 0) {
+      console.log('[Offline] No pending playlists to sync');
+      return;
+    }
+
+    console.log(`[Offline] Found ${pending.length} pending playlists to sync`);
+
+    for (const playlist of pending) {
+      try {
+        console.log(`[Offline] Syncing playlist: ${playlist.name}`);
+
+        // Create playlist on Qobuz
+        const createdPlaylist = await invoke<{ id: number }>('create_playlist', {
+          name: playlist.name,
+          description: playlist.description,
+          isPublic: playlist.isPublic
+        });
+
+        const qobuzPlaylistId = createdPlaylist.id;
+        console.log(`[Offline] Created playlist on Qobuz with ID: ${qobuzPlaylistId}`);
+
+        // Add Qobuz tracks if any
+        if (playlist.trackIds.length > 0) {
+          console.log(`[Offline] Adding ${playlist.trackIds.length} Qobuz tracks`);
+          await invoke('add_tracks_to_playlist', {
+            playlistId: qobuzPlaylistId,
+            trackIds: playlist.trackIds
+          });
+        }
+
+        // Add local tracks if any
+        if (playlist.localTrackIds.length > 0) {
+          console.log(`[Offline] Adding ${playlist.localTrackIds.length} local tracks`);
+          for (let i = 0; i < playlist.localTrackIds.length; i++) {
+            await invoke('playlist_add_local_track', {
+              playlistId: qobuzPlaylistId,
+              localTrackId: playlist.localTrackIds[i],
+              position: playlist.trackIds.length + i // Position after Qobuz tracks
+            });
+          }
+        }
+
+        // Mark as synced
+        await markPendingPlaylistSynced(playlist.id, qobuzPlaylistId);
+        console.log(`[Offline] Successfully synced playlist: ${playlist.name}`);
+
+        showToast(`Synced playlist "${playlist.name}"`, 'success');
+      } catch (err) {
+        console.error(`[Offline] Failed to sync playlist "${playlist.name}":`, err);
+        showToast(`Failed to sync playlist "${playlist.name}"`, 'error');
+      }
+    }
+
+    console.log('[Offline] Finished syncing pending playlists');
+  } catch (err) {
+    console.error('[Offline] Error syncing pending playlists:', err);
+  }
 }
 
 // ============ State Getter ============
