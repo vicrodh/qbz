@@ -24,6 +24,9 @@
     subscribe as subscribeOffline,
     isOffline as checkIsOffline
   } from '$lib/stores/offlineStore';
+  import {
+    setPlaybackContext
+  } from '$lib/stores/playbackContextStore';
 
   // Backend types matching Rust models
   interface LocalTrack {
@@ -716,10 +719,34 @@
     try {
       if (selectedAlbum && albumTracks.length > 0) {
         const trackIndex = albumTracks.findIndex(t => t.id === track.id);
+        const trackIds = albumTracks.map(t => t.id);
+
+        // Set playback context for Local Library album
+        await setPlaybackContext(
+          'local_library',
+          selectedAlbum.id,
+          selectedAlbum.title,
+          'local',
+          trackIds,
+          trackIndex >= 0 ? trackIndex : 0
+        );
+
         await setQueueForAlbumTracks(albumTracks, trackIndex >= 0 ? trackIndex : 0);
       } else if (activeTab === 'tracks' && tracks.length > 0) {
         const orderedTracks = getDisplayedTrackOrder();
         const trackIndex = orderedTracks.findIndex(t => t.id === track.id);
+        const trackIds = orderedTracks.map(t => t.id);
+
+        // Set playback context for Local Library tracks view
+        await setPlaybackContext(
+          'local_library',
+          'local-tracks',
+          'Local Tracks',
+          'local',
+          trackIds,
+          trackIndex >= 0 ? trackIndex : 0
+        );
+
         await setQueueForLocalTracks(orderedTracks, trackIndex >= 0 ? trackIndex : 0);
       }
 

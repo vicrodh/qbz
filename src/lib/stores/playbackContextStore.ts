@@ -9,7 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 // ============ Types ============
 
-export type ContextType = 'album' | 'playlist' | 'artist_top' | 'home_list' | 'favorites';
+export type ContextType = 'album' | 'playlist' | 'artist_top' | 'home_list' | 'favorites' | 'local_library';
 export type ContentSource = 'qobuz' | 'local';
 
 export interface PlaybackContext {
@@ -138,7 +138,8 @@ export function getContextDisplayInfo(): string | null {
     playlist: 'Playlist',
     artist_top: 'Artist Top Songs',
     home_list: 'Home List',
-    favorites: 'Favorites'
+    favorites: 'Favorites',
+    local_library: 'Local Library'
   }[currentContext.type];
 
   return `${typeStr} · ${currentContext.label}`;
