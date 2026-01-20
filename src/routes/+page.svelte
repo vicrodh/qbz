@@ -2259,6 +2259,8 @@
           onTrackGoToArtist={handleArtistClick}
           onTrackDownload={handleDisplayTrackDownload}
           onTrackRemoveDownload={handleTrackRemoveDownload}
+          onTrackOpenFolder={handleTrackOpenFolder}
+          onTrackReDownload={handleDisplayTrackDownload}
           getTrackDownloadStatus={getTrackDownloadStatus}
           {downloadStateVersion}
           onLocalTrackPlay={handleLocalTrackPlay}

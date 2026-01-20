@@ -128,6 +128,8 @@
     onTrackGoToArtist?: (artistId: number) => void;
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
+    onTrackOpenFolder?: (trackId: number) => void;
+    onTrackReDownload?: (track: DisplayTrack) => void;
     getTrackDownloadStatus?: (trackId: number) => { status: DownloadStatus; progress: number };
     downloadStateVersion?: number;
     onLocalTrackPlay?: (track: LocalLibraryTrack) => void;
@@ -155,6 +157,8 @@
     onTrackGoToArtist,
     onTrackDownload,
     onTrackRemoveDownload,
+    onTrackOpenFolder,
+    onTrackReDownload,
     getTrackDownloadStatus,
     downloadStateVersion,
     onLocalTrackPlay,
@@ -1016,7 +1020,11 @@
               onShareQobuz: !track.isLocal && onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
               onShareSonglink: !track.isLocal && onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined,
               onGoToAlbum: !track.isLocal && track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId!) : undefined,
-              onGoToArtist: !track.isLocal && track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined
+              onGoToArtist: !track.isLocal && track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
+              onDownload: !track.isLocal && onTrackDownload ? () => onTrackDownload(track) : undefined,
+              isTrackDownloaded: !track.isLocal ? downloadInfo.status === 'ready' : false,
+              onOpenFolder: !track.isLocal && downloadInfo.status === 'ready' && onTrackOpenFolder ? () => onTrackOpenFolder(track.id) : undefined,
+              onReDownload: !track.isLocal && downloadInfo.status === 'ready' && onTrackReDownload ? () => onTrackReDownload(track) : undefined
             } : {}}
           />
         </div>
