@@ -1823,6 +1823,14 @@
       </div>
     </div>
 
+    <!-- Offline Notice Banner -->
+    {#if isOffline}
+      <div class="offline-notice">
+        <AlertCircle size={16} />
+        <span>Playlist management is disabled in offline mode. You can still play your local tracks.</span>
+      </div>
+    {/if}
+
     <!-- Scan Progress -->
     {#if scanning && scanProgress}
       <div class="scan-progress">
@@ -2703,6 +2711,24 @@
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  /* Offline Notice */
+  .offline-notice {
+    background: rgba(251, 191, 36, 0.1);
+    border: 1px solid rgba(251, 191, 36, 0.3);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #fbbf24;
+    font-size: 14px;
+  }
+
+  .offline-notice span {
+    color: var(--text-primary);
   }
 
   /* Scan Progress */

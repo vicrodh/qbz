@@ -17,6 +17,7 @@
     FolderOpen,
     RefreshCw
   } from 'lucide-svelte';
+  import { shouldHidePlaylistFeatures } from '$lib/utils/offlineHelpers';
 
   interface Props {
     onPlayNow?: () => void;
@@ -283,7 +284,7 @@
               <span>Add to favorites</span>
             </button>
           {/if}
-          {#if onAddToPlaylist}
+          {#if onAddToPlaylist && !shouldHidePlaylistFeatures()}
             <button class="menu-item" onclick={() => handleAction(onAddToPlaylist)}>
               <ListMusic size={14} />
               <span>Add to playlist</span>
