@@ -460,6 +460,11 @@
           navigateTo('search');
           break;
 
+        case 'radio':
+          // Radio is dynamic/endless - no specific page to navigate to
+          console.log('[ContextNav] Radio is currently playing');
+          break;
+
         default:
           console.warn('[ContextNav] Unknown context type:', context.type);
       }
