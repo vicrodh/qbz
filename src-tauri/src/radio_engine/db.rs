@@ -244,6 +244,39 @@ impl RadioDb {
             .map_err(|e| format!("Failed to query radio pool size: {}", e))
     }
 
+    pub fn pool_used_count(&self, session_id: &str) -> Result<u32, String> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM radio_pool WHERE session_id = ? AND used = 1",
+                params![session_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|v| v as u32)
+            .map_err(|e| format!("Failed to query radio pool used count: {}", e))
+    }
+
+    pub fn pool_unused_count(&self, session_id: &str) -> Result<u32, String> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM radio_pool WHERE session_id = ? AND used = 0",
+                params![session_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|v| v as u32)
+            .map_err(|e| format!("Failed to query radio pool unused count: {}", e))
+    }
+
+    pub fn history_len(&self, session_id: &str) -> Result<u32, String> {
+        self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM radio_history WHERE session_id = ?",
+                params![session_id],
+                |row| row.get::<_, i64>(0),
+            )
+            .map(|v| v as u32)
+            .map_err(|e| format!("Failed to query radio history length: {}", e))
+    }
+
     pub fn insert_pool_track(
         &self,
         session_id: &str,
