@@ -724,6 +724,8 @@
 
     // Build queue from album tracks before playing
     if (selectedAlbum?.tracks) {
+      console.log('[Album Queue] Building queue from', selectedAlbum.tracks.length, 'album tracks');
+
       const trackIndex = selectedAlbum.tracks.findIndex(t => t.id === track.id);
       const queueTracks: BackendQueueTrack[] = selectedAlbum.tracks.map(t => ({
         id: t.id,
@@ -738,8 +740,13 @@
         is_local: false
       }));
 
+      console.log('[Album Queue] Mapped to', queueTracks.length, 'queue tracks, startIndex:', trackIndex);
+      console.log('[Album Queue] Track IDs:', queueTracks.map(t => t.id));
+
       // Set the queue starting at the clicked track
       await setQueue(queueTracks, trackIndex >= 0 ? trackIndex : 0, true);
+
+      console.log('[Album Queue] Queue set successfully');
     }
 
     // Play track using unified service
@@ -1025,6 +1032,8 @@
   async function handleShuffleAlbum() {
     if (!selectedAlbum?.tracks?.length) return;
 
+    console.log('[Album Shuffle] Starting shuffle with', selectedAlbum.tracks.length, 'tracks');
+
     // Set shuffle mode first
     try {
       await invoke('set_shuffle', { enabled: true });
@@ -1033,8 +1042,14 @@
       console.error('Failed to enable shuffle:', err);
     }
 
-    // Then play from first track (queue will be shuffled)
-    await handlePlayAllAlbum();
+    // Pick a random track to start with
+    const randomIndex = Math.floor(Math.random() * selectedAlbum.tracks.length);
+    const randomTrack = selectedAlbum.tracks[randomIndex];
+
+    console.log('[Album Shuffle] Starting from random track index:', randomIndex, 'track:', randomTrack.title);
+
+    // Play from random track (queue will be shuffled by backend)
+    await handleAlbumTrackPlay(randomTrack);
     showToast('Shuffle play enabled', 'info');
   }
 

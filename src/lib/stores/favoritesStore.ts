@@ -59,16 +59,25 @@ export async function loadFavorites(): Promise<void> {
 
   isLoading = true;
   try {
-    const response = await invoke<{ tracks: { items: Array<{ id: number }> } }>('get_favorites', {
+    const response = await invoke<{ tracks?: { items?: Array<{ id: number }> } }>('get_favorites', {
       favType: 'track',
       limit: 500
     });
 
-    favoriteTrackIds = new Set(response.tracks.items.map(t => t.id));
+    // Defensive: handle missing tracks or items
+    if (response?.tracks?.items) {
+      favoriteTrackIds = new Set(response.tracks.items.map(t => t.id));
+    } else {
+      // No favorites or unexpected response structure
+      favoriteTrackIds = new Set();
+    }
+
     isLoaded = true;
     notifyListeners();
   } catch (err) {
     console.error('Failed to load favorites:', err);
+    // On error, initialize as empty set
+    favoriteTrackIds = new Set();
   } finally {
     isLoading = false;
   }
