@@ -12,7 +12,10 @@
     Disc3,
     User,
     Link,
-    Trash2
+    Trash2,
+    Download,
+    FolderOpen,
+    RefreshCw
   } from 'lucide-svelte';
 
   interface Props {
@@ -28,6 +31,10 @@
     onShareSonglink?: () => void;
     onGoToAlbum?: () => void;
     onGoToArtist?: () => void;
+    onDownload?: () => void;
+    isTrackDownloaded?: boolean;
+    onOpenFolder?: () => void;
+    onReDownload?: () => void;
   }
 
   let {
@@ -42,18 +49,26 @@
     onShareQobuz,
     onShareSonglink,
     onGoToAlbum,
-    onGoToArtist
+    onGoToArtist,
+    onDownload,
+    isTrackDownloaded = false,
+    onOpenFolder,
+    onReDownload
   }: Props = $props();
 
   let isOpen = $state(false);
   let shareOpen = $state(false);
+  let downloadOpen = $state(false);
   let menuRef: HTMLDivElement | null = null;
   let triggerRef: HTMLButtonElement | null = null;
   let menuEl: HTMLDivElement | null = null;
   let shareTriggerRef: HTMLDivElement | null = null;
+  let downloadTriggerRef: HTMLDivElement | null = null;
   let submenuEl: HTMLDivElement | null = null;
+  let downloadSubmenuEl: HTMLDivElement | null = null;
   let menuStyle = $state('');
   let submenuStyle = $state('');
+  let downloadSubmenuStyle = $state('');
 
   // Portal action - moves element to body to escape stacking context
   function portal(node: HTMLElement) {
@@ -70,12 +85,14 @@
   const hasPlayback = $derived(!!(onPlayNow || onPlayTrackOnly || onPlayFromHere || onPlayNext || onPlayLater));
   const hasLibrary = $derived(!!(onAddFavorite || onAddToPlaylist || onRemoveFromPlaylist));
   const hasShare = $derived(!!(onShareQobuz || onShareSonglink));
+  const hasDownload = $derived(!!onDownload || isTrackDownloaded);
   const hasNav = $derived(!!(onGoToAlbum || onGoToArtist));
-  const hasMenu = $derived(hasPlayback || hasLibrary || hasShare || hasNav);
+  const hasMenu = $derived(hasPlayback || hasLibrary || hasShare || hasDownload || hasNav);
 
   function closeMenu() {
     isOpen = false;
     shareOpen = false;
+    downloadOpen = false;
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -83,7 +100,9 @@
     // Check if click is outside both the trigger container and the menu (which is in portal)
     const isOutsideTrigger = menuRef && !menuRef.contains(target);
     const isOutsideMenu = menuEl && !menuEl.contains(target);
-    if (isOutsideTrigger && isOutsideMenu) {
+    const isOutsideSubmenu = submenuEl && !submenuEl.contains(target);
+    const isOutsideDownloadSubmenu = downloadSubmenuEl && !downloadSubmenuEl.contains(target);
+    if (isOutsideTrigger && isOutsideMenu && isOutsideSubmenu && isOutsideDownloadSubmenu) {
       closeMenu();
     }
   }
@@ -141,6 +160,35 @@
     submenuStyle = `left: ${left}px; top: ${top}px;`;
   }
 
+  async function setDownloadSubmenuPosition() {
+    await tick();
+    if (!downloadTriggerRef || !downloadSubmenuEl) return;
+
+    const triggerRect = downloadTriggerRef.getBoundingClientRect();
+    const submenuRect = downloadSubmenuEl.getBoundingClientRect();
+    const padding = 8;
+
+    const spaceRight = window.innerWidth - triggerRect.right;
+    const openRight = spaceRight >= submenuRect.width + padding;
+
+    let left = openRight
+      ? triggerRect.right + 6
+      : triggerRect.left - submenuRect.width - 6;
+    let top = triggerRect.top - 6;
+
+    if (left < padding) left = padding;
+    if (left + submenuRect.width > window.innerWidth - padding) {
+      left = Math.max(padding, window.innerWidth - submenuRect.width - padding);
+    }
+
+    if (top + submenuRect.height > window.innerHeight - padding) {
+      top = window.innerHeight - submenuRect.height - padding;
+    }
+    if (top < padding) top = padding;
+
+    downloadSubmenuStyle = `left: ${left}px; top: ${top}px;`;
+  }
+
   function handleAction(action?: () => void) {
     if (!action) return;
     action();
@@ -154,6 +202,7 @@
       const handleScroll = () => {
         setMenuPosition();
         if (shareOpen) setSubmenuPosition();
+        if (downloadOpen) setDownloadSubmenuPosition();
       };
 
       window.addEventListener('resize', handleResize);
@@ -287,7 +336,55 @@
           </div>
         {/if}
 
-        {#if hasShare && hasNav}
+        {#if (hasShare || hasLibrary) && hasDownload}
+          <div class="separator"></div>
+        {/if}
+
+        {#if hasDownload}
+          {#if isTrackDownloaded}
+            <div
+              class="menu-item submenu-trigger"
+              bind:this={downloadTriggerRef}
+              onmouseenter={() => {
+                downloadOpen = true;
+                shareOpen = false;
+                setDownloadSubmenuPosition();
+              }}
+              onclick={() => {
+                downloadOpen = !downloadOpen;
+                shareOpen = false;
+                if (downloadOpen) setDownloadSubmenuPosition();
+              }}
+            >
+              <Download size={14} />
+              <span>Download</span>
+              <ChevronRight size={14} class="chevron" />
+              {#if downloadOpen}
+                <div class="submenu" bind:this={downloadSubmenuEl} style={downloadSubmenuStyle}>
+                  {#if onOpenFolder}
+                    <button class="menu-item" onclick={() => handleAction(onOpenFolder)}>
+                      <FolderOpen size={14} />
+                      <span>Open containing folder</span>
+                    </button>
+                  {/if}
+                  {#if onReDownload}
+                    <button class="menu-item" onclick={() => handleAction(onReDownload)}>
+                      <RefreshCw size={14} />
+                      <span>Re-download</span>
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {:else}
+            <button class="menu-item" onclick={() => handleAction(onDownload)}>
+              <Download size={14} />
+              <span>Download</span>
+            </button>
+          {/if}
+        {/if}
+
+        {#if hasDownload && hasNav}
           <div class="separator"></div>
         {/if}
 
