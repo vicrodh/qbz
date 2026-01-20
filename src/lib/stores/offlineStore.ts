@@ -464,22 +464,31 @@ export async function syncPendingPlaylists(): Promise<void> {
         if (playlist.localTrackIds.length > 0) {
           console.log(`[Offline] Adding ${playlist.localTrackIds.length} local tracks`);
           for (let i = 0; i < playlist.localTrackIds.length; i++) {
-            await invoke('playlist_add_local_track', {
-              playlistId: qobuzPlaylistId,
-              localTrackId: playlist.localTrackIds[i],
-              position: playlist.trackIds.length + i // Position after Qobuz tracks
-            });
+            console.log(`[Offline] Adding local track ${playlist.localTrackIds[i]} at position ${playlist.trackIds.length + i}`);
+            try {
+              await invoke('playlist_add_local_track', {
+                playlistId: qobuzPlaylistId,
+                localTrackId: playlist.localTrackIds[i],
+                position: playlist.trackIds.length + i // Position after Qobuz tracks
+              });
+              console.log(`[Offline] Successfully added local track ${playlist.localTrackIds[i]}`);
+            } catch (localTrackErr) {
+              console.error(`[Offline] Failed to add local track ${playlist.localTrackIds[i]}:`, localTrackErr);
+              // Re-throw to prevent marking as synced
+              throw new Error(`Failed to add local track: ${localTrackErr}`);
+            }
           }
         }
 
-        // Mark as synced
+        // Mark as synced ONLY if everything succeeded
         await markPendingPlaylistSynced(playlist.id, qobuzPlaylistId);
         console.log(`[Offline] Successfully synced playlist: ${playlist.name}`);
 
         showToast(`Synced playlist "${playlist.name}"`, 'success');
       } catch (err) {
         console.error(`[Offline] Failed to sync playlist "${playlist.name}":`, err);
-        showToast(`Failed to sync playlist "${playlist.name}"`, 'error');
+        showToast(`Failed to sync playlist "${playlist.name}": ${err}`, 'error');
+        // Don't mark as synced if there was an error - will retry on next online transition
       }
     }
 
