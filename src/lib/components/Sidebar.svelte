@@ -413,6 +413,15 @@
     }
   });
 
+  // Reload playlists when offline status changes
+  $effect(() => {
+    // Track isOffline to trigger reload when it changes
+    if (isOffline !== undefined) {
+      console.log('[Sidebar] Offline status changed, reloading playlists:', isOffline);
+      loadUserPlaylists();
+    }
+  });
+
   onMount(() => {
     loadSortPreference();
     loadUserPlaylists();
@@ -433,8 +442,36 @@
   async function loadUserPlaylists() {
     playlistsLoading = true;
     try {
-      const playlists = await invoke<Playlist[]>('get_user_playlists');
-      userPlaylists = playlists;
+      if (isOffline) {
+        // In offline mode, show only pending playlists (created offline)
+        console.log('[Sidebar] Loading pending playlists in offline mode');
+        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists');
+
+        // Convert pending playlists to Playlist format for UI compatibility
+        userPlaylists = pendingPlaylists.map(p => ({
+          id: -p.id, // Negative ID to distinguish from real playlists
+          name: p.name,
+          description: p.description || undefined,
+          is_public: p.isPublic,
+          tracks_count: p.trackIds.length + p.localTrackIds.length,
+          duration: 0,
+          users_count: 0,
+          is_collaborative: false,
+          timestamp_creation: p.createdAt,
+          timestamp_update: p.createdAt,
+          owner: {
+            id: 0,
+            name: 'You (Offline)',
+            display_name: undefined
+          }
+        }));
+
+        console.log(`[Sidebar] Loaded ${userPlaylists.length} pending playlists`);
+      } else {
+        // Online mode - load from Qobuz
+        const playlists = await invoke<Playlist[]>('get_user_playlists');
+        userPlaylists = playlists;
+      }
     } catch (err) {
       console.error('Failed to load playlists:', err);
     } finally {
