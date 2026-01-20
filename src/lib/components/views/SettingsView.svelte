@@ -727,14 +727,6 @@
     }
   }
 
-  async function handleShowNetworkFoldersChange(enabled: boolean) {
-    try {
-      await setShowNetworkFoldersInManualOffline(enabled);
-    } catch (error) {
-      console.error('Failed to set show network folders in manual offline:', error);
-    }
-  }
-
   async function handleLanguageChange(lang: string) {
     language = lang;
     const localeCode = languageToLocale[lang];
