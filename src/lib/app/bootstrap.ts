@@ -11,6 +11,7 @@ import { goBack, goForward } from '$lib/stores/navigationStore';
 import { loadToastsPreference } from '$lib/stores/toastStore';
 import { loadSystemNotificationsPreference, flushScrobbleQueue } from '$lib/services/playbackService';
 import { initOfflineStore, cleanupOfflineStore, onOnlineTransition } from '$lib/stores/offlineStore';
+import { clampZoom, getNextZoomLevel } from '$lib/utils/zoom';
 
 // ============ Theme Management ============
 
@@ -34,10 +35,48 @@ export async function applySavedZoom(): Promise<void> {
   if (!Number.isFinite(zoom) || zoom <= 0) return;
 
   try {
-    await getCurrentWebview().setZoom(zoom);
+    const clamped = clampZoom(zoom);
+    if (clamped !== zoom) {
+      localStorage.setItem('qbz-zoom-level', String(clamped));
+    }
+    await getCurrentWebview().setZoom(clamped);
   } catch (err) {
     console.warn('Failed to apply saved zoom:', err);
   }
+}
+
+function getStoredZoom(): number {
+  const savedZoom = localStorage.getItem('qbz-zoom-level');
+  const parsed = Number.parseFloat(savedZoom ?? '');
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 1;
+  }
+  return clampZoom(parsed);
+}
+
+async function applyZoomLevel(zoom: number): Promise<void> {
+  const clamped = clampZoom(zoom);
+  localStorage.setItem('qbz-zoom-level', String(clamped));
+  try {
+    await getCurrentWebview().setZoom(clamped);
+  } catch (err) {
+    console.warn('Failed to set zoom level:', err);
+  }
+}
+
+function handleZoomWheel(event: WheelEvent): void {
+  if (!event.ctrlKey && !event.metaKey) return;
+  if (event.deltaY === 0) return;
+
+  event.preventDefault();
+  const direction = event.deltaY < 0 ? 'in' : 'out';
+  const nextZoom = getNextZoomLevel(getStoredZoom(), direction);
+  void applyZoomLevel(nextZoom);
+}
+
+export function setupZoomControls(): () => void {
+  window.addEventListener('wheel', handleZoomWheel, { passive: false });
+  return () => window.removeEventListener('wheel', handleZoomWheel);
 }
 
 // ============ Last.fm Session ============
@@ -105,6 +144,7 @@ export function bootstrapApp(): BootstrapResult {
 
   // Setup mouse navigation
   const cleanupMouse = setupMouseNavigation();
+  const cleanupZoom = setupZoomControls();
 
   // Restore Last.fm session (async, fire-and-forget)
   restoreLastfmSession();
@@ -125,6 +165,7 @@ export function bootstrapApp(): BootstrapResult {
   return {
     cleanup: () => {
       cleanupMouse();
+      cleanupZoom();
       cleanupOfflineStore();
     }
   };

@@ -27,6 +27,7 @@
   import { get } from 'svelte/store';
   import MigrationModal from '../MigrationModal.svelte';
   import { getDevicePrettyName } from '$lib/utils/audioDeviceNames';
+  import { ZOOM_OPTIONS, findZoomOption, getZoomLevelFromOption } from '$lib/utils/zoom';
   import {
     subscribe as subscribeOffline,
     getStatus as getOfflineStatus,
@@ -350,17 +351,7 @@
   let normalizeVolume = $state(false);
 
   // UI scale settings
-  const zoomOptions = ['80%', '90%', '100%', '110%', '125%', '150%', '175%', '200%'];
-  const zoomMap: Record<string, number> = {
-    '80%': 0.8,
-    '90%': 0.9,
-    '100%': 1,
-    '110%': 1.1,
-    '125%': 1.25,
-    '150%': 1.5,
-    '175%': 1.75,
-    '200%': 2,
-  };
+  const zoomOptions = [...ZOOM_OPTIONS];
   let zoomLevel = $state('100%');
 
   // Appearance settings
@@ -416,8 +407,8 @@
     const savedZoom = localStorage.getItem('qbz-zoom-level');
     if (savedZoom) {
       const parsed = Number.parseFloat(savedZoom);
-      const match = zoomOptions.find(option => Math.abs((zoomMap[option] ?? 1) - parsed) < 0.01);
-      zoomLevel = match || '100%';
+      const match = findZoomOption(parsed);
+      zoomLevel = match ?? '100%';
     }
 
     // Load library settings
@@ -1365,7 +1356,7 @@
 
   async function handleZoomChange(value: string) {
     zoomLevel = value;
-    const zoom = zoomMap[value] ?? 1;
+    const zoom = getZoomLevelFromOption(value);
     localStorage.setItem('qbz-zoom-level', String(zoom));
     try {
       await getCurrentWebview().setZoom(zoom);
