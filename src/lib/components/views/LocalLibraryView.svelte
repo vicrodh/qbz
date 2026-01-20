@@ -190,14 +190,14 @@
       return tracks.length;
     }
     // When in albums view, calculate from filtered albums
-    if (activeTab === 'albums' && albums.length > 0) {
+    if (activeTab === 'albums') {
       return albums.reduce((sum, album) => sum + album.track_count, 0);
     }
     // When in artists view, calculate from filtered artists
-    if (activeTab === 'artists' && artists.length > 0) {
+    if (activeTab === 'artists') {
       return artists.reduce((sum, artist) => sum + artist.track_count, 0);
     }
-    // Fallback to stats if available
+    // Fallback for tracks view when no search results
     return stats ? stats.track_count : 0;
   });
 
