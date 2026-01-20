@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio } from 'lucide-svelte';
   import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -111,6 +111,7 @@
   let tracksLoading = $state(false);
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
+  let isRadioLoading = $state(false);
   let similarArtists = $state<QobuzArtist[]>([]);
   let similarArtistsLoading = $state(false);
   let similarArtistImageErrors = $state<Set<number>>(new Set());
@@ -243,6 +244,44 @@
       isFavorite = wasFavorite; // Rollback on error
     } finally {
       isFavoriteLoading = false;
+    }
+  }
+
+  async function createArtistRadio() {
+    if (isRadioLoading) return;
+
+    isRadioLoading = true;
+
+    try {
+      const sessionId = await invoke<string>('create_artist_radio', {
+        artistId: artist.id,
+        artistName: artist.name
+      });
+      console.log(`[Radio] Artist radio created: ${sessionId}`);
+      // Queue and context are set by the backend command
+    } catch (err) {
+      console.error('Failed to create artist radio:', err);
+      // TODO: Show user-facing error toast if available
+    } finally {
+      isRadioLoading = false;
+    }
+  }
+
+  async function createTrackRadio(track: Track) {
+    try {
+      const trackName = track.title;
+      const trackArtistId = track.performer?.id || artist.id;
+
+      const sessionId = await invoke<string>('create_track_radio', {
+        trackId: track.id,
+        trackName,
+        artistId: trackArtistId
+      });
+      console.log(`[Radio] Track radio created: ${sessionId}`);
+      // Queue and context are set by the backend command
+    } catch (err) {
+      console.error('Failed to create track radio:', err);
+      // TODO: Show user-facing error toast if available
     }
   }
 
@@ -636,6 +675,14 @@
           {:else}
             <Heart size={24} />
           {/if}
+        </button>
+        <button
+          class="radio-btn"
+          onclick={createArtistRadio}
+          disabled={isRadioLoading}
+          title="Start Artist Radio"
+        >
+          <Radio size={24} />
         </button>
       </div>
       <div class="artist-stats">
@@ -1245,6 +1292,31 @@
   }
 
   .favorite-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .radio-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: all 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .radio-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+  }
+
+  .radio-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }
