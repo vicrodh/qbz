@@ -48,6 +48,10 @@
     onShareSonglink?: () => void;
     onGoToAlbum?: () => void;
     onGoToArtist?: () => void;
+    onDownload?: () => void;
+    isTrackDownloaded?: boolean;
+    onOpenFolder?: () => void;
+    onReDownload?: () => void;
   }
 
   let {
@@ -243,6 +247,10 @@
       onShareSonglink={menuActions?.onShareSonglink}
       onGoToAlbum={menuActions?.onGoToAlbum}
       onGoToArtist={menuActions?.onGoToArtist}
+      onDownload={menuActions?.onDownload}
+      isTrackDownloaded={menuActions?.isTrackDownloaded}
+      onOpenFolder={menuActions?.onOpenFolder}
+      onReDownload={menuActions?.onReDownload}
     />
   </div>
 </div>
