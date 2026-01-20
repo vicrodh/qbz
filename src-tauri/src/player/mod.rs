@@ -235,14 +235,8 @@ fn extract_audio_metadata(data: &[u8]) -> Result<(u32, u16), String> {
 fn decode_with_fallback(
     data: &[u8],
 ) -> Result<Box<dyn Source<Item = i16> + Send>, String> {
-    if is_isomp4(data) {
-        return decode_with_symphonia(data)
-            .map(|specs| {
-                log::info!("Decoded audio using symphonia fallback (isomp4)");
-                Box::new(specs.samples) as Box<dyn Source<Item = i16> + Send>
-            });
-    }
-
+    // Try rodio's Decoder first (supports ALAC via symphonia-all feature)
+    // This streams instead of decoding everything upfront
     let primary = panic::catch_unwind(AssertUnwindSafe(|| {
         Decoder::new(BufReader::new(Cursor::new(data.to_vec())))
     }));
