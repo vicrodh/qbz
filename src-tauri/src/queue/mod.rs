@@ -164,6 +164,29 @@ impl QueueManager {
 
         // Regenerate shuffle order
         Self::regenerate_shuffle_order_internal(&mut state);
+
+        // CRITICAL FIX: When shuffle is enabled and we have a start_index,
+        // ensure the start_index track is at the BEGINNING of shuffle order
+        // This fixes the bug where shuffle shows incomplete queue
+        if state.shuffle {
+            if let Some(start_idx) = start_index {
+                if start_idx < state.tracks.len() {
+                    // Find where start_idx is in the current shuffle_order
+                    if let Some(pos) = state.shuffle_order.iter().position(|&x| x == start_idx) {
+                        // Move it to the front by swapping
+                        state.shuffle_order.swap(0, pos);
+                        // Set shuffle position to 0 so we start from the beginning
+                        state.shuffle_position = 0;
+
+                        log::info!(
+                            "Queue: Adjusted shuffle order to start with track index {} (was at position {})",
+                            start_idx,
+                            pos
+                        );
+                    }
+                }
+            }
+        }
     }
 
     /// Clear the queue

@@ -76,13 +76,24 @@ fn resolve_local_artwork(url: &str) -> Option<PathBuf> {
 }
 
 /// Format quality info for notification
-fn format_quality(bit_depth: Option<u32>, sample_rate: Option<u32>) -> String {
+fn format_quality(bit_depth: Option<u32>, sample_rate: Option<f64>) -> String {
     match (bit_depth, sample_rate) {
-        (Some(bits), Some(rate)) if bits >= 24 || rate > 48 => {
-            format!("Hi-Res • {}-bit/{}kHz", bits, rate)
+        (Some(bits), Some(rate)) if bits >= 24 || rate > 48.0 => {
+            // Format sample rate: 44.1 → 44.1, 48.0 → 48, 192.0 → 192
+            let rate_str = if rate.fract() == 0.0 {
+                format!("{}", rate as u32)
+            } else {
+                format!("{}", rate)
+            };
+            format!("Hi-Res • {}-bit/{}kHz", bits, rate_str)
         }
         (Some(bits), Some(rate)) => {
-            format!("CD Quality • {}-bit/{}kHz", bits, rate)
+            let rate_str = if rate.fract() == 0.0 {
+                format!("{}", rate as u32)
+            } else {
+                format!("{}", rate)
+            };
+            format!("CD Quality • {}-bit/{}kHz", bits, rate_str)
         }
         _ => String::new()
     }
@@ -96,7 +107,7 @@ pub fn show_track_notification(
     album: String,
     artwork_url: Option<String>,
     bit_depth: Option<u32>,
-    sample_rate: Option<u32>,
+    sample_rate: Option<f64>,  // Changed from u32 to f64 to support 44.1, 88.2, 176.4, etc.
 ) -> Result<(), String> {
     log::info!("Command: show_track_notification - {} by {}", title, artist);
 
