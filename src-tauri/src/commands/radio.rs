@@ -3,8 +3,9 @@
 //! Creates and manages radio sessions for infinite playback discovery
 
 use tauri::State;
+use tokio::task;
 
-use crate::api::Track;
+use crate::api::{QobuzClient, Track};
 use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
 use crate::queue::QueueTrack;
 use crate::radio_engine::{BuildRadioOptions, RadioEngine, RadioPoolBuilder};
@@ -22,42 +23,51 @@ pub async fn create_artist_radio(
 ) -> Result<String, String> {
     log::info!("[Radio] Creating artist radio for: {} (ID: {})", artist_name, artist_id);
 
-    // Get QobuzClient
+    // Clone client for use in builder
+    let client = state.client.lock().await.clone();
+
+    // Build radio pool in async context (RadioPoolBuilder needs client for API calls)
+    let session_id = task::spawn_blocking(move || -> Result<String, String> {
+        let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+        let builder = RadioPoolBuilder::new(&radio_db, &client, BuildRadioOptions::default());
+
+        // This is async but we're in spawn_blocking, so we need to use tokio runtime
+        let rt = tokio::runtime::Handle::current();
+        let session = rt.block_on(builder.create_artist_radio(artist_id))?;
+        Ok(session.id)
+    })
+    .await
+    .map_err(|e| format!("Radio task failed: {}", e))??;
+
+    log::info!("[Radio] Artist radio session created: {}", session_id);
+
+    // Get client again for fetching tracks
     let client = state.client.lock().await;
 
-    // Initialize radio engine and create session
-    let (session_id, track_ids) = {
-        let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
-        let radio_engine = RadioEngine::new(radio_db);
+    // Generate track IDs from radio engine
+    let track_ids = task::spawn_blocking({
+        let session_id = session_id.clone();
+        move || -> Result<Vec<u64>, String> {
+            let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+            let radio_engine = RadioEngine::new(radio_db);
 
-        // Create radio session
-        let builder = RadioPoolBuilder::new(
-            radio_engine.db(),
-            &client,
-            BuildRadioOptions::default(),
-        );
-
-        let session = builder.create_artist_radio(artist_id).await?;
-        let session_id = session.id.clone();
-
-        log::info!("[Radio] Artist radio session created: {}", session_id);
-
-        // Generate initial track IDs (before moving client)
-        let mut track_ids = Vec::new();
-        for _ in 0..15 {
-            match radio_engine.next_track(&session_id) {
-                Ok(radio_track) => {
-                    track_ids.push(radio_track.track_id);
-                }
-                Err(e) => {
-                    log::warn!("[Radio] Failed to get next radio track: {}", e);
-                    break;
+            let mut track_ids = Vec::new();
+            for _ in 0..15 {
+                match radio_engine.next_track(&session_id) {
+                    Ok(radio_track) => {
+                        track_ids.push(radio_track.track_id);
+                    }
+                    Err(e) => {
+                        log::warn!("[Radio] Failed to get next radio track: {}", e);
+                        break;
+                    }
                 }
             }
+            Ok(track_ids)
         }
-
-        (session_id, track_ids)
-    }; // RadioDb/RadioEngine dropped here
+    })
+    .await
+    .map_err(|e| format!("Track generation task failed: {}", e))??;
 
     // Fetch full track details from Qobuz
     let mut tracks = Vec::new();
@@ -119,42 +129,51 @@ pub async fn create_track_radio(
         artist_id
     );
 
-    // Get QobuzClient
+    // Clone client for use in builder
+    let client = state.client.lock().await.clone();
+
+    // Build radio pool in async context (RadioPoolBuilder needs client for API calls)
+    let session_id = task::spawn_blocking(move || -> Result<String, String> {
+        let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+        let builder = RadioPoolBuilder::new(&radio_db, &client, BuildRadioOptions::default());
+
+        // This is async but we're in spawn_blocking, so we need to use tokio runtime
+        let rt = tokio::runtime::Handle::current();
+        let session = rt.block_on(builder.create_track_radio(track_id, artist_id))?;
+        Ok(session.id)
+    })
+    .await
+    .map_err(|e| format!("Radio task failed: {}", e))??;
+
+    log::info!("[Radio] Track radio session created: {}", session_id);
+
+    // Get client again for fetching tracks
     let client = state.client.lock().await;
 
-    // Initialize radio engine and create session
-    let (session_id, track_ids) = {
-        let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
-        let radio_engine = RadioEngine::new(radio_db);
+    // Generate track IDs from radio engine
+    let track_ids = task::spawn_blocking({
+        let session_id = session_id.clone();
+        move || -> Result<Vec<u64>, String> {
+            let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+            let radio_engine = RadioEngine::new(radio_db);
 
-        // Create radio session
-        let builder = RadioPoolBuilder::new(
-            radio_engine.db(),
-            &client,
-            BuildRadioOptions::default(),
-        );
-
-        let session = builder.create_track_radio(track_id, artist_id).await?;
-        let session_id = session.id.clone();
-
-        log::info!("[Radio] Track radio session created: {}", session_id);
-
-        // Generate initial track IDs (before moving client)
-        let mut track_ids = Vec::new();
-        for _ in 0..15 {
-            match radio_engine.next_track(&session_id) {
-                Ok(radio_track) => {
-                    track_ids.push(radio_track.track_id);
-                }
-                Err(e) => {
-                    log::warn!("[Radio] Failed to get next radio track: {}", e);
-                    break;
+            let mut track_ids = Vec::new();
+            for _ in 0..15 {
+                match radio_engine.next_track(&session_id) {
+                    Ok(radio_track) => {
+                        track_ids.push(radio_track.track_id);
+                    }
+                    Err(e) => {
+                        log::warn!("[Radio] Failed to get next radio track: {}", e);
+                        break;
+                    }
                 }
             }
+            Ok(track_ids)
         }
-
-        (session_id, track_ids)
-    }; // RadioDb/RadioEngine dropped here
+    })
+    .await
+    .map_err(|e| format!("Track generation task failed: {}", e))??;
 
     // Fetch full track details from Qobuz
     let mut tracks = Vec::new();
@@ -224,7 +243,7 @@ fn track_to_queue_track(track: &Track) -> QueueTrack {
         album,
         duration_secs: track.duration as u64,
         artwork_url,
-        hires: track.hires.unwrap_or(false),
+        hires: track.hires,
         bit_depth: track.maximum_bit_depth,
         sample_rate: track.maximum_sampling_rate,
         is_local: false,

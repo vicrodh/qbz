@@ -22,6 +22,18 @@ pub struct QobuzClient {
     locale: Arc<RwLock<String>>,
 }
 
+impl Clone for QobuzClient {
+    fn clone(&self) -> Self {
+        Self {
+            http: self.http.clone(),
+            tokens: Arc::clone(&self.tokens),
+            session: Arc::clone(&self.session),
+            validated_secret: Arc::clone(&self.validated_secret),
+            locale: Arc::clone(&self.locale),
+        }
+    }
+}
+
 impl QobuzClient {
     /// Create a new client
     pub fn new() -> Result<Self> {
