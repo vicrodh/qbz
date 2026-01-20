@@ -1,19 +1,22 @@
 <script lang="ts">
-  import { Layers } from 'lucide-svelte';
+  import { Layers, Radio } from 'lucide-svelte';
   import { subscribe, getCurrentContext, getContextDisplayInfo } from '$lib/stores/playbackContextStore';
   import { subscribe as subscribePrefs, getCachedPreferences } from '$lib/stores/playbackPreferencesStore';
-  
+
   interface Props {
     size?: number;
     class?: string;
     onClick?: () => void;
   }
-  
+
   let { size = 16, class: className = '', onClick }: Props = $props();
-  
+
   let context = $state(getCurrentContext());
   let displayInfo = $state(context ? getContextDisplayInfo() : null);
   let showIcon = $state(getCachedPreferences().show_context_icon);
+
+  // Check if the current context is radio
+  let isRadio = $derived(context?.type === 'radio');
 
   function handleClick(e: MouseEvent) {
     e.stopPropagation();
@@ -52,12 +55,17 @@
 {#if context && displayInfo && showIcon}
   <button
     class="stack-icon-wrapper {className}"
+    class:radio-active={isRadio}
     onclick={handleClick}
     title={displayInfo ? `Playing from: ${displayInfo}` : undefined}
     aria-label={displayInfo ? `Playing from: ${displayInfo}` : 'Playback context'}
     type="button"
   >
-    <Layers size={size} strokeWidth={2} />
+    {#if isRadio}
+      <Radio size={size} strokeWidth={2} />
+    {:else}
+      <Layers size={size} strokeWidth={2} />
+    {/if}
   </button>
 {/if}
 
@@ -91,5 +99,24 @@
   .stack-icon-wrapper:focus-visible {
     outline: 2px solid var(--accent-primary);
     outline-offset: 2px;
+  }
+
+  /* Radio icon pulse animation */
+  .stack-icon-wrapper.radio-active {
+    animation: radio-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes radio-pulse {
+    0%, 100% {
+      opacity: 0.7;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  .stack-icon-wrapper.radio-active:hover {
+    animation: none;
+    opacity: 1;
   }
 </style>
