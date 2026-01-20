@@ -197,8 +197,9 @@
     if (activeTab === 'artists') {
       return artists.reduce((sum, artist) => sum + artist.track_count, 0);
     }
-    // Fallback for tracks view when no search results
-    return stats ? stats.track_count : 0;
+    // Fallback for tracks view when no search results - calculate from albums
+    // This ensures the counter respects filters even when tracks aren't loaded
+    return albums.reduce((sum, album) => sum + album.track_count, 0);
   });
 
   // Loading state
