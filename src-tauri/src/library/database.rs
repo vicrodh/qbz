@@ -559,6 +559,24 @@ impl LibraryDatabase {
         Ok(folders)
     }
 
+    /// Get paths of all network folders (for offline filtering)
+    pub fn get_network_folder_paths(&self) -> Result<Vec<String>, LibraryError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT path FROM library_folders WHERE is_network = 1")
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| row.get(0))
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let mut folders = Vec::new();
+        for path in rows {
+            folders.push(path.map_err(|e| LibraryError::Database(e.to_string()))?);
+        }
+        Ok(folders)
+    }
+
     /// Get all library folders with full metadata
     pub fn get_folders_with_metadata(&self) -> Result<Vec<LibraryFolder>, LibraryError> {
         let mut stmt = self
@@ -689,8 +707,34 @@ impl LibraryDatabase {
 
     // === Track Management ===
 
-    /// Insert or update a track
+    /// Check if a file path is already registered as a Qobuz download
+    /// Returns true if the file exists with source = 'qobuz_download'
+    pub fn is_qobuz_download_by_path(&self, file_path: &str) -> Result<bool, LibraryError> {
+        let count: i64 = self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM local_tracks WHERE file_path = ?1 AND source = 'qobuz_download'",
+                params![file_path],
+                |row| row.get(0)
+            )
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+        Ok(count > 0)
+    }
+
+    /// Insert or update a track (skips if file is already a Qobuz download)
     pub fn insert_track(&self, track: &LocalTrack) -> Result<i64, LibraryError> {
+        // Don't overwrite Qobuz downloads with scanned data
+        if self.is_qobuz_download_by_path(&track.file_path)? {
+            log::debug!("Skipping track insert - already exists as Qobuz download: {}", track.file_path);
+            // Return the existing ID
+            return self.conn
+                .query_row(
+                    "SELECT id FROM local_tracks WHERE file_path = ?1",
+                    params![track.file_path],
+                    |row| row.get(0)
+                )
+                .map_err(|e| LibraryError::Database(e.to_string()));
+        }
+
         self.conn
             .execute(
                 r#"INSERT OR REPLACE INTO local_tracks

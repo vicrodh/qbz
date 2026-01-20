@@ -230,6 +230,17 @@
     }
   });
 
+  // Reactive effect: reload library when offline state changes
+  let previousOfflineState = $state<boolean | undefined>(undefined);
+  $effect(() => {
+    // Skip the initial mount
+    if (previousOfflineState !== undefined && previousOfflineState !== isOffline) {
+      console.log('Offline state changed to:', isOffline, '- reloading library data');
+      loadLibraryData();
+    }
+    previousOfflineState = isOffline;
+  });
+
   onMount(() => {
     loadLibraryData();
     loadFolders();
@@ -284,7 +295,10 @@
 
       // If not found in loaded albums, we need to fetch album list first
       if (!album) {
-        const allAlbums = await invoke<LocalAlbum[]>('library_get_albums', { includeHidden: false });
+        const allAlbums = await invoke<LocalAlbum[]>('library_get_albums', {
+          includeHidden: false,
+          excludeNetworkFolders: isOffline
+        });
         albums = allAlbums;
         album = allAlbums.find(a => a.id === albumId);
       }
@@ -313,7 +327,10 @@
     error = null;
     try {
       const [albumsResult, statsResult] = await Promise.all([
-        invoke<LocalAlbum[]>('library_get_albums', { includeHidden: false }),
+        invoke<LocalAlbum[]>('library_get_albums', {
+          includeHidden: false,
+          excludeNetworkFolders: isOffline  // Hide network music when offline
+        }),
         invoke<LibraryStats>('library_get_stats')
       ]);
       albums = albumsResult;
@@ -896,7 +913,10 @@
 
   async function loadHiddenAlbums() {
     try {
-      hiddenAlbums = await invoke<LocalAlbum[]>('library_get_albums', { includeHidden: true });
+      hiddenAlbums = await invoke<LocalAlbum[]>('library_get_albums', {
+        includeHidden: true,
+        excludeNetworkFolders: isOffline
+      });
       const visibleAlbumIds = new Set(albums.map(a => a.id));
       hiddenAlbums = hiddenAlbums.filter(a => !visibleAlbumIds.has(a.id));
     } catch (err) {
