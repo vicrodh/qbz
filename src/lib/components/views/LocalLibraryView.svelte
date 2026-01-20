@@ -1892,21 +1892,21 @@
             class:active={activeTab === 'albums'}
             onclick={() => handleTabChange('albums')}
           >
-            Albums ({filteredAlbumCount})
+            Albums
           </button>
           <button
             class="jump-link"
             class:active={activeTab === 'artists'}
             onclick={() => handleTabChange('artists')}
           >
-            Artists ({filteredArtistCount})
+            Artists
           </button>
           <button
             class="jump-link"
             class:active={activeTab === 'tracks'}
             onclick={() => handleTabChange('tracks')}
           >
-            Tracks ({filteredTrackCount})
+            Tracks
           </button>
         </div>
       </div>
@@ -3034,7 +3034,7 @@
     padding: 12px 24px;
     background-color: var(--bg-primary);
     border-bottom: 1px solid var(--bg-tertiary);
-    margin: 0 -24px 16px;
+    margin: -24px -24px 16px;
   }
 
   .jump-nav-left {
