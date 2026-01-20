@@ -354,42 +354,62 @@
    * - Offline manual: Hide network content ONLY if user disabled the setting
    */
   function shouldExcludeNetworkFolders(): boolean {
-    if (!isOffline) return false;
+    try {
+      console.log('[LocalLibrary] shouldExcludeNetworkFolders called, isOffline:', isOffline);
+      if (!isOffline) return false;
 
-    const reason = getOfflineReason();
-    const offlineSettings = getOfflineSettings();
+      const reason = getOfflineReason();
+      const offlineSettings = getOfflineSettings();
+      console.log('[LocalLibrary] Offline reason:', reason, 'Settings:', offlineSettings);
 
-    if (reason === 'no_network') {
-      // No internet connection - always hide network folders
+      if (reason === 'no_network') {
+        // No internet connection - always hide network folders
+        console.log('[LocalLibrary] Excluding network folders (no_network)');
+        return true;
+      }
+
+      if (reason === 'manual_override') {
+        // Manual offline mode - respect user preference
+        const exclude = !offlineSettings.showNetworkFoldersInManualOffline;
+        console.log('[LocalLibrary] Excluding network folders (manual):', exclude);
+        return exclude;
+      }
+
+      // Default: hide network content when offline
+      console.log('[LocalLibrary] Excluding network folders (default)');
       return true;
+    } catch (err) {
+      console.error('[LocalLibrary] Error in shouldExcludeNetworkFolders:', err);
+      return false; // On error, don't filter
     }
-
-    if (reason === 'manual_override') {
-      // Manual offline mode - respect user preference
-      return !offlineSettings.showNetworkFoldersInManualOffline;
-    }
-
-    // Default: hide network content when offline
-    return true;
   }
 
   async function loadLibraryData() {
+    console.log('[LocalLibrary] loadLibraryData START, isOffline:', isOffline);
     loading = true;
     error = null;
     try {
-      const [albumsResult, statsResult] = await Promise.all([
-        invoke<LocalAlbum[]>('library_get_albums', {
-          includeHidden: false,
-          excludeNetworkFolders: shouldExcludeNetworkFolders()
-        }),
-        invoke<LibraryStats>('library_get_stats')
-      ]);
+      const excludeNetwork = shouldExcludeNetworkFolders();
+      console.log('[LocalLibrary] Calling library_get_albums with excludeNetwork:', excludeNetwork);
+
+      const albumsResult = await invoke<LocalAlbum[]>('library_get_albums', {
+        includeHidden: false,
+        excludeNetworkFolders: excludeNetwork
+      });
+      console.log('[LocalLibrary] Received albums:', albumsResult.length);
+
+      console.log('[LocalLibrary] Calling library_get_stats');
+      const statsResult = await invoke<LibraryStats>('library_get_stats');
+      console.log('[LocalLibrary] Received stats:', statsResult);
+
       albums = albumsResult;
       stats = statsResult;
+      console.log('[LocalLibrary] loadLibraryData COMPLETE');
     } catch (err) {
-      console.error('Failed to load library:', err);
+      console.error('[LocalLibrary] Failed to load library:', err);
       error = String(err);
     } finally {
+      console.log('[LocalLibrary] Setting loading = false');
       loading = false;
     }
   }
