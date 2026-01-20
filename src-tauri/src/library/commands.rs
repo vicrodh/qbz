@@ -1461,31 +1461,60 @@ pub async fn library_backfill_downloads(
     let library_db = state.db.lock().await;
 
     for (track_id, title, artist, album, duration_secs, file_path, bit_depth, sample_rate) in downloads {
-        // Check if already in library
-        let exists = library_db
+        // Strategy: Try to match by qobuz_track_id first, then by file_path
+        // This handles both intact downloads and downloads damaged by scanner
+
+        let exists_by_id = library_db
             .track_exists_by_qobuz_id(track_id)
             .unwrap_or(false);
 
-        if exists {
-            // Track exists - try to repair its source marker if it's missing
-            match library_db.repair_qobuz_download_source(track_id) {
+        let exists_by_path = library_db
+            .track_exists_by_path(&file_path)
+            .unwrap_or(false);
+
+        if exists_by_id {
+            // Track exists with correct qobuz_track_id (not damaged)
+            // Check if it just needs source repair
+            match library_db.is_qobuz_download_by_path(&file_path) {
                 Ok(true) => {
-                    log::info!("Repaired source marker for track {}: {}", track_id, title);
-                    report.repaired_tracks += 1;
-                },
-                Ok(false) => {
-                    // Already has correct source, nothing to do
+                    // Already marked as qobuz_download, nothing to do
                     report.skipped_tracks += 1;
                 },
+                Ok(false) => {
+                    // Has qobuz_track_id but lost source marker - unusual case
+                    log::info!("Repairing source for track with intact ID {}: {}", track_id, title);
+                    match library_db.repair_qobuz_download_by_path(track_id, &file_path) {
+                        Ok(true) => report.repaired_tracks += 1,
+                        Ok(false) => report.skipped_tracks += 1,
+                        Err(e) => {
+                            log::warn!("Failed to repair track {}: {}", track_id, e);
+                            report.failed_tracks.push(title);
+                        }
+                    }
+                },
                 Err(e) => {
-                    log::warn!("Failed to repair track {}: {}", track_id, e);
+                    log::warn!("Failed to check download status for {}: {}", track_id, e);
                     report.failed_tracks.push(title);
                 }
             }
             continue;
         }
 
-        // Insert into library with source = 'qobuz_download'
+        if exists_by_path {
+            // Track exists by path but lost qobuz_track_id (damaged by scanner)
+            log::info!("Repairing damaged download (lost ID) {}: {}", track_id, title);
+            match library_db.repair_qobuz_download_by_path(track_id, &file_path) {
+                Ok(true) => report.repaired_tracks += 1,
+                Ok(false) => report.skipped_tracks += 1,
+                Err(e) => {
+                    log::warn!("Failed to repair track by path {}: {}", track_id, e);
+                    report.failed_tracks.push(title);
+                }
+            }
+            continue;
+        }
+
+        // Track doesn't exist - insert as new
         match library_db.insert_qobuz_download_direct(
             track_id,
             &title,

@@ -2005,16 +2005,34 @@ impl LibraryDatabase {
         Ok(count > 0)
     }
 
-    /// Repair the source field for a track that has qobuz_track_id but lost its source marker
+    /// Repair a track by file_path - restores both qobuz_track_id and source
+    /// This handles tracks that were damaged by scanner's INSERT OR REPLACE
     /// Returns true if the track was found and updated
-    pub fn repair_qobuz_download_source(&self, qobuz_track_id: u64) -> Result<bool, LibraryError> {
+    pub fn repair_qobuz_download_by_path(
+        &self,
+        qobuz_track_id: u64,
+        file_path: &str,
+    ) -> Result<bool, LibraryError> {
         let updated = self.conn.execute(
-            "UPDATE local_tracks SET source = 'qobuz_download'
-             WHERE qobuz_track_id = ?1 AND (source IS NULL OR source != 'qobuz_download')",
-            params![qobuz_track_id as i64],
+            "UPDATE local_tracks
+             SET source = 'qobuz_download', qobuz_track_id = ?1
+             WHERE file_path = ?2 AND (source IS NULL OR source != 'qobuz_download')",
+            params![qobuz_track_id as i64, file_path],
         )
-        .map_err(|e| LibraryError::Database(format!("Failed to repair download source: {}", e)))?;
+        .map_err(|e| LibraryError::Database(format!("Failed to repair download by path: {}", e)))?;
         Ok(updated > 0)
+    }
+
+    /// Check if a track exists by file path (for repair matching)
+    pub fn track_exists_by_path(&self, file_path: &str) -> Result<bool, LibraryError> {
+        let count: i64 = self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM local_tracks WHERE file_path = ?1",
+                params![file_path],
+                |row| row.get(0),
+            )
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+        Ok(count > 0)
     }
 
     /// Insert a Qobuz download into the library
