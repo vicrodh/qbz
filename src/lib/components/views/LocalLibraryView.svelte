@@ -166,6 +166,8 @@
   let showGroupMenu = $state(false);
   let artistSearch = $state('');
   let trackSearch = $state('');
+  let trackSearchOpen = $state(false);
+  let trackSearchInputEl: HTMLInputElement | undefined;
   type TrackGroupMode = 'album' | 'artist' | 'name';
   let trackGroupMode = $state<TrackGroupMode>('album');
   let trackGroupingEnabled = $state(false);
@@ -1267,6 +1269,20 @@
     }, 250);
   }
 
+  function toggleTrackSearch() {
+    trackSearchOpen = !trackSearchOpen;
+    if (trackSearchOpen) {
+      // Focus input after it's rendered
+      setTimeout(() => trackSearchInputEl?.focus(), 50);
+    } else {
+      // Clear search when closing
+      trackSearch = '';
+      if (activeTab === 'tracks') {
+        loadTracks('');
+      }
+    }
+  }
+
   function trackSortValue(track: LocalTrack) {
     const disc = track.disc_number ?? 0;
     const trackNumber = track.track_number ?? 0;
@@ -1867,35 +1883,59 @@
       </div>
     {/if}
 
-    <!-- Tabs -->
-    <div class="tabs">
-      <button
-        class="tab"
-        class:active={activeTab === 'albums'}
-        onclick={() => handleTabChange('albums')}
-      >
-        <Disc3 size={16} />
-        <span>Albums</span>
-        <span class="count">({filteredAlbumCount})</span>
-      </button>
-      <button
-        class="tab"
-        class:active={activeTab === 'artists'}
-        onclick={() => handleTabChange('artists')}
-      >
-        <Mic2 size={16} />
-        <span>Artists</span>
-        <span class="count">({filteredArtistCount})</span>
-      </button>
-      <button
-        class="tab"
-        class:active={activeTab === 'tracks'}
-        onclick={() => handleTabChange('tracks')}
-      >
-        <Music size={16} />
-        <span>Tracks</span>
-        <span class="count">({filteredTrackCount})</span>
-      </button>
+    <!-- Tabs Navigation -->
+    <div class="jump-nav">
+      <div class="jump-nav-left">
+        <div class="jump-links">
+          <button
+            class="jump-link"
+            class:active={activeTab === 'albums'}
+            onclick={() => handleTabChange('albums')}
+          >
+            Albums ({filteredAlbumCount})
+          </button>
+          <button
+            class="jump-link"
+            class:active={activeTab === 'artists'}
+            onclick={() => handleTabChange('artists')}
+          >
+            Artists ({filteredArtistCount})
+          </button>
+          <button
+            class="jump-link"
+            class:active={activeTab === 'tracks'}
+            onclick={() => handleTabChange('tracks')}
+          >
+            Tracks ({filteredTrackCount})
+          </button>
+        </div>
+      </div>
+      <div class="page-search" class:open={trackSearchOpen}>
+        {#if trackSearchOpen}
+          <div class="search-input-container">
+            <input
+              type="text"
+              class="search-input-sticky"
+              placeholder="Search tracks..."
+              bind:value={trackSearch}
+              bind:this={trackSearchInputEl}
+              oninput={scheduleTrackSearch}
+              onkeydown={(e) => {
+                if (e.key === 'Escape') toggleTrackSearch();
+              }}
+            />
+            <div class="search-controls">
+              <button class="search-close-btn" onclick={toggleTrackSearch} title="Close search">
+                <X size={16} />
+              </button>
+            </div>
+          </div>
+        {:else}
+          <button class="search-toggle" onclick={toggleTrackSearch} title="Search tracks">
+            <Search size={18} />
+          </button>
+        {/if}
+      </div>
     </div>
 
     <!-- Content -->
@@ -2209,22 +2249,6 @@
           </div>
         {:else}
           <div class="track-controls">
-            <div class="search-container">
-              <Search size={16} class="search-icon" />
-              <input
-                type="text"
-                placeholder="Search tracks, albums, artists..."
-                bind:value={trackSearch}
-                oninput={scheduleTrackSearch}
-                class="search-input"
-              />
-              {#if trackSearch}
-                <button class="clear-search" onclick={() => { trackSearch = ''; loadTracks(''); }}>
-                  <X size={14} />
-                </button>
-              {/if}
-            </div>
-
             <div class="dropdown-container">
               <button
                 class="control-btn"
@@ -2998,42 +3022,137 @@
   }
 
   /* Tabs */
-  .tabs {
+  /* Sticky Navigation */
+  .jump-nav {
+    position: sticky;
+    top: 0;
+    z-index: 4;
     display: flex;
-    gap: 8px;
-    margin-bottom: 24px;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 24px;
+    background-color: var(--bg-primary);
     border-bottom: 1px solid var(--bg-tertiary);
-    padding-bottom: 16px;
+    margin: 0 -24px 16px;
   }
 
-  .tab {
+  .jump-nav-left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .jump-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+
+  .jump-link {
+    padding: 4px 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 150ms ease, border-color 150ms ease;
+  }
+
+  .jump-link:hover {
+    color: var(--text-secondary);
+  }
+
+  .jump-link.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-primary);
+  }
+
+  /* Page Search in Nav */
+  .page-search {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: none;
+  }
+
+  .search-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
     border: none;
-    border-radius: 8px;
+    background: transparent;
     color: var(--text-muted);
-    font-size: 14px;
-    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: color 150ms ease;
+  }
+
+  .search-toggle:hover {
+    color: var(--text-primary);
+  }
+
+  .search-input-container {
+    display: flex;
+    align-items: center;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 6px;
+    padding: 0 4px 0 12px;
+    animation: slideInFromRight 200ms ease-out;
+  }
+
+  @keyframes slideInFromRight {
+    from {
+      opacity: 0;
+      transform: translateX(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  .search-input-sticky {
+    width: 180px;
+    padding: 6px 0;
+    border: none;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    outline: none;
+  }
+
+  .search-input-sticky::placeholder {
+    color: var(--text-muted);
+  }
+
+  .search-controls {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    margin-left: 8px;
+  }
+
+  .search-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 4px;
     cursor: pointer;
     transition: all 150ms ease;
   }
 
-  .tab:hover {
+  .search-close-btn:hover {
     color: var(--text-primary);
     background-color: var(--bg-tertiary);
-  }
-
-  .tab.active {
-    color: var(--text-primary);
-    background-color: var(--bg-tertiary);
-  }
-
-  .tab .count {
-    font-size: 12px;
-    opacity: 0.7;
   }
 
   /* Album Controls */
