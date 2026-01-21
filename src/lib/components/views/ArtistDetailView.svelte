@@ -6,7 +6,7 @@
   import TrackMenu from '../TrackMenu.svelte';
   import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { togglePlay } from '$lib/stores/playerStore';
-  import { getQueue } from '$lib/stores/queueStore';
+  import { getQueue, syncQueueState } from '$lib/stores/queueStore';
   import { tick } from 'svelte';
 
   interface Track {
@@ -260,11 +260,16 @@
       });
       console.log(`[Radio] Artist radio created: ${sessionId}`);
 
+      // Sync queue state from backend
+      await syncQueueState();
+
       // Get the first track from queue and start playback
       const queue = getQueue();
+      console.log(`[Radio] Queue length: ${queue.length}, onTrackPlay defined: ${!!onTrackPlay}`);
 
       if (queue.length > 0 && onTrackPlay) {
         const firstTrack = queue[0];
+        console.log(`[Radio] First track:`, firstTrack);
         // Start playback using the onTrackPlay callback
         onTrackPlay({
           id: Number(firstTrack.id),
@@ -279,6 +284,8 @@
           samplingRate: firstTrack.sample_rate ?? undefined,
         });
         console.log(`[Radio] Started playback of track ${firstTrack.id}`);
+      } else {
+        console.log(`[Radio] Cannot start playback - queue: ${queue.length}, onTrackPlay: ${!!onTrackPlay}`);
       }
     } catch (err) {
       console.error('Failed to create artist radio:', err);
