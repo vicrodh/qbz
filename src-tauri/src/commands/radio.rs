@@ -51,11 +51,13 @@ pub async fn create_artist_radio(
             let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
             let radio_engine = RadioEngine::new(radio_db);
 
-            let mut track_ids = Vec::new();
-            for _ in 0..15 {
+            let mut tracks_with_distance = Vec::new();
+
+            // Generate more tracks to increase chance of finding seed artist track
+            for _ in 0..20 {
                 match radio_engine.next_track(&session_id) {
                     Ok(radio_track) => {
-                        track_ids.push(radio_track.track_id);
+                        tracks_with_distance.push((radio_track.track_id, radio_track.distance));
                     }
                     Err(e) => {
                         log::warn!("[Radio] Failed to get next radio track: {}", e);
@@ -63,7 +65,19 @@ pub async fn create_artist_radio(
                     }
                 }
             }
-            Ok(track_ids)
+
+            // Find first track from seed artist (distance 0) and move to front
+            if let Some(seed_idx) = tracks_with_distance.iter().position(|(_, dist)| *dist == 0) {
+                if seed_idx != 0 {
+                    tracks_with_distance.swap(0, seed_idx);
+                    log::info!("[Radio] Moved seed artist track to position 0 (was at position {})", seed_idx);
+                }
+            } else {
+                log::warn!("[Radio] No seed artist track found in first 20 tracks");
+            }
+
+            // Take first 15 tracks
+            Ok(tracks_with_distance.into_iter().take(15).map(|(id, _)| id).collect())
         }
     })
     .await
@@ -153,15 +167,18 @@ pub async fn create_track_radio(
     // Generate track IDs from radio engine
     let track_ids = task::spawn_blocking({
         let session_id = session_id.clone();
+        let seed_track_id = track_id;
         move || -> Result<Vec<u64>, String> {
             let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
             let radio_engine = RadioEngine::new(radio_db);
 
-            let mut track_ids = Vec::new();
-            for _ in 0..15 {
+            let mut tracks_with_source = Vec::new();
+
+            // Generate more tracks to find the seed track
+            for _ in 0..20 {
                 match radio_engine.next_track(&session_id) {
                     Ok(radio_track) => {
-                        track_ids.push(radio_track.track_id);
+                        tracks_with_source.push((radio_track.track_id, radio_track.source.clone()));
                     }
                     Err(e) => {
                         log::warn!("[Radio] Failed to get next radio track: {}", e);
@@ -169,7 +186,19 @@ pub async fn create_track_radio(
                     }
                 }
             }
-            Ok(track_ids)
+
+            // Find the seed track itself and move to front
+            if let Some(seed_idx) = tracks_with_source.iter().position(|(id, source)| *id == seed_track_id && source == "seed_track") {
+                if seed_idx != 0 {
+                    tracks_with_source.swap(0, seed_idx);
+                    log::info!("[Radio] Moved seed track to position 0 (was at position {})", seed_idx);
+                }
+            } else {
+                log::warn!("[Radio] Seed track {} not found in first 20 tracks", seed_track_id);
+            }
+
+            // Take first 15 tracks
+            Ok(tracks_with_source.into_iter().take(15).map(|(id, _)| id).collect())
         }
     })
     .await
