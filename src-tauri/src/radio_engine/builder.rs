@@ -31,8 +31,8 @@ impl Default for BuildRadioOptions {
             playlist_limit: 3,
             playlist_track_limit: 200,
 
-            similar_artists_limit: 12,
-            similar_artist_tracks_limit: 40,
+            similar_artists_limit: 8,
+            similar_artist_tracks_limit: 30,
 
             min_pool_size_for_second_degree: 80,
             second_degree_artist_limit: 3,

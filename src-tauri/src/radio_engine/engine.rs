@@ -23,7 +23,7 @@ impl RadioEngine {
 
     fn base_weight(distance: u8) -> u32 {
         match distance {
-            0 => 3,
+            0 => 6,
             1 => 3,
             2 => 1,
             _ => 0,
