@@ -1075,7 +1075,7 @@
         <span class="col-duration">Duration</span>
       </div>
 
-      {#each displayTracks as track, idx (`${track.id}-${downloadStateVersion}`)}
+      {#each displayTracks as track, idx (`${idx}-${track.id}-${downloadStateVersion}`)}
         {@const downloadInfo = track.isLocal ? { status: 'none' as const, progress: 0 } : (getTrackDownloadStatus?.(track.id) ?? { status: 'none' as const, progress: 0 })}
         {@const isActiveTrack = (
           track.isLocal
