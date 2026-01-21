@@ -4,7 +4,7 @@
   import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
-  import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
+  import { consumeContextTrackFocus, setPlaybackContext, getPlaybackContext } from '$lib/stores/playbackContextStore';
   import { togglePlay } from '$lib/stores/playerStore';
   import { getQueue, syncQueueState, playQueueIndex } from '$lib/stores/queueStore';
   import { tick } from 'svelte';
@@ -271,6 +271,9 @@
       radioLoadingMessage = 'Radio function is still experimental...';
       await new Promise(resolve => setTimeout(resolve, 400));
 
+      // Sync context from backend
+      await getPlaybackContext();
+
       // Play first track from queue
       const firstTrack = await playQueueIndex(0);
 
@@ -317,6 +320,9 @@
         artistId: trackArtistId
       });
       console.log(`[Radio] Track radio created: ${sessionId}`);
+
+      // Sync context from backend
+      await getPlaybackContext();
 
       // Play first track from queue
       const firstTrack = await playQueueIndex(0);
