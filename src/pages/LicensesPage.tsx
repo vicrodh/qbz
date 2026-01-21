@@ -63,14 +63,14 @@ export function LicensesPage() {
         </div>
 
         <div className="about-section" style={{ marginTop: 48 }}>
-          <h2 className="section__title">{t('about.title')}</h2>
+          <h2 id="why" className="section__title">{t('about.title')}</h2>
           <div className="about-content" style={{ marginTop: 16 }}>
             <p style={{ whiteSpace: 'pre-line' }}>{t('about.content', { years: getProjectYears() })}</p>
           </div>
 
           <h3 className="feature-card__title" style={{ marginTop: 32 }}>{t('about.donationsTitle')}</h3>
           <p style={{ marginTop: 8 }}>{t('about.donationsContent')}</p>
-          <div className="donation-links" style={{ marginTop: 16, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+          <div className="donation-links" style={{ marginTop: 16, display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'center' }}>
             <a className="btn btn-ghost" href={DONATION_LINKS.kde} target="_blank" rel="noreferrer">
               {t('about.donationLinks.kde')}
             </a>
@@ -79,6 +79,9 @@ export function LicensesPage() {
             </a>
             <a className="btn btn-ghost" href={DONATION_LINKS.arch} target="_blank" rel="noreferrer">
               {t('about.donationLinks.arch')}
+            </a>
+            <a className="btn btn-ghost kofi-link" href="https://ko-fi.com/W7W51SMYGW" target="_blank" rel="noreferrer">
+              Ko-fi
             </a>
           </div>
         </div>

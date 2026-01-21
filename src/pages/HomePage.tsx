@@ -4,7 +4,7 @@ import { DownloadSection } from '../components/DownloadSection'
 import { useApp } from '../lib/appContext'
 import { buildPath } from '../lib/routes'
 
-const CAPABILITY_KEYS = ['audio', 'library', 'playlists', 'desktop', 'casting'] as const
+const CAPABILITY_KEYS = ['audio', 'library', 'playlists', 'desktop', 'casting', 'radio', 'offline'] as const
 
 type CapabilityKey = (typeof CAPABILITY_KEYS)[number]
 
@@ -140,6 +140,8 @@ export function HomePage() {
     playlists: '/assets/icons/playlist.svg',
     desktop: '/assets/icons/linux-desktop.svg',
     casting: '/assets/icons/cast-audio.svg',
+    radio: '/assets/icons/radio-signal.svg',
+    offline: '/assets/icons/offline-small.svg',
   }
 
   const goals = t('goals.items', { returnObjects: true }) as Array<{ title: string; text: string }>
@@ -297,7 +299,10 @@ export function HomePage() {
       <section className="section section--muted">
         <div className="container">
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: 32 }}>
-            <img src="/assets/icons/Tux.svg" alt="Linux Tux mascot - QBZ is Linux first" title="Linux first" style={{ width: 128, height: 'auto', flexShrink: 0 }} />
+            <div style={{ display: 'flex', gap: 16, flexShrink: 0 }}>
+              <img src="/assets/icons/Tux.svg" alt="Linux Tux mascot - QBZ is Linux first" title="Linux first" style={{ width: 128, height: 'auto' }} />
+              <img src="/assets/icons/open-source-color.svg" alt="Open Source" title="Open Source" style={{ height: 128, width: 'auto' }} />
+            </div>
             <div>
               <h2 className="section__title">{t('linuxFirst.title')}</h2>
               <p className="section__subtitle" style={{ maxWidth: 'none' }}>{t('linuxFirst.lead')}</p>

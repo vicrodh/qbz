@@ -52,6 +52,7 @@ type DownloadItem = {
   installCmd?: string
   depsCmd?: string
   helperCmds?: { label: string; cmds: string[] }
+  helperNote?: { label: string; note: string }
 }
 
 const RELEASES_URL = 'https://api.github.com/repos/vicrodh/qbz/releases'
@@ -125,16 +126,6 @@ const getHelperCmds = (type: DownloadItem['type']): { label: string; cmds: strin
       cmds: ['yay -Syu qbz-bin', 'paru -Syu qbz-bin']
     }
   }
-  if (type === 'flatpak') {
-    return {
-      label: 'Audiophile Setup (Bit-Perfect Audio)',
-      cmds: [
-        '# After install, open QBZ → Settings → Audio',
-        '# Select "ALSA Direct" as Audio Backend',
-        '# Note: PipeWire bit-perfect unavailable in Flatpak due to sandbox'
-      ]
-    }
-  }
   return undefined
 }
 
@@ -165,6 +156,10 @@ const mapAssets = (assets: ReleaseAsset[]): DownloadItem[] =>
         installCmd: getInstallCmd(type, asset.name),
         depsCmd: getDepsCmd(type),
         helperCmds: getHelperCmds(type),
+        helperNote: type === 'flatpak' ? {
+          label: 'Audiophile Setup (Bit-Perfect Audio)',
+          note: 'After install, open QBZ → Settings → Audio and select "ALSA Direct" as Audio Backend. Note: PipeWire bit-perfect is unavailable in Flatpak due to sandbox restrictions.'
+        } : undefined,
       }
     })
     .filter((item) => !DISABLED_TYPES.includes(item.type))
@@ -318,6 +313,14 @@ export function DownloadSection() {
                             <CopyButton text={cmd} />
                           </div>
                         ))}
+                      </details>
+                    )}
+                    {item.helperNote && (
+                      <details className="deps-details">
+                        <summary className="deps-summary">{item.helperNote.label}</summary>
+                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 8, lineHeight: 1.5 }}>
+                          {item.helperNote.note}
+                        </p>
                       </details>
                     )}
                     <a className="btn btn-ghost btn-sm" href={item.url} target={item.type === 'aur' ? '_blank' : undefined} rel={item.type === 'aur' ? 'noreferrer' : undefined}>

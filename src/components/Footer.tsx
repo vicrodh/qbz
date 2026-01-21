@@ -27,6 +27,9 @@ export function Footer() {
             <a href="https://github.com/vicrodh/qbz" target="_blank" rel="noreferrer">
               {t('nav.github')}
             </a>
+            <a href="https://ko-fi.com/W7W51SMYGW" target="_blank" rel="noreferrer">
+              Ko-fi
+            </a>
           </div>
         </div>
       </div>

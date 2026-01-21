@@ -117,6 +117,22 @@ export const es = {
           'Keepalive estable para dispositivos.',
         ],
       },
+      radio: {
+        title: 'Radio',
+        bullets: [
+          'Playlists de radio locales y deterministas.',
+          'Experiencia de escucha consistente.',
+          'Transparente y explicable.',
+        ],
+      },
+      offline: {
+        title: 'Modo offline',
+        bullets: [
+          'Funciona sin internet—o por elección.',
+          'Acceso a tu biblioteca local y descargas.',
+          'Escucha ahora, sincroniza después.',
+        ],
+      },
     },
   },
   downloads: {
@@ -246,7 +262,7 @@ export const es = {
 
 Como mucha gente en 2025, integré el uso de agentes de código en mi flujo de trabajo (el real, el que paga las facturas). Esto me hizo pensar en desbloquear este proyecto de mi stack personal. Tomé ideas de los reproductores de música que uso normalmente, features que creo que a gente como yo le gustarían y —sí, si se lo preguntan, "¿Esta app está vibecodeada?"— la respuesta es sí, sin vergüenza. Pero cabe aclarar: soy ingeniero de software, así que he procurado incorporar las mejores prácticas, estructuras de diseño y arquitectura adecuada. Solo la planeación, escritura de prompts, plan de arquitectura y orquestación me tomó un par de semanas. Este proyecto no es un "Hice un nuevo ERP en 3 días sin escribir una sola línea de código". Cada bloque de código ha sido revisado como si se tratara de revisar el código de un becario. No creo en el zero-code, pero tampoco odio el vibecoding. Creo en adaptarse o morir, y que toda herramienta es útil si se usa con responsabilidad. Si tienen curiosidad de qué herramientas fueron usadas: Claude Code, GPT Codex, Copilot y Figma AI me han tenido que tolerar a mí y a mis cambios de humor y de decisiones —se las recomiendo.`,
     donationsTitle: 'Donativos',
-    donationsContent: `Gracias, las ofertas son halagadoras y muy satisfactorias. Pero hay proyectos que lo merecen mucho más que este: KDE Plasma, Neovim y por supuesto Arch Linux (I use Arch BTW). Si has pensado en colaborar con este proyecto, un donativo a nombre de QBZ a esas herramientas sería mucho más apreciado. Por el momento me siento satisfecho con tu feedback y buenos comentarios —me sirven mucho. Ojos frescos siempre son lo mejor para el QA de un desarrollador en solitario.`,
+    donationsContent: `Si deseas apoyar a QBZ, te lo agradezco sinceramente. Dicho esto, hay proyectos que han sido clave en mi flujo de trabajo y merecen reconocimiento: KDE Plasma, Neovim y por supuesto Arch Linux (I use Arch BTW). Considera dividir tu generosidad—o donar a ellos en nombre de QBZ. De cualquier forma, tu feedback y buenos comentarios ya significan mucho. Ojos frescos siempre son lo mejor para el QA de un desarrollador en solitario. Claro, un café no se puede rechazar.`,
     donationLinks: {
       kde: 'KDE Plasma',
       neovim: 'Neovim',
