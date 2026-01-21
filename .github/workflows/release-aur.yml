@@ -13,6 +13,7 @@ on:
 jobs:
   update-aur:
     runs-on: ubuntu-latest
+    needs: []
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,21 +31,57 @@ jobs:
 
       - name: Wait for release assets
         if: github.event_name == 'release'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Waiting 60s for release assets to be available..."
-          sleep 60
+          echo "Waiting for release assets to be available..."
+          MAX_WAIT=600
+          INTERVAL=30
+          ELAPSED=0
 
-      - name: Download release tarball and get checksum
-        id: checksum
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            echo "Checking for release assets (${ELAPSED}s elapsed)..."
+
+            # Check if both tarballs exist
+            AMD64_EXISTS=$(curl -sI "https://github.com/vicrodh/qbz/releases/download/v${VERSION}/qbz_${VERSION}_amd64.tar.gz" | head -n 1 | grep -q "200 OK" && echo "true" || echo "false")
+            AARCH64_EXISTS=$(curl -sI "https://github.com/vicrodh/qbz/releases/download/v${VERSION}/qbz_${VERSION}_aarch64.tar.gz" | head -n 1 | grep -q "200 OK" && echo "true" || echo "false")
+
+            if [ "$AMD64_EXISTS" = "true" ] && [ "$AARCH64_EXISTS" = "true" ]; then
+              echo "Both release assets are available!"
+              break
+            fi
+
+            echo "Waiting for assets... (amd64: $AMD64_EXISTS, aarch64: $AARCH64_EXISTS)"
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+
+          if [ $ELAPSED -ge $MAX_WAIT ]; then
+            echo "Timeout waiting for release assets"
+            exit 1
+          fi
+
+      - name: Download release tarballs and get checksums
+        id: checksums
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          TARBALL_URL="https://github.com/vicrodh/qbz/releases/download/v${VERSION}/qbz_${VERSION}_amd64.tar.gz"
-          echo "Downloading: $TARBALL_URL"
-          curl -fsSL -o /tmp/qbz.tar.gz "$TARBALL_URL"
-          SHA256=$(sha256sum /tmp/qbz.tar.gz | cut -d' ' -f1)
-          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
-          echo "Checksum: $SHA256"
+          # Download x86_64 tarball
+          AMD64_URL="https://github.com/vicrodh/qbz/releases/download/v${VERSION}/qbz_${VERSION}_amd64.tar.gz"
+          echo "Downloading: $AMD64_URL"
+          curl -fsSL -o /tmp/qbz_amd64.tar.gz "$AMD64_URL"
+          SHA256_AMD64=$(sha256sum /tmp/qbz_amd64.tar.gz | cut -d' ' -f1)
+          echo "sha256_amd64=$SHA256_AMD64" >> "$GITHUB_OUTPUT"
+          echo "x86_64 Checksum: $SHA256_AMD64"
+
+          # Download aarch64 tarball
+          AARCH64_URL="https://github.com/vicrodh/qbz/releases/download/v${VERSION}/qbz_${VERSION}_aarch64.tar.gz"
+          echo "Downloading: $AARCH64_URL"
+          curl -fsSL -o /tmp/qbz_aarch64.tar.gz "$AARCH64_URL"
+          SHA256_AARCH64=$(sha256sum /tmp/qbz_aarch64.tar.gz | cut -d' ' -f1)
+          echo "sha256_aarch64=$SHA256_AARCH64" >> "$GITHUB_OUTPUT"
+          echo "aarch64 Checksum: $SHA256_AARCH64"
 
       - name: Setup SSH for AUR
         env:
@@ -65,7 +102,8 @@ jobs:
       - name: Update PKGBUILD
         env:
           VERSION: ${{ steps.version.outputs.version }}
-          SHA256: ${{ steps.checksum.outputs.sha256 }}
+          SHA256_AMD64: ${{ steps.checksums.outputs.sha256_amd64 }}
+          SHA256_AARCH64: ${{ steps.checksums.outputs.sha256_aarch64 }}
         run: |
           cd /tmp/aur-qbz-bin
 
@@ -78,9 +116,11 @@ jobs:
           # Reset pkgrel to 1 for new version
           sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
 
-          # Update checksum
-          sed -i "s/^sha256sums=.*/sha256sums=('${SHA256}')/" PKGBUILD
+          # Update checksums for both architectures
+          sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('${SHA256_AMD64}')/" PKGBUILD
+          sed -i "s/^sha256sums_aarch64=.*/sha256sums_aarch64=('${SHA256_AARCH64}')/" PKGBUILD
 
+          echo "=== Updated PKGBUILD ==="
           cat PKGBUILD
 
       - name: Generate .SRCINFO
