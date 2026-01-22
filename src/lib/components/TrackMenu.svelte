@@ -119,8 +119,9 @@
     await setMenuPosition();
   }
 
-  function handleClickOutside(event: MouseEvent) {
-    const target = event.target as Node;
+  function handleClickOutside(event: Event) {
+    const target = event.target as Node | null;
+    if (!target) return;
     // Check if click is outside both the trigger container and the menu (which is in portal)
     const isOutsideTrigger = menuRef && !menuRef.contains(target);
     const isOutsideMenu = menuEl && !menuEl.contains(target);
@@ -253,12 +254,15 @@
       setMenuPosition();
 
       // Use capture phase so stopPropagation in other UI doesn't prevent close.
+      // Register multiple event types for better cross-platform reliability.
       const outsideListenerOptions: AddEventListenerOptions = { capture: true };
-      document.addEventListener('pointerdown', handleClickOutside as unknown as EventListener, outsideListenerOptions);
+      document.addEventListener('pointerdown', handleClickOutside, outsideListenerOptions);
+      document.addEventListener('mousedown', handleClickOutside, outsideListenerOptions);
+      document.addEventListener('touchstart', handleClickOutside, outsideListenerOptions);
 
       // Auto-close after inactivity when the cursor is not hovering any menu/submenu.
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
-      const idleMs = 20_000;
+      const idleMs = 5_000;
 
       const scheduleIdleClose = () => {
         if (idleTimer) clearTimeout(idleTimer);
@@ -295,7 +299,9 @@
       window.addEventListener('resize', handleResize);
       window.addEventListener('scroll', handleScroll, true);
       return () => {
-        document.removeEventListener('pointerdown', handleClickOutside as unknown as EventListener, outsideListenerOptions);
+        document.removeEventListener('pointerdown', handleClickOutside, outsideListenerOptions);
+        document.removeEventListener('mousedown', handleClickOutside, outsideListenerOptions);
+        document.removeEventListener('touchstart', handleClickOutside, outsideListenerOptions);
         window.removeEventListener('pointermove', onAnyActivity, true);
         window.removeEventListener('wheel', onAnyActivity, true);
         window.removeEventListener('keydown', onAnyActivity, true);
