@@ -524,8 +524,6 @@
     border-top: 9px solid transparent;
     border-bottom: 9px solid transparent;
     pointer-events: none;
-    /* Strong, directional shadow so the caret stays visible over hovered rows */
-    filter: drop-shadow(2px 3px 6px rgba(0, 0, 0, 0.85));
   }
 
   .menu.open-left::after {
@@ -538,7 +536,7 @@
     border-right: 9px solid var(--bg-tertiary);
   }
 
-  /* Subtle outline so the caret remains visible over hovered rows */
+  /* Shadow for caret (only outward, never over the menu) */
   .menu.open-left::before,
   .menu.open-right::before {
     content: '';
@@ -550,16 +548,20 @@
     border-top: 10px solid transparent;
     border-bottom: 10px solid transparent;
     pointer-events: none;
+    opacity: 0.9;
+    filter: blur(2px);
   }
 
   .menu.open-left::before {
-    right: -9px;
-    border-left: 10px solid rgba(255, 255, 255, 0.06);
+    right: -5px;
+    transform: translate(4px, -50%);
+    border-left: 10px solid rgba(0, 0, 0, 0.9);
   }
 
   .menu.open-right::before {
-    left: -9px;
-    border-right: 10px solid rgba(255, 255, 255, 0.06);
+    left: -5px;
+    transform: translate(-4px, -50%);
+    border-right: 10px solid rgba(0, 0, 0, 0.9);
   }
 
   .menu-item {
