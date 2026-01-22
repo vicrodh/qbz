@@ -7,7 +7,7 @@
     ListPlus,
     ListEnd,
     Share2,
-    Download,
+    CloudDownload,
     Link,
     RefreshCw
   } from 'lucide-svelte';
@@ -321,15 +321,15 @@
                   if (downloadOpen) setDownloadSubmenuPosition();
                 }}
               >
-                <Download size={14} />
-                <span>Download album</span>
+                <CloudDownload size={14} />
+                <span>Save album for offline</span>
                 <ChevronRight size={14} class="chevron" />
                 {#if downloadOpen}
                   <div class="submenu" bind:this={downloadSubmenuEl} style={downloadSubmenuStyle}>
                     {#if onReDownloadAlbum}
                       <button class="menu-item" onclick={() => handleAction(onReDownloadAlbum)}>
                         <RefreshCw size={14} />
-                        <span>Re-download album</span>
+                        <span>Refresh album offline copy</span>
                       </button>
                     {/if}
                   </div>
@@ -337,8 +337,8 @@
               </div>
             {:else}
               <button class="menu-item" onclick={() => handleAction(onDownload)}>
-                <Download size={14} />
-                <span>Download album</span>
+                <CloudDownload size={14} />
+                <span>Save album for offline</span>
               </button>
             {/if}
           {/if}

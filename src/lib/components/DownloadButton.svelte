@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Download, Check, Loader, AlertCircle, CloudOff } from 'lucide-svelte';
+  import { CloudDownload, CloudCheck, Loader, AlertCircle, CloudOff } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import {
     subscribe as subscribeOffline,
@@ -55,11 +55,11 @@
       return $t('offline.featureDisabled');
     }
     switch (status) {
-      case 'none': return 'Download for offline';
-      case 'queued': return 'Queued for download';
+      case 'none': return 'Save for offline';
+      case 'queued': return 'Queued for offline';
       case 'downloading': return `Downloading ${progress}%`;
-      case 'ready': return 'Downloaded (click to remove)';
-      case 'failed': return 'Download failed (click to retry)';
+      case 'ready': return 'Available offline (click to remove)';
+      case 'failed': return 'Failed to save for offline (click to retry)';
       default: return '';
     }
   });
@@ -82,7 +82,7 @@
   disabled={isDisabled}
 >
   {#if status === 'ready'}
-    <Check {size} />
+    <CloudCheck {size} />
   {:else if status === 'downloading' || status === 'queued'}
     <div class="progress-ring" style="--progress: {progress}">
       <Loader {size} class="spinning" />
@@ -92,7 +92,7 @@
   {:else if isOffline}
     <CloudOff {size} />
   {:else}
-    <Download {size} />
+    <CloudDownload {size} />
   {/if}
 </button>
 

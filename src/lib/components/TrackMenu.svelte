@@ -13,7 +13,7 @@
     User,
     Link,
     Trash2,
-    Download,
+    CloudDownload,
     RefreshCw,
     Radio
   } from 'lucide-svelte';
@@ -365,21 +365,21 @@
                 if (downloadOpen) setDownloadSubmenuPosition();
               }}
             >
-              <Download size={14} />
-              <span>Download</span>
+              <CloudDownload size={14} />
+              <span>Save for offline</span>
               <ChevronRight size={14} class="chevron" />
               {#if downloadOpen}
                 <div class="submenu" bind:this={downloadSubmenuEl} style={downloadSubmenuStyle}>
                   {#if onReDownload}
                     <button class="menu-item" onclick={() => handleAction(onReDownload)}>
                       <RefreshCw size={14} />
-                      <span>Re-download</span>
+                      <span>Refresh offline copy</span>
                     </button>
                   {/if}
                   {#if onRemoveDownload}
                     <button class="menu-item danger" onclick={() => handleAction(onRemoveDownload)}>
                       <Trash2 size={14} />
-                      <span>Remove download</span>
+                      <span>Remove offline copy</span>
                     </button>
                   {/if}
                 </div>
@@ -387,8 +387,8 @@
             </div>
           {:else}
             <button class="menu-item" onclick={() => handleAction(onDownload)}>
-              <Download size={14} />
-              <span>Download</span>
+              <CloudDownload size={14} />
+              <span>Save for offline</span>
             </button>
           {/if}
         {/if}
