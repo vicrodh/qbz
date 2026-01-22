@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CloudDownload, CloudCheck, Loader, AlertCircle, CloudOff } from 'lucide-svelte';
+  import { CloudDownload, Loader, AlertCircle, CloudOff } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import {
     subscribe as subscribeOffline,
@@ -82,7 +82,7 @@
   disabled={isDisabled}
 >
   {#if status === 'ready'}
-    <CloudCheck {size} />
+    <CloudOff {size} />
   {:else if status === 'downloading' || status === 'queued'}
     <div class="progress-ring" style="--progress: {progress}">
       <Loader {size} class="spinning" />
@@ -126,8 +126,8 @@
     color: var(--success, #22c55e);
   }
 
-  .download-button.ready:hover {
-    color: var(--error, #ef4444);
+  .download-button.ready:hover:not(:disabled) {
+    color: var(--success, #22c55e);
   }
 
   .download-button.failed {
