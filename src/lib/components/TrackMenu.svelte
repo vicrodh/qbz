@@ -18,6 +18,13 @@
     Radio
   } from 'lucide-svelte';
   import { shouldHidePlaylistFeatures } from '$lib/utils/offlineHelpers';
+  import {
+    getActiveTrackMenuId,
+    setActiveTrackMenuId,
+    subscribeActiveTrackMenuId
+  } from '$lib/stores/activeTrackMenu';
+
+  let trackMenuIdCounter = 1;
 
   interface Props {
     onPlayNow?: () => void;
@@ -59,6 +66,8 @@
     onRemoveDownload
   }: Props = $props();
 
+  const menuId = trackMenuIdCounter++;
+
   let isOpen = $state(false);
   let shareOpen = $state(false);
   let downloadOpen = $state(false);
@@ -92,10 +101,21 @@
   const hasNav = $derived(!!(onGoToAlbum || onGoToArtist));
   const hasMenu = $derived(hasPlayback || hasLibrary || hasShare || hasDownload || hasNav);
 
-  function closeMenu() {
+  function closeMenu(options?: { clearActive?: boolean }) {
     isOpen = false;
     shareOpen = false;
     downloadOpen = false;
+    if (options?.clearActive !== false && getActiveTrackMenuId() === menuId) {
+      setActiveTrackMenuId(null);
+    }
+  }
+
+  async function openMenu() {
+    setActiveTrackMenuId(menuId);
+    isOpen = true;
+    shareOpen = false;
+    downloadOpen = false;
+    await setMenuPosition();
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -199,6 +219,15 @@
   }
 
   $effect(() => {
+    const unsubscribe = subscribeActiveTrackMenuId((activeId) => {
+      if (activeId !== menuId && isOpen) {
+        closeMenu({ clearActive: false });
+      }
+    });
+    return unsubscribe;
+  });
+
+  $effect(() => {
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
       const handleResize = () => setMenuPosition();
@@ -231,9 +260,11 @@
       bind:this={triggerRef}
       onclick={(e) => {
         e.stopPropagation();
-        isOpen = !isOpen;
-        shareOpen = false;
-        if (isOpen) setMenuPosition();
+        if (isOpen) {
+          closeMenu();
+        } else {
+          openMenu();
+        }
       }}
       aria-label="Track actions"
     >
