@@ -1110,18 +1110,13 @@
     }
   }
 
-  // Add all album tracks to playlist
-  function handleAddAlbumToPlaylist() {
-    if (!selectedAlbum?.tracks?.length) return;
-
-    const trackIds = selectedAlbum.tracks.map(t => t.id);
-    openAddToPlaylist(trackIds);
-  }
-
   async function addAlbumToPlaylistById(albumId: string) {
     const album = await fetchAlbumDetail(albumId);
+    addAlbumToPlaylist(album);
+  }
+  
+  function addAlbumToPlaylist(album: AlbumDetail | null) {
     if (!album?.tracks?.length) return;
-
     const trackIds = album.tracks.map(t => t.id);
     openAddToPlaylist(trackIds);
   }
@@ -2216,7 +2211,7 @@
           onPlayAllNext={handleAddAlbumToQueueNext}
           onPlayAllLater={handleAddAlbumToQueueLater}
           onAddTrackToPlaylist={(trackId) => openAddToPlaylist([trackId])}
-          onAddAlbumToPlaylist={handleAddAlbumToPlaylist}
+          onAddAlbumToPlaylist={() => addAlbumToPlaylist(selectedAlbum)}
           onTrackDownload={handleTrackDownload}
           onTrackRemoveDownload={handleTrackRemoveDownload}
           onTrackOpenFolder={handleTrackOpenFolder}
