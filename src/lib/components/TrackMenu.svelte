@@ -137,7 +137,10 @@
     const menuRect = menuEl.getBoundingClientRect();
     const padding = 8;
 
-    let left = triggerRect.right - menuRect.width;
+    // Prefer opening to the left of the trigger so the menu doesn't cover the action column
+    // (other context menu triggers / buttons in the same vertical column).
+    const leftPreferred = triggerRect.left - menuRect.width - 10;
+    let left = leftPreferred;
     let top = triggerRect.bottom + 6;
 
     if (left < padding) left = padding;
