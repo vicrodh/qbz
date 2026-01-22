@@ -83,6 +83,7 @@
     onTrackPlayLater?: (track: Track) => void;
     onTrackAddFavorite?: (trackId: number) => void;
     onTrackAddToPlaylist?: (trackId: number) => void;
+    onAddAlbumToPlaylist?: (albumId: string) => void;
     onTrackShareQobuz?: (trackId: number) => void;
     onTrackShareSonglink?: (track: Track) => void;
     onTrackGoToAlbum?: (albumId: string) => void;
@@ -113,6 +114,7 @@
     onTrackPlayLater,
     onTrackAddFavorite,
     onTrackAddToPlaylist,
+    onAddAlbumToPlaylist,
     onTrackShareQobuz,
     onTrackShareSonglink,
     onTrackGoToAlbum,
@@ -626,6 +628,7 @@
                 onPlay={onAlbumPlay ? () => onAlbumPlay(allResults.albums.items[0].id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(allResults.albums.items[0].id) : undefined}
                 onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(allResults.albums.items[0].id) : undefined}
+                onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
                 onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(allResults.albums.items[0].id) : undefined}
                 onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(allResults.albums.items[0].id) : undefined}
                 onDownload={onAlbumDownload ? () => onAlbumDownload(allResults.albums.items[0].id) : undefined}
@@ -757,6 +760,7 @@
                           onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                           onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
                           onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                          onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
                           onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
                           onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
                           onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
@@ -923,6 +927,7 @@
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
               onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+              onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
               onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
               onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
               onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}

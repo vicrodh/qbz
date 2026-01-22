@@ -2175,6 +2175,7 @@
             onTrackPlayLater={queueQobuzTrackLater}
             onTrackAddFavorite={handleAddToFavorites}
             onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+            onAddAlbumToPlaylist={addAlbumToPlaylistById}
             onTrackShareQobuz={shareQobuzTrackLink}
             onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
             onTrackGoToAlbum={handleAlbumClick}
