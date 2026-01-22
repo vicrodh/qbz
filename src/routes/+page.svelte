@@ -1110,6 +1110,14 @@
     }
   }
 
+  // Add all album tracks to playlist
+  function handleAddAlbumToPlaylist() {
+    if (!selectedAlbum?.tracks?.length) return;
+
+    const trackIds = selectedAlbum.tracks.map(t => t.id);
+    openAddToPlaylist(trackIds);
+  }
+
   // Share album Qobuz link
   function shareAlbumQobuzLink() {
     if (!selectedAlbum?.id) return;
@@ -2198,6 +2206,7 @@
           onPlayAllNext={handleAddAlbumToQueueNext}
           onPlayAllLater={handleAddAlbumToQueueLater}
           onAddTrackToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onAddAlbumToPlaylist={handleAddAlbumToPlaylist}
           onTrackDownload={handleTrackDownload}
           onTrackRemoveDownload={handleTrackRemoveDownload}
           onTrackOpenFolder={handleTrackOpenFolder}

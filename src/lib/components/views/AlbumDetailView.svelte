@@ -56,6 +56,7 @@
     onPlayAllNext?: () => void;
     onPlayAllLater?: () => void;
     onAddTrackToPlaylist?: (trackId: number) => void;
+    onAddAlbumToPlaylist?: () => void;
     onTrackDownload?: (track: Track) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
     onTrackOpenFolder?: (trackId: number) => void;
@@ -88,6 +89,7 @@
     onPlayAllNext,
     onPlayAllLater,
     onAddTrackToPlaylist,
+    onAddAlbumToPlaylist,
     onTrackDownload,
     onTrackRemoveDownload,
     onTrackOpenFolder,
@@ -162,6 +164,11 @@
       isFavoriteLoading = false;
     }
   }
+
+  function handleAddAlbumToPlaylist() {
+    if (!album?.tracks?.length) return;
+    onAddAlbumToPlaylist?.();
+  }
 </script>
 
 <div class="album-detail" bind:this={scrollContainer}>
@@ -218,6 +225,7 @@
         <AlbumMenu
           onPlayNext={onPlayAllNext}
           onPlayLater={onPlayAllLater}
+          onAddToPlaylist={onAddAlbumToPlaylist ? handleAddAlbumToPlaylist : undefined}
           onShareQobuz={onShareAlbumQobuz}
           onShareSonglink={onShareAlbumSonglink}
           onDownload={onDownloadAlbum}
