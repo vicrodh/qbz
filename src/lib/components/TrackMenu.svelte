@@ -20,11 +20,10 @@
   import { shouldHidePlaylistFeatures } from '$lib/utils/offlineHelpers';
   import {
     getActiveTrackMenuId,
+    allocateTrackMenuId,
     setActiveTrackMenuId,
     subscribeActiveTrackMenuId
   } from '$lib/stores/activeTrackMenu';
-
-  let trackMenuIdCounter = 1;
 
   interface Props {
     onPlayNow?: () => void;
@@ -66,7 +65,7 @@
     onRemoveDownload
   }: Props = $props();
 
-  const menuId = trackMenuIdCounter++;
+  const menuId = allocateTrackMenuId();
 
   let isOpen = $state(false);
   let shareOpen = $state(false);
