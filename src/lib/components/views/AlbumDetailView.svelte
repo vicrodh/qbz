@@ -58,7 +58,6 @@
     onAddTrackToPlaylist?: (trackId: number) => void;
     onTrackDownload?: (track: Track) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
-    onTrackOpenFolder?: (trackId: number) => void;
     onTrackReDownload?: (track: Track) => void;
     getTrackDownloadStatus?: (trackId: number) => { status: DownloadStatus; progress: number };
     onDownloadAlbum?: () => void;
@@ -90,7 +89,6 @@
     onAddTrackToPlaylist,
     onTrackDownload,
     onTrackRemoveDownload,
-    onTrackOpenFolder,
     onTrackReDownload,
     getTrackDownloadStatus,
     onDownloadAlbum,
@@ -275,8 +273,8 @@
             onGoToArtist: album.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(album.artistId!) : undefined,
             onDownload: onTrackDownload ? () => onTrackDownload(track) : undefined,
             isTrackDownloaded,
-            onOpenFolder: isTrackDownloaded && onTrackOpenFolder ? () => onTrackOpenFolder(track.id) : undefined,
-            onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(track) : undefined
+            onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(track) : undefined,
+            onRemoveDownload: isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined
           }}
         />
       {/each}

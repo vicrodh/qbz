@@ -88,7 +88,7 @@
     onTrackGoToAlbum?: (albumId: string) => void;
     onTrackGoToArtist?: (artistId: number) => void;
     onTrackDownload?: (track: Track) => void;
-    onTrackOpenFolder?: (trackId: number) => void;
+    onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: Track) => void;
     checkTrackDownloaded?: (trackId: number) => boolean;
     onArtistClick?: (artistId: number) => void;
@@ -118,7 +118,7 @@
     onTrackGoToAlbum,
     onTrackGoToArtist,
     onTrackDownload,
-    onTrackOpenFolder,
+    onTrackRemoveDownload,
     onTrackReDownload,
     checkTrackDownloaded,
     onArtistClick,
@@ -897,8 +897,8 @@
                         onGoToArtist={track.performer?.id && onTrackGoToArtist ? (() => { const artistId = track.performer!.id!; return () => onTrackGoToArtist(artistId); })() : undefined}
                         onDownload={onTrackDownload ? () => onTrackDownload(track) : undefined}
                         isTrackDownloaded={isTrackDownloaded}
-                        onOpenFolder={isTrackDownloaded && onTrackOpenFolder ? () => onTrackOpenFolder(track.id) : undefined}
                         onReDownload={isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(track) : undefined}
+                        onRemoveDownload={isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
                       />
                     </div>
                   </div>
@@ -1052,8 +1052,8 @@
                   onGoToArtist={track.performer?.id && onTrackGoToArtist ? (() => { const artistId = track.performer!.id!; return () => onTrackGoToArtist(artistId); })() : undefined}
                   onDownload={onTrackDownload ? () => onTrackDownload(track) : undefined}
                   isTrackDownloaded={isTrackDownloaded}
-                  onOpenFolder={isTrackDownloaded && onTrackOpenFolder ? () => onTrackOpenFolder(track.id) : undefined}
                   onReDownload={isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(track) : undefined}
+                  onRemoveDownload={isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
                 />
               </div>
             </div>

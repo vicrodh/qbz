@@ -69,7 +69,7 @@
     onTrackGoToAlbum?: (albumId: string) => void;
     onTrackGoToArtist?: (artistId: number) => void;
     onTrackDownload?: (track: DisplayTrack) => void;
-    onTrackOpenFolder?: (trackId: number) => void;
+    onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
     checkTrackDownloaded?: (trackId: number) => boolean;
     activeTrackId?: number | null;
@@ -99,7 +99,7 @@
     onTrackGoToAlbum,
     onTrackGoToArtist,
     onTrackDownload,
-    onTrackOpenFolder,
+    onTrackRemoveDownload,
     onTrackReDownload,
     checkTrackDownloaded,
     activeTrackId = null,
@@ -827,8 +827,8 @@
                   onGoToArtist: track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
                   onDownload: onTrackDownload ? () => onTrackDownload(track) : undefined,
                   isTrackDownloaded,
-                  onOpenFolder: isTrackDownloaded && onTrackOpenFolder ? () => onTrackOpenFolder(track.id) : undefined,
-                  onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(track) : undefined
+                  onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(track) : undefined,
+                  onRemoveDownload: isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined
                 }}
               />
             {/each}

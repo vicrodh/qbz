@@ -75,7 +75,6 @@
     onTrackGoToArtist?: (artistId: number) => void;
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
-    onTrackOpenFolder?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
     getTrackDownloadStatus?: (trackId: number) => { status: DownloadStatus; progress: number };
     onPlaylistSelect?: (playlistId: number) => void;
@@ -126,7 +125,6 @@
     onTrackGoToArtist,
     onTrackDownload,
     onTrackRemoveDownload,
-    onTrackOpenFolder,
     onTrackReDownload,
     getTrackDownloadStatus,
     onPlaylistSelect,
@@ -1116,8 +1114,8 @@
                         onGoToArtist: track.performer?.id && onTrackGoToArtist ? () => onTrackGoToArtist(track.performer!.id!) : undefined,
                         onDownload: onTrackDownload ? () => onTrackDownload(displayTrack) : undefined,
                         isTrackDownloaded,
-                        onOpenFolder: isTrackDownloaded && onTrackOpenFolder ? () => onTrackOpenFolder(track.id) : undefined,
-                        onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(displayTrack) : undefined
+                        onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(displayTrack) : undefined,
+                        onRemoveDownload: isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined
                       }}
                     />
                   {/each}
@@ -1172,8 +1170,8 @@
                 onGoToArtist: track.performer?.id && onTrackGoToArtist ? () => onTrackGoToArtist(track.performer!.id!) : undefined,
                 onDownload: onTrackDownload ? () => onTrackDownload(displayTrack) : undefined,
                 isTrackDownloaded,
-                onOpenFolder: isTrackDownloaded && onTrackOpenFolder ? () => onTrackOpenFolder(track.id) : undefined,
-                onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(displayTrack) : undefined
+                onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(displayTrack) : undefined,
+                onRemoveDownload: isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined
               }}
             />
           {/each}

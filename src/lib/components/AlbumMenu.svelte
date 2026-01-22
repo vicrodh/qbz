@@ -9,7 +9,6 @@
     Share2,
     Download,
     Link,
-    FolderOpen,
     RefreshCw
   } from 'lucide-svelte';
 
@@ -33,7 +32,7 @@
     onDownload,
     onOpenChange,
     isAlbumFullyDownloaded = false,
-    onOpenContainingFolder,
+    onOpenContainingFolder: _onOpenContainingFolder,
     onReDownloadAlbum
   }: Props = $props();
 
@@ -327,12 +326,6 @@
                 <ChevronRight size={14} class="chevron" />
                 {#if downloadOpen}
                   <div class="submenu" bind:this={downloadSubmenuEl} style={downloadSubmenuStyle}>
-                    {#if onOpenContainingFolder}
-                      <button class="menu-item" onclick={() => handleAction(onOpenContainingFolder)}>
-                        <FolderOpen size={14} />
-                        <span>Open containing folder</span>
-                      </button>
-                    {/if}
                     {#if onReDownloadAlbum}
                       <button class="menu-item" onclick={() => handleAction(onReDownloadAlbum)}>
                         <RefreshCw size={14} />

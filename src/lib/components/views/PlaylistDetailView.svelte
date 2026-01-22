@@ -128,7 +128,6 @@
     onTrackGoToArtist?: (artistId: number) => void;
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
-    onTrackOpenFolder?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
     getTrackDownloadStatus?: (trackId: number) => { status: DownloadStatus; progress: number };
     downloadStateVersion?: number;
@@ -157,7 +156,6 @@
     onTrackGoToArtist,
     onTrackDownload,
     onTrackRemoveDownload,
-    onTrackOpenFolder,
     onTrackReDownload,
     getTrackDownloadStatus,
     downloadStateVersion,
@@ -1121,8 +1119,8 @@
               onGoToArtist: !track.isLocal && track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
               onDownload: !track.isLocal && onTrackDownload ? () => onTrackDownload(track) : undefined,
               isTrackDownloaded: !track.isLocal ? downloadInfo.status === 'ready' : false,
-              onOpenFolder: !track.isLocal && downloadInfo.status === 'ready' && onTrackOpenFolder ? () => onTrackOpenFolder(track.id) : undefined,
-              onReDownload: !track.isLocal && downloadInfo.status === 'ready' && onTrackReDownload ? () => onTrackReDownload(track) : undefined
+              onReDownload: !track.isLocal && downloadInfo.status === 'ready' && onTrackReDownload ? () => onTrackReDownload(track) : undefined,
+              onRemoveDownload: !track.isLocal && downloadInfo.status === 'ready' && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined
             } : {}}
           />
         </div>

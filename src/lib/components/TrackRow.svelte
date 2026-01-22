@@ -50,8 +50,8 @@
     onGoToArtist?: () => void;
     onDownload?: () => void;
     isTrackDownloaded?: boolean;
-    onOpenFolder?: () => void;
     onReDownload?: () => void;
+    onRemoveDownload?: () => void;
   }
 
   let {
@@ -249,8 +249,8 @@
       onGoToArtist={menuActions?.onGoToArtist}
       onDownload={menuActions?.onDownload}
       isTrackDownloaded={menuActions?.isTrackDownloaded}
-      onOpenFolder={menuActions?.onOpenFolder}
       onReDownload={menuActions?.onReDownload}
+      onRemoveDownload={menuActions?.onRemoveDownload ?? onRemoveDownload}
     />
   </div>
 </div>

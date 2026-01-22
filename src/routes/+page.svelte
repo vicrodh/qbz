@@ -2127,8 +2127,8 @@
             onTrackGoToAlbum={handleAlbumClick}
             onTrackGoToArtist={handleArtistClick}
             onTrackDownload={handleDisplayTrackDownload}
-            onTrackOpenFolder={handleTrackOpenFolder}
             onTrackReDownload={handleDisplayTrackDownload}
+            onTrackRemoveDownload={handleTrackRemoveDownload}
             checkTrackDownloaded={checkTrackDownloaded}
             activeTrackId={currentTrack?.id ?? null}
             isPlaybackActive={isPlaying}
@@ -2163,8 +2163,8 @@
             onTrackGoToAlbum={handleAlbumClick}
             onTrackGoToArtist={handleArtistClick}
             onTrackDownload={handleDisplayTrackDownload}
-            onTrackOpenFolder={handleTrackOpenFolder}
             onTrackReDownload={handleDisplayTrackDownload}
+            onTrackRemoveDownload={handleTrackRemoveDownload}
             checkTrackDownloaded={checkTrackDownloaded}
             onArtistClick={handleArtistClick}
             activeTrackId={currentTrack?.id ?? null}
@@ -2201,7 +2201,6 @@
           onAddTrackToPlaylist={(trackId) => openAddToPlaylist([trackId])}
           onTrackDownload={handleTrackDownload}
           onTrackRemoveDownload={handleTrackRemoveDownload}
-          onTrackOpenFolder={handleTrackOpenFolder}
           onTrackReDownload={handleTrackReDownload}
           getTrackDownloadStatus={getTrackDownloadStatus}
           onDownloadAlbum={handleDownloadAlbum}
@@ -2269,7 +2268,6 @@
           onTrackGoToArtist={handleArtistClick}
           onTrackDownload={handleDisplayTrackDownload}
           onTrackRemoveDownload={handleTrackRemoveDownload}
-          onTrackOpenFolder={handleTrackOpenFolder}
           onTrackReDownload={handleDisplayTrackDownload}
           getTrackDownloadStatus={getTrackDownloadStatus}
           {downloadStateVersion}
@@ -2317,7 +2315,6 @@
             onTrackGoToArtist={handleArtistClick}
             onTrackDownload={handleDisplayTrackDownload}
             onTrackRemoveDownload={handleTrackRemoveDownload}
-            onTrackOpenFolder={handleTrackOpenFolder}
             onTrackReDownload={handleDisplayTrackDownload}
             getTrackDownloadStatus={getTrackDownloadStatus}
             onPlaylistSelect={selectPlaylist}

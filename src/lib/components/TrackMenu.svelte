@@ -14,7 +14,6 @@
     Link,
     Trash2,
     Download,
-    FolderOpen,
     RefreshCw,
     Radio
   } from 'lucide-svelte';
@@ -36,8 +35,8 @@
     onGoToArtist?: () => void;
     onDownload?: () => void;
     isTrackDownloaded?: boolean;
-    onOpenFolder?: () => void;
     onReDownload?: () => void;
+    onRemoveDownload?: () => void;
   }
 
   let {
@@ -56,8 +55,8 @@
     onGoToArtist,
     onDownload,
     isTrackDownloaded = false,
-    onOpenFolder,
-    onReDownload
+    onReDownload,
+    onRemoveDownload
   }: Props = $props();
 
   let isOpen = $state(false);
@@ -371,16 +370,16 @@
               <ChevronRight size={14} class="chevron" />
               {#if downloadOpen}
                 <div class="submenu" bind:this={downloadSubmenuEl} style={downloadSubmenuStyle}>
-                  {#if onOpenFolder}
-                    <button class="menu-item" onclick={() => handleAction(onOpenFolder)}>
-                      <FolderOpen size={14} />
-                      <span>Open containing folder</span>
-                    </button>
-                  {/if}
                   {#if onReDownload}
                     <button class="menu-item" onclick={() => handleAction(onReDownload)}>
                       <RefreshCw size={14} />
                       <span>Re-download</span>
+                    </button>
+                  {/if}
+                  {#if onRemoveDownload}
+                    <button class="menu-item danger" onclick={() => handleAction(onRemoveDownload)}>
+                      <Trash2 size={14} />
+                      <span>Remove download</span>
                     </button>
                   {/if}
                 </div>
