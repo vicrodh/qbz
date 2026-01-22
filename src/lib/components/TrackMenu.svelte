@@ -292,7 +292,6 @@
 
     {#if isOpen}
       <div class="menu" bind:this={menuEl} style={menuStyle} use:portal>
-        <div class="menu-arrow" aria-hidden="true"></div>
         {#if hasPlayback}
           {#if onPlayNow}
             <button class="menu-item" onclick={() => handleAction(onPlayNow)}>
@@ -504,23 +503,29 @@
     overflow: visible;
   }
 
-  .menu-arrow {
+  /* Caret outside the menu pointing at the trigger */
+  .menu.open-left::after,
+  .menu.open-right::after {
+    content: '';
     position: absolute;
     top: var(--arrow-top, 16px);
-    width: 10px;
-    height: 10px;
-    background: var(--bg-tertiary);
-    transform: translateY(-50%) rotate(45deg);
+    transform: translateY(-50%);
+    width: 0;
+    height: 0;
+    border-top: 7px solid transparent;
+    border-bottom: 7px solid transparent;
     pointer-events: none;
-    box-shadow: -2px 2px 10px rgba(0, 0, 0, 0.18);
+    filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.25));
   }
 
-  .menu.open-left .menu-arrow {
-    right: -5px;
+  .menu.open-left::after {
+    right: -7px;
+    border-left: 7px solid var(--bg-tertiary);
   }
 
-  .menu.open-right .menu-arrow {
-    left: -5px;
+  .menu.open-right::after {
+    left: -7px;
+    border-right: 7px solid var(--bg-tertiary);
   }
 
   .menu-item {
