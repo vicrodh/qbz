@@ -1118,6 +1118,14 @@
     openAddToPlaylist(trackIds);
   }
 
+  async function addAlbumToPlaylistById(albumId: string) {
+    const album = await fetchAlbumDetail(albumId);
+    if (!album?.tracks?.length) return;
+
+    const trackIds = album.tracks.map(t => t.id);
+    openAddToPlaylist(trackIds);
+  }
+
   // Share album Qobuz link
   function shareAlbumQobuzLink() {
     if (!selectedAlbum?.id) return;
@@ -2130,6 +2138,7 @@
             onTrackPlayNext={queueQobuzTrackNext}
             onTrackPlayLater={queueQobuzTrackLater}
             onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+            onAddAlbumToPlaylist={addAlbumToPlaylistById}
             onTrackShareQobuz={shareQobuzTrackLink}
             onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
             onTrackGoToAlbum={handleAlbumClick}
