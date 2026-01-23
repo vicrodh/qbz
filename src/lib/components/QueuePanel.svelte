@@ -145,11 +145,9 @@
       .slice(0, displayCount);
   });
 
-  // The real remaining count is queueTotalTracks minus current track (if playing)
-  // queueTotalTracks from backend includes all tracks in queue
-  const realRemainingTracks = $derived(currentTrack ? Math.max(0, queueTotalTracks - 1) : queueTotalTracks);
+  // queueTotalTracks now represents the actual remaining tracks from backend
   const displayedTracks = $derived(Math.min(filteredTracks.length, displayCount));
-  const hasMoreTracks = $derived(!searchQuery && (upcomingTracks.length > displayCount || realRemainingTracks > upcomingTracks.length));
+  const hasMoreTracks = $derived(!searchQuery && (upcomingTracks.length > displayCount || queueTotalTracks > upcomingTracks.length));
   const canDrag = $derived(!searchQuery.trim());
 
   function loadMore() {
@@ -282,7 +280,7 @@
         {#if upcomingTracks.length > 0}
           <div class="section up-next-section">
             <div class="section-label">
-              {$t('player.upNext').toUpperCase()} ({displayedTracks} {$t('player.ofTotal')} {realRemainingTracks})
+              {$t('player.upNext').toUpperCase()} ({displayedTracks} {$t('player.ofTotal')} {infinitePlayEnabled ? '∞' : queueTotalTracks})
             </div>
             <div class="tracks-list">
               {#each filteredTracks as track, index}

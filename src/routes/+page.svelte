@@ -331,6 +331,7 @@
   let repeatMode = $state<RepeatMode>('off');
   let queue = $state<QueueTrack[]>([]);
   let queueTotalTracks = $state(0);
+  let queueRemainingTracks = $state(0); // Actual remaining tracks (total - current_index - 1)
   let historyTracks = $state<QueueTrack[]>([]);
   let infinitePlayEnabled = $state(false);
 
@@ -2126,21 +2127,30 @@
     };
   });
 
-  // Sync queue state when opening queue panel (including history)
+  // Sync queue state when opening queue panel (including history and remaining count)
   $effect(() => {
     if (isQueueOpen) {
       syncQueueState();
-      // Also fetch history from backend
+      // Also fetch history and calculate remaining tracks from backend
       getBackendQueueState().then((state) => {
-        if (state?.history) {
-          historyTracks = state.history.map(t => ({
-            id: String(t.id),
-            artwork: t.artwork_url || '',
-            title: t.title,
-            artist: t.artist,
-            duration: formatDuration(t.duration_secs),
-            trackId: t.id
-          }));
+        if (state) {
+          // Calculate remaining tracks: total - current_index - 1 (for current track)
+          if (state.current_index !== null && state.total_tracks > 0) {
+            queueRemainingTracks = state.total_tracks - state.current_index - 1;
+          } else {
+            queueRemainingTracks = state.total_tracks;
+          }
+
+          if (state.history) {
+            historyTracks = state.history.map(t => ({
+              id: String(t.id),
+              artwork: t.artwork_url || '',
+              title: t.title,
+              artist: t.artist,
+              duration: formatDuration(t.duration_secs),
+              trackId: t.id
+            }));
+          }
         }
       });
     }
@@ -2522,7 +2532,7 @@
       onClose={closeQueue}
       currentTrack={currentQueueTrack ?? undefined}
       upcomingTracks={queue}
-      {queueTotalTracks}
+      queueTotalTracks={queueRemainingTracks}
       {historyTracks}
       onPlayTrack={handleQueueTrackPlay}
       onPlayHistoryTrack={handlePlayHistoryTrack}
