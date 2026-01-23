@@ -119,15 +119,19 @@
     }
   }
 
+  // Track if overflow has been measured (only measure on first hover for performance)
+  let overflowMeasured = false;
+
+  function measureOverflowOnce() {
+    if (!overflowMeasured) {
+      updateOverflow();
+      overflowMeasured = true;
+    }
+  }
+
   onMount(() => {
-    updateOverflow();
-    const observer = new ResizeObserver(() => updateOverflow());
-    if (titleRef) {
-      observer.observe(titleRef);
-    }
-    if (artistRef) {
-      observer.observe(artistRef);
-    }
+    // Don't create ResizeObserver per-card for performance in large libraries
+    // Overflow is measured on first hover instead
 
     if (albumId) {
       void loadAlbumFavorites();
@@ -135,22 +139,17 @@
       const unsubscribe = subscribeAlbumFavorites(() => {
         favoriteFromStore = isAlbumFavorite(albumId);
       });
-      return () => {
-        observer.disconnect();
-        unsubscribe();
-      };
+      return () => unsubscribe();
     }
-    return () => observer.disconnect();
   });
 
+  // Reset measurement when title/artist changes
   $effect(() => {
     title;
-    tick().then(updateOverflow);
-  });
-
-  $effect(() => {
     artist;
-    tick().then(updateOverflow);
+    overflowMeasured = false;
+    titleOverflow = 0;
+    artistOverflow = 0;
   });
 </script>
 
@@ -159,6 +158,8 @@
   style="width: {cardSize}px"
   data-search-id={searchId}
   onclick={handleCardClick}
+  onmouseenter={measureOverflowOnce}
+  onfocus={measureOverflowOnce}
   role="button"
   tabindex="0"
   onkeydown={(e) => e.key === 'Enter' && onclick?.()}
