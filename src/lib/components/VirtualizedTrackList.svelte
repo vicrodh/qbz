@@ -53,7 +53,7 @@
   const GROUP_HEADER_HEIGHT = 56; // px
   const DISC_HEADER_HEIGHT = 32; // px
   const TRACK_ROW_HEIGHT = 56; // px
-  const BUFFER_ITEMS = 10;
+  const BUFFER_ITEMS = 5; // Consistent with VirtualizedAlbumList and VirtualizedArtistGrid
 
   // State
   let containerEl: HTMLDivElement | null = $state(null);

@@ -456,9 +456,11 @@
     previousOfflineState = isOffline;
   });
 
-  // Reactive effect: update virtualization state when album count changes
+  // Reactive effect: update virtualization state when album or track count changes
+  // Use max of both to ensure large track libraries also trigger virtualization
   $effect(() => {
-    useVirtualization = isVirtualizationEnabled() && shouldUsePerformanceMode(albums.length);
+    const itemCount = Math.max(albums.length, tracks.length);
+    useVirtualization = isVirtualizationEnabled() && shouldUsePerformanceMode(itemCount);
   });
 
   onMount(async () => {
@@ -474,7 +476,8 @@
 
     // Subscribe to performance settings changes
     unsubscribePerformance = subscribePerformance(() => {
-      useVirtualization = isVirtualizationEnabled() && shouldUsePerformanceMode(albums.length);
+      const itemCount = Math.max(albums.length, tracks.length);
+      useVirtualization = isVirtualizationEnabled() && shouldUsePerformanceMode(itemCount);
     });
 
     // Subscribe to navigation changes for back/forward support
@@ -2461,122 +2464,42 @@
               <p class="empty-hint">Try a different artist or album name</p>
             </div>
           {:else}
-            {#if useVirtualization}
-              <!-- Virtualized album list for large libraries -->
-              <div class="album-sections virtualized">
-                <div class="virtualized-container">
-                  <VirtualizedAlbumList
-                    groups={groupedAlbums}
-                    viewMode={albumViewMode}
-                    showGroupHeaders={albumGroupingEnabled}
-                    {getArtworkUrl}
-                    getQualityBadge={getAlbumQualityBadge}
-                    isHiRes={isAlbumHiRes}
-                    formatDuration={formatTotalDuration}
-                    onAlbumClick={handleAlbumClick}
-                    onAlbumPlay={handleAlbumPlayFromGrid}
-                    onAlbumQueueNext={handleAlbumQueueNextFromGrid}
-                    onAlbumQueueLater={handleAlbumQueueLaterFromGrid}
-                    scrollToGroupId={virtualizedScrollTarget}
-                  />
-                </div>
-
-                {#if albumGroupingEnabled && albumGroupMode === 'alpha'}
-                  <div class="alpha-index">
-                    {#each alphaIndexLetters as letter}
-                      <button
-                        class="alpha-letter"
-                        class:disabled={!alphaGroups.has(letter)}
-                        onclick={() => {
-                          const groupId = groupIdForKey('album-alpha', letter);
-                          virtualizedScrollTarget = alphaGroups.has(letter) ? groupId : undefined;
-                        }}
-                      >
-                        {letter}
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
+            <!-- Always use virtualization for albums - handles any library size efficiently -->
+            <div class="album-sections virtualized">
+              <div class="virtualized-container">
+                <VirtualizedAlbumList
+                  groups={groupedAlbums}
+                  viewMode={albumViewMode}
+                  showGroupHeaders={albumGroupingEnabled}
+                  {getArtworkUrl}
+                  getQualityBadge={getAlbumQualityBadge}
+                  isHiRes={isAlbumHiRes}
+                  formatDuration={formatTotalDuration}
+                  onAlbumClick={handleAlbumClick}
+                  onAlbumPlay={handleAlbumPlayFromGrid}
+                  onAlbumQueueNext={handleAlbumQueueNextFromGrid}
+                  onAlbumQueueLater={handleAlbumQueueLaterFromGrid}
+                  scrollToGroupId={virtualizedScrollTarget}
+                />
               </div>
-            {:else}
-              <!-- Standard album list for smaller libraries -->
-              <div class="album-sections">
-                <div class="album-group-list">
-                  {#each groupedAlbums as group (group.id)}
-                    <div class="album-group" id={group.id}>
-                      {#if albumGroupingEnabled}
-                      <div class="album-group-header">
-                        <span class="album-group-title">{group.key}</span>
-                        <span class="album-group-count">{group.albums.length}</span>
-                      </div>
-                      {/if}
-                      {#if albumViewMode === 'grid'}
-                        <div class="album-grid">
-                          {#each group.albums as album (album.id)}
-                            <AlbumCard
-                              artwork={getArtworkUrl(album.artwork_path)}
-                              title={album.title}
-                              artist={album.artist}
-                              quality={getAlbumQualityBadge(album)}
-                              showFavorite={true}
-                              favoriteEnabled={false}
-                              onPlay={() => handleAlbumPlayFromGrid(album)}
-                              onPlayNext={() => handleAlbumQueueNextFromGrid(album)}
-                              onPlayLater={() => handleAlbumQueueLaterFromGrid(album)}
-                              onclick={() => handleAlbumClick(album)}
-                            />
-                          {/each}
-                        </div>
-                      {:else}
-                        <div class="album-list">
-                          {#each group.albums as album (album.id)}
-                            <div class="album-row" role="button" tabindex="0" onclick={() => handleAlbumClick(album)}>
-                              <div class="album-row-art">
-                                {#if album.artwork_path}
-                                  <img src={getArtworkUrl(album.artwork_path)} alt={album.title} loading="lazy" decoding="async" />
-                                {:else}
-                                  <div class="artwork-placeholder">
-                                    <Disc3 size={28} />
-                                  </div>
-                                {/if}
-                              </div>
-                              <div class="album-row-info">
-                                <div class="album-row-title truncate">{album.title}</div>
-                                <div class="album-row-meta">
-                                  <span>{album.artist}</span>
-                                  {#if album.year}<span>{album.year}</span>{/if}
-                                  <span>{album.track_count} tracks</span>
-                                  <span>{formatTotalDuration(album.total_duration_secs)}</span>
-                                </div>
-                              </div>
-                              <div class="album-row-quality">
-                                <span class="quality-badge" class:hires={isAlbumHiRes(album)}>
-                                  {getAlbumQualityBadge(album)}
-                                </span>
-                              </div>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
+
+              {#if albumGroupingEnabled && albumGroupMode === 'alpha'}
+                <div class="alpha-index">
+                  {#each alphaIndexLetters as letter}
+                    <button
+                      class="alpha-letter"
+                      class:disabled={!alphaGroups.has(letter)}
+                      onclick={() => {
+                        const groupId = groupIdForKey('album-alpha', letter);
+                        virtualizedScrollTarget = alphaGroups.has(letter) ? groupId : undefined;
+                      }}
+                    >
+                      {letter}
+                    </button>
                   {/each}
                 </div>
-
-                {#if albumGroupingEnabled && albumGroupMode === 'alpha'}
-                  <div class="alpha-index">
-                    {#each alphaIndexLetters as letter}
-                      <button
-                        class="alpha-letter"
-                        class:disabled={!alphaGroups.has(letter)}
-                        onclick={() => scrollToGroup('album-alpha', letter, alphaGroups)}
-                      >
-                        {letter}
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/if}
+              {/if}
+            </div>
           {/if}
         {/if}
         {/if}
@@ -2639,77 +2562,41 @@
               <p>No artists match your search</p>
             </div>
           {:else}
-            <div class="artist-sections" class:virtualized={useVirtualization}>
-              {#if useVirtualization}
-                {#if artistViewMode === 'grid'}
-                  <div class="virtualized-container">
-                    <VirtualizedArtistGrid
-                      groups={groupedArtists}
-                      {artistImages}
-                      {showSettings}
-                      showGroupHeaders={artistGroupingEnabled}
-                      onArtistClick={handleLocalArtistClick}
-                      onUploadImage={handleUploadArtistImage}
-                    />
-                  </div>
-                {:else}
-                  <!-- Artist list view (virtualized) -->
-                  <div class="virtualized-container">
-                    <VirtualizedArtistList
-                      groups={groupedArtists}
-                      {artistImages}
-                      showGroupHeaders={artistGroupingEnabled}
-                      onArtistClick={handleLocalArtistClick}
-                    />
-                  </div>
-                {/if}
-
-                {#if artistGroupingEnabled}
-                  <div class="alpha-index">
-                    {#each alphaIndexLetters as letter}
-                      <button
-                        class="alpha-letter"
-                        class:disabled={!artistAlphaGroups.has(letter)}
-                        onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroups)}
-                      >
-                        {letter}
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
+            <!-- Always use virtualization for artists - handles any library size efficiently -->
+            <div class="artist-sections virtualized">
+              {#if artistViewMode === 'grid'}
+                <div class="virtualized-container">
+                  <VirtualizedArtistGrid
+                    groups={groupedArtists}
+                    {artistImages}
+                    {showSettings}
+                    showGroupHeaders={artistGroupingEnabled}
+                    onArtistClick={handleLocalArtistClick}
+                    onUploadImage={handleUploadArtistImage}
+                  />
+                </div>
               {:else}
-                <div class="artist-grid">
-                  {#each filteredArtists as artist (artist.name)}
-                    {@const artistImage = artistImages.get(artist.name)}
-                    {@const displayName = canonicalNames.get(artist.name) || artist.name}
-                    <div
-                      class="artist-card"
-                      role="button"
-                      tabindex="0"
-                      onclick={() => handleLocalArtistClick(artist.name)}
-                      onkeydown={(event) => event.key === 'Enter' && handleLocalArtistClick(artist.name)}
+                <!-- Artist list view (virtualized) -->
+                <div class="virtualized-container">
+                  <VirtualizedArtistList
+                    groups={groupedArtists}
+                    {artistImages}
+                    showGroupHeaders={artistGroupingEnabled}
+                    onArtistClick={handleLocalArtistClick}
+                  />
+                </div>
+              {/if}
+
+              {#if artistGroupingEnabled}
+                <div class="alpha-index">
+                  {#each alphaIndexLetters as letter}
+                    <button
+                      class="alpha-letter"
+                      class:disabled={!artistAlphaGroups.has(letter)}
+                      onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroups)}
                     >
-                      <div class="artist-icon" class:has-image={!!artistImage}>
-                        {#if artistImage}
-                          <img src={artistImage} alt={displayName} class="artist-image" loading="lazy" />
-                        {:else}
-                          <Mic2 size={32} />
-                        {/if}
-                      </div>
-                      {#if showSettings}
-                        <button
-                          class="artist-image-btn"
-                          onclick={(e) => handleUploadArtistImage(artist.name, e)}
-                          title="Upload custom image"
-                        >
-                          <Upload size={14} />
-                        </button>
-                      {/if}
-                      <div class="artist-name">{displayName}</div>
-                      <div class="artist-stats">
-                        {artist.album_count} albums &bull; {artist.track_count} tracks
-                      </div>
-                    </div>
+                      {letter}
+                    </button>
                   {/each}
                 </div>
               {/if}
@@ -2779,100 +2666,26 @@
 
           {@const { grouped: groupedTracks, alphaGroups: trackAlphaGroups, indexTargets: trackIndexTargets } = groupedTracksMemo}
 
-          <div class="track-sections" class:virtualized={useVirtualization}>
-            {#if useVirtualization}
-              <div class="virtualized-container">
-                <VirtualizedTrackList
-                  groups={groupedTracks}
-                  groupingEnabled={trackGroupingEnabled}
-                  groupMode={trackGroupMode}
-                  {activeTrackId}
-                  {isPlaybackActive}
-                  {formatDuration}
-                  {getQualityBadge}
-                  {buildAlbumSections}
-                  onTrackPlay={handleTrackPlay}
-                  onArtistClick={handleLocalArtistClick}
-                  onAlbumClick={handleLocalAlbumLink}
-                  onTrackPlayNext={onTrackPlayNext}
-                  onTrackPlayLater={onTrackPlayLater}
-                  onTrackAddToPlaylist={onTrackAddToPlaylist}
-                />
-              </div>
-            {:else}
-              <div class="track-group-list">
-                {#each groupedTracks as group (group.id)}
-                  <div class="track-group" id={group.id}>
-                    {#if trackGroupingEnabled}
-                    <div class="track-group-header">
-                      <div class="track-group-title">{group.title}</div>
-                      {#if group.subtitle}
-                        <div class="track-group-subtitle">{group.subtitle}</div>
-                      {/if}
-                      <div class="track-group-count">{group.tracks.length} tracks</div>
-                    </div>
-                    {/if}
-
-                    <div class="track-list">
-                      {#if trackGroupingEnabled && trackGroupMode === 'album'}
-                        {@const trackSections = buildAlbumSections(group.tracks)}
-                        {@const showTrackDiscHeaders = trackSections.length > 1}
-                        {#each trackSections as section (section.disc)}
-                          {#if showTrackDiscHeaders}
-                            <div class="disc-header">{section.label}</div>
-                          {/if}
-                          {#each section.tracks as track, index (track.id)}
-                            <TrackRow
-                              number={track.track_number ?? index + 1}
-                              title={track.title}
-                              artist={track.artist}
-                              duration={formatDuration(track.duration_secs)}
-                              quality={getQualityBadge(track)}
-                              isPlaying={isPlaybackActive && activeTrackId === track.id}
-                              isLocal={true}
-                              hideDownload={true}
-                              hideFavorite={true}
-                              onArtistClick={track.artist ? () => handleLocalArtistClick(track.artist) : undefined}
-                              onAlbumClick={track.album_group_key ? () => handleLocalAlbumLink(track) : undefined}
-                              onPlay={() => handleTrackPlay(track)}
-                              menuActions={{
-                                onPlayNow: () => handleTrackPlay(track),
-                                onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
-                                onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,
-                                onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined
-                              }}
-                            />
-                          {/each}
-                        {/each}
-                      {:else}
-                        {#each group.tracks as track, index (track.id)}
-                          <TrackRow
-                            number={track.track_number ?? index + 1}
-                            title={track.title}
-                            artist={track.artist}
-                            duration={formatDuration(track.duration_secs)}
-                            quality={getQualityBadge(track)}
-                            isPlaying={isPlaybackActive && activeTrackId === track.id}
-                            isLocal={true}
-                            hideDownload={true}
-                            hideFavorite={true}
-                            onArtistClick={track.artist ? () => handleLocalArtistClick(track.artist) : undefined}
-                            onAlbumClick={track.album_group_key ? () => handleLocalAlbumLink(track) : undefined}
-                            onPlay={() => handleTrackPlay(track)}
-                            menuActions={{
-                              onPlayNow: () => handleTrackPlay(track),
-                              onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
-                              onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,
-                              onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined
-                            }}
-                          />
-                        {/each}
-                      {/if}
-                    </div>
-                  </div>
-                {/each}
-              </div>
-            {/if}
+          <!-- Always use virtualization for tracks - handles any library size efficiently -->
+          <div class="track-sections virtualized">
+            <div class="virtualized-container">
+              <VirtualizedTrackList
+                groups={groupedTracks}
+                groupingEnabled={trackGroupingEnabled}
+                groupMode={trackGroupMode}
+                {activeTrackId}
+                {isPlaybackActive}
+                {formatDuration}
+                {getQualityBadge}
+                {buildAlbumSections}
+                onTrackPlay={handleTrackPlay}
+                onArtistClick={handleLocalArtistClick}
+                onAlbumClick={handleLocalAlbumLink}
+                onTrackPlayNext={onTrackPlayNext}
+                onTrackPlayLater={onTrackPlayLater}
+                onTrackAddToPlaylist={onTrackAddToPlaylist}
+              />
+            </div>
 
             {#if trackGroupingEnabled && (trackGroupMode === 'name' || trackGroupMode === 'artist')}
               <div class="alpha-index">
