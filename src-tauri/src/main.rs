@@ -22,6 +22,16 @@ fn is_nvidia_gpu() -> bool {
 }
 
 fn main() {
+    // Set the application name/class for Linux window managers
+    // This helps task managers and window switchers identify the app correctly
+    #[cfg(target_os = "linux")]
+    {
+        // Set program name (affects WM_CLASS)
+        std::env::set_var("GTK_APPLICATION_ID", "com.blitzfc.qbz");
+        // GLib program name helps with process identification
+        // This is set before any GTK initialization
+    }
+
     // Use xdg-desktop-portal for file dialogs on Linux
     // This makes GTK apps use native file pickers (e.g., KDE's on Plasma)
     #[cfg(target_os = "linux")]

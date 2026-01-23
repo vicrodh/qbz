@@ -1,0 +1,14 @@
+[Desktop Entry]
+Name={{name}}
+{{#if comment}}
+Comment={{comment}}
+{{/if}}
+Exec={{exec}}
+Type=Application
+Icon={{icon}}
+Categories={{categories}}
+Terminal=false
+StartupWMClass=com.blitzfc.qbz
+StartupNotify=true
+Keywords=music;audio;qobuz;hifi;streaming;audiophile;flac;
+MimeType=x-scheme-handler/qbz;
