@@ -44,17 +44,18 @@
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<header class="titlebar" data-tauri-drag-region ondblclick={handleDoubleClick}>
-  <!-- Drag region - uses both data-tauri-drag-region and CSS app-region: drag -->
+<header class="titlebar" ondblclick={handleDoubleClick}>
+  <!-- Drag region only (avoid marking the whole header as draggable so buttons remain clickable) -->
   <div class="drag-region" data-tauri-drag-region></div>
 
   <!-- Window Controls -->
-  <div class="window-controls">
+  <div class="window-controls" data-tauri-drag-region="false">
     <button
       class="control-btn minimize"
       onclick={handleMinimize}
       title="Minimize"
       aria-label="Minimize window"
+      data-tauri-drag-region="false"
     >
       <Minus size={16} strokeWidth={1.5} />
     </button>
@@ -63,6 +64,7 @@
       onclick={handleMaximize}
       title={isMaximized ? "Restore" : "Maximize"}
       aria-label={isMaximized ? "Restore window" : "Maximize window"}
+      data-tauri-drag-region="false"
     >
       {#if isMaximized}
         <Minimize2 size={14} strokeWidth={1.5} />
@@ -75,6 +77,7 @@
       onclick={handleClose}
       title="Close"
       aria-label="Close window"
+      data-tauri-drag-region="false"
     >
       <X size={16} strokeWidth={1.5} />
     </button>
