@@ -212,23 +212,9 @@
           {$t('player.history')}
         </button>
       </div>
-      <div class="header-actions">
-        {#if activeTab === 'queue'}
-          <button
-            class="header-btn"
-            class:active={infinitePlayEnabled}
-            onclick={onToggleInfinitePlay}
-            title={$t('player.infinitePlay')}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.781 0-4.781 8 0 8 5.606 0 7.644-8 12.739-8z"/>
-            </svg>
-          </button>
-        {/if}
-        <button class="close-btn" onclick={handleClose}>
-          <X size={20} />
-        </button>
-      </div>
+      <button class="close-btn" onclick={handleClose}>
+        <X size={20} />
+      </button>
     </div>
 
     <!-- Content -->
@@ -373,6 +359,16 @@
           >
             <img src="/add-to-list.svg" alt="" class="footer-icon" />
           </button>
+          <button
+            class="footer-icon-btn"
+            class:active={infinitePlayEnabled}
+            onclick={onToggleInfinitePlay}
+            title={$t('player.infinitePlay')}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="infinite-icon">
+              <path d="M18.178 8c5.096 0 5.096 8 0 8-5.095 0-7.133-8-12.739-8-4.781 0-4.781 8 0 8 5.606 0 7.644-8 12.739-8z"/>
+            </svg>
+          </button>
         </div>
         <div class="footer-right">
           {#if searchOpen}
@@ -469,35 +465,6 @@
   .tab-separator {
     color: var(--text-disabled);
     font-size: 14px;
-  }
-
-  .header-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .header-btn {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-radius: 6px;
-    transition: all 150ms ease;
-  }
-
-  .header-btn:hover {
-    color: var(--text-primary);
-    background: var(--bg-hover);
-  }
-
-  .header-btn.active {
-    color: var(--accent-primary);
   }
 
   .close-btn {
@@ -895,6 +862,14 @@
 
   .footer-icon-btn:hover .footer-icon {
     filter: brightness(0) saturate(100%) invert(100%);
+  }
+
+  .footer-icon-btn.active {
+    color: var(--accent-primary, #6366f1);
+  }
+
+  .footer-icon-btn.active .infinite-icon {
+    stroke: var(--accent-primary, #6366f1);
   }
 
   /* Search Bar */
