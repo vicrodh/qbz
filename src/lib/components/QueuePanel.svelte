@@ -18,6 +18,7 @@
     onClose: () => void;
     currentTrack?: QueueTrack;
     upcomingTracks: QueueTrack[];
+    queueTotalTracks?: number; // Real total from backend (excluding current track)
     historyTracks?: QueueTrack[];
     onPlayTrack?: (trackId: string) => void;
     onPlayHistoryTrack?: (trackId: string) => void;
@@ -34,6 +35,7 @@
     onClose,
     currentTrack,
     upcomingTracks,
+    queueTotalTracks = 0,
     historyTracks = [],
     onPlayTrack,
     onPlayHistoryTrack,
@@ -143,9 +145,11 @@
       .slice(0, displayCount);
   });
 
-  const totalTracks = $derived(upcomingTracks.length);
-  const displayedTracks = $derived(filteredTracks.length);
-  const hasMoreTracks = $derived(!searchQuery && upcomingTracks.length > displayCount);
+  // The real remaining count is queueTotalTracks minus current track (if playing)
+  // queueTotalTracks from backend includes all tracks in queue
+  const realRemainingTracks = $derived(currentTrack ? Math.max(0, queueTotalTracks - 1) : queueTotalTracks);
+  const displayedTracks = $derived(Math.min(filteredTracks.length, displayCount));
+  const hasMoreTracks = $derived(!searchQuery && (upcomingTracks.length > displayCount || realRemainingTracks > upcomingTracks.length));
   const canDrag = $derived(!searchQuery.trim());
 
   function loadMore() {
@@ -278,7 +282,7 @@
         {#if upcomingTracks.length > 0}
           <div class="section up-next-section">
             <div class="section-label">
-              {$t('player.upNext').toUpperCase()} ({displayedTracks}/{totalTracks})
+              {$t('player.upNext').toUpperCase()} ({displayedTracks} {$t('player.ofTotal')} {realRemainingTracks})
             </div>
             <div class="tracks-list">
               {#each filteredTracks as track, index}

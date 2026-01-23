@@ -220,6 +220,7 @@
     "nowPlaying": "Now Playing",
     "queue": "Queue",
     "upNext": "Up Next",
+    "ofTotal": "of",
     "history": "History",
     "recentlyPlayed": "Recently Played",
     "noHistoryYet": "No tracks played yet",

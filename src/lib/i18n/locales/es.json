@@ -220,6 +220,7 @@
     "nowPlaying": "Reproduciendo",
     "queue": "Cola",
     "upNext": "Siguiente",
+    "ofTotal": "de",
     "history": "Historial",
     "recentlyPlayed": "Reproducido Recientemente",
     "noHistoryYet": "Sin pistas reproducidas aún",

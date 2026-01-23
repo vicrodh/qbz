@@ -2522,6 +2522,7 @@
       onClose={closeQueue}
       currentTrack={currentQueueTrack ?? undefined}
       upcomingTracks={queue}
+      {queueTotalTracks}
       {historyTracks}
       onPlayTrack={handleQueueTrackPlay}
       onPlayHistoryTrack={handlePlayHistoryTrack}
