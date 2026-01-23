@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { Search, Disc3, Music, Mic2, User, X, ChevronLeft, ChevronRight, Crown } from 'lucide-svelte';
+  import { Search, Disc3, Music, Mic2, User, X, ChevronLeft, ChevronRight, Crown, Play, Pause } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import { getSearchState, setSearchState, type SearchResults, type SearchAllResults, type SearchTab } from '$lib/stores/searchState';
