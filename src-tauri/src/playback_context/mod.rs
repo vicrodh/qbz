@@ -214,4 +214,14 @@ impl ContextManager {
             }
         }
     }
+
+    /// Append new track IDs to the current context (for radio refill)
+    pub fn append_track_ids(&self, new_track_ids: Vec<u64>) {
+        let mut current = self.current.lock().unwrap();
+        if let Some(ctx) = current.as_mut() {
+            let count = new_track_ids.len();
+            ctx.track_ids.extend(new_track_ids);
+            log::debug!("Appended {} track IDs to context (total: {})", count, ctx.track_ids.len());
+        }
+    }
 }

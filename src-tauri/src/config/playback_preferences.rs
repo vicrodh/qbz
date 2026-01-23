@@ -15,6 +15,9 @@ pub enum AutoplayMode {
     /// Play only the selected track, then stop
     #[serde(rename = "track_only")]
     PlayTrackOnly,
+    /// Create infinite radio when queue ends (based on recent tracks)
+    #[serde(rename = "infinite")]
+    InfiniteRadio,
 }
 
 impl Default for AutoplayMode {
@@ -28,12 +31,14 @@ impl AutoplayMode {
         match self {
             AutoplayMode::ContinueWithinSource => "continue",
             AutoplayMode::PlayTrackOnly => "track_only",
+            AutoplayMode::InfiniteRadio => "infinite",
         }
     }
 
     fn from_db_value(s: &str) -> Self {
         match s {
             "track_only" => AutoplayMode::PlayTrackOnly,
+            "infinite" => AutoplayMode::InfiniteRadio,
             _ => AutoplayMode::ContinueWithinSource,
         }
     }
@@ -194,6 +199,7 @@ pub fn set_autoplay_mode(
     let autoplay_mode = match mode.as_str() {
         "continue" => AutoplayMode::ContinueWithinSource,
         "track_only" => AutoplayMode::PlayTrackOnly,
+        "infinite" => AutoplayMode::InfiniteRadio,
         _ => return Err(format!("Invalid autoplay mode: {}", mode)),
     };
     state.set_autoplay_mode(autoplay_mode)

@@ -433,6 +433,9 @@ pub fn run() {
             // Radio engine commands
             commands::create_artist_radio,
             commands::create_track_radio,
+            commands::refill_radio_queue,
+            commands::get_queue_remaining,
+            commands::create_infinite_radio,
             // Playback context commands
             commands::get_playback_context,
             commands::set_playback_context,

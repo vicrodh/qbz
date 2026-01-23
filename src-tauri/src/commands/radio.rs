@@ -53,8 +53,8 @@ pub async fn create_artist_radio(
 
             let mut tracks_with_distance = Vec::new();
 
-            // Generate more tracks to increase chance of finding seed artist track
-            for _ in 0..20 {
+            // Generate 60 tracks to ensure we get 50 after potential API failures
+            for _ in 0..60 {
                 match radio_engine.next_track(&session_id) {
                     Ok(radio_track) => {
                         tracks_with_distance.push((radio_track.track_id, radio_track.distance));
@@ -73,11 +73,11 @@ pub async fn create_artist_radio(
                     log::info!("[Radio] Moved seed artist track to position 0 (was at position {})", seed_idx);
                 }
             } else {
-                log::warn!("[Radio] No seed artist track found in first 20 tracks");
+                log::warn!("[Radio] No seed artist track found in initial tracks");
             }
 
-            // Take first 15 tracks
-            Ok(tracks_with_distance.into_iter().take(15).map(|(id, _)| id).collect())
+            // Take first 50 tracks for initial queue
+            Ok(tracks_with_distance.into_iter().take(50).map(|(id, _)| id).collect())
         }
     })
     .await
@@ -174,8 +174,8 @@ pub async fn create_track_radio(
 
             let mut tracks_with_source = Vec::new();
 
-            // Generate more tracks to find the seed track
-            for _ in 0..20 {
+            // Generate 60 tracks to ensure we get 50 after potential API failures
+            for _ in 0..60 {
                 match radio_engine.next_track(&session_id) {
                     Ok(radio_track) => {
                         tracks_with_source.push((radio_track.track_id, radio_track.source.clone()));
@@ -194,11 +194,11 @@ pub async fn create_track_radio(
                     log::info!("[Radio] Moved seed track to position 0 (was at position {})", seed_idx);
                 }
             } else {
-                log::warn!("[Radio] Seed track {} not found in first 20 tracks", seed_track_id);
+                log::warn!("[Radio] Seed track {} not found in initial tracks", seed_track_id);
             }
 
-            // Take first 15 tracks
-            Ok(tracks_with_source.into_iter().take(15).map(|(id, _)| id).collect())
+            // Take first 50 tracks for initial queue
+            Ok(tracks_with_source.into_iter().take(50).map(|(id, _)| id).collect())
         }
     })
     .await
@@ -282,4 +282,221 @@ fn track_to_queue_track(track: &Track) -> QueueTrack {
         album_id,
         artist_id,
     }
+}
+
+/// Refill the radio queue with more tracks
+///
+/// Called when the queue is running low (e.g., < 10 tracks remaining).
+/// Generates 20 more tracks and appends them to the queue.
+#[tauri::command]
+pub async fn refill_radio_queue(
+    session_id: String,
+    state: State<'_, AppState>,
+) -> Result<u32, String> {
+    log::info!("[Radio] Refilling queue for session: {}", session_id);
+
+    // Generate more track IDs from radio engine
+    let track_ids = task::spawn_blocking({
+        let session_id = session_id.clone();
+        move || -> Result<Vec<u64>, String> {
+            let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+            let radio_engine = RadioEngine::new(radio_db);
+
+            let mut track_ids = Vec::new();
+
+            // Generate 25 tracks to ensure we get ~20 after API failures
+            for _ in 0..25 {
+                match radio_engine.next_track(&session_id) {
+                    Ok(radio_track) => {
+                        track_ids.push(radio_track.track_id);
+                    }
+                    Err(e) => {
+                        log::warn!("[Radio] Failed to get next radio track during refill: {}", e);
+                        break;
+                    }
+                }
+            }
+
+            Ok(track_ids)
+        }
+    })
+    .await
+    .map_err(|e| format!("Radio refill task failed: {}", e))??;
+
+    if track_ids.is_empty() {
+        log::warn!("[Radio] No more tracks available for refill");
+        return Ok(0);
+    }
+
+    // Fetch full track details from Qobuz
+    let client = state.client.lock().await;
+    let mut tracks = Vec::new();
+    for track_id in track_ids.iter().take(20) {
+        match client.get_track(*track_id).await {
+            Ok(track) => {
+                tracks.push(track);
+            }
+            Err(e) => {
+                log::warn!("[Radio] Failed to fetch track {} during refill: {}", track_id, e);
+            }
+        }
+    }
+
+    let added_count = tracks.len() as u32;
+
+    if tracks.is_empty() {
+        log::warn!("[Radio] Failed to fetch any tracks during refill");
+        return Ok(0);
+    }
+
+    log::info!("[Radio] Fetched {} tracks for refill", added_count);
+
+    // Convert to QueueTrack format and add to queue
+    let queue_tracks: Vec<QueueTrack> = tracks.iter().map(track_to_queue_track).collect();
+
+    for track in queue_tracks {
+        state.queue.add_track(track);
+    }
+
+    // Update playback context with new track IDs
+    let new_track_ids: Vec<u64> = tracks.iter().map(|t| t.id).collect();
+    state.context.append_track_ids(new_track_ids);
+
+    log::info!("[Radio] Refill complete: added {} tracks", added_count);
+
+    Ok(added_count)
+}
+
+/// Get the current queue size (for checking if refill is needed)
+#[tauri::command]
+pub fn get_queue_remaining(state: State<'_, AppState>) -> u32 {
+    let queue_state = state.queue.get_state();
+    queue_state.upcoming.len() as u32
+}
+
+/// Create an infinite radio session based on recent tracks
+///
+/// This is called when "Keep Playing" / autoplay is enabled and the queue ends.
+/// Creates a radio based on the last 5 tracks played for coherent recommendations.
+#[tauri::command]
+pub async fn create_infinite_radio(
+    recent_track_ids: Vec<u64>,
+    state: State<'_, AppState>,
+) -> Result<String, String> {
+    if recent_track_ids.is_empty() {
+        return Err("No recent tracks provided for infinite radio".to_string());
+    }
+
+    log::info!(
+        "[Radio] Creating infinite radio from {} recent tracks: {:?}",
+        recent_track_ids.len(),
+        recent_track_ids
+    );
+
+    // Use the first track's artist as the primary seed (most recently played)
+    let client = state.client.lock().await.clone();
+
+    // Fetch the most recent track to get its artist
+    let primary_track = client
+        .get_track(recent_track_ids[0])
+        .await
+        .map_err(|e| format!("Failed to fetch primary track: {}", e))?;
+
+    let artist_id = primary_track
+        .performer
+        .as_ref()
+        .map(|p| p.id)
+        .ok_or("Primary track has no artist")?;
+
+    let artist_name = primary_track
+        .performer
+        .as_ref()
+        .map(|p| p.name.clone())
+        .unwrap_or_else(|| "Unknown Artist".to_string());
+
+    // Build radio pool with the artist as seed
+    let session_id = task::spawn_blocking({
+        let client = client.clone();
+        move || -> Result<String, String> {
+            let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+            let builder = RadioPoolBuilder::new(&radio_db, &client, BuildRadioOptions::default());
+
+            let rt = tokio::runtime::Handle::current();
+            let session = rt.block_on(builder.create_artist_radio(artist_id))?;
+            Ok(session.id)
+        }
+    })
+    .await
+    .map_err(|e| format!("Infinite radio task failed: {}", e))??;
+
+    log::info!("[Radio] Infinite radio session created: {}", session_id);
+
+    // Generate initial tracks
+    let track_ids = task::spawn_blocking({
+        let session_id = session_id.clone();
+        move || -> Result<Vec<u64>, String> {
+            let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+            let radio_engine = RadioEngine::new(radio_db);
+
+            let mut track_ids = Vec::new();
+
+            // Generate 60 tracks for initial queue
+            for _ in 0..60 {
+                match radio_engine.next_track(&session_id) {
+                    Ok(radio_track) => {
+                        track_ids.push(radio_track.track_id);
+                    }
+                    Err(e) => {
+                        log::warn!("[Radio] Failed to get next radio track: {}", e);
+                        break;
+                    }
+                }
+            }
+
+            Ok(track_ids.into_iter().take(50).collect())
+        }
+    })
+    .await
+    .map_err(|e| format!("Track generation task failed: {}", e))??;
+
+    // Fetch full track details from Qobuz
+    let mut tracks = Vec::new();
+    for track_id in track_ids {
+        match client.get_track(track_id).await {
+            Ok(track) => {
+                tracks.push(track);
+            }
+            Err(e) => {
+                log::warn!("[Radio] Failed to fetch track {}: {}", track_id, e);
+            }
+        }
+    }
+
+    if tracks.is_empty() {
+        return Err("Failed to generate any infinite radio tracks".to_string());
+    }
+
+    log::info!("[Radio] Generated {} infinite radio tracks", tracks.len());
+
+    // Convert to QueueTrack format
+    let queue_tracks: Vec<QueueTrack> = tracks.iter().map(track_to_queue_track).collect();
+
+    // Set the queue
+    state.queue.set_queue(queue_tracks, Some(0));
+
+    // Set playback context to radio
+    let track_ids: Vec<u64> = tracks.iter().map(|t| t.id).collect();
+    let context = PlaybackContext::new(
+        ContextType::Radio,
+        session_id.clone(),
+        format!("Radio: {}", artist_name),
+        ContentSource::Qobuz,
+        track_ids,
+        0,
+    );
+    state.context.set_context(context);
+
+    log::info!("[Radio] Infinite radio ready: {}", session_id);
+
+    Ok(session_id)
 }
