@@ -2278,6 +2278,7 @@
             checkTrackDownloaded={checkTrackDownloaded}
             activeTrackId={currentTrack?.id ?? null}
             isPlaybackActive={isPlaying}
+            sidebarExpanded={sidebarExpanded}
           />
         {/if}
       {:else if activeView === 'search'}
