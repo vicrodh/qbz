@@ -218,6 +218,76 @@
     return albums.reduce((sum, album) => sum + album.track_count, 0);
   });
 
+  // Memoized filtered and grouped albums
+  let filteredAndGroupedAlbums = $derived.by(() => {
+    // Filter albums
+    const filtered = debouncedAlbumSearch
+      ? albums.filter(album => matchesAlbumSearchFast(album, debouncedAlbumSearch))
+      : albums;
+
+    // Group if enabled
+    if (!albumGroupingEnabled) {
+      return {
+        filtered,
+        grouped: [{ key: '', id: 'ungrouped', albums: filtered }],
+        alphaGroups: new Set<string>()
+      };
+    }
+
+    const grouped = groupAlbumsOptimized(filtered, albumGroupMode);
+    const alphaGroups = albumGroupMode === 'alpha'
+      ? new Set(grouped.map(g => g.key))
+      : new Set<string>();
+
+    return { filtered, grouped, alphaGroups };
+  });
+
+  // Fast album search without function call overhead
+  function matchesAlbumSearchFast(album: LocalAlbum, needle: string): boolean {
+    const lowerNeedle = needle.toLowerCase();
+    return (
+      album.title.toLowerCase().includes(lowerNeedle) ||
+      album.artist.toLowerCase().includes(lowerNeedle)
+    );
+  }
+
+  // Optimized grouping that avoids unnecessary allocations
+  function groupAlbumsOptimized(items: LocalAlbum[], mode: AlbumGroupMode) {
+    const prefix = `album-${mode}`;
+
+    // Build groups without sorting first (sort within groups)
+    const groups = new Map<string, LocalAlbum[]>();
+    for (const album of items) {
+      const key = mode === 'artist' ? album.artist : alphaGroupKey(album.title);
+      let group = groups.get(key);
+      if (!group) {
+        group = [];
+        groups.set(key, group);
+      }
+      group.push(album);
+    }
+
+    // Sort keys
+    const keys = [...groups.keys()].sort((a, b) => {
+      if (mode === 'alpha') {
+        if (a === '#') return 1;
+        if (b === '#') return -1;
+      }
+      return a.localeCompare(b);
+    });
+
+    // Sort albums within each group and build result
+    return keys.map(key => {
+      const albumsInGroup = groups.get(key) ?? [];
+      albumsInGroup.sort((a, b) => a.title.localeCompare(b.title));
+      return {
+        key,
+        id: groupIdForKey(prefix, key),
+        albums: albumsInGroup
+      };
+    });
+  }
+
   // Loading state
   let loading = $state(false);
   let scanning = $state(false);
@@ -2153,9 +2223,8 @@
             <p class="empty-hint">Add folders and scan to build your library</p>
           </div>
         {:else}
-          {@const filteredAlbums = debouncedAlbumSearch
-            ? albums.filter(album => matchesAlbumSearch(album, debouncedAlbumSearch))
-            : albums}
+          <!-- Use memoized filtered and grouped albums -->
+          {@const { filtered: filteredAlbums, grouped: groupedAlbums, alphaGroups } = filteredAndGroupedAlbums}
 
           <div class="album-controls">
             <div class="dropdown-container">
@@ -2219,11 +2288,6 @@
               <p class="empty-hint">Try a different artist or album name</p>
             </div>
           {:else}
-          {@const groupedAlbums = albumGroupingEnabled ? groupAlbums(filteredAlbums, albumGroupMode) : [{ key: '', id: 'ungrouped', albums: filteredAlbums }]}
-          {@const alphaGroups = albumGroupingEnabled && albumGroupMode === 'alpha'
-            ? new Set(groupedAlbums.map(group => group.key))
-            : new Set<string>()}
-
             {#if useVirtualization}
               <!-- Virtualized album list for large libraries -->
               <div class="album-sections virtualized">
