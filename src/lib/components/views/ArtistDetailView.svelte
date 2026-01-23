@@ -988,6 +988,7 @@
               class:playing={isActiveTrack}
               role="button"
               tabindex="0"
+              data-track-id={track.id}
               onclick={() => handleTrackPlay(track, index)}
               onkeydown={(e) => e.key === 'Enter' && handleTrackPlay(track, index)}
             >
