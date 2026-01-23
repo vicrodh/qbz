@@ -136,30 +136,57 @@
       : 0
   );
 
+  // Binary search to find first item at or after a given position
+  function binarySearchStart(items: typeof virtualItems, targetTop: number): number {
+    let low = 0;
+    let high = items.length - 1;
+    let result = 0;
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const item = items[mid];
+      if (item.top + item.height > targetTop) {
+        result = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+    return result;
+  }
+
+  // Binary search to find last item before a given position
+  function binarySearchEnd(items: typeof virtualItems, targetBottom: number, startFrom: number): number {
+    let low = startFrom;
+    let high = items.length - 1;
+    let result = high;
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const item = items[mid];
+      if (item.top > targetBottom) {
+        result = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+    return result;
+  }
+
   // Computed: visible items (those in viewport + buffer)
   let visibleItems = $derived.by(() => {
+    if (virtualItems.length === 0) return [];
+
     const viewportTop = scrollTop;
     const viewportBottom = scrollTop + containerHeight;
 
-    // Find first visible item
-    let startIdx = 0;
-    for (let i = 0; i < virtualItems.length; i++) {
-      const item = virtualItems[i];
-      if (item.top + item.height > viewportTop) {
-        startIdx = Math.max(0, i - BUFFER_ITEMS);
-        break;
-      }
-    }
+    // Use binary search for O(log n) instead of O(n)
+    const firstVisible = binarySearchStart(virtualItems, viewportTop);
+    const lastVisible = binarySearchEnd(virtualItems, viewportBottom, firstVisible);
 
-    // Find last visible item
-    let endIdx = virtualItems.length - 1;
-    for (let i = startIdx; i < virtualItems.length; i++) {
-      const item = virtualItems[i];
-      if (item.top > viewportBottom) {
-        endIdx = Math.min(virtualItems.length - 1, i + BUFFER_ITEMS);
-        break;
-      }
-    }
+    const startIdx = Math.max(0, firstVisible - BUFFER_ITEMS);
+    const endIdx = Math.min(virtualItems.length - 1, lastVisible + BUFFER_ITEMS);
 
     return virtualItems.slice(startIdx, endIdx + 1);
   });
