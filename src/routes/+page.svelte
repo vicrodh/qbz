@@ -331,6 +331,8 @@
   let repeatMode = $state<RepeatMode>('off');
   let queue = $state<QueueTrack[]>([]);
   let queueTotalTracks = $state(0);
+  let historyTracks = $state<QueueTrack[]>([]);
+  let infinitePlayEnabled = $state(false);
 
   // Toast State (from store subscription)
   let toast = $state<ToastData | null>(null);
@@ -1038,6 +1040,54 @@
     openAddToPlaylist(trackIds);
     // Close queue panel
     closeQueue();
+  }
+
+  // Toggle infinite play mode (auto-refill queue with similar tracks)
+  function handleToggleInfinitePlay() {
+    infinitePlayEnabled = !infinitePlayEnabled;
+    // Persist to localStorage
+    try {
+      localStorage.setItem('qbz-infinite-play', JSON.stringify(infinitePlayEnabled));
+    } catch {
+      // Ignore storage errors
+    }
+    showToast(infinitePlayEnabled ? 'Infinite play enabled' : 'Infinite play disabled', 'info');
+  }
+
+  // Play a track from history
+  async function handlePlayHistoryTrack(trackId: string) {
+    try {
+      // Get the full queue state to find the track in history
+      const queueState = await getBackendQueueState();
+      if (!queueState) {
+        showToast('Failed to play track', 'error');
+        return;
+      }
+
+      // Find the track in history
+      const numericId = parseInt(trackId, 10);
+      const historyTrack = queueState.history.find(t => t.id === numericId);
+      if (!historyTrack) {
+        showToast('Track not found in history', 'error');
+        return;
+      }
+
+      // Play the track directly
+      await handleTrackPlay({
+        id: historyTrack.id,
+        title: historyTrack.title,
+        artist: historyTrack.artist,
+        album: historyTrack.album,
+        duration: historyTrack.duration_secs,
+        artwork: historyTrack.artwork_url || '',
+        quality: historyTrack.hires ? 'Hi-Res' : 'CD',
+        bitDepth: historyTrack.bit_depth || 16,
+        samplingRate: historyTrack.sample_rate || 44100
+      });
+    } catch (err) {
+      console.error('Failed to play history track:', err);
+      showToast('Failed to play track', 'error');
+    }
   }
 
   // Play all tracks from album (starting from first track)
@@ -1827,6 +1877,16 @@
     initPlaybackContextStore();
     initPlaybackPreferences();
 
+    // Load infinite play preference
+    try {
+      const stored = localStorage.getItem('qbz-infinite-play');
+      if (stored !== null) {
+        infinitePlayEnabled = JSON.parse(stored);
+      }
+    } catch {
+      // Ignore storage errors
+    }
+
     // Note: loadFavorites() is called in handleLoginSuccess after login is confirmed
     // This prevents API calls before authentication is complete
 
@@ -2066,10 +2126,23 @@
     };
   });
 
-  // Sync queue state when opening queue panel
+  // Sync queue state when opening queue panel (including history)
   $effect(() => {
     if (isQueueOpen) {
       syncQueueState();
+      // Also fetch history from backend
+      getBackendQueueState().then((state) => {
+        if (state?.history) {
+          historyTracks = state.history.map(t => ({
+            id: String(t.id),
+            artwork: t.artwork_url || '',
+            title: t.title,
+            artist: t.artist,
+            duration: formatDuration(t.duration_secs),
+            trackId: t.id
+          }));
+        }
+      });
     }
   });
 
@@ -2093,7 +2166,8 @@
     artwork: currentTrack.artwork,
     title: currentTrack.title,
     artist: currentTrack.artist,
-    duration: formatDuration(currentTrack.duration)
+    duration: formatDuration(currentTrack.duration),
+    trackId: currentTrack.id // For favorite checking in QueuePanel
   } : null);
 </script>
 
@@ -2448,10 +2522,15 @@
       onClose={closeQueue}
       currentTrack={currentQueueTrack ?? undefined}
       upcomingTracks={queue}
+      {historyTracks}
       onPlayTrack={handleQueueTrackPlay}
+      onPlayHistoryTrack={handlePlayHistoryTrack}
       onClearQueue={handleClearQueue}
       onSaveAsPlaylist={handleSaveQueueAsPlaylist}
       onReorderTrack={handleQueueReorder}
+      onToggleInfinitePlay={handleToggleInfinitePlay}
+      {infinitePlayEnabled}
+      {isPlaying}
     />
 
     <!-- Expanded Player -->

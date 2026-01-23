@@ -221,6 +221,11 @@
     "queue": "Cola",
     "upNext": "Siguiente",
     "history": "Historial",
+    "recentlyPlayed": "Reproducido Recientemente",
+    "noHistoryYet": "Sin pistas reproducidas aún",
+    "infinitePlay": "Reproducción Infinita",
+    "infinitePlayEnabled": "Reproducción infinita activada",
+    "infinitePlayDisabled": "Reproducción infinita desactivada",
     "lyrics": "Letras",
     "noLyrics": "No hay letras disponibles",
     "fetchingLyrics": "Buscando letras...",
@@ -299,7 +304,8 @@
     "yes": "Sí",
     "no": "No",
     "ok": "OK",
-    "loading": "Cargando..."
+    "loading": "Cargando...",
+    "loadMore": "Cargar Más"
   },
   "settings": {
     "title": "Ajustes",

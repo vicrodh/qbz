@@ -221,6 +221,11 @@
     "queue": "Queue",
     "upNext": "Up Next",
     "history": "History",
+    "recentlyPlayed": "Recently Played",
+    "noHistoryYet": "No tracks played yet",
+    "infinitePlay": "Infinite Play",
+    "infinitePlayEnabled": "Infinite play enabled",
+    "infinitePlayDisabled": "Infinite play disabled",
     "lyrics": "Lyrics",
     "noLyrics": "No lyrics available",
     "fetchingLyrics": "Fetching lyrics...",
@@ -299,7 +304,8 @@
     "yes": "Yes",
     "no": "No",
     "ok": "OK",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "loadMore": "Load More"
   },
   "settings": {
     "title": "Settings",
