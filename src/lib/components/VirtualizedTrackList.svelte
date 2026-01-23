@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import TrackRow from './TrackRow.svelte';
+  import type { DownloadStatus } from '$lib/stores/downloadState';
 
-  // Use generic types to match whatever LocalLibraryView passes
+  // Use generic types to match whatever caller passes
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type Track = any;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -30,6 +31,31 @@
     onTrackPlayNext?: (track: Track) => void;
     onTrackPlayLater?: (track: Track) => void;
     onTrackAddToPlaylist?: (trackId: number) => void;
+    // Optional accessors for different track data structures (e.g., FavoriteTrack vs LocalTrack)
+    getTrackId?: (track: Track) => number;
+    getTrackNumber?: (track: Track, index: number) => number;
+    getTrackTitle?: (track: Track) => string;
+    getTrackArtist?: (track: Track) => string | undefined;
+    getTrackDuration?: (track: Track) => number;
+    getTrackAlbumKey?: (track: Track) => string | undefined;
+    // Optional props for non-local tracks (Favorites, Search, etc.)
+    isLocal?: boolean;
+    hideDownload?: boolean;
+    hideFavorite?: boolean;
+    isFavoriteOverride?: boolean;
+    // Download status support for Favorites/Search
+    getDownloadStatus?: (trackId: number) => { status: DownloadStatus; progress: number };
+    onDownload?: (track: Track) => void;
+    onRemoveDownload?: (trackId: number) => void;
+    // Additional menu actions for Favorites
+    onShareQobuz?: (trackId: number) => void;
+    onShareSonglink?: (track: Track) => void;
+    onGoToAlbum?: (albumId: string) => void;
+    onGoToArtist?: (artistId: number) => void;
+    onReDownload?: (track: Track) => void;
+    // For getting artist/album IDs from non-local tracks
+    getArtistId?: (track: Track) => number | undefined;
+    getAlbumId?: (track: Track) => string | undefined;
   }
 
   let {
@@ -47,6 +73,28 @@
     onTrackPlayNext,
     onTrackPlayLater,
     onTrackAddToPlaylist,
+    // Optional accessors with defaults for LocalTrack structure
+    getTrackId = (t: Track) => t.id,
+    getTrackNumber = (t: Track, idx: number) => t.track_number ?? idx + 1,
+    getTrackTitle = (t: Track) => t.title,
+    getTrackArtist = (t: Track) => t.artist,
+    getTrackDuration = (t: Track) => t.duration_secs,
+    getTrackAlbumKey = (t: Track) => t.album_group_key,
+    // Non-local defaults
+    isLocal = true,
+    hideDownload = true,
+    hideFavorite = true,
+    isFavoriteOverride,
+    getDownloadStatus,
+    onDownload,
+    onRemoveDownload,
+    onShareQobuz,
+    onShareSonglink,
+    onGoToAlbum,
+    onGoToArtist,
+    onReDownload,
+    getArtistId,
+    getAlbumId,
   }: Props = $props();
 
   // Constants
@@ -252,24 +300,45 @@
         {:else if item.type === 'disc-header'}
           <div class="disc-header">{item.label}</div>
         {:else if item.type === 'track'}
+          {@const trackId = getTrackId(item.track)}
+          {@const trackArtist = getTrackArtist(item.track)}
+          {@const albumKey = getTrackAlbumKey(item.track)}
+          {@const artistId = getArtistId?.(item.track)}
+          {@const albumId = getAlbumId?.(item.track)}
+          {@const downloadInfo = getDownloadStatus?.(trackId) ?? { status: 'none' as const, progress: 0 }}
+          {@const isTrackDownloaded = downloadInfo.status === 'ready'}
           <TrackRow
-            number={item.track.track_number ?? item.index + 1}
-            title={item.track.title}
-            artist={item.track.artist}
-            duration={formatDuration(item.track.duration_secs)}
+            trackId={trackId}
+            number={getTrackNumber(item.track, item.index)}
+            title={getTrackTitle(item.track)}
+            artist={trackArtist}
+            duration={formatDuration(getTrackDuration(item.track))}
             quality={getQualityBadge(item.track)}
-            isPlaying={isPlaybackActive && activeTrackId === item.track.id}
-            isLocal={true}
-            hideDownload={true}
-            hideFavorite={true}
-            onArtistClick={item.track.artist && onArtistClick ? () => onArtistClick(item.track.artist) : undefined}
-            onAlbumClick={item.track.album_group_key && onAlbumClick ? () => onAlbumClick(item.track) : undefined}
+            isPlaying={isPlaybackActive && activeTrackId === trackId}
+            {isLocal}
+            {hideDownload}
+            {hideFavorite}
+            isFavoriteOverride={isFavoriteOverride}
+            downloadStatus={downloadInfo.status}
+            downloadProgress={downloadInfo.progress}
+            onArtistClick={trackArtist && onArtistClick ? () => onArtistClick(trackArtist) : undefined}
+            onAlbumClick={albumKey && onAlbumClick ? () => onAlbumClick(item.track) : undefined}
             onPlay={() => onTrackPlay(item.track)}
+            onDownload={onDownload ? () => onDownload(item.track) : undefined}
+            onRemoveDownload={onRemoveDownload ? () => onRemoveDownload(trackId) : undefined}
             menuActions={{
               onPlayNow: () => onTrackPlay(item.track),
               onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(item.track) : undefined,
               onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(item.track) : undefined,
-              onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(item.track.id) : undefined
+              onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(trackId) : undefined,
+              onShareQobuz: onShareQobuz ? () => onShareQobuz(trackId) : undefined,
+              onShareSonglink: onShareSonglink ? () => onShareSonglink(item.track) : undefined,
+              onGoToAlbum: albumId && onGoToAlbum ? () => onGoToAlbum(albumId) : undefined,
+              onGoToArtist: artistId && onGoToArtist ? () => onGoToArtist(artistId) : undefined,
+              onDownload: onDownload ? () => onDownload(item.track) : undefined,
+              isTrackDownloaded,
+              onReDownload: isTrackDownloaded && onReDownload ? () => onReDownload(item.track) : undefined,
+              onRemoveDownload: isTrackDownloaded && onRemoveDownload ? () => onRemoveDownload(trackId) : undefined
             }}
           />
         {/if}
