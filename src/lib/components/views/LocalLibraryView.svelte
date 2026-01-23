@@ -3371,9 +3371,12 @@
     align-items: center;
     gap: 10px;
     padding: 12px 24px;
-    background-color: var(--bg-primary);
-    border-bottom: 1px solid var(--bg-tertiary);
-    margin: 0 -24px 16px;
+    margin: 0 -8px 16px -24px;
+    width: calc(100% + 32px);
+    background: rgba(var(--bg-primary-rgb, 18, 18, 18), 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .jump-nav-left {
