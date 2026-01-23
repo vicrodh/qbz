@@ -258,8 +258,7 @@
               <div class="np-artwork">
                 <img src={currentTrack.artwork} alt={currentTrack.title} />
                 {#if isPlaying}
-                  <div class="spectrum-bars">
-                    <div class="bar"></div>
+                  <div class="playing-indicator">
                     <div class="bar"></div>
                     <div class="bar"></div>
                     <div class="bar"></div>
@@ -598,7 +597,8 @@
     object-fit: cover;
   }
 
-  .spectrum-bars {
+  /* Playing indicator - matches TrackRow style */
+  .np-artwork .playing-indicator {
     position: absolute;
     top: 50%;
     left: 50%;
@@ -606,46 +606,37 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    height: 16px;
-    filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 8px rgba(66, 133, 244, 0.3));
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8)) drop-shadow(0 0 6px rgba(0, 0, 0, 0.5));
   }
 
-  .spectrum-bars .bar {
+  .np-artwork .playing-indicator .bar {
     width: 3px;
-    background-color: #fff;
-    border-radius: 1px;
-    animation: spectrum 1s ease-in-out infinite;
-    box-shadow: 0 0 3px rgba(255, 255, 255, 0.5);
+    background-color: var(--accent-primary);
+    border-radius: 9999px;
+    transform-origin: bottom;
+    animation: equalize 1s ease-in-out infinite;
   }
 
-  .spectrum-bars .bar:nth-child(1) {
-    height: 8px;
-    animation-delay: 0s;
-  }
-
-  .spectrum-bars .bar:nth-child(2) {
+  .np-artwork .playing-indicator .bar:nth-child(1) {
     height: 12px;
+  }
+
+  .np-artwork .playing-indicator .bar:nth-child(2) {
+    height: 16px;
     animation-delay: 0.15s;
   }
 
-  .spectrum-bars .bar:nth-child(3) {
-    height: 6px;
+  .np-artwork .playing-indicator .bar:nth-child(3) {
+    height: 10px;
     animation-delay: 0.3s;
   }
 
-  .spectrum-bars .bar:nth-child(4) {
-    height: 10px;
-    animation-delay: 0.45s;
-  }
-
-  @keyframes spectrum {
+  @keyframes equalize {
     0%, 100% {
       transform: scaleY(0.5);
-      opacity: 0.7;
     }
     50% {
       transform: scaleY(1);
-      opacity: 1;
     }
   }
 
