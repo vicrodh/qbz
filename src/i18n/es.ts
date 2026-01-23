@@ -129,7 +129,7 @@ export const es = {
         title: 'Modo offline',
         bullets: [
           'Funciona sin internet—o por elección.',
-          'Acceso a tu biblioteca local y descargas.',
+          'Accede a tu biblioteca local sin conexión.',
           'Escucha ahora, sincroniza después.',
         ],
       },
@@ -187,7 +187,7 @@ export const es = {
       'Licencia MIT y desarrollo público.',
       'Sin analíticas, anuncios ni tracking en segundo plano.',
       'Integraciones opcionales solo si tú las habilitas.',
-      'Inspirado por el ecosistema FOSS de Qobuz, incluyendo qobuz-dl.',
+      'Inspirado por el ecosistema FOSS de audio y la comunidad de audio de Linux.',
     ],
   },
   linuxFirst: {
@@ -206,7 +206,7 @@ export const es = {
     ],
   },
   footer: {
-    disclaimer: 'QBZ es un proyecto independiente y no está afiliado a Qobuz.',
+    disclaimer: 'Esta aplicación usa la API de Qobuz pero no está certificada, afiliada ni respaldada por Qobuz.',
     rights: 'Publicado bajo licencia MIT.',
   },
   changelog: {
@@ -246,7 +246,7 @@ export const es = {
       },
       inspiration: {
         title: 'Inspiración',
-        items: ['qobuz-dl por vitiko98', 'qobuz-api-rust'],
+        items: ['Comunidad de audio de Linux', 'Ecosistema FOSS de audio'],
       },
       website: {
         title: 'Stack del sitio',
