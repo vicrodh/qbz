@@ -1168,6 +1168,9 @@
       hires: (t.bit_depth && t.bit_depth > 16) || t.sample_rate > 44100,
       bit_depth: t.bit_depth ?? null,
       sample_rate: t.sample_rate ?? null,
+      is_local: true,
+      album_id: null,  // Local tracks don't have Qobuz IDs
+      artist_id: null,
     }));
 
     console.log('[LocalLibrary Queue] Mapped to', queueTracks.length, 'queue tracks');

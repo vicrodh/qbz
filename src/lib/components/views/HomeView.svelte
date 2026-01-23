@@ -374,6 +374,9 @@
       hires: t.hires ?? false,
       bit_depth: t.bitDepth ?? null,
       sample_rate: t.samplingRate ?? null,
+      is_local: t.isLocal ?? false,
+      album_id: t.albumId || null,
+      artist_id: t.artistId ?? null,
     }));
   }
 
