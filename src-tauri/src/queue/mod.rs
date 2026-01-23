@@ -26,6 +26,10 @@ pub struct QueueTrack {
     /// Whether this is a local library track (not from Qobuz)
     #[serde(default)]
     pub is_local: bool,
+    /// Album ID for navigation (Qobuz album ID)
+    pub album_id: Option<String>,
+    /// Artist ID for navigation (Qobuz artist ID)
+    pub artist_id: Option<u64>,
 }
 
 /// Repeat mode options

@@ -941,7 +941,9 @@
       bitDepth: track.bit_depth ?? undefined,
       // Only convert Hz to kHz for local tracks. Qobuz tracks are already in kHz.
       samplingRate: isLocal && track.sample_rate ? track.sample_rate / 1000 : track.sample_rate ?? undefined,
-      isLocal
+      isLocal,
+      albumId: track.album_id ?? undefined,
+      artistId: track.artist_id ?? undefined
     }, { isLocal, showLoadingToast: false });
   }
 

@@ -293,6 +293,8 @@
           hires: firstTrack.hires,
           bitDepth: firstTrack.bit_depth ?? undefined,
           samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
         });
         console.log(`[Radio] Started playback of track ${firstTrack.id}`);
 
@@ -343,6 +345,8 @@
           hires: firstTrack.hires,
           bitDepth: firstTrack.bit_depth ?? undefined,
           samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
         });
         console.log(`[Radio] Started playback of track ${firstTrack.id}`);
       }

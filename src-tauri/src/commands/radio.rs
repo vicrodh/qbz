@@ -265,6 +265,9 @@ fn track_to_queue_track(track: &Track) -> QueueTrack {
         .map(|a| a.title.clone())
         .unwrap_or_else(|| "Unknown Album".to_string());
 
+    let album_id = track.album.as_ref().map(|a| a.id.clone());
+    let artist_id = track.performer.as_ref().map(|p| p.id);
+
     QueueTrack {
         id: track.id,
         title: track.title.clone(),
@@ -276,5 +279,7 @@ fn track_to_queue_track(track: &Track) -> QueueTrack {
         bit_depth: track.maximum_bit_depth,
         sample_rate: track.maximum_sampling_rate,
         is_local: false,
+        album_id,
+        artist_id,
     }
 }
