@@ -184,7 +184,9 @@
   let showTrackGroupMenu = $state(false);
   let trackSearchTimer: ReturnType<typeof setTimeout> | null = null;
   let albumSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  let artistSearchTimer: ReturnType<typeof setTimeout> | null = null;
   let debouncedAlbumSearch = $state('');
+  let debouncedArtistSearch = $state('');
 
   // Data state
   let albums = $state<LocalAlbum[]>([]);
@@ -1364,6 +1366,8 @@
         if (albumSearchTimer) clearTimeout(albumSearchTimer);
       } else if (activeTab === 'artists') {
         artistSearch = '';
+        debouncedArtistSearch = '';
+        if (artistSearchTimer) clearTimeout(artistSearchTimer);
       } else if (activeTab === 'tracks') {
         trackSearch = '';
         loadTracks('');
@@ -1390,6 +1394,7 @@
       scheduleAlbumSearch();
     } else if (activeTab === 'artists') {
       artistSearch = value;
+      scheduleArtistSearch();
     } else if (activeTab === 'tracks') {
       trackSearch = value;
       scheduleTrackSearch();
@@ -1402,6 +1407,15 @@
     }
     albumSearchTimer = setTimeout(() => {
       debouncedAlbumSearch = albumSearch.trim();
+    }, 150);
+  }
+
+  function scheduleArtistSearch() {
+    if (artistSearchTimer) {
+      clearTimeout(artistSearchTimer);
+    }
+    artistSearchTimer = setTimeout(() => {
+      debouncedArtistSearch = artistSearch.trim();
     }, 150);
   }
 
@@ -2336,7 +2350,9 @@
             <p>No artists in library</p>
           </div>
         {:else}
-          {@const filteredArtists = artists.filter(artist => matchesArtistSearch(artist, artistSearch))}
+          {@const filteredArtists = debouncedArtistSearch
+            ? artists.filter(artist => matchesArtistSearch(artist, debouncedArtistSearch))
+            : artists}
           <div class="artist-controls">
             <span class="album-count">{filteredArtists.length} artists</span>
           </div>
