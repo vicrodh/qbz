@@ -2131,30 +2131,42 @@
   $effect(() => {
     if (isQueueOpen) {
       syncQueueState();
-      // Also fetch history and calculate remaining tracks from backend
-      getBackendQueueState().then((state) => {
-        if (state) {
-          // Calculate remaining tracks: total - current_index - 1 (for current track)
-          if (state.current_index !== null && state.total_tracks > 0) {
-            queueRemainingTracks = state.total_tracks - state.current_index - 1;
-          } else {
-            queueRemainingTracks = state.total_tracks;
-          }
-
-          if (state.history) {
-            historyTracks = state.history.map(t => ({
-              id: String(t.id),
-              artwork: t.artwork_url || '',
-              title: t.title,
-              artist: t.artist,
-              duration: formatDuration(t.duration_secs),
-              trackId: t.id
-            }));
-          }
-        }
-      });
+      updateQueueCounts();
     }
   });
+
+  // Update remaining count when track changes while queue is open
+  $effect(() => {
+    // Track the currentTrack to trigger on change
+    const trackId = currentTrack?.id;
+    if (isQueueOpen && trackId !== undefined) {
+      updateQueueCounts();
+    }
+  });
+
+  // Helper function to fetch and update queue counts and history
+  async function updateQueueCounts() {
+    const state = await getBackendQueueState();
+    if (state) {
+      // Calculate remaining tracks: total - current_index - 1 (for current track)
+      if (state.current_index !== null && state.total_tracks > 0) {
+        queueRemainingTracks = state.total_tracks - state.current_index - 1;
+      } else {
+        queueRemainingTracks = state.total_tracks;
+      }
+
+      if (state.history) {
+        historyTracks = state.history.map(t => ({
+          id: String(t.id),
+          artwork: t.artwork_url || '',
+          title: t.title,
+          artist: t.artist,
+          duration: formatDuration(t.duration_secs),
+          trackId: t.id
+        }));
+      }
+    }
+  }
 
   // Start/stop lyrics active line updates based on playback state and visibility
   $effect(() => {
