@@ -2575,24 +2575,26 @@
 
           {@const { grouped: groupedTracks, alphaGroups: trackAlphaGroups, indexTargets: trackIndexTargets } = groupedTracksMemo}
 
-          <div class="track-sections">
+          <div class="track-sections" class:virtualized={useVirtualization}>
             {#if useVirtualization}
-              <VirtualizedTrackList
-                groups={groupedTracks}
-                groupingEnabled={trackGroupingEnabled}
-                groupMode={trackGroupMode}
-                {activeTrackId}
-                {isPlaybackActive}
-                {formatDuration}
-                {getQualityBadge}
-                {buildAlbumSections}
-                onTrackPlay={handleTrackPlay}
-                onArtistClick={handleLocalArtistClick}
-                onAlbumClick={handleLocalAlbumLink}
-                onTrackPlayNext={onTrackPlayNext}
-                onTrackPlayLater={onTrackPlayLater}
-                onTrackAddToPlaylist={onTrackAddToPlaylist}
-              />
+              <div class="virtualized-container">
+                <VirtualizedTrackList
+                  groups={groupedTracks}
+                  groupingEnabled={trackGroupingEnabled}
+                  groupMode={trackGroupMode}
+                  {activeTrackId}
+                  {isPlaybackActive}
+                  {formatDuration}
+                  {getQualityBadge}
+                  {buildAlbumSections}
+                  onTrackPlay={handleTrackPlay}
+                  onArtistClick={handleLocalArtistClick}
+                  onAlbumClick={handleLocalAlbumLink}
+                  onTrackPlayNext={onTrackPlayNext}
+                  onTrackPlayLater={onTrackPlayLater}
+                  onTrackAddToPlaylist={onTrackAddToPlaylist}
+                />
+              </div>
             {:else}
               <div class="track-group-list">
                 {#each groupedTracks as group (group.id)}
@@ -3792,6 +3794,12 @@
     display: flex;
     gap: 12px;
     align-items: flex-start;
+  }
+
+  .track-sections.virtualized {
+    flex: 1;
+    height: calc(100vh - 280px);
+    min-height: 400px;
   }
 
   .track-group-list {
