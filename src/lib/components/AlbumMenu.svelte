@@ -6,6 +6,7 @@
     MoreHorizontal,
     ListPlus,
     ListEnd,
+    ListMusic,
     Share2,
     CloudDownload,
     Link,
@@ -15,6 +16,7 @@
   interface Props {
     onPlayNext?: () => void;
     onPlayLater?: () => void;
+    onAddToPlaylist?: () => void;
     onShareQobuz?: () => void;
     onShareSonglink?: () => void;
     onDownload?: () => void;
@@ -27,6 +29,7 @@
   let {
     onPlayNext,
     onPlayLater,
+    onAddToPlaylist,
     onShareQobuz,
     onShareSonglink,
     onDownload,
@@ -53,9 +56,10 @@
   const menuId = Symbol('album-menu');
 
   const hasQueue = $derived(!!(onPlayNext || onPlayLater));
+  const hasLibrary = $derived(!!onAddToPlaylist);
   const hasShare = $derived(!!(onShareQobuz || onShareSonglink));
   const hasDownload = $derived(!!onDownload || isAlbumFullyDownloaded);
-  const hasMenu = $derived(hasQueue || hasShare || hasDownload);
+  const hasMenu = $derived(hasQueue || hasLibrary || hasShare || hasDownload);
 
   function closeMenu() {
     isOpen = false;
@@ -260,7 +264,18 @@
             {/if}
           {/if}
 
-          {#if hasQueue && (hasShare || hasDownload)}
+          {#if hasQueue && (hasLibrary || hasShare || hasDownload)}
+            <div class="separator"></div>
+          {/if}
+
+          {#if hasLibrary}
+            <button class="menu-item" onclick={() => handleAction(onAddToPlaylist)}>
+              <ListMusic size={14} />
+              <span>Add to playlist</span>
+            </button>
+          {/if}
+
+          {#if hasLibrary && (hasShare || hasDownload)}
             <div class="separator"></div>
           {/if}
 

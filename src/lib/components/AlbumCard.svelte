@@ -21,6 +21,7 @@
     onPlay?: () => void;
     onPlayNext?: () => void;
     onPlayLater?: () => void;
+    onAddAlbumToPlaylist?: () => void;
     onShareQobuz?: () => void;
     onShareSonglink?: () => void;
     onDownload?: () => void;
@@ -44,6 +45,7 @@
     onPlay,
     onPlayNext,
     onPlayLater,
+    onAddAlbumToPlaylist,
     onShareQobuz,
     onShareSonglink,
     onDownload,
@@ -202,6 +204,7 @@
               <AlbumMenu
                 onPlayNext={onPlayNext}
                 onPlayLater={onPlayLater}
+                onAddToPlaylist={onAddAlbumToPlaylist}
                 onShareQobuz={onShareQobuz}
                 onShareSonglink={onShareSonglink}
                 onDownload={onDownload}

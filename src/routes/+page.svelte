@@ -1110,6 +1110,17 @@
     }
   }
 
+  async function addAlbumToPlaylistById(albumId: string) {
+    const album = await fetchAlbumDetail(albumId);
+    addAlbumToPlaylist(album);
+  }
+  
+  function addAlbumToPlaylist(album: AlbumDetail | null) {
+    if (!album?.tracks?.length) return;
+    const trackIds = album.tracks.map(t => t.id);
+    openAddToPlaylist(trackIds);
+  }
+
   // Share album Qobuz link
   function shareAlbumQobuzLink() {
     if (!selectedAlbum?.id) return;
@@ -1447,7 +1458,7 @@
 
   function handlePlaylistCreated() {
     if (playlistModalMode === 'addTrack') {
-      showToast('Track added to playlist', 'success');
+      showToast('Track(s) added to playlist', 'success');
     } else {
       showToast('Playlist created', 'success');
     }
@@ -2122,6 +2133,7 @@
             onTrackPlayNext={queueQobuzTrackNext}
             onTrackPlayLater={queueQobuzTrackLater}
             onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+            onAddAlbumToPlaylist={addAlbumToPlaylistById}
             onTrackShareQobuz={shareQobuzTrackLink}
             onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
             onTrackGoToAlbum={handleAlbumClick}
@@ -2158,6 +2170,7 @@
             onTrackPlayLater={queueQobuzTrackLater}
             onTrackAddFavorite={handleAddToFavorites}
             onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+            onAddAlbumToPlaylist={addAlbumToPlaylistById}
             onTrackShareQobuz={shareQobuzTrackLink}
             onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
             onTrackGoToAlbum={handleAlbumClick}
@@ -2199,6 +2212,7 @@
           onPlayAllNext={handleAddAlbumToQueueNext}
           onPlayAllLater={handleAddAlbumToQueueLater}
           onAddTrackToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onAddAlbumToPlaylist={() => addAlbumToPlaylist(selectedAlbum)}
           onTrackDownload={handleTrackDownload}
           onTrackRemoveDownload={handleTrackRemoveDownload}
           onTrackReDownload={handleTrackReDownload}
@@ -2232,6 +2246,7 @@
           onTrackPlayLater={queueQobuzTrackLater}
           onTrackAddFavorite={handleAddToFavorites}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
           onTrackShareQobuz={shareQobuzTrackLink}
           onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
           onTrackGoToAlbum={handleAlbumClick}
