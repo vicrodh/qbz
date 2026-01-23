@@ -1570,6 +1570,7 @@ pub struct ArtistImageInfo {
     pub image_url: Option<String>,
     pub source: Option<String>,
     pub custom_image_path: Option<String>,
+    pub canonical_name: Option<String>,
 }
 
 /// Get cached artist image
@@ -1598,17 +1599,33 @@ pub async fn library_get_artist_images(
     Ok(results)
 }
 
-/// Cache artist image from Qobuz
+/// Get all canonical artist names mapping
+#[tauri::command]
+pub async fn library_get_canonical_names(
+    state: State<'_, LibraryState>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let db = state.db.lock().await;
+    db.get_all_canonical_names().map_err(|e| e.to_string())
+}
+
+/// Cache artist image from Qobuz/Discogs with canonical name
 #[tauri::command]
 pub async fn library_cache_artist_image(
     artist_name: String,
     image_url: String,
     source: String,
+    canonical_name: Option<String>,
     state: State<'_, LibraryState>,
 ) -> Result<(), String> {
     let db = state.db.lock().await;
-    db.cache_artist_image(&artist_name, Some(&image_url), &source, None)
-        .map_err(|e| e.to_string())
+    db.cache_artist_image_with_canonical(
+        &artist_name,
+        Some(&image_url),
+        &source,
+        None,
+        canonical_name.as_deref(),
+    )
+    .map_err(|e| e.to_string())
 }
 
 /// Set custom artist image

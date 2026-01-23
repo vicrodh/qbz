@@ -204,6 +204,7 @@
           </div>
         {:else if item.type === 'artist'}
           {@const artistImage = artistImages.get(item.artist.name)}
+          {@const displayName = item.artist.displayName || item.artist.name}
           <div
             class="artist-row"
             role="button"
@@ -213,13 +214,13 @@
           >
             <div class="artist-icon" class:has-image={!!artistImage}>
               {#if artistImage}
-                <img src={artistImage} alt={item.artist.name} loading="lazy" />
+                <img src={artistImage} alt={displayName} loading="lazy" />
               {:else}
                 <Mic2 size={20} />
               {/if}
             </div>
             <div class="artist-info">
-              <div class="artist-name">{item.artist.name}</div>
+              <div class="artist-name">{displayName}</div>
               <div class="artist-stats">
                 {item.artist.album_count} albums &bull; {item.artist.track_count} tracks
               </div>

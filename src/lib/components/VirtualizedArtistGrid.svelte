@@ -227,6 +227,7 @@
           <div class="artist-row">
             {#each item.artists as artist (artist.name)}
               {@const artistImage = artistImages.get(artist.name)}
+              {@const displayName = artist.displayName || artist.name}
               <div
                 class="artist-card"
                 role="button"
@@ -236,7 +237,7 @@
               >
                 <div class="artist-icon" class:has-image={!!artistImage}>
                   {#if artistImage}
-                    <img src={artistImage} alt={artist.name} class="artist-image" loading="lazy" />
+                    <img src={artistImage} alt={displayName} class="artist-image" loading="lazy" />
                   {:else}
                     <Mic2 size={32} />
                   {/if}
@@ -250,7 +251,7 @@
                     <Upload size={14} />
                   </button>
                 {/if}
-                <div class="artist-name">{artist.name}</div>
+                <div class="artist-name">{displayName}</div>
                 <div class="artist-stats">
                   {artist.album_count} albums &bull; {artist.track_count} tracks
                 </div>

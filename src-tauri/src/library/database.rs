@@ -486,6 +486,23 @@ impl LibraryDatabase {
             log::info!("Migration completed: sample_rate is now REAL");
         }
 
+        // Migration: Add canonical_name column to artist_images for artist name normalization
+        let has_canonical_name: bool = self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('artist_images') WHERE name = 'canonical_name'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_canonical_name {
+            log::info!("Running migration: adding canonical_name to artist_images");
+            self.conn.execute_batch(
+                "ALTER TABLE artist_images ADD COLUMN canonical_name TEXT;"
+            ).map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
+        }
+
         Ok(())
     }
 
@@ -2281,7 +2298,7 @@ impl LibraryDatabase {
     /// Get cached artist image
     pub fn get_artist_image(&self, artist_name: &str) -> Result<Option<crate::library::commands::ArtistImageInfo>, LibraryError> {
         let result = self.conn.query_row(
-            "SELECT artist_name, image_url, source, custom_image_path FROM artist_images WHERE artist_name = ?1",
+            "SELECT artist_name, image_url, source, custom_image_path, canonical_name FROM artist_images WHERE artist_name = ?1",
             params![artist_name],
             |row| {
                 Ok(crate::library::commands::ArtistImageInfo {
@@ -2289,6 +2306,7 @@ impl LibraryDatabase {
                     image_url: row.get(1)?,
                     source: row.get(2)?,
                     custom_image_path: row.get(3)?,
+                    canonical_name: row.get(4)?,
                 })
             }
         ).optional()
@@ -2296,13 +2314,44 @@ impl LibraryDatabase {
         Ok(result)
     }
 
-    /// Cache artist image
+    /// Get all canonical artist names mapping (for bulk lookup)
+    pub fn get_all_canonical_names(&self) -> Result<std::collections::HashMap<String, String>, LibraryError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT artist_name, canonical_name FROM artist_images WHERE canonical_name IS NOT NULL"
+        ).map_err(|e| LibraryError::Database(format!("Failed to prepare query: {}", e)))?;
+
+        let rows = stmt.query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        }).map_err(|e| LibraryError::Database(format!("Failed to query canonical names: {}", e)))?;
+
+        let mut map = std::collections::HashMap::new();
+        for row in rows {
+            if let Ok((artist_name, canonical_name)) = row {
+                map.insert(artist_name, canonical_name);
+            }
+        }
+        Ok(map)
+    }
+
+    /// Cache artist image with optional canonical name
     pub fn cache_artist_image(
         &self,
         artist_name: &str,
         image_url: Option<&str>,
         source: &str,
         custom_image_path: Option<&str>,
+    ) -> Result<(), LibraryError> {
+        self.cache_artist_image_with_canonical(artist_name, image_url, source, custom_image_path, None)
+    }
+
+    /// Cache artist image with canonical name from Qobuz/Discogs
+    pub fn cache_artist_image_with_canonical(
+        &self,
+        artist_name: &str,
+        image_url: Option<&str>,
+        source: &str,
+        custom_image_path: Option<&str>,
+        canonical_name: Option<&str>,
     ) -> Result<(), LibraryError> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -2311,9 +2360,9 @@ impl LibraryDatabase {
 
         self.conn.execute(
             "INSERT OR REPLACE INTO artist_images
-             (artist_name, image_url, source, custom_image_path, fetched_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![artist_name, image_url, source, custom_image_path, now, now],
+             (artist_name, image_url, source, custom_image_path, canonical_name, fetched_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![artist_name, image_url, source, custom_image_path, canonical_name, now, now],
         )
         .map_err(|e| LibraryError::Database(format!("Failed to cache artist image: {}", e)))?;
         Ok(())

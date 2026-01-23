@@ -236,21 +236,27 @@
     return artists.filter(artist => artist.name.toLowerCase().includes(needle));
   });
 
-  // Memoized grouped artists with alpha index
+  // Memoized grouped artists with alpha index and display names
   let groupedArtistsMemo = $derived.by(() => {
     const filtered = filteredArtistsMemo;
 
+    // Add display names from canonical names mapping
+    const withDisplayNames = filtered.map(artist => ({
+      ...artist,
+      displayName: canonicalNames.get(artist.name) || artist.name
+    }));
+
     if (!artistGroupingEnabled) {
       return {
-        grouped: [{ key: '', id: 'ungrouped', artists: filtered }],
+        grouped: [{ key: '', id: 'ungrouped', artists: withDisplayNames }],
         alphaGroups: new Set<string>()
       };
     }
 
-    // Group by first letter
-    const groups = new Map<string, LocalArtist[]>();
-    for (const artist of filtered) {
-      const key = alphaGroupKey(artist.name);
+    // Group by first letter of DISPLAY name (canonical name if available)
+    const groups = new Map<string, (LocalArtist & { displayName: string })[]>();
+    for (const artist of withDisplayNames) {
+      const key = alphaGroupKey(artist.displayName);
       let group = groups.get(key);
       if (!group) {
         group = [];
@@ -269,7 +275,10 @@
     const grouped = keys.map(key => ({
       key,
       id: `artist-alpha-${key}`,
-      artists: groups.get(key) ?? []
+      // Sort artists within group by display name
+      artists: (groups.get(key) ?? []).sort((a, b) =>
+        a.displayName.localeCompare(b.displayName)
+      )
     }));
 
     return {
@@ -396,6 +405,9 @@
 
   // Qobuz artist images cache (artist name -> image URL)
   let artistImages = $state<Map<string, string>>(new Map());
+
+  // Canonical artist names mapping (local name -> Qobuz/Discogs canonical name)
+  let canonicalNames = $state<Map<string, string>>(new Map());
 
   // Album edit modal state
   let showAlbumEditModal = $state(false);
@@ -1678,7 +1690,7 @@
   }
 
   /**
-   * Load cached artist images from database.
+   * Load cached artist images and canonical names from database.
    */
   async function loadCachedArtistImages(): Promise<void> {
     try {
@@ -1688,6 +1700,7 @@
         image_url: string | null;
         source: string | null;
         custom_image_path: string | null;
+        canonical_name: string | null;
       }>>('library_get_artist_images', { artistNames });
 
       for (const cached of cachedImages) {
@@ -1697,12 +1710,24 @@
         if (imageUrl) {
           artistImages.set(cached.artist_name, imageUrl);
         }
+        // Store canonical name if available and different
+        if (cached.canonical_name && cached.canonical_name !== cached.artist_name) {
+          canonicalNames.set(cached.artist_name, cached.canonical_name);
+        }
       }
       // Trigger re-render
       artistImages = new Map(artistImages);
+      canonicalNames = new Map(canonicalNames);
     } catch (err) {
       console.debug('Failed to load cached artist images:', err);
     }
+  }
+
+  /**
+   * Get the display name for an artist (canonical if available, otherwise original).
+   */
+  function getArtistDisplayName(name: string): string {
+    return canonicalNames.get(name) || name;
   }
 
   /**
@@ -1774,18 +1799,26 @@
             );
             const match = exactMatch ?? results.items[0];
             const imageUrl = match.image?.large || match.image?.thumbnail || match.image?.small;
+            // Store canonical name from Qobuz (properly capitalized)
+            const canonicalName = match.name;
 
             if (imageUrl) {
-              // Cache in database
+              // Cache in database with canonical name
               await invoke('library_cache_artist_image', {
                 artistName: name,
                 imageUrl,
-                source: 'qobuz'
+                source: 'qobuz',
+                canonicalName
               });
               artistImages.set(name, imageUrl);
+              // Also store canonical name mapping
+              if (canonicalName && canonicalName !== name) {
+                canonicalNames.set(name, canonicalName);
+              }
               // Update state periodically (every 5 artists)
               if (i % 5 === 4) {
                 artistImages = new Map(artistImages);
+                canonicalNames = new Map(canonicalNames);
               }
             }
           }
@@ -2648,6 +2681,7 @@
                 <div class="artist-grid">
                   {#each filteredArtists as artist (artist.name)}
                     {@const artistImage = artistImages.get(artist.name)}
+                    {@const displayName = canonicalNames.get(artist.name) || artist.name}
                     <div
                       class="artist-card"
                       role="button"
@@ -2657,7 +2691,7 @@
                     >
                       <div class="artist-icon" class:has-image={!!artistImage}>
                         {#if artistImage}
-                          <img src={artistImage} alt={artist.name} class="artist-image" loading="lazy" />
+                          <img src={artistImage} alt={displayName} class="artist-image" loading="lazy" />
                         {:else}
                           <Mic2 size={32} />
                         {/if}
@@ -2671,7 +2705,7 @@
                           <Upload size={14} />
                         </button>
                       {/if}
-                      <div class="artist-name">{artist.name}</div>
+                      <div class="artist-name">{displayName}</div>
                       <div class="artist-stats">
                         {artist.album_count} albums &bull; {artist.track_count} tracks
                       </div>

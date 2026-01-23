@@ -548,6 +548,7 @@ pub fn run() {
             library::commands::library_get_artist_images,
             library::commands::library_cache_artist_image,
             library::commands::library_set_custom_artist_image,
+            library::commands::library_get_canonical_names,
             // Playlist local content analysis commands (offline mode)
             library::commands::playlist_analyze_local_content,
             library::commands::playlist_get_local_content_status,
