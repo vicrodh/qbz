@@ -1119,7 +1119,12 @@
 
   <!-- Discography Section -->
   <div class="discography section-anchor" bind:this={discographySection}>
-    <h2 class="section-title">Discography</h2>
+    <div class="section-header">
+      <h2 class="section-title">Discography</h2>
+      {#if artist.albums.length > 0}
+        <span class="section-count">{artist.albums.length}</span>
+      {/if}
+    </div>
 
     {#if artist.albums.length === 0}
       <div class="no-albums">No albums found</div>
@@ -1167,7 +1172,10 @@
     <div class="divider"></div>
 
     <div class="discography section-anchor" bind:this={epsSinglesSection}>
-      <h2 class="section-title">EPs & Singles</h2>
+      <div class="section-header">
+        <h2 class="section-title">EPs & Singles</h2>
+        <span class="section-count">{artist.epsSingles.length}</span>
+      </div>
       <div class="albums-grid">
         {#each filteredEpsSingles as album}
           <AlbumCard
@@ -1199,7 +1207,10 @@
     <div class="divider"></div>
 
     <div class="discography section-anchor" bind:this={liveAlbumsSection}>
-      <h2 class="section-title">Live Albums</h2>
+      <div class="section-header">
+        <h2 class="section-title">Live Albums</h2>
+        <span class="section-count">{artist.liveAlbums.length}</span>
+      </div>
       <div class="albums-grid">
         {#each filteredLiveAlbums as album}
           <AlbumCard
@@ -1231,7 +1242,10 @@
     <div class="divider"></div>
 
     <div class="discography section-anchor" bind:this={compilationsSection}>
-      <h2 class="section-title">Compilations</h2>
+      <div class="section-header">
+        <h2 class="section-title">Compilations</h2>
+        <span class="section-count">{artist.compilations.length}</span>
+      </div>
       <div class="albums-grid">
         {#each filteredCompilations as album}
           <AlbumCard
@@ -1263,7 +1277,10 @@
     <div class="divider"></div>
 
     <div class="discography section-anchor" bind:this={tributesSection}>
-      <h2 class="section-title">Tributes & Covers</h2>
+      <div class="section-header">
+        <h2 class="section-title">Tributes & Covers</h2>
+        <span class="section-count">{artist.tributes.length}</span>
+      </div>
       <div class="albums-grid">
         {#each filteredTributes as album}
           <AlbumCard
@@ -1295,7 +1312,10 @@
     <div class="divider"></div>
 
     <div class="discography section-anchor" bind:this={othersSection}>
-      <h2 class="section-title">Others</h2>
+      <div class="section-header">
+        <h2 class="section-title">Others</h2>
+        <span class="section-count">{artist.others.length}</span>
+      </div>
       <div class="albums-grid">
         {#each filteredOthers as album}
           <AlbumCard
@@ -1326,7 +1346,10 @@
     <div class="divider"></div>
 
     <div class="playlists-section section-anchor" bind:this={playlistsSection}>
-      <h2 class="section-title">Playlists</h2>
+      <div class="section-header">
+        <h2 class="section-title">Playlists</h2>
+        <span class="section-count">{artist.playlists.length}</span>
+      </div>
       <div class="playlists-grid">
         {#each filteredPlaylists as playlist}
           <button
@@ -1564,26 +1587,40 @@
   }
 
   .biography {
-    max-width: 600px;
+    max-width: 100%;
+    padding: 16px;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    margin-bottom: 4px;
   }
 
   .bio-text {
     font-size: 14px;
-    line-height: 1.6;
+    line-height: 1.7;
     color: var(--text-secondary);
     margin-bottom: 8px;
   }
 
+  .bio-text :global(p) {
+    margin: 0 0 12px 0;
+  }
+
+  .bio-text :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
   .bio-toggle {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 4px;
     font-size: 13px;
+    font-weight: 500;
     color: var(--accent-primary);
     background: none;
     border: none;
     cursor: pointer;
-    padding: 0;
+    padding: 6px 0;
+    margin-top: 4px;
   }
 
   .bio-toggle:hover {
@@ -1591,9 +1628,11 @@
   }
 
   .bio-source {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
-    margin-top: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--bg-tertiary);
   }
 
   .jump-nav {
@@ -1604,10 +1643,12 @@
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    padding: 12px 24px;
-    background-color: var(--bg-primary);
-    border-bottom: 1px solid var(--bg-tertiary);
-    margin: 0 -24px 16px;
+    padding: 10px 24px;
+    background: rgba(var(--bg-primary-rgb, 18, 18, 18), 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    margin: 0 -24px 24px;
   }
 
   .jump-nav-left {
@@ -1827,13 +1868,19 @@
   }
 
   .similar-artists {
-    margin-top: 16px;
+    margin-top: 20px;
+    padding: 16px;
+    background: var(--bg-secondary);
+    border-radius: 12px;
   }
 
   .similar-title {
-    font-size: 12px;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--text-muted);
-    margin-bottom: 8px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
   }
 
   .similar-loading {
@@ -1845,31 +1892,32 @@
   .similar-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    gap: 8px;
   }
 
   .similar-artist {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 12px;
+    font-size: 13px;
     color: var(--text-secondary);
-    background: none;
-    border: none;
+    background: var(--bg-tertiary);
+    border: 1px solid transparent;
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 16px;
-    transition: background-color 150ms ease, color 150ms ease;
+    padding: 6px 12px 6px 6px;
+    border-radius: 24px;
+    transition: all 150ms ease;
   }
 
   .similar-artist:hover {
-    background-color: var(--bg-tertiary);
+    background: var(--bg-hover);
+    border-color: rgba(255, 255, 255, 0.08);
     color: var(--text-primary);
   }
 
   .similar-avatar {
-    width: 25px;
-    height: 25px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
@@ -1879,7 +1927,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--bg-tertiary);
+    background-color: var(--bg-secondary);
     color: var(--text-muted);
   }
 
@@ -1888,11 +1936,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    font-weight: 500;
   }
 
   .divider {
     height: 1px;
-    background-color: var(--bg-tertiary);
+    background: linear-gradient(90deg, transparent, var(--bg-tertiary) 20%, var(--bg-tertiary) 80%, transparent);
     margin: 32px 0;
   }
 
@@ -1900,11 +1949,50 @@
     scroll-margin-top: 140px;
   }
 
+  .discography {
+    padding: 24px;
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    margin-bottom: 24px;
+  }
+
+  .discography:last-of-type {
+    margin-bottom: 0;
+  }
+
+  .playlists-section {
+    padding: 24px;
+    background: var(--bg-secondary);
+    border-radius: 16px;
+    margin-bottom: 24px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
   .section-title {
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 24px;
+    margin: 0;
+  }
+
+  .section-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
   }
 
   .no-albums {
@@ -2022,6 +2110,9 @@
 
   /* Top Tracks */
   .top-tracks-section {
+    padding: 24px;
+    background: var(--bg-secondary);
+    border-radius: 16px;
     margin-bottom: 0;
   }
 
