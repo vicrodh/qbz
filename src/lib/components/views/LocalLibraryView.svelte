@@ -329,7 +329,10 @@
     // Build groups without sorting first (sort within groups)
     const groups = new Map<string, LocalAlbum[]>();
     for (const album of items) {
-      const key = mode === 'artist' ? album.artist : alphaGroupKey(album.title);
+      // Use canonical name for artist grouping to merge "Alice in Chains" and "Alice In Chains"
+      const key = mode === 'artist'
+        ? (canonicalNames.get(album.artist) || album.artist)
+        : alphaGroupKey(album.title);
       let group = groups.get(key);
       if (!group) {
         group = [];
@@ -1519,7 +1522,10 @@
     const prefix = `album-${mode}`;
     const sorted = [...items].sort((a, b) => {
       if (mode === 'artist') {
-        const artistCmp = a.artist.localeCompare(b.artist);
+        // Use canonical names for sorting to keep "Alice in Chains" and "Alice In Chains" together
+        const aArtist = canonicalNames.get(a.artist) || a.artist;
+        const bArtist = canonicalNames.get(b.artist) || b.artist;
+        const artistCmp = aArtist.localeCompare(bArtist);
         if (artistCmp !== 0) return artistCmp;
         return a.title.localeCompare(b.title);
       }
@@ -1528,7 +1534,10 @@
 
     const groups = new Map<string, LocalAlbum[]>();
     for (const album of sorted) {
-      const key = mode === 'artist' ? album.artist : alphaGroupKey(album.title);
+      // Use canonical name for artist grouping
+      const key = mode === 'artist'
+        ? (canonicalNames.get(album.artist) || album.artist)
+        : alphaGroupKey(album.title);
       if (!groups.has(key)) {
         groups.set(key, []);
       }
@@ -1905,7 +1914,10 @@
         return a.title.localeCompare(b.title);
       }
       if (mode === 'artist') {
-        const artistCmp = a.artist.localeCompare(b.artist);
+        // Use canonical names for sorting to keep variants together
+        const aArtist = canonicalNames.get(a.artist) || a.artist;
+        const bArtist = canonicalNames.get(b.artist) || b.artist;
+        const artistCmp = aArtist.localeCompare(bArtist);
         if (artistCmp !== 0) return artistCmp;
         const albumCmp = a.album.localeCompare(b.album);
         if (albumCmp !== 0) return albumCmp;
@@ -1948,11 +1960,15 @@
           entry.artists.add(track.artist || 'Unknown Artist');
         }
       } else if (mode === 'artist') {
-        const key = track.artist || 'Unknown Artist';
-        if (!groups.has(key)) {
-          groups.set(key, { title: key, tracks: [], artists: new Set([key]) });
+        const rawArtist = track.artist || 'Unknown Artist';
+        // Use canonical name for grouping to merge "Alice in Chains" and "Alice In Chains"
+        const canonicalArtist = canonicalNames.get(rawArtist) || rawArtist;
+        if (!groups.has(canonicalArtist)) {
+          groups.set(canonicalArtist, { title: canonicalArtist, tracks: [], artists: new Set([rawArtist]) });
+        } else {
+          groups.get(canonicalArtist)?.artists.add(rawArtist);
         }
-        groups.get(key)?.tracks.push(track);
+        groups.get(canonicalArtist)?.tracks.push(track);
       } else {
         const key = alphaGroupKey(track.title);
         if (!groups.has(key)) {
