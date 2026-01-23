@@ -14,6 +14,7 @@ pub mod download_settings;
 pub mod playback_preferences;
 pub mod favorites_preferences;
 pub mod subscription_state;
+pub mod tray_settings;
 
 pub use audio_settings::{
     AudioSettings,
@@ -54,4 +55,13 @@ pub use subscription_state::{
     SubscriptionStateState,
     SubscriptionStateStore,
     create_subscription_state,
+};
+
+pub use tray_settings::{
+    TraySettings,
+    TraySettingsState,
+    get_tray_settings,
+    set_enable_tray,
+    set_minimize_to_tray,
+    set_close_to_tray,
 };

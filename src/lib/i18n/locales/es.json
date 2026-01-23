@@ -365,7 +365,16 @@
       "inAppToasts": "Notificaciones en App",
       "systemNotifications": "Notificaciones del Sistema",
       "hideTitleBar": "Ocultar barra de título",
-      "hideTitleBarDesc": "Ocultar completamente la barra de título (para usuarios de gestores de ventanas en mosaico)"
+      "hideTitleBarDesc": "Ocultar completamente la barra de título (para usuarios de gestores de ventanas en mosaico)",
+      "tray": {
+        "title": "Bandeja del Sistema",
+        "enableTray": "Habilitar icono de bandeja",
+        "enableTrayDesc": "Mostrar icono en la bandeja del sistema (requiere reinicio)",
+        "minimizeToTray": "Minimizar a bandeja",
+        "minimizeToTrayDesc": "Ocultar ventana a la bandeja al minimizar",
+        "closeToTray": "Cerrar a bandeja",
+        "closeToTrayDesc": "Ocultar ventana a la bandeja en vez de cerrar"
+      }
     },
     "library": {
       "title": "Biblioteca",

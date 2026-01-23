@@ -376,6 +376,11 @@
   // Title bar settings
   let hideTitleBar = $state(getHideTitleBar());
 
+  // Tray settings
+  let enableTray = $state(true);
+  let minimizeToTray = $state(false);
+  let closeToTray = $state(false);
+
   // Library settings
   let fetchQobuzArtistImages = $state(true);
   let showQobuzDownloadsInLibrary = $state(false);
@@ -465,6 +470,9 @@
 
     // Load playback preferences
     loadPlaybackPreferences();
+
+    // Load tray settings
+    loadTraySettings();
 
     // Detect if running in Flatpak
     loadFlatpakStatus();
@@ -1208,6 +1216,54 @@
     }
   }
 
+  interface TraySettings {
+    enable_tray: boolean;
+    minimize_to_tray: boolean;
+    close_to_tray: boolean;
+  }
+
+  async function loadTraySettings() {
+    try {
+      const settings = await invoke<TraySettings>('get_tray_settings');
+      enableTray = settings.enable_tray;
+      minimizeToTray = settings.minimize_to_tray;
+      closeToTray = settings.close_to_tray;
+    } catch (err) {
+      console.error('Failed to load tray settings:', err);
+    }
+  }
+
+  async function handleEnableTrayChange(value: boolean) {
+    try {
+      await invoke('set_enable_tray', { value });
+      enableTray = value;
+      showToast($t('settings.appearance.tray.enableTrayDesc'), 'info');
+    } catch (err) {
+      console.error('Failed to set enable tray:', err);
+      showToast('Failed to save tray setting', 'error');
+    }
+  }
+
+  async function handleMinimizeToTrayChange(value: boolean) {
+    try {
+      await invoke('set_minimize_to_tray', { value });
+      minimizeToTray = value;
+    } catch (err) {
+      console.error('Failed to set minimize to tray:', err);
+      showToast('Failed to save tray setting', 'error');
+    }
+  }
+
+  async function handleCloseToTrayChange(value: boolean) {
+    try {
+      await invoke('set_close_to_tray', { value });
+      closeToTray = value;
+    } catch (err) {
+      console.error('Failed to set close to tray:', err);
+      showToast('Failed to save tray setting', 'error');
+    }
+  }
+
   async function handleAutoplayModeChange(mode: AutoplayMode) {
     console.log('[Settings] Changing autoplay mode to:', mode);
     try {
@@ -1678,12 +1734,36 @@
       <span class="setting-label">{$t('settings.appearance.systemNotifications')}</span>
       <Toggle enabled={systemNotificationsEnabled} onchange={(v) => { systemNotificationsEnabled = v; setSystemNotificationsEnabled(v); }} />
     </div>
-    <div class="setting-row last">
+    <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.hideTitleBar')}</span>
         <span class="setting-desc">{$t('settings.appearance.hideTitleBarDesc')}</span>
       </div>
       <Toggle enabled={hideTitleBar} onchange={(v) => setHideTitleBar(v)} />
+    </div>
+
+    <!-- System Tray subsection -->
+    <h4 class="subsection-title">{$t('settings.appearance.tray.title')}</h4>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.tray.enableTray')}</span>
+        <span class="setting-desc">{$t('settings.appearance.tray.enableTrayDesc')}</span>
+      </div>
+      <Toggle enabled={enableTray} onchange={(v) => handleEnableTrayChange(v)} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.tray.minimizeToTray')}</span>
+        <span class="setting-desc">{$t('settings.appearance.tray.minimizeToTrayDesc')}</span>
+      </div>
+      <Toggle enabled={minimizeToTray} onchange={(v) => handleMinimizeToTrayChange(v)} disabled={!enableTray} />
+    </div>
+    <div class="setting-row last">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.tray.closeToTray')}</span>
+        <span class="setting-desc">{$t('settings.appearance.tray.closeToTrayDesc')}</span>
+      </div>
+      <Toggle enabled={closeToTray} onchange={(v) => handleCloseToTrayChange(v)} disabled={!enableTray} />
     </div>
   </section>
 
@@ -2088,6 +2168,17 @@ flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
     font-weight: 600;
     color: var(--text-primary);
     margin-bottom: 16px;
+  }
+
+  .subsection-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 20px 0 12px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
   }
 
   .section-note {

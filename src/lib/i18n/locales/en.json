@@ -365,7 +365,16 @@
       "inAppToasts": "In-app toasts notifications",
       "systemNotifications": "System Notifications",
       "hideTitleBar": "Hide title bar",
-      "hideTitleBarDesc": "Hide the title bar completely (for tiling window manager users)"
+      "hideTitleBarDesc": "Hide the title bar completely (for tiling window manager users)",
+      "tray": {
+        "title": "System Tray",
+        "enableTray": "Enable tray icon",
+        "enableTrayDesc": "Show icon in system tray (requires restart)",
+        "minimizeToTray": "Minimize to tray",
+        "minimizeToTrayDesc": "Hide window to tray when minimizing",
+        "closeToTray": "Close to tray",
+        "closeToTrayDesc": "Hide window to tray instead of quitting"
+      }
     },
     "library": {
       "title": "Library",

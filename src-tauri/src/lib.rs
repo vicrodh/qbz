@@ -186,6 +186,9 @@ pub fn run() {
     // Initialize favorites preferences state
     let favorites_prefs_state = config::favorites_preferences::FavoritesPreferencesState::new()
         .expect("Failed to initialize favorites preferences");
+    // Initialize tray settings state
+    let tray_settings_state = config::tray_settings::TraySettingsState::new()
+        .expect("Failed to initialize tray settings");
     // Initialize subscription validity tracking (for offline download compliance)
     let subscription_state = config::create_subscription_state()
         .expect("Failed to initialize subscription state");
@@ -215,15 +218,32 @@ pub fn run() {
         audio_settings.preferred_sample_rate
     );
 
+    // Read tray settings for initialization
+    let tray_settings = tray_settings_state.get_settings().unwrap_or_default();
+    log::info!(
+        "Tray settings: enable={}, minimize_to_tray={}, close_to_tray={}",
+        tray_settings.enable_tray,
+        tray_settings.minimize_to_tray,
+        tray_settings.close_to_tray
+    );
+
+    // Clone settings for use in closures
+    let enable_tray = tray_settings.enable_tray;
+    let close_to_tray = tray_settings.close_to_tray;
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState::with_device_and_settings(saved_device, audio_settings))
-        .setup(|app| {
-            // Initialize system tray icon
-            if let Err(e) = tray::init_tray(app.handle()) {
-                log::error!("Failed to initialize tray icon: {}", e);
+        .setup(move |app| {
+            // Initialize system tray icon (only if enabled)
+            if enable_tray {
+                if let Err(e) = tray::init_tray(app.handle()) {
+                    log::error!("Failed to initialize tray icon: {}", e);
+                }
+            } else {
+                log::info!("System tray icon disabled by user setting");
             }
 
             // Initialize media controls (MPRIS) now that we have an AppHandle
@@ -355,6 +375,16 @@ pub fn run() {
 
             Ok(())
         })
+        .on_window_event(move |window, event| {
+            // Handle close to tray
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if close_to_tray {
+                    log::info!("Close to tray: hiding window instead of closing");
+                    let _ = window.hide();
+                    api.prevent_close();
+                }
+            }
+        })
         .manage(library_state)
         .manage(cast_state)
         .manage(dlna_state)
@@ -370,6 +400,7 @@ pub fn run() {
         .manage(offline_state)
         .manage(playback_prefs_state)
         .manage(favorites_prefs_state)
+        .manage(tray_settings_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -693,6 +724,11 @@ pub fn run() {
             // Flatpak detection commands
             flatpak::is_running_in_flatpak,
             flatpak::get_flatpak_help_text,
+            // Tray settings commands
+            config::tray_settings::get_tray_settings,
+            config::tray_settings::set_enable_tray,
+            config::tray_settings::set_minimize_to_tray,
+            config::tray_settings::set_close_to_tray,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
