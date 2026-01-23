@@ -13,10 +13,12 @@ This project is actively evolving. Contributions are welcome, but we have a few 
 
 We use a consistent branch naming scheme:
 
-`<type>/<scope>/<branch_name>`
+`<type>/<origin>/<branch_name>`
 
-- `type`: `feature` | `bugfix` | `hotfix` | `chore` | `docs`
-- `scope`: `internal` (maintainer work) | `external` (PR author branch name when checked out locally)
+- `type`: `feature` | `bugfix` | `hotfix` | `refactor` | `release` | `chore` | `docs`
+- `origin`:
+  - `internal`: created/owned by maintainers
+  - `external`: branches/commits authored by third-party contributors (PRs)
 
 Examples:
 
@@ -40,22 +42,31 @@ We do not merge external PR branches directly into `main`. Instead, we create an
 2. **Check out the PR**
    - `gh pr checkout <PR_NUMBER>`
 3. **Rename the checked-out branch (local)**
-   - `git branch -m feature/external/<topic>`
+   - Use an `external` branch name so it's obvious these commits are third-party authored:
+   - `git branch -m <type>/external/<topic>`
 4. **Create an integration branch from upstream main**
    - `git fetch origin main`
-   - `git checkout -b feature/internal/pr-<PR_NUMBER>-<topic> origin/main`
+   - `git checkout -b <type>/internal/pr-<PR_NUMBER>-<topic> origin/main`
 5. **Merge the external branch into the integration branch**
-   - `git merge --no-ff feature/external/<topic>`
+   - `git merge --no-ff <type>/external/<topic>`
 6. **Run checks**
    - Frontend: `npm run build`
    - Backend (when Rust changes): `cargo check` (run from `src-tauri/`)
 7. **Push the integration branch (do not merge to main yet)**
-   - `git push -u origin feature/internal/pr-<PR_NUMBER>-<topic>`
+   - `git push -u origin <type>/internal/pr-<PR_NUMBER>-<topic>`
 
 After this, you can either:
 
 - open a PR from the integration branch to `main`, or
 - merge the integration branch to `main` locally when you are ready.
+
+### Merge strategy note (to preserve “external” authorship)
+
+If you want the git history to clearly show third-party authored commits, avoid “squash merge”.
+Prefer:
+
+- **Create a merge commit**, or
+- **Rebase and merge** (preserves individual commits/authors)
 
 ## What to include in PRs
 
@@ -67,4 +78,3 @@ After this, you can either:
 
 - Large refactors mixed with feature work.
 - Changes that reintroduce removed UI/UX patterns (for example, exporting offline cache files).
-
