@@ -159,7 +159,19 @@
     "followers": "followers",
     "loadMore": "Load More",
     "noAlbums": "No albums",
-    "noBiography": "No biography available"
+    "noBiography": "No biography available",
+    "tributes": "Tributes & Covers",
+    "others": "Others",
+    "playlists": "Playlists"
+  },
+  "sort": {
+    "label": "Sort",
+    "default": "Default",
+    "newest": "Newest First",
+    "oldest": "Oldest First",
+    "titleAsc": "Title (A-Z)",
+    "titleDesc": "Title (Z-A)",
+    "artist": "Artist"
   },
   "playlist": {
     "tracks": "tracks",

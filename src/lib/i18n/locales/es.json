@@ -159,7 +159,19 @@
     "followers": "seguidores",
     "loadMore": "Cargar Más",
     "noAlbums": "Sin álbumes",
-    "noBiography": "No hay biografía disponible"
+    "noBiography": "No hay biografía disponible",
+    "tributes": "Tributos y Covers",
+    "others": "Otros",
+    "playlists": "Playlists"
+  },
+  "sort": {
+    "label": "Ordenar",
+    "default": "Por defecto",
+    "newest": "Más reciente",
+    "oldest": "Más antiguo",
+    "titleAsc": "Título (A-Z)",
+    "titleDesc": "Título (Z-A)",
+    "artist": "Artista"
   },
   "playlist": {
     "tracks": "pistas",
