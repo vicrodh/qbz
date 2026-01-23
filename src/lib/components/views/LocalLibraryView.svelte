@@ -11,6 +11,12 @@
   import { t } from '$lib/i18n';
   import { downloadSettingsVersion } from '$lib/stores/downloadSettingsStore';
   import AlbumCard from '../AlbumCard.svelte';
+  import VirtualizedAlbumList from '../VirtualizedAlbumList.svelte';
+  import {
+    isVirtualizationEnabled,
+    shouldUsePerformanceMode,
+    subscribe as subscribePerformance
+  } from '$lib/stores/libraryPerformanceStore';
   import TrackRow from '../TrackRow.svelte';
   import {
     subscribe as subscribeNav,
@@ -164,6 +170,10 @@
   let albumGroupMode = $state<AlbumGroupMode>('alpha');
   let albumGroupingEnabled = $state(false);
   let showGroupMenu = $state(false);
+
+  // Performance mode state
+  let useVirtualization = $state(isVirtualizationEnabled());
+  let virtualizedScrollTarget = $state<string | undefined>(undefined);
   let artistSearch = $state('');
   let trackSearch = $state('');
   let searchOpen = $state(false);
@@ -242,6 +252,7 @@
 
   let unsubscribeNav: (() => void) | null = null;
   let unsubscribeOffline: (() => void) | null = null;
+  let unsubscribePerformance: (() => void) | null = null;
 
   // Reactive effect: reload library when download settings change
   $effect(() => {
@@ -275,6 +286,11 @@
     // Subscribe to offline state changes
     unsubscribeOffline = subscribeOffline(() => {
       isOffline = checkIsOffline();
+    });
+
+    // Subscribe to performance settings changes
+    unsubscribePerformance = subscribePerformance(() => {
+      useVirtualization = isVirtualizationEnabled() && shouldUsePerformanceMode(albums.length);
     });
 
     // Subscribe to navigation changes for back/forward support
@@ -311,6 +327,9 @@
     }
     if (unsubscribeOffline) {
       unsubscribeOffline();
+    }
+    if (unsubscribePerformance) {
+      unsubscribePerformance();
     }
   });
 
@@ -2163,82 +2182,122 @@
             ? new Set(groupedAlbums.map(group => group.key))
             : new Set<string>()}
 
-            <div class="album-sections">
-              <div class="album-group-list">
-                {#each groupedAlbums as group (group.id)}
-                  <div class="album-group" id={group.id}>
-                    {#if albumGroupingEnabled}
-                    <div class="album-group-header">
-                      <span class="album-group-title">{group.key}</span>
-                      <span class="album-group-count">{group.albums.length}</span>
-                    </div>
-                    {/if}
-                    {#if albumViewMode === 'grid'}
-                      <div class="album-grid">
-                        {#each group.albums as album (album.id)}
-                          <AlbumCard
-                            artwork={getArtworkUrl(album.artwork_path)}
-                            title={album.title}
-                            artist={album.artist}
-                            quality={getAlbumQualityBadge(album)}
-                            showFavorite={true}
-                            favoriteEnabled={false}
-                            onPlay={() => handleAlbumPlayFromGrid(album)}
-                            onPlayNext={() => handleAlbumQueueNextFromGrid(album)}
-                            onPlayLater={() => handleAlbumQueueLaterFromGrid(album)}
-                            onclick={() => handleAlbumClick(album)}
-                          />
-                        {/each}
+            {#if useVirtualization}
+              <!-- Virtualized album list for large libraries -->
+              <div class="album-sections virtualized">
+                <div class="virtualized-container">
+                  <VirtualizedAlbumList
+                    groups={groupedAlbums}
+                    viewMode={albumViewMode}
+                    showGroupHeaders={albumGroupingEnabled}
+                    {getArtworkUrl}
+                    getQualityBadge={getAlbumQualityBadge}
+                    isHiRes={isAlbumHiRes}
+                    formatDuration={formatTotalDuration}
+                    onAlbumClick={handleAlbumClick}
+                    onAlbumPlay={handleAlbumPlayFromGrid}
+                    onAlbumQueueNext={handleAlbumQueueNextFromGrid}
+                    onAlbumQueueLater={handleAlbumQueueLaterFromGrid}
+                    scrollToGroupId={virtualizedScrollTarget}
+                  />
+                </div>
+
+                {#if albumGroupingEnabled && albumGroupMode === 'alpha'}
+                  <div class="alpha-index">
+                    {#each alphaIndexLetters as letter}
+                      <button
+                        class="alpha-letter"
+                        class:disabled={!alphaGroups.has(letter)}
+                        onclick={() => {
+                          const groupId = groupIdForKey('album-alpha', letter);
+                          virtualizedScrollTarget = alphaGroups.has(letter) ? groupId : undefined;
+                        }}
+                      >
+                        {letter}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {:else}
+              <!-- Standard album list for smaller libraries -->
+              <div class="album-sections">
+                <div class="album-group-list">
+                  {#each groupedAlbums as group (group.id)}
+                    <div class="album-group" id={group.id}>
+                      {#if albumGroupingEnabled}
+                      <div class="album-group-header">
+                        <span class="album-group-title">{group.key}</span>
+                        <span class="album-group-count">{group.albums.length}</span>
                       </div>
-                    {:else}
-                      <div class="album-list">
-                        {#each group.albums as album (album.id)}
-                          <div class="album-row" role="button" tabindex="0" onclick={() => handleAlbumClick(album)}>
-                            <div class="album-row-art">
-                              {#if album.artwork_path}
-                                <img src={getArtworkUrl(album.artwork_path)} alt={album.title} loading="lazy" decoding="async" />
-                              {:else}
-                                <div class="artwork-placeholder">
-                                  <Disc3 size={28} />
+                      {/if}
+                      {#if albumViewMode === 'grid'}
+                        <div class="album-grid">
+                          {#each group.albums as album (album.id)}
+                            <AlbumCard
+                              artwork={getArtworkUrl(album.artwork_path)}
+                              title={album.title}
+                              artist={album.artist}
+                              quality={getAlbumQualityBadge(album)}
+                              showFavorite={true}
+                              favoriteEnabled={false}
+                              onPlay={() => handleAlbumPlayFromGrid(album)}
+                              onPlayNext={() => handleAlbumQueueNextFromGrid(album)}
+                              onPlayLater={() => handleAlbumQueueLaterFromGrid(album)}
+                              onclick={() => handleAlbumClick(album)}
+                            />
+                          {/each}
+                        </div>
+                      {:else}
+                        <div class="album-list">
+                          {#each group.albums as album (album.id)}
+                            <div class="album-row" role="button" tabindex="0" onclick={() => handleAlbumClick(album)}>
+                              <div class="album-row-art">
+                                {#if album.artwork_path}
+                                  <img src={getArtworkUrl(album.artwork_path)} alt={album.title} loading="lazy" decoding="async" />
+                                {:else}
+                                  <div class="artwork-placeholder">
+                                    <Disc3 size={28} />
+                                  </div>
+                                {/if}
+                              </div>
+                              <div class="album-row-info">
+                                <div class="album-row-title truncate">{album.title}</div>
+                                <div class="album-row-meta">
+                                  <span>{album.artist}</span>
+                                  {#if album.year}<span>{album.year}</span>{/if}
+                                  <span>{album.track_count} tracks</span>
+                                  <span>{formatTotalDuration(album.total_duration_secs)}</span>
                                 </div>
-                              {/if}
-                            </div>
-                            <div class="album-row-info">
-                              <div class="album-row-title truncate">{album.title}</div>
-                              <div class="album-row-meta">
-                                <span>{album.artist}</span>
-                                {#if album.year}<span>{album.year}</span>{/if}
-                                <span>{album.track_count} tracks</span>
-                                <span>{formatTotalDuration(album.total_duration_secs)}</span>
+                              </div>
+                              <div class="album-row-quality">
+                                <span class="quality-badge" class:hires={isAlbumHiRes(album)}>
+                                  {getAlbumQualityBadge(album)}
+                                </span>
                               </div>
                             </div>
-                            <div class="album-row-quality">
-                              <span class="quality-badge" class:hires={isAlbumHiRes(album)}>
-                                {getAlbumQualityBadge(album)}
-                              </span>
-                            </div>
-                          </div>
-                        {/each}
-                      </div>
-                    {/if}
-                  </div>
-                {/each}
-              </div>
-
-              {#if albumGroupingEnabled && albumGroupMode === 'alpha'}
-                <div class="alpha-index">
-                  {#each alphaIndexLetters as letter}
-                    <button
-                      class="alpha-letter"
-                      class:disabled={!alphaGroups.has(letter)}
-                      onclick={() => scrollToGroup('album-alpha', letter, alphaGroups)}
-                    >
-                      {letter}
-                    </button>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
                   {/each}
                 </div>
-              {/if}
-            </div>
+
+                {#if albumGroupingEnabled && albumGroupMode === 'alpha'}
+                  <div class="alpha-index">
+                    {#each alphaIndexLetters as letter}
+                      <button
+                        class="alpha-letter"
+                        class:disabled={!alphaGroups.has(letter)}
+                        onclick={() => scrollToGroup('album-alpha', letter, alphaGroups)}
+                      >
+                        {letter}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
           {/if}
         {/if}
         {/if}
@@ -3429,6 +3488,18 @@
     display: flex;
     gap: 12px;
     align-items: flex-start;
+  }
+
+  .album-sections.virtualized {
+    flex: 1;
+    height: calc(100vh - 280px); /* Adjust based on header/controls height */
+    min-height: 400px;
+  }
+
+  .virtualized-container {
+    flex: 1;
+    height: 100%;
+    min-width: 0;
   }
 
   .album-group-list {
