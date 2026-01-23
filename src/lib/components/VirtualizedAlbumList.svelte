@@ -459,14 +459,14 @@
 
   /* Album Grid Row (Grid Mode) */
   .album-grid-row {
-    display: flex;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(162px, 1fr));
     gap: 24px;
     padding: 0;
   }
 
   .album-grid-row :global(.album-card) {
-    flex: 0 0 auto;
-    width: 162px;
+    width: 100%;
+    max-width: 200px;
   }
 </style>
