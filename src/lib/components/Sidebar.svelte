@@ -950,6 +950,19 @@
     padding-right: 4px;
     min-height: 0;
     flex: 1;
+    scrollbar-gutter: stable;
+  }
+
+  /* When sidebar is collapsed, hide scrollbar to keep icons perfectly aligned */
+  .sidebar.collapsed .playlists-scroll {
+    scrollbar-gutter: auto;
+    padding-right: 0;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .sidebar.collapsed .playlists-scroll::-webkit-scrollbar {
+    display: none;
   }
 
   .playlists-loading,
@@ -961,14 +974,14 @@
 
   .toggle-btn {
     position: absolute;
-    right: -16px;
+    right: -14px;
     top: 50%;
     transform: translateY(-50%);
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     background: rgba(255, 255, 255, 0.08);
     backdrop-filter: blur(12px);

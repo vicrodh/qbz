@@ -71,7 +71,7 @@
 </button>
 
 {#if showTooltip && effectiveTooltip}
-  <div class="custom-tooltip" style={tooltipStyle}>
+  <div class="custom-tooltip" class:bold-first-line={!showLabel} style={tooltipStyle}>
     {effectiveTooltip}
   </div>
 {/if}
@@ -148,5 +148,10 @@
     pointer-events: none;
     min-width: 120px;
     max-width: 200px;
+  }
+
+  .custom-tooltip.bold-first-line::first-line {
+    font-weight: 600;
+    color: var(--text-primary);
   }
 </style>
