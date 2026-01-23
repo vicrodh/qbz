@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-svelte';
+  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronLeft } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import NavigationItem from './NavigationItem.svelte';
@@ -170,7 +170,15 @@
   }
 
   // Get basic tooltip (no state mutation during render)
-  function getPlaylistTooltip(playlist: Playlist): string {
+  function getPlaylistTooltip(playlist: Playlist, sidebarExpanded: boolean): string {
+    // When sidebar is collapsed, show playlist name + track count
+    if (!sidebarExpanded) {
+      const totalCount = getTotalTrackCount(playlist);
+      const trackText = totalCount === 1 ? 'track' : 'tracks';
+      return `${playlist.name}\n${totalCount} ${trackText}`;
+    }
+
+    // When sidebar is expanded, use the rich tooltip with artists
     const cached = playlistTooltipCache.get(playlist.id);
     if (cached) return cached;
 
@@ -687,7 +695,7 @@
               {#each visiblePlaylists as playlist (playlist.id)}
                 <NavigationItem
                   label={playlist.name}
-                  tooltip={getPlaylistTooltip(playlist)}
+                  tooltip={getPlaylistTooltip(playlist, isExpanded)}
                   active={activeView === 'playlist' && selectedPlaylistId === playlist.id}
                   onclick={() => handlePlaylistClick(playlist)}
                   onHover={() => loadPlaylistTooltip(playlist)}
@@ -736,16 +744,16 @@
     </div>
   </div>
 
-  <!-- Toggle Button -->
+  <!-- Toggle Button (Edge position) -->
   <button
     class="toggle-btn"
     onclick={onToggle}
     title={isExpanded ? $t('actions.collapse') : $t('actions.expand')}
   >
     {#if isExpanded}
-      <ChevronsLeft size={16} />
+      <ChevronLeft size={16} />
     {:else}
-      <ChevronsRight size={16} />
+      <ChevronRight size={16} />
     {/if}
   </button>
 
@@ -952,24 +960,31 @@
   }
 
   .toggle-btn {
+    position: absolute;
+    right: -16px;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 100%;
+    width: 32px;
     height: 32px;
-    padding: 0 12px;
-    background: none;
-    border: none;
+    padding: 0;
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 50%;
     color: var(--text-muted);
     cursor: pointer;
-    transition: color 150ms ease, background-color 150ms ease;
-    border-radius: 0;
-    flex-shrink: 0;
+    transition: transform 150ms ease, background-color 150ms ease, color 150ms ease;
+    z-index: 10;
   }
 
   .toggle-btn:hover {
     color: var(--text-primary);
-    background-color: var(--bg-hover);
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateY(-50%) scale(1.1);
   }
 
   .user-section {
