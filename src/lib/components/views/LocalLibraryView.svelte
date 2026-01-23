@@ -12,6 +12,7 @@
   import { downloadSettingsVersion } from '$lib/stores/downloadSettingsStore';
   import AlbumCard from '../AlbumCard.svelte';
   import VirtualizedAlbumList from '../VirtualizedAlbumList.svelte';
+  import VirtualizedArtistGrid from '../VirtualizedArtistGrid.svelte';
   import {
     isVirtualizationEnabled,
     shouldUsePerformanceMode,
@@ -216,6 +217,13 @@
     // Fallback for tracks view when no search results - calculate from albums
     // This ensures the counter respects filters even when tracks aren't loaded
     return albums.reduce((sum, album) => sum + album.track_count, 0);
+  });
+
+  // Memoized filtered artists
+  let filteredArtistsMemo = $derived.by(() => {
+    if (!debouncedArtistSearch) return artists;
+    const needle = debouncedArtistSearch.toLowerCase();
+    return artists.filter(artist => artist.name.toLowerCase().includes(needle));
   });
 
   // Memoized filtered and grouped albums
@@ -2414,9 +2422,7 @@
             <p>No artists in library</p>
           </div>
         {:else}
-          {@const filteredArtists = debouncedArtistSearch
-            ? artists.filter(artist => matchesArtistSearch(artist, debouncedArtistSearch))
-            : artists}
+          {@const filteredArtists = filteredArtistsMemo}
           <div class="artist-controls">
             <span class="album-count">{filteredArtists.length} artists</span>
           </div>
@@ -2427,39 +2433,49 @@
               <p>No artists match your search</p>
             </div>
           {:else}
-            <div class="artist-grid">
-              {#each filteredArtists as artist (artist.name)}
-                {@const artistImage = artistImages.get(artist.name)}
-                <div
-                  class="artist-card"
-                  role="button"
-                  tabindex="0"
-                  onclick={() => handleLocalArtistClick(artist.name)}
-                  onkeydown={(event) => event.key === 'Enter' && handleLocalArtistClick(artist.name)}
-                >
-                  <div class="artist-icon" class:has-image={!!artistImage}>
-                    {#if artistImage}
-                      <img src={artistImage} alt={artist.name} class="artist-image" loading="lazy" />
-                    {:else}
-                      <Mic2 size={32} />
+            {#if useVirtualization}
+              <VirtualizedArtistGrid
+                artists={filteredArtists}
+                {artistImages}
+                {showSettings}
+                onArtistClick={handleLocalArtistClick}
+                onUploadImage={handleUploadArtistImage}
+              />
+            {:else}
+              <div class="artist-grid">
+                {#each filteredArtists as artist (artist.name)}
+                  {@const artistImage = artistImages.get(artist.name)}
+                  <div
+                    class="artist-card"
+                    role="button"
+                    tabindex="0"
+                    onclick={() => handleLocalArtistClick(artist.name)}
+                    onkeydown={(event) => event.key === 'Enter' && handleLocalArtistClick(artist.name)}
+                  >
+                    <div class="artist-icon" class:has-image={!!artistImage}>
+                      {#if artistImage}
+                        <img src={artistImage} alt={artist.name} class="artist-image" loading="lazy" />
+                      {:else}
+                        <Mic2 size={32} />
+                      {/if}
+                    </div>
+                    {#if showSettings}
+                      <button
+                        class="artist-image-btn"
+                        onclick={(e) => handleUploadArtistImage(artist.name, e)}
+                        title="Upload custom image"
+                      >
+                        <Upload size={14} />
+                      </button>
                     {/if}
+                    <div class="artist-name">{artist.name}</div>
+                    <div class="artist-stats">
+                      {artist.album_count} albums &bull; {artist.track_count} tracks
+                    </div>
                   </div>
-                  {#if showSettings}
-                    <button
-                      class="artist-image-btn"
-                      onclick={(e) => handleUploadArtistImage(artist.name, e)}
-                      title="Upload custom image"
-                    >
-                      <Upload size={14} />
-                    </button>
-                  {/if}
-                  <div class="artist-name">{artist.name}</div>
-                  <div class="artist-stats">
-                    {artist.album_count} albums &bull; {artist.track_count} tracks
-                  </div>
-                </div>
-              {/each}
-            </div>
+                {/each}
+              </div>
+            {/if}
           {/if}
         {/if}
       {:else if activeTab === 'tracks'}
