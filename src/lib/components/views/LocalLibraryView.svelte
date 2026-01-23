@@ -13,6 +13,7 @@
   import AlbumCard from '../AlbumCard.svelte';
   import VirtualizedAlbumList from '../VirtualizedAlbumList.svelte';
   import VirtualizedArtistGrid from '../VirtualizedArtistGrid.svelte';
+  import VirtualizedTrackList from '../VirtualizedTrackList.svelte';
   import {
     isVirtualizationEnabled,
     shouldUsePerformanceMode,
@@ -2559,28 +2560,70 @@
               : new Set<string>()}
 
           <div class="track-sections">
-            <div class="track-group-list">
-              {#each groupedTracks as group (group.id)}
-                <div class="track-group" id={group.id}>
-                  {#if trackGroupingEnabled}
-                  <div class="track-group-header">
-                    <div class="track-group-title">{group.title}</div>
-                    {#if group.subtitle}
-                      <div class="track-group-subtitle">{group.subtitle}</div>
+            {#if useVirtualization}
+              <VirtualizedTrackList
+                groups={groupedTracks}
+                groupingEnabled={trackGroupingEnabled}
+                groupMode={trackGroupMode}
+                {activeTrackId}
+                {isPlaybackActive}
+                {formatDuration}
+                {getQualityBadge}
+                {buildAlbumSections}
+                onTrackPlay={handleTrackPlay}
+                onArtistClick={handleLocalArtistClick}
+                onAlbumClick={handleLocalAlbumLink}
+                onTrackPlayNext={onTrackPlayNext}
+                onTrackPlayLater={onTrackPlayLater}
+                onTrackAddToPlaylist={onTrackAddToPlaylist}
+              />
+            {:else}
+              <div class="track-group-list">
+                {#each groupedTracks as group (group.id)}
+                  <div class="track-group" id={group.id}>
+                    {#if trackGroupingEnabled}
+                    <div class="track-group-header">
+                      <div class="track-group-title">{group.title}</div>
+                      {#if group.subtitle}
+                        <div class="track-group-subtitle">{group.subtitle}</div>
+                      {/if}
+                      <div class="track-group-count">{group.tracks.length} tracks</div>
+                    </div>
                     {/if}
-                    <div class="track-group-count">{group.tracks.length} tracks</div>
-                  </div>
-                  {/if}
 
-                  <div class="track-list">
-                    {#if trackGroupingEnabled && trackGroupMode === 'album'}
-                      {@const trackSections = buildAlbumSections(group.tracks)}
-                      {@const showTrackDiscHeaders = trackSections.length > 1}
-                      {#each trackSections as section (section.disc)}
-                        {#if showTrackDiscHeaders}
-                          <div class="disc-header">{section.label}</div>
-                        {/if}
-                        {#each section.tracks as track, index (track.id)}
+                    <div class="track-list">
+                      {#if trackGroupingEnabled && trackGroupMode === 'album'}
+                        {@const trackSections = buildAlbumSections(group.tracks)}
+                        {@const showTrackDiscHeaders = trackSections.length > 1}
+                        {#each trackSections as section (section.disc)}
+                          {#if showTrackDiscHeaders}
+                            <div class="disc-header">{section.label}</div>
+                          {/if}
+                          {#each section.tracks as track, index (track.id)}
+                            <TrackRow
+                              number={track.track_number ?? index + 1}
+                              title={track.title}
+                              artist={track.artist}
+                              duration={formatDuration(track.duration_secs)}
+                              quality={getQualityBadge(track)}
+                              isPlaying={isPlaybackActive && activeTrackId === track.id}
+                              isLocal={true}
+                              hideDownload={true}
+                              hideFavorite={true}
+                              onArtistClick={track.artist ? () => handleLocalArtistClick(track.artist) : undefined}
+                              onAlbumClick={track.album_group_key ? () => handleLocalAlbumLink(track) : undefined}
+                              onPlay={() => handleTrackPlay(track)}
+                              menuActions={{
+                                onPlayNow: () => handleTrackPlay(track),
+                                onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
+                                onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,
+                                onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined
+                              }}
+                            />
+                          {/each}
+                        {/each}
+                      {:else}
+                        {#each group.tracks as track, index (track.id)}
                           <TrackRow
                             number={track.track_number ?? index + 1}
                             title={track.title}
@@ -2602,35 +2645,12 @@
                             }}
                           />
                         {/each}
-                      {/each}
-                    {:else}
-                      {#each group.tracks as track, index (track.id)}
-                        <TrackRow
-                          number={track.track_number ?? index + 1}
-                          title={track.title}
-                          artist={track.artist}
-                          duration={formatDuration(track.duration_secs)}
-                          quality={getQualityBadge(track)}
-                          isPlaying={isPlaybackActive && activeTrackId === track.id}
-                          isLocal={true}
-                          hideDownload={true}
-                          hideFavorite={true}
-                          onArtistClick={track.artist ? () => handleLocalArtistClick(track.artist) : undefined}
-                          onAlbumClick={track.album_group_key ? () => handleLocalAlbumLink(track) : undefined}
-                          onPlay={() => handleTrackPlay(track)}
-                          menuActions={{
-                            onPlayNow: () => handleTrackPlay(track),
-                            onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
-                            onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,
-                            onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined
-                          }}
-                        />
-                      {/each}
-                    {/if}
+                      {/if}
+                    </div>
                   </div>
-                </div>
-              {/each}
-            </div>
+                {/each}
+              </div>
+            {/if}
 
             {#if trackGroupingEnabled && (trackGroupMode === 'name' || trackGroupMode === 'artist')}
               <div class="alpha-index">
