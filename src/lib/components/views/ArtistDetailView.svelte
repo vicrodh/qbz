@@ -1334,20 +1334,22 @@
     flex: 1;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
+    padding-top: 8px;
   }
 
   .artist-name-row {
     display: flex;
     align-items: center;
     gap: 16px;
+    margin-bottom: 8px;
   }
 
   .artist-name {
     font-size: 24px;
     font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 8px;
+    margin: 0;
   }
 
   .favorite-btn {
