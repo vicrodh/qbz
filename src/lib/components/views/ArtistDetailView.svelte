@@ -139,6 +139,11 @@
   let searchInputEl = $state<HTMLInputElement | null>(null);
   let currentSearchIndex = $state(0);
 
+  // Album sorting state
+  type AlbumSortMode = 'default' | 'newest' | 'oldest' | 'title-asc' | 'title-desc';
+  let albumSortMode = $state<AlbumSortMode>('default');
+  let showAlbumSortMenu = $state(false);
+
   // Download status tracking
   let albumDownloadStatuses = $state<Map<string, boolean>>(new Map());
 
@@ -196,11 +201,30 @@
     similarArtists = [];
     similarArtistImageErrors = new Set();
     activeJumpSection = 'about';
+    albumSortMode = 'default'; // Reset sort when artist changes
 
     loadTopTracks();
     loadSimilarArtists();
     checkFavoriteStatus();
     loadArtistAlbumDownloadStatuses();
+  });
+
+  // Close sort menu when clicking outside
+  $effect(() => {
+    if (!showAlbumSortMenu) return;
+
+    function handleClick() {
+      showAlbumSortMenu = false;
+    }
+
+    // Delay to avoid closing immediately
+    setTimeout(() => {
+      document.addEventListener('click', handleClick);
+    }, 0);
+
+    return () => {
+      document.removeEventListener('click', handleClick);
+    };
   });
 
   async function loadArtistAlbumDownloadStatuses() {
@@ -531,38 +555,70 @@
 
   let showJumpNav = $derived(jumpSections.length > 1);
 
-  // Search filtering
+  // Album sorting helper
+  type AlbumItem = { id: string; title: string; year?: string; artwork: string; quality: string };
+  function sortAlbums<T extends AlbumItem>(albums: T[], mode: AlbumSortMode): T[] {
+    if (mode === 'default') return albums;
+    return [...albums].sort((a, b) => {
+      switch (mode) {
+        case 'newest': {
+          const yearA = a.year || '0000';
+          const yearB = b.year || '0000';
+          return yearB.localeCompare(yearA);
+        }
+        case 'oldest': {
+          const yearA = a.year || '9999';
+          const yearB = b.year || '9999';
+          return yearA.localeCompare(yearB);
+        }
+        case 'title-asc':
+          return a.title.localeCompare(b.title);
+        case 'title-desc':
+          return b.title.localeCompare(a.title);
+        default:
+          return 0;
+      }
+    });
+  }
+
+  // Search filtering and sorting
   let searchLower = $derived(searchQuery.toLowerCase().trim());
-  let filteredAlbums = $derived(
-    searchLower
+  let filteredAlbums = $derived.by(() => {
+    let albums = searchLower
       ? artist.albums.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.albums
-  );
-  let filteredEpsSingles = $derived(
-    searchLower
+      : artist.albums;
+    return sortAlbums(albums, albumSortMode);
+  });
+  let filteredEpsSingles = $derived.by(() => {
+    let albums = searchLower
       ? artist.epsSingles.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.epsSingles
-  );
-  let filteredLiveAlbums = $derived(
-    searchLower
+      : artist.epsSingles;
+    return sortAlbums(albums, albumSortMode);
+  });
+  let filteredLiveAlbums = $derived.by(() => {
+    let albums = searchLower
       ? artist.liveAlbums.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.liveAlbums
-  );
-  let filteredCompilations = $derived(
-    searchLower
+      : artist.liveAlbums;
+    return sortAlbums(albums, albumSortMode);
+  });
+  let filteredCompilations = $derived.by(() => {
+    let albums = searchLower
       ? artist.compilations.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.compilations
-  );
-  let filteredTributes = $derived(
-    searchLower
+      : artist.compilations;
+    return sortAlbums(albums, albumSortMode);
+  });
+  let filteredTributes = $derived.by(() => {
+    let albums = searchLower
       ? artist.tributes.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.tributes
-  );
-  let filteredOthers = $derived(
-    searchLower
+      : artist.tributes;
+    return sortAlbums(albums, albumSortMode);
+  });
+  let filteredOthers = $derived.by(() => {
+    let albums = searchLower
       ? artist.others.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.others
-  );
+      : artist.others;
+    return sortAlbums(albums, albumSortMode);
+  });
   let filteredPlaylists = $derived(
     searchLower
       ? artist.playlists.filter(p => p.title.toLowerCase().includes(searchLower))
@@ -840,6 +896,59 @@
               {section.label}
             </button>
           {/each}
+        </div>
+        <!-- Album Sort Dropdown -->
+        <div class="sort-dropdown">
+          <button class="sort-btn" onclick={() => (showAlbumSortMenu = !showAlbumSortMenu)}>
+            <span>
+              {#if albumSortMode === 'default'}Sort: Default
+              {:else if albumSortMode === 'newest'}Sort: Newest
+              {:else if albumSortMode === 'oldest'}Sort: Oldest
+              {:else if albumSortMode === 'title-asc'}Sort: A-Z
+              {:else if albumSortMode === 'title-desc'}Sort: Z-A
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showAlbumSortMenu}
+            <div class="sort-menu">
+              <button
+                class="sort-item"
+                class:selected={albumSortMode === 'default'}
+                onclick={() => { albumSortMode = 'default'; showAlbumSortMenu = false; }}
+              >
+                Default
+              </button>
+              <button
+                class="sort-item"
+                class:selected={albumSortMode === 'newest'}
+                onclick={() => { albumSortMode = 'newest'; showAlbumSortMenu = false; }}
+              >
+                Newest First
+              </button>
+              <button
+                class="sort-item"
+                class:selected={albumSortMode === 'oldest'}
+                onclick={() => { albumSortMode = 'oldest'; showAlbumSortMenu = false; }}
+              >
+                Oldest First
+              </button>
+              <button
+                class="sort-item"
+                class:selected={albumSortMode === 'title-asc'}
+                onclick={() => { albumSortMode = 'title-asc'; showAlbumSortMenu = false; }}
+              >
+                Title (A-Z)
+              </button>
+              <button
+                class="sort-item"
+                class:selected={albumSortMode === 'title-desc'}
+                onclick={() => { albumSortMode = 'title-desc'; showAlbumSortMenu = false; }}
+              >
+                Title (Z-A)
+              </button>
+            </div>
+          {/if}
         </div>
       </div>
       <div class="page-search" class:open={searchOpen}>
@@ -1539,6 +1648,63 @@
   .jump-link.active {
     color: var(--text-primary);
     border-bottom-color: var(--accent-primary);
+  }
+
+  /* Album Sort Dropdown */
+  .sort-dropdown {
+    position: relative;
+    margin-left: auto;
+  }
+
+  .sort-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .sort-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .sort-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 140px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 4px;
+    z-index: 50;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .sort-item {
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: all 100ms ease;
+  }
+
+  .sort-item:hover,
+  .sort-item.selected {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
   }
 
   /* Page Search */
