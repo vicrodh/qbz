@@ -944,9 +944,13 @@ impl Player {
                             return;
                         };
 
-                        // Stop previous engine
+                        // Stop previous engine and wait for sink to release resources
                         if let Some(engine) = current_engine.take() {
                             engine.stop();
+                            // Small delay to allow the audio sink to fully release its
+                            // reference to the OutputStreamHandle before creating a new sink.
+                            // This prevents "resource busy" errors on rapid track switches.
+                            std::thread::sleep(Duration::from_millis(50));
                         }
 
                         *current_audio_data = Some(data.clone());
