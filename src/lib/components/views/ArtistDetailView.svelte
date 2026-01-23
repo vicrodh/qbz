@@ -962,8 +962,13 @@
   <!-- Top Tracks Section -->
   {#if topTracks.length > 0 || tracksLoading}
     <div class="top-tracks-section section-anchor" bind:this={topTracksSection}>
-      <div class="section-header-row">
-        <h2 class="section-title">Popular Tracks</h2>
+      <div class="section-header">
+        <div class="section-header-left">
+          <h2 class="section-title">Popular Tracks</h2>
+          {#if topTracks.length > 0}
+            <span class="section-count">{topTracks.length}</span>
+          {/if}
+        </div>
         {#if topTracks.length > 0}
           <button class="play-all-btn" onclick={handlePlayAllTracks}>
             <Play size={14} fill="white" color="white" />
@@ -1663,7 +1668,8 @@
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    margin: 0 -24px 24px;
+    margin: 0 -8px 24px -24px;
+    width: calc(100% + 32px);
   }
 
   .jump-nav-left {
@@ -2126,17 +2132,6 @@
     padding: 24px;
     background: var(--bg-secondary);
     border-radius: 16px;
-    margin-bottom: 0;
-  }
-
-  .section-header-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
-
-  .section-header-row .section-title {
     margin-bottom: 0;
   }
 
