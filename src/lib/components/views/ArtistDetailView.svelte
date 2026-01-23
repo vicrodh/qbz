@@ -897,59 +897,6 @@
             </button>
           {/each}
         </div>
-        <!-- Album Sort Dropdown -->
-        <div class="sort-dropdown">
-          <button class="sort-btn" onclick={() => (showAlbumSortMenu = !showAlbumSortMenu)}>
-            <span>
-              {#if albumSortMode === 'default'}Sort: Default
-              {:else if albumSortMode === 'newest'}Sort: Newest
-              {:else if albumSortMode === 'oldest'}Sort: Oldest
-              {:else if albumSortMode === 'title-asc'}Sort: A-Z
-              {:else if albumSortMode === 'title-desc'}Sort: Z-A
-              {/if}
-            </span>
-            <ChevronDown size={14} />
-          </button>
-          {#if showAlbumSortMenu}
-            <div class="sort-menu">
-              <button
-                class="sort-item"
-                class:selected={albumSortMode === 'default'}
-                onclick={() => { albumSortMode = 'default'; showAlbumSortMenu = false; }}
-              >
-                Default
-              </button>
-              <button
-                class="sort-item"
-                class:selected={albumSortMode === 'newest'}
-                onclick={() => { albumSortMode = 'newest'; showAlbumSortMenu = false; }}
-              >
-                Newest First
-              </button>
-              <button
-                class="sort-item"
-                class:selected={albumSortMode === 'oldest'}
-                onclick={() => { albumSortMode = 'oldest'; showAlbumSortMenu = false; }}
-              >
-                Oldest First
-              </button>
-              <button
-                class="sort-item"
-                class:selected={albumSortMode === 'title-asc'}
-                onclick={() => { albumSortMode = 'title-asc'; showAlbumSortMenu = false; }}
-              >
-                Title (A-Z)
-              </button>
-              <button
-                class="sort-item"
-                class:selected={albumSortMode === 'title-desc'}
-                onclick={() => { albumSortMode = 'title-desc'; showAlbumSortMenu = false; }}
-              >
-                Title (Z-A)
-              </button>
-            </div>
-          {/if}
-        </div>
       </div>
       <div class="page-search" class:open={searchOpen}>
         {#if searchOpen}
@@ -1120,10 +1067,65 @@
   <!-- Discography Section -->
   <div class="discography section-anchor" bind:this={discographySection}>
     <div class="section-header">
-      <h2 class="section-title">Discography</h2>
-      {#if artist.albums.length > 0}
-        <span class="section-count">{artist.albums.length}</span>
-      {/if}
+      <div class="section-header-left">
+        <h2 class="section-title">Discography</h2>
+        {#if artist.albums.length > 0}
+          <span class="section-count">{artist.albums.length}</span>
+        {/if}
+      </div>
+      <!-- Album Sort Dropdown -->
+      <div class="sort-dropdown">
+        <button class="sort-btn" onclick={() => (showAlbumSortMenu = !showAlbumSortMenu)}>
+          <span>
+            {#if albumSortMode === 'default'}Sort: Default
+            {:else if albumSortMode === 'newest'}Sort: Newest
+            {:else if albumSortMode === 'oldest'}Sort: Oldest
+            {:else if albumSortMode === 'title-asc'}Sort: A-Z
+            {:else if albumSortMode === 'title-desc'}Sort: Z-A
+            {/if}
+          </span>
+          <ChevronDown size={14} />
+        </button>
+        {#if showAlbumSortMenu}
+          <div class="sort-menu">
+            <button
+              class="sort-item"
+              class:selected={albumSortMode === 'default'}
+              onclick={() => { albumSortMode = 'default'; showAlbumSortMenu = false; }}
+            >
+              Default
+            </button>
+            <button
+              class="sort-item"
+              class:selected={albumSortMode === 'newest'}
+              onclick={() => { albumSortMode = 'newest'; showAlbumSortMenu = false; }}
+            >
+              Newest First
+            </button>
+            <button
+              class="sort-item"
+              class:selected={albumSortMode === 'oldest'}
+              onclick={() => { albumSortMode = 'oldest'; showAlbumSortMenu = false; }}
+            >
+              Oldest First
+            </button>
+            <button
+              class="sort-item"
+              class:selected={albumSortMode === 'title-asc'}
+              onclick={() => { albumSortMode = 'title-asc'; showAlbumSortMenu = false; }}
+            >
+              Title (A-Z)
+            </button>
+            <button
+              class="sort-item"
+              class:selected={albumSortMode === 'title-desc'}
+              onclick={() => { albumSortMode = 'title-desc'; showAlbumSortMenu = false; }}
+            >
+              Title (Z-A)
+            </button>
+          </div>
+        {/if}
+      </div>
     </div>
 
     {#if artist.albums.length === 0}
@@ -1694,7 +1696,6 @@
   /* Album Sort Dropdown */
   .sort-dropdown {
     position: relative;
-    margin-left: auto;
   }
 
   .sort-btn {
@@ -1702,7 +1703,7 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    background: var(--bg-secondary);
+    background: var(--bg-tertiary);
     border: 1px solid var(--border-color);
     border-radius: 6px;
     font-size: 12px;
@@ -1868,19 +1869,13 @@
   }
 
   .similar-artists {
-    margin-top: 20px;
-    padding: 16px;
-    background: var(--bg-secondary);
-    border-radius: 12px;
+    margin-top: 16px;
   }
 
   .similar-title {
-    font-size: 11px;
-    font-weight: 600;
+    font-size: 12px;
     color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
   }
 
   .similar-loading {
@@ -1892,32 +1887,31 @@
   .similar-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
   }
 
   .similar-artist {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
-    background: var(--bg-tertiary);
-    border: 1px solid transparent;
+    background: none;
+    border: none;
     cursor: pointer;
-    padding: 6px 12px 6px 6px;
-    border-radius: 24px;
-    transition: all 150ms ease;
+    padding: 4px 8px;
+    border-radius: 16px;
+    transition: background-color 150ms ease, color 150ms ease;
   }
 
   .similar-artist:hover {
-    background: var(--bg-hover);
-    border-color: rgba(255, 255, 255, 0.08);
+    background-color: var(--bg-tertiary);
     color: var(--text-primary);
   }
 
   .similar-avatar {
-    width: 28px;
-    height: 28px;
+    width: 25px;
+    height: 25px;
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
@@ -1927,7 +1921,7 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--bg-secondary);
+    background-color: var(--bg-tertiary);
     color: var(--text-muted);
   }
 
@@ -1936,7 +1930,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-weight: 500;
   }
 
   .divider {
@@ -1970,8 +1963,15 @@
   .section-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 12px;
     margin-bottom: 20px;
+  }
+
+  .section-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
   }
 
   .section-title {
