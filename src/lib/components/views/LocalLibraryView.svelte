@@ -706,7 +706,7 @@
       console.log('[LocalLibrary] Calling library_search');
       tracks = await invoke<LocalTrack[]>('library_search', {
         query,
-        limit: 1000,
+        limit: 100000, // No practical cap - virtualization handles large lists
         excludeNetworkFolders: shouldExcludeNetworkFolders()
       });
       console.log('[LocalLibrary] Received tracks:', tracks.length);

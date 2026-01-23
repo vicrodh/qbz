@@ -63,7 +63,7 @@
   // Constants
   const HEADER_HEIGHT = 44; // px
   const LIST_ROW_HEIGHT = 76; // px (52px art + padding + gap)
-  const GRID_ROW_HEIGHT = 260; // px (approx for 180px card + info + gap)
+  const GRID_ROW_HEIGHT = 270; // px (card height + info + row gap)
   const GRID_MIN_CARD_WIDTH = 180; // px
   const GRID_GAP = 24; // px
   const BUFFER_ITEMS = 5; // Extra items to render above/below viewport
@@ -460,13 +460,13 @@
   /* Album Grid Row (Grid Mode) */
   .album-grid-row {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(162px, 1fr));
-    gap: 30px 22px; /* row-gap column-gap */
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0 22px; /* row-gap column-gap - row gap handled by GRID_ROW_HEIGHT */
     padding: 0;
   }
 
   .album-grid-row :global(.album-card) {
     width: 100%;
-    max-width: 200px;
+    /* No max-width - let cards fill their grid cells to eliminate right gap */
   }
 </style>
