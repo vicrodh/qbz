@@ -176,7 +176,11 @@
   // Performance mode state
   let useVirtualization = $state(isVirtualizationEnabled());
   let virtualizedScrollTarget = $state<string | undefined>(undefined);
+
+  // Artist view state
   let artistSearch = $state('');
+  let artistViewMode = $state<'grid' | 'list'>('grid');
+  let artistGroupingEnabled = $state(true); // Enable alpha grouping by default
   let trackSearch = $state('');
   let searchOpen = $state(false);
   let searchInputEl: HTMLInputElement | undefined;
@@ -225,6 +229,48 @@
     if (!debouncedArtistSearch) return artists;
     const needle = debouncedArtistSearch.toLowerCase();
     return artists.filter(artist => artist.name.toLowerCase().includes(needle));
+  });
+
+  // Memoized grouped artists with alpha index
+  let groupedArtistsMemo = $derived.by(() => {
+    const filtered = filteredArtistsMemo;
+
+    if (!artistGroupingEnabled) {
+      return {
+        grouped: [{ key: '', id: 'ungrouped', artists: filtered }],
+        alphaGroups: new Set<string>()
+      };
+    }
+
+    // Group by first letter
+    const groups = new Map<string, LocalArtist[]>();
+    for (const artist of filtered) {
+      const key = alphaGroupKey(artist.name);
+      let group = groups.get(key);
+      if (!group) {
+        group = [];
+        groups.set(key, group);
+      }
+      group.push(artist);
+    }
+
+    // Sort keys (# at end)
+    const keys = [...groups.keys()].sort((a, b) => {
+      if (a === '#') return 1;
+      if (b === '#') return -1;
+      return a.localeCompare(b);
+    });
+
+    const grouped = keys.map(key => ({
+      key,
+      id: `artist-alpha-${key}`,
+      artists: groups.get(key) ?? []
+    }));
+
+    return {
+      grouped,
+      alphaGroups: new Set(keys)
+    };
   });
 
   // Memoized filtered and grouped albums
@@ -2456,8 +2502,27 @@
             <p>No artists in library</p>
           </div>
         {:else}
+          {@const { grouped: groupedArtists, alphaGroups: artistAlphaGroups } = groupedArtistsMemo}
           {@const filteredArtists = filteredArtistsMemo}
           <div class="artist-controls">
+            <div class="view-toggle">
+              <button
+                class="view-btn"
+                class:active={artistViewMode === 'grid'}
+                onclick={() => artistViewMode = 'grid'}
+                title="Grid view"
+              >
+                <LayoutGrid size={18} />
+              </button>
+              <button
+                class="view-btn"
+                class:active={artistViewMode === 'list'}
+                onclick={() => artistViewMode = 'list'}
+                title="List view"
+              >
+                <List size={18} />
+              </button>
+            </div>
             <span class="album-count">{filteredArtists.length} artists</span>
           </div>
 
@@ -2467,49 +2532,107 @@
               <p>No artists match your search</p>
             </div>
           {:else}
-            {#if useVirtualization}
-              <VirtualizedArtistGrid
-                artists={filteredArtists}
-                {artistImages}
-                {showSettings}
-                onArtistClick={handleLocalArtistClick}
-                onUploadImage={handleUploadArtistImage}
-              />
-            {:else}
-              <div class="artist-grid">
-                {#each filteredArtists as artist (artist.name)}
-                  {@const artistImage = artistImages.get(artist.name)}
-                  <div
-                    class="artist-card"
-                    role="button"
-                    tabindex="0"
-                    onclick={() => handleLocalArtistClick(artist.name)}
-                    onkeydown={(event) => event.key === 'Enter' && handleLocalArtistClick(artist.name)}
-                  >
-                    <div class="artist-icon" class:has-image={!!artistImage}>
-                      {#if artistImage}
-                        <img src={artistImage} alt={artist.name} class="artist-image" loading="lazy" />
-                      {:else}
-                        <Mic2 size={32} />
-                      {/if}
-                    </div>
-                    {#if showSettings}
-                      <button
-                        class="artist-image-btn"
-                        onclick={(e) => handleUploadArtistImage(artist.name, e)}
-                        title="Upload custom image"
-                      >
-                        <Upload size={14} />
-                      </button>
-                    {/if}
-                    <div class="artist-name">{artist.name}</div>
-                    <div class="artist-stats">
-                      {artist.album_count} albums &bull; {artist.track_count} tracks
+            <div class="artist-sections" class:virtualized={useVirtualization}>
+              {#if useVirtualization}
+                {#if artistViewMode === 'grid'}
+                  <div class="virtualized-container">
+                    <VirtualizedArtistGrid
+                      groups={groupedArtists}
+                      {artistImages}
+                      {showSettings}
+                      showGroupHeaders={artistGroupingEnabled}
+                      onArtistClick={handleLocalArtistClick}
+                      onUploadImage={handleUploadArtistImage}
+                    />
+                  </div>
+                {:else}
+                  <!-- Artist list view -->
+                  <div class="virtualized-container">
+                    <div class="artist-list-virtualized">
+                      {#each groupedArtists as group (group.id)}
+                        {#if artistGroupingEnabled && group.key}
+                          <div class="group-header">
+                            <span class="group-title">{group.key}</span>
+                          </div>
+                        {/if}
+                        {#each group.artists as artist (artist.name)}
+                          {@const artistImage = artistImages.get(artist.name)}
+                          <div
+                            class="artist-list-row"
+                            role="button"
+                            tabindex="0"
+                            onclick={() => handleLocalArtistClick(artist.name)}
+                            onkeydown={(e) => e.key === 'Enter' && handleLocalArtistClick(artist.name)}
+                          >
+                            <div class="artist-list-icon" class:has-image={!!artistImage}>
+                              {#if artistImage}
+                                <img src={artistImage} alt={artist.name} loading="lazy" />
+                              {:else}
+                                <Mic2 size={20} />
+                              {/if}
+                            </div>
+                            <div class="artist-list-info">
+                              <div class="artist-list-name">{artist.name}</div>
+                              <div class="artist-list-stats">
+                                {artist.album_count} albums &bull; {artist.track_count} tracks
+                              </div>
+                            </div>
+                          </div>
+                        {/each}
+                      {/each}
                     </div>
                   </div>
-                {/each}
-              </div>
-            {/if}
+                {/if}
+
+                {#if artistGroupingEnabled}
+                  <div class="alpha-index">
+                    {#each alphaIndexLetters as letter}
+                      <button
+                        class="alpha-letter"
+                        class:disabled={!artistAlphaGroups.has(letter)}
+                        onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroups)}
+                      >
+                        {letter}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              {:else}
+                <div class="artist-grid">
+                  {#each filteredArtists as artist (artist.name)}
+                    {@const artistImage = artistImages.get(artist.name)}
+                    <div
+                      class="artist-card"
+                      role="button"
+                      tabindex="0"
+                      onclick={() => handleLocalArtistClick(artist.name)}
+                      onkeydown={(event) => event.key === 'Enter' && handleLocalArtistClick(artist.name)}
+                    >
+                      <div class="artist-icon" class:has-image={!!artistImage}>
+                        {#if artistImage}
+                          <img src={artistImage} alt={artist.name} class="artist-image" loading="lazy" />
+                        {:else}
+                          <Mic2 size={32} />
+                        {/if}
+                      </div>
+                      {#if showSettings}
+                        <button
+                          class="artist-image-btn"
+                          onclick={(e) => handleUploadArtistImage(artist.name, e)}
+                          title="Upload custom image"
+                        >
+                          <Upload size={14} />
+                        </button>
+                      {/if}
+                      <div class="artist-name">{artist.name}</div>
+                      <div class="artist-stats">
+                        {artist.album_count} albums &bull; {artist.track_count} tracks
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
           {/if}
         {/if}
       {:else if activeTab === 'tracks'}
@@ -3873,10 +3996,87 @@
   }
 
   /* Artist Grid */
+  .artist-sections {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .artist-sections.virtualized {
+    flex: 1;
+    height: calc(100vh - 280px);
+    min-height: 400px;
+  }
+
   .artist-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 24px;
+  }
+
+  .artist-list-virtualized {
+    height: 100%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .artist-list-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 150ms ease;
+  }
+
+  .artist-list-row:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .artist-list-icon {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+    color: var(--text-muted);
+    overflow: hidden;
+  }
+
+  .artist-list-icon.has-image {
+    background: none;
+  }
+
+  .artist-list-icon img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .artist-list-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .artist-list-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .artist-list-stats {
+    font-size: 12px;
+    color: var(--text-muted);
   }
 
   .artist-card {
