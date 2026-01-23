@@ -953,16 +953,29 @@
     scrollbar-gutter: stable;
   }
 
-  /* When sidebar is collapsed, hide scrollbar to keep icons perfectly aligned */
+  /* When sidebar is collapsed, use overlay scrollbar to keep icons aligned */
   .sidebar.collapsed .playlists-scroll {
+    overflow-y: overlay;
     scrollbar-gutter: auto;
     padding-right: 0;
-    -ms-overflow-style: none;
-    scrollbar-width: none;
   }
 
+  /* Thin, subtle overlay scrollbar for collapsed mode */
   .sidebar.collapsed .playlists-scroll::-webkit-scrollbar {
-    display: none;
+    width: 4px;
+  }
+
+  .sidebar.collapsed .playlists-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .sidebar.collapsed .playlists-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+  }
+
+  .sidebar.collapsed .playlists-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
   }
 
   .playlists-loading,
