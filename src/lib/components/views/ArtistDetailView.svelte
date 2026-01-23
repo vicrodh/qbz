@@ -1340,6 +1340,7 @@
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
             onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
             onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+            onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
             onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
             onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
             onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
