@@ -870,9 +870,10 @@ pub async fn library_search(
     let db = state.db.lock().await;
 
     // Use optimized SQL-based filtering
+    // limit = 0 means no limit (fetch all tracks)
     let tracks = db.search_with_filter(
         &query,
-        limit.unwrap_or(50),
+        limit.unwrap_or(0),
         include_qobuz,
         exclude_network_folders.unwrap_or(false),
     ).map_err(|e| e.to_string())?;

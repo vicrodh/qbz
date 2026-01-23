@@ -1228,14 +1228,21 @@ impl LibraryDatabase {
             ""
         };
 
+        // limit = 0 means no limit (fetch all)
+        let limit_clause = if limit == 0 {
+            String::new()
+        } else {
+            format!("LIMIT {}", limit)
+        };
+
         let sql = format!(
             r#"
             SELECT * FROM local_tracks
             WHERE (title LIKE ?1 OR artist LIKE ?1 OR album LIKE ?1)
             {} {}
-            LIMIT ?2
+            {}
         "#,
-            source_filter, network_filter
+            source_filter, network_filter, limit_clause
         );
 
         let mut stmt = self
@@ -1244,7 +1251,7 @@ impl LibraryDatabase {
             .map_err(|e| LibraryError::Database(e.to_string()))?;
 
         let rows = stmt
-            .query_map(params![&pattern, limit], |row| {
+            .query_map(params![&pattern], |row| {
                 Self::row_to_track(row)
             })
             .map_err(|e| LibraryError::Database(e.to_string()))?;
