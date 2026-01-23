@@ -46,9 +46,7 @@
   import { showToast } from '$lib/stores/toastStore';
   import {
     subscribe as subscribeTitleBar,
-    getUseCustomTitleBar,
     getHideTitleBar,
-    setUseCustomTitleBar,
     setHideTitleBar
   } from '$lib/stores/titleBarStore';
   import {
@@ -376,7 +374,6 @@
   let language = $state('Auto');
 
   // Title bar settings
-  let useCustomTitleBar = $state(getUseCustomTitleBar());
   let hideTitleBar = $state(getHideTitleBar());
 
   // Library settings
@@ -483,7 +480,6 @@
 
     // Subscribe to title bar state changes
     const unsubscribeTitleBar = subscribeTitleBar(() => {
-      useCustomTitleBar = getUseCustomTitleBar();
       hideTitleBar = getHideTitleBar();
     });
 
@@ -1681,17 +1677,6 @@
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.systemNotifications')}</span>
       <Toggle enabled={systemNotificationsEnabled} onchange={(v) => { systemNotificationsEnabled = v; setSystemNotificationsEnabled(v); }} />
-    </div>
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.appearance.useCustomTitleBar')}</span>
-        <span class="setting-desc">{$t('settings.appearance.useCustomTitleBarDesc')}</span>
-      </div>
-      <Toggle
-        enabled={useCustomTitleBar}
-        disabled={hideTitleBar}
-        onchange={(v) => setUseCustomTitleBar(v)}
-      />
     </div>
     <div class="setting-row last">
       <div class="setting-info">

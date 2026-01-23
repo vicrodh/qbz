@@ -364,8 +364,6 @@
       "uiScale": "Escala de UI",
       "inAppToasts": "Notificaciones en App",
       "systemNotifications": "Notificaciones del Sistema",
-      "useCustomTitleBar": "Usar barra de título de QBZ",
-      "useCustomTitleBarDesc": "Usar la barra de título personalizada de QBZ en lugar de las decoraciones del sistema",
       "hideTitleBar": "Ocultar barra de título",
       "hideTitleBarDesc": "Ocultar completamente la barra de título (para usuarios de gestores de ventanas en mosaico)"
     },

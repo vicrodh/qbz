@@ -364,9 +364,7 @@
       "uiScale": "UI Scale",
       "inAppToasts": "In-app toasts notifications",
       "systemNotifications": "System Notifications",
-      "useCustomTitleBar": "Use QBZ title bar",
-      "useCustomTitleBarDesc": "Use the custom QBZ title bar instead of system decorations",
-      "hideTitleBar": "Remove title bar",
+      "hideTitleBar": "Hide title bar",
       "hideTitleBarDesc": "Hide the title bar completely (for tiling window manager users)"
     },
     "library": {

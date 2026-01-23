@@ -75,7 +75,6 @@
   import {
     subscribe as subscribeTitleBar,
     initTitleBarStore,
-    getTitleBarState,
     shouldShowTitleBar
   } from '$lib/stores/titleBarStore';
 
