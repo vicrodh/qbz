@@ -376,9 +376,11 @@
     color: var(--text-primary);
     text-align: center;
     overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
     width: 100%;
+    line-height: 1.3;
   }
 
   .artist-stats {

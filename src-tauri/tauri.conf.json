@@ -30,8 +30,11 @@
         "scope": [
           "$CACHE/qbz/**",
           "$CONFIG/qbz/**",
+          "$DATA/qbz/**",
+          "$LOCALDATA/qbz/**",
           "$HOME/.cache/qbz/**",
           "$HOME/.config/qbz/**",
+          "$HOME/.local/share/qbz/**",
           "$HOME/**",
           "/mnt/**",
           "/media/**",

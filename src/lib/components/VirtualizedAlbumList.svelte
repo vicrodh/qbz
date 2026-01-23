@@ -466,8 +466,7 @@
   }
 
   .album-grid-row :global(.album-card) {
-    flex: 1 1 180px;
-    max-width: calc((100% - 24px * 5) / 6); /* Max 6 columns */
-    min-width: 180px;
+    flex: 0 0 auto;
+    width: 162px;
   }
 </style>

@@ -183,6 +183,7 @@
   let artistSearch = $state('');
   let artistViewMode = $state<'grid' | 'list'>('grid');
   let artistGroupingEnabled = $state(true); // Enable alpha grouping by default
+  let showArtistGroupMenu = $state(false);
   let trackSearch = $state('');
   let searchOpen = $state(false);
   let searchInputEl: HTMLInputElement | undefined;
@@ -1717,9 +1718,22 @@
 
     if (toFetch.length === 0) return;
 
-    // Fetch in batches of 10 to avoid overwhelming the API
-    const batchSize = 10;
+    // Fetch in smaller batches with delay to avoid rate limiting
+    const batchSize = 5;
+    const batchDelay = 2000; // 2 seconds between batches
+
     for (let i = 0; i < toFetch.length; i += batchSize) {
+      // Add delay between batches (not before the first batch)
+      if (i > 0) {
+        await new Promise(resolve => setTimeout(resolve, batchDelay));
+      }
+
+      // Check if we went offline during the fetch
+      if (isOffline) {
+        console.log('[LocalLibrary] Stopping artist image fetch - went offline');
+        break;
+      }
+
       const batch = toFetch.slice(i, i + batchSize);
       const promises = batch.map(async (artist) => {
         const name = artist.name;
@@ -2541,24 +2555,46 @@
           {@const { grouped: groupedArtists, alphaGroups: artistAlphaGroups } = groupedArtistsMemo}
           {@const filteredArtists = filteredArtistsMemo}
           <div class="artist-controls">
-            <div class="view-toggle">
+            <div class="dropdown-container">
               <button
-                class="view-btn"
-                class:active={artistViewMode === 'grid'}
-                onclick={() => artistViewMode = 'grid'}
-                title="Grid view"
+                class="control-btn"
+                onclick={() => (showArtistGroupMenu = !showArtistGroupMenu)}
+                title="Group artists"
               >
-                <LayoutGrid size={18} />
+                <span>{!artistGroupingEnabled ? 'Group: Off' : 'Group: A-Z'}</span>
               </button>
-              <button
-                class="view-btn"
-                class:active={artistViewMode === 'list'}
-                onclick={() => artistViewMode = 'list'}
-                title="List view"
-              >
-                <List size={18} />
-              </button>
+              {#if showArtistGroupMenu}
+                <div class="dropdown-menu">
+                  <button
+                    class="dropdown-item"
+                    class:selected={!artistGroupingEnabled}
+                    onclick={() => { artistGroupingEnabled = false; showArtistGroupMenu = false; }}
+                  >
+                    Off
+                  </button>
+                  <button
+                    class="dropdown-item"
+                    class:selected={artistGroupingEnabled}
+                    onclick={() => { artistGroupingEnabled = true; showArtistGroupMenu = false; }}
+                  >
+                    Alphabetical (A-Z)
+                  </button>
+                </div>
+              {/if}
             </div>
+
+            <button
+              class="control-btn icon-only"
+              onclick={() => (artistViewMode = artistViewMode === 'list' ? 'grid' : 'list')}
+              title={artistViewMode === 'list' ? 'Grid view' : 'List view'}
+            >
+              {#if artistViewMode === 'list'}
+                <LayoutGrid size={16} />
+              {:else}
+                <List size={16} />
+              {/if}
+            </button>
+
             <span class="album-count">{filteredArtists.length} artists</span>
           </div>
 
