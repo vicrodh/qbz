@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio } from 'lucide-svelte';
+  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal } from 'lucide-svelte';
   import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -143,6 +143,22 @@
   type AlbumSortMode = 'default' | 'newest' | 'oldest' | 'title-asc' | 'title-desc';
   let albumSortMode = $state<AlbumSortMode>('default');
   let showAlbumSortMenu = $state(false);
+
+  // Popular tracks display state
+  let visibleTracksCount = $state(5);
+  let showTracksContextMenu = $state(false);
+
+  // Computed visible tracks
+  let visibleTracks = $derived(topTracks.slice(0, visibleTracksCount));
+  let canLoadMoreTracks = $derived(visibleTracksCount < 50 && topTracks.length > visibleTracksCount);
+
+  function loadMoreTracks() {
+    if (visibleTracksCount === 5) {
+      visibleTracksCount = 20;
+    } else if (visibleTracksCount === 20) {
+      visibleTracksCount = 50;
+    }
+  }
 
   // Download status tracking
   let albumDownloadStatuses = $state<Map<string, boolean>>(new Map());
@@ -513,6 +529,40 @@
     } catch (err) {
       console.error('Failed to set queue:', err);
     }
+  }
+
+  function handlePlayAllTracksNext() {
+    if (!onTrackPlayNext) return;
+    // Add all tracks to play next (in reverse order so first track plays first)
+    for (let i = topTracks.length - 1; i >= 0; i--) {
+      onTrackPlayNext(topTracks[i]);
+    }
+  }
+
+  function handlePlayAllTracksLater() {
+    if (!onTrackPlayLater) return;
+    // Add all tracks to play later
+    for (const track of topTracks) {
+      onTrackPlayLater(track);
+    }
+  }
+
+  async function handleShuffleAllTracks() {
+    if (topTracks.length === 0 || !onTrackPlay) return;
+    // Shuffle and play from random position
+    const randomIndex = Math.floor(Math.random() * topTracks.length);
+    try {
+      await handleTrackPlay(topTracks[randomIndex], randomIndex);
+    } catch (err) {
+      console.error('Failed to shuffle tracks:', err);
+    }
+  }
+
+  function handleAddAllTracksToPlaylist() {
+    if (!onTrackAddToPlaylist || topTracks.length === 0) return;
+    // Add first track to playlist (this opens the playlist picker)
+    // The UI typically handles adding multiple tracks through a different flow
+    onTrackAddToPlaylist(topTracks[0].id);
   }
 
   function handleImageError() {
@@ -950,24 +1000,44 @@
     </div>
   {/if}
 
-  <!-- Divider -->
-  <div class="divider"></div>
-
   <!-- Top Tracks Section -->
   {#if topTracks.length > 0 || tracksLoading}
     <div class="top-tracks-section section-anchor" bind:this={topTracksSection}>
       <div class="section-header">
         <div class="section-header-left">
           <h2 class="section-title">Popular Tracks</h2>
-          {#if topTracks.length > 0}
-            <span class="section-count">{topTracks.length}</span>
-          {/if}
         </div>
         {#if topTracks.length > 0}
-          <button class="play-all-btn" onclick={handlePlayAllTracks}>
-            <Play size={14} fill="white" color="white" />
-            <span>Play All</span>
-          </button>
+          <div class="section-header-actions">
+            <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
+              <Play size={20} fill="white" color="white" />
+            </button>
+            <div class="context-menu-wrapper">
+              <button
+                class="action-btn-circle"
+                onclick={() => showTracksContextMenu = !showTracksContextMenu}
+                title="More options"
+              >
+                <MoreHorizontal size={20} />
+              </button>
+              {#if showTracksContextMenu}
+                <div class="context-menu">
+                  <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
+                    Play Next
+                  </button>
+                  <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
+                    Play Later
+                  </button>
+                  <button class="context-menu-item" onclick={() => { handleShuffleAllTracks(); showTracksContextMenu = false; }}>
+                    Shuffle
+                  </button>
+                  <button class="context-menu-item" onclick={() => { handleAddAllTracksToPlaylist(); showTracksContextMenu = false; }}>
+                    Add to Playlist
+                  </button>
+                </div>
+              {/if}
+            </div>
+          </div>
         {/if}
       </div>
 
@@ -975,7 +1045,7 @@
         <div class="tracks-loading">Loading tracks...</div>
       {:else}
         <div class="tracks-list">
-          {#each topTracks as track, index}
+          {#each visibleTracks as track, index}
             {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
             <div
               class="track-row"
@@ -1058,10 +1128,13 @@
             </div>
           {/each}
         </div>
+        {#if canLoadMoreTracks}
+          <button class="load-more-link" onclick={loadMoreTracks}>
+            Load More
+          </button>
+        {/if}
       {/if}
     </div>
-
-    <div class="divider"></div>
   {/if}
 
   <!-- Discography Section -->
@@ -2157,29 +2230,93 @@
 
   /* Top Tracks */
   .top-tracks-section {
-    padding: 24px;
-    background: var(--bg-secondary);
-    border-radius: 16px;
-    margin-bottom: 0;
+    margin-bottom: 32px;
   }
 
-  .play-all-btn {
+  .section-header-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background-color: var(--accent-primary);
-    border: none;
-    border-radius: 8px;
-    color: white;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 150ms ease;
+    gap: 12px;
   }
 
-  .play-all-btn:hover {
-    background-color: var(--accent-hover);
+  .action-btn-circle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    border: none;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+  }
+
+  .action-btn-circle:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .action-btn-circle.primary {
+    background: var(--accent-primary);
+    color: white;
+  }
+
+  .action-btn-circle.primary:hover {
+    background: var(--accent-hover);
+  }
+
+  .context-menu-wrapper {
+    position: relative;
+  }
+
+  .context-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    min-width: 160px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 4px 0;
+    z-index: 100;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  }
+
+  .context-menu-item {
+    display: block;
+    width: 100%;
+    padding: 10px 16px;
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: background 150ms ease;
+  }
+
+  .context-menu-item:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .load-more-link {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    background: none;
+    border: none;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 150ms ease;
+  }
+
+  .load-more-link:hover {
+    color: var(--text-primary);
   }
 
   .tracks-loading {
