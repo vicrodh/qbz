@@ -318,6 +318,9 @@
   let selectedArtist = $state<ArtistDetail | null>(null);
   let isArtistAlbumsLoading = $state(false);
 
+  // Artist albums for "By the same artist" section in album view
+  let albumArtistAlbums = $state<{ id: string; title: string; artwork: string; quality: string }[]>([]);
+
   // Overlay States (from uiStore subscription)
   let isQueueOpen = $state(false);
   let isFullScreenOpen = $state(false);
@@ -400,9 +403,67 @@
       selectedAlbum = convertQobuzAlbum(album);
       navigateTo('album');
       hideToast();
+
+      // Fetch artist albums for "By the same artist" section (non-blocking)
+      if (album.artist?.id) {
+        fetchAlbumArtistAlbums(album.artist.id);
+      } else {
+        albumArtistAlbums = [];
+      }
     } catch (err) {
       console.error('Failed to load album:', err);
       showToast('Failed to load album', 'error');
+    }
+  }
+
+  /**
+   * Fetch artist albums for the "By the same artist" section
+   * Only includes studio albums and live albums
+   */
+  async function fetchAlbumArtistAlbums(artistId: number) {
+    try {
+      const artist = await invoke<QobuzArtist>('get_artist_detail', { artistId });
+      const artistDetail = convertQobuzArtist(artist);
+
+      // Combine studio albums and live albums, limit to 16
+      const combined = [
+        ...artistDetail.albums.map(a => ({
+          id: a.id,
+          title: a.title,
+          artwork: a.artwork,
+          quality: a.quality
+        })),
+        ...artistDetail.liveAlbums.map(a => ({
+          id: a.id,
+          title: a.title,
+          artwork: a.artwork,
+          quality: a.quality
+        }))
+      ].slice(0, 16);
+
+      albumArtistAlbums = combined;
+    } catch (err) {
+      console.error('Failed to fetch artist albums for "By the same artist":', err);
+      albumArtistAlbums = [];
+    }
+  }
+
+  /**
+   * Navigate to artist view and scroll to Discography section
+   */
+  function handleViewArtistDiscography() {
+    if (selectedAlbum?.artistId) {
+      // Store scroll target for artist view
+      const artistId = selectedAlbum.artistId;
+      handleArtistClick(artistId).then(() => {
+        // Use setTimeout to allow the view to render before scrolling
+        setTimeout(() => {
+          const discographySection = document.querySelector('.artist-section');
+          if (discographySection) {
+            discographySection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }, 100);
+      });
     }
   }
 
@@ -2403,6 +2464,16 @@
           onOpenAlbumFolder={handleOpenAlbumFolder}
           onReDownloadAlbum={handleReDownloadAlbum}
           {downloadStateVersion}
+          artistAlbums={albumArtistAlbums}
+          onRelatedAlbumClick={handleAlbumClick}
+          onRelatedAlbumPlay={playAlbumById}
+          onRelatedAlbumPlayNext={queueAlbumNextById}
+          onRelatedAlbumPlayLater={queueAlbumLaterById}
+          onRelatedAlbumDownload={downloadAlbumById}
+          onRelatedAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onRelatedAlbumShareSonglink={shareAlbumSonglinkById}
+          onViewArtistDiscography={handleViewArtistDiscography}
+          checkRelatedAlbumDownloaded={checkAlbumFullyDownloaded}
         />
       {:else if activeView === 'artist' && selectedArtist}
         <ArtistDetailView

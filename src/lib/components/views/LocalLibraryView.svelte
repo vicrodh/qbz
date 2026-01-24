@@ -2082,13 +2082,11 @@
             </div>
           {/if}
           <div class="album-actions">
-            <button class="play-btn" onclick={handlePlayAllAlbum}>
-              <Play size={16} fill="white" />
-              <span>Play All</span>
+            <button class="action-btn-circle primary" onclick={handlePlayAllAlbum} title="Play All">
+              <Play size={20} fill="currentColor" color="currentColor" />
             </button>
-            <button class="shuffle-btn" onclick={handleShuffleAllAlbum}>
-              <Shuffle size={16} />
-              <span>Shuffle</span>
+            <button class="action-btn-circle" onclick={handleShuffleAllAlbum} title="Shuffle">
+              <Shuffle size={18} />
             </button>
           </div>
         </div>
@@ -4230,45 +4228,6 @@
   .album-actions {
     display: flex;
     gap: 12px;
-  }
-
-  .play-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 28px;
-    background: var(--accent-primary);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 150ms ease;
-  }
-
-  .play-btn:hover {
-    background: var(--accent-hover);
-  }
-
-  .shuffle-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 24px;
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-subtle);
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .shuffle-btn:hover {
-    background: var(--bg-hover);
-    border-color: var(--text-muted);
   }
 
   /* Nav row for album detail */

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { ArrowLeft, Play, Shuffle, Heart, CloudDownload } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Heart, CloudDownload, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import { getOfflineCacheState, type OfflineCacheStatus, isAlbumFullyCached } from '$lib/stores/offlineCacheState';
@@ -24,6 +25,13 @@
     bitDepth?: number;
     samplingRate?: number;
     isrc?: string;
+  }
+
+  interface ArtistAlbum {
+    id: string;
+    title: string;
+    artwork: string;
+    quality: string;
   }
 
   interface Props {
@@ -70,6 +78,17 @@
     isPlaybackActive?: boolean;
     onOpenAlbumFolder?: () => void;
     onReDownloadAlbum?: () => void;
+    // By the same artist section
+    artistAlbums?: ArtistAlbum[];
+    onRelatedAlbumClick?: (albumId: string) => void;
+    onRelatedAlbumPlay?: (albumId: string) => void;
+    onRelatedAlbumPlayNext?: (albumId: string) => void;
+    onRelatedAlbumPlayLater?: (albumId: string) => void;
+    onRelatedAlbumDownload?: (albumId: string) => void;
+    onRelatedAlbumShareQobuz?: (albumId: string) => void;
+    onRelatedAlbumShareSonglink?: (albumId: string) => void;
+    onViewArtistDiscography?: () => void;
+    checkRelatedAlbumDownloaded?: (albumId: string) => Promise<boolean>;
   }
 
   let {
@@ -101,12 +120,88 @@
     activeTrackId = null,
     isPlaybackActive = false,
     onOpenAlbumFolder,
-    onReDownloadAlbum
+    onReDownloadAlbum,
+    artistAlbums = [],
+    onRelatedAlbumClick,
+    onRelatedAlbumPlay,
+    onRelatedAlbumPlayNext,
+    onRelatedAlbumPlayLater,
+    onRelatedAlbumDownload,
+    onRelatedAlbumShareQobuz,
+    onRelatedAlbumShareSonglink,
+    onViewArtistDiscography,
+    checkRelatedAlbumDownloaded
   }: Props = $props();
 
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
   let scrollContainer: HTMLDivElement | null = $state(null);
+
+  // Carousel state for "By the same artist" section
+  let carouselContainer: HTMLDivElement | null = $state(null);
+  let albumsPerPage = $state(4);
+  let currentPage = $state(0);
+
+  // Filter out current album from artist albums
+  const filteredArtistAlbums = $derived(
+    artistAlbums.filter(a => a.id !== album.id).slice(0, 16)
+  );
+
+  const totalPages = $derived(Math.ceil(filteredArtistAlbums.length / albumsPerPage));
+  const visibleAlbums = $derived(
+    filteredArtistAlbums.slice(currentPage * albumsPerPage, (currentPage + 1) * albumsPerPage)
+  );
+  const canScrollLeft = $derived(currentPage > 0);
+  const canScrollRight = $derived(currentPage < totalPages - 1);
+  const hasMoreThanVisible = $derived(filteredArtistAlbums.length > albumsPerPage);
+
+  // Download status tracking for "By the same artist" albums
+  let relatedAlbumDownloadStatuses = $state<Map<string, boolean>>(new Map());
+
+  async function loadRelatedAlbumDownloadStatus(albumId: string) {
+    if (!checkRelatedAlbumDownloaded) return false;
+    try {
+      const isDownloaded = await checkRelatedAlbumDownloaded(albumId);
+      relatedAlbumDownloadStatuses.set(albumId, isDownloaded);
+      relatedAlbumDownloadStatuses = relatedAlbumDownloadStatuses;
+      return isDownloaded;
+    } catch {
+      return false;
+    }
+  }
+
+  async function loadAllRelatedAlbumDownloadStatuses() {
+    if (!checkRelatedAlbumDownloaded || filteredArtistAlbums.length === 0) return;
+    await Promise.all(filteredArtistAlbums.map(album => loadRelatedAlbumDownloadStatus(album.id)));
+  }
+
+  function isRelatedAlbumDownloaded(albumId: string): boolean {
+    return relatedAlbumDownloadStatuses.get(albumId) ?? false;
+  }
+
+  // Load download statuses when artist albums change
+  $effect(() => {
+    if (filteredArtistAlbums.length > 0) {
+      loadAllRelatedAlbumDownloadStatuses();
+    }
+  });
+
+  function calculateAlbumsPerPage() {
+    if (!carouselContainer) return;
+    const containerWidth = carouselContainer.clientWidth;
+    const gap = 16;
+    const cardWidth = 162;
+    const cols = Math.floor((containerWidth + gap) / (cardWidth + gap));
+    albumsPerPage = Math.max(2, cols);
+  }
+
+  function scrollCarousel(direction: 'left' | 'right') {
+    if (direction === 'left') {
+      currentPage = Math.max(0, currentPage - 1);
+    } else {
+      currentPage = Math.min(totalPages - 1, currentPage + 1);
+    }
+  }
   
   const albumFullyDownloaded = $derived(
     isAlbumFullyCached(album.tracks.map(t => t.id))
@@ -155,6 +250,17 @@
     return () => {
       unsubscribe?.();
     };
+  });
+
+  // Set up resize observer for carousel when container is available
+  $effect(() => {
+    if (!carouselContainer) return;
+    calculateAlbumsPerPage();
+    const resizeObserver = new ResizeObserver(() => {
+      calculateAlbumsPerPage();
+    });
+    resizeObserver.observe(carouselContainer);
+    return () => resizeObserver.disconnect();
   });
 
   $effect(() => {
@@ -312,6 +418,73 @@
       {/each}
     </div>
   </div>
+
+  <!-- By the same artist Section -->
+  {#if filteredArtistAlbums.length > 0 && !isVariousArtists}
+    <div class="same-artist-section">
+      <div class="section-header">
+        <h2 class="section-title">By the same artist</h2>
+        {#if hasMoreThanVisible}
+          <div class="carousel-controls">
+            <button
+              class="carousel-btn"
+              onclick={() => scrollCarousel('left')}
+              disabled={!canScrollLeft}
+              aria-label="Previous albums"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <button
+              class="carousel-btn"
+              onclick={() => scrollCarousel('right')}
+              disabled={!canScrollRight}
+              aria-label="Next albums"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+        {/if}
+      </div>
+      <div class="albums-carousel-wrapper" bind:this={carouselContainer}>
+        <div class="albums-carousel">
+          {#each visibleAlbums as relatedAlbum}
+            <div class="album-card-wrapper">
+              <AlbumCard
+                albumId={relatedAlbum.id}
+                artwork={relatedAlbum.artwork}
+                title={relatedAlbum.title}
+                artist={album.artist}
+                quality={relatedAlbum.quality}
+                onclick={() => onRelatedAlbumClick?.(relatedAlbum.id)}
+                onPlay={onRelatedAlbumPlay ? () => onRelatedAlbumPlay(relatedAlbum.id) : undefined}
+                onPlayNext={onRelatedAlbumPlayNext ? () => onRelatedAlbumPlayNext(relatedAlbum.id) : undefined}
+                onPlayLater={onRelatedAlbumPlayLater ? () => onRelatedAlbumPlayLater(relatedAlbum.id) : undefined}
+                onDownload={onRelatedAlbumDownload ? () => onRelatedAlbumDownload(relatedAlbum.id) : undefined}
+                onShareQobuz={onRelatedAlbumShareQobuz ? () => onRelatedAlbumShareQobuz(relatedAlbum.id) : undefined}
+                onShareSonglink={onRelatedAlbumShareSonglink ? () => onRelatedAlbumShareSonglink(relatedAlbum.id) : undefined}
+                isAlbumFullyDownloaded={isRelatedAlbumDownloaded(relatedAlbum.id)}
+              />
+            </div>
+          {/each}
+          {#if onViewArtistDiscography && filteredArtistAlbums.length >= albumsPerPage && currentPage === totalPages - 1}
+            <div class="album-card-wrapper">
+              <div class="view-more-card">
+                <button class="view-more-cover" onclick={onViewArtistDiscography}>
+                  <div class="view-more-label">
+                    <span>View more</span>
+                    <ChevronRight size={20} />
+                  </div>
+                </button>
+                <div class="view-more-info">
+                  <span class="view-more-text">See full discography</span>
+                </div>
+              </div>
+            </div>
+          {/if}
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -519,5 +692,118 @@
     display: flex;
     flex-direction: column;
     width: 100%;
+  }
+
+  /* By the same artist section */
+  .same-artist-section {
+    margin-top: 48px;
+    padding-top: 32px;
+    border-top: 1px solid var(--bg-tertiary);
+  }
+
+  .same-artist-section .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .same-artist-section .section-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .carousel-controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .carousel-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    border-radius: 6px;
+    background-color: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .carousel-btn:hover:not(:disabled) {
+    background-color: var(--bg-tertiary);
+  }
+
+  .carousel-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+  }
+
+  .albums-carousel-wrapper {
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  .albums-carousel {
+    display: flex;
+    gap: 16px;
+  }
+
+  .album-card-wrapper {
+    min-width: 162px;
+    flex-shrink: 0;
+  }
+
+  .view-more-card {
+    width: 162px;
+    min-width: 162px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .view-more-cover {
+    width: 162px;
+    height: 162px;
+    border-radius: 8px;
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+    border: 1px dashed var(--border-strong);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .view-more-cover:hover {
+    background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--bg-tertiary) 100%);
+    border-color: var(--accent-primary);
+  }
+
+  .view-more-label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--text-muted);
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .view-more-cover:hover .view-more-label {
+    color: var(--accent-primary);
+  }
+
+  .view-more-info {
+    padding: 0 4px;
+  }
+
+  .view-more-text {
+    font-size: 13px;
+    color: var(--text-muted);
   }
 </style>

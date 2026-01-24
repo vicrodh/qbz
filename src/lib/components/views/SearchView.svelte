@@ -604,18 +604,23 @@
             <div class="most-popular-wrapper">
               {#if allResults.artists.items.length > 0}
               <button class="artist-card most-popular-card" onclick={() => onArtistClick?.(allResults.artists.items[0].id)}>
-                {#if failedArtistImages.has(allResults.artists.items[0].id) || !getArtistImage(allResults.artists.items[0])}
+                <div class="artist-image-wrapper">
+                  <!-- Placeholder always visible as background -->
                   <div class="artist-image-placeholder">
                     <User size={40} />
                   </div>
-                {:else}
-                  <img 
-                    src={getArtistImage(allResults.artists.items[0])} 
-                    alt={allResults.artists.items[0].name} 
-                    class="artist-image" 
-                    onerror={() => handleArtistImageError(allResults.artists.items[0].id)} 
-                  />
-                {/if}
+                  <!-- Image overlays placeholder when loaded -->
+                  {#if !failedArtistImages.has(allResults.artists.items[0].id) && getArtistImage(allResults.artists.items[0])}
+                    <img
+                      src={getArtistImage(allResults.artists.items[0])}
+                      alt={allResults.artists.items[0].name}
+                      class="artist-image"
+                      loading="lazy"
+                      decoding="async"
+                      onerror={() => handleArtistImageError(allResults.artists.items[0].id)}
+                    />
+                  {/if}
+                </div>
                 <div class="artist-name">{allResults.artists.items[0].name}</div>
                 {#if allResults.artists.items[0].albums_count}
                   <div class="artist-albums">{$t('library.albumCount', { values: { count: allResults.artists.items[0].albums_count } })}</div>
@@ -687,13 +692,16 @@
                     </div>
                   {:else}
                     <button class="artist-card" onclick={() => onArtistClick?.(artist.id)}>
-                      {#if failedArtistImages.has(artist.id) || !getArtistImage(artist)}
+                      <div class="artist-image-wrapper">
+                        <!-- Placeholder always visible as background -->
                         <div class="artist-image-placeholder">
                           <User size={40} />
                         </div>
-                      {:else}
-                        <img src={getArtistImage(artist)} alt={artist.name} class="artist-image" onerror={() => handleArtistImageError(artist.id)} />
-                      {/if}
+                        <!-- Image overlays placeholder when loaded -->
+                        {#if !failedArtistImages.has(artist.id) && getArtistImage(artist)}
+                          <img src={getArtistImage(artist)} alt={artist.name} class="artist-image" loading="lazy" decoding="async" onerror={() => handleArtistImageError(artist.id)} />
+                        {/if}
+                      </div>
                       <div class="artist-name">{artist.name}</div>
                       {#if artist.albums_count}
                         <div class="artist-albums">{$t('library.albumCount', { values: { count: artist.albums_count } })}</div>
@@ -803,75 +811,45 @@
                     onkeydown={(e) => e.key === 'Enter' && handleSearchTrackPlay(track, index)}
                   >
                     <div class="track-number">{index + 1}</div>
-                    {#if failedTrackImages.has(track.id) || !getTrackArtwork(track)}
-                      <div class="track-artwork-container">
-                        <div class="track-artwork-placeholder">
-                          <Music size={20} />
+                    <div class="track-artwork-container">
+                      <!-- Placeholder always visible as background -->
+                      <div class="track-artwork-placeholder">
+                        <Music size={20} />
+                      </div>
+                      <!-- Image overlays placeholder when loaded -->
+                      {#if !failedTrackImages.has(track.id) && getTrackArtwork(track)}
+                        <img src={getTrackArtwork(track)} alt={track.title} class="track-artwork" loading="lazy" decoding="async" onerror={() => handleTrackImageError(track.id)} />
+                      {/if}
+                      <button
+                        class="track-play-overlay"
+                        class:is-playing={isActiveTrack}
+                        onclick={(e) => {
+                          if (isActiveTrack) {
+                            handlePausePlayback(e);
+                          } else {
+                            e.stopPropagation();
+                            handleSearchTrackPlay(track, index);
+                          }
+                        }}
+                        aria-label={isActiveTrack ? 'Pause track' : 'Play track'}
+                      >
+                        <span class="play-icon" aria-hidden="true">
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                            <path d="M8 5v14l11-7z"/>
+                          </svg>
+                        </span>
+                        <div class="playing-indicator" aria-hidden="true">
+                          <div class="bar"></div>
+                          <div class="bar"></div>
+                          <div class="bar"></div>
                         </div>
-                        <button
-                          class="track-play-overlay"
-                          class:is-playing={isActiveTrack}
-                          onclick={(e) => {
-                            if (isActiveTrack) {
-                              handlePausePlayback(e);
-                            } else {
-                              e.stopPropagation();
-                              handleSearchTrackPlay(track, index);
-                            }
-                          }}
-                          aria-label={isActiveTrack ? 'Pause track' : 'Play track'}
-                        >
-                          <span class="play-icon" aria-hidden="true">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                              <path d="M8 5v14l11-7z"/>
-                            </svg>
-                          </span>
-                          <div class="playing-indicator" aria-hidden="true">
-                            <div class="bar"></div>
-                            <div class="bar"></div>
-                            <div class="bar"></div>
-                          </div>
-                          <span class="pause-icon" aria-hidden="true">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-                              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-                            </svg>
-                          </span>
-                        </button>
-                      </div>
-                    {:else}
-                      <div class="track-artwork-container">
-                        <img src={getTrackArtwork(track)} alt={track.title} class="track-artwork" onerror={() => handleTrackImageError(track.id)} />
-                        <button
-                          class="track-play-overlay"
-                          class:is-playing={isActiveTrack}
-                          onclick={(e) => {
-                            if (isActiveTrack) {
-                              handlePausePlayback(e);
-                            } else {
-                              e.stopPropagation();
-                              handleSearchTrackPlay(track, index);
-                            }
-                          }}
-                          aria-label={isActiveTrack ? 'Pause track' : 'Play track'}
-                        >
-                          <span class="play-icon" aria-hidden="true">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                              <path d="M8 5v14l11-7z"/>
-                            </svg>
-                          </span>
-                          <div class="playing-indicator" aria-hidden="true">
-                            <div class="bar"></div>
-                            <div class="bar"></div>
-                            <div class="bar"></div>
-                          </div>
-                          <span class="pause-icon" aria-hidden="true">
-                            <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-                              <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-                            </svg>
-                          </span>
-                        </button>
-                      </div>
-                    {/if}
+                        <span class="pause-icon" aria-hidden="true">
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                            <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                          </svg>
+                        </span>
+                      </button>
+                    </div>
                     <div class="track-info">
                       <div class="track-title">{track.title}</div>
                       {#if track.performer?.id && onTrackGoToArtist}
@@ -967,75 +945,45 @@
               onkeydown={(e) => e.key === 'Enter' && handleSearchTrackPlay(track, index)}
             >
               <div class="track-number">{index + 1}</div>
-              {#if failedTrackImages.has(track.id) || !getTrackArtwork(track)}
-                <div class="track-artwork-container">
-                  <div class="track-artwork-placeholder">
-                    <Music size={20} />
+              <div class="track-artwork-container">
+                <!-- Placeholder always visible as background -->
+                <div class="track-artwork-placeholder">
+                  <Music size={20} />
+                </div>
+                <!-- Image overlays placeholder when loaded -->
+                {#if !failedTrackImages.has(track.id) && getTrackArtwork(track)}
+                  <img src={getTrackArtwork(track)} alt={track.title} class="track-artwork" loading="lazy" decoding="async" onerror={() => handleTrackImageError(track.id)} />
+                {/if}
+                <button
+                  class="track-play-overlay"
+                  class:is-playing={isActiveTrack}
+                  onclick={(e) => {
+                    if (isActiveTrack) {
+                      handlePausePlayback(e);
+                    } else {
+                      e.stopPropagation();
+                      handleSearchTrackPlay(track, index);
+                    }
+                  }}
+                  aria-label={isActiveTrack ? 'Pause track' : 'Play track'}
+                >
+                  <span class="play-icon" aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
+                      <path d="M8 5v14l11-7z"/>
+                    </svg>
+                  </span>
+                  <div class="playing-indicator" aria-hidden="true">
+                    <div class="bar"></div>
+                    <div class="bar"></div>
+                    <div class="bar"></div>
                   </div>
-                  <button
-                    class="track-play-overlay"
-                    class:is-playing={isActiveTrack}
-                    onclick={(e) => {
-                      if (isActiveTrack) {
-                        handlePausePlayback(e);
-                      } else {
-                        e.stopPropagation();
-                        handleSearchTrackPlay(track, index);
-                      }
-                    }}
-                    aria-label={isActiveTrack ? 'Pause track' : 'Play track'}
-                  >
-                    <span class="play-icon" aria-hidden="true">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                        <path d="M8 5v14l11-7z"/>
-                      </svg>
-                    </span>
-                    <div class="playing-indicator" aria-hidden="true">
-                      <div class="bar"></div>
-                      <div class="bar"></div>
-                      <div class="bar"></div>
-                    </div>
-                    <span class="pause-icon" aria-hidden="true">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-                      </svg>
-                    </span>
-                  </button>
-                </div>
-              {:else}
-                <div class="track-artwork-container">
-                  <img src={getTrackArtwork(track)} alt={track.title} class="track-artwork" onerror={() => handleTrackImageError(track.id)} />
-                  <button
-                    class="track-play-overlay"
-                    class:is-playing={isActiveTrack}
-                    onclick={(e) => {
-                      if (isActiveTrack) {
-                        handlePausePlayback(e);
-                      } else {
-                        e.stopPropagation();
-                        handleSearchTrackPlay(track, index);
-                      }
-                    }}
-                    aria-label={isActiveTrack ? 'Pause track' : 'Play track'}
-                  >
-                    <span class="play-icon" aria-hidden="true">
-                      <svg width="24" height="24" viewBox="0 0 24 24" fill="white">
-                        <path d="M8 5v14l11-7z"/>
-                      </svg>
-                    </span>
-                    <div class="playing-indicator" aria-hidden="true">
-                      <div class="bar"></div>
-                      <div class="bar"></div>
-                      <div class="bar"></div>
-                    </div>
-                    <span class="pause-icon" aria-hidden="true">
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-                        <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
-                      </svg>
-                    </span>
-                  </button>
-                </div>
-              {/if}
+                  <span class="pause-icon" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
+                      <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                    </svg>
+                  </span>
+                </button>
+              </div>
               <div class="track-info">
                 <div class="track-title">{track.title}</div>
                 {#if track.performer?.id && onTrackGoToArtist}
@@ -1090,13 +1038,16 @@
         <div class="artists-grid">
           {#each artistResults.items as artist}
             <button class="artist-card" onclick={() => onArtistClick?.(artist.id)}>
-              {#if failedArtistImages.has(artist.id) || !getArtistImage(artist)}
+              <div class="artist-image-wrapper">
+                <!-- Placeholder always visible as background -->
                 <div class="artist-image-placeholder">
                   <User size={40} />
                 </div>
-              {:else}
-                <img src={getArtistImage(artist)} alt={artist.name} class="artist-image" onerror={() => handleArtistImageError(artist.id)} />
-              {/if}
+                <!-- Image overlays placeholder when loaded -->
+                {#if !failedArtistImages.has(artist.id) && getArtistImage(artist)}
+                  <img src={getArtistImage(artist)} alt={artist.name} class="artist-image" loading="lazy" decoding="async" onerror={() => handleArtistImageError(artist.id)} />
+                {/if}
+              </div>
               <div class="artist-name">{artist.name}</div>
               {#if artist.albums_count}
                 <div class="artist-albums">{$t('library.albumCount', { values: { count: artist.albums_count } })}</div>
@@ -1325,10 +1276,13 @@
   }
 
   .track-artwork {
+    position: absolute;
+    inset: 0;
     width: 48px;
     height: 48px;
     border-radius: 4px;
     object-fit: cover;
+    z-index: 1;
   }
 
   .track-artwork-placeholder {
@@ -1430,22 +1384,31 @@
     background-color: var(--bg-tertiary);
   }
 
-  .artist-image {
+  .artist-image-wrapper {
+    position: relative;
     width: 120px;
     height: 120px;
     min-height: 120px;
     border-radius: 50%;
-    object-fit: cover;
     margin-bottom: 12px;
     flex-shrink: 0;
+    overflow: hidden;
+  }
+
+  .artist-image {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+    z-index: 1;
   }
 
   .artist-image-placeholder {
-    width: 120px;
-    height: 120px;
-    min-height: 120px;
+    width: 100%;
+    height: 100%;
     border-radius: 50%;
-    margin-bottom: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1556,8 +1519,7 @@
     height: 220px;
   }
 
-  .most-popular-card .artist-image,
-  .most-popular-card .artist-image-placeholder {
+  .most-popular-card .artist-image-wrapper {
     width: 120px;
     height: 120px;
     min-height: 120px;
@@ -1646,8 +1608,7 @@
     height: 220px;
   }
 
-  .artists-grid-compact .artist-image,
-  .artists-grid-compact .artist-image-placeholder {
+  .artists-grid-compact .artist-image-wrapper {
     width: 120px;
     height: 120px;
     min-height: 120px;
@@ -1783,6 +1744,7 @@
     border: none;
     cursor: pointer;
     transition: background 150ms ease;
+    z-index: 2;
   }
 
   .track-row:hover .track-play-overlay {

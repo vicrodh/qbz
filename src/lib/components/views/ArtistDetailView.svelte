@@ -1120,12 +1120,13 @@
             >
               <div class="track-number">{index + 1}</div>
               <div class="track-artwork">
+                <!-- Placeholder always visible as background -->
+                <div class="track-artwork-placeholder">
+                  <Music size={16} />
+                </div>
+                <!-- Image overlays placeholder when loaded -->
                 {#if track.album?.image?.thumbnail || track.album?.image?.small}
                   <img src={track.album?.image?.thumbnail || track.album?.image?.small} alt={track.title} loading="lazy" decoding="async" />
-                {:else}
-                  <div class="track-artwork-placeholder">
-                    <Music size={16} />
-                  </div>
                 {/if}
                 <button
                   class="track-play-overlay"
@@ -1549,12 +1550,13 @@
             disabled={!onPlaylistClick}
           >
             <div class="playlist-artwork">
+              <!-- Placeholder always visible as background -->
+              <div class="playlist-artwork-placeholder">
+                <Music size={18} />
+              </div>
+              <!-- Image overlays placeholder when loaded -->
               {#if playlist.artwork}
                 <img src={playlist.artwork} alt={playlist.title} loading="lazy" decoding="async" />
-              {:else}
-                <div class="playlist-artwork-placeholder">
-                  <Music size={18} />
-                </div>
               {/if}
             </div>
             <div class="playlist-info">
@@ -2384,6 +2386,7 @@
   }
 
   .playlist-artwork {
+    position: relative;
     width: 56px;
     height: 56px;
     border-radius: 8px;
@@ -2392,9 +2395,12 @@
   }
 
   .playlist-artwork img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    z-index: 1;
   }
 
   .playlist-artwork-placeholder {
@@ -2573,9 +2579,12 @@
   }
 
   .track-artwork img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    z-index: 1;
   }
 
   .track-artwork-placeholder {
@@ -2598,6 +2607,7 @@
     border: none;
     cursor: pointer;
     transition: background 150ms ease;
+    z-index: 2;
   }
 
   .track-row:hover .track-play-overlay {

@@ -169,11 +169,13 @@
     class="artwork-container"
     style="width: {cardSize}px; height: {cardSize}px"
   >
-    {#if imageError || !artwork}
-      <div class="artwork-placeholder">
-        <Disc3 size={48} />
-      </div>
-    {:else}
+    <!-- Placeholder always rendered as background layer (visible while image loads) -->
+    <div class="artwork-placeholder">
+      <Disc3 size={48} />
+    </div>
+
+    <!-- Image overlays placeholder when loaded -->
+    {#if !imageError && artwork}
       <img src={artwork} alt={title} loading="lazy" decoding="async" onerror={handleImageError} />
     {/if}
 
@@ -256,13 +258,17 @@
     position: relative;
     margin-bottom: 8px;
     border-radius: 8px;
+    overflow: hidden;
   }
 
   .artwork-container img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
     border-radius: inherit;
+    z-index: 1;
   }
 
   .artwork-placeholder {
@@ -321,6 +327,7 @@
     -webkit-backdrop-filter: blur(4px);
     pointer-events: auto;
     border-radius: inherit;
+    z-index: 2;
   }
 
   .album-card:hover .action-overlay,

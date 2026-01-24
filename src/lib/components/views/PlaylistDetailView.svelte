@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ImagePlus, Edit3, BarChart2, Heart } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ImagePlus, Edit3, BarChart2, Heart, CloudDownload } from 'lucide-svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
@@ -183,7 +183,6 @@
 
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let playBtnHovered = $state(false);
   let scrollContainer: HTMLDivElement | null = $state(null);
 
   // Offline mode state
@@ -978,17 +977,7 @@
       <!-- Playlist Metadata -->
       <div class="metadata">
         <span class="playlist-label">Playlist</span>
-        <div class="title-row">
-          <h1 class="playlist-title">{playlist.name}</h1>
-          <button
-            class="favorite-btn"
-            class:active={isFavorite}
-            onclick={toggleFavorite}
-            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          >
-            <Heart size={24} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'var(--text-secondary)'} />
-          </button>
-        </div>
+        <h1 class="playlist-title">{playlist.name}</h1>
         {#if playlist.description}
           <p class="playlist-description">{playlist.description}</p>
         {/if}
@@ -1010,18 +999,30 @@
         <!-- Action Buttons -->
         <div class="actions">
           <button
-            class="play-btn"
-            style="background-color: {playBtnHovered ? 'var(--accent-hover)' : 'var(--accent-primary)'}"
-            onmouseenter={() => (playBtnHovered = true)}
-            onmouseleave={() => (playBtnHovered = false)}
+            class="action-btn-circle primary"
             onclick={handlePlayAll}
+            title="Play"
           >
-            <Play size={18} fill="white" color="white" />
-            <span>Play</span>
+            <Play size={20} fill="currentColor" color="currentColor" />
           </button>
-          <button class="secondary-btn" onclick={handleShuffle}>
+          <button
+            class="action-btn-circle"
+            onclick={handleShuffle}
+            title="Shuffle"
+          >
             <Shuffle size={18} />
-            <span>Shuffle</span>
+          </button>
+          <button
+            class="action-btn-circle"
+            class:is-active={isFavorite}
+            onclick={toggleFavorite}
+            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <Heart
+              size={18}
+              color={isFavorite ? 'var(--accent-primary)' : 'currentColor'}
+              fill={isFavorite ? 'var(--accent-primary)' : 'none'}
+            />
           </button>
           <AlbumMenu
             onPlayNext={handlePlayAllNext}
@@ -1092,10 +1093,14 @@
     <!-- Track List -->
     <div class="track-list">
       <div class="track-list-header">
-        <span class="col-number">#</span>
-        <span class="col-title">Title</span>
-        <span class="col-album">Album</span>
-        <span class="col-duration">Duration</span>
+        <div class="col-number">#</div>
+        <div class="col-title">Title</div>
+        <div class="col-album">Album</div>
+        <div class="col-duration">Duration</div>
+        <div class="col-quality">Quality</div>
+        <div class="col-icon"><Heart size={14} /></div>
+        <div class="col-icon"><CloudDownload size={14} /></div>
+        <div class="col-spacer"></div>
       </div>
 
       {#each displayTracks as track, idx (`${idx}-${track.id}-${downloadStateVersion}`)}
@@ -1406,33 +1411,6 @@
     margin-bottom: 8px;
   }
 
-  .title-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .favorite-btn {
-    background: none;
-    border: none;
-    padding: 4px;
-    cursor: pointer;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.15s ease, background-color 0.15s ease;
-  }
-
-  .favorite-btn:hover {
-    background-color: var(--bg-tertiary);
-    transform: scale(1.1);
-  }
-
-  .favorite-btn.active:hover {
-    background-color: rgba(var(--accent-primary-rgb), 0.15);
-  }
-
   .playlist-title {
     font-size: 24px;
     font-weight: 700;
@@ -1476,42 +1454,25 @@
   .actions {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
   }
 
-  .play-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 32px;
-    background-color: var(--accent-primary);
-    color: white;
+  /* Style AlbumMenu trigger to match action buttons */
+  .actions :global(.album-menu .menu-trigger) {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
     border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color 150ms ease;
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+    color: var(--text-muted);
   }
 
-  .secondary-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 24px;
-    background-color: transparent;
+  .actions :global(.album-menu .menu-trigger:hover) {
+    background: var(--bg-hover);
     color: var(--text-primary);
-    border: 1px solid var(--text-muted);
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: border-color 150ms ease;
+    box-shadow: inset 0 0 0 1px var(--text-primary);
   }
 
-  .secondary-btn:hover {
-    border-color: var(--text-primary);
-  }
 
   .icon-btn {
     width: 40px;
@@ -1535,25 +1496,58 @@
   }
 
   .track-list-header {
-    display: grid;
-    grid-template-columns: 48px 1fr 1fr 80px;
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
     gap: 16px;
-    padding: 8px 16px;
     font-size: 12px;
     text-transform: uppercase;
-    color: var(--text-muted);
-    font-weight: 600;
-    letter-spacing: 0.05em;
+    color: #666666;
+    font-weight: 400;
+    box-sizing: border-box;
     border-bottom: 1px solid var(--bg-tertiary);
     margin-bottom: 8px;
   }
 
   .col-number {
+    width: 48px;
     text-align: center;
   }
 
+  .col-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .col-album {
+    flex: 1;
+    min-width: 0;
+  }
+
   .col-duration {
-    text-align: right;
+    width: 80px;
+    text-align: center;
+  }
+
+  .col-quality {
+    width: 80px;
+    text-align: center;
+  }
+
+  .col-icon {
+    width: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.5;
+  }
+
+  .col-spacer {
+    width: 28px;
   }
 
   /* Track Controls */
