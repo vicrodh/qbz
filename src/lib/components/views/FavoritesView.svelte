@@ -1626,9 +1626,9 @@
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    padding: 12px 24px;
-    margin: 0 -8px 16px -24px;
-    width: calc(100% + 32px);
+    padding: 12px 24px 12px 44px;
+    margin: 0 -16px 16px -44px;
+    width: calc(100% + 60px);
     background: rgba(var(--bg-primary-rgb, 18, 18, 18), 0.85);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);

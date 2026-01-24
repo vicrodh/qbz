@@ -2127,9 +2127,9 @@ flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
     display: flex;
     flex-wrap: wrap;
     gap: 16px;
-    padding: 12px 24px;
-    margin: 0 -24px 24px -32px;
-    width: calc(100% + 56px);
+    padding: 12px 24px 12px 52px;
+    margin: 0 -32px 24px -52px;
+    width: calc(100% + 84px);
     background: rgba(var(--bg-primary-rgb, 18, 18, 18), 0.85);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
