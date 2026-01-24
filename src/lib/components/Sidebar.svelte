@@ -953,35 +953,33 @@
 
   .playlists-scroll {
     overflow-y: auto;
-    padding-right: 4px;
+    padding-right: 2px;
     min-height: 0;
     flex: 1;
-    scrollbar-gutter: stable;
+  }
+
+  /* Thin scrollbar for both expanded and collapsed modes */
+  .playlists-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .playlists-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .playlists-scroll::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.15);
+    border-radius: 4px;
+  }
+
+  .playlists-scroll::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.25);
   }
 
   /* When sidebar is collapsed, use overlay scrollbar to keep icons aligned */
   .sidebar.collapsed .playlists-scroll {
     overflow-y: overlay;
-    scrollbar-gutter: auto;
     padding-right: 0;
-  }
-
-  /* Thin, subtle overlay scrollbar for collapsed mode */
-  .sidebar.collapsed .playlists-scroll::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  .sidebar.collapsed .playlists-scroll::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .sidebar.collapsed .playlists-scroll::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.15);
-    border-radius: 4px;
-  }
-
-  .sidebar.collapsed .playlists-scroll::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.25);
   }
 
   .playlists-loading,
@@ -1007,7 +1005,7 @@
     border-radius: 50%;
     color: var(--text-muted);
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.75);
     transition: transform 150ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
     z-index: 10;
   }
@@ -1016,7 +1014,7 @@
     color: var(--text-primary);
     background: var(--bg-hover);
     transform: translateY(-50%) scale(1.1);
-    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6);
+    box-shadow: -6px 0 16px rgba(0, 0, 0, 0.85);
   }
 
   .user-section {
