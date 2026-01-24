@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { ArrowLeft, Play, Shuffle, Heart } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Heart, CloudDownload } from 'lucide-svelte';
   import TrackRow from '../TrackRow.svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import { getOfflineCacheState, type OfflineCacheStatus, isAlbumFullyCached } from '$lib/stores/offlineCacheState';
@@ -267,8 +267,8 @@
       <div class="col-title">Title</div>
       <div class="col-duration">Duration</div>
       <div class="col-quality">Quality</div>
-      <div class="col-spacer"></div>
-      <div class="col-spacer"></div>
+      <div class="col-icon"><Heart size={14} /></div>
+      <div class="col-icon"><CloudDownload size={14} /></div>
       <div class="col-spacer"></div>
     </div>
 
@@ -494,6 +494,15 @@
   .col-quality {
     width: 80px;
     text-align: center;
+  }
+
+  .col-icon {
+    width: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.5;
   }
 
   .col-spacer {
