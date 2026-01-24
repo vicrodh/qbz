@@ -106,6 +106,7 @@ export interface AlbumDetail {
   artist: string;
   artistId?: number;
   year: string;
+  releaseDate?: string; // Full date in YYYY-MM-DD format
   label: string;
   genre: string;
   quality: string;

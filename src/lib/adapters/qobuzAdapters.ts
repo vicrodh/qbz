@@ -323,6 +323,7 @@ export function convertQobuzAlbum(album: QobuzAlbum): AlbumDetail {
     artist: album.artist?.name || 'Unknown Artist',
     artistId: album.artist?.id,
     year: album.release_date_original?.split('-')[0] || '',
+    releaseDate: album.release_date_original,
     label: album.label?.name || '',
     genre: album.genre?.name || '',
     quality,

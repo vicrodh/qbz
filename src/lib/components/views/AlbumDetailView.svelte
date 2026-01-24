@@ -34,6 +34,7 @@
       artist: string;
       artistId?: number;
       year: string;
+      releaseDate?: string;
       label: string;
       genre: string;
       quality: string;
@@ -105,7 +106,6 @@
 
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
-  let playBtnHovered = $state(false);
   let scrollContainer: HTMLDivElement | null = $state(null);
   
   const albumFullyDownloaded = $derived(
@@ -115,6 +115,21 @@
   const isVariousArtists = $derived(
     album.artist?.trim().toLowerCase() === 'various artists'
   );
+
+  // Format release date nicely, fallback to year
+  const formattedReleaseDate = $derived.by(() => {
+    if (album.releaseDate) {
+      const date = new Date(album.releaseDate);
+      if (!isNaN(date.getTime())) {
+        return date.toLocaleDateString('en-US', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
+        });
+      }
+    }
+    return album.year;
+  });
 
   async function scrollToTrack(trackId: number) {
     await tick();
@@ -193,30 +208,36 @@
       {:else}
         <div class="artist-name">{album.artist}</div>
       {/if}
-      <div class="album-info">{album.year} • {album.label} • {album.genre}</div>
+      <div class="album-info">{formattedReleaseDate} • {album.label} • {album.genre}</div>
       <div class="album-quality">{album.quality}</div>
       <div class="album-stats">{album.trackCount} tracks • {album.duration}</div>
 
       <!-- Action Buttons -->
       <div class="actions">
         <button
-          class="play-btn"
-          style="background-color: {playBtnHovered ? 'var(--accent-hover)' : 'var(--accent-primary)'}"
-          onmouseenter={() => (playBtnHovered = true)}
-          onmouseleave={() => (playBtnHovered = false)}
+          class="action-btn primary"
           onclick={onPlayAll}
+          title="Play"
         >
-          <Play size={18} fill="white" color="white" />
-          <span>Play</span>
+          <Play size={20} fill="white" color="white" />
         </button>
-        <button class="secondary-btn" onclick={onShuffleAll}>
+        <button
+          class="action-btn"
+          onclick={onShuffleAll}
+          title="Shuffle"
+        >
           <Shuffle size={18} />
-          <span>Shuffle</span>
         </button>
-        <button class="icon-btn" onclick={toggleFavorite} disabled={isFavoriteLoading}>
+        <button
+          class="action-btn"
+          class:is-favorite={isFavorite}
+          onclick={toggleFavorite}
+          disabled={isFavoriteLoading}
+          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
           <Heart
-            size={20}
-            color={isFavorite ? 'var(--accent-primary)' : 'white'}
+            size={18}
+            color={isFavorite ? 'var(--accent-primary)' : 'currentColor'}
             fill={isFavorite ? 'var(--accent-primary)' : 'none'}
           />
         </button>
@@ -227,7 +248,7 @@
           onShareQobuz={onShareAlbumQobuz}
           onShareSonglink={onShareAlbumSonglink}
           onDownload={onDownloadAlbum}
-          isAlbumFullyCached={albumFullyDownloaded}
+          isAlbumFullyDownloaded={albumFullyDownloaded}
           onOpenContainingFolder={onOpenAlbumFolder}
           onReDownloadAlbum={onReDownloadAlbum}
         />
@@ -417,62 +438,49 @@
     gap: 12px;
   }
 
-  .play-btn {
-    height: 40px;
-    padding: 0 24px;
-    border-radius: 8px;
-    border: none;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    transition: background-color 150ms ease;
-  }
-
-  .play-btn span {
-    font-size: 14px;
-    font-weight: 500;
-    color: white;
-  }
-
-  .secondary-btn {
-    height: 40px;
-    padding: 0 24px;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background: transparent;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: white;
-    cursor: pointer;
-    transition: background-color 150ms ease;
-  }
-
-  .secondary-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-  }
-
-  .secondary-btn span {
-    font-size: 14px;
-    font-weight: 500;
-  }
-
-  .icon-btn {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    border: none;
-    background: transparent;
+  .action-btn {
     display: flex;
     align-items: center;
     justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: transparent;
+    color: var(--text-muted);
     cursor: pointer;
-    transition: background-color 150ms ease;
+    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
   }
 
-  .icon-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+  .action-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
+
+  .action-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .action-btn.primary {
+    width: 44px;
+    height: 44px;
+    background: var(--accent-primary);
+    border: none;
+    color: white;
+    box-shadow: 0 0 2px 1px rgba(var(--accent-primary-rgb, 139, 92, 246), 0.3);
+  }
+
+  .action-btn.primary:hover {
+    background: var(--accent-hover);
+    box-shadow: 0 0 16px 6px rgba(var(--accent-primary-rgb, 139, 92, 246), 0.5);
+  }
+
+  .action-btn.is-favorite {
+    background: rgba(var(--accent-primary-rgb, 139, 92, 246), 0.15);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
   }
 
   .divider {
