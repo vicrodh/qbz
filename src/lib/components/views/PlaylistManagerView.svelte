@@ -581,14 +581,14 @@
           ondrop={(e) => !isUnavailable && handleDrop(e, playlist.id)}
           ondragend={handleDragEnd}
         >
-          <!-- Top row: drag handle only -->
-          <div class="grid-item-header">
-            {#if sort === 'custom' && !isUnavailable}
+          <!-- Top row: drag handle only (when in custom sort mode) -->
+          {#if sort === 'custom' && !isUnavailable}
+            <div class="grid-item-header">
               <div class="drag-handle">
                 <GripVertical size={14} />
               </div>
-            {/if}
-          </div>
+            </div>
+          {/if}
 
           <!-- Clickable area: artwork + info -->
           <div
@@ -1054,14 +1054,6 @@
     display: flex;
     justify-content: flex-start;
     align-items: center;
-    min-height: 0;
-  }
-
-  .grid-item-header:empty {
-    display: none;
-  }
-
-  .grid-item-header:has(.drag-handle) {
     margin-bottom: 4px;
   }
 
@@ -1249,6 +1241,7 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.3;
+    height: 34px; /* Fixed 2-line height: 13px * 1.3 * 2 */
   }
 
   .grid-item .meta {
