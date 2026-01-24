@@ -976,16 +976,16 @@
     border-radius: 4px;
   }
 
-  /* Show scrollbar when hovering the entire playlists section */
-  .playlists-section:hover .playlists-scroll {
+  /* Show scrollbar when hovering the sidebar content area */
+  .content:hover .playlists-scroll {
     scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
   }
 
-  .playlists-section:hover .playlists-scroll::-webkit-scrollbar-thumb {
+  .content:hover .playlists-scroll::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.15);
   }
 
-  .playlists-section:hover .playlists-scroll::-webkit-scrollbar-thumb:hover {
+  .content:hover .playlists-scroll::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 255, 255, 0.25);
   }
 
@@ -993,6 +993,7 @@
   .sidebar.collapsed .playlists-scroll {
     overflow-y: auto;
     margin-right: 0;
+    padding-left: 1px;
   }
 
   .playlists-loading,
