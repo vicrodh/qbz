@@ -2231,7 +2231,7 @@
 
   /* Top Tracks */
   .top-tracks-section {
-    margin-top: 10px;
+    padding-top: 10px;
     margin-bottom: 32px;
   }
 
@@ -2272,6 +2272,7 @@
 
   .action-btn-circle.primary:hover {
     background: var(--accent-hover);
+    box-shadow: 0 0 16px 6px rgba(var(--accent-primary-rgb, 139, 92, 246), 0.5);
   }
 
   .context-menu-wrapper {
@@ -2290,29 +2291,29 @@
     right: 0;
     margin-top: 8px;
     min-width: 160px;
-    background: var(--bg-elevated, var(--bg-secondary));
-    border: 1px solid var(--border-subtle, var(--bg-tertiary));
+    background-color: var(--bg-tertiary);
     border-radius: 8px;
-    padding: 4px 0;
+    padding: 2px 0;
     z-index: 100;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }
 
   .context-menu-item {
     display: block;
     width: 100%;
-    padding: 10px 16px;
+    padding: 8px 12px;
     background: none;
     border: none;
     text-align: left;
-    font-size: 13px;
-    color: var(--text-primary);
+    font-size: 12px;
+    color: var(--text-secondary);
     cursor: pointer;
-    transition: background 150ms ease;
+    transition: background-color 150ms ease, color 150ms ease;
   }
 
   .context-menu-item:hover {
-    background: var(--bg-hover);
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   .load-more-link {
