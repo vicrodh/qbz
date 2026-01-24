@@ -1018,9 +1018,10 @@
                 onclick={() => showTracksContextMenu = !showTracksContextMenu}
                 title="More options"
               >
-                <MoreHorizontal size={20} />
+                <MoreHorizontal size={18} />
               </button>
               {#if showTracksContextMenu}
+                <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
                 <div class="context-menu">
                   <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
                     Play Next
@@ -2230,6 +2231,7 @@
 
   /* Top Tracks */
   .top-tracks-section {
+    margin-top: 10px;
     margin-bottom: 32px;
   }
 
@@ -2243,8 +2245,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
+    width: 40px;
+    height: 40px;
     border: none;
     border-radius: 50%;
     background: var(--bg-tertiary);
@@ -2259,6 +2261,8 @@
   }
 
   .action-btn-circle.primary {
+    width: 44px;
+    height: 44px;
     background: var(--accent-primary);
     color: white;
   }
@@ -2271,18 +2275,24 @@
     position: relative;
   }
 
+  .context-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+  }
+
   .context-menu {
     position: absolute;
     top: 100%;
     right: 0;
     margin-top: 8px;
     min-width: 160px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--bg-tertiary);
+    background: var(--bg-elevated, var(--bg-secondary));
+    border: 1px solid var(--border-subtle, var(--bg-tertiary));
     border-radius: 8px;
     padding: 4px 0;
     z-index: 100;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
   }
 
   .context-menu-item {
@@ -2299,7 +2309,7 @@
   }
 
   .context-menu-item:hover {
-    background: var(--bg-tertiary);
+    background: var(--bg-hover);
   }
 
   .load-more-link {
