@@ -953,7 +953,7 @@
 
   .playlists-scroll {
     overflow-y: auto;
-    padding-right: 2px;
+    margin-right: 4px;
     min-height: 0;
     flex: 1;
   }
