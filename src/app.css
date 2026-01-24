@@ -379,12 +379,14 @@ select {
   width: 44px;
   height: 44px;
   background: var(--accent-primary);
-  border: 2px solid var(--text-primary);
+  border: 2px solid transparent;
   color: var(--text-primary);
+  transition: background 150ms ease, border-color 200ms ease;
 }
 
 .action-btn-circle.primary:hover {
   background: var(--accent-hover);
+  border-color: var(--text-primary);
 }
 
 .action-btn-circle.is-active {
