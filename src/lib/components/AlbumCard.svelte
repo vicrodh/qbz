@@ -344,7 +344,7 @@
     width: 38px;
     height: 38px;
     border-radius: 50%;
-    border: 1px solid var(--alpha-85);
+    border: 1px solid rgba(255, 255, 255, 0.85);
     background: transparent;
     color: white;
     display: flex;
@@ -359,7 +359,7 @@
   }
 
   .overlay-btn.is-active {
-    background-color: var(--alpha-20);
+    background-color: rgba(255, 255, 255, 0.2);
   }
 
   .overlay-btn.disabled,
@@ -389,7 +389,7 @@
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    border: 1px solid var(--alpha-85);
+    border: 1px solid rgba(255, 255, 255, 0.85);
     background: transparent;
     color: white;
     display: flex;

@@ -243,7 +243,7 @@
       }}
       aria-label="Album actions"
     >
-      <MoreHorizontal size={20} color="white" />
+      <MoreHorizontal size={20} color="currentColor" />
     </button>
 
     {#if isOpen && portalTarget}
