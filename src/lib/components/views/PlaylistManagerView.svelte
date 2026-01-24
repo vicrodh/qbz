@@ -1153,7 +1153,7 @@
     justify-content: flex-end;
     align-items: center;
     margin-top: 8px;
-    width: 160px;
+    width: 140px;
     margin-left: auto;
     margin-right: auto;
   }
@@ -1173,8 +1173,8 @@
 
   .grid-item .artwork {
     position: relative;
-    width: 160px;
-    height: 160px;
+    width: 140px;
+    height: 140px;
     margin: 0 auto;
     display: flex;
     align-items: center;
@@ -1219,7 +1219,7 @@
     flex-direction: column;
     gap: 2px;
     margin-top: 8px;
-    width: 160px;
+    width: 140px;
     margin-left: auto;
     margin-right: auto;
   }
