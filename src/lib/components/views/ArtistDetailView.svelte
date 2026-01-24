@@ -577,6 +577,7 @@
 
   // Smart 3-line truncation with resize detection
   let bioTextEl = $state<HTMLDivElement | null>(null);
+  let bioContainerEl = $state<HTMLDivElement | null>(null);
   let isBioTruncated = $state(false);
 
   function checkBioTruncation() {
@@ -586,19 +587,26 @@
   }
 
   $effect(() => {
-    if (!bioTextEl || !bioText) return;
+    if (!bioTextEl || !bioText || !bioContainerEl) return;
 
-    // Initial check
-    checkBioTruncation();
+    // Initial check after a frame to ensure layout is complete
+    requestAnimationFrame(() => {
+      checkBioTruncation();
+    });
 
-    // Observe resize to recalculate when container width changes
+    // Observe the PARENT container (not the clamped element) for width changes
     const observer = new ResizeObserver(() => {
       if (!bioExpanded) {
-        checkBioTruncation();
+        // Double RAF to ensure CSS has applied after resize
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            checkBioTruncation();
+          });
+        });
       }
     });
 
-    observer.observe(bioTextEl);
+    observer.observe(bioContainerEl);
 
     return () => observer.disconnect();
   });
@@ -606,9 +614,11 @@
   // Recheck truncation after collapsing (wait for DOM update)
   $effect(() => {
     if (bioExpanded === false && bioTextEl) {
-      // Use requestAnimationFrame to wait for CSS to apply
+      // Use double RAF to wait for CSS to fully apply
       requestAnimationFrame(() => {
-        checkBioTruncation();
+        requestAnimationFrame(() => {
+          checkBioTruncation();
+        });
       });
     }
   });
@@ -877,7 +887,7 @@
 
       <!-- Biography -->
       {#if bioText}
-        <div class="biography">
+        <div class="biography" bind:this={bioContainerEl}>
           <div class="bio-text" class:expanded={bioExpanded} bind:this={bioTextEl}>
             {@html bioText}
           </div>
@@ -1556,7 +1566,7 @@
   .artist-header {
     display: flex;
     gap: 32px;
-    margin-bottom: 32px;
+    margin-bottom: 22px;
   }
 
   .artist-image-column {
@@ -2272,7 +2282,7 @@
 
   /* Top Tracks */
   .top-tracks-section {
-    padding-top: 10px;
+    margin-top: 32px;
     margin-bottom: 32px;
   }
 
