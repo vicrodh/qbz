@@ -1627,8 +1627,8 @@
     align-items: center;
     gap: 10px;
     padding: 12px 24px;
-    margin: 0 -16px 16px -24px;
-    width: calc(100% + 40px);
+    margin: 0 -8px 16px -24px;
+    width: calc(100% + 32px);
     background: var(--bg-primary);
     border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
