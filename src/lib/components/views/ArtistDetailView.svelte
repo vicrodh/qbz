@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal } from 'lucide-svelte';
+  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info } from 'lucide-svelte';
   import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -151,6 +151,8 @@
   let showCompilationsSortMenu = $state(false);
   let tributesSortMode = $state<AlbumSortMode>('default');
   let showTributesSortMenu = $state(false);
+  let tributesExpanded = $state(false); // Collapsed by default
+  let tributesVisibleCount = $state(20); // Load 20 at a time
   let othersSortMode = $state<AlbumSortMode>('default');
   let showOthersSortMenu = $state(false);
 
@@ -235,6 +237,8 @@
     compilationsSortMode = 'default';
     tributesSortMode = 'default';
     othersSortMode = 'default';
+    tributesExpanded = false;
+    tributesVisibleCount = 20;
 
     loadTopTracks();
     loadSimilarArtists();
@@ -653,9 +657,9 @@
     { id: 'eps', label: 'EPs & Singles', el: epsSinglesSection, visible: hasEpsSingles },
     { id: 'live', label: 'Live Albums', el: liveAlbumsSection, visible: hasLiveAlbums },
     { id: 'compilations', label: 'Compilations', el: compilationsSection, visible: hasCompilations },
-    { id: 'tributes', label: 'Tributes', el: tributesSection, visible: hasTributes },
     { id: 'others', label: 'Others', el: othersSection, visible: hasOthers },
     { id: 'playlists', label: 'Playlists', el: playlistsSection, visible: hasPlaylists },
+    { id: 'tributes', label: 'Tributes', el: tributesSection, visible: hasTributes },
   ].filter(section => section.visible));
 
   let showJumpNav = $derived(jumpSections.length > 1);
@@ -718,6 +722,8 @@
       : artist.tributes;
     return sortAlbums(albums, tributesSortMode);
   });
+  let visibleTributes = $derived(filteredTributes.slice(0, tributesVisibleCount));
+  let canLoadMoreTributes = $derived(tributesVisibleCount < filteredTributes.length);
   let filteredOthers = $derived.by(() => {
     let albums = searchLower
       ? artist.others.filter(a => a.title.toLowerCase().includes(searchLower))
@@ -1465,65 +1471,6 @@
     </div>
   {/if}
 
-  {#if artist.tributes.length > 0}
-    <div class="divider"></div>
-
-    <div class="discography section-anchor" bind:this={tributesSection}>
-      <div class="section-header">
-        <div class="section-header-left">
-          <h2 class="section-title">Tributes & Covers</h2>
-          <span class="section-count">{artist.tributes.length}</span>
-        </div>
-        <div class="sort-dropdown">
-          <button class="sort-btn" onclick={() => (showTributesSortMenu = !showTributesSortMenu)}>
-            <span>
-              {#if tributesSortMode === 'default'}Sort: Default
-              {:else if tributesSortMode === 'newest'}Sort: Newest
-              {:else if tributesSortMode === 'oldest'}Sort: Oldest
-              {:else if tributesSortMode === 'title-asc'}Sort: A-Z
-              {:else if tributesSortMode === 'title-desc'}Sort: Z-A
-              {/if}
-            </span>
-            <ChevronDown size={14} />
-          </button>
-          {#if showTributesSortMenu}
-            <div class="sort-menu">
-              <button class="sort-item" class:selected={tributesSortMode === 'default'} onclick={() => { tributesSortMode = 'default'; showTributesSortMenu = false; }}>Default</button>
-              <button class="sort-item" class:selected={tributesSortMode === 'newest'} onclick={() => { tributesSortMode = 'newest'; showTributesSortMenu = false; }}>Newest First</button>
-              <button class="sort-item" class:selected={tributesSortMode === 'oldest'} onclick={() => { tributesSortMode = 'oldest'; showTributesSortMenu = false; }}>Oldest First</button>
-              <button class="sort-item" class:selected={tributesSortMode === 'title-asc'} onclick={() => { tributesSortMode = 'title-asc'; showTributesSortMenu = false; }}>Title (A-Z)</button>
-              <button class="sort-item" class:selected={tributesSortMode === 'title-desc'} onclick={() => { tributesSortMode = 'title-desc'; showTributesSortMenu = false; }}>Title (Z-A)</button>
-            </div>
-          {/if}
-        </div>
-      </div>
-      <div class="albums-grid">
-        {#each filteredTributes as album}
-          <AlbumCard
-            albumId={album.id}
-            artwork={album.artwork}
-            title={album.title}
-            artist={album.year || ''}
-            quality={album.quality}
-            searchId={`album-${album.id}`}
-            onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
-            onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
-            onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-            onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
-            onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
-            onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
-            onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-            isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-            onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
-            onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-            {downloadStateVersion}
-            onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
-          />
-        {/each}
-      </div>
-    </div>
-  {/if}
-
   {#if artist.others.length > 0}
     <div class="divider"></div>
 
@@ -1626,6 +1573,89 @@
           </button>
         {/each}
       </div>
+    </div>
+  {/if}
+
+  {#if artist.tributes.length > 0}
+    <div class="divider"></div>
+
+    <div class="discography section-anchor" bind:this={tributesSection}>
+      <div class="section-header">
+        <div class="section-header-left">
+          <h2 class="section-title">Tributes & Covers</h2>
+          <span class="section-count">{artist.tributes.length}</span>
+          <button
+            class="info-btn"
+            title="This section contains albums returned by Qobuz that may include covers and tributes by other artists, not necessarily music performed by the artist shown."
+          >
+            <Info size={14} />
+          </button>
+          <button class="collapse-btn" onclick={() => (tributesExpanded = !tributesExpanded)} title={tributesExpanded ? 'Collapse' : 'Expand'}>
+            {#if tributesExpanded}
+              <ChevronDown size={16} />
+            {:else}
+              <ChevronRight size={16} />
+            {/if}
+          </button>
+        </div>
+        {#if tributesExpanded}
+          <div class="sort-dropdown">
+            <button class="sort-btn" onclick={() => (showTributesSortMenu = !showTributesSortMenu)}>
+              <span>
+                {#if tributesSortMode === 'default'}Sort: Default
+                {:else if tributesSortMode === 'newest'}Sort: Newest
+                {:else if tributesSortMode === 'oldest'}Sort: Oldest
+                {:else if tributesSortMode === 'title-asc'}Sort: A-Z
+                {:else if tributesSortMode === 'title-desc'}Sort: Z-A
+                {/if}
+              </span>
+              <ChevronDown size={14} />
+            </button>
+            {#if showTributesSortMenu}
+              <div class="sort-menu">
+                <button class="sort-item" class:selected={tributesSortMode === 'default'} onclick={() => { tributesSortMode = 'default'; showTributesSortMenu = false; }}>Default</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'newest'} onclick={() => { tributesSortMode = 'newest'; showTributesSortMenu = false; }}>Newest First</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'oldest'} onclick={() => { tributesSortMode = 'oldest'; showTributesSortMenu = false; }}>Oldest First</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'title-asc'} onclick={() => { tributesSortMode = 'title-asc'; showTributesSortMenu = false; }}>Title (A-Z)</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'title-desc'} onclick={() => { tributesSortMode = 'title-desc'; showTributesSortMenu = false; }}>Title (Z-A)</button>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+      {#if tributesExpanded}
+        <div class="albums-grid">
+          {#each visibleTributes as album}
+            <AlbumCard
+              albumId={album.id}
+              artwork={album.artwork}
+              title={album.title}
+              artist={album.year || ''}
+              quality={album.quality}
+              searchId={`album-${album.id}`}
+              onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+              onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+              onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+              onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+              onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+              onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+              onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+              isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+              onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+              onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+              {downloadStateVersion}
+              onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+            />
+          {/each}
+        </div>
+        {#if canLoadMoreTributes}
+          <div class="load-more-container">
+            <button class="load-more-btn" onclick={() => (tributesVisibleCount += 20)}>
+              Load More ({filteredTributes.length - tributesVisibleCount} remaining)
+            </button>
+          </div>
+        {/if}
+      {/if}
     </div>
   {/if}
 </div>
@@ -2273,6 +2303,45 @@
     font-size: 12px;
     font-weight: 500;
     color: var(--text-muted);
+  }
+
+  .info-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: help;
+    padding: 0;
+    margin-left: -4px;
+  }
+
+  .info-btn:hover {
+    color: var(--text-secondary);
+  }
+
+  .collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    margin-left: -4px;
+    border-radius: 4px;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .collapse-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
   }
 
   .no-albums {
