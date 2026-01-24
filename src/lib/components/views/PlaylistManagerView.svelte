@@ -1049,13 +1049,20 @@
     border: 2px dashed var(--accent-primary);
   }
 
-  /* Grid item header: drag handle left, edit button right */
+  /* Grid item header: drag handle only (when in custom sort) */
   .grid-item-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
-    height: 24px;
-    margin-bottom: 6px;
+    min-height: 0;
+  }
+
+  .grid-item-header:empty {
+    display: none;
+  }
+
+  .grid-item-header:has(.drag-handle) {
+    margin-bottom: 4px;
   }
 
   .grid-item .drag-handle {
@@ -1146,6 +1153,9 @@
     justify-content: flex-end;
     align-items: center;
     margin-top: 8px;
+    width: 160px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .footer-actions {
@@ -1209,6 +1219,9 @@
     flex-direction: column;
     gap: 2px;
     margin-top: 8px;
+    width: 160px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .grid-item .name {
