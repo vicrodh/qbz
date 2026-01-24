@@ -154,16 +154,18 @@
   }
 
   .tier-label {
+    font-family: 'LINE Seed JP', var(--font-sans);
     font-size: 8px;
-    font-weight: 600;
+    font-weight: 100;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: #b0b0b0;
   }
 
   .quality-info {
+    font-family: 'LINE Seed JP', var(--font-sans);
     font-size: 9px;
-    font-weight: 500;
+    font-weight: 100;
     color: #999999;
   }
 </style>

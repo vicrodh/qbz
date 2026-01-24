@@ -623,7 +623,6 @@
     }
   });
 
-  let hasMoreAlbums = $derived(!!onLoadMore && artist.albumsFetched < artist.totalAlbums);
   let hasTopTracks = $derived(topTracks.length > 0 || tracksLoading);
   let hasEpsSingles = $derived(artist.epsSingles.length > 0);
   let hasLiveAlbums = $derived(artist.liveAlbums.length > 0);
@@ -1270,17 +1269,6 @@
           {/each}
         </div>
 
-      {#if hasMoreAlbums}
-        <div class="load-more-container">
-          <button
-            class="load-more-btn"
-            onclick={onLoadMore}
-            disabled={isLoadingMore}
-          >
-            {isLoadingMore ? 'Loading...' : `Load More (${artist.albumsFetched} of ${artist.totalAlbums})`}
-          </button>
-        </div>
-      {/if}
     {/if}
   </div>
 
@@ -2115,10 +2103,7 @@
   }
 
   .discography {
-    padding: 24px;
-    background: var(--bg-secondary);
-    border-radius: 16px;
-    margin-bottom: 24px;
+    margin-bottom: 32px;
   }
 
   .discography:last-of-type {
@@ -2126,10 +2111,7 @@
   }
 
   .playlists-section {
-    padding: 24px;
-    background: var(--bg-secondary);
-    border-radius: 16px;
-    margin-bottom: 24px;
+    margin-bottom: 32px;
   }
 
   .section-header {

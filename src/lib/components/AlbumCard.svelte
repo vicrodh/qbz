@@ -279,8 +279,9 @@
   .quality-badge {
     display: inline-block;
     margin-top: 4px;
+    font-family: 'LINE Seed JP', var(--font-sans);
     font-size: 10px;
-    font-weight: 600;
+    font-weight: 100;
     color: rgba(255, 255, 255, 0.85);
     background: rgba(255, 255, 255, 0.1);
     border: 1px solid rgba(255, 255, 255, 0.15);
