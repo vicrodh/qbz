@@ -1536,6 +1536,7 @@
   }
 
   .radio-btn {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1546,18 +1547,49 @@
     border-radius: 50%;
     cursor: pointer;
     color: var(--text-muted);
-    transition: all 300ms ease;
+    transition: background 200ms ease, color 200ms ease;
     flex-shrink: 0;
-    overflow: hidden;
-    white-space: nowrap;
   }
 
   .radio-btn.loading {
-    width: auto;
-    min-width: 200px;
-    padding: 0 20px;
-    border-radius: 22px;
     cursor: default;
+    color: var(--accent-primary);
+  }
+
+  /* Outer rotating arc */
+  .radio-btn.loading::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border: 2px solid transparent;
+    border-top-color: var(--accent-primary);
+    border-right-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spinOuter 1.2s linear infinite;
+    pointer-events: none;
+  }
+
+  /* Inner rotating arc (opposite direction) */
+  .radio-btn.loading::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border: 2px solid transparent;
+    border-bottom-color: rgba(var(--accent-primary-rgb, 139, 92, 246), 0.5);
+    border-left-color: rgba(var(--accent-primary-rgb, 139, 92, 246), 0.5);
+    border-radius: 50%;
+    animation: spinInner 1.8s linear infinite reverse;
+    pointer-events: none;
+  }
+
+  @keyframes spinOuter {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes spinInner {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   .radio-btn.glow {
@@ -1576,9 +1608,7 @@
   }
 
   .loading-message {
-    font-size: 13px;
-    color: var(--text-secondary);
-    animation: fadeIn 0.3s ease-in;
+    display: none;
   }
 
   @keyframes fadeIn {
