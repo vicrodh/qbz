@@ -344,20 +344,21 @@
     width: 38px;
     height: 38px;
     border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.85);
+    border: none;
     background: transparent;
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    /* Use box-shadow instead of border for smoother anti-aliasing */
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85), 0 0 1px rgba(0, 0, 0, 0.3);
     transition: transform 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
   }
 
   .overlay-btn:hover {
-    border-color: var(--accent-primary);
     background-color: rgba(0, 0, 0, 0.3);
-    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+    box-shadow: inset 0 0 0 1px var(--accent-primary), 0 0 4px rgba(0, 0, 0, 0.5);
   }
 
   .overlay-btn.is-active {
@@ -391,20 +392,21 @@
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.85);
+    border: none;
     background: transparent;
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
+    /* Use box-shadow instead of border for smoother anti-aliasing */
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85), 0 0 1px rgba(0, 0, 0, 0.3);
     transition: background-color 150ms ease, box-shadow 150ms ease;
   }
 
   :global(.album-card .album-menu .menu-trigger:hover) {
-    border-color: var(--accent-primary);
     background-color: rgba(0, 0, 0, 0.3);
-    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+    box-shadow: inset 0 0 0 1px var(--accent-primary), 0 0 4px rgba(0, 0, 0, 0.5);
   }
 
   .info {
