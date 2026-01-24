@@ -483,6 +483,20 @@
     color: var(--accent-primary);
   }
 
+  /* Style AlbumMenu trigger to match action buttons */
+  .actions :global(.album-menu .menu-trigger) {
+    width: 36px;
+    height: 36px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: var(--text-muted);
+  }
+
+  .actions :global(.album-menu .menu-trigger:hover) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    border-color: var(--text-primary);
+  }
+
   .divider {
     height: 1px;
     background-color: var(--bg-tertiary);
