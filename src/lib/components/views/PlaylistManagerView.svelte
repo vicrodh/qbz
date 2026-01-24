@@ -1017,13 +1017,13 @@
   /* Grid View */
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, 180px);
+    grid-template-columns: repeat(auto-fill, 160px);
     gap: 16px;
     justify-content: start;
   }
 
   .grid-item {
-    width: 180px;
+    width: 160px;
     display: flex;
     flex-direction: column;
     padding: 10px;
