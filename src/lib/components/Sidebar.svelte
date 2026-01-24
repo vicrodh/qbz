@@ -868,6 +868,7 @@
 
   .local-library-section {
     flex-shrink: 0;
+    margin-bottom: 2px;
   }
 
   .section-header {

@@ -139,10 +139,20 @@
   let searchInputEl = $state<HTMLInputElement | null>(null);
   let currentSearchIndex = $state(0);
 
-  // Album sorting state
+  // Album sorting state - independent per section
   type AlbumSortMode = 'default' | 'newest' | 'oldest' | 'title-asc' | 'title-desc';
   let albumSortMode = $state<AlbumSortMode>('default');
   let showAlbumSortMenu = $state(false);
+  let epsSinglesSortMode = $state<AlbumSortMode>('default');
+  let showEpsSinglesSortMenu = $state(false);
+  let liveAlbumsSortMode = $state<AlbumSortMode>('default');
+  let showLiveAlbumsSortMenu = $state(false);
+  let compilationsSortMode = $state<AlbumSortMode>('default');
+  let showCompilationsSortMenu = $state(false);
+  let tributesSortMode = $state<AlbumSortMode>('default');
+  let showTributesSortMenu = $state(false);
+  let othersSortMode = $state<AlbumSortMode>('default');
+  let showOthersSortMenu = $state(false);
 
   // Popular tracks display state
   let visibleTracksCount = $state(5);
@@ -218,7 +228,13 @@
     similarArtists = [];
     similarArtistImageErrors = new Set();
     activeJumpSection = 'about';
-    albumSortMode = 'default'; // Reset sort when artist changes
+    // Reset all sort modes when artist changes
+    albumSortMode = 'default';
+    epsSinglesSortMode = 'default';
+    liveAlbumsSortMode = 'default';
+    compilationsSortMode = 'default';
+    tributesSortMode = 'default';
+    othersSortMode = 'default';
 
     loadTopTracks();
     loadSimilarArtists();
@@ -682,31 +698,31 @@
     let albums = searchLower
       ? artist.epsSingles.filter(a => a.title.toLowerCase().includes(searchLower))
       : artist.epsSingles;
-    return sortAlbums(albums, albumSortMode);
+    return sortAlbums(albums, epsSinglesSortMode);
   });
   let filteredLiveAlbums = $derived.by(() => {
     let albums = searchLower
       ? artist.liveAlbums.filter(a => a.title.toLowerCase().includes(searchLower))
       : artist.liveAlbums;
-    return sortAlbums(albums, albumSortMode);
+    return sortAlbums(albums, liveAlbumsSortMode);
   });
   let filteredCompilations = $derived.by(() => {
     let albums = searchLower
       ? artist.compilations.filter(a => a.title.toLowerCase().includes(searchLower))
       : artist.compilations;
-    return sortAlbums(albums, albumSortMode);
+    return sortAlbums(albums, compilationsSortMode);
   });
   let filteredTributes = $derived.by(() => {
     let albums = searchLower
       ? artist.tributes.filter(a => a.title.toLowerCase().includes(searchLower))
       : artist.tributes;
-    return sortAlbums(albums, albumSortMode);
+    return sortAlbums(albums, tributesSortMode);
   });
   let filteredOthers = $derived.by(() => {
     let albums = searchLower
       ? artist.others.filter(a => a.title.toLowerCase().includes(searchLower))
       : artist.others;
-    return sortAlbums(albums, albumSortMode);
+    return sortAlbums(albums, othersSortMode);
   });
   let filteredPlaylists = $derived(
     searchLower
@@ -1281,6 +1297,28 @@
           <h2 class="section-title">EPs & Singles</h2>
           <span class="section-count">{artist.epsSingles.length}</span>
         </div>
+        <div class="sort-dropdown">
+          <button class="sort-btn" onclick={() => (showEpsSinglesSortMenu = !showEpsSinglesSortMenu)}>
+            <span>
+              {#if epsSinglesSortMode === 'default'}Sort: Default
+              {:else if epsSinglesSortMode === 'newest'}Sort: Newest
+              {:else if epsSinglesSortMode === 'oldest'}Sort: Oldest
+              {:else if epsSinglesSortMode === 'title-asc'}Sort: A-Z
+              {:else if epsSinglesSortMode === 'title-desc'}Sort: Z-A
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showEpsSinglesSortMenu}
+            <div class="sort-menu">
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'default'} onclick={() => { epsSinglesSortMode = 'default'; showEpsSinglesSortMenu = false; }}>Default</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'newest'} onclick={() => { epsSinglesSortMode = 'newest'; showEpsSinglesSortMenu = false; }}>Newest First</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'oldest'} onclick={() => { epsSinglesSortMode = 'oldest'; showEpsSinglesSortMenu = false; }}>Oldest First</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'title-asc'} onclick={() => { epsSinglesSortMode = 'title-asc'; showEpsSinglesSortMenu = false; }}>Title (A-Z)</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'title-desc'} onclick={() => { epsSinglesSortMode = 'title-desc'; showEpsSinglesSortMenu = false; }}>Title (Z-A)</button>
+            </div>
+          {/if}
+        </div>
       </div>
       <div class="albums-grid">
         {#each filteredEpsSingles as album}
@@ -1317,6 +1355,28 @@
         <div class="section-header-left">
           <h2 class="section-title">Live Albums</h2>
           <span class="section-count">{artist.liveAlbums.length}</span>
+        </div>
+        <div class="sort-dropdown">
+          <button class="sort-btn" onclick={() => (showLiveAlbumsSortMenu = !showLiveAlbumsSortMenu)}>
+            <span>
+              {#if liveAlbumsSortMode === 'default'}Sort: Default
+              {:else if liveAlbumsSortMode === 'newest'}Sort: Newest
+              {:else if liveAlbumsSortMode === 'oldest'}Sort: Oldest
+              {:else if liveAlbumsSortMode === 'title-asc'}Sort: A-Z
+              {:else if liveAlbumsSortMode === 'title-desc'}Sort: Z-A
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showLiveAlbumsSortMenu}
+            <div class="sort-menu">
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'default'} onclick={() => { liveAlbumsSortMode = 'default'; showLiveAlbumsSortMenu = false; }}>Default</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'newest'} onclick={() => { liveAlbumsSortMode = 'newest'; showLiveAlbumsSortMenu = false; }}>Newest First</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'oldest'} onclick={() => { liveAlbumsSortMode = 'oldest'; showLiveAlbumsSortMenu = false; }}>Oldest First</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'title-asc'} onclick={() => { liveAlbumsSortMode = 'title-asc'; showLiveAlbumsSortMenu = false; }}>Title (A-Z)</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'title-desc'} onclick={() => { liveAlbumsSortMode = 'title-desc'; showLiveAlbumsSortMenu = false; }}>Title (Z-A)</button>
+            </div>
+          {/if}
         </div>
       </div>
       <div class="albums-grid">
@@ -1355,6 +1415,28 @@
           <h2 class="section-title">Compilations</h2>
           <span class="section-count">{artist.compilations.length}</span>
         </div>
+        <div class="sort-dropdown">
+          <button class="sort-btn" onclick={() => (showCompilationsSortMenu = !showCompilationsSortMenu)}>
+            <span>
+              {#if compilationsSortMode === 'default'}Sort: Default
+              {:else if compilationsSortMode === 'newest'}Sort: Newest
+              {:else if compilationsSortMode === 'oldest'}Sort: Oldest
+              {:else if compilationsSortMode === 'title-asc'}Sort: A-Z
+              {:else if compilationsSortMode === 'title-desc'}Sort: Z-A
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showCompilationsSortMenu}
+            <div class="sort-menu">
+              <button class="sort-item" class:selected={compilationsSortMode === 'default'} onclick={() => { compilationsSortMode = 'default'; showCompilationsSortMenu = false; }}>Default</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'newest'} onclick={() => { compilationsSortMode = 'newest'; showCompilationsSortMenu = false; }}>Newest First</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'oldest'} onclick={() => { compilationsSortMode = 'oldest'; showCompilationsSortMenu = false; }}>Oldest First</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'title-asc'} onclick={() => { compilationsSortMode = 'title-asc'; showCompilationsSortMenu = false; }}>Title (A-Z)</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'title-desc'} onclick={() => { compilationsSortMode = 'title-desc'; showCompilationsSortMenu = false; }}>Title (Z-A)</button>
+            </div>
+          {/if}
+        </div>
       </div>
       <div class="albums-grid">
         {#each filteredCompilations as album}
@@ -1392,6 +1474,28 @@
           <h2 class="section-title">Tributes & Covers</h2>
           <span class="section-count">{artist.tributes.length}</span>
         </div>
+        <div class="sort-dropdown">
+          <button class="sort-btn" onclick={() => (showTributesSortMenu = !showTributesSortMenu)}>
+            <span>
+              {#if tributesSortMode === 'default'}Sort: Default
+              {:else if tributesSortMode === 'newest'}Sort: Newest
+              {:else if tributesSortMode === 'oldest'}Sort: Oldest
+              {:else if tributesSortMode === 'title-asc'}Sort: A-Z
+              {:else if tributesSortMode === 'title-desc'}Sort: Z-A
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showTributesSortMenu}
+            <div class="sort-menu">
+              <button class="sort-item" class:selected={tributesSortMode === 'default'} onclick={() => { tributesSortMode = 'default'; showTributesSortMenu = false; }}>Default</button>
+              <button class="sort-item" class:selected={tributesSortMode === 'newest'} onclick={() => { tributesSortMode = 'newest'; showTributesSortMenu = false; }}>Newest First</button>
+              <button class="sort-item" class:selected={tributesSortMode === 'oldest'} onclick={() => { tributesSortMode = 'oldest'; showTributesSortMenu = false; }}>Oldest First</button>
+              <button class="sort-item" class:selected={tributesSortMode === 'title-asc'} onclick={() => { tributesSortMode = 'title-asc'; showTributesSortMenu = false; }}>Title (A-Z)</button>
+              <button class="sort-item" class:selected={tributesSortMode === 'title-desc'} onclick={() => { tributesSortMode = 'title-desc'; showTributesSortMenu = false; }}>Title (Z-A)</button>
+            </div>
+          {/if}
+        </div>
       </div>
       <div class="albums-grid">
         {#each filteredTributes as album}
@@ -1428,6 +1532,28 @@
         <div class="section-header-left">
           <h2 class="section-title">Others</h2>
           <span class="section-count">{artist.others.length}</span>
+        </div>
+        <div class="sort-dropdown">
+          <button class="sort-btn" onclick={() => (showOthersSortMenu = !showOthersSortMenu)}>
+            <span>
+              {#if othersSortMode === 'default'}Sort: Default
+              {:else if othersSortMode === 'newest'}Sort: Newest
+              {:else if othersSortMode === 'oldest'}Sort: Oldest
+              {:else if othersSortMode === 'title-asc'}Sort: A-Z
+              {:else if othersSortMode === 'title-desc'}Sort: Z-A
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showOthersSortMenu}
+            <div class="sort-menu">
+              <button class="sort-item" class:selected={othersSortMode === 'default'} onclick={() => { othersSortMode = 'default'; showOthersSortMenu = false; }}>Default</button>
+              <button class="sort-item" class:selected={othersSortMode === 'newest'} onclick={() => { othersSortMode = 'newest'; showOthersSortMenu = false; }}>Newest First</button>
+              <button class="sort-item" class:selected={othersSortMode === 'oldest'} onclick={() => { othersSortMode = 'oldest'; showOthersSortMenu = false; }}>Oldest First</button>
+              <button class="sort-item" class:selected={othersSortMode === 'title-asc'} onclick={() => { othersSortMode = 'title-asc'; showOthersSortMenu = false; }}>Title (A-Z)</button>
+              <button class="sort-item" class:selected={othersSortMode === 'title-desc'} onclick={() => { othersSortMode = 'title-desc'; showOthersSortMenu = false; }}>Title (Z-A)</button>
+            </div>
+          {/if}
         </div>
       </div>
       <div class="albums-grid">
@@ -2094,7 +2220,7 @@
 
   .divider {
     height: 1px;
-    background: linear-gradient(90deg, transparent, var(--bg-tertiary) 20%, var(--bg-tertiary) 80%, transparent);
+    background: transparent;
     margin: 32px 0;
   }
 
