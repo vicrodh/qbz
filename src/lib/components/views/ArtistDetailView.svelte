@@ -771,7 +771,7 @@
 
   <!-- Artist Header -->
   <div class="artist-header section-anchor" bind:this={aboutSection}>
-    <!-- Artist Image and Actions -->
+    <!-- Artist Image -->
     <div class="artist-image-column">
       <div class="artist-image-container">
         {#if imageError || !artist.image}
@@ -788,35 +788,6 @@
             onerror={handleImageError}
           />
         {/if}
-      </div>
-      <div class="artist-actions">
-        <button
-          class="favorite-btn"
-          class:is-favorite={isFavorite}
-          onclick={toggleFavorite}
-          disabled={isFavoriteLoading}
-          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-        >
-          {#if isFavorite}
-            <Heart size={24} fill="var(--accent-primary)" color="var(--accent-primary)" />
-          {:else}
-            <Heart size={24} />
-          {/if}
-        </button>
-        <button
-          class="radio-btn"
-          class:loading={isRadioLoading}
-          class:glow={radioJustCreated}
-          onclick={createArtistRadio}
-          disabled={isRadioLoading}
-          title="Start Artist Radio"
-        >
-          {#if isRadioLoading}
-            <span class="loading-message">{radioLoadingMessage}</span>
-          {:else}
-            <Radio size={24} />
-          {/if}
-        </button>
       </div>
     </div>
 
@@ -851,34 +822,54 @@
         <div class="similar-loading">Loading similar artists...</div>
       {:else if similarArtists.length > 0}
         <div class="similar-artists">
-          <div class="similar-title">Similar Artists</div>
+          <div class="similar-title">SIMILAR ARTISTS</div>
           <div class="similar-list">
-            {#each similarArtists as similar}
+            {#each similarArtists as similar, index}
+              {#if index > 0}
+                <span class="similar-separator">•</span>
+              {/if}
               <button
                 class="similar-artist"
                 onclick={() => onTrackGoToArtist?.(similar.id)}
                 title={similar.name}
               >
-                {#if similarArtistImageErrors.has(similar.id) || !getSimilarArtistImage(similar)}
-                  <span class="similar-avatar placeholder">
-                    <User size={12} />
-                  </span>
-                {:else}
-                  <img
-                    src={getSimilarArtistImage(similar)}
-                    alt={similar.name}
-                    class="similar-avatar"
-                    loading="lazy"
-                    decoding="async"
-                    onerror={() => handleSimilarArtistImageError(similar.id)}
-                  />
-                {/if}
-                <span class="similar-name">{similar.name}</span>
+                {similar.name}
               </button>
             {/each}
           </div>
         </div>
       {/if}
+
+      <!-- Action Buttons -->
+      <div class="artist-actions">
+        <button
+          class="favorite-btn"
+          class:is-favorite={isFavorite}
+          onclick={toggleFavorite}
+          disabled={isFavoriteLoading}
+          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          {#if isFavorite}
+            <Heart size={24} fill="var(--accent-primary)" color="var(--accent-primary)" />
+          {:else}
+            <Heart size={24} />
+          {/if}
+        </button>
+        <button
+          class="radio-btn"
+          class:loading={isRadioLoading}
+          class:glow={radioJustCreated}
+          onclick={createArtistRadio}
+          disabled={isRadioLoading}
+          title="Start Artist Radio"
+        >
+          {#if isRadioLoading}
+            <span class="loading-message">{radioLoadingMessage}</span>
+          {:else}
+            <Radio size={24} />
+          {/if}
+        </button>
+      </div>
     </div>
   </div>
 
@@ -1496,7 +1487,7 @@
   .artist-actions {
     display: flex;
     gap: 12px;
-    justify-content: center;
+    margin-top: 20px;
   }
 
   .artist-info {
@@ -1609,17 +1600,15 @@
 
   .biography {
     max-width: 100%;
-    padding: 16px;
-    background: var(--bg-secondary);
-    border-radius: 12px;
-    margin-bottom: 4px;
+    margin-bottom: 16px;
+    font-weight: 300;
   }
 
   .bio-text {
     font-size: 14px;
     line-height: 1.7;
     color: var(--text-secondary);
-    margin-bottom: 8px;
+    font-weight: 300;
   }
 
   .bio-text :global(p) {
@@ -1635,7 +1624,7 @@
     align-items: center;
     gap: 4px;
     font-size: 13px;
-    font-weight: 500;
+    font-weight: 400;
     color: var(--accent-primary);
     background: none;
     border: none;
@@ -1651,9 +1640,8 @@
   .bio-source {
     font-size: 11px;
     color: var(--text-muted);
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--bg-tertiary);
+    margin-top: 8px;
+    font-weight: 300;
   }
 
   .jump-nav {
@@ -1893,8 +1881,11 @@
   }
 
   .similar-title {
-    font-size: 12px;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     margin-bottom: 8px;
   }
 
@@ -1907,49 +1898,29 @@
   .similar-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .similar-separator {
+    color: var(--text-muted);
+    font-size: 10px;
+    user-select: none;
   }
 
   .similar-artist {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
     background: none;
     border: none;
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 16px;
-    transition: background-color 150ms ease, color 150ms ease;
+    padding: 2px 4px;
+    transition: color 150ms ease;
   }
 
   .similar-artist:hover {
-    background-color: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-
-  .similar-avatar {
-    width: 25px;
-    height: 25px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-  }
-
-  .similar-avatar.placeholder {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--bg-tertiary);
-    color: var(--text-muted);
-  }
-
-  .similar-name {
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: var(--accent-primary);
   }
 
   .divider {
