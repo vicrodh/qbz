@@ -215,22 +215,22 @@
       <!-- Action Buttons -->
       <div class="actions">
         <button
-          class="action-btn primary"
+          class="action-btn-circle primary"
           onclick={onPlayAll}
           title="Play"
         >
-          <Play size={20} fill="white" color="white" />
+          <Play size={20} fill="currentColor" color="currentColor" />
         </button>
         <button
-          class="action-btn"
+          class="action-btn-circle"
           onclick={onShuffleAll}
           title="Shuffle"
         >
           <Shuffle size={18} />
         </button>
         <button
-          class="action-btn"
-          class:is-favorite={isFavorite}
+          class="action-btn-circle"
+          class:is-active={isFavorite}
           onclick={toggleFavorite}
           disabled={isFavoriteLoading}
           title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -436,49 +436,6 @@
     display: flex;
     align-items: center;
     gap: 12px;
-  }
-
-  .action-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
-  }
-
-  .action-btn:hover:not(:disabled) {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    border-color: var(--text-primary);
-  }
-
-  .action-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .action-btn.primary {
-    width: 44px;
-    height: 44px;
-    background: var(--accent-primary);
-    border: 2px solid white;
-    color: white;
-  }
-
-  .action-btn.primary:hover {
-    background: var(--accent-hover);
-  }
-
-  .action-btn.is-favorite {
-    background: rgba(var(--accent-primary-rgb, 139, 92, 246), 0.15);
-    border-color: var(--accent-primary);
-    color: var(--accent-primary);
   }
 
   /* Style AlbumMenu trigger to match action buttons */

@@ -1071,7 +1071,7 @@
         {#if topTracks.length > 0}
           <div class="section-header-actions">
             <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
-              <Play size={20} fill="white" color="white" />
+              <Play size={20} fill="currentColor" color="currentColor" />
             </button>
             <div class="context-menu-wrapper">
               <button
@@ -2467,38 +2467,6 @@
     display: flex;
     align-items: center;
     gap: 12px;
-  }
-
-  .action-btn-circle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border: 1px solid var(--text-muted);
-    border-radius: 50%;
-    background: transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: background 150ms ease, color 150ms ease, border-color 150ms ease;
-  }
-
-  .action-btn-circle:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    border-color: var(--text-primary);
-  }
-
-  .action-btn-circle.primary {
-    width: 44px;
-    height: 44px;
-    background: var(--accent-primary);
-    color: white;
-    border: 2px solid white;
-  }
-
-  .action-btn-circle.primary:hover {
-    background: var(--accent-hover);
   }
 
   .context-menu-wrapper {
