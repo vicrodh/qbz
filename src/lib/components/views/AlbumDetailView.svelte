@@ -267,6 +267,9 @@
       <div class="col-title">Title</div>
       <div class="col-duration">Duration</div>
       <div class="col-quality">Quality</div>
+      <div class="col-spacer"></div>
+      <div class="col-spacer"></div>
+      <div class="col-spacer"></div>
     </div>
 
     <!-- Track Rows -->
@@ -490,6 +493,10 @@
   .col-quality {
     width: 80px;
     text-align: right;
+  }
+
+  .col-spacer {
+    width: 28px;
   }
 
   .track-list {
