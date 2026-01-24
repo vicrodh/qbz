@@ -959,6 +959,14 @@
   }
 
   /* Thin scrollbar - hidden by default, visible on hover */
+  .playlists-scroll {
+    scrollbar-color: transparent transparent;
+  }
+
+  .playlists-scroll:hover {
+    scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+  }
+
   .playlists-scroll::-webkit-scrollbar {
     width: 4px;
   }
@@ -970,7 +978,6 @@
   .playlists-scroll::-webkit-scrollbar-thumb {
     background: transparent;
     border-radius: 4px;
-    transition: background 150ms ease;
   }
 
   .playlists-scroll:hover::-webkit-scrollbar-thumb {
