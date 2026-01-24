@@ -356,6 +356,7 @@
 
   .overlay-btn:hover {
     border-color: var(--accent-primary);
+    background-color: rgba(0, 0, 0, 0.3);
   }
 
   .overlay-btn.is-active {
@@ -400,6 +401,7 @@
 
   :global(.album-card .album-menu .menu-trigger:hover) {
     border-color: var(--accent-primary);
+    background-color: rgba(0, 0, 0, 0.3);
   }
 
   .info {
