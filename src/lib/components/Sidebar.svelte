@@ -1006,7 +1006,7 @@
     border-radius: 50%;
     color: var(--text-muted);
     cursor: pointer;
-    box-shadow: -4px 0 12px rgba(0, 0, 0, 0.75);
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
     transition: transform 150ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
     z-index: 10;
   }
@@ -1015,7 +1015,7 @@
     color: var(--text-primary);
     background: var(--bg-hover);
     transform: translateY(-50%) scale(1.1);
-    box-shadow: -6px 0 16px rgba(0, 0, 0, 0.85);
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
   }
 
   .user-section {
