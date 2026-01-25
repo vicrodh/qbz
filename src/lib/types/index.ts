@@ -65,6 +65,7 @@ export interface AlbumInfo {
   duration: string;
   bit_depth?: number;
   sampling_rate?: number;
+  description?: string;
 }
 
 export interface TrackCredits {

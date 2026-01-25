@@ -46,6 +46,8 @@ pub struct AlbumInfo {
     pub duration: String,
     pub bit_depth: Option<u32>,
     pub sampling_rate: Option<f64>,
+    /// Editorial description/review of the album
+    pub description: Option<String>,
 }
 
 /// Format duration in seconds to "Xm Ys" or "Xh Ym" format
@@ -104,6 +106,7 @@ fn album_to_info(album: &Album) -> AlbumInfo {
         duration: format_duration(total_duration),
         bit_depth: album.maximum_bit_depth,
         sampling_rate: album.maximum_sampling_rate,
+        description: album.description.clone(),
     }
 }
 

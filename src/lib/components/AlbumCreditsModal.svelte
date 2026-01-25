@@ -13,11 +13,17 @@
 
   let { isOpen, albumId, onClose, onTrackPlay }: Props = $props();
 
+  type TabType = 'credits' | 'review';
+
   let loading = $state(false);
   let error = $state<string | null>(null);
   let credits = $state<AlbumCredits | null>(null);
   let expandedTracks = $state<Set<number>>(new Set());
   let hoveredTrack = $state<number | null>(null);
+  let activeTab = $state<TabType>('credits');
+
+  // Check if review tab should be available
+  const hasReview = $derived(credits?.album?.description ? true : false);
 
   // Load album credits when modal opens
   $effect(() => {
@@ -27,6 +33,7 @@
       credits = null;
       error = null;
       expandedTracks = new Set();
+      activeTab = 'credits';
     }
   });
 
@@ -35,10 +42,6 @@
     error = null;
     try {
       credits = await invoke<AlbumCredits>('get_album_credits', { albumId: id });
-      // Auto-expand first track if it has credits
-      if (credits.tracks.length > 0 && credits.tracks[0].performers.length > 0) {
-        expandedTracks = new Set([credits.tracks[0].id]);
-      }
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       credits = null;
@@ -69,8 +72,22 @@
       <!-- Header with tabs -->
       <div class="modal-header">
         <div class="tabs">
-          <button class="tab active">Credits</button>
-          <button class="tab disabled" disabled>Review</button>
+          <button
+            class="tab"
+            class:active={activeTab === 'credits'}
+            onclick={() => activeTab = 'credits'}
+          >
+            Credits
+          </button>
+          <button
+            class="tab"
+            class:active={activeTab === 'review'}
+            class:disabled={!hasReview}
+            disabled={!hasReview}
+            onclick={() => hasReview && (activeTab = 'review')}
+          >
+            Review
+          </button>
         </div>
         <button class="close-btn" onclick={onClose} aria-label="Close">
           <X size={20} />
@@ -133,71 +150,79 @@
               </div>
             </div>
 
-            <!-- Right column: Track list -->
-            <div class="tracks-list">
-              {#each credits.tracks as track (track.id)}
-                {@const isExpanded = expandedTracks.has(track.id)}
-                {@const isHovered = hoveredTrack === track.id}
-                {@const hasCredits = track.performers.length > 0 || track.copyright}
+            <!-- Right column: Content based on active tab -->
+            {#if activeTab === 'credits'}
+              <div class="tracks-list">
+                {#each credits.tracks as track (track.id)}
+                  {@const isExpanded = expandedTracks.has(track.id)}
+                  {@const isHovered = hoveredTrack === track.id}
+                  {@const hasCredits = track.performers.length > 0 || track.copyright}
 
-                <div
-                  class="track-panel"
-                  class:expanded={isExpanded}
-                  class:has-credits={hasCredits}
-                >
-                  <button
-                    class="track-header"
-                    onclick={() => hasCredits && toggleTrack(track.id)}
-                    onmouseenter={() => hoveredTrack = track.id}
-                    onmouseleave={() => hoveredTrack = null}
-                    disabled={!hasCredits}
+                  <div
+                    class="track-panel"
+                    class:expanded={isExpanded}
+                    class:has-credits={hasCredits}
                   >
-                    <div class="track-number">
-                      {#if isHovered && onTrackPlay}
-                        <button
-                          class="play-btn"
-                          onclick={(e) => handleTrackPlay(track, e)}
-                          aria-label="Play track"
-                        >
-                          <Play size={14} fill="currentColor" />
-                        </button>
-                      {:else}
-                        <span>{track.number}</span>
-                      {/if}
-                    </div>
-                    <div class="track-info">
-                      <span class="track-title">{track.title}</span>
-                      <span class="track-artist">{track.artist}</span>
-                    </div>
-                    {#if hasCredits}
-                      <div class="track-chevron">
-                        {#if isExpanded}
-                          <ChevronUp size={18} />
+                    <button
+                      class="track-header"
+                      onclick={() => hasCredits && toggleTrack(track.id)}
+                      onmouseenter={() => hoveredTrack = track.id}
+                      onmouseleave={() => hoveredTrack = null}
+                      disabled={!hasCredits}
+                    >
+                      <div class="track-number">
+                        {#if isHovered && onTrackPlay}
+                          <button
+                            class="play-btn"
+                            onclick={(e) => handleTrackPlay(track, e)}
+                            aria-label="Play track"
+                          >
+                            <Play size={14} fill="currentColor" />
+                          </button>
                         {:else}
-                          <ChevronDown size={18} />
+                          <span>{track.number}</span>
+                        {/if}
+                      </div>
+                      <div class="track-info">
+                        <span class="track-title">{track.title}</span>
+                        <span class="track-artist">{track.artist}</span>
+                      </div>
+                      {#if hasCredits}
+                        <div class="track-chevron">
+                          {#if isExpanded}
+                            <ChevronUp size={18} />
+                          {:else}
+                            <ChevronDown size={18} />
+                          {/if}
+                        </div>
+                      {/if}
+                    </button>
+
+                    {#if isExpanded && hasCredits}
+                      <div class="track-credits">
+                        {#each track.performers as performer}
+                          <div class="performer-row">
+                            <span class="performer-name">{performer.name}</span>
+                            {#if performer.roles.length > 0}
+                              <span class="performer-roles">, {performer.roles.join(', ')}</span>
+                            {/if}
+                          </div>
+                        {/each}
+                        {#if track.copyright}
+                          <div class="copyright">{track.copyright}</div>
                         {/if}
                       </div>
                     {/if}
-                  </button>
-
-                  {#if isExpanded && hasCredits}
-                    <div class="track-credits">
-                      {#each track.performers as performer}
-                        <div class="performer-row">
-                          <span class="performer-name">{performer.name}</span>
-                          {#if performer.roles.length > 0}
-                            <span class="performer-roles">, {performer.roles.join(', ')}</span>
-                          {/if}
-                        </div>
-                      {/each}
-                      {#if track.copyright}
-                        <div class="copyright">{track.copyright}</div>
-                      {/if}
-                    </div>
-                  {/if}
+                  </div>
+                {/each}
+              </div>
+            {:else if activeTab === 'review' && credits.album.description}
+              <div class="review-content">
+                <div class="review-text">
+                  {@html credits.album.description}
                 </div>
-              {/each}
-            </div>
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -542,5 +567,46 @@
     border-top: 1px solid var(--bg-hover);
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  /* Review Content */
+  .review-content {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+  }
+
+  .review-text {
+    font-size: 14px;
+    line-height: 1.7;
+    color: var(--text-secondary);
+  }
+
+  .review-text :global(p) {
+    margin: 0 0 16px;
+  }
+
+  .review-text :global(p:last-child) {
+    margin-bottom: 0;
+  }
+
+  .review-text :global(a) {
+    color: var(--accent-primary);
+    text-decoration: none;
+  }
+
+  .review-text :global(a:hover) {
+    text-decoration: underline;
+  }
+
+  .review-text :global(strong),
+  .review-text :global(b) {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .review-text :global(em),
+  .review-text :global(i) {
+    font-style: italic;
   }
 </style>

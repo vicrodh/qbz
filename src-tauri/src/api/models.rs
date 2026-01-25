@@ -105,6 +105,8 @@ pub struct Album {
     pub tracks: Option<TracksContainer>,
     /// Universal Product Code for the album
     pub upc: Option<String>,
+    /// Editorial description/review of the album
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
