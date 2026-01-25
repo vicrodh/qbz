@@ -155,3 +155,59 @@ pub async fn get_tracks_by_ids(
 
     Ok(tracks)
 }
+
+/// Get the current user's Qobuz ID
+#[tauri::command]
+pub async fn get_current_user_id(state: State<'_, AppState>) -> Result<Option<u64>, String> {
+    log::info!("Command: get_current_user_id");
+
+    let client = state.client.lock().await;
+    Ok(client.get_user_id().await)
+}
+
+/// Subscribe to (copy) a playlist to the user's library
+/// This creates a new playlist with all the tracks from the source playlist
+#[tauri::command]
+pub async fn subscribe_playlist(
+    playlist_id: u64,
+    state: State<'_, AppState>,
+) -> Result<Playlist, String> {
+    log::info!("Command: subscribe_playlist {}", playlist_id);
+
+    let client = state.client.lock().await;
+
+    // 1. Get the source playlist with all its tracks
+    let source = client
+        .get_playlist(playlist_id)
+        .await
+        .map_err(|e| format!("Failed to get source playlist: {}", e))?;
+
+    // 2. Extract track IDs from the source playlist
+    let track_ids: Vec<u64> = source
+        .tracks
+        .as_ref()
+        .map(|t| t.items.iter().map(|track| track.id).collect())
+        .unwrap_or_default();
+
+    if track_ids.is_empty() {
+        return Err("Source playlist has no tracks to copy".to_string());
+    }
+
+    // 3. Create a new playlist with the same name
+    let new_playlist = client
+        .create_playlist(&source.name, source.description.as_deref(), false)
+        .await
+        .map_err(|e| format!("Failed to create new playlist: {}", e))?;
+
+    // 4. Add all tracks to the new playlist
+    client
+        .add_tracks_to_playlist(new_playlist.id, &track_ids)
+        .await
+        .map_err(|e| format!("Failed to add tracks to new playlist: {}", e))?;
+
+    // 5. Return the new playlist with updated track count
+    Ok(Playlist {
+        tracks_count: track_ids.len() as u32,
+        ..new_playlist
+    })
+}

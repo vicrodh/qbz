@@ -482,6 +482,8 @@ pub fn run() {
             commands::remove_tracks_from_playlist,
             commands::update_playlist,
             commands::get_tracks_by_ids,
+            commands::get_current_user_id,
+            commands::subscribe_playlist,
             // Playlist import commands
             commands::playlist_import_preview,
             commands::playlist_import_execute,

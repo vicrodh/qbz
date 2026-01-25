@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ImagePlus, Edit3, BarChart2, Heart, CloudDownload } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ImagePlus, Edit3, BarChart2, Heart, CloudDownload, ListPlus } from 'lucide-svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
@@ -201,14 +201,26 @@
   let editModalOpen = $state(false);
   let isFavorite = $state(false);
 
+  // User ownership state (to show "Copy to Library" button for non-owned playlists)
+  let currentUserId = $state<number | null>(null);
+  let isOwnPlaylist = $derived(playlist !== null && currentUserId !== null && playlist.owner.id === currentUserId);
+  let isCopying = $state(false);
+
   async function scrollToTrack(trackId: number) {
     await tick();
     const target = scrollContainer?.querySelector<HTMLElement>(`[data-track-id="${trackId}"]`);
     target?.scrollIntoView({ block: 'center' });
   }
 
-  // Subscribe to offline status changes
+  // Subscribe to offline status changes and fetch current user ID
   onMount(() => {
+    // Fetch current user ID for ownership check
+    invoke<number | null>('get_current_user_id').then(userId => {
+      currentUserId = userId;
+    }).catch(err => {
+      console.warn('Failed to get current user ID:', err);
+    });
+
     const unsubscribe = subscribeOffline(() => {
       offlineStatus = getOfflineStatus();
       // Re-check local copies when offline status changes
@@ -472,6 +484,23 @@
     } catch (err) {
       console.error('Failed to toggle favorite:', err);
       isFavorite = !newValue; // Revert on error
+    }
+  }
+
+  async function copyPlaylistToLibrary() {
+    if (isCopying || !playlist) return;
+
+    isCopying = true;
+    try {
+      const newPlaylist = await invoke<Playlist>('subscribe_playlist', { playlistId: playlist.id });
+      // Notify parent to refresh sidebar
+      onPlaylistUpdated?.();
+      // Show success by navigating to the new playlist or show a toast
+      console.log('Playlist copied successfully:', newPlaylist);
+    } catch (err) {
+      console.error('Failed to copy playlist:', err);
+    } finally {
+      isCopying = false;
     }
   }
 
@@ -1018,6 +1047,17 @@
               fill={isFavorite ? 'var(--accent-primary)' : 'none'}
             />
           </button>
+          {#if !isOwnPlaylist && playlist}
+            <button
+              class="action-btn-circle"
+              class:is-loading={isCopying}
+              onclick={copyPlaylistToLibrary}
+              disabled={isCopying}
+              title="Copy to My Library"
+            >
+              <ListPlus size={18} />
+            </button>
+          {/if}
           <AlbumMenu
             onPlayNext={handlePlayAllNext}
             onPlayLater={handlePlayAllLater}
