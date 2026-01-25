@@ -775,6 +775,10 @@ pub fn run() {
             commands::listenbrainz_flush_queue,
             commands::listenbrainz_clear_queue,
             commands::listenbrainz_cleanup_queue,
+            // Smart playlist generation commands
+            commands::smart_playlist_preview,
+            commands::smart_playlist_resolve_artist,
+            commands::smart_playlist_get_available_types,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

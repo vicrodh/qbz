@@ -20,6 +20,7 @@ pub mod queue;
 pub mod radio;
 pub mod search;
 pub mod share;
+pub mod smart_playlists;
 
 pub use audio_backends::*;
 pub use audio_diagnostics::*;
@@ -39,3 +40,4 @@ pub use queue::*;
 pub use radio::*;
 pub use search::*;
 pub use share::*;
+pub use smart_playlists::*;

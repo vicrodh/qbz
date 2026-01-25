@@ -17,6 +17,7 @@
 pub mod cache;
 pub mod client;
 pub mod models;
+pub mod smart_playlists;
 
 pub use cache::{CacheStats, MusicBrainzCache, MusicBrainzCacheState};
 pub use client::{MusicBrainzClient, MusicBrainzConfig};
