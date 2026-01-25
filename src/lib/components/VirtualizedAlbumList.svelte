@@ -65,7 +65,7 @@
   const LIST_ROW_HEIGHT = 76; // px (52px art + padding + gap)
   const GRID_ROW_HEIGHT = 270; // px (card height + info + row gap)
   const GRID_MIN_CARD_WIDTH = 180; // px
-  const GRID_GAP = 24; // px
+  const GRID_GAP = 14; // px (horizontal gap between cards)
   const BUFFER_ITEMS = 5; // Extra items to render above/below viewport
 
   // State
@@ -466,7 +466,7 @@
   .album-grid-row {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 0 22px; /* row-gap column-gap - row gap handled by GRID_ROW_HEIGHT */
+    gap: 0 14px; /* row-gap column-gap - row gap handled by GRID_ROW_HEIGHT */
     padding: 0;
   }
 

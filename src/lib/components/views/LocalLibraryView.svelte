@@ -3704,7 +3704,7 @@
   .album-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 24px 18px; /* row-gap column-gap */
+    gap: 24px 14px; /* row-gap column-gap */
   }
 
   .album-sections {
