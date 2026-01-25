@@ -205,6 +205,33 @@
   let currentUserId = $state<number | null>(null);
   let isOwnPlaylist = $derived(playlist !== null && currentUserId !== null && playlist.owner.id === currentUserId);
   let isCopying = $state(false);
+  let isCopied = $state(false);
+
+  // Track copied playlists in localStorage
+  const COPIED_PLAYLISTS_KEY = 'qbz_copied_playlists';
+
+  function getCopiedPlaylists(): Set<number> {
+    try {
+      const stored = localStorage.getItem(COPIED_PLAYLISTS_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  }
+
+  function markPlaylistAsCopied(id: number) {
+    const copied = getCopiedPlaylists();
+    copied.add(id);
+    localStorage.setItem(COPIED_PLAYLISTS_KEY, JSON.stringify([...copied]));
+    isCopied = true;
+  }
+
+  function isPlaylistCopied(id: number): boolean {
+    return getCopiedPlaylists().has(id);
+  }
+
+  // Show copy button only if: not own playlist AND not already copied
+  let showCopyButton = $derived(!isOwnPlaylist && playlist !== null && !isCopied);
 
   async function scrollToTrack(trackId: number) {
     await tick();
@@ -229,6 +256,11 @@
       }
     });
     return unsubscribe;
+  });
+
+  // Check if this playlist was already copied when playlistId changes
+  $effect(() => {
+    isCopied = isPlaylistCopied(playlistId);
   });
 
   $effect(() => {
@@ -493,9 +525,10 @@
     isCopying = true;
     try {
       const newPlaylist = await invoke<Playlist>('subscribe_playlist', { playlistId: playlist.id });
+      // Mark as copied so button disappears
+      markPlaylistAsCopied(playlist.id);
       // Notify parent to refresh sidebar
       onPlaylistUpdated?.();
-      // Show success by navigating to the new playlist or show a toast
       console.log('Playlist copied successfully:', newPlaylist);
     } catch (err) {
       console.error('Failed to copy playlist:', err);
@@ -1047,7 +1080,7 @@
               fill={isFavorite ? 'var(--accent-primary)' : 'none'}
             />
           </button>
-          {#if !isOwnPlaylist && playlist}
+          {#if showCopyButton}
             <button
               class="action-btn-circle"
               class:is-loading={isCopying}

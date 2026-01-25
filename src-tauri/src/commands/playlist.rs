@@ -193,19 +193,26 @@ pub async fn subscribe_playlist(
         return Err("Source playlist has no tracks to copy".to_string());
     }
 
-    // 3. Create a new playlist with the same name
+    // 3. Build description with attribution
+    let attribution = format!("\n\n---\nOriginally curated by {} on Qobuz", source.owner.name);
+    let new_description = match source.description {
+        Some(ref desc) if !desc.is_empty() => Some(format!("{}{}", desc, attribution)),
+        _ => Some(attribution.trim_start().to_string()),
+    };
+
+    // 4. Create a new playlist with the same name and attributed description
     let new_playlist = client
-        .create_playlist(&source.name, source.description.as_deref(), false)
+        .create_playlist(&source.name, new_description.as_deref(), false)
         .await
         .map_err(|e| format!("Failed to create new playlist: {}", e))?;
 
-    // 4. Add all tracks to the new playlist
+    // 5. Add all tracks to the new playlist
     client
         .add_tracks_to_playlist(new_playlist.id, &track_ids)
         .await
         .map_err(|e| format!("Failed to add tracks to new playlist: {}", e))?;
 
-    // 5. Return the new playlist with updated track count
+    // 6. Return the new playlist with updated track count
     Ok(Playlist {
         tracks_count: track_ids.len() as u32,
         ..new_playlist
