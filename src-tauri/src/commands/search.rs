@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use crate::api::{Album, Artist, ArtistAlbums, SearchResultsPage, Track};
+use crate::api::{Album, Artist, ArtistAlbums, LabelDetail, SearchResultsPage, Track};
 use crate::api_cache::ApiCacheState;
 use crate::AppState;
 use serde::{Deserialize, Serialize};
@@ -261,6 +261,28 @@ pub async fn get_similar_artists(
     let client = state.client.lock().await;
     client
         .get_similar_artists(artist_id, limit.unwrap_or(5), offset.unwrap_or(0))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get label detail with albums
+#[tauri::command]
+pub async fn get_label(
+    label_id: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<LabelDetail, String> {
+    log::info!(
+        "Command: get_label {} limit={:?} offset={:?}",
+        label_id,
+        limit,
+        offset
+    );
+
+    let client = state.client.lock().await;
+    client
+        .get_label(label_id, limit.unwrap_or(100), offset.unwrap_or(0))
         .await
         .map_err(|e| e.to_string())
 }

@@ -21,6 +21,7 @@ export interface QobuzTrack {
     id?: string;
     title: string;
     image?: QobuzImage;
+    label?: { id: number; name: string };
   };
   performer?: { id?: number; name: string };
   hires_streamable?: boolean;
@@ -59,6 +60,7 @@ export interface AlbumInfo {
   year: string;
   release_date?: string;
   label: string;
+  label_id?: number;
   genre: string;
   quality: string;
   track_count: number;
@@ -90,7 +92,7 @@ export interface QobuzAlbum {
   hires_streamable?: boolean;
   tracks_count?: number;
   duration?: number;
-  label?: { name: string };
+  label?: { id?: number; name: string };
   genre?: { name: string };
   maximum_bit_depth?: number;
   maximum_sampling_rate?: number;
@@ -161,6 +163,7 @@ export interface AlbumDetail {
   year: string;
   releaseDate?: string; // Full date in YYYY-MM-DD format
   label: string;
+  labelId?: number;
   genre: string;
   quality: string;
   trackCount: number;
@@ -228,6 +231,16 @@ export interface ArtistDetail {
     trackCount?: number;
     owner?: string;
   }[];
+  totalAlbums: number;
+  albumsFetched: number;
+}
+
+export interface LabelDetail {
+  id: number;
+  name: string;
+  description?: string;
+  image?: QobuzImage;
+  albums: QobuzAlbum[];
   totalAlbums: number;
   albumsFetched: number;
 }

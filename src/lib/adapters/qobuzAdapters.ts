@@ -325,6 +325,7 @@ export function convertQobuzAlbum(album: QobuzAlbum): AlbumDetail {
     year: album.release_date_original?.split('-')[0] || '',
     releaseDate: album.release_date_original,
     label: album.label?.name || '',
+    labelId: album.label?.id,
     genre: album.genre?.name || '',
     quality,
     trackCount: album.tracks_count || album.tracks?.items?.length || 0,

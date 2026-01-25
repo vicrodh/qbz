@@ -9,9 +9,10 @@
     onClose: () => void;
     onTrackPlay?: (track: TrackCredits) => void;
     onPerformerSearch?: (name: string) => void;
+    onLabelClick?: (labelId: number, labelName: string) => void;
   }
 
-  let { isOpen, albumId, onClose, onTrackPlay, onPerformerSearch }: Props = $props();
+  let { isOpen, albumId, onClose, onTrackPlay, onPerformerSearch, onLabelClick }: Props = $props();
 
   function handlePerformerClick(name: string) {
     if (onPerformerSearch) {
@@ -121,7 +122,19 @@
                 {#if credits.album.label}
                   <p class="meta-row">
                     <span class="meta-label">Released by</span>
-                    <span class="meta-value label-name">{credits.album.label}</span>
+                    {#if credits.album.label_id && onLabelClick}
+                      <button
+                        class="label-link"
+                        onclick={() => {
+                          onLabelClick!(credits!.album.label_id!, credits!.album.label);
+                          onClose();
+                        }}
+                      >
+                        {credits.album.label}
+                      </button>
+                    {:else}
+                      <span class="meta-value label-name">{credits.album.label}</span>
+                    {/if}
                     {#if credits.album.release_date}
                       <span class="meta-date">on {new Date(credits.album.release_date).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
                     {/if}
@@ -446,6 +459,22 @@
   .label-name {
     font-weight: 600;
     color: var(--text-primary);
+  }
+
+  .label-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    font-weight: 600;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: color 150ms ease;
+  }
+
+  .label-link:hover {
+    color: var(--accent-primary);
+    text-decoration: underline;
   }
 
   .meta-date {

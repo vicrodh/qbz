@@ -177,6 +177,7 @@
     Track,
     AlbumDetail,
     ArtistDetail,
+    LabelDetail,
     PlaylistTrack,
     DisplayTrack,
     LocalLibraryTrack,
@@ -274,6 +275,7 @@
   import SettingsView from '$lib/components/views/SettingsView.svelte';
   import AlbumDetailView from '$lib/components/views/AlbumDetailView.svelte';
   import ArtistDetailView from '$lib/components/views/ArtistDetailView.svelte';
+  import LabelView from '$lib/components/views/LabelView.svelte';
   import PlaylistDetailView from '$lib/components/views/PlaylistDetailView.svelte';
   import FavoritesView from '$lib/components/views/FavoritesView.svelte';
   import LocalLibraryView from '$lib/components/views/LocalLibraryView.svelte';
@@ -318,9 +320,10 @@
   // View State (from navigationStore subscription)
   let activeView = $state<ViewType>('home');
   let selectedPlaylistId = $state<number | null>(null);
-  // Album and Artist data are fetched, so kept local
+  // Album, Artist and Label data are fetched, so kept local
   let selectedAlbum = $state<AlbumDetail | null>(null);
   let selectedArtist = $state<ArtistDetail | null>(null);
+  let selectedLabel = $state<{ id: number; name: string } | null>(null);
   let isArtistAlbumsLoading = $state(false);
 
   // Artist albums for "By the same artist" section in album view
@@ -494,6 +497,11 @@
       console.error('Failed to load artist:', err);
       showToast('Failed to load artist', 'error');
     }
+  }
+
+  function handleLabelClick(labelId: number, labelName?: string) {
+    selectedLabel = { id: labelId, name: labelName || '' };
+    navigateTo('label');
   }
 
   /**
@@ -2498,6 +2506,7 @@
           isPlaybackActive={isPlaying}
           onBack={navGoBack}
           onArtistClick={() => selectedAlbum?.artistId && handleArtistClick(selectedAlbum.artistId)}
+          onLabelClick={handleLabelClick}
           onTrackPlay={handleAlbumTrackPlay}
           onTrackPlayNext={handleAlbumTrackPlayNext}
           onTrackPlayLater={handleAlbumTrackPlayLater}
@@ -2565,6 +2574,24 @@
           onPlaylistClick={selectPlaylist}
           activeTrackId={currentTrack?.id ?? null}
           isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'label' && selectedLabel}
+        <LabelView
+          labelId={selectedLabel.id}
+          labelName={selectedLabel.name}
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
         />
       {:else if activeView === 'library' || activeView === 'library-album'}
         <LocalLibraryView
@@ -2887,6 +2914,7 @@
         trackInfoTrackId = null;
       }}
       onArtistClick={handleArtistClick}
+      onLabelClick={handleLabelClick}
     />
 
     <!-- Album Credits Modal -->
@@ -2906,6 +2934,7 @@
           }
         }
       }}
+      onLabelClick={handleLabelClick}
     />
 
     <!-- Cast Picker -->

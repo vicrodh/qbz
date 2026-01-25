@@ -478,6 +478,30 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
+    /// Get label by ID with albums
+    pub async fn get_label(&self, label_id: u64, limit: u32, offset: u32) -> Result<LabelDetail> {
+        let url = endpoints::build_url(paths::LABEL_GET);
+        let locale = self.locale().await;
+
+        let response: Value = self
+            .http
+            .get(&url)
+            .header("X-App-Id", self.app_id().await?)
+            .query(&[
+                ("label_id", label_id.to_string()),
+                ("extra", "albums".to_string()),
+                ("limit", limit.to_string()),
+                ("offset", offset.to_string()),
+                ("lang", locale),
+            ])
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(serde_json::from_value(response)?)
+    }
+
     // === Authenticated endpoints ===
 
     /// Get stream URL for a track (requires auth + signature)

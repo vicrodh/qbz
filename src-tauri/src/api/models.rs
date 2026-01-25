@@ -158,6 +158,8 @@ pub struct AlbumSummary {
     pub title: String,
     #[serde(default)]
     pub image: ImageSet,
+    /// Label (if returned in track response)
+    pub label: Option<Label>,
 }
 
 /// Artist model
@@ -254,11 +256,22 @@ impl ImageSet {
     }
 }
 
-/// Label model
+/// Label model (basic reference)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Label {
     pub id: u64,
     pub name: String,
+}
+
+/// Label detail with albums
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelDetail {
+    pub id: u64,
+    pub name: String,
+    pub description: Option<String>,
+    pub image: Option<ImageSet>,
+    pub albums: Option<SearchResultsPage<Album>>,
+    pub albums_count: Option<u32>,
 }
 
 /// Genre model
