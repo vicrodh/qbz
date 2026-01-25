@@ -52,13 +52,12 @@ enum AudioCommand {
         channels: u16,
     },
     /// Play from streaming source (BufferedMediaSource)
+    /// The download task should already be running and pushing to the source
     PlayStreaming {
         source: Arc<BufferedMediaSource>,
-        writer: BufferWriter,
         track_id: u64,
         sample_rate: u32,
         channels: u16,
-        content_length: u64,
     },
     /// Pause playback
     Pause,
@@ -1148,13 +1147,12 @@ impl Player {
                             actual_duration
                         );
                     }
-                    AudioCommand::PlayStreaming { source, writer: _, track_id, sample_rate, channels, content_length } => {
+                    AudioCommand::PlayStreaming { source, track_id, sample_rate, channels } => {
                         log::info!(
-                            "Audio thread: starting streaming playback for track {} ({}Hz, {} channels, {} bytes)",
+                            "Audio thread: starting streaming playback for track {} ({}Hz, {} channels)",
                             track_id,
                             sample_rate,
-                            channels,
-                            content_length
+                            channels
                         );
                         *pause_suspend_deadline = None;
 
@@ -1765,11 +1763,9 @@ impl Player {
         self.tx
             .send(AudioCommand::PlayStreaming {
                 source: source.clone(),
-                writer: writer.clone(),
                 track_id,
                 sample_rate,
                 channels,
-                content_length,
             })
             .map_err(|e| {
                 log::error!("Player: Failed to send streaming command: {}", e);
