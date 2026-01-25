@@ -640,6 +640,7 @@
                 artwork={getAlbumArtwork(allResults.albums.items[0])}
                 title={allResults.albums.items[0].title}
                 artist={allResults.albums.items[0].artist?.name || 'Unknown Artist'}
+                size="large"
                 quality={getQualityLabel(allResults.albums.items[0])}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(allResults.albums.items[0].id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(allResults.albums.items[0].id) : undefined}
@@ -775,6 +776,7 @@
                           artwork={getAlbumArtwork(album)}
                           title={album.title}
                           artist={album.artist?.name || 'Unknown Artist'}
+                          size="large"
                           quality={getQualityLabel(album)}
                           onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                           onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -913,6 +915,7 @@
               artwork={getAlbumArtwork(album)}
               title={album.title}
               artist={album.artist?.name || 'Unknown Artist'}
+              size="large"
               quality={getQualityLabel(album)}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -1249,9 +1252,9 @@
   }
 
   .albums-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px 14px;
   }
 
   .tracks-list {

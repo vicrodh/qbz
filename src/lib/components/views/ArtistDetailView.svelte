@@ -1273,6 +1273,7 @@
               artwork={album.artwork}
               title={album.title}
               artist={album.year || ''}
+              size="large"
               quality={album.quality}
               searchId={`album-${album.id}`}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1333,6 +1334,7 @@
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
+            size="large"
             quality={album.quality}
             searchId={`album-${album.id}`}
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1392,6 +1394,7 @@
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
+            size="large"
             quality={album.quality}
             searchId={`album-${album.id}`}
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1451,6 +1454,7 @@
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
+            size="large"
             quality={album.quality}
             searchId={`album-${album.id}`}
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1510,6 +1514,7 @@
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
+            size="large"
             quality={album.quality}
             searchId={`album-${album.id}`}
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1632,6 +1637,7 @@
               artwork={album.artwork}
               title={album.title}
               artist={album.year || ''}
+              size="large"
               quality={album.quality}
               searchId={`album-${album.id}`}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -2351,9 +2357,9 @@
   }
 
   .albums-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px 14px;
   }
 
   .playlists-grid {

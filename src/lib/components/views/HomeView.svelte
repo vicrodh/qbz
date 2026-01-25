@@ -644,6 +644,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -673,6 +674,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -702,6 +704,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -731,6 +734,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -760,6 +764,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -789,6 +794,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -889,6 +895,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}

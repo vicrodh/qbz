@@ -1295,6 +1295,7 @@
                         artwork={album.image?.large || album.image?.thumbnail || ''}
                         title={album.title}
                         artist={album.artist.name}
+                        size="large"
                         quality={getQualityLabel(album)}
                         onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                         onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -1366,6 +1367,7 @@
                 artwork={album.image?.large || album.image?.thumbnail || ''}
                 title={album.title}
                 artist={album.artist.name}
+                size="large"
                 quality={getQualityLabel(album)}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -2032,9 +2034,9 @@
   }
 
   .album-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px 14px;
   }
 
   .album-sections {

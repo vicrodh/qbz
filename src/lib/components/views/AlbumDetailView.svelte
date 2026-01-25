@@ -470,6 +470,7 @@
                 artwork={relatedAlbum.artwork}
                 title={relatedAlbum.title}
                 artist={album.artist}
+                size="large"
                 quality={relatedAlbum.quality}
                 onclick={() => onRelatedAlbumClick?.(relatedAlbum.id)}
                 onPlay={onRelatedAlbumPlay ? () => onRelatedAlbumPlay(relatedAlbum.id) : undefined}
