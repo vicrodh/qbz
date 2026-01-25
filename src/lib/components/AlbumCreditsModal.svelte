@@ -130,17 +130,23 @@
                   </p>
                 {/if}
 
-                <div class="quality-badges">
-                  {#if credits.album.bit_depth}
-                    <span class="badge">{credits.album.bit_depth}-Bit</span>
-                  {/if}
-                  {#if credits.album.sampling_rate}
-                    <span class="badge">{credits.album.sampling_rate} kHz</span>
-                  {/if}
-                </div>
+                {#if credits.album.bit_depth || credits.album.sampling_rate}
+                  <div class="quality-info">
+                    {#if credits.album.bit_depth && credits.album.sampling_rate}
+                      {credits.album.bit_depth}-Bit / {credits.album.sampling_rate} kHz
+                    {:else if credits.album.bit_depth}
+                      {credits.album.bit_depth}-Bit
+                    {:else if credits.album.sampling_rate}
+                      {credits.album.sampling_rate} kHz
+                    {/if}
+                  </div>
+                {/if}
               </div>
             </div>
+          </div>
 
+          <!-- Right column: Track list or Review (scrollable) -->
+          <div class="content-column">
             <!-- Tab switcher (only shown if review exists) -->
             {#if hasReview}
               <div class="tab-switcher">
@@ -160,10 +166,7 @@
                 </button>
               </div>
             {/if}
-          </div>
 
-          <!-- Right column: Track list or Review (scrollable) -->
-          <div class="content-column">
             {#if activeTab === 'credits'}
               <div class="tracks-list">
                 {#each credits.tracks as track, index (track.id)}
@@ -271,7 +274,7 @@
     border: 1px solid rgba(255, 255, 255, 0.08);
     border-radius: 12px;
     width: 100%;
-    max-width: 800px;
+    max-width: 850px;
     height: calc(80vh - 5px);
     display: flex;
     flex-direction: column;
@@ -391,7 +394,7 @@
 
   /* Left column: Album info */
   .album-column {
-    width: 200px;
+    width: 260px;
     flex-shrink: 0;
     display: flex;
     flex-direction: column;
@@ -404,8 +407,8 @@
   }
 
   .album-artwork {
-    width: 200px;
-    height: 200px;
+    width: 260px;
+    height: 260px;
     border-radius: 8px;
     object-fit: cover;
   }
@@ -440,29 +443,20 @@
     margin: 0 4px;
   }
 
-  .quality-badges {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
+  .quality-info {
     margin-top: 12px;
-  }
-
-  .badge {
-    padding: 4px 8px;
-    background: var(--bg-tertiary);
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 500;
+    font-size: 13px;
     color: var(--text-secondary);
   }
 
-  /* Tab switcher at bottom of album column */
+  /* Tab switcher above content */
   .tab-switcher {
     flex-shrink: 0;
-    padding-top: 16px;
-    margin-top: auto;
     display: flex;
     gap: 16px;
+    margin-bottom: 12px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   }
 
   .tab-btn {
@@ -488,13 +482,16 @@
   .content-column {
     flex: 1;
     min-width: 0;
-    overflow-y: auto;
+    overflow-y: scroll;
+    display: flex;
+    flex-direction: column;
   }
 
   /* Track list */
   .tracks-list {
     display: flex;
     flex-direction: column;
+    padding-right: 8px;
   }
 
   .track-item {
@@ -511,7 +508,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 0;
+    padding: 9px 0;
     background: none;
     border: none;
     text-align: left;
@@ -658,24 +655,26 @@
   }
 
   /* Scrollbar styling for content column */
-  .content-column::-webkit-scrollbar,
-  .album-info-scroll::-webkit-scrollbar {
-    width: 6px;
+  .content-column::-webkit-scrollbar {
+    width: 8px;
   }
 
-  .content-column::-webkit-scrollbar-track,
-  .album-info-scroll::-webkit-scrollbar-track {
-    background: transparent;
+  .content-column::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.03);
+    border-radius: 4px;
   }
 
-  .content-column::-webkit-scrollbar-thumb,
-  .album-info-scroll::-webkit-scrollbar-thumb {
+  .content-column::-webkit-scrollbar-thumb {
     background: var(--bg-tertiary);
-    border-radius: 3px;
+    border-radius: 4px;
   }
 
-  .content-column::-webkit-scrollbar-thumb:hover,
-  .album-info-scroll::-webkit-scrollbar-thumb:hover {
+  .content-column::-webkit-scrollbar-thumb:hover {
     background: var(--text-muted);
+  }
+
+  /* Album info scroll (hidden scrollbar) */
+  .album-info-scroll::-webkit-scrollbar {
+    width: 0;
   }
 </style>
