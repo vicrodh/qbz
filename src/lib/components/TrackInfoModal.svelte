@@ -7,9 +7,10 @@
     isOpen: boolean;
     trackId: number | null;
     onClose: () => void;
+    onArtistClick?: (artistId: number) => void;
   }
 
-  let { isOpen, trackId, onClose }: Props = $props();
+  let { isOpen, trackId, onClose, onArtistClick }: Props = $props();
 
   let loading = $state(false);
   let error = $state<string | null>(null);
@@ -144,6 +145,22 @@
             <h2 class="track-title">{trackInfo.track.title}</h2>
             {#if trackInfo.track.album?.title}
               <span class="album-title">{trackInfo.track.album.title}</span>
+            {/if}
+            {#if trackInfo.track.performer?.name}
+              {@const artistId = trackInfo.track.performer.id}
+              {#if artistId && onArtistClick}
+                <button
+                  class="artist-link"
+                  onclick={() => {
+                    onArtistClick(artistId);
+                    onClose();
+                  }}
+                >
+                  {trackInfo.track.performer.name}
+                </button>
+              {:else}
+                <span class="artist-name">{trackInfo.track.performer.name}</span>
+              {/if}
             {/if}
           </div>
           <button class="close-btn" onclick={onClose} aria-label="Close">
@@ -300,6 +317,29 @@
   .album-title {
     font-size: 13px;
     color: var(--text-tertiary, #888888);
+  }
+
+  .artist-link {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--accent-primary);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-align: left;
+    transition: opacity 200ms ease;
+  }
+
+  .artist-link:hover {
+    opacity: 0.8;
+    text-decoration: underline;
+  }
+
+  .artist-name {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
   }
 
   .close-btn {

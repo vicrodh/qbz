@@ -2414,6 +2414,7 @@
             onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
             onTrackGoToAlbum={handleAlbumClick}
             onTrackGoToArtist={handleArtistClick}
+            onTrackShowInfo={showTrackInfo}
             onTrackDownload={handleDisplayTrackDownload}
             onTrackReDownload={handleDisplayTrackDownload}
             onTrackRemoveDownload={handleTrackRemoveDownload}
@@ -2624,6 +2625,7 @@
             onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
             onTrackGoToAlbum={handleAlbumClick}
             onTrackGoToArtist={handleArtistClick}
+            onTrackShowInfo={showTrackInfo}
             onTrackDownload={handleDisplayTrackDownload}
             onTrackRemoveDownload={handleTrackRemoveDownload}
             onTrackReDownload={handleDisplayTrackDownload}
@@ -2862,6 +2864,7 @@
         isTrackInfoOpen = false;
         trackInfoTrackId = null;
       }}
+      onArtistClick={handleArtistClick}
     />
 
     <!-- Album Credits Modal -->
