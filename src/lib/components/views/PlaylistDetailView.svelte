@@ -1166,6 +1166,7 @@
     mode="edit"
     playlist={{ id: playlist.id, name: playlist.name, tracks_count: playlist.tracks_count }}
     isHidden={playlistSettings?.hidden ?? false}
+    currentFolderId={playlistSettings?.folder_id ?? null}
     onClose={() => editModalOpen = false}
     onSuccess={handleEditSuccess}
     onDelete={handleDelete}

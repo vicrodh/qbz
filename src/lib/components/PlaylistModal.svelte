@@ -1,9 +1,15 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { X, Trash2, EyeOff, Eye } from 'lucide-svelte';
+  import { X, Trash2, EyeOff, Eye, Folder } from 'lucide-svelte';
   import { logPlaylistAdd } from '$lib/services/recoService';
   import { subscribe as subscribeOffline, getStatus, createPendingPlaylist } from '$lib/stores/offlineStore';
   import { showToast } from '$lib/stores/toastStore';
+  import {
+    subscribe as subscribeFolders,
+    getVisibleFolders,
+    movePlaylistToFolder,
+    type PlaylistFolder
+  } from '$lib/stores/playlistFoldersStore';
 
   interface Playlist {
     id: number;
@@ -22,6 +28,7 @@
     onDelete?: (playlistId: number) => void;
     isHidden?: boolean;
     isLocalTracks?: boolean;
+    currentFolderId?: string | null;
   }
 
   let {
@@ -34,7 +41,8 @@
     onSuccess,
     onDelete,
     isHidden = false,
-    isLocalTracks = false
+    isLocalTracks = false,
+    currentFolderId = null
   }: Props = $props();
 
   // Form state
@@ -42,9 +50,13 @@
   let description = $state('');
   let isPublic = $state(false);
   let hidden = $state(false);
+  let folderId = $state<string | null>(null);
   let selectedPlaylistId = $state<number | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
+
+  // Folders state
+  let folders = $state<PlaylistFolder[]>([]);
 
   // Offline state (reactive)
   let offlineMode = $state(false);
@@ -85,6 +97,16 @@
     return unsubscribe;
   });
 
+  // Subscribe to folders state changes
+  $effect(() => {
+    const unsubscribe = subscribeFolders(() => {
+      folders = getVisibleFolders();
+    });
+    // Initialize folders
+    folders = getVisibleFolders();
+    return unsubscribe;
+  });
+
   // Reset form when modal opens
   $effect(() => {
     if (isOpen) {
@@ -96,13 +118,16 @@
         description = '';
         isPublic = false;
         hidden = isHidden;
+        folderId = currentFolderId;
       } else if (mode === 'create') {
         name = '';
         description = '';
         isPublic = false;
         hidden = false;
+        folderId = null;
       } else if (mode === 'addTrack') {
         selectedPlaylistId = null;
+        folderId = null;
         loadLocalTrackCounts();
       }
     }
@@ -143,6 +168,12 @@
           description: description.trim() || null,
           isPublic
         });
+
+        // Assign to folder if selected
+        if (folderId) {
+          await movePlaylistToFolder(newPlaylist.id, folderId);
+        }
+
         onSuccess?.(newPlaylist);
         onClose();
       }
@@ -178,6 +209,11 @@
         playlistId: playlist.id,
         hidden
       });
+
+      // Update folder assignment if changed
+      if (folderId !== currentFolderId) {
+        await movePlaylistToFolder(playlist.id, folderId);
+      }
 
       onSuccess?.(updatedPlaylist);
       onClose();
@@ -473,6 +509,25 @@
               <span>Make playlist public</span>
             </label>
           </div>
+
+          {#if folders.length > 0}
+            <div class="form-group">
+              <label for="folder-select">
+                <Folder size={14} style="display: inline; vertical-align: middle; margin-right: 4px;" />
+                Folder (optional)
+              </label>
+              <select
+                id="folder-select"
+                bind:value={folderId}
+                disabled={loading}
+              >
+                <option value={null}>No folder</option>
+                {#each folders as folder (folder.id)}
+                  <option value={folder.id}>{folder.name}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
 
           {#if mode === 'edit'}
             <div class="form-group checkbox">

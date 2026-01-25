@@ -783,7 +783,7 @@
                       <span class="folder-chevron" class:expanded={isExpanded_}>
                         <ChevronRight size={12} />
                       </span>
-                      <Folder size={14} style="color: {folder.icon_color}" />
+                      <Folder size={14} />
                       <span class="folder-name">{folder.name}</span>
                       <span class="folder-count">{folderPlaylists.length}</span>
                     </button>
@@ -812,7 +812,7 @@
                     onclick={() => handleToggleFolder(folder.id)}
                     title="{folder.name} ({folderPlaylists.length})"
                   >
-                    <Folder size={14} style="color: {folder.icon_color}" />
+                    <Folder size={14} />
                   </button>
                 {/if}
               {/each}

@@ -109,7 +109,6 @@
   let showFolderModal = $state(false);
   let editingFolder = $state<PlaylistFolder | null>(null);
   let folderName = $state('');
-  let folderColor = $state('#6366f1');
 
   // Persist preferences
   $effect(() => { localStorage.setItem('qbz-pm-filter', filter); });
@@ -539,14 +538,12 @@
   function openCreateFolderModal() {
     editingFolder = null;
     folderName = '';
-    folderColor = '#6366f1';
     showFolderModal = true;
   }
 
   function openEditFolderModal(folder: PlaylistFolder) {
     editingFolder = folder;
     folderName = folder.name;
-    folderColor = folder.icon_color;
     showFolderModal = true;
   }
 
@@ -560,14 +557,13 @@
     if (!folderName.trim()) return;
 
     if (editingFolder) {
-      // Update existing folder
+      // Update existing folder (name only for now)
       await updateFolder(editingFolder.id, {
-        name: folderName.trim(),
-        iconColor: folderColor
+        name: folderName.trim()
       });
     } else {
-      // Create new folder
-      await createFolder(folderName.trim(), 'preset', 'folder', folderColor);
+      // Create new folder (simple, name only)
+      await createFolder(folderName.trim());
     }
 
     folders = getVisibleFolders();
@@ -774,7 +770,7 @@
                   onclick={() => navigateToFolder(folder.id)}
                   onkeydown={(e) => e.key === 'Enter' && navigateToFolder(folder.id)}
                 >
-                  <div class="folder-icon" style="color: {folder.icon_color}">
+                  <div class="folder-icon">
                     <Folder size={32} />
                   </div>
                   <span class="folder-name">{folder.name}</span>
@@ -1018,19 +1014,7 @@
           onkeydown={(e) => e.key === 'Enter' && handleSaveFolder()}
         />
       </div>
-      <div class="form-group">
-        <label for="folder-color-input">Color</label>
-        <div class="color-picker">
-          <input
-            id="folder-color-input"
-            type="color"
-            bind:value={folderColor}
-          />
-          <span class="color-preview" style="background: {folderColor}"></span>
-          <span class="color-value">{folderColor}</span>
-        </div>
-      </div>
-      <div class="modal-actions">
+            <div class="modal-actions">
         {#if editingFolder}
           <button class="btn-danger" onclick={handleDeleteFolder}>
             <Trash2 size={14} />
@@ -1061,6 +1045,7 @@
     mode="edit"
     playlist={{ id: editingPlaylist.id, name: editingPlaylist.name, tracks_count: editingPlaylist.tracks_count }}
     isHidden={playlistSettings.get(editingPlaylist.id)?.hidden ?? false}
+    currentFolderId={playlistSettings.get(editingPlaylist.id)?.folder_id ?? null}
     onClose={() => { editModalOpen = false; editingPlaylist = null; }}
     onSuccess={handleEditSuccess}
     onDelete={handleDelete}
@@ -1327,33 +1312,6 @@
 
   .form-group input[type="text"]:focus {
     border-color: var(--accent-primary);
-  }
-
-  .color-picker {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .color-picker input[type="color"] {
-    width: 40px;
-    height: 40px;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    padding: 0;
-  }
-
-  .color-preview {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-  }
-
-  .color-value {
-    font-size: 13px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
   }
 
   .modal-actions {
