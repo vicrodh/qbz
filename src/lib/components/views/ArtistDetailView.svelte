@@ -120,6 +120,23 @@
   let similarArtists = $state<QobuzArtist[]>([]);
   let similarArtistsLoading = $state(false);
   let similarArtistImageErrors = $state<Set<number>>(new Set());
+
+  // MusicBrainz relationships (Stage 3)
+  interface RelatedArtist {
+    mbid: string;
+    name: string;
+    role?: string;
+    period?: { begin?: string; end?: string };
+  }
+  interface ArtistRelationships {
+    members: RelatedArtist[];
+    pastMembers: RelatedArtist[];
+    groups: RelatedArtist[];
+    collaborators: RelatedArtist[];
+  }
+  let mbRelationships = $state<ArtistRelationships | null>(null);
+  let mbRelationshipsLoading = $state(false);
+  let mbArtistMbid = $state<string | null>(null);
   let artistDetailEl = $state<HTMLDivElement | null>(null);
   let aboutSection = $state<HTMLDivElement | null>(null);
   let topTracksSection = $state<HTMLDivElement | null>(null);
@@ -242,6 +259,7 @@
 
     loadTopTracks();
     loadSimilarArtists();
+    loadMusicBrainzRelationships();
     checkFavoriteStatus();
     loadArtistAlbumDownloadStatuses();
   });
@@ -455,6 +473,91 @@
       similarArtistsLoading = false;
     }
   }
+
+  // Load MusicBrainz relationships for artist enrichment
+  async function loadMusicBrainzRelationships() {
+    // First, resolve the artist to get MBID
+    mbRelationshipsLoading = true;
+    mbRelationships = null;
+    mbArtistMbid = null;
+
+    try {
+      // Check if MusicBrainz is enabled
+      const enabled = await invoke<boolean>('musicbrainz_is_enabled');
+      if (!enabled) {
+        mbRelationshipsLoading = false;
+        return;
+      }
+
+      // Resolve artist name to MBID
+      const resolved = await invoke<{
+        mbid?: string;
+        name?: string;
+        confidence: string;
+      }>('musicbrainz_resolve_artist', { name: artist.name });
+
+      if (!resolved?.mbid || resolved.confidence === 'none') {
+        mbRelationshipsLoading = false;
+        return;
+      }
+
+      mbArtistMbid = resolved.mbid;
+
+      // Fetch relationships
+      const relationships = await invoke<{
+        members: RelatedArtist[];
+        past_members: RelatedArtist[];
+        groups: RelatedArtist[];
+        collaborators: RelatedArtist[];
+      }>('musicbrainz_get_artist_relationships', { mbid: resolved.mbid });
+
+      mbRelationships = {
+        members: relationships.members || [],
+        pastMembers: relationships.past_members || [],
+        groups: relationships.groups || [],
+        collaborators: relationships.collaborators || []
+      };
+    } catch (err) {
+      console.error('Failed to load MusicBrainz relationships:', err);
+      mbRelationships = null;
+    } finally {
+      mbRelationshipsLoading = false;
+    }
+  }
+
+  // Navigate to a related artist by searching Qobuz
+  async function navigateToRelatedArtist(name: string) {
+    try {
+      // Search for the artist on Qobuz
+      const results = await invoke<{ artists?: { items: QobuzArtist[] } }>('search_artists', {
+        query: name,
+        limit: 5
+      });
+
+      if (results?.artists?.items?.length) {
+        // Find the best match (exact name match or first result)
+        const exactMatch = results.artists.items.find(
+          a => a.name.toLowerCase() === name.toLowerCase()
+        );
+        const artistToNavigate = exactMatch || results.artists.items[0];
+
+        // Use the existing navigation callback
+        if (onTrackGoToArtist && artistToNavigate.id) {
+          onTrackGoToArtist(artistToNavigate.id);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to navigate to related artist:', err);
+    }
+  }
+
+  // Check if we have any relationships to show
+  let hasRelationships = $derived(
+    mbRelationships &&
+    (mbRelationships.members.length > 0 ||
+     mbRelationships.pastMembers.length > 0 ||
+     mbRelationships.groups.length > 0)
+  );
 
   function getSimilarArtistImage(similar: QobuzArtist): string {
     return (
@@ -948,6 +1051,73 @@
               </button>
             {/each}
           </div>
+        </div>
+      {/if}
+
+      <!-- MusicBrainz Relationships -->
+      {#if mbRelationshipsLoading}
+        <div class="mb-relationships-loading">Loading artist relationships...</div>
+      {:else if hasRelationships}
+        <div class="mb-relationships">
+          {#if mbRelationships && mbRelationships.members.length > 0}
+            <div class="mb-section">
+              <div class="mb-section-title">BAND MEMBERS</div>
+              <div class="mb-members-list">
+                {#each mbRelationships.members as member}
+                  <button
+                    class="mb-member"
+                    onclick={() => navigateToRelatedArtist(member.name)}
+                    title={member.role ? `${member.name} (${member.role})` : member.name}
+                  >
+                    <User size={14} class="mb-member-icon" />
+                    <span class="mb-member-name">{member.name}</span>
+                    {#if member.role}
+                      <span class="mb-member-role">{member.role}</span>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if mbRelationships && mbRelationships.pastMembers.length > 0}
+            <div class="mb-section">
+              <div class="mb-section-title">PAST MEMBERS</div>
+              <div class="mb-members-list">
+                {#each mbRelationships.pastMembers as member}
+                  <button
+                    class="mb-member past"
+                    onclick={() => navigateToRelatedArtist(member.name)}
+                    title={member.role ? `${member.name} (${member.role})` : member.name}
+                  >
+                    <User size={14} class="mb-member-icon" />
+                    <span class="mb-member-name">{member.name}</span>
+                    {#if member.role}
+                      <span class="mb-member-role">{member.role}</span>
+                    {/if}
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
+
+          {#if mbRelationships && mbRelationships.groups.length > 0}
+            <div class="mb-section">
+              <div class="mb-section-title">MEMBER OF</div>
+              <div class="mb-groups-list">
+                {#each mbRelationships.groups as group}
+                  <button
+                    class="mb-group"
+                    onclick={() => navigateToRelatedArtist(group.name)}
+                    title={group.name}
+                  >
+                    <Music size={14} class="mb-group-icon" />
+                    <span class="mb-group-name">{group.name}</span>
+                  </button>
+                {/each}
+              </div>
+            </div>
+          {/if}
         </div>
       {/if}
 
@@ -2254,6 +2424,88 @@
 
   .similar-artist:hover {
     color: var(--accent-primary);
+  }
+
+  /* MusicBrainz Relationships */
+  .mb-relationships-loading {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 12px;
+  }
+
+  .mb-relationships {
+    margin-top: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mb-section {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .mb-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .mb-members-list,
+  .mb-groups-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .mb-member,
+  .mb-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 16px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .mb-member:hover,
+  .mb-group:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--accent-primary);
+    color: var(--accent-primary);
+  }
+
+  .mb-member.past {
+    opacity: 0.7;
+  }
+
+  .mb-member.past:hover {
+    opacity: 1;
+  }
+
+  .mb-member-icon,
+  .mb-group-icon {
+    flex-shrink: 0;
+    opacity: 0.7;
+  }
+
+  .mb-member-name,
+  .mb-group-name {
+    font-weight: 500;
+  }
+
+  .mb-member-role {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-weight: 400;
   }
 
   .divider {
