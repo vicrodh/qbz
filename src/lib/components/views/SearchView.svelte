@@ -608,6 +608,15 @@
           <input
             type="radio"
             name="searchFilter"
+            checked={filterType === 'MainArtist'}
+            onchange={() => setFilter('MainArtist')}
+          />
+          <span>Artist</span>
+        </label>
+        <label class="filter-option">
+          <input
+            type="radio"
+            name="searchFilter"
             checked={filterType === 'Performer'}
             onchange={() => setFilter('Performer')}
           />
@@ -641,11 +650,15 @@
           <span>Release</span>
         </label>
 
-        {#if filterType}
-          <button class="clear-filter-btn" onclick={clearFilter} title="Clear filter">
-            <X size={14} />
-          </button>
-        {/if}
+        <button
+          class="clear-filter-btn"
+          class:visible={filterType !== null}
+          onclick={clearFilter}
+          title="Clear filter"
+          disabled={!filterType}
+        >
+          <X size={14} />
+        </button>
       </div>
     {/if}
   </div>
@@ -1326,9 +1339,16 @@
     color: var(--text-muted);
     cursor: pointer;
     transition: all 150ms ease;
+    opacity: 0;
+    pointer-events: none;
   }
 
-  .clear-filter-btn:hover {
+  .clear-filter-btn.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .clear-filter-btn.visible:hover {
     background: var(--bg-quaternary, var(--bg-tertiary));
     color: var(--text-primary);
   }
