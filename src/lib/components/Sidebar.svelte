@@ -21,6 +21,7 @@
     toggleFolderExpanded,
     loadFolders,
     createFolder,
+    movePlaylistToFolder,
     type PlaylistFolder
   } from '$lib/stores/playlistFoldersStore';
 
@@ -96,6 +97,21 @@
   // Create folder modal state
   let showCreateFolderModal = $state(false);
   let newFolderName = $state('');
+
+  // Context menu state
+  let contextMenu = $state<{
+    visible: boolean;
+    x: number;
+    y: number;
+    playlist: Playlist | null;
+    currentFolderId: string | null;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    playlist: null,
+    currentFolderId: null
+  });
 
   // Offline state
   let offlineStatus = $state<OfflineStatus>(getOfflineStatus());
@@ -612,7 +628,61 @@
       onPlaylistSelect(playlist.id);
     }
   }
+
+  // Context menu handlers
+  function handlePlaylistContextMenu(e: MouseEvent, playlist: Playlist, folderId: string | null = null) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Get the current folder_id from settings
+    const settings = playlistSettings.get(playlist.id);
+    const currentFolderId = folderId ?? settings?.folder_id ?? null;
+
+    contextMenu = {
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      playlist,
+      currentFolderId
+    };
+  }
+
+  function closeContextMenu() {
+    contextMenu = { ...contextMenu, visible: false };
+  }
+
+  async function handleMoveToFolder(folderId: string | null) {
+    if (!contextMenu.playlist) return;
+
+    const success = await movePlaylistToFolder(contextMenu.playlist.id, folderId);
+    if (success) {
+      // Update local settings
+      const updated = new Map(playlistSettings);
+      const existing = updated.get(contextMenu.playlist.id);
+      if (existing) {
+        updated.set(contextMenu.playlist.id, { ...existing, folder_id: folderId });
+      } else {
+        updated.set(contextMenu.playlist.id, {
+          qobuz_playlist_id: contextMenu.playlist.id,
+          hidden: false,
+          position: 0,
+          folder_id: folderId
+        });
+      }
+      playlistSettings = updated;
+    }
+    closeContextMenu();
+  }
+
+  // Close context menu when clicking outside
+  function handleGlobalClick(e: MouseEvent) {
+    if (contextMenu.visible) {
+      closeContextMenu();
+    }
+  }
 </script>
+
+<svelte:window onclick={handleGlobalClick} />
 
 <aside class="sidebar" class:collapsed={!isExpanded} class:no-titlebar={!showTitleBar}>
   <!-- Scrollable Content Area -->
@@ -796,6 +866,7 @@
                             active={activeView === 'playlist' && selectedPlaylistId === playlist.id}
                             onclick={() => handlePlaylistClick(playlist)}
                             onHover={() => loadPlaylistTooltip(playlist)}
+                            oncontextmenu={(e) => handlePlaylistContextMenu(e, playlist, folder.id)}
                             showLabel={true}
                             indented={true}
                           >
@@ -825,6 +896,7 @@
                   active={activeView === 'playlist' && selectedPlaylistId === playlist.id}
                   onclick={() => handlePlaylistClick(playlist)}
                   onHover={() => loadPlaylistTooltip(playlist)}
+                  oncontextmenu={(e) => handlePlaylistContextMenu(e, playlist, null)}
                   showLabel={isExpanded}
                 >
                   {#snippet icon()}<ListMusic size={14} />{/snippet}
@@ -903,6 +975,47 @@
     {/if}
   </div>
 </aside>
+
+<!-- Playlist Context Menu -->
+{#if contextMenu.visible}
+  <div
+    class="context-menu"
+    style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+    onclick={(e) => e.stopPropagation()}
+    role="menu"
+  >
+    {#if folders.length > 0}
+      <div class="context-menu-section">
+        <span class="context-menu-label">Move to folder</span>
+        {#each folders as folder (folder.id)}
+          {#if folder.id !== contextMenu.currentFolderId}
+            <button
+              class="context-menu-item"
+              onclick={() => handleMoveToFolder(folder.id)}
+            >
+              <Folder size={14} />
+              {folder.name}
+            </button>
+          {/if}
+        {/each}
+      </div>
+    {/if}
+    {#if contextMenu.currentFolderId}
+      <button
+        class="context-menu-item"
+        onclick={() => handleMoveToFolder(null)}
+      >
+        <ChevronLeft size={14} />
+        Move to root
+      </button>
+    {/if}
+    {#if folders.length === 0 && !contextMenu.currentFolderId}
+      <div class="context-menu-empty">
+        No folders yet
+      </div>
+    {/if}
+  </div>
+{/if}
 
 <!-- Create Folder Modal -->
 {#if showCreateFolderModal}
@@ -1486,5 +1599,58 @@
 
   .submenu .menu-item {
     gap: 8px;
+  }
+
+  /* Context Menu */
+  .context-menu {
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 6px;
+    min-width: 180px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10002;
+  }
+
+  .context-menu-section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .context-menu-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 6px 10px;
+  }
+
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 150ms ease;
+  }
+
+  .context-menu-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .context-menu-empty {
+    padding: 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
   }
 </style>

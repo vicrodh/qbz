@@ -9,12 +9,13 @@
     active?: boolean;
     onclick?: () => void;
     onHover?: () => void;
+    oncontextmenu?: (e: MouseEvent) => void;
     class?: string;
     showLabel?: boolean;
     indented?: boolean;
   }
 
-  let { icon, label, badge, tooltip, active = false, onclick, onHover, class: className = '', showLabel = true, indented = false }: Props = $props();
+  let { icon, label, badge, tooltip, active = false, onclick, onHover, oncontextmenu, class: className = '', showLabel = true, indented = false }: Props = $props();
 
   // When label is hidden, always show tooltip on hover
   const effectiveTooltip = $derived(showLabel ? tooltip : (tooltip || label));
@@ -53,6 +54,7 @@
 <button
   bind:this={buttonRef}
   {onclick}
+  {oncontextmenu}
   class="nav-item {className}"
   class:active
   class:collapsed={!showLabel}
