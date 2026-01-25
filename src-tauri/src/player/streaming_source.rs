@@ -63,8 +63,6 @@ impl StreamingConfig {
 struct BufferState {
     /// Accumulated data from HTTP response
     data: Vec<u8>,
-    /// Current read position
-    read_pos: usize,
     /// True when HTTP download is complete
     download_complete: bool,
     /// Error from download, if any
@@ -81,6 +79,8 @@ struct BufferState {
 pub struct BufferedMediaSource {
     state: Arc<(Mutex<BufferState>, Condvar)>,
     config: StreamingConfig,
+    /// Each reader has its own read position
+    read_pos: std::sync::atomic::AtomicU64,
 }
 
 impl BufferedMediaSource {
@@ -92,7 +92,6 @@ impl BufferedMediaSource {
         let state = Arc::new((
             Mutex::new(BufferState {
                 data: Vec::with_capacity(config.initial_buffer_bytes),
-                read_pos: 0,
                 download_complete: false,
                 download_error: None,
                 total_size,
@@ -102,12 +101,23 @@ impl BufferedMediaSource {
 
         let source = Self {
             state: Arc::clone(&state),
-            config,
+            config: config.clone(),
+            read_pos: std::sync::atomic::AtomicU64::new(0),
         };
 
         let writer = BufferWriter { state };
 
         (source, writer)
+    }
+
+    /// Create a new reader that shares the same buffer but has its own read position.
+    /// This is used to pass to symphonia which needs ownership of the reader.
+    pub fn create_reader(&self) -> Self {
+        Self {
+            state: Arc::clone(&self.state),
+            config: self.config.clone(),
+            read_pos: std::sync::atomic::AtomicU64::new(0),
+        }
     }
 
     /// Wait until initial buffer is filled or download completes.
@@ -192,17 +202,34 @@ impl BufferedMediaSource {
             None
         }
     }
+
+    /// Check if minimum buffer for playback is available
+    ///
+    /// Returns true when initial_buffer_bytes have been buffered
+    /// or the download is complete.
+    pub fn has_min_buffer(&self) -> bool {
+        let (lock, _) = &*self.state;
+        if let Ok(state) = lock.lock() {
+            state.data.len() >= self.config.initial_buffer_bytes || state.download_complete
+        } else {
+            false
+        }
+    }
 }
 
 impl Read for BufferedMediaSource {
     fn read(&mut self, buf: &mut [u8]) -> IoResult<usize> {
+        use std::sync::atomic::Ordering;
+
         let (lock, cvar) = &*self.state;
         let mut state = lock.lock().map_err(|_| {
             IoError::new(ErrorKind::Other, "Failed to acquire buffer lock")
         })?;
 
+        let read_pos = self.read_pos.load(Ordering::SeqCst) as usize;
+
         // Wait for data if we're ahead of buffer
-        while state.read_pos >= state.data.len()
+        while read_pos >= state.data.len()
             && !state.download_complete
             && state.download_error.is_none()
         {
@@ -217,15 +244,15 @@ impl Read for BufferedMediaSource {
         }
 
         // EOF if at end and download complete
-        if state.read_pos >= state.data.len() && state.download_complete {
+        if read_pos >= state.data.len() && state.download_complete {
             return Ok(0);
         }
 
         // Read available data
-        let available = state.data.len() - state.read_pos;
+        let available = state.data.len() - read_pos;
         let to_read = buf.len().min(available);
-        buf[..to_read].copy_from_slice(&state.data[state.read_pos..state.read_pos + to_read]);
-        state.read_pos += to_read;
+        buf[..to_read].copy_from_slice(&state.data[read_pos..read_pos + to_read]);
+        self.read_pos.store((read_pos + to_read) as u64, Ordering::SeqCst);
 
         Ok(to_read)
     }
@@ -233,14 +260,18 @@ impl Read for BufferedMediaSource {
 
 impl Seek for BufferedMediaSource {
     fn seek(&mut self, pos: SeekFrom) -> IoResult<u64> {
+        use std::sync::atomic::Ordering;
+
         let (lock, cvar) = &*self.state;
         let mut state = lock.lock().map_err(|_| {
             IoError::new(ErrorKind::Other, "Failed to acquire buffer lock")
         })?;
 
+        let current_pos = self.read_pos.load(Ordering::SeqCst) as i64;
+
         let new_pos = match pos {
             SeekFrom::Start(offset) => offset as i64,
-            SeekFrom::Current(offset) => state.read_pos as i64 + offset,
+            SeekFrom::Current(offset) => current_pos + offset,
             SeekFrom::End(offset) => {
                 // For End seeks, we need to know total size or have complete download
                 if let Some(total) = state.total_size {
@@ -264,10 +295,10 @@ impl Seek for BufferedMediaSource {
             ));
         }
 
-        let new_pos = new_pos as usize;
+        let new_pos_usize = new_pos as usize;
 
         // If seeking forward beyond buffer, wait for data
-        while new_pos > state.data.len()
+        while new_pos_usize > state.data.len()
             && !state.download_complete
             && state.download_error.is_none()
         {
@@ -281,14 +312,14 @@ impl Seek for BufferedMediaSource {
         }
 
         // After download complete, check bounds
-        if state.download_complete && new_pos > state.data.len() {
+        if state.download_complete && new_pos_usize > state.data.len() {
             return Err(IoError::new(
                 ErrorKind::InvalidInput,
                 "Seek position beyond end of stream",
             ));
         }
 
-        state.read_pos = new_pos;
+        self.read_pos.store(new_pos as u64, Ordering::SeqCst);
         Ok(new_pos as u64)
     }
 }
@@ -314,6 +345,7 @@ impl MediaSource for BufferedMediaSource {
 ///
 /// This is the sender side that receives data from the HTTP response
 /// and makes it available to the `BufferedMediaSource` reader.
+#[derive(Clone)]
 pub struct BufferWriter {
     state: Arc<(Mutex<BufferState>, Condvar)>,
 }

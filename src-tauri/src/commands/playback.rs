@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 use crate::api::client::QobuzClient;
 use crate::api::models::Quality;
 use crate::cache::AudioCache;
+use crate::config::audio_settings::AudioSettingsState;
 use crate::offline_cache::OfflineCacheState;
 use crate::player::PlaybackState;
 use crate::queue::QueueManager;
@@ -18,6 +19,7 @@ pub async fn play_track(
     track_id: u64,
     state: State<'_, AppState>,
     offline_cache: State<'_, OfflineCacheState>,
+    audio_settings: State<'_, AudioSettingsState>,
 ) -> Result<(), String> {
     log::info!("Command: play_track {}", track_id);
 
@@ -89,8 +91,20 @@ pub async fn play_track(
         }
     }
 
-    // Not in any cache - download and cache in memory
-    log::info!("Track {} not in any cache, streaming...", track_id);
+    // Not in any cache - check if streaming is enabled
+    log::info!("Track {} not in any cache, checking streaming setting...", track_id);
+
+    // Check if stream_first_track is enabled
+    let (stream_first_enabled, buffer_seconds) = {
+        let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        match store.get_settings() {
+            Ok(settings) => (settings.stream_first_track, settings.stream_buffer_seconds),
+            Err(e) => {
+                log::warn!("Failed to get audio settings, using defaults: {}", e);
+                (false, 3)
+            }
+        }
+    };
 
     let client = state.client.lock().await;
 
@@ -101,6 +115,55 @@ pub async fn play_track(
         .map_err(|e| format!("Failed to get stream URL: {}", e))?;
 
     log::info!("Got stream URL for track {}", track_id);
+
+    if stream_first_enabled {
+        // Use streaming playback - start playing before full download
+        log::info!("Streaming mode enabled - starting stream-first playback for track {}", track_id);
+
+        // Get content length and audio info via HEAD request
+        let (content_length, sample_rate, channels) = get_stream_info(&stream_url.url).await?;
+
+        log::info!(
+            "Stream info: {} bytes, {}Hz, {} channels",
+            content_length,
+            sample_rate,
+            channels
+        );
+
+        // Start streaming playback and get buffer writer
+        let buffer_writer = state.player.play_streaming(
+            track_id,
+            sample_rate,
+            channels,
+            content_length,
+            buffer_seconds,
+        )?;
+
+        // Release client lock before spawning background download
+        drop(client);
+
+        // Spawn background task to download and push data to buffer
+        let url = stream_url.url.clone();
+        let cache_clone = cache.clone();
+        tokio::spawn(async move {
+            match download_and_stream(&url, buffer_writer, track_id, cache_clone).await {
+                Ok(()) => log::info!("Streaming download complete for track {}", track_id),
+                Err(e) => log::error!("Streaming download failed for track {}: {}", track_id, e),
+            }
+        });
+
+        // Prefetch next track in background
+        spawn_prefetch(
+            state.client.clone(),
+            state.audio_cache.clone(),
+            &state.queue,
+        );
+
+        return Ok(());
+    }
+
+    // Standard download path (streaming disabled)
+    log::info!("Standard download mode for track {}", track_id);
 
     // Download the audio
     let audio_data = download_audio(&stream_url.url).await?;
@@ -213,6 +276,213 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
 
     log::info!("Downloaded {} bytes", bytes.len());
     Ok(bytes.to_vec())
+}
+
+/// Get stream info (content length, sample rate, channels) via HEAD request and initial bytes
+async fn get_stream_info(url: &str) -> Result<(u64, u32, u16), String> {
+    use std::time::Duration;
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(30))
+        .connect_timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    // First, do a HEAD request to get content length
+    let head_response = client
+        .head(url)
+        .header("User-Agent", "Mozilla/5.0")
+        .send()
+        .await
+        .map_err(|e| format!("Failed HEAD request: {}", e))?;
+
+    if !head_response.status().is_success() {
+        return Err(format!("HEAD request failed: {}", head_response.status()));
+    }
+
+    let content_length = head_response
+        .headers()
+        .get("content-length")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+        .ok_or_else(|| "No content-length header".to_string())?;
+
+    // Download first ~64KB to probe audio format
+    // This is enough for FLAC/M4A headers
+    let range_response = client
+        .get(url)
+        .header("User-Agent", "Mozilla/5.0")
+        .header("Range", "bytes=0-65535")
+        .send()
+        .await
+        .map_err(|e| format!("Failed range request: {}", e))?;
+
+    if !range_response.status().is_success() && range_response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+        return Err(format!("Range request failed: {}", range_response.status()));
+    }
+
+    let initial_bytes = range_response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read initial bytes: {}", e))?;
+
+    // Try to extract audio format from initial bytes
+    let (sample_rate, channels) = extract_audio_format_from_header(&initial_bytes)?;
+
+    Ok((content_length, sample_rate, channels))
+}
+
+/// Extract sample rate and channels from audio file header
+fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16), String> {
+    use std::io::{BufReader, Cursor};
+    use rodio::Decoder;
+
+    // Check if this is FLAC
+    if data.len() >= 4 && &data[0..4] == b"fLaC" {
+        // Parse FLAC STREAMINFO block
+        // FLAC format: "fLaC" + METADATA_BLOCK_HEADER (4 bytes) + STREAMINFO
+        if data.len() >= 26 {
+            // STREAMINFO starts at byte 8
+            // Bytes 10-12: sample rate (20 bits) + channels (3 bits) + bits per sample (5 bits)
+            let sr_high = ((data[18] as u32) << 12) | ((data[19] as u32) << 4) | ((data[20] as u32) >> 4);
+            let sample_rate = sr_high;
+            let channels = ((data[20] >> 1) & 0x07) + 1;
+            return Ok((sample_rate, channels as u16));
+        }
+    }
+
+    // Check if this is M4A/MP4 (ftyp box)
+    if data.len() >= 12 && &data[4..8] == b"ftyp" {
+        // M4A uses AAC or ALAC, try symphonia probe
+        use symphonia::core::formats::FormatOptions;
+        use symphonia::core::io::MediaSourceStream;
+        use symphonia::core::meta::MetadataOptions;
+        use symphonia::core::probe::Hint;
+        use symphonia::default::get_probe;
+
+        let cursor = Box::new(Cursor::new(data.to_vec())) as Box<dyn std::io::Read + Send + Sync>;
+        // For probing, we need to create a MediaSource
+        // Use a simple wrapper
+        struct ProbeSource {
+            inner: Cursor<Vec<u8>>,
+            len: u64,
+        }
+        impl std::io::Read for ProbeSource {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                self.inner.read(buf)
+            }
+        }
+        impl std::io::Seek for ProbeSource {
+            fn seek(&mut self, pos: std::io::SeekFrom) -> std::io::Result<u64> {
+                self.inner.seek(pos)
+            }
+        }
+        impl symphonia::core::io::MediaSource for ProbeSource {
+            fn is_seekable(&self) -> bool { true }
+            fn byte_len(&self) -> Option<u64> { Some(self.len) }
+        }
+
+        let len = data.len() as u64;
+        let source = Box::new(ProbeSource { inner: Cursor::new(data.to_vec()), len });
+        let mss = MediaSourceStream::new(source, Default::default());
+
+        let mut hint = Hint::new();
+        hint.with_extension("m4a");
+
+        let format_opts = FormatOptions {
+            enable_gapless: true,
+            ..Default::default()
+        };
+
+        if let Ok(probed) = get_probe().format(&hint, mss, &format_opts, &MetadataOptions::default()) {
+            if let Some(track) = probed.format.default_track() {
+                let sample_rate = track.codec_params.sample_rate.unwrap_or(44100);
+                let channels = track.codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
+                return Ok((sample_rate, channels));
+            }
+        }
+
+        // Default to common values for M4A
+        return Ok((44100, 2));
+    }
+
+    // Try rodio decoder for other formats
+    match Decoder::new(BufReader::new(Cursor::new(data.to_vec()))) {
+        Ok(decoder) => {
+            use rodio::Source;
+            Ok((decoder.sample_rate(), decoder.channels()))
+        }
+        Err(_) => {
+            // Default fallback
+            log::warn!("Could not determine audio format, using defaults (44100Hz, stereo)");
+            Ok((44100, 2))
+        }
+    }
+}
+
+/// Download audio chunks and stream them to the buffer writer
+/// Also caches the complete data when download finishes
+async fn download_and_stream(
+    url: &str,
+    writer: crate::player::BufferWriter,
+    track_id: u64,
+    cache: Arc<AudioCache>,
+) -> Result<(), String> {
+    use std::time::Duration;
+    use futures_util::StreamExt;
+
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(300)) // Longer timeout for streaming
+        .connect_timeout(Duration::from_secs(10))
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+
+    log::info!("Starting streaming download for track {}", track_id);
+
+    let response = client
+        .get(url)
+        .header("User-Agent", "Mozilla/5.0")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to start stream: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Stream request failed: {}", response.status()));
+    }
+
+    let mut all_data = Vec::new();
+    let mut stream = response.bytes_stream();
+    let mut bytes_received = 0u64;
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.map_err(|e| format!("Stream chunk error: {}", e))?;
+        bytes_received += chunk.len() as u64;
+
+        // Accumulate for caching
+        all_data.extend_from_slice(&chunk);
+
+        // Push to streaming buffer
+        if let Err(e) = writer.push_chunk(&chunk) {
+            log::error!("Failed to push chunk to buffer: {}", e);
+        }
+
+        // Log progress every ~1MB
+        if bytes_received % (1024 * 1024) < chunk.len() as u64 {
+            log::debug!("Streaming download progress: {} bytes", bytes_received);
+        }
+    }
+
+    // Mark stream as complete
+    if let Err(e) = writer.complete() {
+        log::error!("Failed to mark buffer complete: {}", e);
+    }
+
+    log::info!("Streaming download complete: {} bytes total", bytes_received);
+
+    // Cache the complete file for future plays
+    cache.insert(track_id, all_data);
+
+    Ok(())
 }
 
 /// Number of Qobuz tracks to prefetch (not total tracks, just Qobuz)
