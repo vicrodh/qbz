@@ -6,7 +6,7 @@
   import {
     HardDrive, Music, Disc3, Mic2, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, AlertCircle, ImageDown, Upload, Search, LayoutGrid, List, Edit3,
-    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle
+    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal
   } from 'lucide-svelte';
   import FolderSettingsModal from '../FolderSettingsModal.svelte';
   import { t } from '$lib/i18n';
@@ -175,54 +175,82 @@
   let albumGroupingEnabled = $state(false);
   let showGroupMenu = $state(false);
 
-  // Quality/Format filter
-  type QualityFilter = 'all' | 'hires' | 'cd' | 'lossy' | 'flac' | 'wav' | 'mp3' | 'aac' | 'other';
-  let qualityFilter = $state<QualityFilter>('all');
-  let showQualityMenu = $state(false);
+  // Quality/Format filter with checkboxes (AND between sections, OR within section)
+  let showFilterPanel = $state(false);
+
+  // Quality tier filters (OR within this group)
+  let filterHiRes = $state(false);
+  let filterCdQuality = $state(false);
+  let filterLossy = $state(false);
+
+  // Format filters (OR within this group)
+  let filterFlac = $state(false);
+  let filterWav = $state(false);
+  let filterMp3 = $state(false);
+  let filterAac = $state(false);
+  let filterOther = $state(false);
 
   const LOSSLESS_FORMATS = ['flac', 'wav', 'aiff', 'alac', 'ape', 'dsd', 'dsf', 'dff'];
   const LOSSY_FORMATS = ['mp3', 'aac', 'm4a', 'ogg', 'opus', 'wma'];
 
-  function matchesQualityFilter(album: LocalAlbum, filter: QualityFilter): boolean {
-    if (filter === 'all') return true;
+  // Derived: check if any filter is active
+  let hasActiveFilters = $derived(
+    filterHiRes || filterCdQuality || filterLossy ||
+    filterFlac || filterWav || filterMp3 || filterAac || filterOther
+  );
 
+  // Count active filters for badge
+  let activeFilterCount = $derived(
+    [filterHiRes, filterCdQuality, filterLossy, filterFlac, filterWav, filterMp3, filterAac, filterOther]
+      .filter(Boolean).length
+  );
+
+  function matchesQualityFilters(album: LocalAlbum): boolean {
     const format = album.format.toLowerCase();
     const isLossless = LOSSLESS_FORMATS.includes(format);
     const bitDepth = album.bit_depth ?? 16;
 
-    if (filter === 'hires') {
-      return isLossless && (bitDepth >= 24 || album.sample_rate > 48000);
+    // Check quality tier (OR logic - pass if any selected matches, or none selected)
+    const qualityFiltersActive = filterHiRes || filterCdQuality || filterLossy;
+    let passesQuality = !qualityFiltersActive; // Pass if no quality filters
+
+    if (qualityFiltersActive) {
+      if (filterHiRes && isLossless && (bitDepth >= 24 || album.sample_rate > 48000)) {
+        passesQuality = true;
+      }
+      if (filterCdQuality && isLossless && bitDepth <= 16 && album.sample_rate <= 48000) {
+        passesQuality = true;
+      }
+      if (filterLossy && LOSSY_FORMATS.includes(format)) {
+        passesQuality = true;
+      }
     }
-    if (filter === 'cd') {
-      return isLossless && bitDepth <= 16 && album.sample_rate <= 48000;
+
+    // Check format (OR logic - pass if any selected matches, or none selected)
+    const formatFiltersActive = filterFlac || filterWav || filterMp3 || filterAac || filterOther;
+    let passesFormat = !formatFiltersActive; // Pass if no format filters
+
+    if (formatFiltersActive) {
+      if (filterFlac && format === 'flac') passesFormat = true;
+      if (filterWav && (format === 'wav' || format === 'wave')) passesFormat = true;
+      if (filterMp3 && format === 'mp3') passesFormat = true;
+      if (filterAac && (format === 'aac' || format === 'm4a')) passesFormat = true;
+      if (filterOther && !['flac', 'wav', 'wave', 'mp3', 'aac', 'm4a'].includes(format)) passesFormat = true;
     }
-    if (filter === 'lossy') {
-      return LOSSY_FORMATS.includes(format);
-    }
-    // Format-specific filters
-    if (filter === 'flac') return format === 'flac';
-    if (filter === 'wav') return format === 'wav' || format === 'wave';
-    if (filter === 'mp3') return format === 'mp3';
-    if (filter === 'aac') return format === 'aac' || format === 'm4a';
-    if (filter === 'other') {
-      return !['flac', 'wav', 'wave', 'mp3', 'aac', 'm4a'].includes(format);
-    }
-    return true;
+
+    // AND between sections
+    return passesQuality && passesFormat;
   }
 
-  function getQualityFilterLabel(filter: QualityFilter): string {
-    switch (filter) {
-      case 'all': return 'Quality: All';
-      case 'hires': return 'Hi-Res';
-      case 'cd': return 'CD Quality';
-      case 'lossy': return 'Lossy';
-      case 'flac': return 'FLAC';
-      case 'wav': return 'WAV';
-      case 'mp3': return 'MP3';
-      case 'aac': return 'AAC';
-      case 'other': return 'Other';
-      default: return 'Quality: All';
-    }
+  function clearAllFilters() {
+    filterHiRes = false;
+    filterCdQuality = false;
+    filterLossy = false;
+    filterFlac = false;
+    filterWav = false;
+    filterMp3 = false;
+    filterAac = false;
+    filterOther = false;
   }
 
   // Performance mode state
@@ -349,9 +377,9 @@
       filtered = filtered.filter(album => matchesAlbumSearchFast(album, debouncedAlbumSearch));
     }
 
-    // Apply quality filter
-    if (qualityFilter !== 'all') {
-      filtered = filtered.filter(album => matchesQualityFilter(album, qualityFilter));
+    // Apply quality/format filters (checkboxes)
+    if (hasActiveFilters) {
+      filtered = filtered.filter(album => matchesQualityFilters(album));
     }
 
     // Group if enabled
@@ -2534,80 +2562,78 @@
             <div class="dropdown-container">
               <button
                 class="control-btn"
-                class:active={qualityFilter !== 'all'}
-                onclick={() => (showQualityMenu = !showQualityMenu)}
+                class:active={hasActiveFilters}
+                onclick={() => (showFilterPanel = !showFilterPanel)}
                 title="Filter by quality/format"
               >
-                <span>{getQualityFilterLabel(qualityFilter)}</span>
+                <SlidersHorizontal size={14} />
+                <span>Filter</span>
+                {#if activeFilterCount > 0}
+                  <span class="filter-badge">{activeFilterCount}</span>
+                {/if}
               </button>
-              {#if showQualityMenu}
-                <div class="dropdown-menu quality-menu">
-                  <div class="dropdown-section-label">Quality</div>
-                  <button
-                    class="dropdown-item"
-                    class:selected={qualityFilter === 'all'}
-                    onclick={() => { qualityFilter = 'all'; showQualityMenu = false; }}
-                  >
-                    All
-                  </button>
-                  <button
-                    class="dropdown-item"
-                    class:selected={qualityFilter === 'hires'}
-                    onclick={() => { qualityFilter = 'hires'; showQualityMenu = false; }}
-                  >
-                    Hi-Res (24bit+)
-                  </button>
-                  <button
-                    class="dropdown-item"
-                    class:selected={qualityFilter === 'cd'}
-                    onclick={() => { qualityFilter = 'cd'; showQualityMenu = false; }}
-                  >
-                    CD Quality (16bit)
-                  </button>
-                  <button
-                    class="dropdown-item"
-                    class:selected={qualityFilter === 'lossy'}
-                    onclick={() => { qualityFilter = 'lossy'; showQualityMenu = false; }}
-                  >
-                    Lossy
-                  </button>
-                  <div class="dropdown-divider"></div>
-                  <div class="dropdown-section-label">Format</div>
-                  <button
-                    class="dropdown-item"
-                    class:selected={qualityFilter === 'flac'}
-                    onclick={() => { qualityFilter = 'flac'; showQualityMenu = false; }}
-                  >
-                    FLAC
-                  </button>
-                  <button
-                    class="dropdown-item"
-                    class:selected={qualityFilter === 'wav'}
-                    onclick={() => { qualityFilter = 'wav'; showQualityMenu = false; }}
-                  >
-                    WAV
-                  </button>
-                  <button
-                    class="dropdown-item"
-                    class:selected={qualityFilter === 'mp3'}
-                    onclick={() => { qualityFilter = 'mp3'; showQualityMenu = false; }}
-                  >
-                    MP3
-                  </button>
-                  <button
-                    class="dropdown-item"
-                    class:selected={qualityFilter === 'aac'}
-                    onclick={() => { qualityFilter = 'aac'; showQualityMenu = false; }}
-                  >
-                    AAC
-                  </button>
-                  <button
-                    class="dropdown-item"
-                    class:selected={qualityFilter === 'other'}
-                    onclick={() => { qualityFilter = 'other'; showQualityMenu = false; }}
-                  >
-                    Other
-                  </button>
+              {#if showFilterPanel}
+                <div class="filter-panel">
+                  <div class="filter-panel-header">
+                    <span>Filters</span>
+                    {#if hasActiveFilters}
+                      <button class="clear-filters-btn" onclick={clearAllFilters}>Clear all</button>
+                    {/if}
+                  </div>
+
+                  <div class="filter-section">
+                    <div class="filter-section-label">Quality</div>
+                    <div class="filter-checkboxes">
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterHiRes} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">Hi-Res</span>
+                        <span class="label-hint">24bit+</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterCdQuality} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">CD Quality</span>
+                        <span class="label-hint">16bit</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterLossy} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">Lossy</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="filter-section">
+                    <div class="filter-section-label">Format</div>
+                    <div class="filter-checkboxes format-grid">
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterFlac} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">FLAC</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterWav} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">WAV</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterMp3} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">MP3</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterAac} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">AAC</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterOther} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">Other</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               {/if}
             </div>
@@ -3821,8 +3847,147 @@
     margin: 6px 0;
   }
 
-  .quality-menu {
-    max-height: 360px;
+  /* Filter Panel */
+  .filter-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: var(--accent-primary);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 9px;
+    margin-left: 4px;
+  }
+
+  .filter-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 12px;
+    min-width: 240px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    z-index: 20;
+  }
+
+  .filter-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .filter-panel-header span {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .clear-filters-btn {
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--accent-primary);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 150ms ease;
+  }
+
+  .clear-filters-btn:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .filter-section {
+    margin-bottom: 12px;
+  }
+
+  .filter-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .filter-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .filter-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .filter-checkboxes.format-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 12px;
+  }
+
+  .filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background 150ms ease;
+  }
+
+  .filter-checkbox:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .filter-checkbox input {
+    display: none;
+  }
+
+  .filter-checkbox .checkmark {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--text-muted);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .filter-checkbox input:checked + .checkmark {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+
+  .filter-checkbox input:checked + .checkmark::after {
+    content: '';
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .filter-checkbox .label-text {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .filter-checkbox .label-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: auto;
   }
 
   /* Content */
