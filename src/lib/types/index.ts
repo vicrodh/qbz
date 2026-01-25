@@ -27,6 +27,21 @@ export interface QobuzTrack {
   maximum_bit_depth?: number;
   maximum_sampling_rate?: number;
   isrc?: string;
+  performers?: string;
+  composer?: { id?: number; name: string };
+  copyright?: string;
+}
+
+// Parsed performer from performers string
+export interface Performer {
+  name: string;
+  roles: string[];
+}
+
+// Track info response with parsed performers
+export interface TrackInfo {
+  track: QobuzTrack;
+  performers: Performer[];
 }
 
 export interface QobuzAlbum {

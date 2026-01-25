@@ -15,7 +15,8 @@
     Trash2,
     CloudDownload,
     RefreshCw,
-    Radio
+    Radio,
+    Info
   } from 'lucide-svelte';
   import { shouldHidePlaylistFeatures } from '$lib/utils/offlineHelpers';
   import {
@@ -39,6 +40,7 @@
     onShareSonglink?: () => void;
     onGoToAlbum?: () => void;
     onGoToArtist?: () => void;
+    onShowInfo?: () => void;
     onDownload?: () => void;
     isTrackDownloaded?: boolean;
     onReDownload?: () => void;
@@ -59,6 +61,7 @@
     onShareSonglink,
     onGoToAlbum,
     onGoToArtist,
+    onShowInfo,
     onDownload,
     isTrackDownloaded = false,
     onReDownload,
@@ -99,7 +102,7 @@
   const hasLibrary = $derived(!!(onAddFavorite || onAddToPlaylist || onRemoveFromPlaylist));
   const hasShare = $derived(!!(onShareQobuz || onShareSonglink));
   const hasDownload = $derived(!!onDownload || isTrackDownloaded);
-  const hasNav = $derived(!!(onGoToAlbum || onGoToArtist));
+  const hasNav = $derived(!!(onGoToAlbum || onGoToArtist || onShowInfo));
   const hasMenu = $derived(hasPlayback || hasLibrary || hasShare || hasDownload || hasNav);
 
   function closeMenu(options?: { clearActive?: boolean }) {
@@ -514,6 +517,12 @@
               <button class="menu-item" onclick={() => handleAction(onGoToArtist)}>
                 <User size={14} />
                 <span>Go to artist</span>
+              </button>
+            {/if}
+            {#if onShowInfo}
+              <button class="menu-item" onclick={() => handleAction(onShowInfo)}>
+                <Info size={14} />
+                <span>Track info</span>
               </button>
             {/if}
           {/if}
