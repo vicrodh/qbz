@@ -300,6 +300,7 @@
   export function refreshPlaylists() {
     playlistTooltipCache.clear();
     loadUserPlaylists();
+    loadPlaylistSettings();
   }
 
   export function refreshPlaylistSettings() {
@@ -662,7 +663,7 @@
             </div>
           {/if}
 
-          <button class="menu-item" onclick={() => handleMenuAction(loadUserPlaylists)}>
+          <button class="menu-item" onclick={() => handleMenuAction(refreshPlaylists)}>
             <RefreshCw size={14} />
             <span>{$t('actions.refresh')}</span>
           </button>
