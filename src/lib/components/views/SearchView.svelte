@@ -132,6 +132,7 @@
     id: string;
     title: string;
     artist: { name: string };
+    genre?: { name: string; };
     image: { small?: string; thumbnail?: string; large?: string };
     release_date_original?: string;
     hires_streamable?: boolean;
@@ -374,6 +375,10 @@
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  function getGenreLabel(album: Album): string {
+    return album.genre?.name || 'Unknown genre'
   }
 
   function getQualityLabel(track: Track | Album): string {
@@ -632,6 +637,7 @@
                 artwork={getAlbumArtwork(allResults.albums.items[0])}
                 title={allResults.albums.items[0].title}
                 artist={allResults.albums.items[0].artist?.name || 'Unknown Artist'}
+                genre={getGenreLabel(allResults.albums.items[0])}
                 quality={getQualityLabel(allResults.albums.items[0])}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(allResults.albums.items[0].id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(allResults.albums.items[0].id) : undefined}
@@ -767,6 +773,7 @@
                           artwork={getAlbumArtwork(album)}
                           title={album.title}
                           artist={album.artist?.name || 'Unknown Artist'}
+                          genre={getGenreLabel(album)}
                           quality={getQualityLabel(album)}
                           onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                           onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -904,6 +911,7 @@
               artwork={getAlbumArtwork(album)}
               title={album.title}
               artist={album.artist?.name || 'Unknown Artist'}
+              genre={getGenreLabel(album)}
               quality={getQualityLabel(album)}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
               onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}

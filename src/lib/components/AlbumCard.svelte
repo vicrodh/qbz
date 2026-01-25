@@ -14,6 +14,7 @@
     artwork: string;
     title: string;
     artist: string;
+    genre: string;
     quality?: string;
     size?: 'standard' | 'large';
     searchId?: string;
@@ -38,6 +39,7 @@
     artwork,
     title,
     artist,
+    genre,
     quality,
     size = 'standard',
     searchId,
@@ -182,6 +184,7 @@
     <!-- Action Overlay -->
     {#if hasOverlay}
       <div class="action-overlay" class:menu-open={menuOpen}>
+        <div class="overlay-genre">{genre}</div>
         <div class="action-buttons">
           {#if showFavoriteButton}
             <button
@@ -322,7 +325,7 @@
     justify-content: center;
     opacity: 0;
     transition: opacity 150ms ease;
-    background: rgba(10, 10, 10, 0.25);
+    background: rgba(10, 10, 10, 0.5);
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     pointer-events: auto;
@@ -388,6 +391,23 @@
   .overlay-btn--minor {
     width: 30px;
     height: 30px;
+  }
+
+  .overlay-genre {
+    align-self: flex-start;
+    width: 100%;
+    text-align: left;
+    padding-left: 1em;
+    color: white;
+    text-shadow:
+    0.06em 0 black,
+            0 0.06em black,
+            -0.06em 0 black,
+            0 -0.06em black,
+            -0.06em -0.06em black,
+            -0.06em 0.06em black,
+            0.06em -0.06em black,
+            0.06em 0.06em black;
   }
 
   :global(.album-card .album-menu) {

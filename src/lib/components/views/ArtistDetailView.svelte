@@ -1273,6 +1273,7 @@
               artwork={album.artwork}
               title={album.title}
               artist={album.year || ''}
+              genre={album.genre}
               quality={album.quality}
               searchId={`album-${album.id}`}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1333,6 +1334,7 @@
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
+            genre={album.genre}
             quality={album.quality}
             searchId={`album-${album.id}`}
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1392,6 +1394,7 @@
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
+            genre={album.genre}
             quality={album.quality}
             searchId={`album-${album.id}`}
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1451,6 +1454,7 @@
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
+            genre={album.genre}
             quality={album.quality}
             searchId={`album-${album.id}`}
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1510,6 +1514,7 @@
             artwork={album.artwork}
             title={album.title}
             artist={album.year || ''}
+            genre={album.genre}
             quality={album.quality}
             searchId={`album-${album.id}`}
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1632,6 +1637,7 @@
               artwork={album.artwork}
               title={album.title}
               artist={album.year || ''}
+              genre={album.genre}
               quality={album.quality}
               searchId={`album-${album.id}`}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
