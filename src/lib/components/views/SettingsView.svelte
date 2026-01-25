@@ -396,6 +396,9 @@
   let showLastfmConfig = $state(false);
   let hasEmbeddedCredentials = $state(false);
 
+  // MusicBrainz integration state
+  let musicbrainzEnabled = $state(true);
+
   // Load saved settings on mount
   onMount(() => {
     // Load theme
@@ -461,6 +464,9 @@
 
     // Load Last.fm state
     loadLastfmState();
+
+    // Load MusicBrainz state
+    loadMusicBrainzState();
 
     // Load notification preferences
     loadToastsPreference();
@@ -656,6 +662,23 @@
   function handleScrobblingChange(enabled: boolean) {
     scrobbling = enabled;
     localStorage.setItem('qbz-lastfm-scrobbling', String(enabled));
+  }
+
+  async function loadMusicBrainzState() {
+    try {
+      musicbrainzEnabled = await invoke<boolean>('musicbrainz_is_enabled');
+    } catch (err) {
+      console.error('Failed to load MusicBrainz state:', err);
+    }
+  }
+
+  async function handleMusicBrainzChange(enabled: boolean) {
+    try {
+      await invoke('musicbrainz_set_enabled', { enabled });
+      musicbrainzEnabled = enabled;
+    } catch (err) {
+      console.error('Failed to update MusicBrainz setting:', err);
+    }
   }
 
   async function handleShowDownloadsChange(enabled: boolean) {
@@ -1918,6 +1941,17 @@
         </div>
       {/if}
     {/if}
+
+    <!-- MusicBrainz Integration -->
+    <div class="setting-row last">
+      <div class="setting-info">
+        <span class="setting-label">MusicBrainz</span>
+        <small class="setting-note">
+          Enable artist relationships and enhanced metadata from MusicBrainz.
+        </small>
+      </div>
+      <Toggle enabled={musicbrainzEnabled} onchange={handleMusicBrainzChange} />
+    </div>
   </section>
 
   <!-- Storage Section (Memory Cache) -->
