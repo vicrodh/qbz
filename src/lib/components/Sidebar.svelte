@@ -115,6 +115,42 @@
   let contextMenuSearch = $state('');
   const FOLDER_SEARCH_THRESHOLD = 8;
 
+  // Collapsed folder popover state
+  let folderPopover = $state<{
+    visible: boolean;
+    folderId: string | null;
+    folderName: string;
+    x: number;
+    y: number;
+  }>({
+    visible: false,
+    folderId: null,
+    folderName: '',
+    x: 0,
+    y: 0
+  });
+
+  // Get playlists for the folder popover
+  const folderPopoverPlaylists = $derived.by(() => {
+    if (!folderPopover.folderId) return [];
+    return getPlaylistsInFolder(folderPopover.folderId);
+  });
+
+  function showFolderPopover(event: MouseEvent, folder: PlaylistFolder) {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    folderPopover = {
+      visible: true,
+      folderId: folder.id,
+      folderName: folder.name,
+      x: rect.right + 8,
+      y: rect.top
+    };
+  }
+
+  function closeFolderPopover() {
+    folderPopover = { ...folderPopover, visible: false, folderId: null };
+  }
+
   // Filtered folders for context menu
   const filteredContextFolders = $derived.by(() => {
     const available = folders.filter(f => f.id !== contextMenu.currentFolderId);
@@ -685,10 +721,16 @@
     closeContextMenu();
   }
 
-  // Close context menu when clicking outside
+  // Close context menu and folder popover when clicking outside
   function handleGlobalClick(e: MouseEvent) {
     if (contextMenu.visible) {
       closeContextMenu();
+    }
+    if (folderPopover.visible) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.folder-popover') && !target.closest('.collapsed-folder-btn')) {
+        closeFolderPopover();
+      }
     }
   }
 </script>
@@ -891,7 +933,7 @@
                   <!-- Collapsed sidebar: show folder icon only -->
                   <button
                     class="collapsed-folder-btn"
-                    onclick={() => handleToggleFolder(folder.id)}
+                    onclick={(e) => showFolderPopover(e, folder)}
                     title="{folder.name} ({folderPlaylists.length})"
                   >
                     <Folder size={14} />
@@ -1042,6 +1084,40 @@
     {#if availableFolders.length === 0 && !contextMenu.currentFolderId}
       <div class="context-menu-empty">
         No folders yet
+      </div>
+    {/if}
+  </div>
+{/if}
+
+<!-- Collapsed Folder Popover -->
+{#if folderPopover.visible}
+  <div
+    class="folder-popover"
+    style="left: {folderPopover.x}px; top: {folderPopover.y}px;"
+    onclick={(e) => e.stopPropagation()}
+    role="menu"
+  >
+    <div class="folder-popover-header">
+      <Folder size={14} />
+      <span>{folderPopover.folderName}</span>
+    </div>
+    {#if folderPopoverPlaylists.length > 0}
+      <div class="folder-popover-list">
+        {#each folderPopoverPlaylists as playlist (playlist.id)}
+          <button
+            class="folder-popover-item"
+            class:active={activeView === 'playlist' && selectedPlaylistId === playlist.id}
+            onclick={() => { handlePlaylistClick(playlist); closeFolderPopover(); }}
+          >
+            <ListMusic size={14} />
+            <span class="folder-popover-item-name">{playlist.name}</span>
+            <span class="folder-popover-item-count">{playlist.tracks_count}</span>
+          </button>
+        {/each}
+      </div>
+    {:else}
+      <div class="folder-popover-empty">
+        No playlists
       </div>
     {/if}
   </div>
@@ -1253,6 +1329,7 @@
 
   .playlists-scroll {
     overflow-y: overlay;
+    overflow-x: hidden;
     margin-right: 1px;
     min-height: 0;
     flex: 1;
@@ -1358,17 +1435,99 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 100%;
+    height: 32px;
     background: transparent;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: background-color 150ms ease;
+    color: var(--text-muted);
+    transition: background-color 150ms ease, color 150ms ease;
   }
 
   .collapsed-folder-btn:hover {
     background: var(--bg-hover);
+  }
+
+  /* Folder Popover (collapsed sidebar) */
+  .folder-popover {
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 8px;
+    min-width: 180px;
+    max-width: 260px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10001;
+  }
+
+  .folder-popover-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 4px;
+  }
+
+  .folder-popover-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .folder-popover-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    text-align: left;
+    transition: all 150ms ease;
+  }
+
+  .folder-popover-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .folder-popover-item.active {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .folder-popover-item-name {
+    flex: 1;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .folder-popover-item-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .folder-popover-empty {
+    padding: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
   }
 
   /* Create Folder Modal */
