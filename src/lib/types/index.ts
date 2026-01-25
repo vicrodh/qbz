@@ -130,6 +130,7 @@ export interface ArtistDetail {
     artwork: string;
     year?: string;
     quality: string;
+    genre: string;
   }[];
   epsSingles: {
     id: string;
@@ -137,6 +138,7 @@ export interface ArtistDetail {
     artwork: string;
     year?: string;
     quality: string;
+    genre: string;
   }[];
   liveAlbums: {
     id: string;
@@ -144,6 +146,7 @@ export interface ArtistDetail {
     artwork: string;
     year?: string;
     quality: string;
+    genre: string;
   }[];
   compilations: {
     id: string;
@@ -151,6 +154,7 @@ export interface ArtistDetail {
     artwork: string;
     year?: string;
     quality: string;
+    genre: string;
   }[];
   tributes: {
     id: string;
@@ -158,6 +162,7 @@ export interface ArtistDetail {
     artwork: string;
     year?: string;
     quality: string;
+    genre: string;
   }[];
   others: {
     id: string;
@@ -165,6 +170,7 @@ export interface ArtistDetail {
     artwork: string;
     year?: string;
     quality: string;
+    genre: string;
   }[];
   playlists: {
     id: number;

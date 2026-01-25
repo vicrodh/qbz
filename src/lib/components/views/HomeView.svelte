@@ -36,6 +36,7 @@
     artwork: string;
     title: string;
     artist: string;
+    genre: string;
     quality?: string;
   }
 
@@ -328,6 +329,7 @@
       artwork: getQobuzImage(album.image),
       title: album.title,
       artist: album.artist?.name || 'Unknown Artist',
+      genre: album.genre?.name || 'Unknown genre',
       quality: formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate)
     };
   }
@@ -637,6 +639,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -666,6 +669,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -695,6 +699,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -724,6 +729,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -753,6 +759,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -782,6 +789,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -881,6 +889,7 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
