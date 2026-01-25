@@ -6,7 +6,7 @@
   import {
     HardDrive, Music, Disc3, Mic2, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, AlertCircle, ImageDown, Upload, Search, LayoutGrid, List, Edit3,
-    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal
+    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown
   } from 'lucide-svelte';
   import FolderSettingsModal from '../FolderSettingsModal.svelte';
   import { t } from '$lib/i18n';
@@ -177,6 +177,64 @@
 
   // Quality/Format filter with checkboxes (AND between sections, OR within section)
   let showFilterPanel = $state(false);
+  let filterPanelRef: HTMLDivElement | null = $state(null);
+  let filterPanelTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function startFilterPanelTimer() {
+    clearFilterPanelTimer();
+    filterPanelTimeout = setTimeout(() => {
+      showFilterPanel = false;
+    }, 3000);
+  }
+
+  function clearFilterPanelTimer() {
+    if (filterPanelTimeout) {
+      clearTimeout(filterPanelTimeout);
+      filterPanelTimeout = null;
+    }
+  }
+
+  function handleFilterPanelActivity() {
+    if (showFilterPanel) {
+      startFilterPanelTimer();
+    }
+  }
+
+  function handleClickOutsideFilterPanel(event: MouseEvent) {
+    if (showFilterPanel && filterPanelRef && !filterPanelRef.contains(event.target as Node)) {
+      showFilterPanel = false;
+      clearFilterPanelTimer();
+    }
+  }
+
+  // Effect to manage filter panel auto-close
+  $effect(() => {
+    if (showFilterPanel) {
+      startFilterPanelTimer();
+      document.addEventListener('click', handleClickOutsideFilterPanel, true);
+    } else {
+      clearFilterPanelTimer();
+      document.removeEventListener('click', handleClickOutsideFilterPanel, true);
+    }
+    return () => {
+      clearFilterPanelTimer();
+      document.removeEventListener('click', handleClickOutsideFilterPanel, true);
+    };
+  });
+
+  // Effect to close sort menu on click outside
+  $effect(() => {
+    if (showSortMenu) {
+      const handleClickOutside = (event: MouseEvent) => {
+        const target = event.target as HTMLElement;
+        if (!target.closest('.sort-btn') && !target.closest('.sort-menu')) {
+          showSortMenu = false;
+        }
+      };
+      document.addEventListener('click', handleClickOutside, true);
+      return () => document.removeEventListener('click', handleClickOutside, true);
+    }
+  });
 
   // Quality tier filters (OR within this group)
   let filterHiRes = $state(false);
@@ -257,6 +315,67 @@
     filterMp3 = false;
     filterAac = false;
     filterOther = false;
+  }
+
+  // Album sorting state
+  type SortBy = 'title' | 'year' | 'artist';
+  type SortDirection = 'asc' | 'desc';
+  let sortBy = $state<SortBy>('title');
+  let sortDirection = $state<SortDirection>('asc');
+  let showSortMenu = $state(false);
+
+  const sortOptions: { value: SortBy; label: string }[] = [
+    { value: 'title', label: 'Album Name' },
+    { value: 'year', label: 'Release Year' },
+    { value: 'artist', label: 'Artist Name' }
+  ];
+
+  function getSortLabel(): string {
+    const option = sortOptions.find(o => o.value === sortBy);
+    return option?.label || 'Album Name';
+  }
+
+  function toggleSortDirection() {
+    sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+  }
+
+  function selectSort(value: SortBy) {
+    if (sortBy === value) {
+      toggleSortDirection();
+    } else {
+      sortBy = value;
+      sortDirection = 'asc';
+    }
+    showSortMenu = false;
+  }
+
+  function sortAlbums(items: LocalAlbum[]): LocalAlbum[] {
+    const sorted = [...items];
+    const dir = sortDirection === 'asc' ? 1 : -1;
+
+    sorted.sort((a, b) => {
+      switch (sortBy) {
+        case 'title':
+          return a.title.localeCompare(b.title) * dir;
+        case 'year': {
+          // Albums without year go to the end
+          const yearA = a.year ?? (sortDirection === 'asc' ? 9999 : 0);
+          const yearB = b.year ?? (sortDirection === 'asc' ? 9999 : 0);
+          if (yearA !== yearB) return (yearA - yearB) * dir;
+          // Secondary sort by title
+          return a.title.localeCompare(b.title);
+        }
+        case 'artist':
+          const artistCompare = a.artist.localeCompare(b.artist) * dir;
+          if (artistCompare !== 0) return artistCompare;
+          // Secondary sort by title
+          return a.title.localeCompare(b.title);
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
   }
 
   // Performance mode state
@@ -387,6 +506,9 @@
     if (hasActiveFilters) {
       filtered = filtered.filter(album => matchesQualityFilters(album));
     }
+
+    // Apply sorting
+    filtered = sortAlbums(filtered);
 
     // Group if enabled
     if (!albumGroupingEnabled) {
@@ -2565,7 +2687,7 @@
             </div>
 
             <!-- Quality/Format Filter -->
-            <div class="dropdown-container">
+            <div class="dropdown-container" bind:this={filterPanelRef}>
               <button
                 class="control-btn"
                 class:active={hasActiveFilters}
@@ -2579,7 +2701,12 @@
                 {/if}
               </button>
               {#if showFilterPanel}
-                <div class="filter-panel">
+                <div
+                  class="filter-panel"
+                  onmouseenter={clearFilterPanelTimer}
+                  onmouseleave={startFilterPanelTimer}
+                  onclick={handleFilterPanelActivity}
+                >
                   <div class="filter-panel-header">
                     <span>Filters</span>
                     {#if hasActiveFilters}
@@ -2650,6 +2777,36 @@
                       </label>
                     </div>
                   </div>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Sort dropdown -->
+            <div class="dropdown-container">
+              <button
+                class="control-btn sort-btn"
+                onclick={() => (showSortMenu = !showSortMenu)}
+                title="Sort albums"
+              >
+                <ArrowUpDown size={14} />
+                <span>{getSortLabel()}</span>
+                <span class="sort-direction">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                <ChevronDown size={12} class="chevron" />
+              </button>
+              {#if showSortMenu}
+                <div class="sort-menu">
+                  {#each sortOptions as option}
+                    <button
+                      class="dropdown-item"
+                      class:selected={sortBy === option.value}
+                      onclick={() => selectSort(option.value)}
+                    >
+                      <span>{option.label}</span>
+                      {#if sortBy === option.value}
+                        <span class="sort-indicator">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      {/if}
+                    </button>
+                  {/each}
                 </div>
               {/if}
             </div>
@@ -4006,6 +4163,66 @@
     margin-left: auto;
   }
 
+  /* Sort dropdown */
+  .sort-btn {
+    gap: 6px;
+  }
+
+  .sort-btn .sort-direction {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .sort-btn :global(.chevron) {
+    margin-left: 2px;
+    opacity: 0.6;
+    transition: transform 150ms ease;
+  }
+
+  .sort-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 6px;
+    min-width: 160px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    z-index: 20;
+  }
+
+  .sort-menu .dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 150ms ease;
+  }
+
+  .sort-menu .dropdown-item:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .sort-menu .dropdown-item.selected {
+    color: var(--accent-primary);
+    font-weight: 500;
+  }
+
+  .sort-menu .sort-indicator {
+    font-size: 12px;
+    opacity: 0.8;
+  }
+
   /* Content */
   .content {
     min-height: 200px;
@@ -4673,7 +4890,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 10000;
   }
 
   .modal {
