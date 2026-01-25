@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, Filter, ArrowUpDown, LayoutGrid, List, GripVertical, EyeOff, Eye, BarChart2, Play, Pencil, Search, X, Cloud, CloudOff, Wifi, Heart } from 'lucide-svelte';
+  import { ArrowLeft, Filter, ArrowUpDown, LayoutGrid, List, GripVertical, EyeOff, Eye, BarChart2, Play, Pencil, Search, X, Cloud, CloudOff, Wifi, Heart, Folder, FolderPlus, ChevronRight, ChevronDown, Trash2, Star, Music, Disc, Library, Info } from 'lucide-svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
+  import FolderEditModal from '../FolderEditModal.svelte';
   import { t } from '$lib/i18n';
   import {
     subscribe as subscribeOffline,
@@ -12,6 +13,17 @@
     type OfflineStatus,
     type OfflineSettings
   } from '$lib/stores/offlineStore';
+  import {
+    subscribe as subscribeFolders,
+    getFolders,
+    getVisibleFolders,
+    loadFolders,
+    createFolder,
+    updateFolder,
+    deleteFolder,
+    movePlaylistToFolder,
+    type PlaylistFolder
+  } from '$lib/stores/playlistFoldersStore';
 
   interface Playlist {
     id: number;
@@ -30,6 +42,7 @@
     position: number;
     hasLocalContent?: LocalContentStatus;
     is_favorite?: boolean;
+    folder_id?: string | null;
   }
 
   interface PlaylistStats {
@@ -39,15 +52,16 @@
   }
 
   type PlaylistFilter = 'all' | 'visible' | 'hidden' | 'offline_all' | 'offline_partial' | 'offline_unavailable';
-  type PlaylistSort = 'name' | 'recent' | 'playcount' | 'custom';
+  type PlaylistSort = 'name' | 'recent' | 'playcount' | 'tracks' | 'custom';
   type ViewMode = 'list' | 'grid';
 
   interface Props {
     onBack?: () => void;
     onPlaylistSelect?: (playlistId: number) => void;
+    onPlaylistsChanged?: () => void;
   }
 
-  let { onBack, onPlaylistSelect }: Props = $props();
+  let { onBack, onPlaylistSelect, onPlaylistsChanged }: Props = $props();
 
   let playlists = $state<Playlist[]>([]);
   let playlistSettings = $state<Map<number, PlaylistSettings>>(new Map());
@@ -85,6 +99,18 @@
   // Drag state
   let draggedId = $state<number | null>(null);
   let dragOverId = $state<number | null>(null);
+  let dragOverFolderId = $state<string | null>(null);
+  let absorbingPlaylistId = $state<number | null>(null);
+  let absorbingToFolderId = $state<string | null>(null);
+
+  // Folder state
+  let folders = $state<PlaylistFolder[]>([]);
+  let currentFolderId = $state<string | null>(null);
+  let foldersCollapsed = $state(false);
+
+  // Create/Edit folder modal state
+  let showFolderModal = $state(false);
+  let editingFolder = $state<PlaylistFolder | null>(null);
 
   // Persist preferences
   $effect(() => { localStorage.setItem('qbz-pm-filter', filter); });
@@ -166,6 +192,13 @@
       // 'all' shows everything
     }
 
+    // Filter by current folder
+    result = result.filter(p => {
+      const settings = playlistSettings.get(p.id);
+      const playlistFolderId = settings?.folder_id ?? null;
+      return playlistFolderId === currentFolderId;
+    });
+
     // Apply sort
     if (sort === 'name') {
       result.sort((a, b) => a.name.localeCompare(b.name));
@@ -173,6 +206,12 @@
       result.sort((a, b) => {
         const countA = playlistStats.get(a.id)?.play_count ?? 0;
         const countB = playlistStats.get(b.id)?.play_count ?? 0;
+        return countB - countA;
+      });
+    } else if (sort === 'tracks') {
+      result.sort((a, b) => {
+        const countA = getTotalTrackCount(a);
+        const countB = getTotalTrackCount(b);
         return countB - countA;
       });
     } else if (sort === 'custom') {
@@ -187,8 +226,22 @@
     return result;
   });
 
+  // Get current folder info
+  const currentFolder = $derived(
+    currentFolderId ? folders.find(f => f.id === currentFolderId) : null
+  );
+
+  // Get playlist count for a folder
+  function getPlaylistCountInFolder(folderId: string): number {
+    return playlists.filter(p => {
+      const settings = playlistSettings.get(p.id);
+      return settings?.folder_id === folderId;
+    }).length;
+  }
+
   onMount(() => {
     loadData();
+    loadFolders();
 
     // Subscribe to offline state changes
     const unsubscribeOffline = subscribeOffline(() => {
@@ -196,8 +249,14 @@
       offlineSettings = getOfflineSettings();
     });
 
+    // Subscribe to folder changes
+    const unsubscribeFolders = subscribeFolders(() => {
+      folders = getVisibleFolders();
+    });
+
     return () => {
       unsubscribeOffline();
+      unsubscribeFolders();
     };
   });
 
@@ -329,12 +388,14 @@
     editModalOpen = false;
     editingPlaylist = null;
     loadData(); // Refresh
+    onPlaylistsChanged?.();
   }
 
   function handleDelete(playlistId: number) {
     editModalOpen = false;
     editingPlaylist = null;
     loadData(); // Refresh
+    onPlaylistsChanged?.();
   }
 
   async function toggleHidden(playlist: Playlist) {
@@ -345,8 +406,23 @@
       const updated = new Map(playlistSettings);
       updated.set(playlist.id, { ...current, qobuz_playlist_id: playlist.id, hidden: newHidden, position: current?.position ?? 0 });
       playlistSettings = updated;
+      onPlaylistsChanged?.();
     } catch (err) {
       console.error('Failed to toggle hidden:', err);
+    }
+  }
+
+  async function toggleFavorite(playlist: Playlist) {
+    const current = playlistSettings.get(playlist.id);
+    const newFavorite = !current?.is_favorite;
+    try {
+      await invoke('playlist_set_favorite', { playlistId: playlist.id, favorite: newFavorite });
+      const updated = new Map(playlistSettings);
+      updated.set(playlist.id, { ...current, qobuz_playlist_id: playlist.id, is_favorite: newFavorite, hidden: current?.hidden ?? false, position: current?.position ?? 0 });
+      playlistSettings = updated;
+      onPlaylistsChanged?.();
+    } catch (err) {
+      console.error('Failed to toggle favorite:', err);
     }
   }
 
@@ -399,6 +475,7 @@
         updated.set(id, { ...existing, qobuz_playlist_id: id, hidden: existing?.hidden ?? false, position: index });
       });
       playlistSettings = updated;
+      onPlaylistsChanged?.();
     } catch (err) {
       console.error('Failed to reorder playlists:', err);
     }
@@ -410,6 +487,138 @@
   function handleDragEnd() {
     draggedId = null;
     dragOverId = null;
+    dragOverFolderId = null;
+  }
+
+  // === Folder Navigation ===
+
+  function navigateToFolder(folderId: string | null) {
+    currentFolderId = folderId;
+  }
+
+  function navigateToRoot() {
+    currentFolderId = null;
+  }
+
+  // === Folder Drag & Drop ===
+
+  function handleFolderDragOver(e: DragEvent, folderId: string) {
+    e.preventDefault();
+    if (draggedId) {
+      dragOverFolderId = folderId;
+    }
+  }
+
+  function handleFolderDragLeave() {
+    dragOverFolderId = null;
+  }
+
+  async function handleFolderDrop(e: DragEvent, folderId: string) {
+    e.preventDefault();
+    if (!draggedId) return;
+
+    const playlistIdToMove = draggedId;
+
+    // Start absorption animation
+    absorbingPlaylistId = playlistIdToMove;
+    absorbingToFolderId = folderId;
+
+    draggedId = null;
+    dragOverId = null;
+    dragOverFolderId = null;
+
+    // Move playlist to folder in backend
+    const success = await movePlaylistToFolder(playlistIdToMove, folderId);
+
+    // Wait for animation then update state
+    setTimeout(() => {
+      if (success) {
+        // Update local settings
+        const updated = new Map(playlistSettings);
+        const existing = updated.get(playlistIdToMove);
+        if (existing) {
+          updated.set(playlistIdToMove, { ...existing, folder_id: folderId });
+        } else {
+          updated.set(playlistIdToMove, {
+            qobuz_playlist_id: playlistIdToMove,
+            hidden: false,
+            position: 0,
+            folder_id: folderId
+          });
+        }
+        playlistSettings = updated;
+        onPlaylistsChanged?.();
+      }
+      absorbingPlaylistId = null;
+      absorbingToFolderId = null;
+    }, 300);
+  }
+
+  // === Folder Modal ===
+
+  function openCreateFolderModal() {
+    editingFolder = null;
+    showFolderModal = true;
+  }
+
+  function openEditFolderModal(folder: PlaylistFolder) {
+    editingFolder = folder;
+    showFolderModal = true;
+  }
+
+  function closeFolderModal() {
+    showFolderModal = false;
+    editingFolder = null;
+  }
+
+  async function handleSaveFolder(
+    folder: PlaylistFolder | null,
+    updates: {
+      name: string;
+      iconType: string;
+      iconPreset: string;
+      iconColor: string;
+      customImagePath?: string;
+    }
+  ) {
+    if (folder) {
+      // Update existing folder
+      await updateFolder(folder.id, {
+        name: updates.name,
+        iconType: updates.iconType,
+        iconPreset: updates.iconPreset,
+        iconColor: updates.iconColor,
+        customImagePath: updates.customImagePath
+      });
+    } else {
+      // Create new folder
+      await createFolder(
+        updates.name,
+        updates.iconType,
+        updates.iconPreset,
+        updates.iconColor
+      );
+    }
+
+    folders = getVisibleFolders();
+    closeFolderModal();
+    onPlaylistsChanged?.();
+  }
+
+  async function handleDeleteFolder(folder: PlaylistFolder) {
+    const confirmed = confirm(`Delete folder "${folder.name}"? Playlists will be moved to root.`);
+    if (!confirmed) return;
+
+    await deleteFolder(folder.id);
+    folders = getVisibleFolders();
+
+    // If we're inside the deleted folder, go back to root
+    if (currentFolderId === folder.id) {
+      currentFolderId = null;
+    }
+
+    closeFolderModal();
+    onPlaylistsChanged?.();
   }
 </script>
 
@@ -422,6 +631,17 @@
     </button>
     <h1>Playlist Manager</h1>
   </div>
+
+  <!-- Breadcrumb Navigation (when inside a folder) -->
+  {#if currentFolderId && currentFolder}
+    <div class="breadcrumb">
+      <button class="breadcrumb-item" onclick={navigateToRoot}>
+        All Playlists
+      </button>
+      <ChevronRight size={14} class="breadcrumb-separator" />
+      <span class="breadcrumb-current">{currentFolder.name}</span>
+    </div>
+  {/if}
 
   <!-- Controls -->
   <div class="controls">
@@ -491,7 +711,7 @@
       <button class="control-btn" onclick={() => { showSortMenu = !showSortMenu; showFilterMenu = false; }}>
         <ArrowUpDown size={16} />
         <span>
-          {sort === 'name' ? 'Name' : sort === 'recent' ? 'Recent' : sort === 'playcount' ? 'Play Count' : 'Custom'}
+          {sort === 'name' ? 'Name' : sort === 'recent' ? 'Recent' : sort === 'playcount' ? 'Play Count' : sort === 'tracks' ? 'Track Count' : 'Custom'}
         </span>
       </button>
       {#if showSortMenu}
@@ -504,6 +724,9 @@
           </button>
           <button class="dropdown-item" class:selected={sort === 'playcount'} onclick={() => { sort = 'playcount'; showSortMenu = false; }}>
             Play Count
+          </button>
+          <button class="dropdown-item" class:selected={sort === 'tracks'} onclick={() => { sort = 'tracks'; showSortMenu = false; }}>
+            Track Count
           </button>
           <button class="dropdown-item" class:selected={sort === 'custom'} onclick={() => { sort = 'custom'; showSortMenu = false; }}>
             Custom Order
@@ -521,11 +744,24 @@
       {/if}
     </button>
 
-    <span class="playlist-count">{displayPlaylists.length} playlists</span>
+    {#if !currentFolderId}
+      <button class="control-btn" onclick={openCreateFolderModal}>
+        <FolderPlus size={16} />
+        <span>New Folder</span>
+      </button>
+    {/if}
+
+    <span class="playlist-count">
+      {#if !currentFolderId && folders.length > 0}
+        {folders.length} folders, {displayPlaylists.length} playlists
+      {:else}
+        {displayPlaylists.length} playlists
+      {/if}
+    </span>
   </div>
 
   {#if sort === 'custom'}
-    <p class="drag-hint">Drag playlists to reorder them</p>
+    <p class="drag-hint">Drag playlists to reorder them{#if !currentFolderId && folders.length > 0}, or drop onto a folder to move{/if}</p>
   {/if}
 
   <!-- Content -->
@@ -534,11 +770,137 @@
       <div class="spinner"></div>
       <p>Loading playlists...</p>
     </div>
-  {:else if displayPlaylists.length === 0}
-    <div class="empty">
-      <p>{filter === 'hidden' ? 'No hidden playlists' : filter === 'visible' ? 'No visible playlists' : 'No playlists yet'}</p>
-    </div>
-  {:else if viewMode === 'grid'}
+  {:else}
+    <!-- Folders Section (only at root level) -->
+    {#if !currentFolderId && folders.length > 0}
+      <div class="folders-section">
+        <button
+          class="section-header-btn"
+          onclick={() => foldersCollapsed = !foldersCollapsed}
+        >
+          <span class="section-title">Folders ({folders.length})</span>
+          <span class="info-icon" title="To drag playlists into folders, enable Custom sort order">
+            <Info size={12} />
+          </span>
+          {#if foldersCollapsed}
+            <ChevronRight size={14} />
+          {:else}
+            <ChevronDown size={14} />
+          {/if}
+        </button>
+
+        {#if !foldersCollapsed}
+          {#if viewMode === 'grid'}
+            <div class="folders-grid">
+              {#each folders as folder (folder.id)}
+                <div
+                  class="folder-card"
+                  class:drag-over={dragOverFolderId === folder.id}
+                  class:absorbing={absorbingToFolderId === folder.id}
+                  ondragover={(e) => handleFolderDragOver(e, folder.id)}
+                  ondragleave={handleFolderDragLeave}
+                  ondrop={(e) => handleFolderDrop(e, folder.id)}
+                >
+                  <div
+                    class="folder-card-content"
+                    role="button"
+                    tabindex="0"
+                    onclick={() => navigateToFolder(folder.id)}
+                    onkeydown={(e) => e.key === 'Enter' && navigateToFolder(folder.id)}
+                  >
+                    <div class="folder-icon" style={folder.icon_color ? `background: ${folder.icon_color};` : ''}>
+                      {#if folder.icon_type === 'custom' && folder.custom_image_path}
+                        <img src={folder.custom_image_path} alt="" class="folder-custom-img" />
+                      {:else if folder.icon_preset === 'heart'}
+                        <Heart size={32} />
+                      {:else if folder.icon_preset === 'star'}
+                        <Star size={32} />
+                      {:else if folder.icon_preset === 'music'}
+                        <Music size={32} />
+                      {:else if folder.icon_preset === 'disc'}
+                        <Disc size={32} />
+                      {:else if folder.icon_preset === 'library'}
+                        <Library size={32} />
+                      {:else}
+                        <Folder size={32} />
+                      {/if}
+                    </div>
+                    <span class="folder-name">{folder.name}</span>
+                    <span class="folder-count">{getPlaylistCountInFolder(folder.id)} playlists</span>
+                  </div>
+                  <button
+                    class="folder-edit-btn"
+                    onclick={(e) => { e.stopPropagation(); openEditFolderModal(folder); }}
+                    title="Edit folder"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <!-- List view folders (compact) -->
+            <div class="folders-list">
+              {#each folders as folder (folder.id)}
+                <div
+                  class="folder-list-item"
+                  class:drag-over={dragOverFolderId === folder.id}
+                  class:absorbing={absorbingToFolderId === folder.id}
+                  ondragover={(e) => handleFolderDragOver(e, folder.id)}
+                  ondragleave={handleFolderDragLeave}
+                  ondrop={(e) => handleFolderDrop(e, folder.id)}
+                  role="button"
+                  tabindex="0"
+                  onclick={() => navigateToFolder(folder.id)}
+                  onkeydown={(e) => e.key === 'Enter' && navigateToFolder(folder.id)}
+                >
+                  <div class="folder-list-icon" style={folder.icon_color ? `background: ${folder.icon_color};` : ''}>
+                    {#if folder.icon_type === 'custom' && folder.custom_image_path}
+                      <img src={folder.custom_image_path} alt="" class="folder-list-img" />
+                    {:else if folder.icon_preset === 'heart'}
+                      <Heart size={20} />
+                    {:else if folder.icon_preset === 'star'}
+                      <Star size={20} />
+                    {:else if folder.icon_preset === 'music'}
+                      <Music size={20} />
+                    {:else if folder.icon_preset === 'disc'}
+                      <Disc size={20} />
+                    {:else if folder.icon_preset === 'library'}
+                      <Library size={20} />
+                    {:else}
+                      <Folder size={20} />
+                    {/if}
+                  </div>
+                  <span class="folder-list-name">{folder.name}</span>
+                  <span class="folder-list-count">{getPlaylistCountInFolder(folder.id)}</span>
+                  <button
+                    class="folder-list-edit"
+                    onclick={(e) => { e.stopPropagation(); openEditFolderModal(folder); }}
+                    title="Edit folder"
+                  >
+                    <Pencil size={12} />
+                  </button>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Playlists Section -->
+    {#if displayPlaylists.length === 0 && (currentFolderId || folders.length === 0)}
+      <div class="empty">
+        <p>{filter === 'hidden' ? 'No hidden playlists' : filter === 'visible' ? 'No visible playlists' : currentFolderId ? 'No playlists in this folder' : 'No playlists yet'}</p>
+      </div>
+    {:else if displayPlaylists.length > 0}
+      {#if !currentFolderId && folders.length > 0}
+        <div class="section-header-btn playlists-section-header">
+          <span class="section-title">Playlists ({displayPlaylists.length})</span>
+        </div>
+      {/if}
+
+      {#if viewMode === 'grid'}
     <!-- Grid View -->
     <div class="grid">
       {#each displayPlaylists as playlist (playlist.id)}
@@ -552,6 +914,7 @@
           class:unavailable={isUnavailable}
           class:dragging={draggedId === playlist.id}
           class:drag-over={dragOverId === playlist.id}
+          class:absorbing={absorbingPlaylistId === playlist.id}
           draggable={sort === 'custom' && !isUnavailable}
           ondragstart={(e) => !isUnavailable && handleDragStart(e, playlist.id)}
           ondragover={(e) => !isUnavailable && handleDragOver(e, playlist.id)}
@@ -559,29 +922,14 @@
           ondrop={(e) => !isUnavailable && handleDrop(e, playlist.id)}
           ondragend={handleDragEnd}
         >
-          <!-- Top row: drag handle (left) and edit button (right) -->
-          <div class="grid-item-header">
-            {#if sort === 'custom' && !isUnavailable}
+          <!-- Top row: drag handle only (when in custom sort mode) -->
+          {#if sort === 'custom' && !isUnavailable}
+            <div class="grid-item-header">
               <div class="drag-handle">
                 <GripVertical size={14} />
               </div>
-            {:else}
-              <div class="drag-handle-placeholder"></div>
-            {/if}
-            {#if !isUnavailable}
-              <button
-                class="edit-btn"
-                onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
-                title="Edit playlist"
-              >
-                <Pencil size={14} />
-              </button>
-            {:else}
-              <span class="view-only-badge" title={$t('offline.viewOnly')}>
-                <CloudOff size={12} />
-              </span>
-            {/if}
-          </div>
+            </div>
+          {/if}
 
           <!-- Clickable area: artwork + info -->
           <div
@@ -593,16 +941,6 @@
           >
             <div class="artwork">
               <PlaylistCollage artworks={playlist.images ?? []} size={140} />
-              {#if isHidden}
-                <div class="hidden-badge">
-                  <EyeOff size={12} />
-                </div>
-              {/if}
-              {#if isFavorite}
-                <div class="favorite-badge" title="Favorite">
-                  <Heart size={12} fill="var(--accent-primary)" color="var(--accent-primary)" />
-                </div>
-              {/if}
               {#if localStatus === 'all_local'}
                 <div class="local-badge all" title={$t('offline.allLocal')}>
                   <Wifi size={12} />
@@ -615,8 +953,47 @@
             </div>
             <div class="info">
               <span class="name">{playlist.name}</span>
-              <span class="meta">{getTotalTrackCount(playlist)} tracks{#if getLocalTrackCount(playlist.id) > 0} <span class="local-count">({getLocalTrackCount(playlist.id)} local)</span>{/if}</span>
             </div>
+          </div>
+
+          <!-- Footer: meta + action buttons inline -->
+          <div class="grid-item-footer">
+            <span class="meta">{getTotalTrackCount(playlist)} tracks{#if getLocalTrackCount(playlist.id) > 0} <span class="local-count">({getLocalTrackCount(playlist.id)} local)</span>{/if}</span>
+            {#if !isUnavailable}
+              <div class="footer-actions">
+                <button
+                  class="favorite-btn"
+                  class:is-active={isFavorite}
+                  onclick={(e) => { e.stopPropagation(); toggleFavorite(playlist); }}
+                  title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <Heart size={12} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'currentColor'} />
+                </button>
+                <button
+                  class="visibility-btn"
+                  class:is-hidden={isHidden}
+                  onclick={(e) => { e.stopPropagation(); toggleHidden(playlist); }}
+                  title={isHidden ? 'Show in sidebar' : 'Hide from sidebar'}
+                >
+                  {#if isHidden}
+                    <EyeOff size={12} />
+                  {:else}
+                    <Eye size={12} />
+                  {/if}
+                </button>
+                <button
+                  class="edit-btn"
+                  onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
+                  title="Edit playlist"
+                >
+                  <Pencil size={12} />
+                </button>
+              </div>
+            {:else}
+              <span class="view-only-badge" title={$t('offline.viewOnly')}>
+                <CloudOff size={12} />
+              </span>
+            {/if}
           </div>
         </div>
       {/each}
@@ -636,6 +1013,7 @@
           class:unavailable={isUnavailable}
           class:dragging={draggedId === playlist.id}
           class:drag-over={dragOverId === playlist.id}
+          class:absorbing={absorbingPlaylistId === playlist.id}
           draggable={sort === 'custom' && !isUnavailable}
           ondragstart={(e) => !isUnavailable && handleDragStart(e, playlist.id)}
           ondragover={(e) => !isUnavailable && handleDragOver(e, playlist.id)}
@@ -684,17 +1062,27 @@
               {stats.play_count}
             </span>
           {/if}
-          {#if isHidden}
-            <span class="hidden-indicator" title="Hidden from sidebar">
-              <EyeOff size={14} />
-            </span>
-          {/if}
-          {#if isFavorite}
-            <span class="favorite-indicator" title="Favorite">
-              <Heart size={14} fill="var(--accent-primary)" color="var(--accent-primary)" />
-            </span>
-          {/if}
           {#if !isUnavailable}
+            <button
+              class="favorite-btn"
+              class:is-active={isFavorite}
+              onclick={(e) => { e.stopPropagation(); toggleFavorite(playlist); }}
+              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+            >
+              <Heart size={14} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'currentColor'} />
+            </button>
+            <button
+              class="visibility-btn"
+              class:is-hidden={isHidden}
+              onclick={(e) => { e.stopPropagation(); toggleHidden(playlist); }}
+              title={isHidden ? 'Show in sidebar' : 'Hide from sidebar'}
+            >
+              {#if isHidden}
+                <EyeOff size={14} />
+              {:else}
+                <Eye size={14} />
+              {/if}
+            </button>
             <button
               class="edit-btn"
               onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
@@ -706,8 +1094,19 @@
         </div>
       {/each}
     </div>
+      {/if}
+    {/if}
   {/if}
 </div>
+
+<!-- Folder Modal -->
+<FolderEditModal
+  isOpen={showFolderModal}
+  folder={editingFolder}
+  onClose={closeFolderModal}
+  onSave={handleSaveFolder}
+  onDelete={handleDeleteFolder}
+/>
 
 <!-- Edit Modal -->
 {#if editingPlaylist}
@@ -716,6 +1115,7 @@
     mode="edit"
     playlist={{ id: editingPlaylist.id, name: editingPlaylist.name, tracks_count: editingPlaylist.tracks_count }}
     isHidden={playlistSettings.get(editingPlaylist.id)?.hidden ?? false}
+    currentFolderId={playlistSettings.get(editingPlaylist.id)?.folder_id ?? null}
     onClose={() => { editModalOpen = false; editingPlaylist = null; }}
     onSuccess={handleEditSuccess}
     onDelete={handleDelete}
@@ -778,6 +1178,409 @@
 
   .back-btn:hover {
     color: var(--text-primary);
+  }
+
+  /* Breadcrumb */
+  .breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-size: 14px;
+  }
+
+  .breadcrumb-item {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    transition: color 150ms ease;
+  }
+
+  .breadcrumb-item:hover {
+    color: var(--text-primary);
+    text-decoration: underline;
+  }
+
+  .breadcrumb :global(.breadcrumb-separator) {
+    color: var(--text-muted);
+  }
+
+  .breadcrumb-current {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  /* Folders Section */
+  .folders-section {
+    margin-bottom: 24px;
+  }
+
+  .section-header-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: none;
+    border: none;
+    padding: 8px 0;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: color 150ms ease;
+  }
+
+  .section-header-btn:hover {
+    color: var(--text-primary);
+  }
+
+  .playlists-section-header {
+    margin-top: 16px;
+    margin-bottom: 8px;
+    cursor: default;
+  }
+
+  .section-title {
+    font-size: 14px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+
+  .info-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    cursor: help;
+    margin-left: auto;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 150ms ease;
+  }
+
+  .info-icon:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+  }
+
+  .folders-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, 160px);
+    gap: 16px;
+    justify-content: start;
+    margin-top: 12px;
+  }
+
+  .folder-card {
+    position: relative;
+    background: var(--bg-tertiary);
+    border-radius: 10px;
+    padding: 16px;
+    transition: background-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+  }
+
+  .folder-card:hover {
+    background: var(--bg-hover);
+  }
+
+  .folder-card.drag-over {
+    background: var(--accent-primary);
+    transform: scale(1.02);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  }
+
+  .folder-card.absorbing {
+    animation: folder-pulse 300ms ease;
+    background: var(--accent-primary);
+  }
+
+  @keyframes folder-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+  }
+
+  .folder-card-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .folder-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 12px;
+    color: var(--text-primary);
+  }
+
+  .folder-custom-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 12px;
+  }
+
+  .folder-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+
+  .folder-card .folder-count {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .folder-edit-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: var(--bg-secondary);
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 150ms ease, background-color 150ms ease;
+  }
+
+  .folder-card:hover .folder-edit-btn {
+    opacity: 1;
+  }
+
+  .folder-edit-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  /* List view folders (compact) */
+  .folders-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .folder-list-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .folder-list-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .folder-list-item.drag-over {
+    background: var(--accent-primary);
+    transform: scale(1.02);
+  }
+
+  .folder-list-item.absorbing {
+    animation: folder-pulse 300ms ease;
+    background: var(--accent-primary);
+  }
+
+  .folder-list-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    color: var(--text-primary);
+    flex-shrink: 0;
+  }
+
+  .folder-list-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 8px;
+  }
+
+  .folder-list-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 120px;
+  }
+
+  .folder-list-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: opacity 150ms ease;
+    margin-left: auto;
+  }
+
+  .folder-list-item:hover .folder-list-count {
+    opacity: 1;
+  }
+
+  .folder-list-edit {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    opacity: 0;
+    transition: all 150ms ease;
+  }
+
+  .folder-list-item:hover .folder-list-edit {
+    opacity: 1;
+  }
+
+  .folder-list-edit:hover {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  /* Folder Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal-content {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 24px;
+    min-width: 320px;
+    max-width: 400px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 20px 0;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .form-group label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .form-group input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--alpha-10);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 150ms ease;
+  }
+
+  .form-group input[type="text"]:focus {
+    border-color: var(--accent-primary);
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 20px;
+  }
+
+  .modal-actions-right {
+    display: flex;
+    gap: 12px;
+  }
+
+  .btn-secondary,
+  .btn-primary,
+  .btn-danger {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    transition: background-color 150ms ease, opacity 150ms ease;
+  }
+
+  .btn-secondary {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--alpha-10);
+    color: var(--text-primary);
+  }
+
+  .btn-secondary:hover {
+    background: var(--bg-hover);
+  }
+
+  .btn-primary {
+    background: var(--accent-primary);
+    border: none;
+    color: white;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-secondary);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-danger {
+    background: transparent;
+    border: 1px solid var(--error);
+    color: var(--error);
+  }
+
+  .btn-danger:hover {
+    background: var(--error);
+    color: white;
   }
 
   .controls {
@@ -971,13 +1774,13 @@
   /* Grid View */
   .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, 180px);
+    grid-template-columns: repeat(auto-fill, 160px);
     gap: 16px;
     justify-content: start;
   }
 
   .grid-item {
-    width: 180px;
+    width: 160px;
     display: flex;
     flex-direction: column;
     padding: 10px;
@@ -1003,13 +1806,21 @@
     border: 2px dashed var(--accent-primary);
   }
 
-  /* Grid item header: drag handle left, edit button right */
+  .grid-item.absorbing {
+    animation: absorb-to-folder 300ms ease forwards;
+  }
+
+  @keyframes absorb-to-folder {
+    0% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.5); }
+  }
+
+  /* Grid item header: drag handle only (when in custom sort) */
   .grid-item-header {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: center;
-    height: 24px;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
 
   .grid-item .drag-handle {
@@ -1044,6 +1855,90 @@
     color: var(--text-primary);
   }
 
+  .visibility-btn {
+    padding: 4px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 150ms ease;
+  }
+
+  .visibility-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .visibility-btn.is-hidden {
+    color: var(--text-muted);
+    opacity: 0.4;
+  }
+
+  .visibility-btn.is-hidden:hover {
+    opacity: 1;
+    color: var(--text-primary);
+  }
+
+  .favorite-btn {
+    padding: 4px;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    color: var(--text-muted);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 150ms ease;
+  }
+
+  .favorite-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .favorite-btn.is-active {
+    color: var(--accent-primary);
+  }
+
+  /* Grid item footer: meta + actions inline */
+  .grid-item-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+    width: 140px;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .grid-item-footer .meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .grid-item-footer .local-count {
+    color: var(--text-muted);
+    opacity: 0.8;
+  }
+
+  .footer-actions {
+    display: flex;
+    align-items: center;
+    gap: 0;
+  }
+
+  .grid-item-footer .favorite-btn,
+  .grid-item-footer .visibility-btn,
+  .grid-item-footer .edit-btn {
+    padding: 2px;
+  }
+
   /* Clickable content area */
   .grid-item-content {
     cursor: pointer;
@@ -1053,36 +1948,14 @@
 
   .grid-item .artwork {
     position: relative;
-    width: 160px;
-    height: 160px;
+    width: 140px;
+    height: 140px;
     margin: 0 auto;
     display: flex;
     align-items: center;
     justify-content: center;
     overflow: hidden;
     border-radius: 4px;
-  }
-
-  .hidden-badge {
-    position: absolute;
-    bottom: 4px;
-    right: 4px;
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 4px;
-    padding: 3px;
-    color: var(--text-muted);
-  }
-
-  .favorite-badge {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    background: rgba(0, 0, 0, 0.7);
-    border-radius: 4px;
-    padding: 3px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .local-badge {
@@ -1119,8 +1992,10 @@
   .grid-item .info {
     display: flex;
     flex-direction: column;
-    gap: 2px;
     margin-top: 8px;
+    width: 140px;
+    margin-left: auto;
+    margin-right: auto;
   }
 
   .grid-item .name {
@@ -1132,6 +2007,7 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.3;
+    height: 34px; /* Fixed 2-line height: 13px * 1.3 * 2 */
   }
 
   .grid-item .meta {
@@ -1171,6 +2047,10 @@
 
   .list-item.drag-over {
     border: 2px dashed var(--accent-primary);
+  }
+
+  .list-item.absorbing {
+    animation: absorb-to-folder 300ms ease forwards;
   }
 
   .list-item .drag-handle {
@@ -1226,17 +2106,8 @@
     flex-shrink: 0;
   }
 
-  .hidden-indicator {
-    color: var(--text-muted);
-    flex-shrink: 0;
-  }
-
-  .favorite-indicator {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-  }
-
+  .list-item .favorite-btn,
+  .list-item .visibility-btn,
   .list-item .edit-btn {
     flex-shrink: 0;
   }

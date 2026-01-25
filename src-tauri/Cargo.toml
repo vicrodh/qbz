@@ -71,6 +71,7 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 dirs = "5"
 filetime = "0.2"
 glob = "0.3"
+uuid = { version = "1", features = ["v4"] }
 
 # File dialogs - platform specific (see target dependencies below)
 

@@ -454,7 +454,7 @@
 
   /* Tidal logo is black, invert it when active for visibility */
   .provider[data-provider="tidal"] .provider-logo.active {
-    filter: brightness(0) invert(1) drop-shadow(0 6px 14px rgba(255, 255, 255, 0.5));
+    filter: brightness(0) invert(1) drop-shadow(0 6px 14px var(--alpha-50));
   }
 
   .progress-panel {
@@ -462,7 +462,7 @@
     padding: 16px;
     border-radius: 12px;
     background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--alpha-8);
   }
 
   .progress-header {
@@ -500,7 +500,7 @@
   .summary {
     margin-top: 12px;
     padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--alpha-8);
   }
 
   .summary-title {
@@ -556,7 +556,7 @@
     width: 14px;
     height: 14px;
     border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.2);
+    border: 2px solid var(--alpha-20);
     border-top-color: var(--accent-primary);
     animation: spin 0.8s linear infinite;
   }

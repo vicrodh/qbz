@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400&family=LINE+Seed+JP:wght@400;700&display=swap');
 
 :root {
   /* QBZ Dark Theme Colors */
@@ -19,6 +19,29 @@
   --border-subtle: #2a2a2a;
   --border-strong: #3a3a3a;
 
+  /* Alpha/Opacity - for overlays, borders, backgrounds needing transparency */
+  /* Dark themes use white-based, light themes use black-based */
+  --alpha-4: rgba(255, 255, 255, 0.04);
+  --alpha-5: rgba(255, 255, 255, 0.05);
+  --alpha-6: rgba(255, 255, 255, 0.06);
+  --alpha-8: rgba(255, 255, 255, 0.08);
+  --alpha-10: rgba(255, 255, 255, 0.1);
+  --alpha-15: rgba(255, 255, 255, 0.15);
+  --alpha-18: rgba(255, 255, 255, 0.18);
+  --alpha-20: rgba(255, 255, 255, 0.2);
+  --alpha-25: rgba(255, 255, 255, 0.25);
+  --alpha-30: rgba(255, 255, 255, 0.3);
+  --alpha-35: rgba(255, 255, 255, 0.35);
+  --alpha-40: rgba(255, 255, 255, 0.4);
+  --alpha-45: rgba(255, 255, 255, 0.45);
+  --alpha-50: rgba(255, 255, 255, 0.5);
+  --alpha-60: rgba(255, 255, 255, 0.6);
+  --alpha-70: rgba(255, 255, 255, 0.7);
+  --alpha-80: rgba(255, 255, 255, 0.8);
+  --alpha-85: rgba(255, 255, 255, 0.85);
+  --alpha-90: rgba(255, 255, 255, 0.9);
+  --alpha-95: rgba(255, 255, 255, 0.95);
+
   /* Layout */
   --sidebar-width: 240px;
   --now-playing-height: 80px;
@@ -33,7 +56,7 @@
   --spacing-page: 48px;
 
   /* Typography */
-  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-sans: 'LINE Seed JP', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', monospace;
 }
 
@@ -51,6 +74,28 @@
 
   --border-subtle: #e0e0e0;
   --border-strong: #cccccc;
+
+  /* Alpha overrides for light theme - use black-based */
+  --alpha-4: rgba(0, 0, 0, 0.04);
+  --alpha-5: rgba(0, 0, 0, 0.05);
+  --alpha-6: rgba(0, 0, 0, 0.06);
+  --alpha-8: rgba(0, 0, 0, 0.08);
+  --alpha-10: rgba(0, 0, 0, 0.1);
+  --alpha-15: rgba(0, 0, 0, 0.15);
+  --alpha-18: rgba(0, 0, 0, 0.18);
+  --alpha-20: rgba(0, 0, 0, 0.2);
+  --alpha-25: rgba(0, 0, 0, 0.25);
+  --alpha-30: rgba(0, 0, 0, 0.3);
+  --alpha-35: rgba(0, 0, 0, 0.35);
+  --alpha-40: rgba(0, 0, 0, 0.4);
+  --alpha-45: rgba(0, 0, 0, 0.45);
+  --alpha-50: rgba(0, 0, 0, 0.5);
+  --alpha-60: rgba(0, 0, 0, 0.6);
+  --alpha-70: rgba(0, 0, 0, 0.7);
+  --alpha-80: rgba(0, 0, 0, 0.8);
+  --alpha-85: rgba(0, 0, 0, 0.85);
+  --alpha-90: rgba(0, 0, 0, 0.9);
+  --alpha-95: rgba(0, 0, 0, 0.95);
 }
 
 /* OLED Theme */
@@ -59,6 +104,9 @@
   --bg-secondary: #0a0a0a;
   --bg-tertiary: #1a1a1a;
   --bg-hover: #111111;
+
+  --border-subtle: #1a1a1a;
+  --border-strong: #2a2a2a;
 }
 
 /* Warm Theme */
@@ -71,6 +119,9 @@
   --accent-primary: #d4a574;
   --accent-hover: #e0b888;
   --accent-active: #c49460;
+
+  --border-subtle: #2e2820;
+  --border-strong: #3d362a;
 }
 
 /* Nord Theme */
@@ -345,4 +396,55 @@ select {
 
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* ============ Action Buttons ============ */
+/* Reusable circular action buttons for headers and toolbars */
+/* Uses box-shadow inset instead of border for smoother anti-aliasing */
+
+.action-btn-circle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  transition: background 150ms ease, color 150ms ease, box-shadow 150ms ease;
+}
+
+.action-btn-circle:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 1px var(--text-primary);
+}
+
+.action-btn-circle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-btn-circle.primary {
+  width: 44px;
+  height: 44px;
+  background: var(--accent-primary);
+  border: none;
+  color: var(--text-primary);
+  box-shadow: inset 0 0 0 2px var(--border-subtle);
+  transition: background 150ms ease, box-shadow 200ms ease;
+}
+
+.action-btn-circle.primary:hover {
+  background: var(--accent-hover);
+  box-shadow: inset 0 0 0 2px var(--text-primary);
+}
+
+.action-btn-circle.is-active {
+  background: rgba(var(--accent-primary-rgb, 66, 133, 244), 0.15);
+  box-shadow: inset 0 0 0 1px var(--accent-primary);
+  color: var(--accent-primary);
 }

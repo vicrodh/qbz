@@ -296,7 +296,7 @@
     --glass-bg: rgba(25, 25, 30, 0.88);
     --glass-blur: 20px;
     --glass-radius: 0;
-    --glass-border: rgba(255, 255, 255, 0.06);
+    --glass-border: var(--alpha-6);
     --glass-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
   }
 

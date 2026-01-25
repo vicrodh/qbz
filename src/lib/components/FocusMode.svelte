@@ -349,9 +349,9 @@
     justify-content: center;
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--alpha-10);
     border-radius: 50%;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--alpha-70);
     cursor: pointer;
     opacity: 0;
     transition: all 200ms ease;
@@ -399,7 +399,7 @@
     overflow: hidden;
     box-shadow:
       0 32px 80px rgba(0, 0, 0, 0.6),
-      0 0 0 1px rgba(255, 255, 255, 0.05);
+      0 0 0 1px var(--alpha-5);
   }
 
   .artwork-image {
@@ -438,10 +438,10 @@
   }
 
   .lyrics-container :global(.lyrics-lines) {
-    --text-primary: rgba(255, 255, 255, 0.95);
-    --text-secondary: rgba(255, 255, 255, 0.5);
-    --text-muted: rgba(255, 255, 255, 0.25);
-    --bg-tertiary: rgba(255, 255, 255, 0.08);
+    --text-primary: var(--alpha-95);
+    --text-secondary: var(--alpha-50);
+    --text-muted: var(--alpha-25);
+    --bg-tertiary: var(--alpha-8);
     padding: 0;
     height: 100%;
   }
@@ -453,19 +453,19 @@
     justify-content: center;
     gap: 12px;
     height: 100%;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--alpha-50);
     font-size: 14px;
   }
 
   .error-text {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--alpha-40);
   }
 
   .spinner {
     width: 24px;
     height: 24px;
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-top-color: rgba(255, 255, 255, 0.8);
+    border: 2px solid var(--alpha-20);
+    border-top-color: var(--alpha-80);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -553,7 +553,7 @@
 
   .track-artist {
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--alpha-60);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -584,7 +584,7 @@
     background: none;
     border: none;
     border-radius: 50%;
-    color: rgba(255, 255, 255, 0.85);
+    color: var(--alpha-85);
     cursor: pointer;
     transition: all 150ms ease;
   }
@@ -596,19 +596,19 @@
 
   .control-btn:not(:disabled):hover {
     color: white;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--alpha-10);
   }
 
   .play-btn {
     width: 52px;
     height: 52px;
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--alpha-15);
     backdrop-filter: blur(4px);
     color: white;
   }
 
   .play-btn:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--alpha-25);
     transform: scale(1.05);
   }
 
@@ -628,7 +628,7 @@
     font-size: 12px;
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--alpha-60);
     min-width: 40px;
   }
 
@@ -639,7 +639,7 @@
   .progress-bar {
     flex: 1;
     height: 4px;
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--alpha-20);
     border-radius: 2px;
     position: relative;
     cursor: pointer;
@@ -685,7 +685,7 @@
     width: 140px;
     height: 6px;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--alpha-15);
     cursor: pointer;
     position: relative;
   }
@@ -693,7 +693,7 @@
   .volume-fill {
     height: 100%;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.7);
+    background: var(--alpha-70);
   }
 
   .volume-thumb {

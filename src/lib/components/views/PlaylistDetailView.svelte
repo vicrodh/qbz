@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ImagePlus, Edit3, BarChart2, Heart } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ImagePlus, Edit3, BarChart2, Heart, CloudDownload, ListPlus } from 'lucide-svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
@@ -103,6 +103,7 @@
     hidden?: boolean;
     position?: number;
     is_favorite?: boolean;
+    folder_id?: string | null;
   }
 
   interface PlaylistStats {
@@ -183,7 +184,6 @@
 
   let loading = $state(true);
   let error = $state<string | null>(null);
-  let playBtnHovered = $state(false);
   let scrollContainer: HTMLDivElement | null = $state(null);
 
   // Offline mode state
@@ -201,14 +201,53 @@
   let editModalOpen = $state(false);
   let isFavorite = $state(false);
 
+  // User ownership state (to show "Copy to Library" button for non-owned playlists)
+  let currentUserId = $state<number | null>(null);
+  let isOwnPlaylist = $derived(playlist !== null && currentUserId !== null && playlist.owner.id === currentUserId);
+  let isCopying = $state(false);
+  let isCopied = $state(false);
+
+  // Track copied playlists in localStorage
+  const COPIED_PLAYLISTS_KEY = 'qbz_copied_playlists';
+
+  function getCopiedPlaylists(): Set<number> {
+    try {
+      const stored = localStorage.getItem(COPIED_PLAYLISTS_KEY);
+      return stored ? new Set(JSON.parse(stored)) : new Set();
+    } catch {
+      return new Set();
+    }
+  }
+
+  function markPlaylistAsCopied(id: number) {
+    const copied = getCopiedPlaylists();
+    copied.add(id);
+    localStorage.setItem(COPIED_PLAYLISTS_KEY, JSON.stringify([...copied]));
+    isCopied = true;
+  }
+
+  function isPlaylistCopied(id: number): boolean {
+    return getCopiedPlaylists().has(id);
+  }
+
+  // Show copy button only if: not own playlist AND not already copied
+  let showCopyButton = $derived(!isOwnPlaylist && playlist !== null && !isCopied);
+
   async function scrollToTrack(trackId: number) {
     await tick();
     const target = scrollContainer?.querySelector<HTMLElement>(`[data-track-id="${trackId}"]`);
     target?.scrollIntoView({ block: 'center' });
   }
 
-  // Subscribe to offline status changes
+  // Subscribe to offline status changes and fetch current user ID
   onMount(() => {
+    // Fetch current user ID for ownership check
+    invoke<number | null>('get_current_user_id').then(userId => {
+      currentUserId = userId;
+    }).catch(err => {
+      console.warn('Failed to get current user ID:', err);
+    });
+
     const unsubscribe = subscribeOffline(() => {
       offlineStatus = getOfflineStatus();
       // Re-check local copies when offline status changes
@@ -217,6 +256,11 @@
       }
     });
     return unsubscribe;
+  });
+
+  // Check if this playlist was already copied when playlistId changes
+  $effect(() => {
+    isCopied = isPlaylistCopied(playlistId);
   });
 
   $effect(() => {
@@ -472,6 +516,24 @@
     } catch (err) {
       console.error('Failed to toggle favorite:', err);
       isFavorite = !newValue; // Revert on error
+    }
+  }
+
+  async function copyPlaylistToLibrary() {
+    if (isCopying || !playlist) return;
+
+    isCopying = true;
+    try {
+      const newPlaylist = await invoke<Playlist>('subscribe_playlist', { playlistId: playlist.id });
+      // Mark as copied so button disappears
+      markPlaylistAsCopied(playlist.id);
+      // Notify parent to refresh sidebar
+      onPlaylistUpdated?.();
+      console.log('Playlist copied successfully:', newPlaylist);
+    } catch (err) {
+      console.error('Failed to copy playlist:', err);
+    } finally {
+      isCopying = false;
     }
   }
 
@@ -912,13 +974,6 @@
     const url = `https://play.qobuz.com/playlist/${playlist.id}`;
     writeText(url);
   }
-
-  function sharePlaylistSonglink() {
-    if (!playlist?.id) return;
-    const qobuzUrl = `https://play.qobuz.com/playlist/${playlist.id}`;
-    const songlinkUrl = `https://song.link/${encodeURIComponent(qobuzUrl)}`;
-    writeText(songlinkUrl);
-  }
 </script>
 
 <div class="playlist-detail" bind:this={scrollContainer}>
@@ -978,17 +1033,7 @@
       <!-- Playlist Metadata -->
       <div class="metadata">
         <span class="playlist-label">Playlist</span>
-        <div class="title-row">
-          <h1 class="playlist-title">{playlist.name}</h1>
-          <button
-            class="favorite-btn"
-            class:active={isFavorite}
-            onclick={toggleFavorite}
-            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          >
-            <Heart size={24} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'var(--text-secondary)'} />
-          </button>
-        </div>
+        <h1 class="playlist-title">{playlist.name}</h1>
         {#if playlist.description}
           <p class="playlist-description">{playlist.description}</p>
         {/if}
@@ -1010,24 +1055,46 @@
         <!-- Action Buttons -->
         <div class="actions">
           <button
-            class="play-btn"
-            style="background-color: {playBtnHovered ? 'var(--accent-hover)' : 'var(--accent-primary)'}"
-            onmouseenter={() => (playBtnHovered = true)}
-            onmouseleave={() => (playBtnHovered = false)}
+            class="action-btn-circle primary"
             onclick={handlePlayAll}
+            title="Play"
           >
-            <Play size={18} fill="white" color="white" />
-            <span>Play</span>
+            <Play size={20} fill="currentColor" color="currentColor" />
           </button>
-          <button class="secondary-btn" onclick={handleShuffle}>
+          <button
+            class="action-btn-circle"
+            onclick={handleShuffle}
+            title="Shuffle"
+          >
             <Shuffle size={18} />
-            <span>Shuffle</span>
           </button>
+          <button
+            class="action-btn-circle"
+            class:is-active={isFavorite}
+            onclick={toggleFavorite}
+            title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+          >
+            <Heart
+              size={18}
+              color={isFavorite ? 'var(--accent-primary)' : 'currentColor'}
+              fill={isFavorite ? 'var(--accent-primary)' : 'none'}
+            />
+          </button>
+          {#if showCopyButton}
+            <button
+              class="action-btn-circle"
+              class:is-loading={isCopying}
+              onclick={copyPlaylistToLibrary}
+              disabled={isCopying}
+              title="Copy to My Library"
+            >
+              <ListPlus size={18} />
+            </button>
+          {/if}
           <AlbumMenu
             onPlayNext={handlePlayAllNext}
             onPlayLater={handlePlayAllLater}
             onShareQobuz={sharePlaylistQobuz}
-            onShareSonglink={sharePlaylistSonglink}
           />
         </div>
       </div>
@@ -1092,10 +1159,14 @@
     <!-- Track List -->
     <div class="track-list">
       <div class="track-list-header">
-        <span class="col-number">#</span>
-        <span class="col-title">Title</span>
-        <span class="col-album">Album</span>
-        <span class="col-duration">Duration</span>
+        <div class="col-number">#</div>
+        <div class="col-title">Title</div>
+        <div class="col-album">Album</div>
+        <div class="col-duration">Duration</div>
+        <div class="col-quality">Quality</div>
+        <div class="col-icon"><Heart size={14} /></div>
+        <div class="col-icon"><CloudDownload size={14} /></div>
+        <div class="col-spacer"></div>
       </div>
 
       {#each displayTracks as track, idx (`${idx}-${track.id}-${downloadStateVersion}`)}
@@ -1168,6 +1239,7 @@
     mode="edit"
     playlist={{ id: playlist.id, name: playlist.name, tracks_count: playlist.tracks_count }}
     isHidden={playlistSettings?.hidden ?? false}
+    currentFolderId={playlistSettings?.folder_id ?? null}
     onClose={() => editModalOpen = false}
     onSuccess={handleEditSuccess}
     onDelete={handleDelete}
@@ -1366,8 +1438,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: var(--alpha-10);
+    border: 1px solid var(--alpha-30);
     border-radius: 50%;
     color: white;
     cursor: pointer;
@@ -1375,8 +1447,8 @@
   }
 
   .artwork-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
-    border-color: rgba(255, 255, 255, 0.5);
+    background: var(--alpha-20);
+    border-color: var(--alpha-50);
   }
 
   .artwork-btn.artwork-clear {
@@ -1404,33 +1476,6 @@
     font-weight: 600;
     letter-spacing: 0.1em;
     margin-bottom: 8px;
-  }
-
-  .title-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .favorite-btn {
-    background: none;
-    border: none;
-    padding: 4px;
-    cursor: pointer;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.15s ease, background-color 0.15s ease;
-  }
-
-  .favorite-btn:hover {
-    background-color: var(--bg-tertiary);
-    transform: scale(1.1);
-  }
-
-  .favorite-btn.active:hover {
-    background-color: rgba(var(--accent-primary-rgb), 0.15);
   }
 
   .playlist-title {
@@ -1476,42 +1521,25 @@
   .actions {
     display: flex;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
   }
 
-  .play-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 32px;
-    background-color: var(--accent-primary);
-    color: white;
+  /* Style AlbumMenu trigger to match action buttons */
+  .actions :global(.album-menu .menu-trigger) {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
     border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background-color 150ms ease;
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+    color: var(--text-muted);
   }
 
-  .secondary-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 24px;
-    background-color: transparent;
+  .actions :global(.album-menu .menu-trigger:hover) {
+    background: var(--bg-hover);
     color: var(--text-primary);
-    border: 1px solid var(--text-muted);
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: border-color 150ms ease;
+    box-shadow: inset 0 0 0 1px var(--text-primary);
   }
 
-  .secondary-btn:hover {
-    border-color: var(--text-primary);
-  }
 
   .icon-btn {
     width: 40px;
@@ -1535,25 +1563,58 @@
   }
 
   .track-list-header {
-    display: grid;
-    grid-template-columns: 48px 1fr 1fr 80px;
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
     gap: 16px;
-    padding: 8px 16px;
     font-size: 12px;
     text-transform: uppercase;
-    color: var(--text-muted);
-    font-weight: 600;
-    letter-spacing: 0.05em;
+    color: #666666;
+    font-weight: 400;
+    box-sizing: border-box;
     border-bottom: 1px solid var(--bg-tertiary);
     margin-bottom: 8px;
   }
 
   .col-number {
+    width: 48px;
     text-align: center;
   }
 
+  .col-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .col-album {
+    flex: 1;
+    min-width: 0;
+  }
+
   .col-duration {
-    text-align: right;
+    width: 80px;
+    text-align: center;
+  }
+
+  .col-quality {
+    width: 80px;
+    text-align: center;
+  }
+
+  .col-icon {
+    width: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.5;
+  }
+
+  .col-spacer {
+    width: 28px;
   }
 
   /* Track Controls */

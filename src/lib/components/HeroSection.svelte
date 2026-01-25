@@ -106,7 +106,7 @@
     height: 36px;
     padding: 0 24px;
     border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.3);
+    border: 1px solid var(--alpha-30);
     background: transparent;
     display: flex;
     align-items: center;
@@ -116,7 +116,7 @@
   }
 
   .more-btn:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--alpha-10);
   }
 
   .more-btn span {

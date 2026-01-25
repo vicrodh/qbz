@@ -984,7 +984,7 @@ pub async fn library_play_track(
 
 // === Playlist Local Settings ===
 
-use crate::library::{PlaylistSettings, PlaylistStats};
+use crate::library::{PlaylistFolder, PlaylistSettings, PlaylistStats};
 
 /// Get playlist settings by Qobuz playlist ID
 #[tauri::command]
@@ -1927,4 +1927,137 @@ pub async fn library_clear_thumbnails() -> Result<(), String> {
 pub async fn library_get_thumbnails_cache_size() -> Result<u64, String> {
     log::debug!("Command: library_get_thumbnails_cache_size");
     thumbnails::get_cache_size().map_err(|e| e.to_string())
+}
+
+// === Playlist Folders ===
+
+/// Create a new playlist folder
+#[tauri::command]
+pub async fn create_playlist_folder(
+    name: String,
+    icon_type: Option<String>,
+    icon_preset: Option<String>,
+    icon_color: Option<String>,
+    state: State<'_, LibraryState>,
+) -> Result<PlaylistFolder, String> {
+    log::info!("Command: create_playlist_folder {}", name);
+
+    let db = state.db.lock().await;
+    db.create_playlist_folder(
+        &name,
+        icon_type.as_deref(),
+        icon_preset.as_deref(),
+        icon_color.as_deref(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Get all playlist folders
+#[tauri::command]
+pub async fn get_playlist_folders(
+    state: State<'_, LibraryState>,
+) -> Result<Vec<PlaylistFolder>, String> {
+    log::info!("Command: get_playlist_folders");
+
+    let db = state.db.lock().await;
+    db.get_all_playlist_folders().map_err(|e| e.to_string())
+}
+
+/// Update a playlist folder
+#[tauri::command]
+pub async fn update_playlist_folder(
+    id: String,
+    name: Option<String>,
+    icon_type: Option<String>,
+    icon_preset: Option<String>,
+    icon_color: Option<String>,
+    custom_image_path: Option<String>,
+    is_hidden: Option<bool>,
+    state: State<'_, LibraryState>,
+) -> Result<PlaylistFolder, String> {
+    log::info!("Command: update_playlist_folder {}", id);
+
+    // Handle custom image - copy to persistent storage if provided
+    // Uses Option<Option<&str>> semantics: None = don't update, Some(None) = clear, Some(Some(path)) = set new
+    let final_custom_image: Option<Option<String>> = if let Some(source_path) = custom_image_path {
+        if source_path.is_empty() {
+            // Empty string means clear the image
+            Some(None)
+        } else {
+            let source = Path::new(&source_path);
+            if !source.exists() {
+                return Err(format!("Source image does not exist: {}", source_path));
+            }
+
+            let artwork_dir = get_artwork_cache_dir();
+            let extension = source
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("jpg");
+            let filename = format!("folder_{}_{}.{}", id, chrono::Utc::now().timestamp(), extension);
+            let dest_path = artwork_dir.join(filename);
+
+            fs::copy(source, &dest_path)
+                .map_err(|e| format!("Failed to copy image: {}", e))?;
+
+            log::info!("Copied folder image to: {}", dest_path.display());
+            Some(Some(dest_path.to_string_lossy().to_string()))
+        }
+    } else {
+        None
+    };
+
+    let db = state.db.lock().await;
+    db.update_playlist_folder(
+        &id,
+        name.as_deref(),
+        icon_type.as_deref(),
+        icon_preset.as_deref(),
+        icon_color.as_deref(),
+        final_custom_image.as_ref().map(|o| o.as_deref()),
+        is_hidden,
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Delete a playlist folder (playlists return to root)
+#[tauri::command]
+pub async fn delete_playlist_folder(
+    id: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("Command: delete_playlist_folder {}", id);
+
+    let db = state.db.lock().await;
+    db.delete_playlist_folder(&id).map_err(|e| e.to_string())
+}
+
+/// Reorder playlist folders
+#[tauri::command]
+pub async fn reorder_playlist_folders(
+    folder_ids: Vec<String>,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("Command: reorder_playlist_folders ({} folders)", folder_ids.len());
+
+    let db = state.db.lock().await;
+    db.reorder_playlist_folders(&folder_ids).map_err(|e| e.to_string())
+}
+
+/// Move a playlist to a folder (or root if folder_id is None)
+#[tauri::command]
+pub async fn move_playlist_to_folder(
+    playlist_id: u64,
+    folder_id: Option<String>,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!(
+        "Command: move_playlist_to_folder playlist {} to folder {:?}",
+        playlist_id,
+        folder_id
+    );
+
+    let db = state.db.lock().await;
+    db.move_playlist_to_folder(playlist_id, folder_id.as_deref())
+        .map_err(|e| e.to_string())
 }

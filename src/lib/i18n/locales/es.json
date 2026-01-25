@@ -159,7 +159,19 @@
     "followers": "seguidores",
     "loadMore": "Cargar Más",
     "noAlbums": "Sin álbumes",
-    "noBiography": "No hay biografía disponible"
+    "noBiography": "No hay biografía disponible",
+    "tributes": "Tributos y Covers",
+    "others": "Otros",
+    "playlists": "Playlists"
+  },
+  "sort": {
+    "label": "Ordenar",
+    "default": "Por defecto",
+    "newest": "Más reciente",
+    "oldest": "Más antiguo",
+    "titleAsc": "Título (A-Z)",
+    "titleDesc": "Título (Z-A)",
+    "artist": "Artista"
   },
   "playlist": {
     "tracks": "pistas",
@@ -187,7 +199,13 @@
     "recent": "Reciente",
     "trackCount": "# de Pistas",
     "playCount": "Reproducciones",
-    "custom": "Personalizado"
+    "custom": "Personalizado",
+    "default": "Por defecto",
+    "newest": "Más Nuevos",
+    "oldest": "Más Antiguos",
+    "titleAZ": "Título (A-Z)",
+    "titleZA": "Título (Z-A)",
+    "artist": "Artista"
   },
   "favorites": {
     "title": "Favoritos",
@@ -309,7 +327,9 @@
     "no": "No",
     "ok": "OK",
     "loading": "Cargando...",
-    "loadMore": "Cargar Más"
+    "loadMore": "Cargar Más",
+    "collapse": "Contraer barra lateral",
+    "expand": "Expandir barra lateral"
   },
   "settings": {
     "title": "Ajustes",
@@ -361,7 +381,18 @@
       "language": "Idioma",
       "uiScale": "Escala de UI",
       "inAppToasts": "Notificaciones en App",
-      "systemNotifications": "Notificaciones del Sistema"
+      "systemNotifications": "Notificaciones del Sistema",
+      "hideTitleBar": "Ocultar barra de título",
+      "hideTitleBarDesc": "Ocultar completamente la barra de título (para usuarios de gestores de ventanas en mosaico)",
+      "tray": {
+        "title": "Bandeja del Sistema",
+        "enableTray": "Habilitar icono de bandeja",
+        "enableTrayDesc": "Mostrar icono en la bandeja del sistema (requiere reinicio)",
+        "minimizeToTray": "Minimizar a bandeja",
+        "minimizeToTrayDesc": "Ocultar ventana a la bandeja al minimizar",
+        "closeToTray": "Cerrar a bandeja",
+        "closeToTrayDesc": "Ocultar ventana a la bandeja en vez de cerrar"
+      }
     },
     "library": {
       "title": "Biblioteca",

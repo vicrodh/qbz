@@ -311,7 +311,7 @@
 
   .close-btn:hover {
     color: var(--text-primary);
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--alpha-10);
   }
 
   .protocol-tabs {
@@ -349,7 +349,7 @@
   }
 
   .protocol-tab .count {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: var(--alpha-20);
     padding: 2px 6px;
     border-radius: 10px;
     font-size: 11px;
@@ -411,7 +411,7 @@
   }
 
   .device:hover {
-    background-color: rgba(255, 255, 255, 0.05);
+    background-color: var(--alpha-5);
     border-color: var(--accent-primary);
   }
 

@@ -110,8 +110,8 @@
     padding: 5px 10px;
     min-width: 120px;
     border-radius: 4px;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--alpha-6);
+    border: 1px solid var(--alpha-10);
     box-sizing: border-box;
     cursor: help;
   }
@@ -154,16 +154,18 @@
   }
 
   .tier-label {
+    font-family: 'LINE Seed JP', var(--font-sans);
     font-size: 8px;
-    font-weight: 600;
+    font-weight: 100;
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: #b0b0b0;
   }
 
   .quality-info {
+    font-family: 'LINE Seed JP', var(--font-sans);
     font-size: 9px;
-    font-weight: 500;
+    font-weight: 100;
     color: #999999;
   }
 </style>

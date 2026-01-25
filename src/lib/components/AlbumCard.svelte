@@ -169,11 +169,13 @@
     class="artwork-container"
     style="width: {cardSize}px; height: {cardSize}px"
   >
-    {#if imageError || !artwork}
-      <div class="artwork-placeholder">
-        <Disc3 size={48} />
-      </div>
-    {:else}
+    <!-- Placeholder always rendered as background layer (visible while image loads) -->
+    <div class="artwork-placeholder">
+      <Disc3 size={48} />
+    </div>
+
+    <!-- Image overlays placeholder when loaded -->
+    {#if !imageError && artwork}
       <img src={artwork} alt={title} loading="lazy" decoding="async" onerror={handleImageError} />
     {/if}
 
@@ -256,13 +258,17 @@
     position: relative;
     margin-bottom: 8px;
     border-radius: 8px;
+    overflow: hidden;
   }
 
   .artwork-container img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
     border-radius: inherit;
+    z-index: 1;
   }
 
   .artwork-placeholder {
@@ -279,11 +285,12 @@
   .quality-badge {
     display: inline-block;
     margin-top: 4px;
+    font-family: 'LINE Seed JP', var(--font-sans);
     font-size: 10px;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    font-weight: 100;
+    color: var(--alpha-85);
+    background: var(--alpha-10);
+    border: 1px solid var(--alpha-15);
     border-radius: 4px;
     padding: 4px 6px;
     min-width: 72px;
@@ -320,6 +327,7 @@
     -webkit-backdrop-filter: blur(4px);
     pointer-events: auto;
     border-radius: inherit;
+    z-index: 2;
   }
 
   .album-card:hover .action-overlay,
@@ -343,18 +351,21 @@
     width: 38px;
     height: 38px;
     border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.85);
+    border: none;
     background: transparent;
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: transform 150ms ease, background-color 150ms ease;
+    /* Use box-shadow instead of border for smoother anti-aliasing */
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85), 0 0 1px rgba(0, 0, 0, 0.3);
+    transition: transform 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
   }
 
   .overlay-btn:hover {
-    border-color: var(--accent-primary);
+    background-color: rgba(0, 0, 0, 0.3);
+    box-shadow: inset 0 0 0 1px var(--accent-primary), 0 0 4px rgba(0, 0, 0, 0.5);
   }
 
   .overlay-btn.is-active {
@@ -388,17 +399,21 @@
     width: 30px;
     height: 30px;
     border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.85);
+    border: none;
     background: transparent;
     color: white;
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 0;
+    /* Use box-shadow instead of border for smoother anti-aliasing */
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85), 0 0 1px rgba(0, 0, 0, 0.3);
+    transition: background-color 150ms ease, box-shadow 150ms ease;
   }
 
   :global(.album-card .album-menu .menu-trigger:hover) {
-    border-color: var(--accent-primary);
+    background-color: rgba(0, 0, 0, 0.3);
+    box-shadow: inset 0 0 0 1px var(--accent-primary), 0 0 4px rgba(0, 0, 0, 0.5);
   }
 
   .info {

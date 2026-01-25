@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight } from 'lucide-svelte';
+  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import NavigationItem from './NavigationItem.svelte';
@@ -13,6 +13,17 @@
     type OfflineStatus,
     type OfflineSettings
   } from '$lib/stores/offlineStore';
+  import {
+    subscribe as subscribeFolders,
+    getFolders,
+    getVisibleFolders,
+    isFolderExpanded,
+    toggleFolderExpanded,
+    loadFolders,
+    createFolder,
+    movePlaylistToFolder,
+    type PlaylistFolder
+  } from '$lib/stores/playlistFoldersStore';
 
   interface Playlist {
     id: number;
@@ -30,6 +41,7 @@
     position: number;
     play_count?: number;
     hasLocalContent?: LocalContentStatus;
+    folder_id?: string | null;
   }
 
   type SortOption = 'name' | 'recent' | 'tracks' | 'playcount' | 'custom';
@@ -47,6 +59,9 @@
     onLogout?: () => void;
     userName?: string;
     subscription?: string;
+    isExpanded?: boolean;
+    onToggle?: () => void;
+    showTitleBar?: boolean;
   }
 
   let {
@@ -61,7 +76,10 @@
     onAboutClick,
     onLogout,
     userName = 'User',
-    subscription = 'Qobuz™'
+    subscription = 'Qobuz™',
+    isExpanded = true,
+    onToggle,
+    showTitleBar = true
   }: Props = $props();
 
   let userPlaylists = $state<Playlist[]>([]);
@@ -71,6 +89,39 @@
   let playlistsLoading = $state(false);
   let playlistsCollapsed = $state(false);
   let localLibraryCollapsed = $state(false);
+
+  // Folder state
+  let folders = $state<PlaylistFolder[]>([]);
+  let folderExpandState = $state<Map<string, boolean>>(new Map());
+
+  // Create folder modal state
+  let showCreateFolderModal = $state(false);
+  let newFolderName = $state('');
+
+  // Context menu state
+  let contextMenu = $state<{
+    visible: boolean;
+    x: number;
+    y: number;
+    playlist: Playlist | null;
+    currentFolderId: string | null;
+  }>({
+    visible: false,
+    x: 0,
+    y: 0,
+    playlist: null,
+    currentFolderId: null
+  });
+  let contextMenuSearch = $state('');
+  const FOLDER_SEARCH_THRESHOLD = 8;
+
+  // Filtered folders for context menu
+  const filteredContextFolders = $derived.by(() => {
+    const available = folders.filter(f => f.id !== contextMenu.currentFolderId);
+    if (!contextMenuSearch.trim()) return available;
+    const query = contextMenuSearch.toLowerCase();
+    return available.filter(f => f.name.toLowerCase().includes(query));
+  });
 
   // Offline state
   let offlineStatus = $state<OfflineStatus>(getOfflineStatus());
@@ -166,7 +217,15 @@
   }
 
   // Get basic tooltip (no state mutation during render)
-  function getPlaylistTooltip(playlist: Playlist): string {
+  function getPlaylistTooltip(playlist: Playlist, sidebarExpanded: boolean): string {
+    // When sidebar is collapsed, show playlist name + track count
+    if (!sidebarExpanded) {
+      const totalCount = getTotalTrackCount(playlist);
+      const trackText = totalCount === 1 ? 'track' : 'tracks';
+      return `${playlist.name}\n${totalCount} ${trackText}`;
+    }
+
+    // When sidebar is expanded, use the rich tooltip with artists
     const cached = playlistTooltipCache.get(playlist.id);
     if (cached) return cached;
 
@@ -286,6 +345,7 @@
   export function refreshPlaylists() {
     playlistTooltipCache.clear();
     loadUserPlaylists();
+    loadPlaylistSettings();
   }
 
   export function refreshPlaylistSettings() {
@@ -402,6 +462,48 @@
     closeMenu();
   }
 
+  // Folder helpers
+  function handleToggleFolder(folderId: string) {
+    toggleFolderExpanded(folderId);
+    // Update local state for reactivity
+    folderExpandState = new Map(folderExpandState);
+  }
+
+  function openCreateFolderModal() {
+    newFolderName = '';
+    showCreateFolderModal = true;
+    closeMenu();
+  }
+
+  async function handleCreateFolder() {
+    if (!newFolderName.trim()) return;
+
+    const folder = await createFolder(newFolderName.trim());
+    if (folder) {
+      showCreateFolderModal = false;
+      newFolderName = '';
+      // Refresh folders state
+      folders = getVisibleFolders();
+    }
+  }
+
+  function cancelCreateFolder() {
+    showCreateFolderModal = false;
+    newFolderName = '';
+  }
+
+  // Get playlists for a specific folder (or root if null)
+  function getPlaylistsInFolder(folderId: string | null): Playlist[] {
+    return visiblePlaylists.filter(p => {
+      const settings = playlistSettings.get(p.id);
+      const playlistFolderId = settings?.folder_id ?? null;
+      return playlistFolderId === folderId;
+    });
+  }
+
+  // Check if any playlists exist in root (no folder)
+  let rootPlaylists = $derived(getPlaylistsInFolder(null));
+
   $effect(() => {
     if (!menuOpen) {
       document.removeEventListener('click', handleClickOutside);
@@ -429,6 +531,7 @@
     loadUserPlaylists();
     loadPlaylistSettings();
     loadLocalTrackCounts();
+    loadFolders(); // Load playlist folders
 
     // Subscribe to offline state changes
     const unsubscribeOffline = subscribeOffline(() => {
@@ -436,8 +539,14 @@
       offlineSettings = getOfflineSettings();
     });
 
+    // Subscribe to folder changes
+    const unsubscribeFolders = subscribeFolders(() => {
+      folders = getVisibleFolders();
+    });
+
     return () => {
       unsubscribeOffline();
+      unsubscribeFolders();
     };
   });
 
@@ -529,22 +638,81 @@
       onPlaylistSelect(playlist.id);
     }
   }
+
+  // Context menu handlers
+  function handlePlaylistContextMenu(e: MouseEvent, playlist: Playlist, folderId: string | null = null) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Get the current folder_id from settings
+    const settings = playlistSettings.get(playlist.id);
+    const currentFolderId = folderId ?? settings?.folder_id ?? null;
+
+    contextMenu = {
+      visible: true,
+      x: e.clientX,
+      y: e.clientY,
+      playlist,
+      currentFolderId
+    };
+  }
+
+  function closeContextMenu() {
+    contextMenu = { ...contextMenu, visible: false };
+    contextMenuSearch = '';
+  }
+
+  async function handleMoveToFolder(folderId: string | null) {
+    if (!contextMenu.playlist) return;
+
+    const success = await movePlaylistToFolder(contextMenu.playlist.id, folderId);
+    if (success) {
+      // Update local settings
+      const updated = new Map(playlistSettings);
+      const existing = updated.get(contextMenu.playlist.id);
+      if (existing) {
+        updated.set(contextMenu.playlist.id, { ...existing, folder_id: folderId });
+      } else {
+        updated.set(contextMenu.playlist.id, {
+          qobuz_playlist_id: contextMenu.playlist.id,
+          hidden: false,
+          position: 0,
+          folder_id: folderId
+        });
+      }
+      playlistSettings = updated;
+    }
+    closeContextMenu();
+  }
+
+  // Close context menu when clicking outside
+  function handleGlobalClick(e: MouseEvent) {
+    if (contextMenu.visible) {
+      closeContextMenu();
+    }
+  }
 </script>
 
-<aside class="sidebar">
+<svelte:window onclick={handleGlobalClick} />
+
+<aside class="sidebar" class:collapsed={!isExpanded} class:no-titlebar={!showTitleBar}>
   <!-- Scrollable Content Area -->
   <div class="content">
     <!-- Search Bar -->
     <button
       type="button"
       class="search-container"
+      class:collapsed={!isExpanded}
       onclick={() => {
         console.log('Search button clicked!');
         handleViewChange('search');
       }}
+      title={isExpanded ? undefined : $t('nav.search')}
     >
       <Search class="search-icon" size={16} />
-      <span class="search-placeholder">{$t('nav.search')}</span>
+      {#if isExpanded}
+        <span class="search-placeholder">{$t('nav.search')}</span>
+      {/if}
     </button>
 
     <!-- Navigation Section -->
@@ -553,6 +721,7 @@
         label={$t('nav.home')}
         active={activeView === 'home'}
         onclick={() => handleViewChange('home')}
+        showLabel={isExpanded}
       >
         {#snippet icon()}<Home size={14} />{/snippet}
       </NavigationItem>
@@ -564,6 +733,7 @@
         label={$t('nav.favorites')}
         active={activeView.startsWith('favorites-')}
         onclick={() => handleViewChange('favorites')}
+        showLabel={isExpanded}
       >
         {#snippet icon()}<Heart size={14} />{/snippet}
       </NavigationItem>
@@ -572,29 +742,31 @@
     <!-- Playlists Section (hidden in offline mode) -->
     {#if !isOffline}
     <div class="section playlists-section">
-      <div class="playlists-header">
-        <div class="section-header">{$t('nav.playlists')}</div>
-        <div class="header-actions" bind:this={menuRef}>
-          <button class="icon-btn" onclick={onCreatePlaylist} title={$t('playlist.createNew')}>
-            <Plus size={14} />
-          </button>
-          <button
-            class="icon-btn"
-            bind:this={triggerRef}
-            onclick={(e) => { e.stopPropagation(); toggleMenu(); }}
-            title={$t('actions.more')}
-          >
-            <MoreHorizontal size={14} />
-          </button>
-          <button class="icon-btn" onclick={() => playlistsCollapsed = !playlistsCollapsed} title={playlistsCollapsed ? $t('actions.open') : $t('actions.close')}>
-            {#if playlistsCollapsed}
-              <ChevronDown size={14} />
-            {:else}
-              <ChevronUp size={14} />
-            {/if}
-          </button>
+      {#if isExpanded}
+        <div class="playlists-header">
+          <div class="section-header">{$t('nav.playlists')}</div>
+          <div class="header-actions" bind:this={menuRef}>
+            <button class="icon-btn" onclick={onCreatePlaylist} title={$t('playlist.createNew')}>
+              <Plus size={14} />
+            </button>
+            <button
+              class="icon-btn"
+              bind:this={triggerRef}
+              onclick={(e) => { e.stopPropagation(); toggleMenu(); }}
+              title={$t('actions.more')}
+            >
+              <MoreHorizontal size={14} />
+            </button>
+            <button class="icon-btn" onclick={() => playlistsCollapsed = !playlistsCollapsed} title={playlistsCollapsed ? $t('actions.open') : $t('actions.close')}>
+              {#if playlistsCollapsed}
+                <ChevronDown size={14} />
+              {:else}
+                <ChevronUp size={14} />
+              {/if}
+            </button>
+          </div>
         </div>
-      </div>
+      {/if}
 
       <!-- Dropdown Menu -->
       {#if menuOpen}
@@ -640,7 +812,14 @@
             </div>
           {/if}
 
-          <button class="menu-item" onclick={() => handleMenuAction(loadUserPlaylists)}>
+          <button class="menu-item" onclick={openCreateFolderModal}>
+            <FolderPlus size={14} />
+            <span>{$t('playlist.newFolder', { default: 'New Folder' })}</span>
+          </button>
+
+          <div class="menu-divider"></div>
+
+          <button class="menu-item" onclick={() => handleMenuAction(refreshPlaylists)}>
             <RefreshCw size={14} />
             <span>{$t('actions.refresh')}</span>
           </button>
@@ -664,28 +843,85 @@
         </div>
       {/if}
 
-      {#if !playlistsCollapsed}
+      {#if !playlistsCollapsed || !isExpanded}
         <div class="playlists-scroll">
           {#if playlistsLoading}
-            <div class="playlists-loading">{$t('actions.loading')}</div>
-          {:else if visiblePlaylists.length > 0}
+            {#if isExpanded}
+              <div class="playlists-loading">{$t('actions.loading')}</div>
+            {/if}
+          {:else if visiblePlaylists.length > 0 || folders.length > 0}
             <nav class="playlists-nav">
-              {#each visiblePlaylists as playlist (playlist.id)}
+              <!-- Folders with their playlists -->
+              {#each folders as folder (folder.id)}
+                {@const folderPlaylists = getPlaylistsInFolder(folder.id)}
+                {@const isExpanded_ = isFolderExpanded(folder.id)}
+                {#if isExpanded}
+                  <div class="folder-item">
+                    <button
+                      class="folder-header"
+                      onclick={() => handleToggleFolder(folder.id)}
+                    >
+                      <Folder size={14} />
+                      <span class="folder-name">{folder.name}</span>
+                      <span class="folder-count">{folderPlaylists.length}</span>
+                      <span class="folder-chevron" class:expanded={isExpanded_}>
+                        <ChevronRight size={12} />
+                      </span>
+                    </button>
+                    {#if isExpanded_}
+                      <div class="folder-playlists">
+                        {#each folderPlaylists as playlist (playlist.id)}
+                          <NavigationItem
+                            label={playlist.name}
+                            tooltip={getPlaylistTooltip(playlist, true)}
+                            active={activeView === 'playlist' && selectedPlaylistId === playlist.id}
+                            onclick={() => handlePlaylistClick(playlist)}
+                            onHover={() => loadPlaylistTooltip(playlist)}
+                            oncontextmenu={(e) => handlePlaylistContextMenu(e, playlist, folder.id)}
+                            showLabel={true}
+                            indented={true}
+                          >
+                            {#snippet icon()}<ListMusic size={14} />{/snippet}
+                          </NavigationItem>
+                        {/each}
+                      </div>
+                    {/if}
+                  </div>
+                {:else}
+                  <!-- Collapsed sidebar: show folder icon only -->
+                  <button
+                    class="collapsed-folder-btn"
+                    onclick={() => handleToggleFolder(folder.id)}
+                    title="{folder.name} ({folderPlaylists.length})"
+                  >
+                    <Folder size={14} />
+                  </button>
+                {/if}
+              {/each}
+
+              <!-- Root playlists (not in any folder) -->
+              {#each rootPlaylists as playlist (playlist.id)}
                 <NavigationItem
                   label={playlist.name}
-                  tooltip={getPlaylistTooltip(playlist)}
+                  tooltip={getPlaylistTooltip(playlist, isExpanded)}
                   active={activeView === 'playlist' && selectedPlaylistId === playlist.id}
                   onclick={() => handlePlaylistClick(playlist)}
                   onHover={() => loadPlaylistTooltip(playlist)}
+                  oncontextmenu={(e) => handlePlaylistContextMenu(e, playlist, null)}
+                  showLabel={isExpanded}
                 >
                   {#snippet icon()}<ListMusic size={14} />{/snippet}
                 </NavigationItem>
               {/each}
             </nav>
           {:else if userPlaylists.length > 0}
-            <div class="no-playlists">{$t('playlist.allHidden')}</div>
+            {#if isExpanded}
+              <div class="no-playlists">{$t('playlist.allHidden')}</div>
+            {/if}
           {:else}
-            <div class="no-playlists">{$t('empty.noPlaylists')}</div>
+            {#if isExpanded}
+              <div class="no-playlists">{$t('empty.noPlaylists')}</div>
+            {/if}
           {/if}
         </div>
       {/if}
@@ -694,19 +930,22 @@
 
     <!-- Local Library Section -->
     <div class="section local-library-section">
-      <button class="section-header-btn" onclick={() => localLibraryCollapsed = !localLibraryCollapsed}>
-        <span class="section-header">{$t('library.title')}</span>
-        {#if localLibraryCollapsed}
-          <ChevronDown size={12} />
-        {:else}
-          <ChevronUp size={12} />
-        {/if}
-      </button>
-      {#if !localLibraryCollapsed}
+      {#if isExpanded}
+        <button class="section-header-btn" onclick={() => localLibraryCollapsed = !localLibraryCollapsed}>
+          <span class="section-header">{$t('library.title')}</span>
+          {#if localLibraryCollapsed}
+            <ChevronDown size={12} />
+          {:else}
+            <ChevronUp size={12} />
+          {/if}
+        </button>
+      {/if}
+      {#if !localLibraryCollapsed || !isExpanded}
         <NavigationItem
           label={$t('library.browse')}
           active={activeView === 'library'}
           onclick={() => handleViewChange('library')}
+          showLabel={isExpanded}
         >
           {#snippet icon()}<HardDrive size={14} />{/snippet}
         </NavigationItem>
@@ -714,16 +953,131 @@
     </div>
   </div>
 
+  <!-- Toggle Button (Edge position) -->
+  <button
+    class="toggle-btn"
+    onclick={onToggle}
+    title={isExpanded ? $t('actions.collapse') : $t('actions.expand')}
+  >
+    {#if isExpanded}
+      <ChevronLeft size={16} />
+    {:else}
+      <ChevronRight size={16} />
+    {/if}
+  </button>
+
   <!-- Fixed User Profile at Bottom -->
-  <div class="user-section">
-    <UserCard
-      username={userName}
-      {subscription}
-      onSettingsClick={onSettingsClick ?? (() => handleViewChange('settings'))}
-      {onAboutClick}
-    />
+  <div class="user-section" class:collapsed={!isExpanded}>
+    {#if isExpanded}
+      <UserCard
+        username={userName}
+        {subscription}
+        onSettingsClick={onSettingsClick ?? (() => handleViewChange('settings'))}
+        {onAboutClick}
+      />
+    {:else}
+      <button
+        class="collapsed-settings-btn"
+        onclick={onSettingsClick ?? (() => handleViewChange('settings'))}
+        title={$t('nav.settings')}
+      >
+        <Settings size={16} />
+      </button>
+    {/if}
   </div>
 </aside>
+
+<!-- Playlist Context Menu -->
+{#if contextMenu.visible}
+  {@const availableFolders = folders.filter(f => f.id !== contextMenu.currentFolderId)}
+  {@const showSearch = availableFolders.length >= FOLDER_SEARCH_THRESHOLD}
+  <div
+    class="context-menu"
+    class:has-search={showSearch}
+    style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
+    onclick={(e) => e.stopPropagation()}
+    role="menu"
+  >
+    {#if availableFolders.length > 0}
+      <div class="context-menu-section">
+        <span class="context-menu-label">Move to folder</span>
+        {#if showSearch}
+          <div class="context-menu-search">
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder="Search folders..."
+              bind:value={contextMenuSearch}
+              onclick={(e) => e.stopPropagation()}
+            />
+          </div>
+        {/if}
+        <div class="context-menu-folders" class:scrollable={showSearch}>
+          {#each filteredContextFolders as folder (folder.id)}
+            <button
+              class="context-menu-item"
+              onclick={() => handleMoveToFolder(folder.id)}
+            >
+              <Folder size={14} />
+              {folder.name}
+            </button>
+          {/each}
+          {#if showSearch && filteredContextFolders.length === 0}
+            <div class="context-menu-empty">
+              No folders match
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
+    {#if contextMenu.currentFolderId}
+      <button
+        class="context-menu-item"
+        onclick={() => handleMoveToFolder(null)}
+      >
+        <ChevronLeft size={14} />
+        Move to root
+      </button>
+    {/if}
+    {#if availableFolders.length === 0 && !contextMenu.currentFolderId}
+      <div class="context-menu-empty">
+        No folders yet
+      </div>
+    {/if}
+  </div>
+{/if}
+
+<!-- Create Folder Modal -->
+{#if showCreateFolderModal}
+  <div class="modal-overlay" onclick={cancelCreateFolder} role="presentation">
+    <div class="modal-content create-folder-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      <h2 class="modal-title">{$t('playlist.newFolder', { default: 'New Folder' })}</h2>
+      <div class="form-group">
+        <label for="folder-name">{$t('common.name', { default: 'Name' })}</label>
+        <input
+          id="folder-name"
+          type="text"
+          bind:value={newFolderName}
+          placeholder={$t('playlist.folderNamePlaceholder', { default: 'Enter folder name' })}
+          onkeydown={(e) => e.key === 'Enter' && handleCreateFolder()}
+          autofocus
+        />
+      </div>
+      <div class="modal-actions">
+        <button class="btn-secondary" onclick={cancelCreateFolder}>
+          {$t('actions.cancel')}
+        </button>
+        <button
+          class="btn-primary"
+          onclick={handleCreateFolder}
+          disabled={!newFolderName.trim()}
+        >
+          {$t('actions.create', { default: 'Create' })}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   .sidebar {
@@ -736,6 +1090,16 @@
     display: flex;
     flex-direction: column;
     height: calc(100vh - 136px); /* 104px NowPlayingBar + 32px TitleBar */
+    transition: width 200ms ease, min-width 200ms ease;
+  }
+
+  .sidebar.collapsed {
+    width: 64px;
+    min-width: 64px;
+  }
+
+  .sidebar.no-titlebar {
+    height: calc(100vh - 104px); /* Only 104px NowPlayingBar, no title bar */
   }
 
   .content {
@@ -769,6 +1133,14 @@
     background-color: var(--bg-hover);
   }
 
+  .search-container.collapsed {
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    justify-content: center;
+    border-radius: 8px;
+  }
+
   .search-container :global(.search-icon) {
     color: var(--text-muted);
     flex-shrink: 0;
@@ -795,6 +1167,7 @@
 
   .local-library-section {
     flex-shrink: 0;
+    margin-bottom: 2px;
   }
 
   .section-header {
@@ -879,10 +1252,34 @@
   }
 
   .playlists-scroll {
-    overflow-y: auto;
-    padding-right: 4px;
+    overflow-y: overlay;
+    margin-right: 1px;
     min-height: 0;
     flex: 1;
+  }
+
+  /* Thin subtle scrollbar - always visible */
+  .playlists-scroll::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .playlists-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .playlists-scroll::-webkit-scrollbar-thumb {
+    background: var(--alpha-10);
+    border-radius: 4px;
+  }
+
+  .playlists-scroll::-webkit-scrollbar-thumb:hover {
+    background: var(--alpha-20);
+  }
+
+
+  /* Compensate margin-right in collapsed mode by shifting icons slightly right */
+  .sidebar.collapsed .playlists-scroll .nav-item {
+    padding-left: 1px;
   }
 
   .playlists-loading,
@@ -892,9 +1289,245 @@
     padding: 6px 8px;
   }
 
+  /* Folder styles */
+  .folder-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .folder-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    padding: 6px 8px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: background-color 150ms ease;
+  }
+
+  .folder-header:hover {
+    background: var(--bg-hover);
+  }
+
+  .folder-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    transition: transform 150ms ease;
+  }
+
+  .folder-chevron.expanded {
+    transform: rotate(90deg);
+  }
+
+  .folder-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-muted);
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .folder-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .folder-header:hover .folder-count {
+    opacity: 1;
+  }
+
+  .folder-playlists {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-left: 12px;
+  }
+
+  .collapsed-folder-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+  }
+
+  .collapsed-folder-btn:hover {
+    background: var(--bg-hover);
+  }
+
+  /* Create Folder Modal */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal-content {
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    padding: 24px;
+    min-width: 320px;
+    max-width: 400px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+
+  .modal-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 20px 0;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+
+  .form-group label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .form-group input {
+    width: 100%;
+    padding: 10px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--alpha-10);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-primary);
+    outline: none;
+    transition: border-color 150ms ease;
+  }
+
+  .form-group input:focus {
+    border-color: var(--accent-primary);
+  }
+
+  .form-group input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+  }
+
+  .btn-secondary,
+  .btn-primary {
+    padding: 8px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 150ms ease, opacity 150ms ease;
+  }
+
+  .btn-secondary {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--alpha-10);
+    color: var(--text-primary);
+  }
+
+  .btn-secondary:hover {
+    background: var(--bg-hover);
+  }
+
+  .btn-primary {
+    background: var(--accent-primary);
+    border: none;
+    color: white;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background: var(--accent-secondary);
+  }
+
+  .btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .toggle-btn {
+    position: absolute;
+    right: -10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    padding: 0;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--alpha-10);
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+    box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+    transition: transform 150ms ease, background-color 150ms ease, color 150ms ease, box-shadow 150ms ease;
+    z-index: 10;
+  }
+
+  .toggle-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-hover);
+    transform: translateY(-50%) scale(1.1);
+    box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  }
+
   .user-section {
     border-top: 1px solid var(--bg-tertiary);
     padding: 8px;
+  }
+
+  .user-section.collapsed {
+    display: flex;
+    justify-content: center;
+    padding: 8px;
+  }
+
+  .collapsed-settings-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 150ms ease, background-color 150ms ease;
+  }
+
+  .collapsed-settings-btn:hover {
+    color: var(--text-primary);
+    background-color: var(--bg-hover);
   }
 
   /* Dropdown menu styles */
@@ -996,5 +1629,113 @@
 
   .submenu .menu-item {
     gap: 8px;
+  }
+
+  /* Context Menu */
+  .context-menu {
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 6px;
+    min-width: 180px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10002;
+  }
+
+  .context-menu.has-search {
+    min-width: 220px;
+  }
+
+  .context-menu-section {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .context-menu-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 6px 10px;
+  }
+
+  .context-menu-search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 10px;
+    margin-bottom: 4px;
+    color: var(--text-muted);
+  }
+
+  .context-menu-search input {
+    flex: 1;
+    background: var(--bg-primary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-size: 12px;
+    color: var(--text-primary);
+    outline: none;
+  }
+
+  .context-menu-search input:focus {
+    border-color: var(--accent-primary);
+  }
+
+  .context-menu-search input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .context-menu-folders {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .context-menu-folders.scrollable {
+    max-height: 200px;
+    overflow-y: auto;
+  }
+
+  .context-menu-folders.scrollable::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  .context-menu-folders.scrollable::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .context-menu-folders.scrollable::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 2px;
+  }
+
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    background: none;
+    border: none;
+    border-radius: 4px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 150ms ease;
+  }
+
+  .context-menu-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .context-menu-empty {
+    padding: 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: center;
   }
 </style>

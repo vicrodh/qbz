@@ -1,9 +1,15 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { X, Trash2, EyeOff, Eye } from 'lucide-svelte';
+  import { X, Trash2, EyeOff, Eye, Folder } from 'lucide-svelte';
   import { logPlaylistAdd } from '$lib/services/recoService';
   import { subscribe as subscribeOffline, getStatus, createPendingPlaylist } from '$lib/stores/offlineStore';
   import { showToast } from '$lib/stores/toastStore';
+  import {
+    subscribe as subscribeFolders,
+    getVisibleFolders,
+    movePlaylistToFolder,
+    type PlaylistFolder
+  } from '$lib/stores/playlistFoldersStore';
 
   interface Playlist {
     id: number;
@@ -22,6 +28,7 @@
     onDelete?: (playlistId: number) => void;
     isHidden?: boolean;
     isLocalTracks?: boolean;
+    currentFolderId?: string | null;
   }
 
   let {
@@ -34,7 +41,8 @@
     onSuccess,
     onDelete,
     isHidden = false,
-    isLocalTracks = false
+    isLocalTracks = false,
+    currentFolderId = null
   }: Props = $props();
 
   // Form state
@@ -42,9 +50,13 @@
   let description = $state('');
   let isPublic = $state(false);
   let hidden = $state(false);
+  let folderId = $state<string | null>(null);
   let selectedPlaylistId = $state<number | null>(null);
   let loading = $state(false);
   let error = $state<string | null>(null);
+
+  // Folders state
+  let folders = $state<PlaylistFolder[]>([]);
 
   // Offline state (reactive)
   let offlineMode = $state(false);
@@ -85,6 +97,16 @@
     return unsubscribe;
   });
 
+  // Subscribe to folders state changes
+  $effect(() => {
+    const unsubscribe = subscribeFolders(() => {
+      folders = getVisibleFolders();
+    });
+    // Initialize folders
+    folders = getVisibleFolders();
+    return unsubscribe;
+  });
+
   // Reset form when modal opens
   $effect(() => {
     if (isOpen) {
@@ -96,13 +118,16 @@
         description = '';
         isPublic = false;
         hidden = isHidden;
+        folderId = currentFolderId;
       } else if (mode === 'create') {
         name = '';
         description = '';
         isPublic = false;
         hidden = false;
+        folderId = null;
       } else if (mode === 'addTrack') {
         selectedPlaylistId = null;
+        folderId = null;
         loadLocalTrackCounts();
       }
     }
@@ -143,6 +168,12 @@
           description: description.trim() || null,
           isPublic
         });
+
+        // Assign to folder if selected
+        if (folderId) {
+          await movePlaylistToFolder(newPlaylist.id, folderId);
+        }
+
         onSuccess?.(newPlaylist);
         onClose();
       }
@@ -178,6 +209,11 @@
         playlistId: playlist.id,
         hidden
       });
+
+      // Update folder assignment if changed
+      if (folderId !== currentFolderId) {
+        await movePlaylistToFolder(playlist.id, folderId);
+      }
 
       onSuccess?.(updatedPlaylist);
       onClose();
@@ -342,6 +378,8 @@
           });
           void logPlaylistAdd(trackIds, newPlaylist.id);
         }
+        // Update tracks_count to reflect added tracks (API returns 0 at creation)
+        newPlaylist.tracks_count = isLocalTracks ? 0 : trackIds.length;
       }
 
       onSuccess?.(newPlaylist);
@@ -463,78 +501,99 @@
             ></textarea>
           </div>
 
-          <div class="form-group checkbox">
-            <label>
-              <input
-                type="checkbox"
-                bind:checked={isPublic}
+          {#if folders.length > 0}
+            <div class="form-group">
+              <label for="folder-select">
+                <Folder size={14} style="display: inline; vertical-align: middle; margin-right: 4px;" />
+                Folder
+              </label>
+              <select
+                id="folder-select"
+                bind:value={folderId}
                 disabled={loading}
-              />
-              <span>Make playlist public</span>
-            </label>
-          </div>
+              >
+                <option value={null}>No folder</option>
+                {#each folders as folder (folder.id)}
+                  <option value={folder.id}>{folder.name}</option>
+                {/each}
+              </select>
+            </div>
+          {/if}
 
-          {#if mode === 'edit'}
+          <div class="checkbox-row">
             <div class="form-group checkbox">
               <label>
                 <input
                   type="checkbox"
-                  bind:checked={hidden}
+                  bind:checked={isPublic}
                   disabled={loading}
                 />
-                <span class="hidden-label">
-                  {#if hidden}
-                    <EyeOff size={14} />
-                  {:else}
-                    <Eye size={14} />
-                  {/if}
-                  Hide from sidebar
-                </span>
+                <span>Make playlist public</span>
               </label>
             </div>
 
-            <div class="danger-zone">
-              <div class="danger-label">Danger Zone</div>
-              {#if showDeleteConfirm}
-                <div class="delete-confirm">
-                  <span>Are you sure? This cannot be undone.</span>
-                  <div class="delete-actions">
-                    <button class="btn-cancel" onclick={() => showDeleteConfirm = false} disabled={loading}>
-                      Cancel
-                    </button>
-                    <button class="btn-delete" onclick={handleDelete} disabled={loading}>
-                      {loading ? 'Deleting...' : 'Delete'}
-                    </button>
-                  </div>
-                </div>
-              {:else}
-                <button class="btn-danger" onclick={() => showDeleteConfirm = true} disabled={loading}>
-                  <Trash2 size={14} />
-                  Delete Playlist
-                </button>
-              {/if}
-            </div>
-          {/if}
+            {#if mode === 'edit'}
+              <div class="form-group checkbox">
+                <label>
+                  <input
+                    type="checkbox"
+                    bind:checked={hidden}
+                    disabled={loading}
+                  />
+                  <span class="hidden-label">
+                    {#if hidden}
+                      <EyeOff size={14} />
+                    {:else}
+                      <Eye size={14} />
+                    {/if}
+                    Hide from sidebar
+                  </span>
+                </label>
+              </div>
+            {/if}
+          </div>
         {/if}
       </div>
 
       <div class="modal-footer">
-        <button class="btn-secondary" onclick={onClose} disabled={loading}>
-          Cancel
-        </button>
-        <button class="btn-primary" onclick={handleSubmit} disabled={loading}>
-          {#if loading}
-            Saving...
-          {:else if mode === 'create'}
-            Create
-          {:else if mode === 'edit'}
-            Save
-          {:else if selectedPlaylistId === CREATE_NEW_PLAYLIST}
-            Create & Add
-          {:else}
-            Add
-          {/if}
-        </button>
+        {#if mode === 'edit'}
+          <div class="footer-left">
+            {#if showDeleteConfirm}
+              <div class="delete-confirm-inline">
+                <span>Delete?</span>
+                <button class="btn-delete-sm" onclick={handleDelete} disabled={loading}>
+                  Yes
+                </button>
+                <button class="btn-cancel-sm" onclick={() => showDeleteConfirm = false} disabled={loading}>
+                  No
+                </button>
+              </div>
+            {:else}
+              <button class="btn-danger-sm" onclick={() => showDeleteConfirm = true} disabled={loading}>
+                <Trash2 size={12} />
+                Delete
+              </button>
+            {/if}
+          </div>
+        {/if}
+        <div class="footer-right">
+          <button class="btn-secondary" onclick={onClose} disabled={loading}>
+            Cancel
+          </button>
+          <button class="btn-primary" onclick={handleSubmit} disabled={loading}>
+            {#if loading}
+              Saving...
+            {:else if mode === 'create'}
+              Create
+            {:else if mode === 'edit'}
+              Save
+            {:else if selectedPlaylistId === CREATE_NEW_PLAYLIST}
+              Create & Add
+            {:else}
+              Add
+            {/if}
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -553,7 +612,7 @@
 
   .modal {
     width: 100%;
-    max-width: 440px;
+    max-width: 490px;
     max-height: 90vh;
     overflow: hidden;
     display: flex;
@@ -686,12 +745,36 @@
     color: var(--text-primary);
   }
 
+  .checkbox-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 8px;
+  }
+
+  .checkbox-row .form-group {
+    margin-bottom: 0;
+  }
+
   .modal-footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     gap: 12px;
     padding: 16px 24px;
     border-top: 1px solid var(--bg-tertiary);
+  }
+
+  .footer-left {
+    display: flex;
+    align-items: center;
+  }
+
+  .footer-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-left: auto;
   }
 
   .btn-secondary,
@@ -734,6 +817,76 @@
     display: flex;
     align-items: center;
     gap: 6px;
+  }
+
+  /* Compact footer delete button */
+  .btn-danger-sm {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 14px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    font-size: 13px;
+    color: #ef4444;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .btn-danger-sm:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.2);
+    border-color: rgba(239, 68, 68, 0.5);
+  }
+
+  .btn-danger-sm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .delete-confirm-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .delete-confirm-inline span {
+    font-size: 13px;
+    color: #ef4444;
+  }
+
+  .btn-delete-sm,
+  .btn-cancel-sm {
+    padding: 8px 12px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 150ms ease;
+    border: none;
+  }
+
+  .btn-cancel-sm {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .btn-cancel-sm:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+
+  .btn-delete-sm {
+    background: #ef4444;
+    color: white;
+  }
+
+  .btn-delete-sm:hover:not(:disabled) {
+    background: #dc2626;
+  }
+
+  .btn-delete-sm:disabled,
+  .btn-cancel-sm:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .danger-zone {

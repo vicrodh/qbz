@@ -65,7 +65,7 @@
   const LIST_ROW_HEIGHT = 76; // px (52px art + padding + gap)
   const GRID_ROW_HEIGHT = 270; // px (card height + info + row gap)
   const GRID_MIN_CARD_WIDTH = 180; // px
-  const GRID_GAP = 24; // px
+  const GRID_GAP = 14; // px (horizontal gap between cards)
   const BUFFER_ITEMS = 5; // Extra items to render above/below viewport
 
   // State
@@ -274,6 +274,11 @@
             onkeydown={(e) => e.key === 'Enter' && onAlbumClick(item.album)}
           >
             <div class="album-row-art">
+              <!-- Placeholder always visible as background -->
+              <div class="artwork-placeholder">
+                <Disc3 size={28} />
+              </div>
+              <!-- Image overlays placeholder when loaded -->
               {#if item.album.artwork_path}
                 <img
                   src={getArtworkUrl(item.album.artwork_path)}
@@ -281,10 +286,6 @@
                   loading="lazy"
                   decoding="async"
                 />
-              {:else}
-                <div class="artwork-placeholder">
-                  <Disc3 size={28} />
-                </div>
               {/if}
             </div>
             <div class="album-row-info">
@@ -382,6 +383,7 @@
   }
 
   .album-row-art {
+    position: relative;
     width: 52px;
     height: 52px;
     border-radius: 8px;
@@ -390,9 +392,12 @@
   }
 
   .album-row-art img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    z-index: 1;
   }
 
   .artwork-placeholder {
@@ -461,7 +466,7 @@
   .album-grid-row {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 0 22px; /* row-gap column-gap - row gap handled by GRID_ROW_HEIGHT */
+    gap: 0 14px; /* row-gap column-gap - row gap handled by GRID_ROW_HEIGHT */
     padding: 0;
   }
 

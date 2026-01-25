@@ -103,6 +103,8 @@ pub struct Album {
     pub maximum_bit_depth: Option<u32>,
     #[serde(default)]
     pub tracks: Option<TracksContainer>,
+    /// Universal Product Code for the album
+    pub upc: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

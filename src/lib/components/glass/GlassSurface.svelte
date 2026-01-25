@@ -104,7 +104,7 @@
   .glass-surface {
     overflow: hidden;
     border-radius: var(--glass-radius, 14px);
-    background: var(--glass-fallback, rgba(255, 255, 255, 0.06));
+    background: var(--glass-fallback, var(--alpha-6));
     color: var(--glass-text, inherit);
     box-shadow: var(--glass-shadow, 0 18px 40px rgba(0, 0, 0, 0.35));
     isolation: isolate;
@@ -113,7 +113,7 @@
   .glass-backdrop {
     position: absolute;
     inset: 0;
-    background: var(--glass-bg, rgba(255, 255, 255, 0.08));
+    background: var(--glass-bg, var(--alpha-8));
     border-radius: inherit;
     z-index: 0;
     transition: filter 0.3s ease;
@@ -130,7 +130,7 @@
     position: absolute;
     inset: 0;
     z-index: 1;
-    background: linear-gradient(140deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0));
+    background: linear-gradient(140deg, var(--alpha-18), rgba(255, 255, 255, 0));
     opacity: 0.8;
     pointer-events: none;
   }
@@ -140,8 +140,8 @@
     inset: 0;
     z-index: 2;
     border-radius: inherit;
-    border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.15));
-    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+    border: 1px solid var(--glass-border, var(--alpha-15));
+    box-shadow: inset 0 0 0 1px var(--alpha-4);
     pointer-events: none;
   }
 
@@ -152,7 +152,7 @@
     width: 160px;
     height: 160px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.15) 35%, transparent 70%);
+    background: radial-gradient(circle, var(--alpha-35) 0%, var(--alpha-15) 35%, transparent 70%);
     transform: translate(-50%, -50%) scale(0);
     animation: glassRipple var(--glass-ripple-duration, 800ms) cubic-bezier(0.34, 1.56, 0.64, 1);
     z-index: 2;

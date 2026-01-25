@@ -104,10 +104,15 @@ pub fn init_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                 }
                 "show_hide" => {
                     if let Some(window) = app.get_webview_window("main") {
-                        if window.is_visible().unwrap_or(true) {
+                        let is_visible = window.is_visible().unwrap_or(false);
+                        log::info!("Show/Hide: window visible = {}", is_visible);
+                        if is_visible {
+                            log::info!("Hiding window");
                             let _ = window.hide();
                         } else {
+                            log::info!("Showing window");
                             let _ = window.show();
+                            let _ = window.unminimize();
                             let _ = window.set_focus();
                         }
                     }

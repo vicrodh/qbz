@@ -159,7 +159,19 @@
     "followers": "followers",
     "loadMore": "Load More",
     "noAlbums": "No albums",
-    "noBiography": "No biography available"
+    "noBiography": "No biography available",
+    "tributes": "Tributes & Covers",
+    "others": "Others",
+    "playlists": "Playlists"
+  },
+  "sort": {
+    "label": "Sort",
+    "default": "Default",
+    "newest": "Newest First",
+    "oldest": "Oldest First",
+    "titleAsc": "Title (A-Z)",
+    "titleDesc": "Title (Z-A)",
+    "artist": "Artist"
   },
   "playlist": {
     "tracks": "tracks",
@@ -187,7 +199,13 @@
     "recent": "Recent",
     "trackCount": "# of Tracks",
     "playCount": "Play Count",
-    "custom": "Custom"
+    "custom": "Custom",
+    "default": "Default",
+    "newest": "Newest First",
+    "oldest": "Oldest First",
+    "titleAZ": "Title (A-Z)",
+    "titleZA": "Title (Z-A)",
+    "artist": "Artist"
   },
   "favorites": {
     "title": "Favorites",
@@ -309,7 +327,9 @@
     "no": "No",
     "ok": "OK",
     "loading": "Loading...",
-    "loadMore": "Load More"
+    "loadMore": "Load More",
+    "collapse": "Collapse sidebar",
+    "expand": "Expand sidebar"
   },
   "settings": {
     "title": "Settings",
@@ -361,7 +381,18 @@
       "language": "Language",
       "uiScale": "UI Scale",
       "inAppToasts": "In-app toasts notifications",
-      "systemNotifications": "System Notifications"
+      "systemNotifications": "System Notifications",
+      "hideTitleBar": "Hide title bar",
+      "hideTitleBarDesc": "Hide the title bar completely (for tiling window manager users)",
+      "tray": {
+        "title": "System Tray",
+        "enableTray": "Enable tray icon",
+        "enableTrayDesc": "Show icon in system tray (requires restart)",
+        "minimizeToTray": "Minimize to tray",
+        "minimizeToTrayDesc": "Hide window to tray when minimizing",
+        "closeToTray": "Close to tray",
+        "closeToTrayDesc": "Hide window to tray instead of quitting"
+      }
     },
     "library": {
       "title": "Library",

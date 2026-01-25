@@ -1,9 +1,17 @@
 <script lang="ts">
   import { Minus, Maximize2, Minimize2, X } from 'lucide-svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
+  import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
 
+  interface TraySettings {
+    enable_tray: boolean;
+    minimize_to_tray: boolean;
+    close_to_tray: boolean;
+  }
+
   let isMaximized = $state(false);
+  let minimizeToTray = $state(false);
   let appWindow: ReturnType<typeof getCurrentWindow>;
 
   onMount(() => {
@@ -14,6 +22,14 @@
 
       // Check initial maximized state
       isMaximized = await appWindow.isMaximized();
+
+      // Load tray settings
+      try {
+        const settings = await invoke<TraySettings>('get_tray_settings');
+        minimizeToTray = settings.minimize_to_tray;
+      } catch (e) {
+        console.error('Failed to load tray settings:', e);
+      }
 
       // Listen for window state changes
       unlisten = await appWindow.onResized(async () => {
@@ -27,7 +43,11 @@
   });
 
   async function handleMinimize() {
-    await appWindow?.minimize();
+    if (minimizeToTray) {
+      await appWindow?.hide();
+    } else {
+      await appWindow?.minimize();
+    }
   }
 
   async function handleMaximize() {
@@ -134,7 +154,7 @@
 
   .control-btn.minimize:hover,
   .control-btn.maximize:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--alpha-10);
   }
 
   .control-btn.close:hover {

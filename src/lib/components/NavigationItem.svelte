@@ -9,10 +9,16 @@
     active?: boolean;
     onclick?: () => void;
     onHover?: () => void;
+    oncontextmenu?: (e: MouseEvent) => void;
     class?: string;
+    showLabel?: boolean;
+    indented?: boolean;
   }
 
-  let { icon, label, badge, tooltip, active = false, onclick, onHover, class: className = '' }: Props = $props();
+  let { icon, label, badge, tooltip, active = false, onclick, onHover, oncontextmenu, class: className = '', showLabel = true, indented = false }: Props = $props();
+
+  // When label is hidden, always show tooltip on hover
+  const effectiveTooltip = $derived(showLabel ? tooltip : (tooltip || label));
 
   let showTooltip = $state(false);
   let tooltipTimeout: ReturnType<typeof setTimeout> | null = null;
@@ -23,7 +29,7 @@
     // Call hover callback immediately (for lazy loading)
     onHover?.();
 
-    if (!tooltip) return;
+    if (!effectiveTooltip) return;
     tooltipTimeout = setTimeout(() => {
       updateTooltipPosition();
       showTooltip = true;
@@ -48,24 +54,29 @@
 <button
   bind:this={buttonRef}
   {onclick}
+  {oncontextmenu}
   class="nav-item {className}"
   class:active
-  title={tooltip ? undefined : label}
+  class:collapsed={!showLabel}
+  class:indented
+  title={effectiveTooltip ? undefined : label}
   onmouseenter={handleMouseEnter}
   onmouseleave={handleMouseLeave}
 >
   <div class="icon-container">
     {@render icon()}
   </div>
-  <span class="label">{label}</span>
-  {#if badge}
-    <span class="badge">{badge}</span>
+  {#if showLabel}
+    <span class="label">{label}</span>
+    {#if badge}
+      <span class="badge">{badge}</span>
+    {/if}
   {/if}
 </button>
 
-{#if showTooltip && tooltip}
-  <div class="custom-tooltip" style={tooltipStyle}>
-    {tooltip}
+{#if showTooltip && effectiveTooltip}
+  <div class="custom-tooltip" class:bold-first-line={!showLabel} style={tooltipStyle}>
+    {effectiveTooltip}
   </div>
 {/if}
 
@@ -91,9 +102,18 @@
     background-color: var(--bg-hover);
   }
 
+  .nav-item.collapsed {
+    justify-content: center;
+    padding: 0;
+  }
+
   .nav-item.active {
     background-color: var(--bg-tertiary);
     color: var(--text-primary);
+  }
+
+  .nav-item.indented {
+    padding-left: 20px;
   }
 
   .icon-container {
@@ -136,5 +156,10 @@
     pointer-events: none;
     min-width: 120px;
     max-width: 200px;
+  }
+
+  .custom-tooltip.bold-first-line::first-line {
+    font-weight: 600;
+    color: var(--text-primary);
   }
 </style>

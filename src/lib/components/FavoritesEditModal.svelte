@@ -2,7 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
   import Modal from './Modal.svelte';
-  import { Heart, Star, Music, Folder, Disc, Library, Upload, GripVertical } from 'lucide-svelte';
+  import { Heart, Star, Music, Folder, Disc, Library, Headphones, Upload, GripVertical } from 'lucide-svelte';
   import type { FavoritesPreferences } from '../types';
 
   interface Props {
@@ -28,6 +28,7 @@
     { id: 'folder', label: 'Folder', icon: Folder },
     { id: 'disc', label: 'Disc', icon: Disc },
     { id: 'library', label: 'Library', icon: Library },
+    { id: 'headphones', label: 'Headphones', icon: Headphones },
   ];
 
   const solidColors = [
@@ -175,8 +176,7 @@
     <div class="modal-column">
       <div class="modal-section">
         <h3>Icon</h3>
-        <p class="section-description">Choose an icon for the Favorites page header</p>
-        
+
         <div class="icon-grid">
           {#each presetIcons as preset}
             <button
@@ -185,7 +185,7 @@
               onclick={() => selectPreset(preset.id)}
               title={preset.label}
             >
-              <svelte:component this={preset.icon} size={24} />
+              <svelte:component this={preset.icon} size={17} />
             </button>
           {/each}
         </div>
@@ -203,10 +203,8 @@
 
       <div class="modal-section">
         <h3>Background</h3>
-        <p class="section-description">Choose a background color or gradient</p>
-        
+
         <div class="color-section">
-          <h4>Solid Colors</h4>
           <div class="color-grid">
             <button
               class="color-btn"
@@ -230,7 +228,6 @@
         </div>
 
         <div class="color-section">
-          <h4>Gradients</h4>
           <div class="color-grid">
             {#each gradients as gradient}
               <button
@@ -246,7 +243,6 @@
         </div>
 
         <div class="color-section">
-          <h4>Custom Gradient</h4>
           {#if !showCustomGradientPicker}
             <button class="btn-custom-gradient" onclick={() => showCustomGradientPicker = true}>
               Create Custom Gradient
@@ -285,8 +281,7 @@
     <div class="modal-column">
       <div class="modal-section">
         <h3>Tab Order</h3>
-        <p class="section-description">Reorder tabs in the Favorites page navigation</p>
-        
+
         <div class="tab-order-list">
           {#each tabOrder as tab, index}
             <div class="tab-order-item">
@@ -358,19 +353,6 @@
     color: var(--text-primary);
   }
 
-  .modal-section h4 {
-    font-size: 13px;
-    font-weight: 600;
-    margin: 0 0 8px 0;
-    color: var(--text-secondary);
-  }
-
-  .section-description {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin: 0 0 16px 0;
-  }
-
   .color-section {
     margin-bottom: 20px;
   }
@@ -381,19 +363,20 @@
 
   .icon-grid {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 12px;
-    margin-bottom: 16px;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+    margin-bottom: 12px;
   }
 
   .icon-preset-btn {
-    aspect-ratio: 1;
+    width: 42px;
+    height: 42px;
     display: flex;
     align-items: center;
     justify-content: center;
     background: var(--bg-secondary);
     border: 2px solid transparent;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
     transition: all 150ms ease;
     color: var(--text-secondary);

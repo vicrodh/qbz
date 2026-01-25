@@ -323,8 +323,8 @@
     text-transform: uppercase;
     letter-spacing: 0.3px;
     background: transparent;
-    color: rgba(255, 255, 255, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    color: var(--alpha-15);
+    border: 1px solid var(--alpha-6);
     transition: all 200ms ease;
     cursor: help;
   }
@@ -344,8 +344,8 @@
 
   .badge.off {
     background: transparent;
-    color: rgba(255, 255, 255, 0.15);
-    border-color: rgba(255, 255, 255, 0.06);
+    color: var(--alpha-15);
+    border-color: var(--alpha-6);
   }
 
   /* HW Badge (ALSA Direct) - Blue like audio equipment LED */
@@ -364,7 +364,7 @@
     bottom: calc(100% + 8px);
     right: 0;
     background: rgba(24, 24, 28, 0.98);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--alpha-10);
     border-radius: 6px;
     padding: 8px 12px;
     min-width: 120px;
@@ -390,7 +390,7 @@
     font-size: 9px;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--alpha-40);
     margin-bottom: 4px;
   }
 
@@ -425,7 +425,7 @@
 
   .tooltip-raw {
     font-size: 9px;
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--alpha-30);
     font-family: var(--font-mono, monospace);
     margin-top: 4px;
     white-space: nowrap;
@@ -439,18 +439,18 @@
     gap: 6px;
     margin-top: 8px;
     padding-top: 8px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    border-top: 1px solid var(--alpha-10);
   }
 
   .volume-label {
     font-size: 10px;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--alpha-40);
   }
 
   .volume-value {
     font-size: 11px;
     font-weight: 500;
-    color: rgba(255, 255, 255, 0.8);
+    color: var(--alpha-80);
   }
 
   .tooltip-section {
@@ -471,7 +471,7 @@
 
   .setting-icon {
     font-size: 8px;
-    color: rgba(255, 255, 255, 0.3);
+    color: var(--alpha-30);
     line-height: 1.4;
   }
 
@@ -488,7 +488,7 @@
   }
 
   .setting-text {
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--alpha-70);
     line-height: 1.4;
   }
 
@@ -498,7 +498,7 @@
 
   .setting-detail {
     font-size: 10px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--alpha-50);
     font-family: var(--font-mono, monospace);
   }
 </style>

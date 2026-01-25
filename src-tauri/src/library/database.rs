@@ -74,7 +74,25 @@ impl LibraryDatabase {
             CREATE INDEX IF NOT EXISTS idx_tracks_file_path ON local_tracks(file_path);
             CREATE INDEX IF NOT EXISTS idx_tracks_title ON local_tracks(title);
 
+            -- Playlist folders (local organization for Qobuz playlists)
+            CREATE TABLE IF NOT EXISTS playlist_folders (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                icon_type TEXT DEFAULT 'preset',
+                icon_preset TEXT DEFAULT 'folder',
+                icon_color TEXT DEFAULT '#6366f1',
+                custom_image_path TEXT,
+                is_hidden INTEGER DEFAULT 0,
+                position INTEGER DEFAULT 0,
+                created_at INTEGER NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_playlist_folders_position ON playlist_folders(position);
+            CREATE INDEX IF NOT EXISTS idx_playlist_folders_hidden ON playlist_folders(is_hidden);
+
             -- Playlist local settings (enhances remote Qobuz playlists)
+            -- Note: For existing databases, folder_id is added via migration
             CREATE TABLE IF NOT EXISTS playlist_settings (
                 qobuz_playlist_id INTEGER PRIMARY KEY,
                 custom_artwork_path TEXT,
@@ -84,9 +102,12 @@ impl LibraryDatabase {
                 notes TEXT,
                 hidden INTEGER DEFAULT 0,
                 position INTEGER DEFAULT 0,
+                folder_id TEXT REFERENCES playlist_folders(id) ON DELETE SET NULL,
                 created_at INTEGER NOT NULL,
                 updated_at INTEGER NOT NULL
             );
+
+            -- Note: idx_playlist_settings_folder is created conditionally after migrations run
 
             -- Playlist statistics (play counts, etc.)
             CREATE TABLE IF NOT EXISTS playlist_stats (
@@ -322,6 +343,54 @@ impl LibraryDatabase {
             ).map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
         }
 
+        // Migration: Add playlist_folders table and folder_id column
+        let has_playlist_folders: bool = self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='playlist_folders'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_playlist_folders {
+            log::info!("Running migration: creating playlist_folders table");
+            self.conn.execute_batch(
+                "CREATE TABLE IF NOT EXISTS playlist_folders (
+                    id TEXT PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    icon_type TEXT DEFAULT 'preset',
+                    icon_preset TEXT DEFAULT 'folder',
+                    icon_color TEXT DEFAULT '#6366f1',
+                    custom_image_path TEXT,
+                    is_hidden INTEGER DEFAULT 0,
+                    position INTEGER DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_playlist_folders_position ON playlist_folders(position);
+                CREATE INDEX IF NOT EXISTS idx_playlist_folders_hidden ON playlist_folders(is_hidden);"
+            ).map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
+        }
+
+        // Migration: Add folder_id column to playlist_settings
+        let has_folder_id: bool = self.conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('playlist_settings') WHERE name = 'folder_id'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_folder_id {
+            log::info!("Running migration: adding folder_id column to playlist_settings");
+            self.conn.execute_batch(
+                "ALTER TABLE playlist_settings ADD COLUMN folder_id TEXT REFERENCES playlist_folders(id) ON DELETE SET NULL;
+                 CREATE INDEX IF NOT EXISTS idx_playlist_settings_folder ON playlist_settings(folder_id);"
+            ).map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
+        }
+
         // Migration: Add catalog_number column to local_tracks
         let has_catalog_number: bool = self
             .conn
@@ -502,6 +571,11 @@ impl LibraryDatabase {
                 "ALTER TABLE artist_images ADD COLUMN canonical_name TEXT;"
             ).map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
         }
+
+        // Create folder_id index after all migrations have run (ensures column exists)
+        self.conn.execute_batch(
+            "CREATE INDEX IF NOT EXISTS idx_playlist_settings_folder ON playlist_settings(folder_id);"
+        ).map_err(|e| LibraryError::Database(format!("Failed to create folder index: {}", e)))?;
 
         Ok(())
     }
@@ -1378,6 +1452,7 @@ pub struct PlaylistSettings {
     pub position: i32,
     pub has_local_content: LocalContentStatus,
     pub is_favorite: bool,
+    pub folder_id: Option<String>,  // ID of the folder this playlist belongs to (null = root)
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -1428,6 +1503,21 @@ pub struct PlaylistStats {
     pub updated_at: i64,
 }
 
+/// Playlist folder for organizing playlists locally
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct PlaylistFolder {
+    pub id: String,
+    pub name: String,
+    pub icon_type: String,      // "preset" or "custom"
+    pub icon_preset: String,    // lucide icon name
+    pub icon_color: String,     // hex color
+    pub custom_image_path: Option<String>,
+    pub is_hidden: bool,
+    pub position: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 impl Default for PlaylistSettings {
     fn default() -> Self {
         let now = std::time::SystemTime::now()
@@ -1445,6 +1535,7 @@ impl Default for PlaylistSettings {
             position: 0,
             has_local_content: LocalContentStatus::Unknown,
             is_favorite: false,
+            folder_id: None,
             created_at: now,
             updated_at: now,
         }
@@ -1474,7 +1565,7 @@ impl LibraryDatabase {
     pub fn get_playlist_settings(&self, qobuz_playlist_id: u64) -> Result<Option<PlaylistSettings>, LibraryError> {
         let result = self.conn.query_row(
             "SELECT qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                    last_search_query, notes, hidden, position, has_local_content, is_favorite, created_at, updated_at
+                    last_search_query, notes, hidden, position, has_local_content, is_favorite, folder_id, created_at, updated_at
              FROM playlist_settings WHERE qobuz_playlist_id = ?1",
             params![qobuz_playlist_id as i64],
             |row| {
@@ -1489,8 +1580,9 @@ impl LibraryDatabase {
                     position: row.get(7)?,
                     has_local_content: LocalContentStatus::from_str(&row.get::<_, Option<String>>(8)?.unwrap_or_default()),
                     is_favorite: row.get::<_, i32>(9).unwrap_or(0) != 0,
-                    created_at: row.get(10)?,
-                    updated_at: row.get(11)?,
+                    folder_id: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
                 })
             },
         ).optional()
@@ -1509,8 +1601,8 @@ impl LibraryDatabase {
         self.conn.execute(
             "INSERT INTO playlist_settings
                 (qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                 last_search_query, notes, hidden, position, has_local_content, is_favorite, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                 last_search_query, notes, hidden, position, has_local_content, is_favorite, folder_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
              ON CONFLICT(qobuz_playlist_id) DO UPDATE SET
                 custom_artwork_path = excluded.custom_artwork_path,
                 sort_by = excluded.sort_by,
@@ -1521,6 +1613,7 @@ impl LibraryDatabase {
                 position = excluded.position,
                 has_local_content = excluded.has_local_content,
                 is_favorite = excluded.is_favorite,
+                folder_id = excluded.folder_id,
                 updated_at = excluded.updated_at",
             params![
                 settings.qobuz_playlist_id as i64,
@@ -1533,6 +1626,7 @@ impl LibraryDatabase {
                 settings.position,
                 settings.has_local_content.as_str(),
                 settings.is_favorite as i32,
+                &settings.folder_id,
                 settings.created_at,
                 now,
             ],
@@ -1631,7 +1725,7 @@ impl LibraryDatabase {
     pub fn get_all_playlist_settings(&self) -> Result<Vec<PlaylistSettings>, LibraryError> {
         let mut stmt = self.conn.prepare(
             "SELECT qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                    last_search_query, notes, hidden, position, has_local_content, is_favorite, created_at, updated_at
+                    last_search_query, notes, hidden, position, has_local_content, is_favorite, folder_id, created_at, updated_at
              FROM playlist_settings ORDER BY position ASC, updated_at DESC"
         ).map_err(|e| LibraryError::Database(format!("Failed to prepare statement: {}", e)))?;
 
@@ -1647,8 +1741,9 @@ impl LibraryDatabase {
                 position: row.get(7)?,
                 has_local_content: LocalContentStatus::from_str(&row.get::<_, Option<String>>(8)?.unwrap_or_default()),
                 is_favorite: row.get::<_, i32>(9).unwrap_or(0) != 0,
-                created_at: row.get(10)?,
-                updated_at: row.get(11)?,
+                folder_id: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
             })
         }).map_err(|e| LibraryError::Database(format!("Failed to query playlist settings: {}", e)))?;
 
@@ -1855,6 +1950,231 @@ impl LibraryDatabase {
 
         stats.collect::<Result<Vec<_>, _>>()
             .map_err(|e| LibraryError::Database(format!("Failed to collect playlist stats: {}", e)))
+    }
+
+    // === Playlist Folders ===
+
+    /// Create a new playlist folder
+    pub fn create_playlist_folder(&self, name: &str, icon_type: Option<&str>, icon_preset: Option<&str>, icon_color: Option<&str>) -> Result<PlaylistFolder, LibraryError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        let id = uuid::Uuid::new_v4().to_string();
+
+        // Get the next position
+        let max_position: i32 = self.conn
+            .query_row("SELECT COALESCE(MAX(position), -1) FROM playlist_folders", [], |row| row.get(0))
+            .unwrap_or(-1);
+
+        let folder = PlaylistFolder {
+            id: id.clone(),
+            name: name.to_string(),
+            icon_type: icon_type.unwrap_or("preset").to_string(),
+            icon_preset: icon_preset.unwrap_or("folder").to_string(),
+            icon_color: icon_color.unwrap_or("#6366f1").to_string(),
+            custom_image_path: None,
+            is_hidden: false,
+            position: max_position + 1,
+            created_at: now,
+            updated_at: now,
+        };
+
+        self.conn.execute(
+            "INSERT INTO playlist_folders (id, name, icon_type, icon_preset, icon_color, custom_image_path, is_hidden, position, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                &folder.id,
+                &folder.name,
+                &folder.icon_type,
+                &folder.icon_preset,
+                &folder.icon_color,
+                &folder.custom_image_path,
+                folder.is_hidden as i32,
+                folder.position,
+                folder.created_at,
+                folder.updated_at,
+            ],
+        ).map_err(|e| LibraryError::Database(format!("Failed to create playlist folder: {}", e)))?;
+
+        Ok(folder)
+    }
+
+    /// Get all playlist folders
+    pub fn get_all_playlist_folders(&self) -> Result<Vec<PlaylistFolder>, LibraryError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, name, icon_type, icon_preset, icon_color, custom_image_path, is_hidden, position, created_at, updated_at
+             FROM playlist_folders ORDER BY position ASC"
+        ).map_err(|e| LibraryError::Database(format!("Failed to prepare statement: {}", e)))?;
+
+        let folders = stmt.query_map([], |row| {
+            Ok(PlaylistFolder {
+                id: row.get(0)?,
+                name: row.get(1)?,
+                icon_type: row.get(2)?,
+                icon_preset: row.get(3)?,
+                icon_color: row.get(4)?,
+                custom_image_path: row.get(5)?,
+                is_hidden: row.get::<_, i32>(6)? != 0,
+                position: row.get(7)?,
+                created_at: row.get(8)?,
+                updated_at: row.get(9)?,
+            })
+        }).map_err(|e| LibraryError::Database(format!("Failed to query playlist folders: {}", e)))?;
+
+        folders.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| LibraryError::Database(format!("Failed to collect playlist folders: {}", e)))
+    }
+
+    /// Get a playlist folder by ID
+    pub fn get_playlist_folder(&self, folder_id: &str) -> Result<Option<PlaylistFolder>, LibraryError> {
+        let result = self.conn.query_row(
+            "SELECT id, name, icon_type, icon_preset, icon_color, custom_image_path, is_hidden, position, created_at, updated_at
+             FROM playlist_folders WHERE id = ?1",
+            params![folder_id],
+            |row| {
+                Ok(PlaylistFolder {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    icon_type: row.get(2)?,
+                    icon_preset: row.get(3)?,
+                    icon_color: row.get(4)?,
+                    custom_image_path: row.get(5)?,
+                    is_hidden: row.get::<_, i32>(6)? != 0,
+                    position: row.get(7)?,
+                    created_at: row.get(8)?,
+                    updated_at: row.get(9)?,
+                })
+            },
+        ).optional()
+        .map_err(|e| LibraryError::Database(format!("Failed to get playlist folder: {}", e)))?;
+
+        Ok(result)
+    }
+
+    /// Update a playlist folder
+    pub fn update_playlist_folder(
+        &self,
+        folder_id: &str,
+        name: Option<&str>,
+        icon_type: Option<&str>,
+        icon_preset: Option<&str>,
+        icon_color: Option<&str>,
+        custom_image_path: Option<Option<&str>>,
+        is_hidden: Option<bool>,
+    ) -> Result<PlaylistFolder, LibraryError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        // Get existing folder
+        let existing = self.get_playlist_folder(folder_id)?
+            .ok_or_else(|| LibraryError::Database("Folder not found".to_string()))?;
+
+        let new_name = name.unwrap_or(&existing.name);
+        let new_icon_type = icon_type.unwrap_or(&existing.icon_type);
+        let new_icon_preset = icon_preset.unwrap_or(&existing.icon_preset);
+        let new_icon_color = icon_color.unwrap_or(&existing.icon_color);
+        let new_custom_image_path = custom_image_path.unwrap_or(existing.custom_image_path.as_deref());
+        let new_is_hidden = is_hidden.unwrap_or(existing.is_hidden);
+
+        self.conn.execute(
+            "UPDATE playlist_folders SET name = ?1, icon_type = ?2, icon_preset = ?3, icon_color = ?4,
+             custom_image_path = ?5, is_hidden = ?6, updated_at = ?7 WHERE id = ?8",
+            params![
+                new_name,
+                new_icon_type,
+                new_icon_preset,
+                new_icon_color,
+                new_custom_image_path,
+                new_is_hidden as i32,
+                now,
+                folder_id,
+            ],
+        ).map_err(|e| LibraryError::Database(format!("Failed to update playlist folder: {}", e)))?;
+
+        self.get_playlist_folder(folder_id)?
+            .ok_or_else(|| LibraryError::Database("Folder not found after update".to_string()))
+    }
+
+    /// Delete a playlist folder (playlists return to root via ON DELETE SET NULL)
+    pub fn delete_playlist_folder(&self, folder_id: &str) -> Result<(), LibraryError> {
+        self.conn.execute(
+            "DELETE FROM playlist_folders WHERE id = ?1",
+            params![folder_id],
+        ).map_err(|e| LibraryError::Database(format!("Failed to delete playlist folder: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Reorder playlist folders
+    pub fn reorder_playlist_folders(&self, folder_ids: &[String]) -> Result<(), LibraryError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        for (position, folder_id) in folder_ids.iter().enumerate() {
+            self.conn.execute(
+                "UPDATE playlist_folders SET position = ?1, updated_at = ?2 WHERE id = ?3",
+                params![position as i32, now, folder_id],
+            ).map_err(|e| LibraryError::Database(format!("Failed to reorder folder: {}", e)))?;
+        }
+
+        Ok(())
+    }
+
+    /// Move a playlist to a folder (or root if folder_id is None)
+    pub fn move_playlist_to_folder(&self, qobuz_playlist_id: u64, folder_id: Option<&str>) -> Result<(), LibraryError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        // First check if settings exist, if not create default
+        let existing = self.get_playlist_settings(qobuz_playlist_id)?;
+        if existing.is_none() {
+            let mut settings = PlaylistSettings::default();
+            settings.qobuz_playlist_id = qobuz_playlist_id;
+            settings.folder_id = folder_id.map(|s| s.to_string());
+            return self.save_playlist_settings(&settings);
+        }
+
+        self.conn.execute(
+            "UPDATE playlist_settings SET folder_id = ?1, updated_at = ?2 WHERE qobuz_playlist_id = ?3",
+            params![folder_id, now, qobuz_playlist_id as i64],
+        ).map_err(|e| LibraryError::Database(format!("Failed to move playlist to folder: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Get playlists in a specific folder (or root if folder_id is None)
+    pub fn get_playlists_in_folder(&self, folder_id: Option<&str>) -> Result<Vec<u64>, LibraryError> {
+        if let Some(fid) = folder_id {
+            let mut stmt = self.conn.prepare(
+                "SELECT qobuz_playlist_id FROM playlist_settings WHERE folder_id = ?1 ORDER BY position ASC"
+            ).map_err(|e| LibraryError::Database(format!("Failed to prepare statement: {}", e)))?;
+
+            let ids = stmt.query_map(params![fid], |row| {
+                Ok(row.get::<_, i64>(0)? as u64)
+            }).map_err(|e| LibraryError::Database(format!("Failed to query playlists in folder: {}", e)))?;
+
+            ids.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| LibraryError::Database(format!("Failed to collect playlist IDs: {}", e)))
+        } else {
+            let mut stmt = self.conn.prepare(
+                "SELECT qobuz_playlist_id FROM playlist_settings WHERE folder_id IS NULL ORDER BY position ASC"
+            ).map_err(|e| LibraryError::Database(format!("Failed to prepare statement: {}", e)))?;
+
+            let ids = stmt.query_map([], |row| {
+                Ok(row.get::<_, i64>(0)? as u64)
+            }).map_err(|e| LibraryError::Database(format!("Failed to query playlists in folder: {}", e)))?;
+
+            ids.collect::<Result<Vec<_>, _>>()
+                .map_err(|e| LibraryError::Database(format!("Failed to collect playlist IDs: {}", e)))
+        }
     }
 
     // === Playlist Local Tracks ===
@@ -2520,13 +2840,13 @@ impl LibraryDatabase {
     ) -> Result<Vec<PlaylistSettings>, LibraryError> {
         let query = if include_partial {
             "SELECT qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                    last_search_query, notes, hidden, position, has_local_content, is_favorite, created_at, updated_at
+                    last_search_query, notes, hidden, position, has_local_content, is_favorite, folder_id, created_at, updated_at
              FROM playlist_settings
              WHERE has_local_content IN ('some_local', 'all_local')
              ORDER BY position ASC, updated_at DESC"
         } else {
             "SELECT qobuz_playlist_id, custom_artwork_path, sort_by, sort_order,
-                    last_search_query, notes, hidden, position, has_local_content, is_favorite, created_at, updated_at
+                    last_search_query, notes, hidden, position, has_local_content, is_favorite, folder_id, created_at, updated_at
              FROM playlist_settings
              WHERE has_local_content = 'all_local'
              ORDER BY position ASC, updated_at DESC"
@@ -2547,8 +2867,9 @@ impl LibraryDatabase {
                 position: row.get(7)?,
                 has_local_content: LocalContentStatus::from_str(&row.get::<_, Option<String>>(8)?.unwrap_or_default()),
                 is_favorite: row.get::<_, i32>(9).unwrap_or(0) != 0,
-                created_at: row.get(10)?,
-                updated_at: row.get(11)?,
+                folder_id: row.get(10)?,
+                created_at: row.get(11)?,
+                updated_at: row.get(12)?,
             })
         }).map_err(|e| LibraryError::Database(format!("Failed to query playlists by local content: {}", e)))?;
 

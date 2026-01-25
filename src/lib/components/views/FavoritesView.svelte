@@ -201,6 +201,11 @@
   let showAlbumGroupMenu = $state(false);
   let albumGroupingEnabled = $state(false);
 
+  // Album sorting
+  type AlbumSortMode = 'default' | 'newest' | 'oldest' | 'title-asc' | 'title-desc' | 'artist';
+  let albumSortMode = $state<AlbumSortMode>('default');
+  let showAlbumSortMenu = $state(false);
+
   type TrackGroupMode = 'album' | 'artist' | 'name';
   let trackGroupMode = $state<TrackGroupMode>('album');
   let showTrackGroupMenu = $state(false);
@@ -243,12 +248,44 @@
   });
 
   let filteredAlbums = $derived.by(() => {
-    if (!albumSearch.trim()) return favoriteAlbums;
-    const query = albumSearch.toLowerCase();
-    return favoriteAlbums.filter(a =>
-      a.title.toLowerCase().includes(query) ||
-      a.artist.name.toLowerCase().includes(query)
-    );
+    let albums = favoriteAlbums;
+
+    // Filter by search
+    if (albumSearch.trim()) {
+      const query = albumSearch.toLowerCase();
+      albums = albums.filter(a =>
+        a.title.toLowerCase().includes(query) ||
+        a.artist.name.toLowerCase().includes(query)
+      );
+    }
+
+    // Sort albums
+    if (albumSortMode !== 'default') {
+      albums = [...albums].sort((a, b) => {
+        switch (albumSortMode) {
+          case 'newest': {
+            const dateA = a.release_date_original || '0000';
+            const dateB = b.release_date_original || '0000';
+            return dateB.localeCompare(dateA);
+          }
+          case 'oldest': {
+            const dateA = a.release_date_original || '9999';
+            const dateB = b.release_date_original || '9999';
+            return dateA.localeCompare(dateB);
+          }
+          case 'title-asc':
+            return a.title.localeCompare(b.title);
+          case 'title-desc':
+            return b.title.localeCompare(a.title);
+          case 'artist':
+            return a.artist.name.localeCompare(b.artist.name);
+          default:
+            return 0;
+        }
+      });
+    }
+
+    return albums;
   });
 
   let filteredArtists = $derived.by(() => {
@@ -330,6 +367,7 @@
   onMount(() => {
     albumViewMode = loadStoredString('qbz-favorites-album-view', 'grid', ['grid', 'list']);
     albumGroupMode = loadStoredString('qbz-favorites-album-group', 'alpha', ['alpha', 'artist']);
+    albumSortMode = loadStoredString('qbz-favorites-album-sort', 'default', ['default', 'newest', 'oldest', 'title-asc', 'title-desc', 'artist']);
     trackGroupMode = loadStoredString('qbz-favorites-track-group', 'album', ['album', 'artist', 'name']);
     albumGroupingEnabled = loadStoredBool('qbz-favorites-album-group-enabled', false);
     trackGroupingEnabled = loadStoredBool('qbz-favorites-track-group-enabled', false);
@@ -373,6 +411,7 @@
     try {
       localStorage.setItem('qbz-favorites-album-view', albumViewMode);
       localStorage.setItem('qbz-favorites-album-group', albumGroupMode);
+      localStorage.setItem('qbz-favorites-album-sort', albumSortMode);
       localStorage.setItem('qbz-favorites-track-group', trackGroupMode);
       localStorage.setItem('qbz-favorites-album-group-enabled', String(albumGroupingEnabled));
       localStorage.setItem('qbz-favorites-track-group-enabled', String(trackGroupingEnabled));
@@ -938,6 +977,66 @@
                 class="dropdown-item"
                 class:selected={albumGroupingEnabled && albumGroupMode === 'artist'}
                 onclick={() => { albumGroupMode = 'artist'; albumGroupingEnabled = true; showAlbumGroupMenu = false; }}
+              >
+                Artist
+              </button>
+            </div>
+          {/if}
+        </div>
+        <div class="dropdown-container">
+          <button class="control-btn" onclick={() => (showAlbumSortMenu = !showAlbumSortMenu)}>
+            <span>
+              {#if albumSortMode === 'default'}Sort: Default
+              {:else if albumSortMode === 'newest'}Sort: Newest
+              {:else if albumSortMode === 'oldest'}Sort: Oldest
+              {:else if albumSortMode === 'title-asc'}Sort: A-Z
+              {:else if albumSortMode === 'title-desc'}Sort: Z-A
+              {:else if albumSortMode === 'artist'}Sort: Artist
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showAlbumSortMenu}
+            <div class="dropdown-menu">
+              <button
+                class="dropdown-item"
+                class:selected={albumSortMode === 'default'}
+                onclick={() => { albumSortMode = 'default'; showAlbumSortMenu = false; }}
+              >
+                Default
+              </button>
+              <button
+                class="dropdown-item"
+                class:selected={albumSortMode === 'newest'}
+                onclick={() => { albumSortMode = 'newest'; showAlbumSortMenu = false; }}
+              >
+                Newest First
+              </button>
+              <button
+                class="dropdown-item"
+                class:selected={albumSortMode === 'oldest'}
+                onclick={() => { albumSortMode = 'oldest'; showAlbumSortMenu = false; }}
+              >
+                Oldest First
+              </button>
+              <button
+                class="dropdown-item"
+                class:selected={albumSortMode === 'title-asc'}
+                onclick={() => { albumSortMode = 'title-asc'; showAlbumSortMenu = false; }}
+              >
+                Title (A-Z)
+              </button>
+              <button
+                class="dropdown-item"
+                class:selected={albumSortMode === 'title-desc'}
+                onclick={() => { albumSortMode = 'title-desc'; showAlbumSortMenu = false; }}
+              >
+                Title (Z-A)
+              </button>
+              <button
+                class="dropdown-item"
+                class:selected={albumSortMode === 'artist'}
+                onclick={() => { albumSortMode = 'artist'; showAlbumSortMenu = false; }}
               >
                 Artist
               </button>
@@ -1528,9 +1627,11 @@
     align-items: center;
     gap: 10px;
     padding: 12px 24px;
-    margin: 0 -32px 16px -32px;
-    background-color: var(--bg-primary);
-    border-bottom: 1px solid var(--bg-tertiary);
+    margin: 0 -8px 16px -24px;
+    width: calc(100% + 32px);
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--alpha-6);
+    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
   }
 
   .nav-left {
@@ -2044,9 +2145,9 @@
   .album-row-quality .quality-badge {
     font-size: 11px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--alpha-85);
+    background: var(--alpha-10);
+    border: 1px solid var(--alpha-15);
     border-radius: 6px;
     padding: 3px 8px;
     min-width: 72px;

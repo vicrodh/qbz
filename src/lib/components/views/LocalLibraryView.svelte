@@ -6,7 +6,7 @@
   import {
     HardDrive, Music, Disc3, Mic2, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, AlertCircle, ImageDown, Upload, Search, LayoutGrid, List, Edit3,
-    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle
+    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal
   } from 'lucide-svelte';
   import FolderSettingsModal from '../FolderSettingsModal.svelte';
   import { t } from '$lib/i18n';
@@ -175,6 +175,84 @@
   let albumGroupingEnabled = $state(false);
   let showGroupMenu = $state(false);
 
+  // Quality/Format filter with checkboxes (AND between sections, OR within section)
+  let showFilterPanel = $state(false);
+
+  // Quality tier filters (OR within this group)
+  let filterHiRes = $state(false);
+  let filterCdQuality = $state(false);
+  let filterLossy = $state(false);
+
+  // Format filters (OR within this group)
+  let filterFlac = $state(false);
+  let filterWav = $state(false);
+  let filterMp3 = $state(false);
+  let filterAac = $state(false);
+  let filterOther = $state(false);
+
+  const LOSSLESS_FORMATS = ['flac', 'wav', 'aiff', 'alac', 'ape', 'dsd', 'dsf', 'dff'];
+  const LOSSY_FORMATS = ['mp3', 'aac', 'm4a', 'ogg', 'opus', 'wma'];
+
+  // Derived: check if any filter is active
+  let hasActiveFilters = $derived(
+    filterHiRes || filterCdQuality || filterLossy ||
+    filterFlac || filterWav || filterMp3 || filterAac || filterOther
+  );
+
+  // Count active filters for badge
+  let activeFilterCount = $derived(
+    [filterHiRes, filterCdQuality, filterLossy, filterFlac, filterWav, filterMp3, filterAac, filterOther]
+      .filter(Boolean).length
+  );
+
+  function matchesQualityFilters(album: LocalAlbum): boolean {
+    const format = album.format.toLowerCase();
+    const isLossless = LOSSLESS_FORMATS.includes(format);
+    const bitDepth = album.bit_depth ?? 16;
+
+    // Check quality tier (OR logic - pass if any selected matches, or none selected)
+    const qualityFiltersActive = filterHiRes || filterCdQuality || filterLossy;
+    let passesQuality = !qualityFiltersActive; // Pass if no quality filters
+
+    if (qualityFiltersActive) {
+      if (filterHiRes && isLossless && (bitDepth >= 24 || album.sample_rate > 48000)) {
+        passesQuality = true;
+      }
+      if (filterCdQuality && isLossless && bitDepth <= 16 && album.sample_rate <= 48000) {
+        passesQuality = true;
+      }
+      if (filterLossy && LOSSY_FORMATS.includes(format)) {
+        passesQuality = true;
+      }
+    }
+
+    // Check format (OR logic - pass if any selected matches, or none selected)
+    const formatFiltersActive = filterFlac || filterWav || filterMp3 || filterAac || filterOther;
+    let passesFormat = !formatFiltersActive; // Pass if no format filters
+
+    if (formatFiltersActive) {
+      if (filterFlac && format === 'flac') passesFormat = true;
+      if (filterWav && (format === 'wav' || format === 'wave')) passesFormat = true;
+      if (filterMp3 && format === 'mp3') passesFormat = true;
+      if (filterAac && (format === 'aac' || format === 'm4a')) passesFormat = true;
+      if (filterOther && !['flac', 'wav', 'wave', 'mp3', 'aac', 'm4a'].includes(format)) passesFormat = true;
+    }
+
+    // AND between sections
+    return passesQuality && passesFormat;
+  }
+
+  function clearAllFilters() {
+    filterHiRes = false;
+    filterCdQuality = false;
+    filterLossy = false;
+    filterFlac = false;
+    filterWav = false;
+    filterMp3 = false;
+    filterAac = false;
+    filterOther = false;
+  }
+
   // Performance mode state
   let useVirtualization = $state(isVirtualizationEnabled());
   let virtualizedScrollTarget = $state<string | undefined>(undefined);
@@ -291,10 +369,18 @@
 
   // Memoized filtered and grouped albums
   let filteredAndGroupedAlbums = $derived.by(() => {
-    // Filter albums
-    const filtered = debouncedAlbumSearch
-      ? albums.filter(album => matchesAlbumSearchFast(album, debouncedAlbumSearch))
-      : albums;
+    // Filter albums by search and quality
+    let filtered = albums;
+
+    // Apply search filter
+    if (debouncedAlbumSearch) {
+      filtered = filtered.filter(album => matchesAlbumSearchFast(album, debouncedAlbumSearch));
+    }
+
+    // Apply quality/format filters (checkboxes)
+    if (hasActiveFilters) {
+      filtered = filtered.filter(album => matchesQualityFilters(album));
+    }
 
     // Group if enabled
     if (!albumGroupingEnabled) {
@@ -2029,7 +2115,7 @@
   }
 </script>
 
-<div class="library-view">
+<div class="library-view" class:virtualized-active={(activeTab === 'albums' && !showHiddenAlbums && albums.length > 0) || (activeTab === 'artists' && artists.length > 0) || (activeTab === 'tracks' && tracks.length > 0)}>
   {#if selectedAlbum}
     {@const albumSections = buildAlbumSections(albumTracks)}
     {@const showDiscHeaders = albumSections.length > 1}
@@ -2082,19 +2168,26 @@
             </div>
           {/if}
           <div class="album-actions">
-            <button class="play-btn" onclick={handlePlayAllAlbum}>
-              <Play size={16} fill="white" />
-              <span>Play All</span>
+            <button class="action-btn-circle primary" onclick={handlePlayAllAlbum} title="Play All">
+              <Play size={20} fill="currentColor" color="currentColor" />
             </button>
-            <button class="shuffle-btn" onclick={handleShuffleAllAlbum}>
-              <Shuffle size={16} />
-              <span>Shuffle</span>
+            <button class="action-btn-circle" onclick={handleShuffleAllAlbum} title="Shuffle">
+              <Shuffle size={18} />
             </button>
           </div>
         </div>
       </div>
 
       <div class="track-list">
+        <div class="track-list-header">
+          <div class="col-number">#</div>
+          <div class="col-title">Title</div>
+          <div class="col-duration">Duration</div>
+          <div class="col-quality">Quality</div>
+          <div class="col-spacer"></div>
+          <div class="col-spacer"></div>
+          <div class="col-spacer"></div>
+        </div>
         {#each albumSections as section (section.disc)}
           {#if showDiscHeaders}
             <div class="disc-header">{section.label}</div>
@@ -2461,6 +2554,86 @@
                   >
                     Artist
                   </button>
+                </div>
+              {/if}
+            </div>
+
+            <!-- Quality/Format Filter -->
+            <div class="dropdown-container">
+              <button
+                class="control-btn"
+                class:active={hasActiveFilters}
+                onclick={() => (showFilterPanel = !showFilterPanel)}
+                title="Filter by quality/format"
+              >
+                <SlidersHorizontal size={14} />
+                <span>Filter</span>
+                {#if activeFilterCount > 0}
+                  <span class="filter-badge">{activeFilterCount}</span>
+                {/if}
+              </button>
+              {#if showFilterPanel}
+                <div class="filter-panel">
+                  <div class="filter-panel-header">
+                    <span>Filters</span>
+                    {#if hasActiveFilters}
+                      <button class="clear-filters-btn" onclick={clearAllFilters}>Clear all</button>
+                    {/if}
+                  </div>
+
+                  <div class="filter-section">
+                    <div class="filter-section-label">Quality</div>
+                    <div class="filter-checkboxes">
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterHiRes} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">Hi-Res</span>
+                        <span class="label-hint">24bit+</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterCdQuality} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">CD Quality</span>
+                        <span class="label-hint">16bit</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterLossy} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">Lossy</span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div class="filter-section">
+                    <div class="filter-section-label">Format</div>
+                    <div class="filter-checkboxes format-grid">
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterFlac} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">FLAC</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterWav} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">WAV</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterMp3} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">MP3</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterAac} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">AAC</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterOther} />
+                        <span class="checkmark"></span>
+                        <span class="label-text">Other</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               {/if}
             </div>
@@ -2888,6 +3061,11 @@
     padding-right: 8px;
     overflow-y: auto;
     height: 100%;
+  }
+
+  .library-view.virtualized-active {
+    overflow: hidden;
+    padding-bottom: 0;
   }
 
   /* Custom scrollbar */
@@ -3371,9 +3549,11 @@
     align-items: center;
     gap: 10px;
     padding: 12px 24px;
-    background-color: var(--bg-primary);
-    border-bottom: 1px solid var(--bg-tertiary);
-    margin: 0 -24px 16px;
+    margin: 0 -8px 16px -24px;
+    width: calc(100% + 32px);
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--alpha-6);
+    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
   }
 
   .jump-nav-left {
@@ -3568,6 +3748,17 @@
     color: var(--text-primary);
   }
 
+  .control-btn.active {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    color: white;
+  }
+
+  .control-btn.active:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+
   .control-btn.icon-only {
     width: 36px;
     height: 36px;
@@ -3641,6 +3832,164 @@
     font-weight: 600;
   }
 
+  .dropdown-section-label {
+    padding: 6px 10px 4px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+  }
+
+  .dropdown-divider {
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 6px 0;
+  }
+
+  /* Filter Panel */
+  .filter-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    background: var(--accent-primary);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    border-radius: 9px;
+    margin-left: 4px;
+  }
+
+  .filter-panel {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 12px;
+    padding: 12px;
+    min-width: 240px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+    z-index: 20;
+  }
+
+  .filter-panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .filter-panel-header span {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .clear-filters-btn {
+    background: none;
+    border: none;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--accent-primary);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background 150ms ease;
+  }
+
+  .clear-filters-btn:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .filter-section {
+    margin-bottom: 12px;
+  }
+
+  .filter-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .filter-section-label {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+  }
+
+  .filter-checkboxes {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .filter-checkboxes.format-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 6px 12px;
+  }
+
+  .filter-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    padding: 6px 8px;
+    border-radius: 6px;
+    transition: background 150ms ease;
+  }
+
+  .filter-checkbox:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .filter-checkbox input {
+    display: none;
+  }
+
+  .filter-checkbox .checkmark {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--text-muted);
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .filter-checkbox input:checked + .checkmark {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+
+  .filter-checkbox input:checked + .checkmark::after {
+    content: '';
+    width: 4px;
+    height: 8px;
+    border: solid white;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg) translateY(-1px);
+  }
+
+  .filter-checkbox .label-text {
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .filter-checkbox .label-hint {
+    font-size: 11px;
+    color: var(--text-muted);
+    margin-left: auto;
+  }
+
   /* Content */
   .content {
     min-height: 200px;
@@ -3690,7 +4039,7 @@
   .album-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 24px;
+    gap: 24px 14px; /* row-gap column-gap */
   }
 
   .album-sections {
@@ -3814,9 +4163,9 @@
   .album-row-quality .quality-badge {
     font-size: 11px;
     font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--alpha-85);
+    background: var(--alpha-10);
+    border: 1px solid var(--alpha-15);
     border-radius: 6px;
     padding: 3px 8px;
     min-width: 72px;
@@ -4032,7 +4381,7 @@
     align-items: center;
     justify-content: center;
     background: rgba(0, 0, 0, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid var(--alpha-15);
     border-radius: 6px;
     color: var(--text-primary);
     cursor: pointer;
@@ -4101,6 +4450,47 @@
 
   .track-list .disc-header:first-child {
     margin-top: 0;
+  }
+
+  .track-list-header {
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 400;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--bg-tertiary);
+    margin-bottom: 8px;
+  }
+
+  .track-list-header .col-number {
+    width: 48px;
+    text-align: center;
+  }
+
+  .track-list-header .col-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .track-list-header .col-duration {
+    width: 80px;
+    text-align: center;
+  }
+
+  .track-list-header .col-quality {
+    width: 80px;
+    text-align: center;
+  }
+
+  .track-list-header .col-spacer {
+    width: 28px;
   }
 
   /* Album Detail */
@@ -4227,46 +4617,9 @@
 
   .album-actions {
     display: flex;
+    align-items: center;
     gap: 12px;
-  }
-
-  .play-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 28px;
-    background: var(--accent-primary);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 150ms ease;
-  }
-
-  .play-btn:hover {
-    background: var(--accent-hover);
-  }
-
-  .shuffle-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 12px 24px;
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-subtle);
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .shuffle-btn:hover {
-    background: var(--bg-hover);
-    border-color: var(--text-muted);
+    margin-top: 4px;
   }
 
   /* Nav row for album detail */

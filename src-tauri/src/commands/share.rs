@@ -180,28 +180,134 @@ async fn search_itunes_by_term(title: &str, artist: &str) -> Option<String> {
         .find_map(|result| result.track_view_url.or(result.collection_view_url))
 }
 
-/// Get song.link URL for an album
-/// Requires UPC to be present in the album metadata
+/// iTunes album lookup response
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ItunesAlbumResult {
+    collection_id: Option<u64>,
+    collection_view_url: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ItunesAlbumLookupResponse {
+    result_count: u32,
+    results: Vec<ItunesAlbumResult>,
+}
+
+/// Get album.link URL for an album
+/// Tries iTunes lookup by UPC first, then by album title/artist search
 #[tauri::command]
 pub async fn share_album_songlink(
     upc: Option<String>,
+    album_id: Option<String>,
+    title: Option<String>,
+    artist: Option<String>,
     state: State<'_, AppState>,
 ) -> Result<SongLinkResponse, String> {
-    let upc = upc.ok_or_else(|| {
-        ShareError::MissingUpc.to_string()
-    })?;
+    let upc = upc.unwrap_or_default().trim().to_string();
+    let title = title.unwrap_or_default().trim().to_string();
+    let artist = artist.unwrap_or_default().trim().to_string();
 
-    if upc.is_empty() {
-        return Err(ShareError::MissingUpc.to_string());
+    // Try iTunes lookup by UPC first
+    if !upc.is_empty() {
+        if let Some(songlink) = lookup_itunes_album_by_upc(&upc).await {
+            return Ok(songlink);
+        }
+        log::debug!("UPC lookup failed, trying Odesli API...");
+
+        // Try Odesli API with UPC
+        match state.songlink.get_by_upc(&upc).await {
+            Ok(result) => return Ok(result),
+            Err(err) => log::warn!("Odesli UPC lookup failed: {}", err),
+        }
     }
 
-    log::info!("Command: share_album_songlink UPC={}", upc);
+    // Try iTunes search by title/artist
+    if !title.is_empty() && !artist.is_empty() {
+        if let Some(songlink) = search_itunes_album(&title, &artist).await {
+            return Ok(songlink);
+        }
+    }
 
-    state
-        .songlink
-        .get_by_upc(&upc)
+    Err("Could not find album on music platforms".to_string())
+}
+
+async fn lookup_itunes_album_by_upc(upc: &str) -> Option<SongLinkResponse> {
+    if upc.trim().is_empty() {
+        return None;
+    }
+
+    log::info!("Looking up iTunes album by UPC: {}", upc);
+
+    let url = "https://itunes.apple.com/lookup";
+    let response = reqwest::Client::new()
+        .get(url)
+        .query(&[("upc", upc), ("country", "US")])
+        .send()
         .await
-        .map_err(|e| e.to_string())
+        .ok()?;
+
+    if !response.status().is_success() {
+        return None;
+    }
+
+    let data: ItunesAlbumLookupResponse = response.json().await.ok()?;
+    if data.result_count == 0 {
+        return None;
+    }
+
+    let album = data.results.into_iter().find(|r| r.collection_id.is_some())?;
+    let collection_id = album.collection_id?;
+
+    albumlink_from_itunes_id(collection_id)
+}
+
+async fn search_itunes_album(title: &str, artist: &str) -> Option<SongLinkResponse> {
+    let term = format!("{} {}", artist, title);
+    log::info!("Searching iTunes for album: {}", term);
+
+    let url = "https://itunes.apple.com/search";
+    let response = reqwest::Client::new()
+        .get(url)
+        .query(&[
+            ("term", term),
+            ("entity", "album".to_string()),
+            ("limit", "1".to_string()),
+            ("country", "US".to_string()),
+        ])
+        .send()
+        .await
+        .ok()?;
+
+    if !response.status().is_success() {
+        return None;
+    }
+
+    let data: ItunesAlbumLookupResponse = response.json().await.ok()?;
+    if data.result_count == 0 {
+        return None;
+    }
+
+    let album = data.results.into_iter().find(|r| r.collection_id.is_some())?;
+    let collection_id = album.collection_id?;
+
+    albumlink_from_itunes_id(collection_id)
+}
+
+fn albumlink_from_itunes_id(collection_id: u64) -> Option<SongLinkResponse> {
+    let page_url = format!("https://album.link/i/{}", collection_id);
+    log::info!("Using Album.link direct URL: {}", page_url);
+
+    Some(SongLinkResponse {
+        page_url,
+        title: None,
+        artist: None,
+        thumbnail_url: None,
+        platforms: HashMap::new(),
+        identifier: collection_id.to_string(),
+        content_type: ContentType::Album.as_str().to_string(),
+    })
 }
 
 /// Generate a Qobuz share URL for a track

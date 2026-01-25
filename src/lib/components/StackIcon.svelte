@@ -88,7 +88,7 @@
   
   .stack-icon-wrapper:hover {
     opacity: 1;
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--alpha-5);
     color: var(--text-primary);
   }
 

@@ -626,7 +626,7 @@
     width: 18px;
     height: 18px;
     border-width: 2px;
-    border-color: rgba(255, 255, 255, 0.3);
+    border-color: var(--alpha-30);
     border-top-color: white;
   }
 

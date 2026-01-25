@@ -410,7 +410,7 @@
   .artwork-placeholder {
     width: 100%;
     height: 100%;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--alpha-6);
     border-radius: 6px;
   }
 
@@ -432,9 +432,9 @@
     justify-content: center;
     width: 24px;
     height: 24px;
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--alpha-6);
     border: none;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--alpha-50);
     cursor: pointer;
     border-radius: 4px;
     transition: all 0.15s ease;
@@ -470,7 +470,7 @@
     align-items: center;
     gap: 4px;
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--alpha-50);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -487,7 +487,7 @@
   }
 
   .album {
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--alpha-40);
   }
 
   /* Seek Bar */
@@ -506,7 +506,7 @@
   .progress-track {
     width: 100%;
     height: 4px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--alpha-10);
     border-radius: 2px;
     overflow: hidden;
   }
@@ -549,7 +549,7 @@
   .volume-bar {
     width: 90px;
     height: 4px;
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--alpha-18);
     border-radius: 999px;
     cursor: pointer;
     position: relative;
@@ -558,7 +558,7 @@
   .volume-fill {
     height: 100%;
     border-radius: 999px;
-    background: rgba(255, 255, 255, 0.8);
+    background: var(--alpha-80);
   }
 
   .volume-thumb {
@@ -604,14 +604,14 @@
     height: 28px;
     background: transparent;
     border: none;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--alpha-70);
     cursor: pointer;
     border-radius: 50%;
     transition: all 0.15s ease;
   }
 
   .ctrl-btn:hover {
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--alpha-8);
     color: #fff;
   }
 
@@ -626,10 +626,10 @@
   .ctrl-btn.play {
     width: 32px;
     height: 32px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--alpha-10);
   }
 
   .ctrl-btn.play:hover {
-    background: rgba(255, 255, 255, 0.18);
+    background: var(--alpha-18);
   }
 </style>

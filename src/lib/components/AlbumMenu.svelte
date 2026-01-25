@@ -243,7 +243,7 @@
       }}
       aria-label="Album actions"
     >
-      <MoreHorizontal size={20} color="white" />
+      <MoreHorizontal size={20} color="currentColor" />
     </button>
 
     {#if isOpen && portalTarget}
@@ -308,7 +308,7 @@
                   {#if onShareSonglink}
                     <button class="menu-item" onclick={() => handleAction(onShareSonglink)}>
                       <Link size={14} />
-                      <span>Song.link</span>
+                      <span>Album.link</span>
                     </button>
                   {/if}
                 </div>
@@ -385,7 +385,7 @@
   }
 
   .menu-trigger:hover {
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: var(--alpha-10);
   }
 
   .menu {

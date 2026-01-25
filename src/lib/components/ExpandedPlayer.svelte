@@ -453,9 +453,9 @@
     justify-content: center;
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(8px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    border: 1px solid var(--alpha-10);
     border-radius: 50%;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--alpha-70);
     cursor: pointer;
     transition: all 150ms ease;
   }
@@ -549,21 +549,21 @@
   }
 
   .artist-album-row .separator {
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--alpha-50);
     margin: 0 2px;
   }
 
   .artist {
     font-size: 16px;
     font-weight: 400;
-    color: rgba(255, 255, 255, 0.7);
+    color: var(--alpha-70);
     margin: 0;
   }
 
   .album {
     font-size: 16px;
     font-weight: 400;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--alpha-50);
     margin: 0;
   }
 
@@ -585,7 +585,7 @@
     display: flex;
     justify-content: space-between;
     font-size: 12px;
-    color: rgba(255, 255, 255, 0.5);
+    color: var(--alpha-50);
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
     margin-bottom: 8px;
@@ -593,7 +593,7 @@
 
   .progress-bar {
     height: 4px;
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: var(--alpha-20);
     border-radius: 2px;
     position: relative;
     cursor: pointer;
@@ -634,7 +634,7 @@
   .control-btn {
     background: none;
     border: none;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--alpha-60);
     cursor: pointer;
     transition: all 150ms ease;
     position: relative;
@@ -644,7 +644,7 @@
 
   .control-btn:hover {
     color: white;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--alpha-10);
   }
 
   .control-btn.primary {
@@ -666,7 +666,7 @@
   .control-btn.play-pause {
     width: 64px;
     height: 64px;
-    background: rgba(255, 255, 255, 0.15);
+    background: var(--alpha-15);
     backdrop-filter: blur(4px);
     display: flex;
     align-items: center;
@@ -674,7 +674,7 @@
   }
 
   .control-btn.play-pause:hover {
-    background: rgba(255, 255, 255, 0.25);
+    background: var(--alpha-25);
     transform: scale(1.05);
   }
 
@@ -692,7 +692,7 @@
 
   .volume-bar {
     height: 4px;
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: var(--alpha-20);
     border-radius: 2px;
     position: relative;
     cursor: pointer;
@@ -727,7 +727,7 @@
     padding: 4px 8px;
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.6);
-    color: rgba(255, 255, 255, 0.9);
+    color: var(--alpha-90);
     font-size: 12px;
     font-weight: 600;
     opacity: 0;
@@ -757,14 +757,14 @@
     background: none;
     border: none;
     border-radius: 50%;
-    color: rgba(255, 255, 255, 0.6);
+    color: var(--alpha-60);
     cursor: pointer;
     transition: all 150ms ease;
   }
 
   .action-btn:hover {
     color: white;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--alpha-10);
   }
 
   .action-btn.active {
@@ -816,10 +816,10 @@
   }
 
   .lyrics-container :global(.lyrics-lines) {
-    --text-primary: rgba(255, 255, 255, 0.9);
-    --text-secondary: rgba(255, 255, 255, 0.45);
-    --text-muted: rgba(255, 255, 255, 0.2);
-    --bg-tertiary: rgba(255, 255, 255, 0.08);
+    --text-primary: var(--alpha-90);
+    --text-secondary: var(--alpha-45);
+    --text-muted: var(--alpha-20);
+    --bg-tertiary: var(--alpha-8);
     padding: 0;
     height: 100%;
     max-height: 100%; /* Constrain to parent height */
@@ -832,7 +832,7 @@
     align-items: center;
     justify-content: center;
     height: 100%;
-    color: rgba(255, 255, 255, 0.4);
+    color: var(--alpha-40);
     font-size: 15px;
     gap: 12px;
   }
@@ -848,8 +848,8 @@
   .spinner {
     width: 24px;
     height: 24px;
-    border: 2px solid rgba(255, 255, 255, 0.2);
-    border-top-color: rgba(255, 255, 255, 0.8);
+    border: 2px solid var(--alpha-20);
+    border-top-color: var(--alpha-80);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }

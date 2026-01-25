@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio } from 'lucide-svelte';
+  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info } from 'lucide-svelte';
   import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -139,6 +139,39 @@
   let searchInputEl = $state<HTMLInputElement | null>(null);
   let currentSearchIndex = $state(0);
 
+  // Album sorting state - independent per section
+  type AlbumSortMode = 'default' | 'newest' | 'oldest' | 'title-asc' | 'title-desc';
+  let albumSortMode = $state<AlbumSortMode>('default');
+  let showAlbumSortMenu = $state(false);
+  let epsSinglesSortMode = $state<AlbumSortMode>('default');
+  let showEpsSinglesSortMenu = $state(false);
+  let liveAlbumsSortMode = $state<AlbumSortMode>('default');
+  let showLiveAlbumsSortMenu = $state(false);
+  let compilationsSortMode = $state<AlbumSortMode>('default');
+  let showCompilationsSortMenu = $state(false);
+  let tributesSortMode = $state<AlbumSortMode>('default');
+  let showTributesSortMenu = $state(false);
+  let tributesExpanded = $state(false); // Collapsed by default
+  let tributesVisibleCount = $state(20); // Load 20 at a time
+  let othersSortMode = $state<AlbumSortMode>('default');
+  let showOthersSortMenu = $state(false);
+
+  // Popular tracks display state
+  let visibleTracksCount = $state(5);
+  let showTracksContextMenu = $state(false);
+
+  // Computed visible tracks
+  let visibleTracks = $derived(topTracks.slice(0, visibleTracksCount));
+  let canLoadMoreTracks = $derived(visibleTracksCount < 50 && topTracks.length > visibleTracksCount);
+
+  function loadMoreTracks() {
+    if (visibleTracksCount === 5) {
+      visibleTracksCount = 20;
+    } else if (visibleTracksCount === 20) {
+      visibleTracksCount = 50;
+    }
+  }
+
   // Download status tracking
   let albumDownloadStatuses = $state<Map<string, boolean>>(new Map());
 
@@ -191,16 +224,44 @@
     if (!artistId || !artistName) return;
 
     bioExpanded = false;
+    isBioTruncated = false;
     imageError = false;
     topTracks = [];
     similarArtists = [];
     similarArtistImageErrors = new Set();
     activeJumpSection = 'about';
+    // Reset all sort modes when artist changes
+    albumSortMode = 'default';
+    epsSinglesSortMode = 'default';
+    liveAlbumsSortMode = 'default';
+    compilationsSortMode = 'default';
+    tributesSortMode = 'default';
+    othersSortMode = 'default';
+    tributesExpanded = false;
+    tributesVisibleCount = 20;
 
     loadTopTracks();
     loadSimilarArtists();
     checkFavoriteStatus();
     loadArtistAlbumDownloadStatuses();
+  });
+
+  // Close sort menu when clicking outside
+  $effect(() => {
+    if (!showAlbumSortMenu) return;
+
+    function handleClick() {
+      showAlbumSortMenu = false;
+    }
+
+    // Delay to avoid closing immediately
+    setTimeout(() => {
+      document.addEventListener('click', handleClick);
+    }, 0);
+
+    return () => {
+      document.removeEventListener('click', handleClick);
+    };
   });
 
   async function loadArtistAlbumDownloadStatuses() {
@@ -491,6 +552,40 @@
     }
   }
 
+  function handlePlayAllTracksNext() {
+    if (!onTrackPlayNext) return;
+    // Add all tracks to play next (in reverse order so first track plays first)
+    for (let i = topTracks.length - 1; i >= 0; i--) {
+      onTrackPlayNext(topTracks[i]);
+    }
+  }
+
+  function handlePlayAllTracksLater() {
+    if (!onTrackPlayLater) return;
+    // Add all tracks to play later
+    for (const track of topTracks) {
+      onTrackPlayLater(track);
+    }
+  }
+
+  async function handleShuffleAllTracks() {
+    if (topTracks.length === 0 || !onTrackPlay) return;
+    // Shuffle and play from random position
+    const randomIndex = Math.floor(Math.random() * topTracks.length);
+    try {
+      await handleTrackPlay(topTracks[randomIndex], randomIndex);
+    } catch (err) {
+      console.error('Failed to shuffle tracks:', err);
+    }
+  }
+
+  function handleAddAllTracksToPlaylist() {
+    if (!onTrackAddToPlaylist || topTracks.length === 0) return;
+    // Add first track to playlist (this opens the playlist picker)
+    // The UI typically handles adding multiple tracks through a different flow
+    onTrackAddToPlaylist(topTracks[0].id);
+  }
+
   function handleImageError() {
     imageError = true;
   }
@@ -500,16 +595,54 @@
     artist.biography?.content || artist.biography?.summary || null
   );
 
-  // Truncate bio for collapsed view (reduced to ~530 chars, 2/3 of original 800)
-  const BIO_TRUNCATE_LENGTH = 530;
-  let truncatedBio = $derived(
-    bioText && bioText.length > BIO_TRUNCATE_LENGTH
-      ? bioText.slice(0, BIO_TRUNCATE_LENGTH) + '...'
-      : bioText
-  );
-  let bioNeedsTruncation = $derived(bioText ? bioText.length > BIO_TRUNCATE_LENGTH : false);
+  // Smart 3-line truncation with resize detection
+  let bioTextEl = $state<HTMLDivElement | null>(null);
+  let bioContainerEl = $state<HTMLDivElement | null>(null);
+  let isBioTruncated = $state(false);
 
-  let hasMoreAlbums = $derived(!!onLoadMore && artist.albumsFetched < artist.totalAlbums);
+  function checkBioTruncation() {
+    if (!bioTextEl || bioExpanded) return;
+    // scrollHeight > clientHeight means content is overflowing (truncated by line-clamp)
+    isBioTruncated = bioTextEl.scrollHeight > bioTextEl.clientHeight + 1;
+  }
+
+  $effect(() => {
+    if (!bioTextEl || !bioText || !bioContainerEl) return;
+
+    // Initial check after a frame to ensure layout is complete
+    requestAnimationFrame(() => {
+      checkBioTruncation();
+    });
+
+    // Observe the PARENT container (not the clamped element) for width changes
+    const observer = new ResizeObserver(() => {
+      if (!bioExpanded) {
+        // Double RAF to ensure CSS has applied after resize
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            checkBioTruncation();
+          });
+        });
+      }
+    });
+
+    observer.observe(bioContainerEl);
+
+    return () => observer.disconnect();
+  });
+
+  // Recheck truncation after collapsing (wait for DOM update)
+  $effect(() => {
+    if (bioExpanded === false && bioTextEl) {
+      // Use double RAF to wait for CSS to fully apply
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          checkBioTruncation();
+        });
+      });
+    }
+  });
+
   let hasTopTracks = $derived(topTracks.length > 0 || tracksLoading);
   let hasEpsSingles = $derived(artist.epsSingles.length > 0);
   let hasLiveAlbums = $derived(artist.liveAlbums.length > 0);
@@ -524,45 +657,79 @@
     { id: 'eps', label: 'EPs & Singles', el: epsSinglesSection, visible: hasEpsSingles },
     { id: 'live', label: 'Live Albums', el: liveAlbumsSection, visible: hasLiveAlbums },
     { id: 'compilations', label: 'Compilations', el: compilationsSection, visible: hasCompilations },
-    { id: 'tributes', label: 'Tributes', el: tributesSection, visible: hasTributes },
     { id: 'others', label: 'Others', el: othersSection, visible: hasOthers },
     { id: 'playlists', label: 'Playlists', el: playlistsSection, visible: hasPlaylists },
+    { id: 'tributes', label: 'Tributes', el: tributesSection, visible: hasTributes },
   ].filter(section => section.visible));
 
   let showJumpNav = $derived(jumpSections.length > 1);
 
-  // Search filtering
+  // Album sorting helper
+  type AlbumItem = { id: string; title: string; year?: string; artwork: string; quality: string };
+  function sortAlbums<T extends AlbumItem>(albums: T[], mode: AlbumSortMode): T[] {
+    if (mode === 'default') return albums;
+    return [...albums].sort((a, b) => {
+      switch (mode) {
+        case 'newest': {
+          const yearA = a.year || '0000';
+          const yearB = b.year || '0000';
+          return yearB.localeCompare(yearA);
+        }
+        case 'oldest': {
+          const yearA = a.year || '9999';
+          const yearB = b.year || '9999';
+          return yearA.localeCompare(yearB);
+        }
+        case 'title-asc':
+          return a.title.localeCompare(b.title);
+        case 'title-desc':
+          return b.title.localeCompare(a.title);
+        default:
+          return 0;
+      }
+    });
+  }
+
+  // Search filtering and sorting
   let searchLower = $derived(searchQuery.toLowerCase().trim());
-  let filteredAlbums = $derived(
-    searchLower
+  let filteredAlbums = $derived.by(() => {
+    let albums = searchLower
       ? artist.albums.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.albums
-  );
-  let filteredEpsSingles = $derived(
-    searchLower
+      : artist.albums;
+    return sortAlbums(albums, albumSortMode);
+  });
+  let filteredEpsSingles = $derived.by(() => {
+    let albums = searchLower
       ? artist.epsSingles.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.epsSingles
-  );
-  let filteredLiveAlbums = $derived(
-    searchLower
+      : artist.epsSingles;
+    return sortAlbums(albums, epsSinglesSortMode);
+  });
+  let filteredLiveAlbums = $derived.by(() => {
+    let albums = searchLower
       ? artist.liveAlbums.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.liveAlbums
-  );
-  let filteredCompilations = $derived(
-    searchLower
+      : artist.liveAlbums;
+    return sortAlbums(albums, liveAlbumsSortMode);
+  });
+  let filteredCompilations = $derived.by(() => {
+    let albums = searchLower
       ? artist.compilations.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.compilations
-  );
-  let filteredTributes = $derived(
-    searchLower
+      : artist.compilations;
+    return sortAlbums(albums, compilationsSortMode);
+  });
+  let filteredTributes = $derived.by(() => {
+    let albums = searchLower
       ? artist.tributes.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.tributes
-  );
-  let filteredOthers = $derived(
-    searchLower
+      : artist.tributes;
+    return sortAlbums(albums, tributesSortMode);
+  });
+  let visibleTributes = $derived(filteredTributes.slice(0, tributesVisibleCount));
+  let canLoadMoreTributes = $derived(tributesVisibleCount < filteredTributes.length);
+  let filteredOthers = $derived.by(() => {
+    let albums = searchLower
       ? artist.others.filter(a => a.title.toLowerCase().includes(searchLower))
-      : artist.others
-  );
+      : artist.others;
+    return sortAlbums(albums, othersSortMode);
+  });
   let filteredPlaylists = $derived(
     searchLower
       ? artist.playlists.filter(p => p.title.toLowerCase().includes(searchLower))
@@ -715,7 +882,7 @@
 
   <!-- Artist Header -->
   <div class="artist-header section-anchor" bind:this={aboutSection}>
-    <!-- Artist Image and Actions -->
+    <!-- Artist Image -->
     <div class="artist-image-column">
       <div class="artist-image-container">
         {#if imageError || !artist.image}
@@ -733,35 +900,6 @@
           />
         {/if}
       </div>
-      <div class="artist-actions">
-        <button
-          class="favorite-btn"
-          class:is-favorite={isFavorite}
-          onclick={toggleFavorite}
-          disabled={isFavoriteLoading}
-          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-        >
-          {#if isFavorite}
-            <Heart size={24} fill="var(--accent-primary)" color="var(--accent-primary)" />
-          {:else}
-            <Heart size={24} />
-          {/if}
-        </button>
-        <button
-          class="radio-btn"
-          class:loading={isRadioLoading}
-          class:glow={radioJustCreated}
-          onclick={createArtistRadio}
-          disabled={isRadioLoading}
-          title="Start Artist Radio"
-        >
-          {#if isRadioLoading}
-            <span class="loading-message">{radioLoadingMessage}</span>
-          {:else}
-            <Radio size={24} />
-          {/if}
-        </button>
-      </div>
     </div>
 
     <!-- Artist Info -->
@@ -770,11 +908,11 @@
 
       <!-- Biography -->
       {#if bioText}
-        <div class="biography">
-          <div class="bio-text">
-            {@html bioExpanded ? bioText : truncatedBio}
+        <div class="biography" bind:this={bioContainerEl}>
+          <div class="bio-text" class:expanded={bioExpanded} bind:this={bioTextEl}>
+            {@html bioText}
           </div>
-          {#if bioNeedsTruncation}
+          {#if isBioTruncated || bioExpanded}
             <button class="bio-toggle" onclick={() => bioExpanded = !bioExpanded}>
               {#if bioExpanded}
                 <ChevronUp size={16} />
@@ -795,34 +933,57 @@
         <div class="similar-loading">Loading similar artists...</div>
       {:else if similarArtists.length > 0}
         <div class="similar-artists">
-          <div class="similar-title">Similar Artists</div>
+          <div class="similar-title">SIMILAR ARTISTS</div>
           <div class="similar-list">
-            {#each similarArtists as similar}
+            {#each similarArtists as similar, index}
+              {#if index > 0}
+                <span class="similar-separator">•</span>
+              {/if}
               <button
                 class="similar-artist"
                 onclick={() => onTrackGoToArtist?.(similar.id)}
                 title={similar.name}
               >
-                {#if similarArtistImageErrors.has(similar.id) || !getSimilarArtistImage(similar)}
-                  <span class="similar-avatar placeholder">
-                    <User size={12} />
-                  </span>
-                {:else}
-                  <img
-                    src={getSimilarArtistImage(similar)}
-                    alt={similar.name}
-                    class="similar-avatar"
-                    loading="lazy"
-                    decoding="async"
-                    onerror={() => handleSimilarArtistImageError(similar.id)}
-                  />
-                {/if}
-                <span class="similar-name">{similar.name}</span>
+                {similar.name}
               </button>
             {/each}
           </div>
         </div>
       {/if}
+
+      <!-- Action Buttons -->
+      <div class="artist-actions">
+        <button
+          class="favorite-btn"
+          class:is-favorite={isFavorite}
+          onclick={toggleFavorite}
+          disabled={isFavoriteLoading}
+          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+        >
+          {#if isFavorite}
+            <Heart size={24} fill="var(--accent-primary)" color="var(--accent-primary)" />
+          {:else}
+            <Heart size={24} />
+          {/if}
+        </button>
+        <div class="radio-btn-wrapper">
+          <button
+            class="radio-btn"
+            class:loading={isRadioLoading}
+            class:glow={radioJustCreated}
+            onclick={createArtistRadio}
+            disabled={isRadioLoading}
+            title="Start Artist Radio"
+          >
+            <Radio size={24} />
+          </button>
+          {#if isRadioLoading && radioLoadingMessage}
+            {#key radioLoadingMessage}
+              <span class="floating-message">{radioLoadingMessage}</span>
+            {/key}
+          {/if}
+        </div>
+      </div>
     </div>
   </div>
 
@@ -900,19 +1061,45 @@
     </div>
   {/if}
 
-  <!-- Divider -->
-  <div class="divider"></div>
-
   <!-- Top Tracks Section -->
   {#if topTracks.length > 0 || tracksLoading}
     <div class="top-tracks-section section-anchor" bind:this={topTracksSection}>
-      <div class="section-header-row">
-        <h2 class="section-title">Popular Tracks</h2>
+      <div class="section-header">
+        <div class="section-header-left">
+          <h2 class="section-title">Popular Tracks</h2>
+        </div>
         {#if topTracks.length > 0}
-          <button class="play-all-btn" onclick={handlePlayAllTracks}>
-            <Play size={14} fill="white" color="white" />
-            <span>Play All</span>
-          </button>
+          <div class="section-header-actions">
+            <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
+              <Play size={20} fill="currentColor" color="currentColor" />
+            </button>
+            <div class="context-menu-wrapper">
+              <button
+                class="action-btn-circle"
+                onclick={() => showTracksContextMenu = !showTracksContextMenu}
+                title="More options"
+              >
+                <MoreHorizontal size={18} />
+              </button>
+              {#if showTracksContextMenu}
+                <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
+                <div class="context-menu">
+                  <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
+                    Play Next
+                  </button>
+                  <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
+                    Play Later
+                  </button>
+                  <button class="context-menu-item" onclick={() => { handleShuffleAllTracks(); showTracksContextMenu = false; }}>
+                    Shuffle
+                  </button>
+                  <button class="context-menu-item" onclick={() => { handleAddAllTracksToPlaylist(); showTracksContextMenu = false; }}>
+                    Add to Playlist
+                  </button>
+                </div>
+              {/if}
+            </div>
+          </div>
         {/if}
       </div>
 
@@ -920,24 +1107,26 @@
         <div class="tracks-loading">Loading tracks...</div>
       {:else}
         <div class="tracks-list">
-          {#each topTracks as track, index}
+          {#each visibleTracks as track, index}
             {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
             <div
               class="track-row"
               class:playing={isActiveTrack}
               role="button"
               tabindex="0"
+              data-track-id={track.id}
               onclick={() => handleTrackPlay(track, index)}
               onkeydown={(e) => e.key === 'Enter' && handleTrackPlay(track, index)}
             >
               <div class="track-number">{index + 1}</div>
               <div class="track-artwork">
+                <!-- Placeholder always visible as background -->
+                <div class="track-artwork-placeholder">
+                  <Music size={16} />
+                </div>
+                <!-- Image overlays placeholder when loaded -->
                 {#if track.album?.image?.thumbnail || track.album?.image?.small}
                   <img src={track.album?.image?.thumbnail || track.album?.image?.small} alt={track.title} loading="lazy" decoding="async" />
-                {:else}
-                  <div class="track-artwork-placeholder">
-                    <Music size={16} />
-                  </div>
                 {/if}
                 <button
                   class="track-play-overlay"
@@ -996,21 +1185,83 @@
                   onShareQobuz={onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined}
                   onShareSonglink={onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined}
                   onGoToAlbum={track.album?.id && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.album!.id) : undefined}
-                  onGoToArtist={(track.performer?.id || artist.id) && onTrackGoToArtist ? () => onTrackGoToArtist(track.performer?.id ?? artist.id) : undefined}
                 />
               </div>
             </div>
           {/each}
         </div>
+        {#if canLoadMoreTracks}
+          <button class="load-more-link" onclick={loadMoreTracks}>
+            Load More
+          </button>
+        {/if}
       {/if}
     </div>
-
-    <div class="divider"></div>
   {/if}
 
   <!-- Discography Section -->
   <div class="discography section-anchor" bind:this={discographySection}>
-    <h2 class="section-title">Discography</h2>
+    <div class="section-header">
+      <div class="section-header-left">
+        <h2 class="section-title">Discography</h2>
+        {#if artist.albums.length > 0}
+          <span class="section-count">{artist.albums.length}</span>
+        {/if}
+      </div>
+      <!-- Album Sort Dropdown -->
+      <div class="sort-dropdown">
+        <button class="sort-btn" onclick={() => (showAlbumSortMenu = !showAlbumSortMenu)}>
+          <span>
+            {#if albumSortMode === 'default'}Sort: Default
+            {:else if albumSortMode === 'newest'}Sort: Newest
+            {:else if albumSortMode === 'oldest'}Sort: Oldest
+            {:else if albumSortMode === 'title-asc'}Sort: A-Z
+            {:else if albumSortMode === 'title-desc'}Sort: Z-A
+            {/if}
+          </span>
+          <ChevronDown size={14} />
+        </button>
+        {#if showAlbumSortMenu}
+          <div class="sort-menu">
+            <button
+              class="sort-item"
+              class:selected={albumSortMode === 'default'}
+              onclick={() => { albumSortMode = 'default'; showAlbumSortMenu = false; }}
+            >
+              Default
+            </button>
+            <button
+              class="sort-item"
+              class:selected={albumSortMode === 'newest'}
+              onclick={() => { albumSortMode = 'newest'; showAlbumSortMenu = false; }}
+            >
+              Newest First
+            </button>
+            <button
+              class="sort-item"
+              class:selected={albumSortMode === 'oldest'}
+              onclick={() => { albumSortMode = 'oldest'; showAlbumSortMenu = false; }}
+            >
+              Oldest First
+            </button>
+            <button
+              class="sort-item"
+              class:selected={albumSortMode === 'title-asc'}
+              onclick={() => { albumSortMode = 'title-asc'; showAlbumSortMenu = false; }}
+            >
+              Title (A-Z)
+            </button>
+            <button
+              class="sort-item"
+              class:selected={albumSortMode === 'title-desc'}
+              onclick={() => { albumSortMode = 'title-desc'; showAlbumSortMenu = false; }}
+            >
+              Title (Z-A)
+            </button>
+          </div>
+        {/if}
+      </div>
+    </div>
 
     {#if artist.albums.length === 0}
       <div class="no-albums">No albums found</div>
@@ -1040,17 +1291,6 @@
           {/each}
         </div>
 
-      {#if hasMoreAlbums}
-        <div class="load-more-container">
-          <button
-            class="load-more-btn"
-            onclick={onLoadMore}
-            disabled={isLoadingMore}
-          >
-            {isLoadingMore ? 'Loading...' : `Load More (${artist.albumsFetched} of ${artist.totalAlbums})`}
-          </button>
-        </div>
-      {/if}
     {/if}
   </div>
 
@@ -1058,7 +1298,34 @@
     <div class="divider"></div>
 
     <div class="discography section-anchor" bind:this={epsSinglesSection}>
-      <h2 class="section-title">EPs & Singles</h2>
+      <div class="section-header">
+        <div class="section-header-left">
+          <h2 class="section-title">EPs & Singles</h2>
+          <span class="section-count">{artist.epsSingles.length}</span>
+        </div>
+        <div class="sort-dropdown">
+          <button class="sort-btn" onclick={() => (showEpsSinglesSortMenu = !showEpsSinglesSortMenu)}>
+            <span>
+              {#if epsSinglesSortMode === 'default'}Sort: Default
+              {:else if epsSinglesSortMode === 'newest'}Sort: Newest
+              {:else if epsSinglesSortMode === 'oldest'}Sort: Oldest
+              {:else if epsSinglesSortMode === 'title-asc'}Sort: A-Z
+              {:else if epsSinglesSortMode === 'title-desc'}Sort: Z-A
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showEpsSinglesSortMenu}
+            <div class="sort-menu">
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'default'} onclick={() => { epsSinglesSortMode = 'default'; showEpsSinglesSortMenu = false; }}>Default</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'newest'} onclick={() => { epsSinglesSortMode = 'newest'; showEpsSinglesSortMenu = false; }}>Newest First</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'oldest'} onclick={() => { epsSinglesSortMode = 'oldest'; showEpsSinglesSortMenu = false; }}>Oldest First</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'title-asc'} onclick={() => { epsSinglesSortMode = 'title-asc'; showEpsSinglesSortMenu = false; }}>Title (A-Z)</button>
+              <button class="sort-item" class:selected={epsSinglesSortMode === 'title-desc'} onclick={() => { epsSinglesSortMode = 'title-desc'; showEpsSinglesSortMenu = false; }}>Title (Z-A)</button>
+            </div>
+          {/if}
+        </div>
+      </div>
       <div class="albums-grid">
         {#each filteredEpsSingles as album}
           <AlbumCard
@@ -1090,7 +1357,34 @@
     <div class="divider"></div>
 
     <div class="discography section-anchor" bind:this={liveAlbumsSection}>
-      <h2 class="section-title">Live Albums</h2>
+      <div class="section-header">
+        <div class="section-header-left">
+          <h2 class="section-title">Live Albums</h2>
+          <span class="section-count">{artist.liveAlbums.length}</span>
+        </div>
+        <div class="sort-dropdown">
+          <button class="sort-btn" onclick={() => (showLiveAlbumsSortMenu = !showLiveAlbumsSortMenu)}>
+            <span>
+              {#if liveAlbumsSortMode === 'default'}Sort: Default
+              {:else if liveAlbumsSortMode === 'newest'}Sort: Newest
+              {:else if liveAlbumsSortMode === 'oldest'}Sort: Oldest
+              {:else if liveAlbumsSortMode === 'title-asc'}Sort: A-Z
+              {:else if liveAlbumsSortMode === 'title-desc'}Sort: Z-A
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showLiveAlbumsSortMenu}
+            <div class="sort-menu">
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'default'} onclick={() => { liveAlbumsSortMode = 'default'; showLiveAlbumsSortMenu = false; }}>Default</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'newest'} onclick={() => { liveAlbumsSortMode = 'newest'; showLiveAlbumsSortMenu = false; }}>Newest First</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'oldest'} onclick={() => { liveAlbumsSortMode = 'oldest'; showLiveAlbumsSortMenu = false; }}>Oldest First</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'title-asc'} onclick={() => { liveAlbumsSortMode = 'title-asc'; showLiveAlbumsSortMenu = false; }}>Title (A-Z)</button>
+              <button class="sort-item" class:selected={liveAlbumsSortMode === 'title-desc'} onclick={() => { liveAlbumsSortMode = 'title-desc'; showLiveAlbumsSortMenu = false; }}>Title (Z-A)</button>
+            </div>
+          {/if}
+        </div>
+      </div>
       <div class="albums-grid">
         {#each filteredLiveAlbums as album}
           <AlbumCard
@@ -1122,41 +1416,36 @@
     <div class="divider"></div>
 
     <div class="discography section-anchor" bind:this={compilationsSection}>
-      <h2 class="section-title">Compilations</h2>
+      <div class="section-header">
+        <div class="section-header-left">
+          <h2 class="section-title">Compilations</h2>
+          <span class="section-count">{artist.compilations.length}</span>
+        </div>
+        <div class="sort-dropdown">
+          <button class="sort-btn" onclick={() => (showCompilationsSortMenu = !showCompilationsSortMenu)}>
+            <span>
+              {#if compilationsSortMode === 'default'}Sort: Default
+              {:else if compilationsSortMode === 'newest'}Sort: Newest
+              {:else if compilationsSortMode === 'oldest'}Sort: Oldest
+              {:else if compilationsSortMode === 'title-asc'}Sort: A-Z
+              {:else if compilationsSortMode === 'title-desc'}Sort: Z-A
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showCompilationsSortMenu}
+            <div class="sort-menu">
+              <button class="sort-item" class:selected={compilationsSortMode === 'default'} onclick={() => { compilationsSortMode = 'default'; showCompilationsSortMenu = false; }}>Default</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'newest'} onclick={() => { compilationsSortMode = 'newest'; showCompilationsSortMenu = false; }}>Newest First</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'oldest'} onclick={() => { compilationsSortMode = 'oldest'; showCompilationsSortMenu = false; }}>Oldest First</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'title-asc'} onclick={() => { compilationsSortMode = 'title-asc'; showCompilationsSortMenu = false; }}>Title (A-Z)</button>
+              <button class="sort-item" class:selected={compilationsSortMode === 'title-desc'} onclick={() => { compilationsSortMode = 'title-desc'; showCompilationsSortMenu = false; }}>Title (Z-A)</button>
+            </div>
+          {/if}
+        </div>
+      </div>
       <div class="albums-grid">
         {#each filteredCompilations as album}
-          <AlbumCard
-            albumId={album.id}
-            artwork={album.artwork}
-            title={album.title}
-            artist={album.year || ''}
-            quality={album.quality}
-            searchId={`album-${album.id}`}
-            onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
-            onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
-            onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-            onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
-            onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
-            onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
-            onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-            isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-            onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
-            onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-            {downloadStateVersion}
-            onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
-          />
-        {/each}
-      </div>
-    </div>
-  {/if}
-
-  {#if artist.tributes.length > 0}
-    <div class="divider"></div>
-
-    <div class="discography section-anchor" bind:this={tributesSection}>
-      <h2 class="section-title">Tributes & Covers</h2>
-      <div class="albums-grid">
-        {#each filteredTributes as album}
           <AlbumCard
             albumId={album.id}
             artwork={album.artwork}
@@ -1186,7 +1475,34 @@
     <div class="divider"></div>
 
     <div class="discography section-anchor" bind:this={othersSection}>
-      <h2 class="section-title">Others</h2>
+      <div class="section-header">
+        <div class="section-header-left">
+          <h2 class="section-title">Others</h2>
+          <span class="section-count">{artist.others.length}</span>
+        </div>
+        <div class="sort-dropdown">
+          <button class="sort-btn" onclick={() => (showOthersSortMenu = !showOthersSortMenu)}>
+            <span>
+              {#if othersSortMode === 'default'}Sort: Default
+              {:else if othersSortMode === 'newest'}Sort: Newest
+              {:else if othersSortMode === 'oldest'}Sort: Oldest
+              {:else if othersSortMode === 'title-asc'}Sort: A-Z
+              {:else if othersSortMode === 'title-desc'}Sort: Z-A
+              {/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showOthersSortMenu}
+            <div class="sort-menu">
+              <button class="sort-item" class:selected={othersSortMode === 'default'} onclick={() => { othersSortMode = 'default'; showOthersSortMenu = false; }}>Default</button>
+              <button class="sort-item" class:selected={othersSortMode === 'newest'} onclick={() => { othersSortMode = 'newest'; showOthersSortMenu = false; }}>Newest First</button>
+              <button class="sort-item" class:selected={othersSortMode === 'oldest'} onclick={() => { othersSortMode = 'oldest'; showOthersSortMenu = false; }}>Oldest First</button>
+              <button class="sort-item" class:selected={othersSortMode === 'title-asc'} onclick={() => { othersSortMode = 'title-asc'; showOthersSortMenu = false; }}>Title (A-Z)</button>
+              <button class="sort-item" class:selected={othersSortMode === 'title-desc'} onclick={() => { othersSortMode = 'title-desc'; showOthersSortMenu = false; }}>Title (Z-A)</button>
+            </div>
+          {/if}
+        </div>
+      </div>
       <div class="albums-grid">
         {#each filteredOthers as album}
           <AlbumCard
@@ -1199,6 +1515,7 @@
             onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
             onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
             onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+            onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
             onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
             onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
             onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
@@ -1217,7 +1534,12 @@
     <div class="divider"></div>
 
     <div class="playlists-section section-anchor" bind:this={playlistsSection}>
-      <h2 class="section-title">Playlists</h2>
+      <div class="section-header">
+        <div class="section-header-left">
+          <h2 class="section-title">Playlists</h2>
+          <span class="section-count">{artist.playlists.length}</span>
+        </div>
+      </div>
       <div class="playlists-grid">
         {#each filteredPlaylists as playlist}
           <button
@@ -1227,12 +1549,13 @@
             disabled={!onPlaylistClick}
           >
             <div class="playlist-artwork">
+              <!-- Placeholder always visible as background -->
+              <div class="playlist-artwork-placeholder">
+                <Music size={18} />
+              </div>
+              <!-- Image overlays placeholder when loaded -->
               {#if playlist.artwork}
                 <img src={playlist.artwork} alt={playlist.title} loading="lazy" decoding="async" />
-              {:else}
-                <div class="playlist-artwork-placeholder">
-                  <Music size={18} />
-                </div>
               {/if}
             </div>
             <div class="playlist-info">
@@ -1251,6 +1574,89 @@
           </button>
         {/each}
       </div>
+    </div>
+  {/if}
+
+  {#if artist.tributes.length > 0}
+    <div class="divider"></div>
+
+    <div class="discography section-anchor" bind:this={tributesSection}>
+      <div class="section-header">
+        <div class="section-header-left">
+          <h2 class="section-title">Tributes & Covers</h2>
+          <span class="section-count">{artist.tributes.length}</span>
+          <button
+            class="info-btn"
+            title="This section contains albums returned by Qobuz that may include covers and tributes by other artists, not necessarily music performed by the artist shown."
+          >
+            <Info size={14} />
+          </button>
+          <button class="collapse-btn" onclick={() => (tributesExpanded = !tributesExpanded)} title={tributesExpanded ? 'Collapse' : 'Expand'}>
+            {#if tributesExpanded}
+              <ChevronDown size={16} />
+            {:else}
+              <ChevronRight size={16} />
+            {/if}
+          </button>
+        </div>
+        {#if tributesExpanded}
+          <div class="sort-dropdown">
+            <button class="sort-btn" onclick={() => (showTributesSortMenu = !showTributesSortMenu)}>
+              <span>
+                {#if tributesSortMode === 'default'}Sort: Default
+                {:else if tributesSortMode === 'newest'}Sort: Newest
+                {:else if tributesSortMode === 'oldest'}Sort: Oldest
+                {:else if tributesSortMode === 'title-asc'}Sort: A-Z
+                {:else if tributesSortMode === 'title-desc'}Sort: Z-A
+                {/if}
+              </span>
+              <ChevronDown size={14} />
+            </button>
+            {#if showTributesSortMenu}
+              <div class="sort-menu">
+                <button class="sort-item" class:selected={tributesSortMode === 'default'} onclick={() => { tributesSortMode = 'default'; showTributesSortMenu = false; }}>Default</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'newest'} onclick={() => { tributesSortMode = 'newest'; showTributesSortMenu = false; }}>Newest First</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'oldest'} onclick={() => { tributesSortMode = 'oldest'; showTributesSortMenu = false; }}>Oldest First</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'title-asc'} onclick={() => { tributesSortMode = 'title-asc'; showTributesSortMenu = false; }}>Title (A-Z)</button>
+                <button class="sort-item" class:selected={tributesSortMode === 'title-desc'} onclick={() => { tributesSortMode = 'title-desc'; showTributesSortMenu = false; }}>Title (Z-A)</button>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+      {#if tributesExpanded}
+        <div class="albums-grid">
+          {#each visibleTributes as album}
+            <AlbumCard
+              albumId={album.id}
+              artwork={album.artwork}
+              title={album.title}
+              artist={album.year || ''}
+              quality={album.quality}
+              searchId={`album-${album.id}`}
+              onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+              onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+              onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+              onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+              onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+              onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+              onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+              isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+              onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+              onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+              {downloadStateVersion}
+              onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+            />
+          {/each}
+        </div>
+        {#if canLoadMoreTributes}
+          <div class="load-more-container">
+            <button class="load-more-btn" onclick={() => (tributesVisibleCount += 20)}>
+              Load More ({filteredTributes.length - tributesVisibleCount} remaining)
+            </button>
+          </div>
+        {/if}
+      {/if}
     </div>
   {/if}
 </div>
@@ -1305,7 +1711,7 @@
   .artist-header {
     display: flex;
     gap: 32px;
-    margin-bottom: 32px;
+    margin-bottom: 22px;
   }
 
   .artist-image-column {
@@ -1343,7 +1749,7 @@
   .artist-actions {
     display: flex;
     gap: 12px;
-    justify-content: center;
+    margin-top: 20px;
   }
 
   .artist-info {
@@ -1392,6 +1798,7 @@
   }
 
   .radio-btn {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1402,18 +1809,49 @@
     border-radius: 50%;
     cursor: pointer;
     color: var(--text-muted);
-    transition: all 300ms ease;
+    transition: background 200ms ease, color 200ms ease;
     flex-shrink: 0;
-    overflow: hidden;
-    white-space: nowrap;
   }
 
   .radio-btn.loading {
-    width: auto;
-    min-width: 200px;
-    padding: 0 20px;
-    border-radius: 22px;
     cursor: default;
+    color: var(--accent-primary);
+  }
+
+  /* Outer rotating arc */
+  .radio-btn.loading::before {
+    content: '';
+    position: absolute;
+    inset: -4px;
+    border: 2px solid transparent;
+    border-top-color: var(--accent-primary);
+    border-right-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spinOuter 1.2s linear infinite;
+    pointer-events: none;
+  }
+
+  /* Inner rotating arc (opposite direction) */
+  .radio-btn.loading::after {
+    content: '';
+    position: absolute;
+    inset: -8px;
+    border: 2px solid transparent;
+    border-bottom-color: rgba(var(--accent-primary-rgb, 139, 92, 246), 0.5);
+    border-left-color: rgba(var(--accent-primary-rgb, 139, 92, 246), 0.5);
+    border-radius: 50%;
+    animation: spinInner 1.8s linear infinite reverse;
+    pointer-events: none;
+  }
+
+  @keyframes spinOuter {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  @keyframes spinInner {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   .radio-btn.glow {
@@ -1431,20 +1869,42 @@
     cursor: not-allowed;
   }
 
-  .loading-message {
-    font-size: 13px;
-    color: var(--text-secondary);
-    animation: fadeIn 0.3s ease-in;
+  .radio-btn-wrapper {
+    position: relative;
   }
 
-  @keyframes fadeIn {
-    from {
+  .floating-message {
+    position: absolute;
+    left: 50%;
+    bottom: 100%;
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    padding: 4px 10px;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    pointer-events: none;
+    animation: floatUp 1.2s ease-out infinite;
+  }
+
+  @keyframes floatUp {
+    0% {
       opacity: 0;
-      transform: translateY(-2px);
+      transform: translateX(-50%) translateY(8px);
     }
-    to {
+    20% {
       opacity: 1;
-      transform: translateY(0);
+      transform: translateX(-50%) translateY(0);
+    }
+    60% {
+      opacity: 1;
+      transform: translateX(-50%) translateY(-8px);
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(-50%) translateY(-20px);
     }
   }
 
@@ -1455,26 +1915,49 @@
   }
 
   .biography {
-    max-width: 600px;
+    max-width: 100%;
+    margin-bottom: 16px;
+    font-weight: 300;
   }
 
   .bio-text {
     font-size: 14px;
-    line-height: 1.6;
+    line-height: 1.7;
     color: var(--text-secondary);
-    margin-bottom: 8px;
+    font-weight: 300;
+    /* Smart 3-line clamp */
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .bio-text.expanded {
+    display: block;
+    -webkit-line-clamp: unset;
+    overflow: visible;
+  }
+
+  .bio-text :global(p) {
+    margin: 0 0 12px 0;
+  }
+
+  .bio-text :global(p:last-child) {
+    margin-bottom: 0;
   }
 
   .bio-toggle {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 4px;
     font-size: 13px;
+    font-weight: 400;
     color: var(--accent-primary);
     background: none;
     border: none;
     cursor: pointer;
-    padding: 0;
+    padding: 6px 0;
+    margin-top: 4px;
   }
 
   .bio-toggle:hover {
@@ -1482,9 +1965,10 @@
   }
 
   .bio-source {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
     margin-top: 8px;
+    font-weight: 300;
   }
 
   .jump-nav {
@@ -1495,10 +1979,12 @@
     justify-content: space-between;
     align-items: center;
     gap: 10px;
-    padding: 12px 24px;
-    background-color: var(--bg-primary);
-    border-bottom: 1px solid var(--bg-tertiary);
-    margin: 0 -24px 16px;
+    padding: 10px 24px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--alpha-6);
+    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
+    margin: 0 -8px 24px -24px;
+    width: calc(100% + 32px);
   }
 
   .jump-nav-left {
@@ -1539,6 +2025,62 @@
   .jump-link.active {
     color: var(--text-primary);
     border-bottom-color: var(--accent-primary);
+  }
+
+  /* Album Sort Dropdown */
+  .sort-dropdown {
+    position: relative;
+  }
+
+  .sort-btn {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .sort-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .sort-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 140px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 4px;
+    z-index: 50;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  }
+
+  .sort-item {
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 12px;
+    transition: all 100ms ease;
+  }
+
+  .sort-item:hover,
+  .sort-item.selected {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
   }
 
   /* Page Search */
@@ -1665,8 +2207,11 @@
   }
 
   .similar-title {
-    font-size: 12px;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
     margin-bottom: 8px;
   }
 
@@ -1679,54 +2224,34 @@
   .similar-list {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .similar-separator {
+    color: var(--text-muted);
+    font-size: 10px;
+    user-select: none;
   }
 
   .similar-artist {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 12px;
-    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
     background: none;
     border: none;
     cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 16px;
-    transition: background-color 150ms ease, color 150ms ease;
+    padding: 2px 4px;
+    transition: color 150ms ease;
   }
 
   .similar-artist:hover {
-    background-color: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-
-  .similar-avatar {
-    width: 25px;
-    height: 25px;
-    border-radius: 50%;
-    object-fit: cover;
-    flex-shrink: 0;
-  }
-
-  .similar-avatar.placeholder {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--bg-tertiary);
-    color: var(--text-muted);
-  }
-
-  .similar-name {
-    max-width: 140px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: var(--accent-primary);
   }
 
   .divider {
     height: 1px;
-    background-color: var(--bg-tertiary);
+    background: transparent;
     margin: 32px 0;
   }
 
@@ -1734,11 +2259,90 @@
     scroll-margin-top: 140px;
   }
 
+  .discography {
+    margin-bottom: 32px;
+  }
+
+  .discography:last-of-type {
+    margin-bottom: 0;
+  }
+
+  .playlists-section {
+    margin-bottom: 32px;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .section-header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
   .section-title {
-    font-size: 24px;
+    font-size: 20px;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 24px;
+    margin: 0;
+  }
+
+  .section-count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .info-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: help;
+    padding: 0;
+    margin-left: -4px;
+  }
+
+  .info-btn:hover {
+    color: var(--text-secondary);
+  }
+
+  .collapse-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0;
+    margin-left: -4px;
+    border-radius: 4px;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .collapse-btn:hover {
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
   }
 
   .no-albums {
@@ -1781,6 +2385,7 @@
   }
 
   .playlist-artwork {
+    position: relative;
     width: 56px;
     height: 56px;
     border-radius: 8px;
@@ -1789,9 +2394,12 @@
   }
 
   .playlist-artwork img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    z-index: 1;
   }
 
   .playlist-artwork-placeholder {
@@ -1856,37 +2464,72 @@
 
   /* Top Tracks */
   .top-tracks-section {
-    margin-bottom: 0;
+    margin-top: 32px;
+    margin-bottom: 32px;
   }
 
-  .section-header-row {
+  .section-header-actions {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
+    gap: 12px;
   }
 
-  .section-header-row .section-title {
-    margin-bottom: 0;
+  .context-menu-wrapper {
+    position: relative;
   }
 
-  .play-all-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background-color: var(--accent-primary);
-    border: none;
+  .context-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+  }
+
+  .context-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    min-width: 160px;
+    background-color: var(--bg-tertiary);
     border-radius: 8px;
-    color: white;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 150ms ease;
+    padding: 2px 0;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }
 
-  .play-all-btn:hover {
-    background-color: var(--accent-hover);
+  .context-menu-item {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .context-menu-item:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .load-more-link {
+    display: block;
+    width: 100%;
+    padding: 16px;
+    background: none;
+    border: none;
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: color 150ms ease;
+  }
+
+  .load-more-link:hover {
+    color: var(--text-primary);
   }
 
   .tracks-loading {
@@ -1935,9 +2578,12 @@
   }
 
   .track-artwork img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
+    z-index: 1;
   }
 
   .track-artwork-placeholder {
@@ -1960,6 +2606,7 @@
     border: none;
     cursor: pointer;
     transition: background 150ms ease;
+    z-index: 2;
   }
 
   .track-row:hover .track-play-overlay {

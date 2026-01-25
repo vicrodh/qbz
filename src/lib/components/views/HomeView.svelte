@@ -75,6 +75,7 @@
     checkTrackDownloaded?: (trackId: number) => boolean;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
+    sidebarExpanded?: boolean;
   }
 
   let {
@@ -105,7 +106,8 @@
     onTrackReDownload,
     checkTrackDownloaded,
     activeTrackId = null,
-    isPlaybackActive = false
+    isPlaybackActive = false,
+    sidebarExpanded = true
   }: Props = $props();
 
   // Home settings state
@@ -589,7 +591,7 @@
 <div class="home-view">
   <!-- Loading Overlay - fades out when ALL sections are ready -->
   {#if isOverlayVisible}
-    <div class="loading-overlay" class:fade-out={sectionsFinished >= totalVisibleSections && totalVisibleSections > 0}>
+    <div class="loading-overlay" class:fade-out={sectionsFinished >= totalVisibleSections && totalVisibleSections > 0} style="left: {sidebarExpanded ? '280px' : '64px'}">
       <div class="loading-content">
         <div class="loading-icon">
           <Loader2 size={36} class="spinner" />
@@ -954,7 +956,7 @@
   .loading-overlay {
     position: fixed;
     top: 0;
-    left: var(--sidebar-width, 280px);
+    /* left is set dynamically via inline style based on sidebar state */
     right: 0;
     bottom: calc(var(--player-bar-height, 104px));
     z-index: 10;
@@ -962,7 +964,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: opacity 300ms ease-out;
+    transition: opacity 300ms ease-out, left 200ms ease;
   }
 
   .loading-overlay.fade-out {
