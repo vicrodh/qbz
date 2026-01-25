@@ -11,6 +11,9 @@
 //! Supports both rodio (PipeWire/Pulse) and direct ALSA (hw: devices).
 
 mod playback_engine;
+mod streaming_source;
+
+pub use streaming_source::{BufferedMediaSource, BufferWriter, StreamingConfig};
 
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::panic::{self, AssertUnwindSafe};
