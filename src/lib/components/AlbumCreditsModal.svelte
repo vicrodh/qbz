@@ -146,6 +146,13 @@
               <div class="tab-switcher">
                 <button
                   class="tab-btn"
+                  class:active={activeTab === 'credits'}
+                  onclick={() => activeTab = 'credits'}
+                >
+                  Credits
+                </button>
+                <button
+                  class="tab-btn"
                   class:active={activeTab === 'review'}
                   onclick={() => activeTab = 'review'}
                 >
@@ -454,6 +461,8 @@
     flex-shrink: 0;
     padding-top: 16px;
     margin-top: auto;
+    display: flex;
+    gap: 16px;
   }
 
   .tab-btn {
