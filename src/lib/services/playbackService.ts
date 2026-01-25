@@ -157,6 +157,16 @@ export async function playTrack(
     // Update Last.fm
     await updateLastfmNowPlaying(track.title, track.artist, track.album, track.duration, track.id);
 
+    // Update ListenBrainz (with MusicBrainz enrichment)
+    await updateListenBrainzNowPlaying(
+      track.title,
+      track.artist,
+      track.album,
+      track.duration,
+      track.id,
+      track.isrc
+    );
+
     // Check favorite status (only for Qobuz tracks)
     if (!isLocal) {
       const isFav = await checkTrackFavorite(track.id);
@@ -288,6 +298,185 @@ export async function showTrackNotification(
 
 let lastScrobbledTrackId: number | null = null;
 let scrobbleTimeout: ReturnType<typeof setTimeout> | null = null;
+
+// ============ ListenBrainz Integration ============
+
+let lastListenBrainzScrobbledTrackId: number | null = null;
+let listenbrainzScrobbleTimeout: ReturnType<typeof setTimeout> | null = null;
+
+interface ListenBrainzStatus {
+  connected: boolean;
+  userName: string | null;
+  enabled: boolean;
+}
+
+interface MusicBrainzTrackData {
+  mbid?: string;
+  title?: string;
+  artistCredit?: string;
+  artistMbids?: string[];
+  releaseMbid?: string;
+  releaseTitle?: string;
+  confidence: 'exact' | 'high' | 'medium' | 'low' | 'none';
+}
+
+/**
+ * Get ListenBrainz connection status
+ */
+async function getListenBrainzStatus(): Promise<ListenBrainzStatus | null> {
+  try {
+    return await invoke<ListenBrainzStatus>('listenbrainz_get_status');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolve track to MusicBrainz for enhanced scrobbling
+ */
+async function resolveMusicBrainzTrack(
+  title: string,
+  artist: string,
+  isrc?: string
+): Promise<MusicBrainzTrackData | null> {
+  try {
+    const result = await invoke<MusicBrainzTrackData>('musicbrainz_resolve_track', {
+      isrc: isrc || null,
+      title,
+      artist
+    });
+    if (result && result.confidence !== 'none') {
+      return result;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Update ListenBrainz "now playing" and schedule scrobble
+ */
+export async function updateListenBrainzNowPlaying(
+  title: string,
+  artist: string,
+  album: string,
+  durationSecs: number,
+  trackId: number,
+  isrc?: string
+): Promise<void> {
+  // Check if ListenBrainz is connected and enabled
+  const status = await getListenBrainzStatus();
+  if (!status?.connected || !status?.enabled) return;
+
+  const isOffline = checkIsOffline();
+  const durationMs = durationSecs * 1000;
+
+  // Try to get MusicBrainz data for enrichment
+  let mbData: MusicBrainzTrackData | null = null;
+  if (!isOffline) {
+    mbData = await resolveMusicBrainzTrack(title, artist, isrc);
+  }
+
+  // Skip "now playing" update when offline (requires network)
+  if (!isOffline) {
+    try {
+      await invoke('listenbrainz_now_playing', {
+        artist,
+        track: title,
+        album: album || null,
+        recordingMbid: mbData?.mbid || null,
+        releaseMbid: mbData?.releaseMbid || null,
+        artistMbids: mbData?.artistMbids || null,
+        isrc: isrc || null,
+        durationMs
+      });
+      console.log('ListenBrainz: Updated now playing');
+    } catch (err) {
+      console.error('ListenBrainz now playing failed:', err);
+    }
+  }
+
+  // Schedule scrobble after 50% of track or 4 minutes (whichever is shorter)
+  if (listenbrainzScrobbleTimeout) {
+    clearTimeout(listenbrainzScrobbleTimeout);
+  }
+
+  const scrobbleDelay = Math.min(durationSecs * 0.5, 240) * 1000; // in ms
+
+  listenbrainzScrobbleTimeout = setTimeout(async () => {
+    if (lastListenBrainzScrobbledTrackId !== trackId) {
+      const timestamp = Math.floor(Date.now() / 1000);
+
+      // If offline, queue the scrobble for later
+      if (checkIsOffline()) {
+        try {
+          await invoke('listenbrainz_queue_listen', {
+            artist,
+            track: title,
+            album: album || null,
+            timestamp,
+            recordingMbid: mbData?.mbid || null,
+            releaseMbid: mbData?.releaseMbid || null,
+            artistMbids: mbData?.artistMbids || null,
+            isrc: isrc || null,
+            durationMs
+          });
+          lastListenBrainzScrobbledTrackId = trackId;
+          console.log('ListenBrainz: Queued scrobble for later (offline)');
+        } catch (err) {
+          console.error('Failed to queue ListenBrainz scrobble:', err);
+        }
+      } else {
+        // Online - scrobble immediately
+        try {
+          await invoke('listenbrainz_scrobble', {
+            artist,
+            track: title,
+            album: album || null,
+            timestamp,
+            recordingMbid: mbData?.mbid || null,
+            releaseMbid: mbData?.releaseMbid || null,
+            artistMbids: mbData?.artistMbids || null,
+            isrc: isrc || null,
+            durationMs
+          });
+          lastListenBrainzScrobbledTrackId = trackId;
+          console.log('ListenBrainz: Scrobbled track');
+        } catch (err) {
+          console.error('ListenBrainz scrobble failed:', err);
+        }
+      }
+    }
+  }, scrobbleDelay);
+}
+
+/**
+ * Flush queued ListenBrainz listens
+ * Call this when transitioning from offline to online
+ */
+export async function flushListenBrainzQueue(): Promise<number> {
+  // Check if ListenBrainz is connected and enabled
+  const status = await getListenBrainzStatus();
+  if (!status?.connected || !status?.enabled) return 0;
+
+  // Don't try to flush if still offline
+  if (checkIsOffline()) {
+    console.log('ListenBrainz: Cannot flush queue (still offline)');
+    return 0;
+  }
+
+  try {
+    const sent = await invoke<number>('listenbrainz_flush_queue');
+    if (sent > 0) {
+      console.log(`ListenBrainz: Flushed ${sent} queued listens`);
+    }
+    return sent;
+  } catch (err) {
+    console.error('ListenBrainz: Failed to flush queue:', err);
+    return 0;
+  }
+}
 
 /**
  * Update Last.fm "now playing" and schedule scrobble
@@ -513,5 +702,9 @@ export function cleanup(): void {
   if (scrobbleTimeout) {
     clearTimeout(scrobbleTimeout);
     scrobbleTimeout = null;
+  }
+  if (listenbrainzScrobbleTimeout) {
+    clearTimeout(listenbrainzScrobbleTimeout);
+    listenbrainzScrobbleTimeout = null;
   }
 }

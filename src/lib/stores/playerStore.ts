@@ -33,6 +33,8 @@ export interface PlayingTrack {
   // Optional IDs for recommendation tracking
   albumId?: string;
   artistId?: number;
+  // ISRC for MusicBrainz/ListenBrainz enrichment
+  isrc?: string;
 }
 
 interface BackendPlaybackState {
