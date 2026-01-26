@@ -641,7 +641,7 @@
   let selectedDiscogsImage = $state<string | null>(null);
   let fetchingDiscogsImages = $state(false);
   let discogsImagePage = $state(0);
-  const IMAGES_PER_PAGE = 4;
+  const IMAGES_PER_PAGE = 2;
 
   // Folder selection state (by folder ID)
   let selectedFolders = $state<Set<number>>(new Set());
@@ -3266,7 +3266,6 @@
                   {/each}
                 </div>
               {/if}
-              <p class="form-hint discogs-hint">Click a cover to select it, then Save.</p>
             </div>
           </div>
         </div>
@@ -4984,7 +4983,7 @@
 
   .modal {
     width: 100%;
-    max-width: 684px;
+    max-width: 704px;
     max-height: 90vh;
     overflow: hidden;
     display: flex;
@@ -5194,8 +5193,8 @@
   }
 
   .artwork-preview {
-    width: 74px;
-    height: 74px;
+    width: 94px;
+    height: 94px;
     border-radius: 6px;
     object-fit: cover;
     background: var(--bg-tertiary);
@@ -5254,7 +5253,7 @@
 
   .discogs-options-compact {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-auto-rows: 70px;
+    grid-template-rows: 70px;
     gap: 10px;
     margin-top: 0;
     flex: 1;
