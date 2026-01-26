@@ -641,7 +641,7 @@
   let selectedDiscogsImage = $state<string | null>(null);
   let fetchingDiscogsImages = $state(false);
   let discogsImagePage = $state(0);
-  const IMAGES_PER_PAGE = 2;
+  const IMAGES_PER_PAGE = 3;
 
   // Folder selection state (by folder ID)
   let selectedFolders = $state<Set<number>>(new Set());
@@ -3170,105 +3170,101 @@
               {/if}
               <span>{refreshingAlbumMetadata ? 'Refreshing...' : 'Refresh metadata'}</span>
             </button>
+            </div>
           </div>
-        </div>
 
-        <div class="form-group">
-          <label>Album Artwork</label>
-          <div class="artwork-layout">
-            <div class="artwork-left">
-              <div class="artwork-row">
-                {#if selectedAlbum.artwork_path}
-                  <img
-                    src={getArtworkUrl(selectedAlbum.artwork_path)}
-                    alt="Current artwork"
-                    class="artwork-preview"
-                  />
-                {:else}
-                  <div class="artwork-preview artwork-placeholder-mini">
-                    <Disc3 size={24} />
-                  </div>
-                {/if}
-                <div class="artwork-actions">
-	                  <button
-	                    class="discogs-btn"
-	                    onclick={handleSetAlbumArtwork}
-	                    disabled={updatingArtwork}
-	                  >
-	                    <Upload size={14} />
-	                    <span>{updatingArtwork ? 'Updating...' : 'Upload cover'}</span>
-	                  </button>
-	                  <button
-	                    class="discogs-btn"
-	                    onclick={fetchDiscogsArtwork}
-	                    disabled={fetchingDiscogsImages}
-	                  >
-	                    <img src="/discogs_icon.svg" alt="Discogs" class="discogs-icon" />
-	                    <span>{fetchingDiscogsImages ? 'Fetching...' : 'Get from Discogs'}</span>
-	                  </button>
-	                </div>
-              </div>
+          <div class="form-group">
+            <div class="artwork-layout-header">
+              <label>Album Artwork</label>
+              <div class="discogs-layout-label">Select Artwork from Discogs</div>
             </div>
 
-            <div class="discogs-panel">
-              <div class="discogs-header">
-                <div class="discogs-title">Select Artwork from Discogs</div>
-                {#if discogsImageOptions.length > IMAGES_PER_PAGE}
-                  <div class="carousel-controls">
-                    <button
-                      class="carousel-btn"
-                      onclick={prevDiscogsPage}
-                      disabled={!hasPrevDiscogsPages}
-                      title="Previous"
-                    >
-                      <ChevronLeft size={16} />
+            <div class="artwork-layout">
+              <div class="artwork-left">
+                <div class="artwork-row">
+                  {#if selectedAlbum.artwork_path}
+                    <img
+                      src={getArtworkUrl(selectedAlbum.artwork_path)}
+                      alt="Current artwork"
+                      class="artwork-preview"
+                    />
+                  {:else}
+                    <div class="artwork-preview artwork-placeholder-mini">
+                      <Disc3 size={24} />
+                    </div>
+                  {/if}
+
+                  <div class="artwork-actions">
+                    <button class="discogs-btn" onclick={handleSetAlbumArtwork} disabled={updatingArtwork}>
+                      <Upload size={14} />
+                      <span>{updatingArtwork ? 'Updating...' : 'Upload cover'}</span>
                     </button>
-                    <span class="page-indicator">
-                      {discogsImagePage + 1} / {Math.ceil(discogsImageOptions.length / IMAGES_PER_PAGE)}
-                    </span>
-                    <button
-                      class="carousel-btn"
-                      onclick={nextDiscogsPage}
-                      disabled={!hasMoreDiscogsPages}
-                      title="Next"
-                    >
-                      <ChevronRight size={16} />
+                    <button class="discogs-btn" onclick={fetchDiscogsArtwork} disabled={fetchingDiscogsImages}>
+                      <img src="/discogs_icon.svg" alt="Discogs" class="discogs-icon" />
+                      <span>{fetchingDiscogsImages ? 'Fetching...' : 'Get from Discogs'}</span>
                     </button>
                   </div>
-                {/if}
-              </div>
-
-	              {#if discogsImageOptions.length === 0}
-	                <div class="discogs-placeholder">
-	                  {#if fetchingDiscogsImages}
-	                    <span>Fetching...</span>
-	                  {:else}
-	                    <span>Click “Get from Discogs” to show results here.</span>
-	                  {/if}
-	                </div>
-	              {:else}
-                <div class="discogs-options discogs-options-compact">
-                  {#each paginatedDiscogsImages as option, i}
-                    <button
-                      class="discogs-option"
-                      class:selected={selectedDiscogsImage === option.url}
-                      onclick={() => selectedDiscogsImage = option.url}
-                      title={option.release_title ? `${option.release_title}${option.release_year ? ` (${option.release_year})` : ''}` : ''}
-                    >
-                      <img src={option.url} alt={`Option ${discogsImagePage * IMAGES_PER_PAGE + i + 1}`} />
-                      <div class="option-info">
-                        {#if option.release_title}
-                          <div class="release-title">{option.release_title}{#if option.release_year} ({option.release_year}){/if}</div>
-                        {/if}
-                        <div class="image-dims">{option.width}x{option.height}</div>
-                      </div>
-                    </button>
-                  {/each}
                 </div>
-              {/if}
+              </div>
+
+              <div class="discogs-panel">
+                {#if discogsImageOptions.length > IMAGES_PER_PAGE}
+                  <div class="discogs-header">
+                    <div class="carousel-controls">
+                      <button
+                        class="carousel-btn"
+                        onclick={prevDiscogsPage}
+                        disabled={!hasPrevDiscogsPages}
+                        title="Previous"
+                      >
+                        <ChevronLeft size={16} />
+                      </button>
+                      <span class="page-indicator">
+                        {discogsImagePage + 1} / {Math.ceil(discogsImageOptions.length / IMAGES_PER_PAGE)}
+                      </span>
+                      <button
+                        class="carousel-btn"
+                        onclick={nextDiscogsPage}
+                        disabled={!hasMoreDiscogsPages}
+                        title="Next"
+                      >
+                        <ChevronRight size={16} />
+                      </button>
+                    </div>
+                  </div>
+                {/if}
+
+                {#if discogsImageOptions.length === 0}
+                  <div class="discogs-placeholder">
+                    {#if fetchingDiscogsImages}
+                      <span>Fetching...</span>
+                    {:else}
+                      <span>Click “Get from Discogs” to show results here.</span>
+                    {/if}
+                  </div>
+                {:else}
+                  <div class="discogs-options discogs-options-compact">
+                    {#each paginatedDiscogsImages as option, i}
+                      <button
+                        class="discogs-option"
+                        class:selected={selectedDiscogsImage === option.url}
+                        onclick={() => selectedDiscogsImage = option.url}
+                        title={option.release_title ? `${option.release_title}${option.release_year ? ` (${option.release_year})` : ''}` : ''}
+                      >
+                        <img src={option.url} alt={`Option ${discogsImagePage * IMAGES_PER_PAGE + i + 1}`} />
+                        <div class="option-info">
+                          {#if option.release_title}
+                            <div class="release-title">{option.release_title}{#if option.release_year} ({option.release_year}){/if}</div>
+                          {/if}
+                          <div class="image-dims">{option.width}x{option.height}</div>
+                        </div>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
             </div>
           </div>
-        </div>
 
       </div>
 
@@ -4983,6 +4979,7 @@
 
   .modal {
     --album-settings-cover-size: 94px;
+    --discogs-panel-height: calc(var(--album-settings-cover-size) + 56px);
     width: 100%;
     max-width: 704px;
     max-height: 90vh;
@@ -5101,6 +5098,25 @@
     margin-bottom: 8px;
   }
 
+  .artwork-layout-header {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 8px;
+  }
+
+  .artwork-layout-header label {
+    margin-bottom: 0;
+  }
+
+  .discogs-layout-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-left: -8px;
+  }
+
   .form-group input[type="text"] {
     width: 100%;
     padding: 10px 12px;
@@ -5166,16 +5182,12 @@
     border-radius: 10px;
     padding: 10px 12px;
     background: var(--bg-secondary);
-    height: 208px;
+    height: var(--discogs-panel-height);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-  }
-
-  .discogs-title {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-secondary);
+    margin-left: -8px;
+    width: calc(100% + 8px);
   }
 
   .discogs-placeholder {
@@ -5253,7 +5265,7 @@
   }
 
   .discogs-options-compact {
-    grid-template-columns: repeat(2, var(--album-settings-cover-size));
+    grid-template-columns: repeat(3, var(--album-settings-cover-size));
     grid-template-rows: var(--album-settings-cover-size);
     justify-content: start;
     gap: 10px;
@@ -5325,7 +5337,7 @@
   .discogs-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     margin-bottom: 8px;
   }
 
