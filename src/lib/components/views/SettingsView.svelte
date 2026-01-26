@@ -1939,6 +1939,7 @@
     </div>
   </section>
 
+
   <!-- Offline Library Section -->
   <section class="section" bind:this={downloadsSection}>
     <h3 class="section-title">{$t('settings.offlineLibrary.title')}</h3>
@@ -1952,13 +1953,6 @@
           Loading...
         {/if}
       </span>
-    </div>
-    <div class="setting-row">
-      <div class="setting-with-description">
-        <span class="setting-label">Show in Local Library</span>
-        <span class="setting-description">Display offline Qobuz™ tracks in your Local Library</span>
-      </div>
-      <Toggle enabled={showQobuzDownloadsInLibrary} onchange={handleShowDownloadsChange} />
     </div>
     <div class="setting-row">
       <div class="setting-with-description">
@@ -1985,6 +1979,105 @@
     </div>
   </section>
 
+  <!-- Flatpak Section (only shown when running in Flatpak) -->
+  {#if isFlatpak}
+    <section class="section flatpak-section">
+      <h3 class="section-title">Flatpak Sandbox</h3>
+      <div class="flatpak-info">
+        <p class="flatpak-intro">
+          QBZ is running inside a Flatpak sandbox. For offline libraries on NAS, network mounts, or external disks, direct filesystem access is required.
+        </p>
+        <div class="flatpak-guide">
+          <h4>Grant Filesystem Access</h4>
+          <p>Use <strong>Flatseal</strong> (GUI) or run this command for each folder you want to add:</p>
+          <CopyableCommand command="flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz" />
+          <h4>Examples</h4>
+          <CopyableCommand command="# CIFS / Samba mount\nflatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz\n\n# SSHFS mount\nflatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz\n\n# Custom folder (edit as needed)\nflatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz" />
+          <p class="flatpak-note">
+            <strong>Note:</strong> This setting is persistent and survives reboots and updates.<br />
+            <strong>Tip:</strong> You can repeat the command for as many folders as you need.
+          </p>
+        </div>
+        <div class="flatpak-guide" style="margin-top:2em;">
+          <h4>Chromecast &amp; DLNA Device Discovery</h4>
+          <p>
+            To detect Chromecast and DLNA devices on your network, you must grant network sharing permissions to the app:
+          </p>
+          <CopyableCommand command="flatpak override --user --share=network com.blitzfc.qbz" />
+          <p class="flatpak-note">
+            <strong>Note:</strong> Without this, device discovery will not work.<br />
+            You only need to do this once.
+          </p>
+        </div>
+      </div>
+    </section>
+  {/if}
+<script lang="ts">
+  // ...existing code...
+  import { onMount } from 'svelte';
+  // ...existing code...
+  import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
+
+  // Componente para comandos copiables
+  export let CopyableCommand: any = (props: { command: string }) => {
+    let copied = false;
+    async function handleCopy() {
+      try {
+        await copyToClipboard(props.command);
+        copied = true;
+        setTimeout(() => (copied = false), 1200);
+      } catch {
+        // fallback
+        try {
+          await navigator.clipboard.writeText(props.command);
+          copied = true;
+          setTimeout(() => (copied = false), 1200);
+        } catch {}
+      }
+    }
+    return (
+      <div class="copyable-command">
+        <pre class="code-block">{props.command}</pre>
+        <button class="copy-btn" on:click={handleCopy}>{copied ? 'Copied!' : 'Copy'}</button>
+      </div>
+    );
+  };
+</script>
+
+<style>
+  .copyable-command {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .copyable-command .code-block {
+    margin: 0;
+    font-size: 13px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    padding: 8px 12px;
+    user-select: all;
+    min-width: 0;
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .copy-btn {
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .copy-btn:hover {
+    background: var(--accent-secondary);
+  }
+</style>
   <!-- Library Section -->
   <section class="section" bind:this={librarySection}>
     <h3 class="section-title">{$t('settings.library.title')}</h3>
