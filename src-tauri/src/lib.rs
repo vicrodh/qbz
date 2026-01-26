@@ -763,6 +763,9 @@ pub fn run() {
             commands::musicbrainz_get_cache_stats,
             commands::musicbrainz_clear_cache,
             commands::musicbrainz_cleanup_cache,
+            // Musician resolution commands
+            commands::resolve_musician,
+            commands::get_musician_appearances,
             // ListenBrainz integration commands
             commands::listenbrainz_get_status,
             commands::listenbrainz_is_enabled,

@@ -364,3 +364,93 @@ impl ArtistRelationships {
             && self.collaborators.is_empty()
     }
 }
+
+// ============ Musician Types ============
+
+/// Musician confidence level for MusicBrainz ↔ Qobuz matching
+///
+/// This determines what UI is shown when a musician is clicked:
+/// - Confirmed (3): Navigate to Qobuz Artist Page
+/// - Contextual (2): Navigate to Musician Page
+/// - Weak (1): Show Informational Modal only
+/// - None (0): Show Informational Modal only
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MusicianConfidence {
+    /// Level 3: Dedicated Qobuz artist page exists
+    Confirmed,
+    /// Level 2: Appears in Qobuz credits, no standalone artist page
+    Contextual,
+    /// Level 1: MusicBrainz entity exists, sparse Qobuz results
+    Weak,
+    /// Level 0: No safe match, high risk of incorrect association
+    None,
+}
+
+impl MusicianConfidence {
+    pub fn level(&self) -> u8 {
+        match self {
+            Self::Confirmed => 3,
+            Self::Contextual => 2,
+            Self::Weak => 1,
+            Self::None => 0,
+        }
+    }
+}
+
+impl Default for MusicianConfidence {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+/// Resolved musician with confidence assessment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedMusician {
+    /// Musician name (from credits or MusicBrainz)
+    pub name: String,
+    /// Primary role (e.g., "drums", "piano")
+    pub role: String,
+    /// MusicBrainz ID (if resolved)
+    pub mbid: Option<String>,
+    /// Qobuz artist ID (if exists)
+    pub qobuz_artist_id: Option<i64>,
+    /// Confidence level
+    pub confidence: MusicianConfidence,
+    /// Known bands/projects (from MusicBrainz)
+    pub bands: Vec<String>,
+    /// Number of albums the musician appears on (Qobuz)
+    pub appears_on_count: usize,
+}
+
+impl ResolvedMusician {
+    pub fn empty(name: String, role: String) -> Self {
+        Self {
+            name,
+            role,
+            mbid: None,
+            qobuz_artist_id: None,
+            confidence: MusicianConfidence::None,
+            bands: Vec::new(),
+            appears_on_count: 0,
+        }
+    }
+}
+
+/// Album appearance for a musician
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlbumAppearance {
+    pub album_id: String,
+    pub album_title: String,
+    pub album_artwork: String,
+    pub artist_name: String,
+    pub year: Option<String>,
+    pub role_on_album: String,
+}
+
+/// Musician appearances response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MusicianAppearances {
+    pub albums: Vec<AlbumAppearance>,
+    pub total: usize,
+}
