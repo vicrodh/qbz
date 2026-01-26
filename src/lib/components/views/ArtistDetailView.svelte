@@ -7,7 +7,8 @@
   import { consumeContextTrackFocus, setPlaybackContext, getPlaybackContext } from '$lib/stores/playbackContextStore';
   import { togglePlay } from '$lib/stores/playerStore';
   import { getQueue, syncQueueState, playQueueIndex } from '$lib/stores/queueStore';
-  import { tick } from 'svelte';
+  import { subscribeContentSidebar, toggleContentSidebar, type ContentSidebarType } from '$lib/stores/sidebarStore';
+  import { tick, onMount, onDestroy } from 'svelte';
 
   interface Track {
     id: number;
@@ -118,6 +119,17 @@
   let radioLoadingMessage = $state('');
   let radioJustCreated = $state(false);
   let showNetworkSidebar = $state(false);
+  let unsubscribeSidebar: (() => void) | null = null;
+
+  onMount(() => {
+    unsubscribeSidebar = subscribeContentSidebar((active: ContentSidebarType) => {
+      showNetworkSidebar = active === 'network';
+    });
+  });
+
+  onDestroy(() => {
+    unsubscribeSidebar?.();
+  });
   let similarArtists = $state<QobuzArtist[]>([]);
   let similarArtistsLoading = $state(false);
   let similarArtistImageErrors = $state<Set<number>>(new Set());
@@ -1203,7 +1215,7 @@
         <button
           class="network-btn"
           class:active={showNetworkSidebar}
-          onclick={() => showNetworkSidebar = !showNetworkSidebar}
+          onclick={() => toggleContentSidebar('network')}
           title="Artist Network"
         >
           <img src="/element-connect.svg" alt="Network" class="network-icon" />
@@ -1908,7 +1920,7 @@
           <h3 class="sidebar-title">Network</h3>
           <div class="sidebar-subtitle">{artist.name}</div>
         </div>
-        <button class="sidebar-close" onclick={() => showNetworkSidebar = false} title="Close">
+        <button class="sidebar-close" onclick={() => toggleContentSidebar('network')} title="Close">
           <X size={18} />
         </button>
       </div>
