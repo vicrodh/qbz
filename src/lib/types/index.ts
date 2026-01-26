@@ -238,6 +238,10 @@ export interface ArtistDetail {
     trackCount?: number;
     owner?: string;
   }[];
+  labels: {
+    id: number;
+    name: string;
+  }[];
   totalAlbums: number;
   albumsFetched: number;
 }

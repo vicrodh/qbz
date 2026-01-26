@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info } from 'lucide-svelte';
+  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Tag } from 'lucide-svelte';
   import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -74,6 +74,7 @@
     onTrackShareSonglink?: (track: Track) => void;
     onTrackGoToAlbum?: (albumId: string) => void;
     onTrackGoToArtist?: (artistId: number) => void;
+    onLabelClick?: (labelId: number, labelName?: string) => void;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
   }
@@ -105,6 +106,7 @@
     onTrackShareSonglink,
     onTrackGoToAlbum,
     onTrackGoToArtist,
+    onLabelClick,
     activeTrackId = null,
     isPlaybackActive = false
   }: Props = $props();
@@ -1930,7 +1932,20 @@
         <section class="sidebar-section">
           <h4 class="section-label">LABELS</h4>
           <div class="section-items">
-            <span class="placeholder-text">Coming soon...</span>
+            {#if artist.labels.length > 0}
+              {#each artist.labels as label}
+                <button
+                  class="sidebar-artist-link"
+                  onclick={() => onLabelClick?.(label.id, label.name)}
+                  title={label.name}
+                >
+                  <Tag size={12} />
+                  {label.name}
+                </button>
+              {/each}
+            {:else}
+              <span class="placeholder-text">No label info</span>
+            {/if}
           </div>
         </section>
 

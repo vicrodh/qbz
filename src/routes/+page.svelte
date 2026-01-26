@@ -2596,6 +2596,7 @@
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
           onPlaylistClick={selectPlaylist}
+          onLabelClick={handleLabelClick}
           activeTrackId={currentTrack?.id ?? null}
           isPlaybackActive={isPlaying}
         />
