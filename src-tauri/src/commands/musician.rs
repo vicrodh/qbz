@@ -64,10 +64,10 @@ pub async fn resolve_musician(
                 }
             }
 
-            // If we have a match but it has few albums, check if "The X" has more
+            // If we have a match but it has few albums, check if "The X" has more STUDIO albums
             if let Some(ref current) = best_match {
-                let current_albums = current.albums_count.unwrap_or(0);
-                if current_albums < 5 {
+                let current_total = current.albums_count.unwrap_or(0);
+                if current_total < 10 {
                     // Search specifically for "The X" to compare
                     let the_name = format!("The {}", name);
                     if let Ok(the_results) = client.search_artists(&the_name, 5, 0, None).await {
@@ -75,11 +75,19 @@ pub async fn resolve_musician(
                             let artist_lower = artist.name.to_lowercase();
                             let the_name_lower = the_name.to_lowercase();
                             if artist_lower == the_name_lower {
-                                let the_albums = artist.albums_count.unwrap_or(0);
-                                if the_albums > current_albums {
+                                // Compare studio album counts for better accuracy
+                                let current_studio = count_studio_albums(&client, current.id).await;
+                                let the_studio = count_studio_albums(&client, artist.id).await;
+
+                                log::info!(
+                                    "Comparing studio albums: '{}' has {} studio albums, 'The {}' has {} studio albums",
+                                    current.name, current_studio, name, the_studio
+                                );
+
+                                if the_studio > current_studio {
                                     log::info!(
-                                        "Preferring 'The {}' ({} albums) over '{}' ({} albums)",
-                                        name, the_albums, current.name, current_albums
+                                        "Preferring 'The {}' ({} studio albums) over '{}' ({} studio albums)",
+                                        name, the_studio, current.name, current_studio
                                     );
                                     best_match = Some(artist);
                                 }
@@ -396,4 +404,206 @@ fn extract_role_from_performers(performers: &str, name: &str) -> String {
 
     // Fallback
     "Performer".to_string()
+}
+
+// ============ Album Categorization (mirrors qobuzAdapters.ts logic) ============
+
+use lazy_static::lazy_static;
+use regex::Regex;
+
+lazy_static! {
+    // Unofficial releases patterns
+    static ref BROADCAST_PATTERNS: Regex = Regex::new(r"(?i)\b(fm broadcasts?|radio broadcasts?|broadcasts?|bootleg|unofficial|pirate)\b").unwrap();
+    static ref NON_MUSIC_PATTERNS: Regex = Regex::new(r"(?i)\b(interviews?|speaks|talking|in their own words|the interviews?|memories:?\s*the)\b").unwrap();
+    static ref BOOTLEG_LABELS: Regex = Regex::new(r"(?i)\b(leftfield media|purple pyramid|cleopatra|laser media|radio lu|broadcast archives)\b").unwrap();
+
+    // Compilation patterns
+    static ref COMPILATION_PATTERNS: Regex = Regex::new(r"(?i)\b(greatest hits|best of|anthology|the very best|essentials?|definitive collection|gold|platinum|hits collection|complete collection|hit collection|b-sides|rarities)\b").unwrap();
+    static ref VARIOUS_PATTERNS: Regex = Regex::new(r"(?i)\b(various artists|v\.?a\.?|original soundtrack|ost)\b").unwrap();
+
+    // Live album patterns
+    static ref LIVE_PATTERNS: Regex = Regex::new(r"(?i)\blive\b|\blive at\b|\blive in\b|\bin concert\b|\bunplugged\b|\bmtv unplugged\b|\bacoustic live\b|\balive\b|\bon stage\b").unwrap();
+    static ref LIVE_MULTILANG: Regex = Regex::new(r"(?i)\b(en vivo|en directo|ao vivo|dal vivo|en direct|konzert|liveopname)\b|ライブ|라이브|콘서트").unwrap();
+    static ref FM_BROADCAST: Regex = Regex::new(r"(?i)\b(fm broadcasts?|radio broadcasts?|broadcasts?)\b").unwrap();
+
+    // Studio album variant patterns
+    static ref STUDIO_VARIANT: Regex = Regex::new(r"(?i)\b(deluxe|remaster|anniversary|expanded|special edition|collector|box set)\b").unwrap();
+
+    // EP/Single patterns
+    static ref EP_PATTERNS: Regex = Regex::new(r"(?i)\b(- ep|\.ep|\(ep\))\b").unwrap();
+    static ref EP_SUFFIX: Regex = Regex::new(r"(?i)\bep\s*$").unwrap();
+    static ref SINGLE_PATTERNS: Regex = Regex::new(r"(?i)\b(- single|\(single\))\b").unwrap();
+}
+
+/// Album category for filtering
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum AlbumCategory {
+    Albums,    // Studio albums (main discography)
+    Tributes,  // Albums by other artists
+    Others,    // Compilations, bootlegs, unofficial
+    Live,      // Live recordings
+    Eps,       // EPs and singles
+}
+
+/// Check if album is by a different artist
+fn is_different_artist(album: &crate::api::Album, main_artist_id: u64) -> bool {
+    album.artist.id != main_artist_id
+}
+
+/// Check if this is an unofficial/bootleg release
+fn is_unofficial_release(title: &str, label: &str, track_count: u32, duration: u32) -> bool {
+    // FM Broadcasts, bootlegs
+    if BROADCAST_PATTERNS.is_match(title) {
+        return true;
+    }
+
+    // Interviews, spoken word
+    if NON_MUSIC_PATTERNS.is_match(title) {
+        return true;
+    }
+
+    // Known bootleg labels
+    if BOOTLEG_LABELS.is_match(label) {
+        return true;
+    }
+
+    // Podcast-like: single long track
+    if track_count == 1 && duration >= 1200 {
+        return true;
+    }
+
+    false
+}
+
+/// Check if this is a compilation/greatest hits
+fn is_compilation_album(title: &str) -> bool {
+    COMPILATION_PATTERNS.is_match(title) || VARIOUS_PATTERNS.is_match(title)
+}
+
+/// Check if this is a live album
+fn is_live_album(title: &str) -> bool {
+    // Don't classify FM broadcasts as live
+    if FM_BROADCAST.is_match(title) {
+        return false;
+    }
+
+    if LIVE_PATTERNS.is_match(title) || LIVE_MULTILANG.is_match(title) {
+        return true;
+    }
+
+    false
+}
+
+/// Check if this is a studio album (main discography material)
+fn is_studio_album(title: &str, track_count: u32, duration: u32) -> bool {
+    // Single-track releases over 20 min are likely podcasts
+    if track_count == 1 && duration >= 1200 {
+        return false;
+    }
+
+    // Deluxe/remastered editions are studio albums
+    if STUDIO_VARIANT.is_match(title) && (track_count >= 7 || duration >= 2100) {
+        return true;
+    }
+
+    // Standard album: 7+ tracks or 25+ minutes
+    if track_count >= 7 {
+        return true;
+    }
+    if duration >= 1500 {
+        return true;
+    }
+
+    false
+}
+
+/// Check if this is an EP or Single
+fn is_ep_or_single(title: &str, track_count: u32, duration: u32) -> bool {
+    // Explicitly marked as EP or Single
+    if EP_PATTERNS.is_match(title) || EP_SUFFIX.is_match(title) || SINGLE_PATTERNS.is_match(title) {
+        return true;
+    }
+
+    // Very short releases: 1-4 tracks
+    if track_count > 0 && track_count <= 4 {
+        return true;
+    }
+
+    // Under 15 minutes
+    if duration > 0 && duration <= 900 {
+        return true;
+    }
+
+    // 5-6 tracks AND under 20 minutes
+    if track_count >= 5 && track_count <= 6 && duration > 0 && duration <= 1200 {
+        return true;
+    }
+
+    false
+}
+
+/// Categorize an album (mirrors TypeScript categorizeAlbum)
+fn categorize_album(album: &crate::api::Album, main_artist_id: u64) -> AlbumCategory {
+    let title = album.title.to_lowercase();
+    let label = album.label.as_ref().map(|l| l.name.as_str()).unwrap_or("");
+    let track_count = album.tracks_count.unwrap_or(0);
+    let duration = album.duration.unwrap_or(0);
+
+    // 1. Albums by different artists -> Tributes
+    if is_different_artist(album, main_artist_id) {
+        return AlbumCategory::Tributes;
+    }
+
+    // 2. Unofficial releases -> Others
+    if is_unofficial_release(&title, label, track_count, duration) {
+        return AlbumCategory::Others;
+    }
+
+    // 3. Compilations -> Others
+    if is_compilation_album(&title) {
+        return AlbumCategory::Others;
+    }
+
+    // 4. Live albums -> Live
+    if is_live_album(&title) {
+        return AlbumCategory::Live;
+    }
+
+    // 5. Check if it's a studio album first
+    if is_studio_album(&title, track_count, duration) {
+        return AlbumCategory::Albums;
+    }
+
+    // 6. EPs and Singles
+    if is_ep_or_single(&title, track_count, duration) {
+        return AlbumCategory::Eps;
+    }
+
+    // 7. Default: treat as studio album
+    AlbumCategory::Albums
+}
+
+/// Count studio albums for an artist (fetches albums and filters)
+async fn count_studio_albums(
+    client: &crate::api::QobuzClient,
+    artist_id: u64,
+) -> usize {
+    // Fetch artist with albums (limit to 50 for performance)
+    match client.get_artist_with_pagination(artist_id, true, Some(50), None).await {
+        Ok(artist) => {
+            if let Some(albums) = artist.albums {
+                albums
+                    .items
+                    .iter()
+                    .filter(|album| categorize_album(album, artist_id) == AlbumCategory::Albums)
+                    .count()
+            } else {
+                0
+            }
+        }
+        Err(e) => {
+            log::warn!("Failed to fetch albums for artist {}: {}", artist_id, e);
+            0
+        }
+    }
 }
