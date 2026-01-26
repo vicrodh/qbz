@@ -243,12 +243,13 @@
   import { enterMiniplayerMode } from '$lib/services/miniplayerService';
 
   // Sidebar mutual exclusion
-  import { closeContentSidebar } from '$lib/stores/sidebarStore';
+  import { closeContentSidebar, subscribeContentSidebar, type ContentSidebarType } from '$lib/stores/sidebarStore';
 
   // Lyrics state management
   import {
     subscribe as subscribeLyrics,
     toggleSidebar as toggleLyricsSidebar,
+    hideSidebar as hideLyricsSidebar,
     startWatching as startLyricsWatching,
     stopWatching as stopLyricsWatching,
     startActiveLineUpdates,
@@ -2192,6 +2193,14 @@
       }
     });
 
+    // Subscribe to content sidebar for mutual exclusion (network closes lyrics/queue)
+    const unsubscribeContentSidebar = subscribeContentSidebar((active: ContentSidebarType) => {
+      if (active === 'network') {
+        hideLyricsSidebar();
+        closeQueue();
+      }
+    });
+
     // Subscribe to cast state changes
     const unsubscribeCast = subscribeCast(() => {
       isCastConnected = isCasting();
@@ -2318,6 +2327,7 @@
       unsubscribePlayer();
       unsubscribeQueue();
       unsubscribeLyrics();
+      unsubscribeContentSidebar();
       unsubscribeCast();
       stopLyricsWatching();
       stopActiveLineUpdates();
