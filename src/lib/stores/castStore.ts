@@ -47,6 +47,13 @@ let state: CastState = {
 let positionPollInterval: ReturnType<typeof setInterval> | null = null;
 const POSITION_POLL_INTERVAL_MS = 1000;
 
+// Callback for when track ends (for auto-advance)
+let onCastTrackEnded: (() => Promise<void>) | null = null;
+
+// Track end detection state
+let lastTransportState: string = '';
+let trackEndDetected = false;
+
 const listeners = new Set<() => void>();
 
 function notifyListeners(): void {
@@ -372,6 +379,13 @@ export function getCastPosition(): { positionSecs: number; durationSecs: number 
 }
 
 /**
+ * Set callback for when cast track ends (for auto-advance)
+ */
+export function setOnCastTrackEnded(callback: (() => Promise<void>) | null): void {
+  onCastTrackEnded = callback;
+}
+
+/**
  * Start polling for DLNA position updates
  */
 export function startPositionPolling(): void {
@@ -379,6 +393,9 @@ export function startPositionPolling(): void {
   if (state.protocol !== 'dlna') return;
 
   console.log('[CastStore] Starting DLNA position polling');
+  trackEndDetected = false;
+  lastTransportState = 'PLAYING';
+  
   positionPollInterval = setInterval(async () => {
     if (!state.isConnected || state.protocol !== 'dlna') {
       stopPositionPolling();
@@ -394,6 +411,7 @@ export function startPositionPolling(): void {
 
       const wasPlaying = state.isPlaying;
       const isNowPlaying = positionInfo.transport_state === 'PLAYING';
+      const transportState = positionInfo.transport_state;
 
       state = {
         ...state,
@@ -404,10 +422,31 @@ export function startPositionPolling(): void {
       
       notifyListeners();
 
-      // Detect track ended
-      if (wasPlaying && !isNowPlaying && positionInfo.transport_state === 'STOPPED') {
-        console.log('[CastStore] DLNA playback stopped');
+      // Detect track ended: was PLAYING, now STOPPED, and position is near end or reset to 0
+      const isNearEnd = positionInfo.duration_secs > 0 && 
+        (positionInfo.position_secs >= positionInfo.duration_secs - 2 || positionInfo.position_secs === 0);
+      
+      if (lastTransportState === 'PLAYING' && 
+          (transportState === 'STOPPED' || transportState === 'NO_MEDIA_PRESENT') && 
+          !trackEndDetected) {
+        console.log('[CastStore] DLNA track ended, transport:', transportState, 'position:', positionInfo.position_secs);
+        trackEndDetected = true;
+        
+        if (onCastTrackEnded) {
+          try {
+            await onCastTrackEnded();
+          } catch (err) {
+            console.error('[CastStore] Failed to auto-advance:', err);
+          }
+        }
       }
+      
+      // Reset track end detection when a new track starts playing
+      if (transportState === 'PLAYING' && trackEndDetected) {
+        trackEndDetected = false;
+      }
+      
+      lastTransportState = transportState;
     } catch (err) {
       // Silently ignore polling errors (device may be temporarily unavailable)
     }

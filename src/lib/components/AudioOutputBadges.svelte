@@ -2,6 +2,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import { getDevicePrettyName, isExternalDevice } from '$lib/utils/audioDeviceNames';
+  import { isCasting, getConnectedDevice, getConnectedProtocol, subscribe as subscribeCast } from '$lib/stores/castStore';
 
   interface AudioSettings {
     output_device: string | null;
@@ -44,6 +45,11 @@
   let pipewireSinks = $state<PipewireSink[]>([]);
   let hardwareStatus = $state<HardwareAudioStatus | null>(null);
   let isHovering = $state(false);
+  
+  // Cast state
+  let castConnected = $state(false);
+  let castDeviceName = $state<string | null>(null);
+  let castProtocol = $state<string | null>(null);
 
   // Ticker animation for long device names
   let deviceNameRef: HTMLDivElement | null = $state(null);
@@ -133,9 +139,9 @@
     return 'DAC Passthrough activo';
   });
 
-  // Whether to show badges at all (only if at least one setting is enabled or device is external)
+  // Whether to show badges at all (only if at least one setting is enabled or device is external or casting)
   const shouldShowBadges = $derived(
-    settings?.dac_passthrough || settings?.exclusive_mode || isExternal || isAlsaDirect
+    castConnected || settings?.dac_passthrough || settings?.exclusive_mode || isExternal || isAlsaDirect
   );
 
   async function loadStatus() {
@@ -174,12 +180,19 @@
 
   onMount(() => {
     loadStatus();
+    
+    // Subscribe to cast state
+    const unsubscribeCast = subscribeCast(() => {
+      castConnected = isCasting();
+      castDeviceName = getConnectedDevice()?.name ?? null;
+      castProtocol = getConnectedProtocol();
+    });
 
     // Lightweight polling: ONLY update hardware status (no device enumeration)
     // This reads /proc/asound which is very cheap, no CPAL/ALSA enumeration
     const pollInterval = setInterval(async () => {
-      // Only poll if using bit-perfect modes
-      if (settings?.dac_passthrough || settings?.backend_type === 'Alsa') {
+      // Only poll if using bit-perfect modes AND not casting
+      if (!castConnected && (settings?.dac_passthrough || settings?.backend_type === 'Alsa')) {
         try {
           hardwareStatus = await invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null);
         } catch (err) {
@@ -189,7 +202,10 @@
     }, 1000);
 
     // Cleanup on unmount
-    return () => clearInterval(pollInterval);
+    return () => {
+      clearInterval(pollInterval);
+      unsubscribeCast();
+    };
   });
 </script>
 
@@ -200,8 +216,22 @@
   onmouseenter={() => isHovering = true}
   onmouseleave={() => isHovering = false}
 >
-  <!-- DAC Badge or HW Badge (mutually exclusive) -->
-  {#if isAlsaDirect}
+  <!-- Casting Badge (shown when casting to external device) -->
+  {#if castConnected}
+    <div class="badge cast-badge active">
+      <span class="badge-label">
+        {#if castProtocol === 'dlna'}
+          DLNA
+        {:else if castProtocol === 'chromecast'}
+          CAST
+        {:else if castProtocol === 'airplay'}
+          AIR
+        {:else}
+          CAST
+        {/if}
+      </span>
+    </div>
+  {:else if isAlsaDirect}
     <!-- Hardware Direct Badge (ALSA Direct mode) -->
     <div class="badge hw-badge active">
       <span class="badge-label">HW</span>
@@ -218,20 +248,33 @@
     </div>
   {/if}
 
-  <!-- Exclusive Mode Badge -->
+  <!-- Exclusive Mode Badge (only show when not casting) -->
+  {#if !castConnected}
   <div
     class="badge"
     class:active={exclusiveModeActive}
   >
     <span class="badge-label">EXC</span>
   </div>
+  {/if}
 
   <!-- Unified Tooltip on hover -->
   {#if isHovering && showTooltips}
     <div class="device-tooltip">
       <!-- Output Device -->
       <div class="tooltip-section">
-        <div class="tooltip-label">Output Device</div>
+        <div class="tooltip-label">{castConnected ? 'Casting to' : 'Output Device'}</div>
+        {#if castConnected}
+          <div class="tooltip-device cast-device">
+            {#if castProtocol === 'dlna'}
+              <img src="/dlna.svg" alt="DLNA" class="cast-icon-svg" />
+            {:else}
+              <img src="/cast_audio.svg" alt="Cast" class="cast-icon-svg" />
+            {/if}
+            <span class="device-name-text">{castDeviceName || 'Unknown Device'}</span>
+          </div>
+          <div class="tooltip-raw">{castProtocol?.toUpperCase()} Streaming</div>
+        {:else}
         <div
           class="tooltip-device"
           class:scrollable={deviceNameOverflow > 0}
@@ -251,10 +294,11 @@
             <span class="volume-value">{currentVolume}%</span>
           </div>
         {/if}
+        {/if}
       </div>
 
-      <!-- Audio Settings -->
-      {#if isAlsaDirect || settings?.dac_passthrough || settings?.exclusive_mode}
+      <!-- Audio Settings (only show when not casting) -->
+      {#if !castConnected && (isAlsaDirect || settings?.dac_passthrough || settings?.exclusive_mode)}
         <div class="tooltip-section">
           <div class="tooltip-label">Audio Settings</div>
           {#if isAlsaDirect}
@@ -355,6 +399,13 @@
     border-color: rgba(59, 130, 246, 0.4);
   }
 
+  /* Cast Badge - Purple for network streaming */
+  .badge.cast-badge {
+    background: rgba(168, 85, 247, 0.2);
+    color: #a855f7;
+    border-color: rgba(168, 85, 247, 0.4);
+  }
+
   .badge-label {
     line-height: 1;
   }
@@ -431,6 +482,20 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  /* Cast device styling in tooltip */
+  .tooltip-device.cast-device {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    color: #a855f7;
+  }
+
+  .cast-icon-svg {
+    width: 14px;
+    height: 14px;
+    filter: invert(55%) sepia(80%) saturate(2000%) hue-rotate(240deg) brightness(100%);
   }
 
   .tooltip-volume {

@@ -15,7 +15,8 @@ import {
   castSetVolume,
   castStop,
   getCastPosition,
-  subscribe as subscribeToCast
+  subscribe as subscribeToCast,
+  setOnCastTrackEnded
 } from '$lib/stores/castStore';
 
 // ============ Types ============
@@ -353,6 +354,8 @@ export async function stop(): Promise<void> {
  */
 export function setOnTrackEnded(callback: () => Promise<void>): void {
   onTrackEnded = callback;
+  // Also set the same callback for cast track ended (DLNA auto-advance)
+  setOnCastTrackEnded(callback);
 }
 
 /**
