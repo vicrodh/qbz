@@ -1885,6 +1885,7 @@
                   onclick={() => onTrackGoToArtist?.(similar.id)}
                   title={similar.name}
                 >
+                  <User size={12} />
                   {similar.name}
                 </button>
               {/each}
@@ -2038,7 +2039,7 @@
   .section-items {
     display: flex;
     flex-direction: column;
-    gap: 4px;
+    gap: 2px;
   }
 
   .placeholder-text {
@@ -2050,14 +2051,14 @@
   .sidebar-artist-link {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
+    gap: 6px;
+    padding: 5px 8px;
     background: transparent;
     border: none;
-    border-radius: 6px;
+    border-radius: 4px;
     cursor: pointer;
     color: var(--text-secondary);
-    font-size: 13px;
+    font-size: 12px;
     text-align: left;
     transition: background 150ms ease, color 150ms ease;
   }
