@@ -60,6 +60,7 @@
   };
 
   let trackEdits = $state<TrackEdit[]>([]);
+  const totalDiscs = $derived(Math.max(1, ...trackEdits.map(t => t.discNumber ?? 1)));
 
   function resetFromAlbum() {
     if (!album) return;
@@ -249,7 +250,6 @@
               <div class="col-track">Track</div>
               <div class="col-disc">Disc</div>
             </div>
-            {@const totalDiscs = Math.max(1, ...trackEdits.map(t => t.discNumber ?? 1))}
             <div class="track-body">
               {#each trackEdits as t, i (t.id)}
                 <div class="track-row">
