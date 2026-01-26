@@ -91,15 +91,16 @@
     }
   });
 
-  function parseYear(): number | null {
-    const trimmed = yearInput.trim();
-    if (!trimmed) return null;
-    const num = Number(trimmed);
-    if (!Number.isFinite(num)) return null;
-    const year = Math.trunc(num);
-    if (year < 0 || year > 3000) return null;
-    return year;
-  }
+    function parseYear(): number | null {
+      const trimmed = yearInput.trim();
+      if (!trimmed) return null;
+      const num = Number(trimmed);
+      if (!Number.isFinite(num)) return null;
+      if (!Number.isInteger(num)) return null;
+      const year = num;
+      if (year < 0 || year > 3000) return null;
+      return year;
+    }
 
   function buildPayload() {
     if (!album) return null;
@@ -194,67 +195,83 @@
   }
 </script>
 
-<Modal
-  isOpen={isOpen}
-  onClose={onClose}
-  title="Edit Local Metadata (LocalLibrary)"
-  maxWidth="820px"
->
-  {#snippet children()}
-    <div class="tag-editor">
-      <p class="subtitle">
-        Changes apply to LocalLibrary indexing and search. Qobuz catalog is not modified.
-      </p>
+  <Modal
+    isOpen={isOpen}
+    onClose={onClose}
+    title="Edit metadata"
+    maxWidth="820px"
+  >
+    {#snippet children()}
+      <div class="tag-editor">
+        <p class="subtitle">
+          Changes apply to LocalLibrary indexing and search. Qobuz catalog is not modified.
+        </p>
 
-      <div class="grid">
-        <div class="field">
-          <label>Album name</label>
-          <input class="text text-sm" type="text" bind:value={albumTitle} />
-        </div>
-        <div class="field">
-          <label>Album artist</label>
-          <input class="text text-sm" type="text" bind:value={albumArtist} />
-        </div>
-        <div class="field">
-          <label>Year</label>
-          <input class="text text-sm" type="text" inputmode="numeric" bind:value={yearInput} placeholder="e.g. 1999" />
-        </div>
-        <div class="field">
-          <label>Genre</label>
-          <input class="text text-sm" type="text" bind:value={genre} placeholder="Free text" />
-        </div>
-        <div class="field span-2">
-          <label>Catalog / Release ID (optional)</label>
-          <input class="text text-sm" type="text" bind:value={catalogNumber} />
-        </div>
-      </div>
-
-      <div class="section">
-        <h3>Tracklist (album order)</h3>
-        <div class="track-table">
-          <div class="track-head">
-            <div class="col-num">#</div>
-            <div class="col-title">Track title</div>
-            <div class="col-disc">Disc</div>
+        <div class="grid grid-2">
+          <div class="field">
+            <label>Album name</label>
+            <input class="text control-sm" type="text" bind:value={albumTitle} />
           </div>
-          {#each trackEdits as t, i (t.id)}
-            <div class="track-row">
-              <div class="col-num">{i + 1}</div>
-              <div class="col-title">
-                <input class="text text-sm" type="text" bind:value={t.title} />
-              </div>
-              <div class="col-disc">
-                <input
-                  class="text text-sm disc"
-                  type="number"
-                  min="1"
-                  bind:value={t.discNumber}
-                />
-              </div>
-            </div>
-          {/each}
+          <div class="field">
+            <label>Album artist</label>
+            <input class="text control-sm" type="text" bind:value={albumArtist} />
+          </div>
         </div>
-      </div>
+
+        <div class="grid grid-3">
+          <div class="field">
+            <label>Year</label>
+            <input
+              class="text control-sm"
+              type="number"
+              step="1"
+              inputmode="numeric"
+              bind:value={yearInput}
+              placeholder="e.g. 1999"
+            />
+          </div>
+          <div class="field">
+            <label>Genre</label>
+            <input class="text control-sm" type="text" bind:value={genre} placeholder="e.g. ROCK, POP, etc" />
+          </div>
+          <div class="field">
+            <label>Catalog / Release ID</label>
+            <input class="text control-sm" type="text" bind:value={catalogNumber} />
+          </div>
+        </div>
+
+        <div class="section">
+          <h3>Tracklist</h3>
+          <div class="track-table">
+            <div class="track-head">
+              <div class="col-num">#</div>
+              <div class="col-title">Track title</div>
+              <div class="col-track">Track</div>
+              <div class="col-disc">Disc</div>
+            </div>
+            {@const totalDiscs = Math.max(1, ...trackEdits.map(t => t.discNumber ?? 1))}
+            <div class="track-body">
+              {#each trackEdits as t, i (t.id)}
+                <div class="track-row">
+                  <div class="col-num">{i + 1}</div>
+                  <div class="col-title">
+                    <input class="text control-xs" type="text" bind:value={t.title} />
+                  </div>
+                  <div class="col-track">
+                    <input class="text control-xs num" type="number" min="1" step="1" bind:value={t.trackNumber} />
+                  </div>
+                  <div class="col-disc">
+                    <div class="disc-of">
+                      <input class="text control-xs num" type="number" min="1" step="1" bind:value={t.discNumber} />
+                      <span class="disc-sep">of</span>
+                      <input class="text control-xs num" type="number" value={totalDiscs} readonly tabindex="-1" />
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          </div>
+        </div>
 
       <div class="section">
         <h3>Persistence</h3>
@@ -299,12 +316,12 @@
   {/snippet}
 </Modal>
 
-<style>
-  .tag-editor {
-    display: flex;
-    flex-direction: column;
-    gap: 18px;
-  }
+  <style>
+    .tag-editor {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
 
   .subtitle {
     margin: 0;
@@ -312,15 +329,18 @@
     font-size: 13px;
   }
 
-  .grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-  }
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
 
-  .span-2 {
-    grid-column: span 2;
-  }
+    .grid-2 {
+      grid-template-columns: 1fr 1fr;
+    }
+
+    .grid-3 {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
 
   .field {
     display: flex;
@@ -333,21 +353,31 @@
     color: var(--text-muted);
   }
 
-  .text {
-    background: var(--bg-secondary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 8px;
-    padding: 10px 12px;
-    color: var(--text-primary);
-    font-size: 14px;
-  }
+    .text {
+      background: var(--bg-secondary);
+      border: 1px solid var(--bg-tertiary);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
 
-  /* Bootstrap-ish "sm" control sizing (relative step down). */
-  .text-sm {
-    padding: 6px 10px;
-    font-size: 13px;
-    border-radius: 6px;
-  }
+    /* Bootstrap-ish control sizing (relative step down). */
+    .control-sm {
+      padding: 6px 10px;
+      font-size: 13px;
+      border-radius: 6px;
+    }
+
+    .control-xs {
+      padding: 4px 8px;
+      font-size: 12px;
+      border-radius: 6px;
+    }
+
+    .num {
+      text-align: center;
+    }
 
   .text:focus {
     outline: none;
@@ -362,6 +392,7 @@
   }
 
   .track-table {
+    --track-row-height: 44px;
     border: 1px solid var(--bg-tertiary);
     border-radius: 10px;
     overflow: hidden;
@@ -369,10 +400,11 @@
 
   .track-head, .track-row {
     display: grid;
-    grid-template-columns: 44px 1fr 96px;
+    grid-template-columns: 44px 1fr 90px 160px;
     gap: 10px;
     align-items: center;
-    padding: 10px 12px;
+    min-height: var(--track-row-height);
+    padding: 0 12px;
   }
 
   .track-head {
@@ -381,26 +413,54 @@
     font-size: 12px;
   }
 
-  .track-row {
-    background: var(--bg-primary);
-    border-top: 1px solid var(--bg-tertiary);
+    .track-row {
+      background: var(--bg-primary);
+      border-top: 1px solid var(--bg-tertiary);
+    }
+
+  .track-body {
+    max-height: calc(var(--track-row-height) * 5);
+    overflow-y: auto;
+    scroll-snap-type: y mandatory;
+    scrollbar-gutter: stable;
   }
 
-  .col-num {
-    color: var(--text-muted);
-    text-align: right;
-    padding-right: 6px;
-  }
+    .track-body .track-row {
+      scroll-snap-align: start;
+      scroll-snap-stop: always;
+    }
 
-  .disc {
-    width: 100%;
-  }
+    .track-body .track-row:nth-child(even) {
+      background: var(--bg-secondary);
+    }
 
-  .radio-group {
-    display: flex;
-    flex-direction: column;
+    .col-num {
+      color: var(--text-muted);
+      text-align: right;
+      padding-right: 6px;
+    }
+
+    .col-track {
+      width: 100%;
+    }
+
+  .disc-of {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
     gap: 8px;
-  }
+      align-items: center;
+    }
+
+    .disc-sep {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
 
   .radio {
     display: flex;

@@ -33,12 +33,21 @@
       onClose();
     }
   }
+
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if isOpen}
-  <div class="modal-overlay" onclick={handleBackdropClick} role="dialog" aria-modal="true">
+  <div class="modal-overlay" use:portal onclick={handleBackdropClick} role="dialog" aria-modal="true">
     <div class="modal" style="max-width: {maxWidth}">
       {#if title || showCloseButton}
         <div class="modal-header">
