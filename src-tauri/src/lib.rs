@@ -699,6 +699,8 @@ pub fn run() {
             config::audio_settings::set_audio_backend_type,
             config::audio_settings::set_audio_alsa_plugin,
             config::audio_settings::set_audio_alsa_hardware_volume,
+            config::audio_settings::set_audio_stream_first_track,
+            config::audio_settings::set_audio_stream_buffer_seconds,
             // Audio backend commands
             commands::get_available_backends,
             commands::get_devices_for_backend,

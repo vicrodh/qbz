@@ -245,8 +245,8 @@ export async function togglePlay(): Promise<void> {
           console.log('[Player] Restoring local track:', localTrackId);
           await invoke('library_play_track', { trackId: localTrackId });
         } else {
-          // Qobuz track - use play_track
-          await invoke('play_track', { trackId: currentTrack.id });
+          // Qobuz track - use play_track with duration for seekbar
+          await invoke('play_track', { trackId: currentTrack.id, durationSecs: currentTrack.duration });
         }
 
         // Seek to saved position after a short delay to let audio load

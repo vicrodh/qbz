@@ -16,6 +16,10 @@ pub struct AudioSettings {
     pub backend_type: Option<AudioBackendType>,  // None = auto-detect
     pub alsa_plugin: Option<AlsaPlugin>,  // Only used when backend is ALSA
     pub alsa_hardware_volume: bool,  // Use ALSA mixer for volume (only with hw: devices)
+    /// When true, uncached tracks start playing via streaming instead of waiting for full download
+    pub stream_first_track: bool,
+    /// Initial buffer size in seconds before starting streaming playback (1-10, default 3)
+    pub stream_buffer_seconds: u8,
 }
 
 impl Default for AudioSettings {
@@ -28,6 +32,8 @@ impl Default for AudioSettings {
             backend_type: None,  // Auto-detect (PipeWire if available, else ALSA)
             alsa_plugin: Some(AlsaPlugin::Hw),  // Default to hw (bit-perfect)
             alsa_hardware_volume: false,  // Disabled by default (maximum compatibility)
+            stream_first_track: false,  // Disabled by default (current behavior)
+            stream_buffer_seconds: 3,  // 3 seconds initial buffer
         }
     }
 }
@@ -58,7 +64,9 @@ impl AudioSettingsStore {
                 preferred_sample_rate INTEGER,
                 backend_type TEXT,
                 alsa_plugin TEXT,
-                alsa_hardware_volume INTEGER NOT NULL DEFAULT 0
+                alsa_hardware_volume INTEGER NOT NULL DEFAULT 0,
+                stream_first_track INTEGER NOT NULL DEFAULT 0,
+                stream_buffer_seconds INTEGER NOT NULL DEFAULT 3
             );
             INSERT OR IGNORE INTO audio_settings (id, exclusive_mode, dac_passthrough)
             VALUES (1, 0, 0);"
@@ -68,6 +76,8 @@ impl AudioSettingsStore {
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN backend_type TEXT", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN alsa_plugin TEXT", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN alsa_hardware_volume INTEGER DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN stream_first_track INTEGER DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN stream_buffer_seconds INTEGER DEFAULT 3", []);
 
         Ok(Self { conn })
     }
@@ -75,7 +85,7 @@ impl AudioSettingsStore {
     pub fn get_settings(&self) -> Result<AudioSettings, String> {
         self.conn
             .query_row(
-                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume FROM audio_settings WHERE id = 1",
+                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds FROM audio_settings WHERE id = 1",
                 [],
                 |row| {
                     // Parse backend_type from JSON string
@@ -96,6 +106,8 @@ impl AudioSettingsStore {
                         backend_type,
                         alsa_plugin,
                         alsa_hardware_volume: row.get::<_, Option<i64>>(6)?.unwrap_or(0) != 0,
+                        stream_first_track: row.get::<_, Option<i64>>(7)?.unwrap_or(0) != 0,
+                        stream_buffer_seconds: row.get::<_, Option<i64>>(8)?.unwrap_or(3) as u8,
                     })
                 },
             )
@@ -179,6 +191,28 @@ impl AudioSettingsStore {
                 params![enabled as i64],
             )
             .map_err(|e| format!("Failed to set ALSA hardware volume: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_stream_first_track(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET stream_first_track = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set stream first track: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_stream_buffer_seconds(&self, seconds: u8) -> Result<(), String> {
+        // Clamp to valid range 1-10
+        let clamped = seconds.clamp(1, 10);
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET stream_buffer_seconds = ?1 WHERE id = 1",
+                params![clamped as i64],
+            )
+            .map_err(|e| format!("Failed to set stream buffer seconds: {}", e))?;
         Ok(())
     }
 }
@@ -266,4 +300,22 @@ pub fn set_audio_alsa_hardware_volume(
 ) -> Result<(), String> {
     let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
     store.set_alsa_hardware_volume(enabled)
+}
+
+#[tauri::command]
+pub fn set_audio_stream_first_track(
+    state: tauri::State<'_, AudioSettingsState>,
+    enabled: bool,
+) -> Result<(), String> {
+    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    store.set_stream_first_track(enabled)
+}
+
+#[tauri::command]
+pub fn set_audio_stream_buffer_seconds(
+    state: tauri::State<'_, AudioSettingsState>,
+    seconds: u8,
+) -> Result<(), String> {
+    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    store.set_stream_buffer_seconds(seconds)
 }

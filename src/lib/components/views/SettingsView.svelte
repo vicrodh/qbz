@@ -248,6 +248,8 @@
   let selectedBackend = $state<string>('Auto');
   let selectedAlsaPlugin = $state<string>('hw (Direct Hardware)');
   let alsaHardwareVolume = $state(false);
+  let streamFirstTrack = $state(false);
+  let streamBufferSeconds = $state(3);
 
   // Backend system state
   let availableBackends = $state<BackendInfo[]>([]);
@@ -886,6 +888,8 @@
     backend_type: 'PipeWire' | 'Alsa' | 'Pulse' | null;
     alsa_plugin: 'Hw' | 'PlugHw' | 'Pcm' | null;
     alsa_hardware_volume: boolean;
+    stream_first_track: boolean;
+    stream_buffer_seconds: number;
   }
 
   interface BackendInfo {
@@ -1031,6 +1035,8 @@
       }
 
       alsaHardwareVolume = settings.alsa_hardware_volume ?? false;
+      streamFirstTrack = settings.stream_first_track ?? false;
+      streamBufferSeconds = settings.stream_buffer_seconds ?? 3;
 
       // Validate mutual exclusion: DAC Passthrough disables Gapless + Crossfade
       if (dacPassthrough) {
@@ -1194,6 +1200,28 @@
       console.log('[Audio] ALSA hardware volume changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change ALSA hardware volume:', err);
+    }
+  }
+
+  async function handleStreamFirstTrackChange(enabled: boolean) {
+    streamFirstTrack = enabled;
+    try {
+      await invoke('set_audio_stream_first_track', { enabled });
+      console.log('[Audio] Stream first track changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change stream first track:', err);
+    }
+  }
+
+  async function handleStreamBufferSecondsChange(seconds: number) {
+    // Clamp to valid range
+    const clamped = Math.max(1, Math.min(10, Math.round(seconds)));
+    streamBufferSeconds = clamped;
+    try {
+      await invoke('set_audio_stream_buffer_seconds', { seconds: clamped });
+      console.log('[Audio] Stream buffer seconds changed:', clamped);
+    } catch (err) {
+      console.error('[Audio] Failed to change stream buffer seconds:', err);
     }
   }
 
@@ -1649,6 +1677,30 @@
         <br />
         <strong>Recommended:</strong> Switch to ALSA Direct backend for true bit-perfect audio.
       </div>
+    </div>
+    {/if}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Stream Uncached Tracks</span>
+        <span class="setting-desc">Start playback faster when track is not in cache. Seeking may be limited during initial buffering.</span>
+      </div>
+      <Toggle enabled={streamFirstTrack} onchange={handleStreamFirstTrackChange} />
+    </div>
+    {#if streamFirstTrack}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Initial Buffer Size</span>
+        <span class="setting-desc">Seconds to buffer before starting playback ({streamBufferSeconds}s)</span>
+      </div>
+      <input
+        type="range"
+        min="1"
+        max="10"
+        step="1"
+        value={streamBufferSeconds}
+        oninput={(e) => handleStreamBufferSecondsChange(parseInt(e.currentTarget.value))}
+        class="buffer-slider"
+      />
     </div>
     {/if}
     <div class="setting-row last">
@@ -2895,6 +2947,41 @@ flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
   .warning-content strong {
     color: rgb(251, 191, 36);
     font-weight: 600;
+  }
+
+  /* Buffer slider styling */
+  .buffer-slider {
+    width: 120px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--alpha-20);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .buffer-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent-color, #3b82f6);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+
+  .buffer-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+  }
+
+  .buffer-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--accent-color, #3b82f6);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
   }
 </style>
 

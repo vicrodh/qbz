@@ -114,7 +114,7 @@ export async function playTrack(
       if (isLocal) {
         await invoke('library_play_track', { trackId: track.id });
       } else {
-        await invoke('play_track', { trackId: track.id });
+        await invoke('play_track', { trackId: track.id, durationSecs: track.duration });
       }
     }
 
