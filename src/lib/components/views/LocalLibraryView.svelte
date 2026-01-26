@@ -3142,7 +3142,7 @@
       <div class="modal-body">
         <div class="form-group">
           <label>Album name</label>
-          <div class="album-name-display">{selectedAlbum.title}</div>
+          <div class="album-name">{selectedAlbum.title}</div>
           <button class="settings-action-btn" onclick={openTagEditorFromAlbumSettings}>
             <img src="/edit-tool.svg" alt="" class="settings-action-icon" />
             <span>Edit Album info</span>
@@ -3152,7 +3152,7 @@
 
         <div class="form-group">
           <label>Refresh</label>
-          <button class="settings-action-btn danger" onclick={handleRefreshAlbumMetadataFromFiles} disabled={refreshingAlbumMetadata}>
+          <button class="settings-action-btn outline" onclick={handleRefreshAlbumMetadataFromFiles} disabled={refreshingAlbumMetadata}>
             <RefreshCw size={16} class={refreshingAlbumMetadata ? 'spinning' : ''} />
             <span>{refreshingAlbumMetadata ? 'Refreshing...' : 'Refresh metadata from files'}</span>
           </button>
@@ -3244,25 +3244,25 @@
           </div>
         {/if}
 
-        <div class="form-group">
-          <label class="toggle-label">
-            <input
-              type="checkbox"
-              bind:checked={editingAlbumHidden}
-            />
-            <span>Hide this album from library</span>
-          </label>
-          <p class="form-hint">Hidden albums can be viewed from Settings</p>
-        </div>
       </div>
 
       <div class="modal-footer">
-        <button class="secondary-btn" onclick={() => showAlbumEditModal = false}>
-          Cancel
-        </button>
-        <button class="primary-btn" onclick={saveAlbumEdit}>
-          Save
-        </button>
+        <div class="footer-left">
+          <label class="toggle-label footer-toggle">
+            <input type="checkbox" bind:checked={editingAlbumHidden} />
+            <span>Hide this album from library</span>
+          </label>
+          <p class="form-hint footer-hint">Hidden albums can be viewed from Settings</p>
+        </div>
+
+        <div class="footer-actions">
+          <button class="secondary-btn" onclick={() => showAlbumEditModal = false}>
+            Cancel
+          </button>
+          <button class="primary-btn" onclick={saveAlbumEdit}>
+            Save
+          </button>
+        </div>
       </div>
     </div>
   </div>
@@ -4953,7 +4953,7 @@
 
   .modal {
     width: 100%;
-    max-width: 440px;
+    max-width: 520px;
     max-height: 90vh;
     overflow: hidden;
     display: flex;
@@ -4999,7 +4999,7 @@
   }
 
   .modal-body {
-    padding: 24px;
+    padding: 18px 20px;
     overflow-y: auto;
   }
 
@@ -5036,15 +5036,11 @@
     border-color: var(--accent-primary);
   }
 
-  .album-name-display {
-    width: 100%;
-    padding: 10px 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 8px;
-    font-size: 14px;
+  .album-name {
+    font-size: 16px;
+    font-weight: 650;
     color: var(--text-primary);
-    margin-bottom: 10px;
+    margin: 0 0 10px 0;
   }
 
   .toggle-label {
@@ -5090,13 +5086,13 @@
     background: var(--bg-hover);
   }
 
-  .settings-action-btn.danger {
-    background: rgba(239, 68, 68, 0.12);
-    border-color: rgba(239, 68, 68, 0.25);
+  .settings-action-btn.outline {
+    background: transparent;
+    border-color: var(--accent-primary);
   }
 
-  .settings-action-btn.danger:hover {
-    background: rgba(239, 68, 68, 0.18);
+  .settings-action-btn.outline:hover {
+    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
   }
 
   .settings-action-icon {
@@ -5274,10 +5270,27 @@
 
   .modal-footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: flex-end;
     gap: 12px;
     padding: 16px 24px;
     border-top: 1px solid var(--bg-tertiary);
+  }
+
+  .footer-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 60%;
+  }
+
+  .footer-actions {
+    display: flex;
+    gap: 12px;
+  }
+
+  .footer-hint {
+    margin-top: 0;
   }
 
   .secondary-btn,
