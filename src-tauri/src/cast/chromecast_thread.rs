@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use crate::cast::device::CastDeviceConnection;
 use crate::cast::errors::CastError;
-use crate::cast::{CastStatus, MediaMetadata};
+use crate::cast::{CastStatus, MediaMetadata, CastPositionInfo};
 
 /// Commands sent to the Chromecast thread
 pub enum CastCommand {
@@ -23,6 +23,9 @@ pub enum CastCommand {
     },
     GetStatus {
         reply: Sender<Result<CastStatus, CastError>>,
+    },
+    GetMediaPosition {
+        reply: Sender<Result<CastPositionInfo, CastError>>,
     },
     LoadMedia {
         url: String,
@@ -188,6 +191,17 @@ impl ChromecastHandle {
             .recv()
             .map_err(|_| CastError::Connection("Thread response error".to_string()))?
     }
+
+    /// Get media position for seekbar updates
+    pub fn get_media_position(&self) -> Result<CastPositionInfo, CastError> {
+        let (reply_tx, reply_rx) = mpsc::channel();
+        self.sender
+            .send(CastCommand::GetMediaPosition { reply: reply_tx })
+            .map_err(|_| CastError::Connection("Thread communication error".to_string()))?;
+        reply_rx
+            .recv()
+            .map_err(|_| CastError::Connection("Thread response error".to_string()))?
+    }
 }
 
 impl Drop for ChromecastHandle {
@@ -243,6 +257,14 @@ fn chromecast_thread_main(receiver: Receiver<CastCommand>) {
             CastCommand::GetStatus { reply } => {
                 let result = match connection.as_ref() {
                     Some(conn) => conn.get_status(),
+                    None => Err(CastError::NotConnected),
+                };
+                let _ = reply.send(result);
+            }
+
+            CastCommand::GetMediaPosition { reply } => {
+                let result = match connection.as_mut() {
+                    Some(conn) => conn.get_media_position(),
                     None => Err(CastError::NotConnected),
                 };
                 let _ = reply.send(result);

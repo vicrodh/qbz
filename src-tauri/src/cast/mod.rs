@@ -10,7 +10,7 @@ pub mod airplay;
 pub mod dlna;
 
 pub use commands::CastState;
-pub use device::{CastDeviceConnection, CastStatus, MediaMetadata};
+pub use device::{CastDeviceConnection, CastStatus, MediaMetadata, CastPositionInfo};
 pub use discovery::{DeviceDiscovery, DiscoveredDevice};
 pub use errors::CastError;
 pub use media_server::MediaServer;

@@ -619,6 +619,7 @@ pub fn run() {
             cast::commands::cast_connect,
             cast::commands::cast_disconnect,
             cast::commands::cast_get_status,
+            cast::commands::cast_get_position,
             cast::commands::cast_play_track,
             cast::commands::cast_play_local_track,
             cast::commands::cast_play,

@@ -250,8 +250,8 @@ export async function castTrack(
     };
     notifyListeners();
     
-    // Start position polling for DLNA
-    if (state.protocol === 'dlna') {
+    // Start position polling for DLNA and Chromecast
+    if (state.protocol === 'dlna' || state.protocol === 'chromecast') {
       startPositionPolling();
     }
   } catch (err) {
@@ -401,50 +401,77 @@ export function setOnCastTrackEnded(callback: (() => Promise<void>) | null): voi
 }
 
 /**
- * Start polling for DLNA position updates
+ * Start polling for cast position updates (DLNA and Chromecast)
  */
 export function startPositionPolling(): void {
   if (positionPollInterval) return;
-  if (state.protocol !== 'dlna') return;
+  if (state.protocol !== 'dlna' && state.protocol !== 'chromecast') return;
 
-  console.log('[CastStore] Starting DLNA position polling');
+  console.log(`[CastStore] Starting ${state.protocol?.toUpperCase()} position polling`);
   trackEndDetected = false;
   lastTransportState = 'PLAYING';
   
   positionPollInterval = setInterval(async () => {
-    if (!state.isConnected || state.protocol !== 'dlna') {
+    if (!state.isConnected || (state.protocol !== 'dlna' && state.protocol !== 'chromecast')) {
       stopPositionPolling();
       return;
     }
 
     try {
-      const positionInfo = await invoke<{
-        position_secs: number;
-        duration_secs: number;
-        transport_state: string;
-      }>('dlna_get_position');
+      let positionSecs = 0;
+      let durationSecs = 0;
+      let transportState = 'PLAYING';
+      let idleReason: string | null = null;
 
-      const wasPlaying = state.isPlaying;
-      const isNowPlaying = positionInfo.transport_state === 'PLAYING';
-      const transportState = positionInfo.transport_state;
+      if (state.protocol === 'dlna') {
+        const positionInfo = await invoke<{
+          position_secs: number;
+          duration_secs: number;
+          transport_state: string;
+        }>('dlna_get_position');
+        
+        positionSecs = positionInfo.position_secs;
+        durationSecs = positionInfo.duration_secs;
+        transportState = positionInfo.transport_state;
+      } else if (state.protocol === 'chromecast') {
+        const positionInfo = await invoke<{
+          position_secs: number;
+          duration_secs: number;
+          player_state: string;
+          idle_reason: string | null;
+        }>('cast_get_position');
+        
+        positionSecs = positionInfo.position_secs;
+        durationSecs = positionInfo.duration_secs;
+        transportState = positionInfo.player_state;
+        idleReason = positionInfo.idle_reason;
+      }
+
+      const isNowPlaying = transportState === 'PLAYING';
 
       state = {
         ...state,
-        positionSecs: positionInfo.position_secs,
-        durationSecs: positionInfo.duration_secs,
+        positionSecs,
+        durationSecs,
         isPlaying: isNowPlaying
       };
       
       notifyListeners();
 
-      // Detect track ended: was PLAYING, now STOPPED, and position is near end or reset to 0
-      const isNearEnd = positionInfo.duration_secs > 0 && 
-        (positionInfo.position_secs >= positionInfo.duration_secs - 2 || positionInfo.position_secs === 0);
+      // Detect track ended based on protocol
+      let trackEnded = false;
       
-      if (lastTransportState === 'PLAYING' && 
-          (transportState === 'STOPPED' || transportState === 'NO_MEDIA_PRESENT') && 
-          !trackEndDetected) {
-        console.log('[CastStore] DLNA track ended, transport:', transportState, 'position:', positionInfo.position_secs);
+      if (state.protocol === 'dlna') {
+        // DLNA: was PLAYING, now STOPPED or NO_MEDIA_PRESENT
+        trackEnded = lastTransportState === 'PLAYING' && 
+          (transportState === 'STOPPED' || transportState === 'NO_MEDIA_PRESENT');
+      } else if (state.protocol === 'chromecast') {
+        // Chromecast: IDLE state with FINISHED reason
+        trackEnded = transportState === 'IDLE' && idleReason === 'FINISHED';
+      }
+      
+      if (trackEnded && !trackEndDetected) {
+        console.log(`[CastStore] ${state.protocol?.toUpperCase()} track ended, state:`, transportState, 'idle_reason:', idleReason);
         trackEndDetected = true;
         
         if (onCastTrackEnded) {
@@ -473,7 +500,7 @@ export function startPositionPolling(): void {
  */
 export function stopPositionPolling(): void {
   if (positionPollInterval) {
-    console.log('[CastStore] Stopping DLNA position polling');
+    console.log('[CastStore] Stopping position polling');
     clearInterval(positionPollInterval);
     positionPollInterval = null;
   }
