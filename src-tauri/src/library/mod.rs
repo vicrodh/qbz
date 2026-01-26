@@ -10,14 +10,19 @@ pub mod errors;
 pub mod metadata;
 pub mod models;
 pub mod scanner;
+pub mod tag_sidecar;
 pub mod thumbnails;
 
 pub use commands::LibraryState;
 pub use cue_parser::{cue_to_tracks, CueParser, CueSheet, CueTrack};
-pub use database::{LibraryDatabase, LibraryFolder, LibraryStats, PlaylistFolder, PlaylistSettings, PlaylistStats};
+pub use database::{
+    AlbumTrackUpdate, LibraryDatabase, LibraryFolder, LibraryStats, PlaylistFolder, PlaylistSettings,
+    PlaylistStats, TrackMetadataUpdateFull,
+};
 pub use errors::LibraryError;
 pub use metadata::MetadataExtractor;
 pub use models::*;
+pub use tag_sidecar::*;
 pub use scanner::{LibraryScanner, ScanResult};
 
 use std::path::PathBuf;

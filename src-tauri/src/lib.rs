@@ -611,6 +611,9 @@ pub fn run() {
             // Album settings commands
             library::commands::library_get_album_settings,
             library::commands::library_set_album_hidden,
+            library::commands::library_update_album_metadata,
+            library::commands::library_write_album_metadata_to_files,
+            library::commands::library_refresh_album_metadata_from_files,
             library::commands::library_get_hidden_albums,
             library::commands::library_backfill_downloads,
             // Artist images commands

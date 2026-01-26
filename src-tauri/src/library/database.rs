@@ -5,6 +5,29 @@ use std::path::Path;
 
 use crate::library::{AudioFormat, LibraryError, LocalAlbum, LocalArtist, LocalTrack};
 
+#[derive(Debug, Clone)]
+pub struct AlbumTrackUpdate {
+    pub id: i64,
+    pub title: String,
+    pub disc_number: Option<u32>,
+    pub track_number: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct TrackMetadataUpdateFull {
+    pub id: i64,
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub album_artist: Option<String>,
+    pub album_group_title: String,
+    pub track_number: Option<u32>,
+    pub disc_number: Option<u32>,
+    pub year: Option<u32>,
+    pub genre: Option<String>,
+    pub catalog_number: Option<String>,
+}
+
 /// Library database wrapper
 pub struct LibraryDatabase {
     conn: Connection,
@@ -1246,6 +1269,145 @@ impl LibraryDatabase {
         "#,
                 params![artwork_path, group_key],
             )
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn update_album_group_metadata(
+        &mut self,
+        group_key: &str,
+        album_title: &str,
+        album_artist: &str,
+        year: Option<u32>,
+        genre: Option<&str>,
+        catalog_number: Option<&str>,
+        track_artist_match: Option<&str>,
+        track_updates: &[AlbumTrackUpdate],
+    ) -> Result<(), LibraryError> {
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let normalized_album_artist = {
+            let trimmed = album_artist.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            }
+        };
+
+        tx.execute(
+            r#"
+            UPDATE local_tracks
+            SET
+                album = ?1,
+                album_group_title = ?2,
+                album_artist = ?3,
+                year = ?4,
+                genre = ?5,
+                catalog_number = ?6
+            WHERE COALESCE(album_group_key, album || '|' || COALESCE(album_artist, artist)) = ?7
+            "#,
+            params![
+                album_title.trim(),
+                album_title.trim(),
+                normalized_album_artist,
+                year,
+                genre.map(|s| s.trim()).filter(|s| !s.is_empty()),
+                catalog_number.map(|s| s.trim()).filter(|s| !s.is_empty()),
+                group_key
+            ],
+        )
+        .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        if let Some(match_artist) = track_artist_match {
+            let match_trim = match_artist.trim();
+            if !match_trim.is_empty() && !album_artist.trim().is_empty() {
+                tx.execute(
+                    r#"
+                    UPDATE local_tracks
+                    SET artist = ?1
+                    WHERE COALESCE(album_group_key, album || '|' || COALESCE(album_artist, artist)) = ?2
+                      AND artist = ?3
+                    "#,
+                    params![album_artist.trim(), group_key, match_trim],
+                )
+                .map_err(|e| LibraryError::Database(e.to_string()))?;
+            }
+        }
+
+        {
+            let mut stmt = tx
+                .prepare("UPDATE local_tracks SET title = ?1, disc_number = ?2, track_number = ?3 WHERE id = ?4")
+                .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+            for update in track_updates {
+                stmt.execute(params![
+                    update.title.trim(),
+                    update.disc_number,
+                    update.track_number,
+                    update.id
+                ])
+                .map_err(|e| LibraryError::Database(e.to_string()))?;
+            }
+        }
+
+        tx.commit()
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+        Ok(())
+    }
+
+    pub fn update_tracks_metadata_by_id(
+        &mut self,
+        updates: &[TrackMetadataUpdateFull],
+    ) -> Result<(), LibraryError> {
+        let tx = self
+            .conn
+            .transaction()
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        {
+            let mut stmt = tx
+                .prepare(
+                    r#"
+                    UPDATE local_tracks
+                    SET
+                        title = ?1,
+                        artist = ?2,
+                        album = ?3,
+                        album_artist = ?4,
+                        album_group_title = ?5,
+                        track_number = ?6,
+                        disc_number = ?7,
+                        year = ?8,
+                        genre = ?9,
+                        catalog_number = ?10
+                    WHERE id = ?11
+                    "#,
+                )
+                .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+            for update in updates {
+                stmt.execute(params![
+                    update.title.trim(),
+                    update.artist.trim(),
+                    update.album.trim(),
+                    update.album_artist.as_ref().map(|s| s.trim().to_string()),
+                    update.album_group_title.trim(),
+                    update.track_number,
+                    update.disc_number,
+                    update.year,
+                    update.genre.as_ref().map(|s| s.trim().to_string()),
+                    update.catalog_number.as_ref().map(|s| s.trim().to_string()),
+                    update.id
+                ])
+                .map_err(|e| LibraryError::Database(e.to_string()))?;
+            }
+        }
+
+        tx.commit()
             .map_err(|e| LibraryError::Database(e.to_string()))?;
         Ok(())
     }
