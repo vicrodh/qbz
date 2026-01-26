@@ -271,30 +271,11 @@
             </div>
         </div>
 
-      <div class="section">
-        <h3>Persistence</h3>
-        <div class="radio-group">
-          <label class="radio">
-            <input type="radio" name="persistence" value="sidecar" bind:group={persistence} />
-            <span>Save as QBZ sidecar (default, does not modify audio files)</span>
-          </label>
-          <label class="radio">
-            <input type="radio" name="persistence" value="direct" bind:group={persistence} />
-            <span>Write changes to audio files (embedded tags)</span>
-          </label>
-        </div>
-        {#if persistence === 'direct'}
-          <div class="warning">
-            SECURITY NOTE: This will modify files on disk. Ensure the album path is mounted read-write and that you have permissions.
-          </div>
-        {/if}
-      </div>
-
-      <div class="section">
-        <h3>Reference (read-only)</h3>
-        <div class="ref-grid">
-          <div class="ref-item">
-            <span class="ref-label">Album path</span>
+        <div class="section">
+          <h3>Reference (read-only)</h3>
+          <div class="ref-grid">
+            <div class="ref-item">
+              <span class="ref-label">Album path</span>
             <span class="ref-value mono">{album?.directory_path ?? ''}</span>
           </div>
           <div class="ref-item">
@@ -307,19 +288,35 @@
   {/snippet}
 
   {#snippet footer()}
-    <button class="secondary-btn" onclick={onClose} disabled={saving}>Cancel</button>
-    <button class="primary-btn" onclick={handleSave} disabled={saving}>
-      {saving ? 'Saving...' : 'Save changes'}
-    </button>
+    <div class="footer-left">
+      <label class="footer-label" for="persistence-select">Persistence</label>
+      <select
+        id="persistence-select"
+        class="select control-sm"
+        bind:value={persistence}
+      >
+        <option value="sidecar">QBZ sidecar (does not modify files)</option>
+        <option value="direct">Write to audio files (embedded tags)</option>
+      </select>
+      {#if persistence === 'direct'}
+        <span class="warning-inline">Writes to files on disk.</span>
+      {/if}
+    </div>
+    <div class="footer-actions">
+      <button class="secondary-btn" onclick={onClose} disabled={saving}>Cancel</button>
+      <button class="primary-btn" onclick={handleSave} disabled={saving}>
+        {saving ? 'Saving...' : 'Save changes'}
+      </button>
+    </div>
   {/snippet}
 </Modal>
 
   <style>
-    .tag-editor {
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-    }
+  .tag-editor {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
 
   .subtitle {
     margin: 0;
@@ -336,9 +333,9 @@
       grid-template-columns: 1fr 1fr;
     }
 
-    .grid-3 {
-      grid-template-columns: 1fr 1fr 1fr;
-    }
+  .grid-3 {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
 
   .field {
     display: flex;
@@ -351,14 +348,14 @@
     color: var(--text-muted);
   }
 
-    .text {
-      background: var(--bg-secondary);
-      border: 1px solid var(--bg-tertiary);
-      border-radius: 8px;
-      padding: 10px 12px;
-      color: var(--text-primary);
-      font-size: 14px;
-    }
+  .text {
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 10px 12px;
+    color: var(--text-primary);
+    font-size: 14px;
+  }
 
     /* Bootstrap-ish control sizing (relative step down). */
     .control-sm {
@@ -390,7 +387,7 @@
   }
 
   .track-table {
-    --track-row-height: 44px;
+    --track-row-height: 40px;
     border: 1px solid var(--bg-tertiary);
     border-radius: 10px;
     overflow: hidden;
@@ -404,6 +401,7 @@
     grid-template-columns: 90px 1fr 180px;
     align-items: stretch;
     min-height: var(--track-row-height);
+    height: var(--track-row-height);
   }
 
   .track-head {
@@ -422,6 +420,7 @@
     overflow-y: auto;
     scroll-snap-type: y mandatory;
     scrollbar-gutter: stable;
+    overscroll-behavior: contain;
   }
 
   .track-body .track-row {
@@ -435,7 +434,7 @@
 
   .cell {
     border-right: 1px solid var(--bg-tertiary);
-    padding: 10px 12px;
+    padding: 6px 10px;
     display: flex;
     align-items: center;
   }
@@ -474,18 +473,15 @@
     outline: none;
   }
 
-    .radio-group {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
+  /* Hide number spinners, keep keyboard support */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
 
-  .radio {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    color: var(--text-primary);
-    font-size: 13px;
+  input[type="number"] {
+    -moz-appearance: textfield;
   }
 
   .warning {
