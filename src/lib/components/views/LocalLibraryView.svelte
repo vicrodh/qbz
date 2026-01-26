@@ -3190,23 +3190,23 @@
                   </div>
                 {/if}
                 <div class="artwork-actions">
-                  <button
-                    class="discogs-btn"
-                    onclick={handleSetAlbumArtwork}
-                    disabled={updatingArtwork}
-                  >
-                    <Upload size={14} />
-                    <span>{updatingArtwork ? 'Updating...' : 'Change Cover'}</span>
-                  </button>
-                  <button
-                    class="discogs-btn"
-                    onclick={fetchDiscogsArtwork}
-                    disabled={fetchingDiscogsImages}
-                  >
-                    <img src="/discogs_icon.svg" alt="Discogs" class="discogs-icon" />
-                    <span>{fetchingDiscogsImages ? 'Fetching...' : 'Fetch from Discogs'}</span>
-                  </button>
-                </div>
+	                  <button
+	                    class="discogs-btn"
+	                    onclick={handleSetAlbumArtwork}
+	                    disabled={updatingArtwork}
+	                  >
+	                    <Upload size={14} />
+	                    <span>{updatingArtwork ? 'Updating...' : 'Upload cover'}</span>
+	                  </button>
+	                  <button
+	                    class="discogs-btn"
+	                    onclick={fetchDiscogsArtwork}
+	                    disabled={fetchingDiscogsImages}
+	                  >
+	                    <img src="/discogs_icon.svg" alt="Discogs" class="discogs-icon" />
+	                    <span>{fetchingDiscogsImages ? 'Fetching...' : 'Get from Discogs'}</span>
+	                  </button>
+	                </div>
               </div>
             </div>
 
@@ -3238,15 +3238,15 @@
                 {/if}
               </div>
 
-              {#if discogsImageOptions.length === 0}
-                <div class="discogs-placeholder">
-                  {#if fetchingDiscogsImages}
-                    <span>Fetching...</span>
-                  {:else}
-                    <span>Click “Fetch from Discogs” to show results here.</span>
-                  {/if}
-                </div>
-              {:else}
+	              {#if discogsImageOptions.length === 0}
+	                <div class="discogs-placeholder">
+	                  {#if fetchingDiscogsImages}
+	                    <span>Fetching...</span>
+	                  {:else}
+	                    <span>Click “Get from Discogs” to show results here.</span>
+	                  {/if}
+	                </div>
+	              {:else}
                 <div class="discogs-options discogs-options-compact">
                   {#each paginatedDiscogsImages as option, i}
                     <button
