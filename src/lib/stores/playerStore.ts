@@ -13,7 +13,9 @@ import {
   castPause,
   castSeek,
   castSetVolume,
-  castStop
+  castStop,
+  getCastPosition,
+  subscribe as subscribeToCast
 } from '$lib/stores/castStore';
 
 // ============ Types ============
@@ -64,6 +66,7 @@ let volume = 75;
 let isFavorite = false;
 // Event listener state (replaces polling)
 let eventUnlisten: UnlistenFn | null = null;
+let castUnsubscribe: (() => void) | null = null;
 let isAdvancingTrack = false;
 let isSkipping = false;
 let queueEnded = false;
@@ -401,6 +404,19 @@ export async function startPolling(): Promise<void> {
   } catch (err) {
     console.error('Failed to start playback event listener:', err);
   }
+
+  // Also subscribe to cast store for DLNA position updates
+  if (!castUnsubscribe) {
+    castUnsubscribe = subscribeToCast(() => {
+      if (isCasting()) {
+        const castPos = getCastPosition();
+        if (castPos.positionSecs !== currentTime) {
+          currentTime = castPos.positionSecs;
+          notifyListeners();
+        }
+      }
+    });
+  }
 }
 
 /**
@@ -411,6 +427,10 @@ export function stopPolling(): void {
     eventUnlisten();
     eventUnlisten = null;
     console.log('Stopped listening for playback events');
+  }
+  if (castUnsubscribe) {
+    castUnsubscribe();
+    castUnsubscribe = null;
   }
 }
 

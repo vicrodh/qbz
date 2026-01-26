@@ -633,6 +633,7 @@ pub fn run() {
             cast::dlna::commands::dlna_connect,
             cast::dlna::commands::dlna_disconnect,
             cast::dlna::commands::dlna_get_status,
+            cast::dlna::commands::dlna_get_position,
             cast::dlna::commands::dlna_play_track,
             cast::dlna::commands::dlna_load_media,
             cast::dlna::commands::dlna_play,

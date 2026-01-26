@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 use crate::api::models::Quality;
 use crate::AppState;
 use crate::cast::dlna::{
-    DiscoveredDlnaDevice, DlnaConnection, DlnaDiscovery, DlnaError, DlnaMetadata, DlnaStatus,
+    DiscoveredDlnaDevice, DlnaConnection, DlnaDiscovery, DlnaError, DlnaMetadata, DlnaPositionInfo, DlnaStatus,
 };
 use crate::cast::MediaServer;
 
@@ -99,6 +99,14 @@ pub async fn dlna_get_status(state: State<'_, DlnaState>) -> Result<DlnaStatus, 
     let connection = state.connection.lock().await;
     let conn = connection.as_ref().ok_or_else(|| "Not connected".to_string())?;
     Ok(conn.get_status())
+}
+
+/// Get current playback position from DLNA device
+#[tauri::command]
+pub async fn dlna_get_position(state: State<'_, DlnaState>) -> Result<DlnaPositionInfo, String> {
+    let connection = state.connection.lock().await;
+    let conn = connection.as_ref().ok_or_else(|| "Not connected".to_string())?;
+    conn.get_position_info().await.map_err(|e| e.to_string())
 }
 
 // === Playback ===

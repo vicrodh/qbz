@@ -17,6 +17,14 @@ pub struct DlnaMetadata {
     pub duration_secs: Option<u64>,
 }
 
+/// DLNA playback position info
+#[derive(Debug, Clone, Serialize)]
+pub struct DlnaPositionInfo {
+    pub position_secs: u64,
+    pub duration_secs: u64,
+    pub transport_state: String, // PLAYING, PAUSED_PLAYBACK, STOPPED, etc.
+}
+
 /// DLNA device status
 #[derive(Debug, Clone, Serialize)]
 pub struct DlnaStatus {
@@ -265,6 +273,73 @@ impl DlnaConnection {
         Ok(())
     }
 
+    /// Get current playback position and transport state
+    pub async fn get_position_info(&self) -> Result<DlnaPositionInfo, DlnaError> {
+        if !self.connected {
+            return Err(DlnaError::NotConnected);
+        }
+
+        let av_service = self.av_transport_service.as_ref()
+            .ok_or_else(|| DlnaError::Playback("Device has no AVTransport service".to_string()))?;
+
+        // Get position info
+        let position_response = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            av_service.action(&self.device_url, "GetPositionInfo", "<InstanceID>0</InstanceID>")
+        )
+        .await
+        .map_err(|_| DlnaError::Playback("GetPositionInfo timed out".to_string()))?
+        .map_err(|e| DlnaError::Playback(e.to_string()))?;
+
+        // Get transport state
+        let transport_response = tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            av_service.action(&self.device_url, "GetTransportInfo", "<InstanceID>0</InstanceID>")
+        )
+        .await
+        .map_err(|_| DlnaError::Playback("GetTransportInfo timed out".to_string()))?
+        .map_err(|e| DlnaError::Playback(e.to_string()))?;
+
+        // Parse RelTime (position) - format: "HH:MM:SS" or "H:MM:SS"
+        let rel_time = position_response.get("RelTime")
+            .map(|s| s.as_str())
+            .unwrap_or("0:00:00");
+        let position_secs = parse_time_string(rel_time);
+
+        // Parse TrackDuration - format: "HH:MM:SS"
+        let track_duration = position_response.get("TrackDuration")
+            .map(|s| s.as_str())
+            .unwrap_or("0:00:00");
+        let duration_secs = parse_time_string(track_duration);
+
+        // Get transport state (PLAYING, PAUSED_PLAYBACK, STOPPED, etc.)
+        let transport_state = transport_response.get("CurrentTransportState")
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| "UNKNOWN".to_string());
+
+        Ok(DlnaPositionInfo {
+            position_secs,
+            duration_secs,
+            transport_state,
+        })
+    }
+
+}
+
+/// Parse time string "HH:MM:SS" or "H:MM:SS" to seconds
+fn parse_time_string(time: &str) -> u64 {
+    let parts: Vec<&str> = time.split(':').collect();
+    if parts.len() != 3 {
+        return 0;
+    }
+    
+    let hours: u64 = parts[0].parse().unwrap_or(0);
+    let minutes: u64 = parts[1].parse().unwrap_or(0);
+    let seconds: u64 = parts[2].split('.').next()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    
+    hours * 3600 + minutes * 60 + seconds
 }
 
 /// Build DIDL-Lite metadata for a track

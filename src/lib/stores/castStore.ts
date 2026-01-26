@@ -16,12 +16,21 @@ export interface CastDevice {
   port: number;
 }
 
+export interface CastPositionInfo {
+  positionSecs: number;
+  durationSecs: number;
+  transportState: string;
+}
+
 interface CastState {
   isConnected: boolean;
   protocol: CastProtocol | null;
   device: CastDevice | null;
   isPlaying: boolean;
   currentTrackId: number | null;
+  // Position tracking for DLNA
+  positionSecs: number;
+  durationSecs: number;
 }
 
 let state: CastState = {
@@ -29,8 +38,14 @@ let state: CastState = {
   protocol: null,
   device: null,
   isPlaying: false,
-  currentTrackId: null
+  currentTrackId: null,
+  positionSecs: 0,
+  durationSecs: 0
 };
+
+// Polling interval for DLNA position updates
+let positionPollInterval: ReturnType<typeof setInterval> | null = null;
+const POSITION_POLL_INTERVAL_MS = 1000;
 
 const listeners = new Set<() => void>();
 
@@ -115,6 +130,9 @@ export async function connectToDevice(device: CastDevice, protocol: CastProtocol
 export async function disconnect(): Promise<void> {
   if (!state.isConnected || !state.protocol) return;
 
+  // Stop position polling first
+  stopPositionPolling();
+
   try {
     await castStop();
     switch (state.protocol) {
@@ -137,7 +155,9 @@ export async function disconnect(): Promise<void> {
     protocol: null,
     device: null,
     isPlaying: false,
-    currentTrackId: null
+    currentTrackId: null,
+    positionSecs: 0,
+    durationSecs: 0
   };
   notifyListeners();
 }
@@ -202,9 +222,16 @@ export async function castTrack(
     state = {
       ...state,
       isPlaying: true,
-      currentTrackId: trackId
+      currentTrackId: trackId,
+      positionSecs: 0,
+      durationSecs: metadata.durationSecs || 0
     };
     notifyListeners();
+    
+    // Start position polling for DLNA
+    if (state.protocol === 'dlna') {
+      startPositionPolling();
+    }
   } catch (err) {
     console.error('[CastStore] Failed to cast track:', err);
     throw err;
@@ -331,5 +358,69 @@ export async function castSetVolume(volume: number): Promise<void> {
     }
   } catch (err) {
     console.error('[CastStore] Failed to set volume:', err);
+  }
+}
+
+/**
+ * Get current cast position (for seekbar display)
+ */
+export function getCastPosition(): { positionSecs: number; durationSecs: number } {
+  return {
+    positionSecs: state.positionSecs,
+    durationSecs: state.durationSecs
+  };
+}
+
+/**
+ * Start polling for DLNA position updates
+ */
+export function startPositionPolling(): void {
+  if (positionPollInterval) return;
+  if (state.protocol !== 'dlna') return;
+
+  console.log('[CastStore] Starting DLNA position polling');
+  positionPollInterval = setInterval(async () => {
+    if (!state.isConnected || state.protocol !== 'dlna') {
+      stopPositionPolling();
+      return;
+    }
+
+    try {
+      const positionInfo = await invoke<{
+        position_secs: number;
+        duration_secs: number;
+        transport_state: string;
+      }>('dlna_get_position');
+
+      const wasPlaying = state.isPlaying;
+      const isNowPlaying = positionInfo.transport_state === 'PLAYING';
+
+      state = {
+        ...state,
+        positionSecs: positionInfo.position_secs,
+        durationSecs: positionInfo.duration_secs,
+        isPlaying: isNowPlaying
+      };
+      
+      notifyListeners();
+
+      // Detect track ended
+      if (wasPlaying && !isNowPlaying && positionInfo.transport_state === 'STOPPED') {
+        console.log('[CastStore] DLNA playback stopped');
+      }
+    } catch (err) {
+      // Silently ignore polling errors (device may be temporarily unavailable)
+    }
+  }, POSITION_POLL_INTERVAL_MS);
+}
+
+/**
+ * Stop polling for position updates
+ */
+export function stopPositionPolling(): void {
+  if (positionPollInterval) {
+    console.log('[CastStore] Stopping DLNA position polling');
+    clearInterval(positionPollInterval);
+    positionPollInterval = null;
   }
 }
