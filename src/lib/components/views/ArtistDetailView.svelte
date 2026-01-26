@@ -1333,7 +1333,7 @@
                     Play Next
                   </button>
                   <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
-                    Play Later
+                    Add to queue
                   </button>
                   <button class="context-menu-item" onclick={() => { handleShuffleAllTracks(); showTracksContextMenu = false; }}>
                     Shuffle
