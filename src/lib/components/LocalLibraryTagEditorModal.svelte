@@ -251,11 +251,11 @@
               {#each trackEdits as t, i (t.id)}
                 <div class="track-row">
                   <div class="cell">
-                      <input class="table-input control-xs num" type="number" min="1" step="1" bind:value={t.trackNumber} />
-                    </div>
-                    <div class="cell">
-                      <input class="table-input control-xs" type="text" bind:value={t.title} />
-                    </div>
+                    <input class="table-input control-xs num" type="number" min="1" step="1" bind:value={t.trackNumber} />
+                  </div>
+                  <div class="cell">
+                    <input class="table-input control-xs" type="text" bind:value={t.title} />
+                  </div>
                   <div class="cell">
                     <div class="disc-of">
                       <input class="table-input control-xs num" type="number" min="1" step="1" bind:value={t.discNumber} />
@@ -275,35 +275,35 @@
           </div>
         </div>
 
-      <div class="section">
-        <div class="ref-item flat">
+        <div class="ref-inline">
           <span class="ref-label">Album path</span>
           <span class="ref-value mono">{album?.directory_path ?? ''}</span>
         </div>
       </div>
-    </div>
-  {/snippet}
+    {/snippet}
 
   {#snippet footer()}
-    <div class="footer-left">
-      <label class="footer-label" for="persistence-select">Persistence</label>
-      <select
-        id="persistence-select"
-        class="select control-xs"
-        bind:value={persistence}
-      >
-        <option value="sidecar">QBZ sidecar (does not modify files)</option>
-        <option value="direct">Write to audio files (embedded tags)</option>
-      </select>
-      {#if persistence === 'direct'}
-        <span class="warning-inline">Writes to files on disk.</span>
-      {/if}
-    </div>
-    <div class="footer-actions">
-      <button class="secondary-btn" onclick={onClose} disabled={saving}>Cancel</button>
-      <button class="primary-btn" onclick={handleSave} disabled={saving}>
-        {saving ? 'Saving...' : 'Save'}
-      </button>
+    <div class="editor-footer">
+      <div class="footer-left">
+        <label class="footer-label" for="persistence-select">Persistence</label>
+        <select
+          id="persistence-select"
+          class="select-inline control-xs"
+          bind:value={persistence}
+        >
+          <option value="sidecar">QBZ sidecar (does not modify files)</option>
+          <option value="direct">Write to audio files (embedded tags)</option>
+        </select>
+        {#if persistence === 'direct'}
+          <span class="warning-inline">Writes to files on disk.</span>
+        {/if}
+      </div>
+      <div class="footer-actions">
+        <button class="secondary-btn" onclick={onClose} disabled={saving}>Cancel</button>
+        <button class="primary-btn" onclick={handleSave} disabled={saving}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
     </div>
   {/snippet}
 </Modal>
@@ -315,16 +315,10 @@
     gap: 18px;
   }
 
-  .subtitle {
-    margin: 0;
-    color: var(--text-muted);
-    font-size: 13px;
+  .grid {
+    display: grid;
+    gap: 12px;
   }
-
-    .grid {
-      display: grid;
-      gap: 12px;
-    }
 
     .grid-2 {
       grid-template-columns: 1fr 1fr;
@@ -371,20 +365,22 @@
       text-align: center;
     }
 
-  .text:focus {
-    outline: none;
-    border-color: var(--accent-primary);
-  }
+.text:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
 
-  .section h3 {
-    margin: 0 0 10px 0;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
+.ref-inline {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--text-primary);
+  padding: 0 2px;
+}
 
-  .track-table {
-    --track-row-height: 40px;
+.track-table {
+  --track-row-height: 24px;
+  --track-row-pad-y: 6px;
     border: 1px solid var(--bg-tertiary);
     border-radius: 10px;
     overflow: hidden;
@@ -397,8 +393,7 @@
     display: grid;
     grid-template-columns: 90px 1fr 180px;
     align-items: stretch;
-    min-height: var(--track-row-height);
-    height: var(--track-row-height);
+    min-height: calc(var(--track-row-height) + var(--track-row-pad-y) * 2);
   }
 
   .track-head {
@@ -413,12 +408,12 @@
   }
 
   .track-body {
-    max-height: calc(var(--track-row-height) * 5);
+    max-height: calc((var(--track-row-height) + var(--track-row-pad-y) * 2) * 5);
     overflow-y: auto;
     scroll-snap-type: y mandatory;
     scrollbar-gutter: stable;
     overscroll-behavior: contain;
-    padding: 0 12px;
+    padding: 0;
   }
 
   .track-body .track-row {
@@ -432,7 +427,7 @@
 
   .cell {
     border-right: 1px solid var(--bg-tertiary);
-    padding: 6px 10px;
+    padding: var(--track-row-pad-y) 10px;
     display: flex;
     align-items: center;
   }
@@ -473,20 +468,75 @@
     border-bottom-color: var(--accent-primary);
   }
 
-  .track-row:focus-within {
-    background: var(--bg-hover);
-  }
+.track-row:focus-within,
+.cell:focus-within {
+  background: var(--bg-hover);
+}
 
-  /* Hide number spinners, keep keyboard support */
+/* Hide number spinners, keep keyboard support */
   input[type="number"]::-webkit-outer-spin-button,
   input[type="number"]::-webkit-inner-spin-button {
     -webkit-appearance: none;
     margin: 0;
   }
 
-  input[type="number"] {
-    -moz-appearance: textfield;
-  }
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.ref-inline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  color: var(--text-primary);
+  padding: 0 2px;
+}
+
+.footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.editor-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.footer-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.select-inline {
+  appearance: none;
+  background: var(--bg-secondary);
+  border: 1px solid var(--bg-tertiary);
+  border-radius: 6px;
+  padding: 6px 28px 6px 10px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23888888' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  cursor: pointer;
+}
+
+.select-inline:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
 
   .warning {
     margin-top: 10px;
