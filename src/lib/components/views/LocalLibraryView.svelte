@@ -4982,6 +4982,7 @@
   }
 
   .modal {
+    --album-settings-cover-size: 94px;
     width: 100%;
     max-width: 704px;
     max-height: 90vh;
@@ -5193,8 +5194,8 @@
   }
 
   .artwork-preview {
-    width: 94px;
-    height: 94px;
+    width: var(--album-settings-cover-size);
+    height: var(--album-settings-cover-size);
     border-radius: 6px;
     object-fit: cover;
     background: var(--bg-tertiary);
@@ -5252,8 +5253,9 @@
   }
 
   .discogs-options-compact {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    grid-template-rows: 70px;
+    grid-template-columns: repeat(2, var(--album-settings-cover-size));
+    grid-template-rows: var(--album-settings-cover-size);
+    justify-content: start;
     gap: 10px;
     margin-top: 0;
     flex: 1;
