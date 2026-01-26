@@ -16,7 +16,8 @@ import {
   castStop,
   getCastPosition,
   subscribe as subscribeToCast,
-  setOnCastTrackEnded
+  setOnCastTrackEnded,
+  setOnCastDisconnected
 } from '$lib/stores/castStore';
 
 // ============ Types ============
@@ -418,6 +419,12 @@ export async function startPolling(): Promise<void> {
           notifyListeners();
         }
       }
+    });
+
+    // Set callback for when cast disconnects - reset player state
+    setOnCastDisconnected(() => {
+      isPlaying = false;
+      notifyListeners();
     });
   }
 }

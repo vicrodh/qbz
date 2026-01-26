@@ -50,6 +50,9 @@ const POSITION_POLL_INTERVAL_MS = 1000;
 // Callback for when track ends (for auto-advance)
 let onCastTrackEnded: (() => Promise<void>) | null = null;
 
+// Callback for when cast disconnects (to reset player state)
+let onCastDisconnected: (() => void) | null = null;
+
 // Track end detection state
 let lastTransportState: string = '';
 let trackEndDetected = false;
@@ -167,6 +170,18 @@ export async function disconnect(): Promise<void> {
     durationSecs: 0
   };
   notifyListeners();
+
+  // Notify player to reset its state
+  if (onCastDisconnected) {
+    onCastDisconnected();
+  }
+}
+
+/**
+ * Set callback for when cast disconnects
+ */
+export function setOnCastDisconnected(callback: () => void): void {
+  onCastDisconnected = callback;
 }
 
 /**
