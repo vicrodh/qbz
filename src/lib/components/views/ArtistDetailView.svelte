@@ -135,6 +135,12 @@
     groups: RelatedArtist[];
     collaborators: RelatedArtist[];
   }
+  interface GroupedMember {
+    mbid: string;
+    name: string;
+    roles: string[];
+    period?: { begin?: string; end?: string };
+  }
   let mbRelationships = $state<ArtistRelationships | null>(null);
   let mbRelationshipsLoading = $state(false);
   let mbArtistMbid = $state<string | null>(null);
@@ -558,6 +564,40 @@
     (mbRelationships.members.length > 0 ||
      mbRelationships.pastMembers.length > 0 ||
      mbRelationships.groups.length > 0)
+  );
+
+  // Group members by MBID, combining their roles
+  function groupMembersByMbid(members: RelatedArtist[]): GroupedMember[] {
+    const grouped = new Map<string, GroupedMember>();
+    for (const member of members) {
+      const existing = grouped.get(member.mbid);
+      if (existing) {
+        if (member.role && !existing.roles.includes(member.role)) {
+          existing.roles.push(member.role);
+        }
+      } else {
+        grouped.set(member.mbid, {
+          mbid: member.mbid,
+          name: member.name,
+          roles: member.role ? [member.role] : [],
+          period: member.period
+        });
+      }
+    }
+    return Array.from(grouped.values());
+  }
+
+  let groupedMembers = $derived(
+    mbRelationships ? groupMembersByMbid(mbRelationships.members) : []
+  );
+  let groupedPastMembers = $derived(
+    mbRelationships ? groupMembersByMbid(mbRelationships.pastMembers) : []
+  );
+  let groupedGroups = $derived(
+    mbRelationships ? groupMembersByMbid(mbRelationships.groups) : []
+  );
+  let groupedCollaborators = $derived(
+    mbRelationships ? groupMembersByMbid(mbRelationships.collaborators) : []
   );
 
   function getSimilarArtistImage(similar: QobuzArtist): string {
@@ -1902,13 +1942,14 @@
             {#if mbRelationshipsLoading}
               <span class="placeholder-text">Loading...</span>
             {:else if hasRelationships}
-              {#if mbRelationships && mbRelationships.members.length > 0}
+              {#if groupedMembers.length > 0}
                 <div class="relationship-group">
                   <span class="relationship-label">Members</span>
-                  {#each mbRelationships.members as member}
+                  {#each groupedMembers as member}
                     <button
                       class="sidebar-artist-link"
                       onclick={() => navigateToRelatedArtist(member.name)}
+                      title={member.roles.length > 0 ? member.roles.join(', ') : member.name}
                     >
                       <User size={12} />
                       {member.name}
@@ -1916,13 +1957,14 @@
                   {/each}
                 </div>
               {/if}
-              {#if mbRelationships && mbRelationships.pastMembers.length > 0}
+              {#if groupedPastMembers.length > 0}
                 <div class="relationship-group">
                   <span class="relationship-label">Former Members</span>
-                  {#each mbRelationships.pastMembers as member}
+                  {#each groupedPastMembers as member}
                     <button
                       class="sidebar-artist-link past-member"
                       onclick={() => navigateToRelatedArtist(member.name)}
+                      title={member.roles.length > 0 ? member.roles.join(', ') : member.name}
                     >
                       <User size={12} />
                       {member.name}
@@ -1930,13 +1972,14 @@
                   {/each}
                 </div>
               {/if}
-              {#if mbRelationships && mbRelationships.groups.length > 0}
+              {#if groupedGroups.length > 0}
                 <div class="relationship-group">
                   <span class="relationship-label">Member Of</span>
-                  {#each mbRelationships.groups as group}
+                  {#each groupedGroups as group}
                     <button
                       class="sidebar-artist-link"
                       onclick={() => navigateToRelatedArtist(group.name)}
+                      title={group.roles.length > 0 ? group.roles.join(', ') : group.name}
                     >
                       <Music size={12} />
                       {group.name}
@@ -1944,13 +1987,14 @@
                   {/each}
                 </div>
               {/if}
-              {#if mbRelationships && mbRelationships.collaborators.length > 0}
+              {#if groupedCollaborators.length > 0}
                 <div class="relationship-group">
                   <span class="relationship-label">Collaborators</span>
-                  {#each mbRelationships.collaborators as collab}
+                  {#each groupedCollaborators as collab}
                     <button
                       class="sidebar-artist-link"
                       onclick={() => navigateToRelatedArtist(collab.name)}
+                      title={collab.roles.length > 0 ? collab.roles.join(', ') : collab.name}
                     >
                       <User size={12} />
                       {collab.name}
