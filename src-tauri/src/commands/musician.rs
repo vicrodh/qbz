@@ -32,19 +32,66 @@ pub async fn resolve_musician(
 
     let mut musician = ResolvedMusician::empty(name.clone(), role.clone());
 
-    // Step 1: Search Qobuz for artist by exact name
+    // Step 1: Search Qobuz for artist, handling "The" prefix variations
+    // MusicBrainz often has "Beatles" but Qobuz has "The Beatles"
     let qobuz_artist = {
         let client = state.client.lock().await;
-        match client.search_artists(&name, 5, 0, None).await {
-            Ok(results) => results
-                .items
-                .into_iter()
-                .find(|a| a.name.to_lowercase() == name.to_lowercase()),
-            Err(e) => {
-                log::warn!("Qobuz artist search failed: {}", e);
-                None
+        let name_lower = name.to_lowercase();
+
+        // Search with original name
+        let mut best_match: Option<crate::api::Artist> = None;
+
+        if let Ok(results) = client.search_artists(&name, 10, 0, None).await {
+            // Look for exact match first
+            for artist in &results.items {
+                let artist_lower = artist.name.to_lowercase();
+                if artist_lower == name_lower {
+                    best_match = Some(artist.clone());
+                    break;
+                }
+            }
+
+            // If no exact match, check for "The X" variant
+            if best_match.is_none() {
+                let the_name = format!("the {}", name_lower);
+                for artist in &results.items {
+                    let artist_lower = artist.name.to_lowercase();
+                    if artist_lower == the_name {
+                        log::info!("Found 'The' variant: {} -> {}", name, artist.name);
+                        best_match = Some(artist.clone());
+                        break;
+                    }
+                }
+            }
+
+            // If we have a match but it has few albums, check if "The X" has more
+            if let Some(ref current) = best_match {
+                let current_albums = current.albums_count.unwrap_or(0);
+                if current_albums < 5 {
+                    // Search specifically for "The X" to compare
+                    let the_name = format!("The {}", name);
+                    if let Ok(the_results) = client.search_artists(&the_name, 5, 0, None).await {
+                        for artist in the_results.items {
+                            let artist_lower = artist.name.to_lowercase();
+                            let the_name_lower = the_name.to_lowercase();
+                            if artist_lower == the_name_lower {
+                                let the_albums = artist.albums_count.unwrap_or(0);
+                                if the_albums > current_albums {
+                                    log::info!(
+                                        "Preferring 'The {}' ({} albums) over '{}' ({} albums)",
+                                        name, the_albums, current.name, current_albums
+                                    );
+                                    best_match = Some(artist);
+                                }
+                                break;
+                            }
+                        }
+                    }
+                }
             }
         }
+
+        best_match
     };
 
     // Step 2: If found, check if they have a real catalog
@@ -56,9 +103,10 @@ pub async fn resolve_musician(
             musician.qobuz_artist_id = Some(artist.id as i64);
             musician.confidence = MusicianConfidence::Confirmed;
             log::info!(
-                "Musician {} resolved as Confirmed (Qobuz artist ID: {})",
+                "Musician {} resolved as Confirmed (Qobuz artist ID: {}, name: {})",
                 name,
-                artist.id
+                artist.id,
+                artist.name
             );
         }
     }
