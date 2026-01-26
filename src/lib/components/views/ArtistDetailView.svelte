@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Share2 } from 'lucide-svelte';
+  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info } from 'lucide-svelte';
   import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -1206,7 +1206,7 @@
           onclick={() => showNetworkSidebar = !showNetworkSidebar}
           title="Artist Network"
         >
-          <Share2 size={24} />
+          <img src="/element-connect.svg" alt="Network" class="network-icon" />
         </button>
       </div>
     </div>
@@ -1901,7 +1901,13 @@
   {#if showNetworkSidebar}
     <aside class="network-sidebar">
       <div class="sidebar-header">
-        <h3 class="sidebar-title">Artist Network</h3>
+        <div class="sidebar-header-icon">
+          <img src="/element-connect.svg" alt="" />
+        </div>
+        <div class="sidebar-header-text">
+          <h3 class="sidebar-title">Network</h3>
+          <div class="sidebar-subtitle">{artist.name}</div>
+        </div>
         <button class="sidebar-close" onclick={() => showNetworkSidebar = false} title="Close">
           <X size={18} />
         </button>
@@ -1959,7 +1965,6 @@
                       : (periodStr || member.name)}
                     <button
                       class="sidebar-artist-link"
-                      class:ended={member.ended}
                       onclick={() => navigateToRelatedArtist(member.name)}
                       title={tooltip}
                     >
@@ -2022,15 +2027,15 @@
     position: relative;
   }
 
-  /* Network Sidebar */
+  /* Network Sidebar - matches LyricsSidebar dimensions */
   .network-sidebar {
     position: fixed;
     top: 52px;
     right: 0;
-    width: 280px;
-    height: calc(100vh - 52px - 72px);
+    width: 340px;
+    height: calc(100vh - 104px);
     background: var(--bg-secondary);
-    border-left: 1px solid var(--border-primary);
+    border-left: 1px solid var(--bg-tertiary);
     z-index: 100;
     display: flex;
     flex-direction: column;
@@ -2051,17 +2056,50 @@
   .sidebar-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    gap: 12px;
     padding: 16px;
-    border-bottom: 1px solid var(--border-primary);
+    border-bottom: 1px solid var(--bg-tertiary);
+    background: var(--bg-primary);
     flex-shrink: 0;
   }
 
+  .sidebar-header-icon {
+    width: 36px;
+    height: 36px;
+    display: grid;
+    place-items: center;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    color: var(--accent-primary);
+  }
+
+  .sidebar-header-icon img {
+    width: 18px;
+    height: 18px;
+    filter: brightness(0) saturate(100%) invert(56%) sepia(63%) saturate(4848%) hue-rotate(230deg) brightness(102%) contrast(101%);
+  }
+
+  .sidebar-header-text {
+    flex: 1;
+    min-width: 0;
+  }
+
   .sidebar-title {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--text-primary);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
     margin: 0;
+  }
+
+  .sidebar-subtitle {
+    font-size: 13px;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-top: 2px;
   }
 
   .sidebar-close {
@@ -2137,15 +2175,11 @@
     color: var(--text-primary);
   }
 
-  .sidebar-artist-link.ended {
-    color: var(--text-muted);
-  }
-
-  .sidebar-artist-link.ended:hover {
-    color: var(--text-primary);
-  }
 
   .relationship-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
     margin-bottom: 16px;
   }
 
@@ -2158,7 +2192,7 @@
     font-size: 12px;
     font-weight: 500;
     color: var(--text-muted);
-    margin-bottom: 8px;
+    margin-bottom: 6px;
   }
 
   /* Custom scrollbar */
@@ -2383,8 +2417,19 @@
   }
 
   .network-btn.active {
-    color: var(--accent-primary);
     background: var(--bg-hover);
+  }
+
+  .network-btn .network-icon {
+    width: 24px;
+    height: 24px;
+    filter: brightness(0) saturate(100%) invert(70%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(90%) contrast(90%);
+    transition: filter 150ms ease;
+  }
+
+  .network-btn:hover .network-icon,
+  .network-btn.active .network-icon {
+    filter: brightness(0) saturate(100%) invert(56%) sepia(63%) saturate(4848%) hue-rotate(230deg) brightness(102%) contrast(101%);
   }
 
   .floating-message {
