@@ -260,6 +260,7 @@ function toArtistAlbumSummary(album: QobuzAlbum): ArtistAlbumSummary {
     title: album.title,
     artwork,
     year: album.release_date_original?.split('-')[0],
+    releaseDate: album.release_date_original,
     quality,
     genre: album.genre?.name || "Unknown genre"
   };

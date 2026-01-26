@@ -726,6 +726,7 @@
                 title={allResults.albums.items[0].title}
                 artist={allResults.albums.items[0].artist?.name || 'Unknown Artist'}
                 genre={getGenreLabel(allResults.albums.items[0])}
+                releaseDate={allResults.albums.items[0].release_date_original}
                 size="large"
                 quality={getQualityLabel(allResults.albums.items[0])}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(allResults.albums.items[0].id) : undefined}
@@ -863,6 +864,7 @@
                           title={album.title}
                           artist={album.artist?.name || 'Unknown Artist'}
                           genre={getGenreLabel(album)}
+                          releaseDate={album.release_date_original}
                           size="large"
                           quality={getQualityLabel(album)}
                           onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1003,6 +1005,7 @@
               title={album.title}
               artist={album.artist?.name || 'Unknown Artist'}
               genre={getGenreLabel(album)}
+              releaseDate={album.release_date_original}
               size="large"
               quality={getQualityLabel(album)}
               onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}

@@ -188,6 +188,7 @@ export interface ArtistDetail {
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
     genre: string;
   }[];
@@ -196,6 +197,7 @@ export interface ArtistDetail {
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
     genre: string;
   }[];
@@ -204,6 +206,7 @@ export interface ArtistDetail {
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
     genre: string;
   }[];
@@ -212,6 +215,7 @@ export interface ArtistDetail {
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
     genre: string;
   }[];
@@ -220,6 +224,7 @@ export interface ArtistDetail {
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
     genre: string;
   }[];
@@ -228,6 +233,7 @@ export interface ArtistDetail {
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
     genre: string;
   }[];

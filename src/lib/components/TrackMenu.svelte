@@ -379,7 +379,7 @@
             {#if onPlayLater}
               <button class="menu-item" onclick={() => handleAction(onPlayLater)}>
                 <ListEnd size={14} />
-                <span>Play later</span>
+                <span>Add to queue</span>
               </button>
             {/if}
             {#if onCreateRadio}

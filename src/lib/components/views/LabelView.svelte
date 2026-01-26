@@ -278,6 +278,7 @@
             title={album.title}
             artist={album.artist?.name || 'Unknown Artist'}
             genre={getGenreLabel(album)}
+            releaseDate={album.release_date_original}
             quality={getQualityLabel(album)}
             size="large"
             onclick={() => onAlbumClick?.(album.id)}

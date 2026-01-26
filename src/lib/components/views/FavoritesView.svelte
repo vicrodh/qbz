@@ -1301,6 +1301,7 @@
                         title={album.title}
                         artist={album.artist.name}
                         genre={getGenreLabel(album)}
+                        releaseDate={album.release_date_original}
                         size="large"
                         quality={getQualityLabel(album)}
                         onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -1374,6 +1375,7 @@
                 title={album.title}
                 artist={album.artist.name}
                 genre={getGenreLabel(album)}
+                releaseDate={album.release_date_original}
                 size="large"
                 quality={getQualityLabel(album)}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}

@@ -33,6 +33,7 @@
     artwork: string;
     quality: string;
     genre: string;
+    releaseDate?: string;
   }
 
   interface Props {
@@ -485,6 +486,7 @@
                 title={relatedAlbum.title}
                 artist={album.artist}
                 genre={relatedAlbum.genre}
+                releaseDate={relatedAlbum.releaseDate}
                 size="large"
                 quality={relatedAlbum.quality}
                 onclick={() => onRelatedAlbumClick?.(relatedAlbum.id)}

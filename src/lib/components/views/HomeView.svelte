@@ -38,6 +38,7 @@
     artist: string;
     genre: string;
     quality?: string;
+    releaseDate?: string;
   }
 
   interface ArtistCardData {
@@ -334,7 +335,8 @@
       title: album.title,
       artist: album.artist?.name || 'Unknown Artist',
       genre: album.genre?.name || 'Unknown genre',
-      quality: formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate)
+      quality: formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate),
+      releaseDate: album.release_date_original
     };
   }
 
@@ -647,6 +649,7 @@
                 title={album.title}
                 artist={album.artist}
                 genre={album.genre}
+                releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -678,6 +681,7 @@
                 title={album.title}
                 artist={album.artist}
                 genre={album.genre}
+                releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -709,6 +713,7 @@
                 title={album.title}
                 artist={album.artist}
                 genre={album.genre}
+                releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -740,6 +745,7 @@
                 title={album.title}
                 artist={album.artist}
                 genre={album.genre}
+                releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -771,6 +777,7 @@
                 title={album.title}
                 artist={album.artist}
                 genre={album.genre}
+                releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -802,6 +809,7 @@
                 title={album.title}
                 artist={album.artist}
                 genre={album.genre}
+                releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
@@ -904,6 +912,7 @@
                 title={album.title}
                 artist={album.artist}
                 genre={album.genre}
+                releaseDate={album.releaseDate}
                 size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}

@@ -15,6 +15,7 @@
     title: string;
     artist: string;
     genre: string;
+    releaseDate?: string;
     quality?: string;
     size?: 'standard' | 'large';
     searchId?: string;
@@ -40,6 +41,7 @@
     title,
     artist,
     genre,
+    releaseDate,
     quality,
     size = 'standard',
     searchId,
@@ -89,6 +91,19 @@
   function handleImageError() {
     imageError = true;
   }
+
+  function formatReleaseDate(dateStr: string | undefined): string {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  }
+
+  const formattedDate = $derived(formatReleaseDate(releaseDate));
 
   async function handleToggleFavorite(event: MouseEvent) {
     event.stopPropagation();
@@ -184,7 +199,12 @@
     <!-- Action Overlay -->
     {#if hasOverlay}
       <div class="action-overlay" class:menu-open={menuOpen}>
-        <div class="overlay-genre">{genre}</div>
+        <div class="overlay-info">
+          <span class="overlay-genre">{genre}</span>
+          {#if formattedDate}
+            <span class="overlay-date">{formattedDate}</span>
+          {/if}
+        </div>
         <div class="action-buttons">
           {#if showFavoriteButton}
             <button
@@ -325,9 +345,9 @@
     justify-content: center;
     opacity: 0;
     transition: opacity 150ms ease;
-    background: rgba(10, 10, 10, 0.5);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(10, 10, 10, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     pointer-events: auto;
     border-radius: inherit;
     z-index: 2;
@@ -348,6 +368,24 @@
     left: 50%;
     top: 75%;
     transform: translate(-50%, -50%);
+    opacity: 0;
+  }
+
+  .album-card:hover .action-buttons,
+  .action-overlay:focus-within .action-buttons,
+  .action-overlay.menu-open .action-buttons {
+    animation: slide-in-down 0.4s ease-out forwards;
+  }
+
+  @keyframes slide-in-down {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, calc(-50% - 12px));
+    }
+    100% {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
   }
 
   .overlay-btn {
@@ -393,21 +431,49 @@
     height: 30px;
   }
 
-  .overlay-genre {
+  .overlay-info {
     align-self: flex-start;
     width: 100%;
     text-align: left;
-    padding-left: 1em;
+    padding: 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  .album-card:hover .overlay-info,
+  .action-overlay:focus-within .overlay-info,
+  .action-overlay.menu-open .overlay-info {
+    animation: slide-in-up 0.4s ease-out forwards;
+  }
+
+  @keyframes slide-in-up {
+    0% {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .overlay-genre {
+    font-size: 14px;
+    font-weight: 600;
     color: white;
-    text-shadow:
-    0.06em 0 black,
-            0 0.06em black,
-            -0.06em 0 black,
-            0 -0.06em black,
-            -0.06em -0.06em black,
-            -0.06em 0.06em black,
-            0.06em -0.06em black,
-            0.06em 0.06em black;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .overlay-date {
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.85);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   }
 
   :global(.album-card .album-menu) {
