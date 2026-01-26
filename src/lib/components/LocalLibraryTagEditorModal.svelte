@@ -243,34 +243,32 @@
 
         <div class="section">
           <h3>Tracklist</h3>
-          <div class="track-table">
-            <div class="track-head">
-              <div class="col-num">#</div>
-              <div class="col-title">Track title</div>
-              <div class="col-track">Track</div>
-              <div class="col-disc">Disc</div>
-            </div>
-            <div class="track-body">
-              {#each trackEdits as t, i (t.id)}
-                <div class="track-row">
-                  <div class="col-num">{i + 1}</div>
-                  <div class="col-title">
-                    <input class="text control-xs" type="text" bind:value={t.title} />
-                  </div>
-                  <div class="col-track">
-                    <input class="text control-xs num" type="number" min="1" step="1" bind:value={t.trackNumber} />
-                  </div>
-                  <div class="col-disc">
-                    <div class="disc-of">
-                      <input class="text control-xs num" type="number" min="1" step="1" bind:value={t.discNumber} />
-                      <span class="disc-sep">of</span>
-                      <input class="text control-xs num" type="number" value={totalDiscs} readonly tabindex="-1" />
+            <div class="track-table">
+              <div class="track-head">
+                <div class="cell cell-head">Track</div>
+                <div class="cell cell-head">Track title</div>
+                <div class="cell cell-head">Disc</div>
+              </div>
+              <div class="track-body">
+                {#each trackEdits as t, i (t.id)}
+                  <div class="track-row">
+                    <div class="cell">
+                      <input class="table-input control-xs num" type="number" min="1" step="1" bind:value={t.trackNumber} />
+                    </div>
+                    <div class="cell">
+                      <input class="table-input control-xs" type="text" bind:value={t.title} />
+                    </div>
+                    <div class="cell">
+                      <div class="disc-of">
+                        <input class="table-input control-xs num" type="number" min="1" step="1" bind:value={t.discNumber} />
+                        <span class="disc-sep">of</span>
+                        <input class="table-input control-xs num" type="number" value={totalDiscs} readonly tabindex="-1" />
+                      </div>
                     </div>
                   </div>
-                </div>
-              {/each}
+                {/each}
+              </div>
             </div>
-          </div>
         </div>
 
       <div class="section">
@@ -396,15 +394,16 @@
     border: 1px solid var(--bg-tertiary);
     border-radius: 10px;
     overflow: hidden;
+    display: grid;
+    grid-template-rows: auto 1fr;
   }
 
-  .track-head, .track-row {
+  .track-head,
+  .track-row {
     display: grid;
-    grid-template-columns: 44px 1fr 90px 160px;
-    gap: 10px;
-    align-items: center;
+    grid-template-columns: 90px 1fr 180px;
+    align-items: stretch;
     min-height: var(--track-row-height);
-    padding: 0 12px;
   }
 
   .track-head {
@@ -413,10 +412,10 @@
     font-size: 12px;
   }
 
-    .track-row {
-      background: var(--bg-primary);
-      border-top: 1px solid var(--bg-tertiary);
-    }
+  .track-row {
+    background: var(--bg-primary);
+    border-top: 1px solid var(--bg-tertiary);
+  }
 
   .track-body {
     max-height: calc(var(--track-row-height) * 5);
@@ -425,36 +424,55 @@
     scrollbar-gutter: stable;
   }
 
-    .track-body .track-row {
-      scroll-snap-align: start;
-      scroll-snap-stop: always;
-    }
+  .track-body .track-row {
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
 
-    .track-body .track-row:nth-child(even) {
-      background: var(--bg-secondary);
-    }
+  .track-body .track-row:nth-child(even) {
+    background: var(--bg-secondary);
+  }
 
-    .col-num {
-      color: var(--text-muted);
-      text-align: right;
-      padding-right: 6px;
-    }
+  .cell {
+    border-right: 1px solid var(--bg-tertiary);
+    padding: 10px 12px;
+    display: flex;
+    align-items: center;
+  }
 
-    .col-track {
-      width: 100%;
-    }
+  .cell:last-child {
+    border-right: none;
+  }
+
+  .cell-head {
+    font-weight: 600;
+    color: var(--text-muted);
+  }
 
   .disc-of {
     display: grid;
     grid-template-columns: 1fr auto 1fr;
     gap: 8px;
-      align-items: center;
-    }
+    align-items: center;
+  }
 
-    .disc-sep {
-      font-size: 12px;
-      color: var(--text-muted);
-    }
+  .disc-sep {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .table-input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    padding: 0;
+    height: 100%;
+  }
+
+  .table-input:focus {
+    outline: none;
+  }
 
     .radio-group {
       display: flex;
