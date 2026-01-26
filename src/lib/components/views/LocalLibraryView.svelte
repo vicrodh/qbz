@@ -640,6 +640,7 @@
   let discogsImageOptions = $state<DiscogsImageOption[]>([]);
   let selectedDiscogsImage = $state<string | null>(null);
   let fetchingDiscogsImages = $state(false);
+  let discogsFetchSuccessful = $state(false);
   let discogsImagePage = $state(0);
   const IMAGES_PER_PAGE = 3;
 
@@ -1477,6 +1478,7 @@
     albumMetadataRefreshed = false;
     discogsImageOptions = [];
     selectedDiscogsImage = null;
+    discogsFetchSuccessful = false;
     showAlbumEditModal = true;
   }
 
@@ -1529,6 +1531,7 @@
       discogsImageOptions = [];
       selectedDiscogsImage = null;
       discogsImagePage = 0;
+      discogsFetchSuccessful = false;
 
       const options = await invoke<DiscogsImageOption[]>('discogs_search_artwork', {
         artist: selectedAlbum.artist,
@@ -1537,6 +1540,10 @@
       });
 
       discogsImageOptions = options;
+      discogsFetchSuccessful = options.length > 0;
+      if (options.length === 0) {
+        alert('No artwork found on Discogs for this album.');
+      }
       console.log(`Found ${options.length} Discogs artwork options`);
     } catch (err) {
       console.error('Failed to fetch Discogs artwork:', err);
@@ -3174,12 +3181,14 @@
           </div>
 
           <div class="form-group">
-            <div class="artwork-layout-header">
+            <div class="artwork-layout-header" class:discogs-active={discogsFetchSuccessful}>
               <label>Album Artwork</label>
-              <div class="discogs-layout-label">Select Artwork from Discogs</div>
+              {#if discogsFetchSuccessful}
+                <div class="discogs-layout-label">Select Artwork from Discogs</div>
+              {/if}
             </div>
 
-            <div class="artwork-layout">
+            <div class="artwork-layout" class:discogs-active={discogsFetchSuccessful}>
               <div class="artwork-left">
                 <div class="artwork-row">
                   {#if selectedAlbum.artwork_path}
@@ -3207,42 +3216,34 @@
                 </div>
               </div>
 
-              <div class="discogs-panel">
-                {#if discogsImageOptions.length > IMAGES_PER_PAGE}
-                  <div class="discogs-header">
-                    <div class="carousel-controls">
-                      <button
-                        class="carousel-btn"
-                        onclick={prevDiscogsPage}
-                        disabled={!hasPrevDiscogsPages}
-                        title="Previous"
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      <span class="page-indicator">
-                        {discogsImagePage + 1} / {Math.ceil(discogsImageOptions.length / IMAGES_PER_PAGE)}
-                      </span>
-                      <button
-                        class="carousel-btn"
-                        onclick={nextDiscogsPage}
-                        disabled={!hasMoreDiscogsPages}
-                        title="Next"
-                      >
-                        <ChevronRight size={16} />
-                      </button>
+              {#if discogsFetchSuccessful}
+                <div class="discogs-panel">
+                  {#if discogsImageOptions.length > IMAGES_PER_PAGE}
+                    <div class="discogs-header">
+                      <div class="carousel-controls">
+                        <button
+                          class="carousel-btn"
+                          onclick={prevDiscogsPage}
+                          disabled={!hasPrevDiscogsPages}
+                          title="Previous"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <span class="page-indicator">
+                          {discogsImagePage + 1} / {Math.ceil(discogsImageOptions.length / IMAGES_PER_PAGE)}
+                        </span>
+                        <button
+                          class="carousel-btn"
+                          onclick={nextDiscogsPage}
+                          disabled={!hasMoreDiscogsPages}
+                          title="Next"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                {/if}
+                  {/if}
 
-                {#if discogsImageOptions.length === 0}
-                  <div class="discogs-placeholder">
-                    {#if fetchingDiscogsImages}
-                      <span>Fetching...</span>
-                    {:else}
-                      <span>Click “Get from Discogs” to show results here.</span>
-                    {/if}
-                  </div>
-                {:else}
                   <div class="discogs-options discogs-options-compact">
                     {#each paginatedDiscogsImages as option, i}
                       <button
@@ -3254,15 +3255,17 @@
                         <img src={option.url} alt={`Option ${discogsImagePage * IMAGES_PER_PAGE + i + 1}`} />
                         <div class="option-info">
                           {#if option.release_title}
-                            <div class="release-title">{option.release_title}{#if option.release_year} ({option.release_year}){/if}</div>
+                            <div class="release-title">
+                              {option.release_title}{#if option.release_year} ({option.release_year}){/if}
+                            </div>
                           {/if}
                           <div class="image-dims">{option.width}x{option.height}</div>
                         </div>
                       </button>
                     {/each}
                   </div>
-                {/if}
-              </div>
+                </div>
+              {/if}
             </div>
           </div>
 
@@ -5050,7 +5053,7 @@
     margin-top: 6px;
     font-size: 18px;
     font-weight: 400;
-    color: var(--text-primary);
+    color: var(--text-muted);
     line-height: 1.25;
     word-break: break-word;
   }
@@ -5100,10 +5103,14 @@
 
   .artwork-layout-header {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 16px;
     align-items: end;
     margin-bottom: 8px;
+  }
+
+  .artwork-layout-header.discogs-active {
+    grid-template-columns: 1fr 1fr;
   }
 
   .artwork-layout-header label {
@@ -5171,9 +5178,13 @@
 
   .artwork-layout {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr;
     gap: 16px;
     align-items: start;
+  }
+
+  .artwork-layout.discogs-active {
+    grid-template-columns: 1fr 1fr;
   }
 
   .discogs-panel {
