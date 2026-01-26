@@ -148,18 +148,18 @@
   async function handleSave() {
     if (!album) return;
     if (!albumTitle.trim()) {
-      showToast('Album title is required', 'error');
+      alert('Album title is required.');
       return;
     }
     if (trackEdits.some(t => !t.title.trim())) {
-      showToast('Track titles cannot be empty', 'error');
+      alert('Track titles cannot be empty.');
       return;
     }
 
     if (persistence === 'direct') {
       const anyCue = tracks.some(t => !!t.cue_file_path || typeof t.cue_start_secs === 'number');
       if (anyCue) {
-        showToast('Writing tags to files is not supported for CUE-based albums. Use sidecar mode.', 'error');
+        alert('Writing tags to files is not supported for CUE-based albums. Use sidecar mode.');
         return;
       }
 
@@ -171,7 +171,7 @@
     try {
       payload = buildPayload();
     } catch (err) {
-      showToast(String(err), 'error');
+      alert(String(err));
       return;
     }
     if (!payload) return;
@@ -187,7 +187,7 @@
       await onSaved();
       onClose();
     } catch (err) {
-      showToast(`Failed to save metadata: ${err}`, 'error');
+      alert(`Failed to save metadata: ${err}`);
     } finally {
       saving = false;
     }

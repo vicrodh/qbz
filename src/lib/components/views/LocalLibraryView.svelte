@@ -1512,7 +1512,7 @@
       await handleTagEditorSaved();
     } catch (err) {
       console.error('Failed to refresh metadata:', err);
-      showToast(`Failed to refresh metadata: ${err}`, 'error');
+      alert(`Failed to refresh metadata: ${err}`);
     } finally {
       refreshingAlbumMetadata = false;
     }
