@@ -2108,9 +2108,9 @@
     line-height: 1.7;
     color: var(--text-secondary);
     font-weight: 300;
-    /* Smart 3-line clamp */
+    /* Smart 2-line clamp */
     display: -webkit-box;
-    -webkit-line-clamp: 3;
+    -webkit-line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
   }
