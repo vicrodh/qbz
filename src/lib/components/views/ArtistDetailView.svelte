@@ -1904,10 +1904,24 @@
             {:else if hasRelationships}
               {#if mbRelationships && mbRelationships.members.length > 0}
                 <div class="relationship-group">
-                  <span class="relationship-label">Band Members</span>
+                  <span class="relationship-label">Members</span>
                   {#each mbRelationships.members as member}
                     <button
                       class="sidebar-artist-link"
+                      onclick={() => navigateToRelatedArtist(member.name)}
+                    >
+                      <User size={12} />
+                      {member.name}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+              {#if mbRelationships && mbRelationships.pastMembers.length > 0}
+                <div class="relationship-group">
+                  <span class="relationship-label">Former Members</span>
+                  {#each mbRelationships.pastMembers as member}
+                    <button
+                      class="sidebar-artist-link past-member"
                       onclick={() => navigateToRelatedArtist(member.name)}
                     >
                       <User size={12} />
@@ -1926,6 +1940,20 @@
                     >
                       <Music size={12} />
                       {group.name}
+                    </button>
+                  {/each}
+                </div>
+              {/if}
+              {#if mbRelationships && mbRelationships.collaborators.length > 0}
+                <div class="relationship-group">
+                  <span class="relationship-label">Collaborators</span>
+                  {#each mbRelationships.collaborators as collab}
+                    <button
+                      class="sidebar-artist-link"
+                      onclick={() => navigateToRelatedArtist(collab.name)}
+                    >
+                      <User size={12} />
+                      {collab.name}
                     </button>
                   {/each}
                 </div>
@@ -2065,6 +2093,14 @@
 
   .sidebar-artist-link:hover {
     background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .sidebar-artist-link.past-member {
+    color: var(--text-muted);
+  }
+
+  .sidebar-artist-link.past-member:hover {
     color: var(--text-primary);
   }
 
