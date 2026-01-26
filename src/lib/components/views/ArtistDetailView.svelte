@@ -160,6 +160,7 @@
   let mbRelationships = $state<ArtistRelationships | null>(null);
   let mbRelationshipsLoading = $state(false);
   let mbArtistMbid = $state<string | null>(null);
+  let mbAvailable = $state(true); // Assume available until proven otherwise
   let artistDetailEl = $state<HTMLDivElement | null>(null);
   let aboutSection = $state<HTMLDivElement | null>(null);
   let topTracksSection = $state<HTMLDivElement | null>(null);
@@ -503,11 +504,13 @@
     mbRelationshipsLoading = true;
     mbRelationships = null;
     mbArtistMbid = null;
+    mbAvailable = true; // Reset on each load attempt
 
     try {
       // Check if MusicBrainz is enabled
       const enabled = await invoke<boolean>('musicbrainz_is_enabled');
       if (!enabled) {
+        mbAvailable = false;
         mbRelationshipsLoading = false;
         return;
       }
@@ -542,6 +545,7 @@
       };
     } catch (err) {
       console.error('Failed to load MusicBrainz relationships:', err);
+      mbAvailable = false;
       mbRelationships = null;
     } finally {
       mbRelationshipsLoading = false;
@@ -1972,70 +1976,72 @@
           </div>
         </section>
 
-        <!-- MusicBrainz Relationships -->
-        <section class="sidebar-section">
-          <h4 class="section-label">RELATIONSHIPS</h4>
-          <div class="section-items">
-            {#if mbRelationshipsLoading}
-              <span class="placeholder-text">Loading...</span>
-            {:else if hasRelationships}
-              {#if groupedMembers.length > 0}
-                <div class="relationship-group">
-                  <span class="relationship-label">Members & Former</span>
-                  {#each groupedMembers as member}
-                    {@const periodStr = member.period?.begin || member.period?.end
-                      ? `${member.period.begin || '?'} - ${member.period.end || 'present'}`
-                      : ''}
-                    {@const tooltipParts = [...member.roles]}
-                    {@const tooltip = tooltipParts.length > 0
-                      ? (periodStr ? `${tooltipParts.join(', ')} (${periodStr})` : tooltipParts.join(', '))
-                      : (periodStr || member.name)}
-                    <button
-                      class="sidebar-artist-link"
-                      onclick={() => navigateToRelatedArtist(member.name)}
-                      title={tooltip}
-                    >
-                      <User size={12} />
-                      {member.name}
-                    </button>
-                  {/each}
-                </div>
+        <!-- MusicBrainz Relationships (only shown if MB is enabled and available) -->
+        {#if mbAvailable}
+          <section class="sidebar-section">
+            <h4 class="section-label">RELATIONSHIPS</h4>
+            <div class="section-items">
+              {#if mbRelationshipsLoading}
+                <span class="placeholder-text">Loading...</span>
+              {:else if hasRelationships}
+                {#if groupedMembers.length > 0}
+                  <div class="relationship-group">
+                    <span class="relationship-label">Members & Former</span>
+                    {#each groupedMembers as member}
+                      {@const periodStr = member.period?.begin || member.period?.end
+                        ? `${member.period.begin || '?'} - ${member.period.end || 'present'}`
+                        : ''}
+                      {@const tooltipParts = [...member.roles]}
+                      {@const tooltip = tooltipParts.length > 0
+                        ? (periodStr ? `${tooltipParts.join(', ')} (${periodStr})` : tooltipParts.join(', '))
+                        : (periodStr || member.name)}
+                      <button
+                        class="sidebar-artist-link"
+                        onclick={() => navigateToRelatedArtist(member.name)}
+                        title={tooltip}
+                      >
+                        <User size={12} />
+                        {member.name}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+                {#if groupedGroups.length > 0}
+                  <div class="relationship-group">
+                    <span class="relationship-label">Member Of</span>
+                    {#each groupedGroups as group}
+                      <button
+                        class="sidebar-artist-link"
+                        onclick={() => navigateToRelatedArtist(group.name)}
+                        title={group.roles.length > 0 ? group.roles.join(', ') : group.name}
+                      >
+                        <Music size={12} />
+                        {group.name}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+                {#if groupedCollaborators.length > 0}
+                  <div class="relationship-group">
+                    <span class="relationship-label">Collaborators</span>
+                    {#each groupedCollaborators as collab}
+                      <button
+                        class="sidebar-artist-link"
+                        onclick={() => navigateToRelatedArtist(collab.name)}
+                        title={collab.roles.length > 0 ? collab.roles.join(', ') : collab.name}
+                      >
+                        <User size={12} />
+                        {collab.name}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              {:else}
+                <span class="placeholder-text">No relationships found</span>
               {/if}
-              {#if groupedGroups.length > 0}
-                <div class="relationship-group">
-                  <span class="relationship-label">Member Of</span>
-                  {#each groupedGroups as group}
-                    <button
-                      class="sidebar-artist-link"
-                      onclick={() => navigateToRelatedArtist(group.name)}
-                      title={group.roles.length > 0 ? group.roles.join(', ') : group.name}
-                    >
-                      <Music size={12} />
-                      {group.name}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-              {#if groupedCollaborators.length > 0}
-                <div class="relationship-group">
-                  <span class="relationship-label">Collaborators</span>
-                  {#each groupedCollaborators as collab}
-                    <button
-                      class="sidebar-artist-link"
-                      onclick={() => navigateToRelatedArtist(collab.name)}
-                      title={collab.roles.length > 0 ? collab.roles.join(', ') : collab.name}
-                    >
-                      <User size={12} />
-                      {collab.name}
-                    </button>
-                  {/each}
-                </div>
-              {/if}
-            {:else}
-              <span class="placeholder-text">No relationships found</span>
-            {/if}
-          </div>
-        </section>
+            </div>
+          </section>
+        {/if}
       </div>
     </aside>
   {/if}
