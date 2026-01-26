@@ -242,6 +242,9 @@
   // MiniPlayer
   import { enterMiniplayerMode } from '$lib/services/miniplayerService';
 
+  // Sidebar mutual exclusion
+  import { closeContentSidebar } from '$lib/stores/sidebarStore';
+
   // Lyrics state management
   import {
     subscribe as subscribeLyrics,
@@ -2078,6 +2081,10 @@
     // Subscribe to UI state changes
     const unsubscribeUI = subscribeUI(() => {
       const uiState = getUIState();
+      // Close network sidebar when queue opens
+      if (uiState.isQueueOpen && !isQueueOpen) {
+        closeContentSidebar('network');
+      }
       isQueueOpen = uiState.isQueueOpen;
       isFullScreenOpen = uiState.isFullScreenOpen;
       isFocusModeOpen = uiState.isFocusModeOpen;
@@ -2179,6 +2186,10 @@
       lyricsActiveIndex = state.activeIndex;
       lyricsActiveProgress = state.activeProgress;
       lyricsSidebarVisible = state.sidebarVisible;
+      // Close network sidebar when lyrics opens
+      if (state.sidebarVisible) {
+        closeContentSidebar('network');
+      }
     });
 
     // Subscribe to cast state changes
