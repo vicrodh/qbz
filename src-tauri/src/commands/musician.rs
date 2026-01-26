@@ -64,23 +64,28 @@ pub async fn resolve_musician(
                 }
             }
 
-            // If we have a match but it has few albums, check if "The X" has more STUDIO albums
+            // Always check if "The X" variant has more STUDIO albums
+            // Total album count is misleading (tributes, compilations inflate it)
             if let Some(ref current) = best_match {
-                let current_total = current.albums_count.unwrap_or(0);
-                if current_total < 10 {
-                    // Search specifically for "The X" to compare
+                // Count studio albums for current match
+                let current_studio = count_studio_albums(&client, current.id).await;
+                log::info!(
+                    "Match '{}' has {} studio albums (total: {})",
+                    current.name, current_studio, current.albums_count.unwrap_or(0)
+                );
+
+                // If few studio albums, check "The X" variant
+                if current_studio < 10 {
                     let the_name = format!("The {}", name);
                     if let Ok(the_results) = client.search_artists(&the_name, 5, 0, None).await {
                         for artist in the_results.items {
                             let artist_lower = artist.name.to_lowercase();
                             let the_name_lower = the_name.to_lowercase();
                             if artist_lower == the_name_lower {
-                                // Compare studio album counts for better accuracy
-                                let current_studio = count_studio_albums(&client, current.id).await;
                                 let the_studio = count_studio_albums(&client, artist.id).await;
 
                                 log::info!(
-                                    "Comparing studio albums: '{}' has {} studio albums, 'The {}' has {} studio albums",
+                                    "Comparing studio albums: '{}' has {} studio, 'The {}' has {} studio",
                                     current.name, current_studio, name, the_studio
                                 );
 
