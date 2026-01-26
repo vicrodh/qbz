@@ -325,9 +325,9 @@
     justify-content: center;
     opacity: 0;
     transition: opacity 150ms ease;
-    background: rgba(10, 10, 10, 0.5);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(10, 10, 10, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     pointer-events: auto;
     border-radius: inherit;
     z-index: 2;
@@ -397,17 +397,11 @@
     align-self: flex-start;
     width: 100%;
     text-align: left;
-    padding-left: 1em;
+    padding: 14px 14px;
+    font-size: 14px;
+    font-weight: 600;
     color: white;
-    text-shadow:
-    0.06em 0 black,
-            0 0.06em black,
-            -0.06em 0 black,
-            0 -0.06em black,
-            -0.06em -0.06em black,
-            -0.06em 0.06em black,
-            0.06em -0.06em black,
-            0.06em 0.06em black;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   }
 
   :global(.album-card .album-menu) {
