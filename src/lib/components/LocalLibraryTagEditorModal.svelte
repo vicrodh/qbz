@@ -379,22 +379,21 @@
 }
 
 .track-table {
-  --track-row-height: 24px;
-  --track-row-pad-y: 6px;
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 10px;
-    overflow: hidden;
-    display: grid;
-    grid-template-rows: auto 1fr;
-  }
+  --track-row-height: 44px;
+  border: 1px solid var(--bg-tertiary);
+  border-radius: 10px;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
 
-  .track-head,
-  .track-row {
-    display: grid;
-    grid-template-columns: 90px 1fr 180px;
-    align-items: stretch;
-    min-height: calc(var(--track-row-height) + var(--track-row-pad-y) * 2);
-  }
+.track-head,
+.track-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 180px;
+  align-items: stretch;
+  min-height: var(--track-row-height);
+}
 
   .track-head {
     background: var(--bg-tertiary);
@@ -407,14 +406,14 @@
     border-top: 1px solid var(--bg-tertiary);
   }
 
-  .track-body {
-    max-height: calc((var(--track-row-height) + var(--track-row-pad-y) * 2) * 5);
-    overflow-y: auto;
-    scroll-snap-type: y mandatory;
-    scrollbar-gutter: stable;
-    overscroll-behavior: contain;
-    padding: 0;
-  }
+.track-body {
+  max-height: calc(var(--track-row-height) * 5);
+  overflow-y: auto;
+  scroll-snap-type: y mandatory;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  padding: 0 0 2px 0;
+}
 
   .track-body .track-row {
     scroll-snap-align: start;
@@ -425,12 +424,12 @@
     background: var(--bg-secondary);
   }
 
-  .cell {
-    border-right: 1px solid var(--bg-tertiary);
-    padding: var(--track-row-pad-y) 10px;
-    display: flex;
-    align-items: center;
-  }
+.cell {
+  border-right: 1px solid var(--bg-tertiary);
+  padding: 10px;
+  display: flex;
+  align-items: center;
+}
 
   .cell:last-child {
     border-right: none;
@@ -517,6 +516,7 @@ input[type="number"] {
   display: flex;
   align-items: center;
   gap: 10px;
+  margin-left: auto;
 }
 
 .select-inline {
