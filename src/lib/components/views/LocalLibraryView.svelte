@@ -3140,23 +3140,29 @@
       </div>
       
       <div class="modal-body">
-        <div class="form-group">
-          <label>Album name</label>
-          <div class="album-name">{selectedAlbum.title}</div>
-          <button class="settings-action-btn" onclick={openTagEditorFromAlbumSettings}>
-            <img src="/edit-tool.svg" alt="" class="settings-action-icon" />
-            <span>Edit Album info</span>
-          </button>
-          <p class="form-hint">Edit metadata for LocalLibrary indexing and search.</p>
-        </div>
-
-        <div class="form-group">
-          <label>Refresh</label>
-          <button class="settings-action-btn outline" onclick={handleRefreshAlbumMetadataFromFiles} disabled={refreshingAlbumMetadata}>
-            <RefreshCw size={16} class={refreshingAlbumMetadata ? 'spinning' : ''} />
-            <span>{refreshingAlbumMetadata ? 'Refreshing...' : 'Refresh metadata from files'}</span>
-          </button>
-          <p class="form-hint">Re-read embedded file tags and discard QBZ sidecar overrides.</p>
+        <div class="album-header-grid">
+          <div class="album-text">
+            <div class="album-title">{selectedAlbum.title}</div>
+            <div class="album-artist">{selectedAlbum.artist}</div>
+          </div>
+          <div class="album-actions">
+            <button
+              class="icon-square-btn"
+              onclick={openTagEditorFromAlbumSettings}
+              title="Edit album info"
+            >
+              <Edit3 size={18} />
+            </button>
+            <button
+              class="icon-square-btn"
+              class:spinning={refreshingAlbumMetadata}
+              onclick={handleRefreshAlbumMetadataFromFiles}
+              disabled={refreshingAlbumMetadata}
+              title="Refresh metadata from files"
+            >
+              <RefreshCw size={18} class={refreshingAlbumMetadata ? 'spinning' : ''} />
+            </button>
+          </div>
         </div>
 
         <div class="form-group">
@@ -4953,7 +4959,7 @@
 
   .modal {
     width: 100%;
-    max-width: 520px;
+    max-width: 570px;
     max-height: 90vh;
     overflow: hidden;
     display: flex;
@@ -5003,6 +5009,59 @@
     overflow-y: auto;
   }
 
+  .album-header-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 18px;
+  }
+
+  .album-title {
+    font-size: 18px;
+    font-weight: 650;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .album-artist {
+    margin-top: 6px;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    line-height: 1.25;
+    word-break: break-word;
+  }
+
+  .album-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .icon-square-btn {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 10px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .icon-square-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+
+  .icon-square-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
   .form-group {
     margin-bottom: 20px;
   }
@@ -5036,13 +5095,6 @@
     border-color: var(--accent-primary);
   }
 
-  .album-name {
-    font-size: 16px;
-    font-weight: 650;
-    color: var(--text-primary);
-    margin: 0 0 10px 0;
-  }
-
   .toggle-label {
     display: flex;
     align-items: center;
@@ -5066,40 +5118,6 @@
     margin-top: 6px;
     font-size: 12px;
     color: var(--text-muted);
-  }
-
-  .settings-action-btn {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 12px;
-    background: var(--bg-tertiary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 10px;
-    color: var(--text-primary);
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .settings-action-btn:hover {
-    background: var(--bg-hover);
-  }
-
-  .settings-action-btn.outline {
-    background: transparent;
-    border-color: var(--accent-primary);
-  }
-
-  .settings-action-btn.outline:hover {
-    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
-  }
-
-  .settings-action-icon {
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-    opacity: 0.9;
   }
 
   .artwork-row {
