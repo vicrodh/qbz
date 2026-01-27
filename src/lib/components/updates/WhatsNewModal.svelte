@@ -119,7 +119,7 @@
   .whats-new-content :global(li) {
     line-height: 1.6 !important;
     color: var(--text-secondary) !important;
-    font-size: 14px !important;
+    font-size: 12px !important;
     font-weight: 400 !important;
   }
 
@@ -132,7 +132,7 @@
   /* Nested list items - darker/muted color */
   .whats-new-content :global(ul ul li) {
     color: var(--text-muted) !important;
-    font-size: 13px !important;
+    font-size: 11px !important;
   }
 
   /* Section headings */
