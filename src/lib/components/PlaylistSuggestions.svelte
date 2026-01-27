@@ -29,13 +29,17 @@
 
   // State
   let loading = $state(false);
+  let loadingMore = $state(false);
   let error = $state<string | null>(null);
   let pool = $state<SuggestedTrack[]>([]);
   let currentPage = $state(0);
   let result = $state<SuggestionResult | null>(null);
+  let hasLoadedOnce = $state(false);
 
   // Configuration
   const VISIBLE_COUNT = 6;
+  const INITIAL_POOL = 18;  // 3 pages worth
+  const EXPANDED_POOL = 60; // Full pool on demand
 
   // Derived state
   const dismissedIds = $derived(getDismissedTrackIds(playlistId));
@@ -46,17 +50,18 @@
   const visibleTracks = $derived(
     filteredPool.slice(currentPage * VISIBLE_COUNT, (currentPage + 1) * VISIBLE_COUNT)
   );
-  const hasMore = $derived(currentPage < totalPages - 1);
-  const isEmpty = $derived(filteredPool.length === 0 && !loading);
+  const hasMorePages = $derived(currentPage < totalPages - 1);
+  const canLoadMore = $derived(hasLoadedOnce && pool.length < EXPANDED_POOL && !loadingMore);
+  const isEmpty = $derived(filteredPool.length === 0 && !loading && hasLoadedOnce);
 
   // Load suggestions when artists change
   $effect(() => {
-    if (artists.length > 0) {
-      void loadSuggestions();
+    if (artists.length > 0 && !hasLoadedOnce) {
+      void loadSuggestions(false);
     }
   });
 
-  async function loadSuggestions() {
+  async function loadSuggestions(expanded: boolean) {
     if (loading) return;
 
     loading = true;
@@ -67,10 +72,11 @@
         artists,
         excludeTrackIds,
         showReasons,
-        { max_pool_size: 60 }
+        { max_pool_size: expanded ? EXPANDED_POOL : INITIAL_POOL }
       );
       pool = result.tracks;
       currentPage = 0;
+      hasLoadedOnce = true;
     } catch (err) {
       console.error('Failed to load suggestions:', err);
       error = err instanceof Error ? err.message : 'Failed to load suggestions';
@@ -80,13 +86,40 @@
     }
   }
 
+  async function handleLoadMore() {
+    if (loadingMore || pool.length >= EXPANDED_POOL) return;
+
+    loadingMore = true;
+    try {
+      const moreResult = await getPlaylistSuggestionsV2(
+        artists,
+        excludeTrackIds,
+        showReasons,
+        { max_pool_size: EXPANDED_POOL }
+      );
+      // Merge new tracks, avoiding duplicates
+      const existingIds = new Set(pool.map(t => t.track_id));
+      const newTracks = moreResult.tracks.filter(t => !existingIds.has(t.track_id));
+      pool = [...pool, ...newTracks];
+      result = moreResult;
+    } catch (err) {
+      console.error('Failed to load more suggestions:', err);
+    } finally {
+      loadingMore = false;
+    }
+  }
+
   function handleRefresh() {
-    if (hasMore) {
+    if (hasMorePages) {
       // Rotate to next page
       currentPage = (currentPage + 1) % totalPages;
+    } else if (canLoadMore) {
+      // Load more tracks
+      void handleLoadMore();
     } else {
       // Reload from scratch
-      void loadSuggestions();
+      hasLoadedOnce = false;
+      void loadSuggestions(false);
     }
   }
 
@@ -129,10 +162,10 @@
       </div>
       <button
         class="refresh-btn"
-        class:spinning={loading}
+        class:spinning={loading || loadingMore}
         onclick={handleRefresh}
-        disabled={loading}
-        title={hasMore ? 'Show more' : 'Refresh suggestions'}
+        disabled={loading || loadingMore}
+        title={hasMorePages ? 'Show more' : canLoadMore ? 'Load more suggestions' : 'Refresh suggestions'}
       >
         <RefreshCw size={16} />
       </button>
@@ -146,7 +179,7 @@
     {:else if error}
       <div class="error-state">
         <p>{error}</p>
-        <button onclick={() => loadSuggestions()}>Retry</button>
+        <button onclick={() => loadSuggestions(false)}>Retry</button>
       </div>
     {:else if isEmpty}
       <div class="empty-state">
@@ -215,9 +248,16 @@
         {/each}
       </div>
 
-      {#if totalPages > 1}
+      {#if filteredPool.length > VISIBLE_COUNT || canLoadMore}
         <div class="pagination-info">
-          Showing {currentPage * VISIBLE_COUNT + 1}-{Math.min((currentPage + 1) * VISIBLE_COUNT, filteredPool.length)} of {filteredPool.length}
+          {#if loadingMore}
+            Loading more...
+          {:else}
+            Showing {currentPage * VISIBLE_COUNT + 1}-{Math.min((currentPage + 1) * VISIBLE_COUNT, filteredPool.length)} of {filteredPool.length}
+            {#if canLoadMore}
+              <button class="load-more-link" onclick={handleLoadMore}>Load more</button>
+            {/if}
+          {/if}
         </div>
       {/if}
     {/if}
@@ -281,8 +321,12 @@
   }
 
   .refresh-btn:disabled {
-    opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .refresh-btn.spinning {
+    background: transparent;
+    color: var(--text-muted);
   }
 
   .refresh-btn.spinning :global(svg) {
@@ -468,5 +512,21 @@
     text-align: center;
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .load-more-link {
+    background: none;
+    border: none;
+    color: var(--accent-primary);
+    cursor: pointer;
+    font-size: 12px;
+    margin-left: 8px;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .load-more-link:hover {
+    color: var(--text-primary);
   }
 </style>

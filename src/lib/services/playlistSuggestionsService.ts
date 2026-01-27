@@ -43,46 +43,6 @@ export interface VectorStoreStats {
   db_size_bytes: number;
 }
 
-interface MbidResolution {
-  mbid?: string;
-  name?: string;
-  confidence: string;
-}
-
-// ============ MBID Resolution ============
-
-/**
- * Resolve artist names to MusicBrainz IDs
- * Results are cached by the backend
- */
-async function resolveArtistMbids(
-  artistNames: string[]
-): Promise<Map<string, string>> {
-  const mbidMap = new Map<string, string>();
-
-  // Resolve in parallel with concurrency limit
-  const batchSize = 5;
-  for (let i = 0; i < artistNames.length; i += batchSize) {
-    const batch = artistNames.slice(i, i + batchSize);
-    const results = await Promise.allSettled(
-      batch.map(name =>
-        invoke<MbidResolution>('musicbrainz_resolve_artist', { name })
-      )
-    );
-
-    results.forEach((result, idx) => {
-      if (result.status === 'fulfilled' && result.value?.mbid) {
-        // Only include high-confidence matches
-        if (result.value.confidence !== 'none' && result.value.confidence !== 'weak') {
-          mbidMap.set(batch[idx], result.value.mbid);
-        }
-      }
-    });
-  }
-
-  return mbidMap;
-}
-
 // ============ Local Storage for Dismissed Tracks ============
 
 const DISMISSED_STORAGE_PREFIX = 'playlist_suggestions_dismissed_';
@@ -142,10 +102,16 @@ export async function getPlaylistSuggestionsV2(
   includeReasons: boolean = false,
   config?: SuggestionConfig
 ): Promise<SuggestionResult> {
-  // Extract unique artist names
-  const uniqueNames = [...new Set(artists.map(a => a.name).filter(Boolean))];
+  // Filter out empty names and deduplicate
+  const uniqueArtists = artists.filter(a => a.name?.trim());
+  const seen = new Set<string>();
+  const dedupedArtists = uniqueArtists.filter(a => {
+    if (seen.has(a.name)) return false;
+    seen.add(a.name);
+    return true;
+  });
 
-  if (uniqueNames.length === 0) {
+  if (dedupedArtists.length === 0) {
     return {
       tracks: [],
       source_artists: [],
@@ -154,24 +120,13 @@ export async function getPlaylistSuggestionsV2(
     };
   }
 
-  // Resolve artist names to MBIDs
-  const mbidMap = await resolveArtistMbids(uniqueNames);
-  const artistMbids = [...mbidMap.values()];
-
-  if (artistMbids.length === 0) {
-    console.debug('No artist MBIDs resolved for suggestions');
-    return {
-      tracks: [],
-      source_artists: [],
-      playlist_artists_count: uniqueNames.length,
-      similar_artists_count: 0
-    };
-  }
-
-  // Call backend
+  // Call backend - MBID resolution happens server-side with caching
   const result = await invoke<SuggestionResult>('get_playlist_suggestions_v2', {
     input: {
-      artist_mbids: artistMbids,
+      artists: dedupedArtists.map(a => ({
+        name: a.name,
+        qobuz_id: a.qobuzId ?? null
+      })),
       exclude_track_ids: excludeTrackIds,
       include_reasons: includeReasons,
       config: config ?? null
