@@ -570,7 +570,7 @@
   {/snippet}
 </Modal>
 
-  <style>
+<style>
   .tag-editor {
     display: flex;
     flex-direction: column;
