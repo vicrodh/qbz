@@ -126,6 +126,7 @@ Coming soon.
 - Grid and list views with search, A-Z index, and grouping by artist or album.
 - Multi-disc album grouping with disc headers in album views.
 - Local artwork detection (folder and embedded) with Discogs fallback.
+- **Tag editor for local library:** Edit metadata (title, artist, album, genre, year) with sidecar storage that preserves original files.
 
 ### Playlist Import
 - Import public playlists from Spotify, Apple Music, Tidal, and Deezer into your Qobuz™ library.
@@ -142,6 +143,8 @@ Coming soon.
 - MPRIS media controls and media key support on Linux.
 - Desktop notifications for track changes.
 - Last.fm scrobbling and now-playing updates.
+- **MusicBrainz integration:** Artist enrichment, musician credits, recording relationships, and detailed album personnel.
+- **ListenBrainz integration:** Scrobbling with listen history sync.
 - Discogs artwork fetching for local library.
 - Shareable Qobuz™ URLs and universal SongLink links (Odesli).
 
@@ -149,6 +152,11 @@ Coming soon.
 - Now playing, queue panel, and full-screen playback views.
 - Focus mode for distraction-free listening.
 - Mini player mode.
+- **Musician pages:** Explore performers, composers, and producers with their discography and roles.
+- **Label pages:** Browse record label catalogs.
+- **Album credits:** View detailed personnel and recording credits from MusicBrainz.
+- **Track info modal:** Detailed track metadata, recording info, and file details.
+- **Artist network sidebar:** Explore related artists and collaborators.
 - Keyboard shortcuts for common actions.
 - English and Spanish localization.
 
@@ -156,6 +164,7 @@ Coming soon.
 - Audio device selection and quality preferences.
 - API keys configuration for self-hosted builds.
 - Theme and appearance options.
+- **Update notifications:** Check for new releases with What's New changelogs.
 
 ### Performance
 - Low CPU usage in idle and playback with adaptive audio thread scheduling.
@@ -314,10 +323,13 @@ qbz/
 │       ├── cast/         # Chromecast & DLNA casting
 │       ├── library/      # Local library backend
 │       ├── lastfm/       # Last.fm integration
+│       ├── listenbrainz/ # ListenBrainz integration
+│       ├── musicbrainz/  # MusicBrainz integration
 │       ├── discogs/      # Discogs integration
 │       ├── playlist_import/ # Spotify/Tidal import
 │       ├── share/        # SongLink / share utilities
 │       ├── media_controls/ # MPRIS integration
+│       ├── updates/      # Release updates checker
 │       └── commands/     # Tauri IPC commands
 ├── packaging/
 │   ├── aur/              # Arch Linux PKGBUILD
