@@ -54,12 +54,31 @@
   const canLoadMore = $derived(hasLoadedOnce && pool.length < EXPANDED_POOL && !loadingMore);
   const isEmpty = $derived(filteredPool.length === 0 && !loading && hasLoadedOnce);
 
-  // Load suggestions when artists change
+  // Track if we've initiated loading for this playlist
+  let loadingInitiated = $state(false);
+
+  // Load suggestions when artists change (only once per playlist)
   $effect(() => {
-    if (artists.length > 0 && !hasLoadedOnce) {
-      console.log('[Suggestions] Effect triggered, artists:', artists.length);
+    // Read artists.length to track changes
+    const artistCount = artists.length;
+
+    if (artistCount > 0 && !loadingInitiated && !loading) {
+      console.log('[Suggestions] Effect triggered, artists:', artistCount);
+      loadingInitiated = true;
       void loadSuggestions(false);
     }
+  });
+
+  // Reset when playlist changes
+  $effect(() => {
+    // Track playlistId changes
+    const currentPlaylistId = playlistId;
+    return () => {
+      // Cleanup when playlist changes
+      loadingInitiated = false;
+      hasLoadedOnce = false;
+      pool = [];
+    };
   });
 
   async function loadSuggestions(expanded: boolean) {

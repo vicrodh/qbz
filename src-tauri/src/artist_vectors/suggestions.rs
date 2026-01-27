@@ -22,6 +22,7 @@ use super::store::ArtistVectorStore;
 
 /// Configuration for suggestion generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct SuggestionConfig {
     /// Maximum number of artists to consider for suggestions
     pub max_artists: usize,
