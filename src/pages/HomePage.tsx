@@ -188,13 +188,26 @@ export function HomePage() {
             </div>
           </div>
           <div className="hero__image">
-            <img
-              src="/assets/screenshots/qbz-home.webp"
-              srcSet="/assets/screenshots/qbz-home-sm.webp 640w, /assets/screenshots/qbz-home.webp 1280w"
-              sizes="(max-width: 768px) 640px, 1280px"
-              alt="QBZ application interface showing home view with queue and playback controls"
-              title="QBZ home view"
-            />
+            <picture>
+              <source
+                type="image/avif"
+                srcSet="/assets/screenshots/qbz-home-sm.avif 640w, /assets/screenshots/qbz-home.avif 1280w"
+                sizes="(max-width: 768px) 640px, 1280px"
+              />
+              <source
+                type="image/webp"
+                srcSet="/assets/screenshots/qbz-home-sm.webp 640w, /assets/screenshots/qbz-home.webp 1280w"
+                sizes="(max-width: 768px) 640px, 1280px"
+              />
+              <img
+                src="/assets/screenshots/qbz-home.webp"
+                alt="QBZ application interface showing home view with queue and playback controls"
+                title="QBZ home view"
+                width={1280}
+                height={800}
+                fetchPriority="high"
+              />
+            </picture>
           </div>
         </div>
       </section>
@@ -244,14 +257,26 @@ export function HomePage() {
                   : 'qbz-locallibrary'
               return (
                 <div key={shot.title} className="screenshot">
-                  <img
-                    src={`/assets/screenshots/${imgBase}.webp`}
-                    srcSet={`/assets/screenshots/${imgBase}-sm.webp 640w, /assets/screenshots/${imgBase}.webp 1280w`}
-                    sizes="(max-width: 768px) 640px, 1280px"
-                    alt={`QBZ screenshot: ${shot.title}`}
-                    title={shot.title}
-                    loading="lazy"
-                  />
+                  <picture>
+                    <source
+                      type="image/avif"
+                      srcSet={`/assets/screenshots/${imgBase}-sm.avif 640w, /assets/screenshots/${imgBase}.avif 1280w`}
+                      sizes="(max-width: 768px) 640px, 1280px"
+                    />
+                    <source
+                      type="image/webp"
+                      srcSet={`/assets/screenshots/${imgBase}-sm.webp 640w, /assets/screenshots/${imgBase}.webp 1280w`}
+                      sizes="(max-width: 768px) 640px, 1280px"
+                    />
+                    <img
+                      src={`/assets/screenshots/${imgBase}.webp`}
+                      alt={`QBZ screenshot: ${shot.title}`}
+                      title={shot.title}
+                      width={1280}
+                      height={800}
+                      loading="lazy"
+                    />
+                  </picture>
                   <div className="screenshot__caption">
                     <div className="screenshot__title">{shot.title}</div>
                     <div className="screenshot__text">{shot.text}</div>
