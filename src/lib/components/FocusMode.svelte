@@ -299,7 +299,7 @@
     position: fixed;
     inset: 0;
     z-index: 110;
-    background-color: #000;
+    background-color: var(--bg-primary);
     cursor: default;
     animation: fadeIn 300ms ease-out;
     overflow: hidden;
@@ -362,7 +362,7 @@
   }
 
   .close-btn:hover {
-    color: white;
+    color: var(--text-primary);
     background: rgba(0, 0, 0, 0.5);
   }
 
@@ -534,7 +534,7 @@
   .track-title {
     font-size: 14px;
     font-weight: 600;
-    color: white;
+    color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -595,7 +595,7 @@
   }
 
   .control-btn:not(:disabled):hover {
-    color: white;
+    color: var(--text-primary);
     background: var(--alpha-10);
   }
 
@@ -604,7 +604,7 @@
     height: 52px;
     background: var(--alpha-15);
     backdrop-filter: blur(4px);
-    color: white;
+    color: var(--text-primary);
   }
 
   .play-btn:hover {
@@ -647,7 +647,7 @@
 
   .progress-fill {
     height: 100%;
-    background: white;
+    background: var(--text-primary);
     border-radius: 2px;
     transition: width 100ms linear;
   }
@@ -658,7 +658,7 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background: white;
+    background: var(--text-primary);
     transform: translate(-50%, -50%);
     opacity: 0;
     transition: opacity 150ms ease;
@@ -703,7 +703,7 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background: #fff;
+    background: var(--text-primary);
     opacity: 0;
     transition: opacity 150ms ease;
   }
@@ -719,7 +719,7 @@
     padding: 4px 8px;
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.5);
-    color: #fff;
+    color: var(--text-primary);
     font-size: 12px;
     opacity: 0;
     transform: translateY(4px);

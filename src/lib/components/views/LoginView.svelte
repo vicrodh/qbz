@@ -411,13 +411,13 @@
   .error-box {
     text-align: center;
     padding: 24px;
-    background-color: rgba(255, 107, 107, 0.1);
+    background-color: var(--danger-bg);
     border-radius: 8px;
     margin-bottom: 16px;
   }
 
   .error-box p {
-    color: #ff6b6b;
+    color: var(--danger);
     margin-bottom: 8px;
   }
 
@@ -430,8 +430,8 @@
   .timeout-box {
     text-align: center;
     padding: 24px;
-    background-color: rgba(251, 191, 36, 0.1);
-    border: 1px solid rgba(251, 191, 36, 0.3);
+    background-color: var(--warning-bg);
+    border: 1px solid var(--warning-border);
     border-radius: 8px;
     margin-bottom: 16px;
   }
@@ -439,7 +439,7 @@
   .timeout-title {
     font-size: 16px;
     font-weight: 600;
-    color: #fbbf24;
+    color: var(--warning);
     margin-bottom: 12px;
   }
 
@@ -554,9 +554,9 @@
 
   .error-message {
     padding: 12px 16px;
-    background-color: rgba(255, 107, 107, 0.1);
+    background-color: var(--danger-bg);
     border-radius: 8px;
-    color: #ff6b6b;
+    color: var(--danger);
     font-size: 14px;
   }
 

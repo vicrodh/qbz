@@ -407,7 +407,7 @@
     z-index: 100;
     display: flex;
     flex-direction: column;
-    background-color: #0a0a0a;
+    background-color: var(--bg-primary);
     animation: fadeIn 200ms ease-out;
     overflow: hidden;
   }
@@ -463,7 +463,7 @@
   }
 
   .close-btn:hover {
-    color: white;
+    color: var(--text-primary);
     background: rgba(0, 0, 0, 0.5);
   }
 
@@ -532,7 +532,7 @@
   .title {
     font-size: 22px;
     font-weight: 600;
-    color: white;
+    color: var(--text-primary);
     margin: 0 0 6px;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -603,7 +603,7 @@
 
   .progress-fill {
     height: 100%;
-    background-color: white;
+    background-color: var(--text-primary);
     border-radius: 2px;
     transition: width 100ms linear;
   }
@@ -614,7 +614,7 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background-color: white;
+    background-color: var(--text-primary);
     transform: translate(-50%, -50%);
     opacity: 0;
     transition: opacity 150ms ease;
@@ -645,12 +645,12 @@
   }
 
   .control-btn:hover {
-    color: white;
+    color: var(--text-primary);
     background: var(--alpha-10);
   }
 
   .control-btn.primary {
-    color: white;
+    color: var(--text-primary);
   }
 
   .control-btn.active {
@@ -702,7 +702,7 @@
 
   .volume-fill {
     height: 100%;
-    background-color: white;
+    background-color: var(--text-primary);
     border-radius: 2px;
   }
 
@@ -712,7 +712,7 @@
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background-color: white;
+    background-color: var(--text-primary);
     transform: translate(-50%, -50%);
     opacity: 0;
     transition: opacity 150ms ease;
@@ -765,7 +765,7 @@
   }
 
   .action-btn:hover {
-    color: white;
+    color: var(--text-primary);
     background: var(--alpha-10);
   }
 

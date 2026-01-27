@@ -200,6 +200,13 @@ pub fn run() {
     // Initialize ListenBrainz integration state
     let listenbrainz_state = listenbrainz::ListenBrainzSharedState::new()
         .expect("Failed to initialize ListenBrainz state");
+    // Initialize remote metadata state (for Tag Editor service integration)
+    let remote_metadata_state = commands::RemoteMetadataSharedState {
+        inner: Arc::new(Mutex::new(library::remote_metadata::RemoteMetadataState::new(
+            Some(Arc::new(musicbrainz::MusicBrainzSharedState::new()
+                .expect("Failed to initialize MusicBrainz for remote metadata")))
+        ))),
+    };
 
     // Read saved audio device and settings for player initialization
     let (saved_device, audio_settings) = audio_settings_state
@@ -390,6 +397,20 @@ pub fn run() {
                     log::info!("Close to tray: hiding window instead of closing");
                     let _ = window.hide();
                     api.prevent_close();
+                } else {
+                    // Cleanup cast devices on actual close
+                    log::info!("App closing: cleaning up cast devices");
+                    
+                    // Disconnect Chromecast if connected (sends message through channel)
+                    if let Some(cast_state) = window.app_handle().try_state::<cast::CastState>() {
+                        log::info!("Disconnecting Chromecast on app exit");
+                        cast_state.chromecast.disconnect();
+                    }
+                    
+                    // Note: DLNA connection will be dropped when the app exits,
+                    // which will naturally close the connection. The tokio Mutex
+                    // prevents us from synchronously stopping playback here.
+                    log::info!("DLNA connection will be cleaned up on drop");
                 }
             }
         })
@@ -411,6 +432,7 @@ pub fn run() {
         .manage(tray_settings_state)
         .manage(musicbrainz_state)
         .manage(listenbrainz_state)
+        .manage(remote_metadata_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -574,6 +596,13 @@ pub fn run() {
             library::commands::playlist_get_stats,
             library::commands::playlist_get_all_stats,
             library::commands::playlist_increment_play_count,
+            // Playlist custom order commands
+            library::commands::playlist_get_custom_order,
+            library::commands::playlist_init_custom_order,
+            library::commands::playlist_set_custom_order,
+            library::commands::playlist_move_track,
+            library::commands::playlist_has_custom_order,
+            library::commands::playlist_clear_custom_order,
             // Playlist folders commands
             library::commands::create_playlist_folder,
             library::commands::get_playlist_folders,
@@ -597,6 +626,9 @@ pub fn run() {
             // Album settings commands
             library::commands::library_get_album_settings,
             library::commands::library_set_album_hidden,
+            library::commands::library_update_album_metadata,
+            library::commands::library_write_album_metadata_to_files,
+            library::commands::library_refresh_album_metadata_from_files,
             library::commands::library_get_hidden_albums,
             library::commands::library_backfill_downloads,
             // Artist images commands
@@ -619,6 +651,7 @@ pub fn run() {
             cast::commands::cast_connect,
             cast::commands::cast_disconnect,
             cast::commands::cast_get_status,
+            cast::commands::cast_get_position,
             cast::commands::cast_play_track,
             cast::commands::cast_play_local_track,
             cast::commands::cast_play,
@@ -633,6 +666,7 @@ pub fn run() {
             cast::dlna::commands::dlna_connect,
             cast::dlna::commands::dlna_disconnect,
             cast::dlna::commands::dlna_get_status,
+            cast::dlna::commands::dlna_get_position,
             cast::dlna::commands::dlna_play_track,
             cast::dlna::commands::dlna_load_media,
             cast::dlna::commands::dlna_play,
@@ -785,6 +819,11 @@ pub fn run() {
             commands::smart_playlist_preview,
             commands::smart_playlist_resolve_artist,
             commands::smart_playlist_get_available_types,
+            // Remote metadata commands (Tag Editor service integration)
+            commands::remote_metadata_search,
+            commands::remote_metadata_get_album,
+            commands::remote_metadata_cache_stats,
+            commands::remote_metadata_clear_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

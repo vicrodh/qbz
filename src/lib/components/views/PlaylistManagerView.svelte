@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, Filter, ArrowUpDown, LayoutGrid, List, GripVertical, EyeOff, Eye, BarChart2, Play, Pencil, Search, X, Cloud, CloudOff, Wifi, Heart, Folder, FolderPlus, ChevronRight, ChevronDown, Trash2, Star, Music, Disc, Library, Info } from 'lucide-svelte';
+  import { ArrowLeft, Filter, ArrowUpDown, LayoutGrid, List, GripVertical, EyeOff, Eye, BarChart2, Play, Pencil, Search, X, Cloud, CloudOff, Wifi, Heart, Folder, FolderPlus, ChevronRight, ChevronDown, ChevronUp, Trash2, Star, Music, Disc, Library, Info } from 'lucide-svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
   import FolderEditModal from '../FolderEditModal.svelte';
@@ -459,26 +459,17 @@
     const draggedIndex = currentOrder.indexOf(draggedId);
     const targetIndex = currentOrder.indexOf(targetId);
 
-    if (draggedIndex === -1 || targetIndex === -1) return;
+    if (draggedIndex === -1 || targetIndex === -1) {
+      draggedId = null;
+      dragOverId = null;
+      return;
+    }
 
     // Remove dragged item and insert at target position
     currentOrder.splice(draggedIndex, 1);
     currentOrder.splice(targetIndex, 0, draggedId);
 
-    // Save new order
-    try {
-      await invoke('playlist_reorder', { playlistIds: currentOrder });
-      // Update local settings
-      const updated = new Map(playlistSettings);
-      currentOrder.forEach((id, index) => {
-        const existing = updated.get(id);
-        updated.set(id, { ...existing, qobuz_playlist_id: id, hidden: existing?.hidden ?? false, position: index });
-      });
-      playlistSettings = updated;
-      onPlaylistsChanged?.();
-    } catch (err) {
-      console.error('Failed to reorder playlists:', err);
-    }
+    await savePlaylistOrder(currentOrder);
 
     draggedId = null;
     dragOverId = null;
@@ -488,6 +479,51 @@
     draggedId = null;
     dragOverId = null;
     dragOverFolderId = null;
+  }
+
+  // Move playlist up one position
+  async function movePlaylistUp(playlistId: number) {
+    if (sort !== 'custom') return;
+    const currentOrder = displayPlaylists.map(p => p.id);
+    const currentIndex = currentOrder.indexOf(playlistId);
+    if (currentIndex <= 0) return;
+
+    // Swap with previous
+    [currentOrder[currentIndex - 1], currentOrder[currentIndex]] =
+      [currentOrder[currentIndex], currentOrder[currentIndex - 1]];
+
+    await savePlaylistOrder(currentOrder);
+  }
+
+  // Move playlist down one position
+  async function movePlaylistDown(playlistId: number) {
+    if (sort !== 'custom') return;
+    const currentOrder = displayPlaylists.map(p => p.id);
+    const currentIndex = currentOrder.indexOf(playlistId);
+    if (currentIndex < 0 || currentIndex >= currentOrder.length - 1) return;
+
+    // Swap with next
+    [currentOrder[currentIndex], currentOrder[currentIndex + 1]] =
+      [currentOrder[currentIndex + 1], currentOrder[currentIndex]];
+
+    await savePlaylistOrder(currentOrder);
+  }
+
+  // Helper to save playlist order
+  async function savePlaylistOrder(newOrder: number[]) {
+    try {
+      await invoke('playlist_reorder', { playlistIds: newOrder });
+      // Update local settings
+      const updated = new Map(playlistSettings);
+      newOrder.forEach((id, index) => {
+        const existing = updated.get(id);
+        if (existing) updated.set(id, { ...existing, position: index });
+      });
+      playlistSettings = updated;
+      onPlaylistsChanged?.();
+    } catch (err) {
+      console.error('Failed to reorder playlists:', err);
+    }
   }
 
   // === Folder Navigation ===
@@ -922,11 +958,30 @@
           ondrop={(e) => !isUnavailable && handleDrop(e, playlist.id)}
           ondragend={handleDragEnd}
         >
-          <!-- Top row: drag handle only (when in custom sort mode) -->
+          <!-- Top row: reorder controls (when in custom sort mode) -->
           {#if sort === 'custom' && !isUnavailable}
+            {@const playlistIndex = displayPlaylists.findIndex(p => p.id === playlist.id)}
             <div class="grid-item-header">
-              <div class="drag-handle">
-                <GripVertical size={14} />
+              <div class="reorder-controls">
+                <button
+                  class="reorder-btn"
+                  onclick={(e) => { e.stopPropagation(); movePlaylistUp(playlist.id); }}
+                  disabled={playlistIndex === 0}
+                  title="Move up"
+                >
+                  <ChevronUp size={14} />
+                </button>
+                <div class="drag-handle">
+                  <GripVertical size={14} />
+                </div>
+                <button
+                  class="reorder-btn"
+                  onclick={(e) => { e.stopPropagation(); movePlaylistDown(playlist.id); }}
+                  disabled={playlistIndex === displayPlaylists.length - 1}
+                  title="Move down"
+                >
+                  <ChevronDown size={14} />
+                </button>
               </div>
             </div>
           {/if}
@@ -1026,8 +1081,27 @@
           title={isUnavailable ? $t('offline.viewOnly') : undefined}
         >
           {#if sort === 'custom' && !isUnavailable}
-            <div class="drag-handle">
-              <GripVertical size={16} />
+            {@const playlistIndex = displayPlaylists.findIndex(p => p.id === playlist.id)}
+            <div class="reorder-controls horizontal">
+              <button
+                class="reorder-btn"
+                onclick={(e) => { e.stopPropagation(); movePlaylistUp(playlist.id); }}
+                disabled={playlistIndex === 0}
+                title="Move up"
+              >
+                <ChevronUp size={14} />
+              </button>
+              <div class="drag-handle">
+                <GripVertical size={16} />
+              </div>
+              <button
+                class="reorder-btn"
+                onclick={(e) => { e.stopPropagation(); movePlaylistDown(playlist.id); }}
+                disabled={playlistIndex === displayPlaylists.length - 1}
+                title="Move down"
+              >
+                <ChevronDown size={14} />
+              </button>
             </div>
           {/if}
           <div class="artwork-small">
@@ -1534,56 +1608,6 @@
     gap: 12px;
   }
 
-  .btn-secondary,
-  .btn-primary,
-  .btn-danger {
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: background-color 150ms ease, opacity 150ms ease;
-  }
-
-  .btn-secondary {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--alpha-10);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover {
-    background: var(--bg-hover);
-  }
-
-  .btn-primary {
-    background: var(--accent-primary);
-    border: none;
-    color: white;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--accent-secondary);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-danger {
-    background: transparent;
-    border: 1px solid var(--error);
-    color: var(--error);
-  }
-
-  .btn-danger:hover {
-    background: var(--error);
-    color: white;
-  }
-
   .controls {
     display: flex;
     align-items: center;
@@ -1832,6 +1856,42 @@
 
   .grid-item .drag-handle:active {
     cursor: grabbing;
+  }
+
+  /* Reorder controls for custom sort mode */
+  .reorder-controls {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .reorder-controls.horizontal {
+    flex-direction: row;
+    margin-right: 8px;
+  }
+
+  .reorder-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s, color 0.15s;
+  }
+
+  .reorder-btn:hover:not(:disabled) {
+    background: var(--hover-bg, rgba(255, 255, 255, 0.1));
+    color: var(--text-primary, #fff);
+  }
+
+  .reorder-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 
   .drag-handle-placeholder {

@@ -14,7 +14,7 @@
     artwork: string;
     title: string;
     artist: string;
-    genre: string;
+    genre?: string;
     releaseDate?: string;
     quality?: string;
     size?: 'standard' | 'large';
@@ -29,6 +29,7 @@
     onDownload?: () => void;
     showFavorite?: boolean;
     favoriteEnabled?: boolean;
+    showGenre?: boolean;
     isAlbumFullyDownloaded?: boolean;
     onOpenContainingFolder?: () => void;
     onReDownloadAlbum?: () => void;
@@ -55,6 +56,7 @@
     onDownload,
     showFavorite,
     favoriteEnabled,
+    showGenre = true,
     isAlbumFullyDownloaded = false,
     onOpenContainingFolder,
     onReDownloadAlbum,
@@ -199,12 +201,14 @@
     <!-- Action Overlay -->
     {#if hasOverlay}
       <div class="action-overlay" class:menu-open={menuOpen}>
-        <div class="overlay-info">
-          <span class="overlay-genre">{genre}</span>
-          {#if formattedDate}
-            <span class="overlay-date">{formattedDate}</span>
-          {/if}
-        </div>
+        {#if showGenre && (genre || formattedDate)}
+          <div class="overlay-info">
+            {#if genre}<span class="overlay-genre">{genre}</span>{/if}
+            {#if formattedDate}
+              <span class="overlay-date">{formattedDate}</span>
+            {/if}
+          </div>
+        {/if}
         <div class="action-buttons">
           {#if showFavoriteButton}
             <button
@@ -219,6 +223,9 @@
             >
               <Heart size={18} fill={isFavorite ? 'white' : 'none'} color="white" />
             </button>
+          {:else}
+            <!-- Spacer to keep Play button centered -->
+            <div class="overlay-btn--spacer"></div>
           {/if}
           {#if onPlay}
             <button class="overlay-btn" type="button" onclick={handlePlay} title="Play">
@@ -429,6 +436,12 @@
   .overlay-btn--minor {
     width: 30px;
     height: 30px;
+  }
+
+  .overlay-btn--spacer {
+    width: 30px;
+    height: 30px;
+    visibility: hidden;
   }
 
   .overlay-info {

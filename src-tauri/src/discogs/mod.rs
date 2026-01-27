@@ -44,7 +44,7 @@ pub struct DiscogsImageOption {
     pub release_year: Option<u32>,
 }
 
-/// Release details from Discogs API
+/// Release details from Discogs API (internal, for artwork)
 #[derive(Debug, Deserialize)]
 struct ReleaseDetails {
     id: u64,
@@ -61,6 +61,69 @@ struct ReleaseImage {
     height: u32,
     #[serde(rename = "type")]
     image_type: String,
+}
+
+// ============ Public Metadata Structures ============
+
+/// Full release metadata from Discogs (for tag editor)
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+pub struct DiscogsReleaseMetadata {
+    pub id: u64,
+    pub title: String,
+    pub artists: Option<Vec<DiscogsArtist>>,
+    pub year: Option<u32>,
+    pub genres: Option<Vec<String>>,
+    pub styles: Option<Vec<String>>,
+    pub labels: Option<Vec<DiscogsLabel>>,
+    pub tracklist: Option<Vec<DiscogsTrack>>,
+    pub country: Option<String>,
+    /// URL to view on Discogs
+    pub uri: Option<String>,
+}
+
+/// Artist in Discogs release
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+pub struct DiscogsArtist {
+    pub name: String,
+    pub id: Option<u64>,
+    /// Join phrase (e.g., " & ", " feat. ")
+    pub join: Option<String>,
+}
+
+/// Label in Discogs release
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+pub struct DiscogsLabel {
+    pub name: String,
+    pub catno: Option<String>,
+    pub id: Option<u64>,
+}
+
+/// Track in Discogs release
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+pub struct DiscogsTrack {
+    /// Position (e.g., "1", "A1", "1-1")
+    pub position: String,
+    pub title: String,
+    /// Duration as string (e.g., "3:45")
+    pub duration: Option<String>,
+    /// Track type (e.g., "track", "heading")
+    #[serde(rename = "type_")]
+    pub track_type: Option<String>,
+}
+
+/// Extended search result with more metadata
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
+pub struct DiscogsSearchResultExtended {
+    pub id: u64,
+    pub title: String,
+    #[serde(rename = "type")]
+    pub result_type: String,
+    pub year: Option<String>,
+    pub country: Option<String>,
+    pub label: Option<Vec<String>>,
+    pub catno: Option<String>,
+    pub format: Option<Vec<String>>,
+    pub cover_image: Option<String>,
 }
 
 impl DiscogsClient {
@@ -362,6 +425,82 @@ impl DiscogsClient {
             .map_err(|e| format!("Failed to parse Discogs response: {}", e))?;
 
         Ok(search)
+    }
+
+    /// Search for releases with extended metadata
+    /// Returns up to `limit` results with detailed release information
+    pub async fn search_releases(
+        &self,
+        artist: &str,
+        album: &str,
+        catalog_number: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<DiscogsSearchResultExtended>, String> {
+        // Build search query - prefer catalog number if available
+        let query = if let Some(catno) = catalog_number.filter(|s| !s.trim().is_empty()) {
+            catno.to_string()
+        } else {
+            format!("{} {}", artist, album)
+        };
+
+        let url = format!(
+            "{}/search?q={}&type=release&per_page={}",
+            DISCOGS_PROXY_URL,
+            urlencoding::encode(&query),
+            limit.min(25)
+        );
+
+        log::debug!(
+            "Searching Discogs releases for: {} - {} (catalog: {:?})",
+            artist,
+            album,
+            catalog_number
+        );
+
+        let response = self.client.get(&url).send().await
+            .map_err(|e| format!("Failed to search Discogs: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!("Discogs search failed with status: {}", response.status()));
+        }
+
+        // Parse response with extended fields
+        #[derive(Debug, Deserialize)]
+        struct ExtendedSearchResponse {
+            results: Vec<DiscogsSearchResultExtended>,
+        }
+
+        let search: ExtendedSearchResponse = response.json().await
+            .map_err(|e| format!("Failed to parse Discogs response: {}", e))?;
+
+        // Filter to releases only
+        let results: Vec<_> = search.results
+            .into_iter()
+            .filter(|r| r.result_type == "release" || r.result_type == "master")
+            .collect();
+
+        log::info!("Found {} Discogs releases", results.len());
+        Ok(results)
+    }
+
+    /// Get full release metadata including tracklist
+    pub async fn get_release_metadata(&self, release_id: u64) -> Result<DiscogsReleaseMetadata, String> {
+        let url = format!("{}/release/{}", DISCOGS_PROXY_URL, release_id);
+
+        log::debug!("Fetching Discogs release metadata for ID: {}", release_id);
+
+        let response = self.client.get(&url).send().await
+            .map_err(|e| format!("Failed to fetch release: {}", e))?;
+
+        if !response.status().is_success() {
+            return Err(format!("Failed to fetch release: {}", response.status()));
+        }
+
+        let metadata: DiscogsReleaseMetadata = response.json().await
+            .map_err(|e| format!("Failed to parse release metadata: {}", e))?;
+
+        log::info!("Fetched Discogs release: {} ({:?})", metadata.title, metadata.year);
+        Ok(metadata)
     }
 
     /// Download an image to the cache directory

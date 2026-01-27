@@ -327,37 +327,8 @@
     width: 100%;
   }
 
-  .btn {
+  /* Layout-specific: equal width buttons */
+  .modal-footer :global(.btn) {
     flex: 1;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms ease;
-    border: none;
-    font-size: 14px;
-  }
-
-  .btn-primary {
-    background: var(--accent-primary);
-    color: white;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--accent-primary-hover);
-  }
-
-  .btn-secondary {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--bg-tertiary);
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 </style>

@@ -3,7 +3,7 @@
 use serde::{Deserialize, Serialize};
 
 use rust_cast::CastDevice;
-use rust_cast::channels::media::{Image, Media, Metadata, MusicTrackMediaMetadata, StreamType};
+use rust_cast::channels::media::{Image, Media, Metadata, MusicTrackMediaMetadata, StreamType, PlayerState, IdleReason};
 use rust_cast::channels::receiver::{CastDeviceApp, Status as ReceiverStatus};
 
 use crate::cast::CastError;
@@ -18,6 +18,15 @@ pub struct MediaMetadata {
     pub album: String,
     pub artwork_url: Option<String>,
     pub duration_secs: Option<u64>,
+}
+
+/// Media position info for seekbar updates
+#[derive(Debug, Clone, Serialize)]
+pub struct CastPositionInfo {
+    pub position_secs: f64,
+    pub duration_secs: f64,
+    pub player_state: String,
+    pub idle_reason: Option<String>,
 }
 
 /// Device status for frontend
@@ -206,6 +215,56 @@ impl CastDeviceConnection {
             )
             .map_err(|e| CastError::Media(e.to_string()))?;
         Ok(())
+    }
+
+    /// Get current media position for seekbar updates
+    pub fn get_media_position(&mut self) -> Result<CastPositionInfo, CastError> {
+        let session = self.session.as_ref().ok_or(CastError::NotConnected)?;
+        let destination = &session.transport_id;
+
+        let status = self
+            .device
+            .media
+            .get_status(destination.as_str(), None)
+            .map_err(|e| CastError::Media(e.to_string()))?;
+
+        // Get the first media entry (current playing item)
+        if let Some(entry) = status.entries.first() {
+            let player_state = match entry.player_state {
+                PlayerState::Idle => "IDLE",
+                PlayerState::Playing => "PLAYING",
+                PlayerState::Paused => "PAUSED",
+                PlayerState::Buffering => "BUFFERING",
+            };
+
+            let idle_reason = entry.idle_reason.as_ref().map(|r| match r {
+                IdleReason::Cancelled => "CANCELLED".to_string(),
+                IdleReason::Interrupted => "INTERRUPTED".to_string(),
+                IdleReason::Finished => "FINISHED".to_string(),
+                IdleReason::Error => "ERROR".to_string(),
+            });
+
+            let duration = entry.media.as_ref()
+                .and_then(|m| m.duration)
+                .unwrap_or(0.0) as f64;
+
+            let position = entry.current_time.unwrap_or(0.0) as f64;
+
+            Ok(CastPositionInfo {
+                position_secs: position,
+                duration_secs: duration,
+                player_state: player_state.to_string(),
+                idle_reason,
+            })
+        } else {
+            // No media playing
+            Ok(CastPositionInfo {
+                position_secs: 0.0,
+                duration_secs: 0.0,
+                player_state: "IDLE".to_string(),
+                idle_reason: None,
+            })
+        }
     }
 
     fn ensure_session(&mut self) -> Result<(), CastError> {

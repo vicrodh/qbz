@@ -312,11 +312,10 @@
                 artwork={getArtworkUrl(album.artwork_path)}
                 title={album.title}
                 artist={album.artist}
-                genre={"Unknown genre"}
                 quality={getQualityBadge(album)}
                 size="large"
-                showFavorite={true}
-                favoriteEnabled={false}
+                showFavorite={false}
+                showGenre={false}
                 onPlay={() => onAlbumPlay(album)}
                 onPlayNext={() => onAlbumQueueNext(album)}
                 onPlayLater={() => onAlbumQueueLater(album)}

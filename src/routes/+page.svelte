@@ -3075,7 +3075,6 @@
     height: calc(100vh - 136px); /* 104px NowPlayingBar + 32px TitleBar */
     overflow: hidden;
     position: relative;
-    z-index: 1;
   }
 
   .main-content {

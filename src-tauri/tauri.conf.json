@@ -36,7 +36,6 @@
           "$HOME/.cache/qbz/**",
           "$HOME/.config/qbz/**",
           "$HOME/.local/share/qbz/**",
-          "$HOME/**",
           "/mnt/**",
           "/media/**",
           "/run/media/**"

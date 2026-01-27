@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
   import { ArrowLeft, ChevronDown, ChevronRight, Loader2 } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
@@ -1552,6 +1553,23 @@
       console.warn('Failed to set zoom:', err);
     }
   }
+
+  // Flatpak copyable command state
+  let copiedCommands = $state<Record<string, boolean>>({});
+
+  async function copyCommand(key: string, command: string) {
+    try {
+      await copyToClipboard(command);
+      copiedCommands[key] = true;
+      setTimeout(() => { copiedCommands[key] = false; }, 1200);
+    } catch {
+      try {
+        await navigator.clipboard.writeText(command);
+        copiedCommands[key] = true;
+        setTimeout(() => { copiedCommands[key] = false; }, 1200);
+      } catch {}
+    }
+  }
 </script>
 
 <div class="settings-view" bind:this={settingsViewEl}>
@@ -1939,6 +1957,7 @@
     </div>
   </section>
 
+
   <!-- Offline Library Section -->
   <section class="section" bind:this={downloadsSection}>
     <h3 class="section-title">{$t('settings.offlineLibrary.title')}</h3>
@@ -1952,13 +1971,6 @@
           Loading...
         {/if}
       </span>
-    </div>
-    <div class="setting-row">
-      <div class="setting-with-description">
-        <span class="setting-label">Show in Local Library</span>
-        <span class="setting-description">Display offline Qobuz™ tracks in your Local Library</span>
-      </div>
-      <Toggle enabled={showQobuzDownloadsInLibrary} onchange={handleShowDownloadsChange} />
     </div>
     <div class="setting-row">
       <div class="setting-with-description">
@@ -1985,6 +1997,96 @@
     </div>
   </section>
 
+  <!-- Flatpak Section (only shown when running in Flatpak) -->
+  {#if isFlatpak}
+    <section class="section flatpak-section">
+      <h3 class="section-title">Flatpak Sandbox</h3>
+      <div class="flatpak-info">
+        <p class="flatpak-intro">
+          QBZ is running inside a Flatpak sandbox. For offline libraries on NAS, network mounts, or external disks, direct filesystem access is required.
+        </p>
+        <div class="flatpak-guide">
+          <h4>Grant Filesystem Access</h4>
+          <p>Use <strong>Flatseal</strong> (GUI) or run this command for each folder you want to add:</p>
+          <div class="copyable-command">
+            <pre class="code-block">flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('fs-basic', 'flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz')}>
+              {copiedCommands['fs-basic'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <h4>Examples</h4>
+          <div class="copyable-command">
+            <pre class="code-block"># CIFS / Samba mount
+flatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz
+
+# SSHFS mount
+flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz
+
+# Custom folder (edit as needed)
+flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('fs-examples', `# CIFS / Samba mount\nflatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz\n\n# SSHFS mount\nflatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz\n\n# Custom folder (edit as needed)\nflatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz`)}>
+              {copiedCommands['fs-examples'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <p class="flatpak-note">
+            <strong>Note:</strong> This setting is persistent and survives reboots and updates.<br />
+            <strong>Tip:</strong> You can repeat the command for as many folders as you need.
+          </p>
+        </div>
+        <div class="flatpak-guide" style="margin-top:2em;">
+          <h4>Chromecast &amp; DLNA Device Discovery</h4>
+          <p>
+            To detect Chromecast and DLNA devices on your network, you must grant network sharing permissions to the app:
+          </p>
+          <div class="copyable-command">
+            <pre class="code-block">flatpak override --user --share=network com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('network', 'flatpak override --user --share=network com.blitzfc.qbz')}>
+              {copiedCommands['network'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <p class="flatpak-note">
+            <strong>Note:</strong> Without this, device discovery will not work.<br />
+            You only need to do this once.
+          </p>
+        </div>
+      </div>
+    </section>
+  {/if}
+
+<style>
+  .copyable-command {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+  .copyable-command .code-block {
+    margin: 0;
+    font-size: 13px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    padding: 8px 12px;
+    user-select: all;
+    min-width: 0;
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+  .copy-btn {
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .copy-btn:hover {
+    background: var(--accent-secondary);
+  }
+</style>
   <!-- Library Section -->
   <section class="section" bind:this={librarySection}>
     <h3 class="section-title">{$t('settings.library.title')}</h3>

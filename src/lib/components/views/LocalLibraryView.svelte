@@ -6,11 +6,13 @@
   import {
     HardDrive, Music, Disc3, Mic2, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, AlertCircle, ImageDown, Upload, Search, LayoutGrid, List, Edit3,
-    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown
+    Network, Power, PowerOff, ChevronLeft, ChevronRight, Shuffle, SlidersHorizontal, ArrowUpDown, ChevronDown, Check
   } from 'lucide-svelte';
   import FolderSettingsModal from '../FolderSettingsModal.svelte';
+  import LocalLibraryTagEditorModal from '../LocalLibraryTagEditorModal.svelte';
   import { t } from '$lib/i18n';
   import { downloadSettingsVersion } from '$lib/stores/downloadSettingsStore';
+  import { showToast } from '$lib/stores/toastStore';
   import AlbumCard from '../AlbumCard.svelte';
   import VirtualizedAlbumList from '../VirtualizedAlbumList.svelte';
   import VirtualizedArtistGrid from '../VirtualizedArtistGrid.svelte';
@@ -55,6 +57,7 @@
     disc_number?: number;
     year?: number;
     genre?: string;
+    catalog_number?: string;
     duration_secs: number;
     format: string;
     bit_depth?: number;
@@ -630,13 +633,16 @@
 
   // Album edit modal state
   let showAlbumEditModal = $state(false);
-  let editingAlbumTitle = $state('');
+  let showTagEditorModal = $state(false);
+  let refreshingAlbumMetadata = $state(false);
+  let albumMetadataRefreshed = $state(false);
   let editingAlbumHidden = $state(false);
   let discogsImageOptions = $state<DiscogsImageOption[]>([]);
   let selectedDiscogsImage = $state<string | null>(null);
   let fetchingDiscogsImages = $state(false);
+  let discogsFetchSuccessful = $state(false);
   let discogsImagePage = $state(0);
-  const IMAGES_PER_PAGE = 4;
+  const IMAGES_PER_PAGE = 3;
 
   // Folder selection state (by folder ID)
   let selectedFolders = $state<Set<number>>(new Set());
@@ -1468,11 +1474,53 @@
 
   function openAlbumEditModal() {
     if (!selectedAlbum) return;
-    editingAlbumTitle = selectedAlbum.title;
     editingAlbumHidden = false;
+    albumMetadataRefreshed = false;
     discogsImageOptions = [];
     selectedDiscogsImage = null;
+    discogsFetchSuccessful = false;
     showAlbumEditModal = true;
+  }
+
+  function openTagEditorFromAlbumSettings() {
+    if (!selectedAlbum) return;
+    showAlbumEditModal = false;
+    showTagEditorModal = true;
+  }
+
+  async function handleTagEditorSaved() {
+    if (!selectedAlbum) return;
+    await loadLibraryData();
+    await loadAlbumById(selectedAlbum.id);
+  }
+
+  async function handleRefreshAlbumMetadataFromFiles() {
+    if (!selectedAlbum || refreshingAlbumMetadata) return;
+
+    const confirmed = await ask(
+      'This will re-read embedded metadata from the audio files and discard QBZ sidecar overrides for this album.',
+      {
+        title: 'Refresh metadata from files?',
+        kind: 'warning',
+        okLabel: 'Refresh',
+        cancelLabel: 'Cancel'
+      }
+    );
+    if (!confirmed) return;
+
+    try {
+      refreshingAlbumMetadata = true;
+      albumMetadataRefreshed = false;
+      await invoke('library_refresh_album_metadata_from_files', { albumGroupKey: selectedAlbum.id });
+      showToast('Metadata refreshed from files', 'success');
+      albumMetadataRefreshed = true;
+      await handleTagEditorSaved();
+    } catch (err) {
+      console.error('Failed to refresh metadata:', err);
+      alert(`Failed to refresh metadata: ${err}`);
+    } finally {
+      refreshingAlbumMetadata = false;
+    }
   }
 
   async function fetchDiscogsArtwork() {
@@ -1483,6 +1531,7 @@
       discogsImageOptions = [];
       selectedDiscogsImage = null;
       discogsImagePage = 0;
+      discogsFetchSuccessful = false;
 
       const options = await invoke<DiscogsImageOption[]>('discogs_search_artwork', {
         artist: selectedAlbum.artist,
@@ -1491,6 +1540,10 @@
       });
 
       discogsImageOptions = options;
+      discogsFetchSuccessful = options.length > 0;
+      if (options.length === 0) {
+        alert('No artwork found on Discogs for this album.');
+      }
       console.log(`Found ${options.length} Discogs artwork options`);
     } catch (err) {
       console.error('Failed to fetch Discogs artwork:', err);
@@ -2243,7 +2296,7 @@
   }
 </script>
 
-<div class="library-view" class:virtualized-active={(activeTab === 'albums' && !showHiddenAlbums && albums.length > 0) || (activeTab === 'artists' && artists.length > 0) || (activeTab === 'tracks' && tracks.length > 0)}>
+<div class="library-view" class:virtualized-active={!selectedAlbum && ((activeTab === 'albums' && !showHiddenAlbums && albums.length > 0) || (activeTab === 'artists' && artists.length > 0) || (activeTab === 'tracks' && tracks.length > 0))}>
   {#if selectedAlbum}
     {@const albumSections = buildAlbumSections(albumTracks)}
     {@const showDiscHeaders = albumSections.length > 1}
@@ -2480,7 +2533,7 @@
         {/if}
 
         <div class="settings-actions">
-          <button class="secondary-btn" onclick={toggleHiddenAlbumsView}>
+          <button class="btn btn-secondary" onclick={toggleHiddenAlbumsView}>
             <span>{showHiddenAlbums ? 'Show Active Albums' : 'View Hidden Albums'}</span>
             {#if hiddenAlbums.length > 0}
               <span class="count">({hiddenAlbums.length})</span>
@@ -2488,7 +2541,7 @@
           </button>
           {#if hasDiscogsCredentials}
             <button
-              class="secondary-btn"
+              class="btn btn-secondary"
               onclick={handleFetchMissingArtwork}
               disabled={fetchingArtwork || isOffline}
               title={isOffline ? 'Artwork fetching unavailable offline' : ''}
@@ -2592,7 +2645,7 @@
           <div class="albums-section">
             <div class="section-header">
               <h3>Hidden Albums ({hiddenAlbums.length})</h3>
-              <button class="secondary-btn" onclick={toggleHiddenAlbumsView}>
+              <button class="btn btn-secondary" onclick={toggleHiddenAlbumsView}>
                 <span>Back to Active Albums</span>
               </button>
             </div>
@@ -3085,139 +3138,169 @@
   {/if}
 </div>
 
-<!-- Album Edit Modal -->
+<!-- Album Settings Modal -->
 {#if showAlbumEditModal && selectedAlbum}
   <div class="modal-overlay" onclick={() => showAlbumEditModal = false}>
     <div class="modal" onclick={(e: MouseEvent) => e.stopPropagation()}>
       <div class="modal-header">
-        <h2>Edit Album</h2>
+        <h2>Album Settings</h2>
         <button class="close-btn" onclick={() => showAlbumEditModal = false}>
           <X size={20} />
         </button>
       </div>
       
       <div class="modal-body">
-        <div class="form-group">
-          <label for="album-title">Album Title</label>
-          <input
-            id="album-title"
-            type="text"
-            bind:value={editingAlbumTitle}
-            placeholder="Album title"
-            readonly
-            disabled
-          />
-          <p class="form-hint">Album title editing coming soon</p>
-        </div>
-
-        <div class="form-group">
-          <label>Album Artwork</label>
-          <div class="artwork-row">
-            {#if selectedAlbum.artwork_path}
-              <img
-                src={getArtworkUrl(selectedAlbum.artwork_path)}
-                alt="Current artwork"
-                class="artwork-preview"
-              />
-            {:else}
-              <div class="artwork-preview artwork-placeholder-mini">
-                <Disc3 size={24} />
-              </div>
-            {/if}
-            <div class="artwork-actions">
-              <button
-                class="discogs-btn"
-                onclick={handleSetAlbumArtwork}
-                disabled={updatingArtwork}
-              >
-                <Upload size={14} />
-                <span>{updatingArtwork ? 'Updating...' : 'Change Cover'}</span>
-              </button>
-              <button
-                class="discogs-btn"
-                onclick={fetchDiscogsArtwork}
-                disabled={fetchingDiscogsImages}
-              >
-                <img src="/discogs_icon.svg" alt="Discogs" class="discogs-icon" />
-                <span>{fetchingDiscogsImages ? 'Fetching...' : 'Fetch from Discogs'}</span>
-              </button>
+        <div class="album-header-grid">
+          <div class="album-text">
+            <div class="album-title">{selectedAlbum.title}</div>
+            <div class="album-artist">{selectedAlbum.artist}</div>
+          </div>
+          <div class="album-settings-actions">
+            <button
+              class="album-action-btn"
+              onclick={openTagEditorFromAlbumSettings}
+              title="Edit album metadata for LocalLibrary indexing and search"
+            >
+              <Edit3 size={18} />
+              <span>Edit album info</span>
+            </button>
+            <button
+              class="album-action-btn"
+              onclick={handleRefreshAlbumMetadataFromFiles}
+              disabled={refreshingAlbumMetadata}
+              title="Re-read embedded file tags and discard QBZ sidecar overrides"
+            >
+              {#if albumMetadataRefreshed && !refreshingAlbumMetadata}
+                <Check size={18} />
+              {:else}
+                <RefreshCw size={18} class={refreshingAlbumMetadata ? 'spinning' : ''} />
+              {/if}
+              <span>{refreshingAlbumMetadata ? 'Refreshing...' : 'Refresh metadata'}</span>
+            </button>
             </div>
           </div>
-        </div>
 
-        {#if discogsImageOptions.length > 0}
           <div class="form-group">
-            <div class="discogs-header">
-              <label>Select Artwork from Discogs</label>
-              {#if discogsImageOptions.length > IMAGES_PER_PAGE}
-                <div class="carousel-controls">
-                  <button
-                    class="carousel-btn"
-                    onclick={prevDiscogsPage}
-                    disabled={!hasPrevDiscogsPages}
-                    title="Previous"
-                  >
-                    <ChevronLeft size={16} />
-                  </button>
-                  <span class="page-indicator">
-                    {discogsImagePage + 1} / {Math.ceil(discogsImageOptions.length / IMAGES_PER_PAGE)}
-                  </span>
-                  <button
-                    class="carousel-btn"
-                    onclick={nextDiscogsPage}
-                    disabled={!hasMoreDiscogsPages}
-                    title="Next"
-                  >
-                    <ChevronRight size={16} />
-                  </button>
+            <div class="artwork-layout-header" class:discogs-active={discogsFetchSuccessful}>
+              <label>Album Artwork</label>
+              {#if discogsFetchSuccessful}
+                <div class="discogs-layout-label">Select Artwork from Discogs</div>
+              {/if}
+            </div>
+
+            <div class="artwork-layout" class:discogs-active={discogsFetchSuccessful}>
+              <div class="artwork-left">
+                <div class="artwork-row">
+                  {#if selectedAlbum.artwork_path}
+                    <img
+                      src={getArtworkUrl(selectedAlbum.artwork_path)}
+                      alt="Current artwork"
+                      class="artwork-preview"
+                    />
+                  {:else}
+                    <div class="artwork-preview artwork-placeholder-mini">
+                      <Disc3 size={24} />
+                    </div>
+                  {/if}
+
+                  <div class="artwork-actions">
+                    <button class="discogs-btn" onclick={handleSetAlbumArtwork} disabled={updatingArtwork}>
+                      <Upload size={14} />
+                      <span>{updatingArtwork ? 'Updating...' : 'Upload cover'}</span>
+                    </button>
+                    <button class="discogs-btn" onclick={fetchDiscogsArtwork} disabled={fetchingDiscogsImages}>
+                      <img src="/discogs_icon.svg" alt="Discogs" class="discogs-icon" />
+                      <span>{fetchingDiscogsImages ? 'Fetching...' : 'Get from Discogs'}</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {#if discogsFetchSuccessful}
+                <div class="discogs-panel">
+                  {#if discogsImageOptions.length > IMAGES_PER_PAGE}
+                    <div class="discogs-header">
+                      <div class="carousel-controls">
+                        <button
+                          class="carousel-btn"
+                          onclick={prevDiscogsPage}
+                          disabled={!hasPrevDiscogsPages}
+                          title="Previous"
+                        >
+                          <ChevronLeft size={16} />
+                        </button>
+                        <span class="page-indicator">
+                          {discogsImagePage + 1} / {Math.ceil(discogsImageOptions.length / IMAGES_PER_PAGE)}
+                        </span>
+                        <button
+                          class="carousel-btn"
+                          onclick={nextDiscogsPage}
+                          disabled={!hasMoreDiscogsPages}
+                          title="Next"
+                        >
+                          <ChevronRight size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  {/if}
+
+                  <div class="discogs-options discogs-options-compact">
+                    {#each paginatedDiscogsImages as option, i}
+                      <button
+                        class="discogs-option"
+                        class:selected={selectedDiscogsImage === option.url}
+                        onclick={() => selectedDiscogsImage = option.url}
+                        title={option.release_title ? `${option.release_title}${option.release_year ? ` (${option.release_year})` : ''}` : ''}
+                      >
+                        <img src={option.url} alt={`Option ${discogsImagePage * IMAGES_PER_PAGE + i + 1}`} />
+                        <div class="option-info">
+                          {#if option.release_title}
+                            <div class="release-title">
+                              {option.release_title}{#if option.release_year} ({option.release_year}){/if}
+                            </div>
+                          {/if}
+                          <div class="image-dims">{option.width}x{option.height}</div>
+                        </div>
+                      </button>
+                    {/each}
+                  </div>
                 </div>
               {/if}
             </div>
-            <div class="discogs-options">
-              {#each paginatedDiscogsImages as option, i}
-                <button
-                  class="discogs-option"
-                  class:selected={selectedDiscogsImage === option.url}
-                  onclick={() => selectedDiscogsImage = option.url}
-                  title={option.release_title ? `${option.release_title}${option.release_year ? ` (${option.release_year})` : ''}` : ''}
-                >
-                  <img src={option.url} alt={`Option ${discogsImagePage * IMAGES_PER_PAGE + i + 1}`} />
-                  <div class="option-info">
-                    {#if option.release_title}
-                      <div class="release-title">{option.release_title}{#if option.release_year} ({option.release_year}){/if}</div>
-                    {/if}
-                    <div class="image-dims">{option.width}x{option.height}</div>
-                  </div>
-                </button>
-              {/each}
-            </div>
-            <p class="form-hint">Click an image to select it, then click Save</p>
           </div>
-        {/if}
 
-        <div class="form-group">
-          <label class="toggle-label">
-            <input
-              type="checkbox"
-              bind:checked={editingAlbumHidden}
-            />
-            <span>Hide this album from library</span>
-          </label>
-          <p class="form-hint">Hidden albums can be viewed from Settings</p>
-        </div>
       </div>
 
       <div class="modal-footer">
-        <button class="secondary-btn" onclick={() => showAlbumEditModal = false}>
-          Cancel
-        </button>
-        <button class="primary-btn" onclick={saveAlbumEdit}>
-          Save
-        </button>
+        <div class="footer-left">
+          <label class="toggle-label footer-toggle">
+            <input type="checkbox" bind:checked={editingAlbumHidden} />
+            <span>Hide this album from library</span>
+          </label>
+          <p class="form-hint footer-hint">Hidden albums can be viewed from Settings</p>
+        </div>
+
+        <div class="footer-actions">
+          <button class="btn btn-secondary" onclick={() => showAlbumEditModal = false}>
+            Cancel
+          </button>
+          <button class="btn btn-primary" onclick={saveAlbumEdit}>
+            Save
+          </button>
+        </div>
       </div>
     </div>
   </div>
 {/if}
+
+<!-- LocalLibrary Tag Editor Modal -->
+<LocalLibraryTagEditorModal
+  isOpen={showTagEditorModal}
+  album={selectedAlbum}
+  tracks={albumTracks}
+  onClose={() => (showTagEditorModal = false)}
+  onSaved={handleTagEditorSaved}
+/>
 
 <!-- Folder Settings Modal -->
 <FolderSettingsModal
@@ -3622,30 +3705,6 @@
     flex-wrap: wrap;
     gap: 12px;
     align-items: center;
-  }
-
-  .secondary-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border: 1px solid var(--border-subtle);
-    border-radius: 8px;
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .secondary-btn:hover:not(:disabled) {
-    background: var(--bg-hover);
-    border-color: var(--text-muted);
-  }
-
-  .secondary-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .discogs-hint {
@@ -4794,7 +4853,8 @@
   }
 
   .album-info .artist {
-    font-size: 16px;
+    font-size: 18px;
+    font-weight: 500;
     color: var(--text-primary);
     margin: 0 0 8px 0;
   }
@@ -4805,6 +4865,9 @@
     padding: 0;
     text-align: left;
     cursor: pointer;
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--accent-primary);
   }
 
   .album-info .artist-link:hover {
@@ -4894,8 +4957,10 @@
   }
 
   .modal {
+    --album-settings-cover-size: 94px;
+    --discogs-panel-height: calc(var(--album-settings-cover-size) + 56px);
     width: 100%;
-    max-width: 440px;
+    max-width: 704px;
     max-height: 90vh;
     overflow: hidden;
     display: flex;
@@ -4941,8 +5006,63 @@
   }
 
   .modal-body {
-    padding: 24px;
+    padding: 18px 20px;
     overflow-y: auto;
+  }
+
+  .album-header-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 16px;
+    align-items: start;
+    margin-bottom: 18px;
+  }
+
+  .album-title {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  .album-artist {
+    margin-top: 6px;
+    font-size: 18px;
+    font-weight: 400;
+    color: var(--text-muted);
+    line-height: 1.25;
+    word-break: break-word;
+  }
+
+  .album-settings-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .album-action-btn {
+    width: 190px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    padding: 0 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 10px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .album-action-btn:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+
+  .album-action-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
   }
 
   .form-group {
@@ -4955,6 +5075,29 @@
     font-weight: 500;
     color: var(--text-secondary);
     margin-bottom: 8px;
+  }
+
+  .artwork-layout-header {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    align-items: end;
+    margin-bottom: 8px;
+  }
+
+  .artwork-layout-header.discogs-active {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .artwork-layout-header label {
+    margin-bottom: 0;
+  }
+
+  .discogs-layout-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-left: -8px;
   }
 
   .form-group input[type="text"] {
@@ -5009,9 +5152,49 @@
     gap: 16px;
   }
 
+  .artwork-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    align-items: start;
+  }
+
+  .artwork-layout.discogs-active {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .discogs-panel {
+    min-width: 0;
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 10px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    height: var(--discogs-panel-height);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    margin-left: -8px;
+    width: calc(100% + 8px);
+  }
+
+  .discogs-placeholder {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 10px;
+  }
+
+  .discogs-hint {
+    margin-top: 8px;
+  }
+
   .artwork-preview {
-    width: 64px;
-    height: 64px;
+    width: var(--album-settings-cover-size);
+    height: var(--album-settings-cover-size);
     border-radius: 6px;
     object-fit: cover;
     background: var(--bg-tertiary);
@@ -5066,6 +5249,20 @@
     grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
     gap: 12px;
     margin-top: 8px;
+  }
+
+  .discogs-options-compact {
+    grid-template-columns: repeat(3, var(--album-settings-cover-size));
+    grid-template-rows: var(--album-settings-cover-size);
+    justify-content: start;
+    gap: 10px;
+    margin-top: 0;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  .discogs-panel .discogs-option:hover {
+    transform: none;
   }
 
   .discogs-option {
@@ -5127,7 +5324,7 @@
   .discogs-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-end;
     margin-bottom: 8px;
   }
 
@@ -5171,40 +5368,26 @@
 
   .modal-footer {
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: flex-end;
     gap: 12px;
     padding: 16px 24px;
     border-top: 1px solid var(--bg-tertiary);
   }
 
-  .secondary-btn,
-  .primary-btn {
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms ease;
+  .footer-left {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 60%;
   }
 
-  .secondary-btn {
-    background: transparent;
-    border: 1px solid var(--text-muted);
-    color: var(--text-secondary);
+  .footer-actions {
+    display: flex;
+    gap: 12px;
   }
 
-  .secondary-btn:hover {
-    border-color: var(--text-primary);
-    color: var(--text-primary);
-  }
-
-  .primary-btn {
-    background: var(--accent-primary);
-    border: none;
-    color: white;
-  }
-
-  .primary-btn:hover {
-    background: var(--accent-hover);
+  .footer-hint {
+    margin-top: 0;
   }
 </style>

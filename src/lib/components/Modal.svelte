@@ -33,12 +33,21 @@
       onClose();
     }
   }
+
+  function portal(node: HTMLElement) {
+    document.body.appendChild(node);
+    return {
+      destroy() {
+        node.remove();
+      }
+    };
+  }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if isOpen}
-  <div class="modal-overlay" onclick={handleBackdropClick} role="dialog" aria-modal="true">
+  <div class="modal-overlay" use:portal onclick={handleBackdropClick} role="dialog" aria-modal="true">
     <div class="modal" style="max-width: {maxWidth}">
       {#if title || showCloseButton}
         <div class="modal-header">
@@ -77,8 +86,9 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    padding: 20px;
     padding-left: 140px; /* Half of sidebar width (280px) for visual center */
-    z-index: 10000;
+    z-index: 200000;
     animation: fade-in 150ms ease;
   }
 
@@ -92,7 +102,7 @@
     border: 1px solid var(--bg-tertiary);
     border-radius: 12px;
     width: 100%;
-    max-height: 80vh;
+    max-height: calc(100dvh - 40px);
     display: flex;
     flex-direction: column;
     animation: slide-up 200ms ease;

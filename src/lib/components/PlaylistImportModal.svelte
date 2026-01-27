@@ -523,35 +523,6 @@
     border-top: 1px solid var(--bg-tertiary);
   }
 
-  .btn-secondary,
-  .btn-primary {
-    padding: 10px 16px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: transform 150ms ease, background 150ms ease, opacity 150ms ease;
-  }
-
-  .btn-secondary {
-    background: transparent;
-    border: 1px solid var(--bg-tertiary);
-    color: var(--text-secondary);
-  }
-
-  .btn-primary {
-    background: var(--accent-primary);
-    border: none;
-    color: var(--text-on-accent);
-  }
-
-  .btn-primary:disabled,
-  .btn-secondary:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-  }
-
   .spinner {
     width: 14px;
     height: 14px;

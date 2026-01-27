@@ -550,39 +550,6 @@
     padding-top: 24px;
   }
 
-  .btn {
-    padding: 8px 20px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms ease;
-    border: none;
-  }
-
-  .btn-secondary {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--bg-tertiary);
-  }
-
-  .btn-primary {
-    background: var(--accent-primary);
-    color: var(--bg-primary);
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    opacity: 0.9;
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
   .btn-custom-gradient {
     width: 100%;
     padding: 8px 16px;

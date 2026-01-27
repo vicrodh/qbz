@@ -1596,41 +1596,6 @@
     justify-content: flex-end;
   }
 
-  .btn-secondary,
-  .btn-primary {
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 150ms ease, opacity 150ms ease;
-  }
-
-  .btn-secondary {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--alpha-10);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover {
-    background: var(--bg-hover);
-  }
-
-  .btn-primary {
-    background: var(--accent-primary);
-    border: none;
-    color: white;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--accent-secondary);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
   .toggle-btn {
     position: absolute;
     right: -10px;

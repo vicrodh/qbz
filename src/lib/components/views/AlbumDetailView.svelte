@@ -654,7 +654,7 @@
 
   .album-stats {
     font-size: 14px;
-    color: #666666;
+    color: var(--text-muted);
     margin-bottom: 24px;
   }
 
@@ -694,7 +694,7 @@
     gap: 16px;
     font-size: 12px;
     text-transform: uppercase;
-    color: #666666;
+    color: var(--text-muted);
     font-weight: 400;
     box-sizing: border-box;
   }
