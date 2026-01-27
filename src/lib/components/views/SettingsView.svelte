@@ -162,10 +162,11 @@
   let integrationsSection: HTMLElement;
   let updatesSection: HTMLElement;
   let storageSection: HTMLElement;
+  let flatpakSection: HTMLElement;
   let activeSection = $state('audio');
 
-  // Navigation section definitions (static, refs resolved at click/scroll time)
-  const navSectionDefs = [
+  // Base navigation sections (always present)
+  const baseNavSectionDefs = [
     { id: 'audio', label: 'Audio' },
     { id: 'playback', label: 'Playback' },
     { id: 'offline', label: 'Offline' },
@@ -176,6 +177,14 @@
     { id: 'updates', label: 'Updates' },
     { id: 'storage', label: 'Storage' },
   ];
+
+  // Navigation section definitions (dynamic: includes Flatpak only when running in Flatpak)
+  // NOTE: If adding new sections, add them BEFORE Flatpak. Flatpak must always be last.
+  const navSectionDefs = $derived(
+    isFlatpak
+      ? [...baseNavSectionDefs, { id: 'flatpak', label: 'Flatpak' }]
+      : baseNavSectionDefs
+  );
 
   // Get section element by id (resolved at call time, not definition time)
   function getSectionEl(id: string): HTMLElement | undefined {
@@ -189,6 +198,7 @@
       case 'integrations': return integrationsSection;
       case 'updates': return updatesSection;
       case 'storage': return storageSection;
+      case 'flatpak': return flatpakSection;
       default: return undefined;
     }
   }
@@ -2081,96 +2091,6 @@
     </div>
   </section>
 
-  <!-- Flatpak Section (only shown when running in Flatpak) -->
-  {#if isFlatpak}
-    <section class="section flatpak-section">
-      <h3 class="section-title">Flatpak Sandbox</h3>
-      <div class="flatpak-info">
-        <p class="flatpak-intro">
-          QBZ is running inside a Flatpak sandbox. For offline libraries on NAS, network mounts, or external disks, direct filesystem access is required.
-        </p>
-        <div class="flatpak-guide">
-          <h4>Grant Filesystem Access</h4>
-          <p>Use <strong>Flatseal</strong> (GUI) or run this command for each folder you want to add:</p>
-          <div class="copyable-command">
-            <pre class="code-block">flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz</pre>
-            <button class="copy-btn" onclick={() => copyCommand('fs-basic', 'flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz')}>
-              {copiedCommands['fs-basic'] ? 'Copied!' : 'Copy'}
-            </button>
-          </div>
-          <h4>Examples</h4>
-          <div class="copyable-command">
-            <pre class="code-block"># CIFS / Samba mount
-flatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz
-
-# SSHFS mount
-flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz
-
-# Custom folder (edit as needed)
-flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
-            <button class="copy-btn" onclick={() => copyCommand('fs-examples', `# CIFS / Samba mount\nflatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz\n\n# SSHFS mount\nflatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz\n\n# Custom folder (edit as needed)\nflatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz`)}>
-              {copiedCommands['fs-examples'] ? 'Copied!' : 'Copy'}
-            </button>
-          </div>
-          <p class="flatpak-note">
-            <strong>Note:</strong> This setting is persistent and survives reboots and updates.<br />
-            <strong>Tip:</strong> You can repeat the command for as many folders as you need.
-          </p>
-        </div>
-        <div class="flatpak-guide" style="margin-top:2em;">
-          <h4>Chromecast &amp; DLNA Device Discovery</h4>
-          <p>
-            To detect Chromecast and DLNA devices on your network, you must grant network sharing permissions to the app:
-          </p>
-          <div class="copyable-command">
-            <pre class="code-block">flatpak override --user --share=network com.blitzfc.qbz</pre>
-            <button class="copy-btn" onclick={() => copyCommand('network', 'flatpak override --user --share=network com.blitzfc.qbz')}>
-              {copiedCommands['network'] ? 'Copied!' : 'Copy'}
-            </button>
-          </div>
-          <p class="flatpak-note">
-            <strong>Note:</strong> Without this, device discovery will not work.<br />
-            You only need to do this once.
-          </p>
-        </div>
-      </div>
-    </section>
-  {/if}
-
-<style>
-  .copyable-command {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    margin-bottom: 8px;
-  }
-  .copyable-command .code-block {
-    margin: 0;
-    font-size: 13px;
-    background: var(--bg-tertiary);
-    border-radius: 6px;
-    padding: 8px 12px;
-    user-select: all;
-    min-width: 0;
-    flex: 1;
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
-  .copy-btn {
-    background: var(--accent-primary);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    padding: 6px 14px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-  .copy-btn:hover {
-    background: var(--accent-secondary);
-  }
-</style>
   <!-- Library Section -->
   <section class="section" bind:this={librarySection}>
     <h3 class="section-title">{$t('settings.library.title')}</h3>
@@ -2501,8 +2421,9 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   </section>
 
   <!-- Flatpak Section (only shown when running in Flatpak) -->
+  <!-- NOTE: Keep this section LAST. If adding new settings sections, add them BEFORE this one. -->
   {#if isFlatpak}
-    <section class="section flatpak-section">
+    <section class="section flatpak-section" id="flatpak" bind:this={flatpakSection}>
       <h3 class="section-title">Flatpak Sandbox</h3>
       <div class="flatpak-info">
         <p class="flatpak-intro">
@@ -2510,16 +2431,46 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
         </p>
         <div class="flatpak-guide">
           <h4>Grant Filesystem Access</h4>
-          <p>Use <strong>Flatseal</strong> (GUI) or run this command:</p>
-          <pre class="code-block">flatpak override --user --filesystem=/path/to/music com.blitzfc.qbz</pre>
+          <p>Use <strong>Flatseal</strong> (GUI) or run this command for each folder you want to add:</p>
+          <div class="copyable-command">
+            <pre class="code-block">flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('fs-basic', 'flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz')}>
+              {copiedCommands['fs-basic'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
           <h4>Examples</h4>
-          <pre class="code-block"># CIFS / Samba mount
+          <div class="copyable-command">
+            <pre class="code-block"># CIFS / Samba mount
 flatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz
 
 # SSHFS mount
-flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
+flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz
+
+# Custom folder (edit as needed)
+flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('fs-examples', `# CIFS / Samba mount\nflatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz\n\n# SSHFS mount\nflatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz\n\n# Custom folder (edit as needed)\nflatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz`)}>
+              {copiedCommands['fs-examples'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
           <p class="flatpak-note">
-            <strong>Note:</strong> This setting is persistent and survives reboots and updates.
+            <strong>Note:</strong> This setting is persistent and survives reboots and updates.<br />
+            <strong>Tip:</strong> You can repeat the command for as many folders as you need.
+          </p>
+        </div>
+        <div class="flatpak-guide" style="margin-top:2em;">
+          <h4>Chromecast &amp; DLNA Device Discovery</h4>
+          <p>
+            To detect Chromecast and DLNA devices on your network, you must grant network sharing permissions to the app:
+          </p>
+          <div class="copyable-command">
+            <pre class="code-block">flatpak override --user --share=network com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('network', 'flatpak override --user --share=network com.blitzfc.qbz')}>
+              {copiedCommands['network'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <p class="flatpak-note">
+            <strong>Note:</strong> Without this, device discovery will not work.<br />
+            You only need to do this once.
           </p>
         </div>
       </div>
@@ -3311,6 +3262,44 @@ flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
     border-radius: 50%;
     cursor: pointer;
     border: none;
+  }
+
+  /* Flatpak copyable command styling */
+  .copyable-command {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .copyable-command .code-block {
+    margin: 0;
+    font-size: 13px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    padding: 8px 12px;
+    user-select: all;
+    min-width: 0;
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .copy-btn {
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+
+  .copy-btn:hover {
+    background: var(--accent-secondary);
   }
 </style>
 

@@ -771,6 +771,8 @@ pub fn run() {
             updates::is_release_ignored,
             updates::has_whats_new_been_shown,
             updates::mark_whats_new_shown,
+            updates::has_flatpak_welcome_been_shown,
+            updates::mark_flatpak_welcome_shown,
             updates::get_current_version,
             updates::check_for_updates,
             updates::fetch_release_for_version,

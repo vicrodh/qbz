@@ -301,11 +301,13 @@
   import UpdateAvailableModal from '$lib/components/updates/UpdateAvailableModal.svelte';
   import UpdateReminderModal from '$lib/components/updates/UpdateReminderModal.svelte';
   import WhatsNewModal from '$lib/components/updates/WhatsNewModal.svelte';
+  import FlatpakWelcomeModal from '$lib/components/updates/FlatpakWelcomeModal.svelte';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
   import {
     decideLaunchModals,
     disableUpdateChecks,
     ignoreReleaseVersion,
+    markFlatpakWelcomeShown,
     openReleasePageAndAcknowledge,
   } from '$lib/services/updatesService';
 
@@ -342,7 +344,12 @@
   let isUpdateModalOpen = $state(false);
   let isReminderModalOpen = $state(false);
   let isWhatsNewModalOpen = $state(false);
+  let isFlatpakWelcomeOpen = $state(false);
   let updatesLaunchTriggered = $state(false);
+
+  // Sequential modal queue: Flatpak → What's new → Update available
+  let pendingWhatsNewRelease = $state<ReleaseInfo | null>(null);
+  let pendingUpdateRelease = $state<ReleaseInfo | null>(null);
 
   // Album, Artist and Label data are fetched, so kept local
   let selectedAlbum = $state<AlbumDetail | null>(null);
@@ -370,15 +377,35 @@
     const decision = await decideLaunchModals();
     updatesCurrentVersion = decision.currentVersion;
 
-    if (decision.updateRelease) {
-      updateRelease = decision.updateRelease;
-      isUpdateModalOpen = true;
+    // Store pending modals for sequential display
+    // Order: Flatpak → What's new → Update available
+    pendingWhatsNewRelease = decision.whatsNewRelease;
+    pendingUpdateRelease = decision.updateRelease;
+
+    // Show first modal in queue (Flatpak has highest priority)
+    if (decision.showFlatpakWelcome) {
+      isFlatpakWelcomeOpen = true;
       return;
     }
 
-    if (decision.whatsNewRelease) {
-      whatsNewRelease = decision.whatsNewRelease;
+    // No Flatpak modal, try What's New
+    showNextModalInQueue();
+  }
+
+  function showNextModalInQueue(): void {
+    // What's New has second priority
+    if (pendingWhatsNewRelease) {
+      whatsNewRelease = pendingWhatsNewRelease;
+      pendingWhatsNewRelease = null;
       isWhatsNewModalOpen = true;
+      return;
+    }
+
+    // Update Available has lowest priority
+    if (pendingUpdateRelease) {
+      updateRelease = pendingUpdateRelease;
+      pendingUpdateRelease = null;
+      isUpdateModalOpen = true;
     }
   }
 
@@ -414,9 +441,18 @@
     void disableUpdateChecks();
   }
 
+  function handleFlatpakWelcomeClose(): void {
+    isFlatpakWelcomeOpen = false;
+    void markFlatpakWelcomeShown();
+    // Show next modal in queue
+    showNextModalInQueue();
+  }
+
   function handleWhatsNewClose(): void {
     isWhatsNewModalOpen = false;
     whatsNewRelease = null;
+    // Show next modal in queue
+    showNextModalInQueue();
   }
 
   $effect(() => {
@@ -3118,6 +3154,11 @@
         onClose={handleWhatsNewClose}
       />
     {/if}
+
+    <FlatpakWelcomeModal
+      isOpen={isFlatpakWelcomeOpen}
+      onClose={handleFlatpakWelcomeClose}
+    />
 
     <!-- Track Info Modal -->
     <TrackInfoModal
