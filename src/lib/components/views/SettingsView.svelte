@@ -7,6 +7,8 @@
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import VolumeSlider from '../VolumeSlider.svelte';
+  import UpdateCheckResultModal from '../updates/UpdateCheckResultModal.svelte';
+  import WhatsNewModal from '../updates/WhatsNewModal.svelte';
   import {
     getOfflineCacheStats,
     clearOfflineCache,
@@ -56,6 +58,20 @@
     setShowContextIcon,
     type AutoplayMode
   } from '$lib/stores/playbackPreferencesStore';
+  import {
+    subscribe as subscribeUpdates,
+    checkForUpdates,
+    fetchReleaseForVersion,
+    getCurrentVersion as getUpdatesCurrentVersion,
+    getPreferences as getUpdatePreferences,
+    initUpdatesStore,
+    setCheckOnLaunch,
+    setShowWhatsNewOnLaunch,
+    type ReleaseInfo,
+    type UpdateCheckStatus,
+    type UpdatePreferences
+  } from '$lib/stores/updatesStore';
+  import { openReleasePageAndAcknowledge } from '$lib/services/updatesService';
 
   interface Props {
     onBack?: () => void;
@@ -64,6 +80,7 @@
     userEmail?: string;
     subscription?: string;
     subscriptionValidUntil?: string | null;
+    showTitleBar?: boolean;
   }
 
   interface CacheStats {
@@ -92,7 +109,8 @@
     userName = 'User',
     userEmail = '',
     subscription = 'Qobuz™',
-    subscriptionValidUntil = null
+    subscriptionValidUntil = null,
+    showTitleBar = true
   }: Props = $props();
 
   // Cache state (memory cache)
@@ -123,6 +141,16 @@
   let flatpakHelpText = $state('');
   let isCheckingNetwork = $state(false);
 
+  // Updates state
+  let updatePreferences = $state<UpdatePreferences>(getUpdatePreferences());
+  let updatesCurrentVersion = $state(getUpdatesCurrentVersion());
+  let isCheckingUpdates = $state(false);
+  let isUpdateResultOpen = $state(false);
+  let updateResultStatus = $state<UpdateCheckStatus>('no_updates');
+  let updateResultRelease = $state<ReleaseInfo | null>(null);
+  let isSettingsWhatsNewOpen = $state(false);
+  let settingsWhatsNewRelease = $state<ReleaseInfo | null>(null);
+
   // Section navigation
   let settingsViewEl: HTMLDivElement;
   let audioSection: HTMLElement;
@@ -132,6 +160,7 @@
   let downloadsSection: HTMLElement;
   let librarySection: HTMLElement;
   let integrationsSection: HTMLElement;
+  let updatesSection: HTMLElement;
   let storageSection: HTMLElement;
   let activeSection = $state('audio');
 
@@ -144,6 +173,7 @@
     { id: 'downloads', label: 'Offline Library' },
     { id: 'library', label: 'Library' },
     { id: 'integrations', label: 'Integrations' },
+    { id: 'updates', label: 'Updates' },
     { id: 'storage', label: 'Storage' },
   ];
 
@@ -157,6 +187,7 @@
       case 'downloads': return downloadsSection;
       case 'library': return librarySection;
       case 'integrations': return integrationsSection;
+      case 'updates': return updatesSection;
       case 'storage': return storageSection;
       default: return undefined;
     }
@@ -167,6 +198,51 @@
     if (!el) return;
     activeSection = id;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function handleUpdateCheckOnLaunchToggle(enabled: boolean): Promise<void> {
+    await setCheckOnLaunch(enabled);
+  }
+
+  async function handleShowWhatsNewToggle(enabled: boolean): Promise<void> {
+    await setShowWhatsNewOnLaunch(enabled);
+  }
+
+  async function handleManualUpdateCheck(): Promise<void> {
+    if (isCheckingUpdates) return;
+    isCheckingUpdates = true;
+    try {
+      const result = await checkForUpdates('manual');
+      updateResultStatus = result.status;
+      updateResultRelease = result.release;
+      isUpdateResultOpen = true;
+    } finally {
+      isCheckingUpdates = false;
+    }
+  }
+
+  function handleCloseUpdateResult(): void {
+    isUpdateResultOpen = false;
+  }
+
+  function handleVisitReleaseFromResult(): void {
+    if (!updateResultRelease) return;
+    void openReleasePageAndAcknowledge(updateResultRelease);
+    isUpdateResultOpen = false;
+  }
+
+  async function handleShowCurrentChangelog(): Promise<void> {
+    const version = updatesCurrentVersion || getUpdatesCurrentVersion();
+    if (!version) return;
+    const release = await fetchReleaseForVersion(version);
+    if (!release) return;
+    settingsWhatsNewRelease = release;
+    isSettingsWhatsNewOpen = true;
+  }
+
+  function handleCloseSettingsWhatsNew(): void {
+    isSettingsWhatsNewOpen = false;
+    settingsWhatsNewRelease = null;
   }
 
   // Audio device state - use PipeWire sinks directly for friendly names
@@ -499,6 +575,13 @@
     // Load tray settings
     loadTraySettings();
 
+    // Initialize updates preferences/version state
+    initUpdatesStore();
+    const unsubscribeUpdates = subscribeUpdates(() => {
+      updatePreferences = getUpdatePreferences();
+      updatesCurrentVersion = getUpdatesCurrentVersion();
+    });
+
     // Detect if running in Flatpak
     loadFlatpakStatus();
 
@@ -544,6 +627,7 @@
       unsubscribeOffline();
       unsubscribeZoom();
       unsubscribeTitleBar();
+      unsubscribeUpdates();
       settingsViewEl?.removeEventListener('scroll', handleScroll);
     };
   });
@@ -2263,6 +2347,85 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     </div>
   </section>
 
+  <!-- Updates Section -->
+  <section class="section" bind:this={updatesSection}>
+    <h3 class="section-title">Updates</h3>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Check for new releases on launch</span>
+      </div>
+      <Toggle
+        enabled={updatePreferences.checkOnLaunch}
+        onchange={handleUpdateCheckOnLaunchToggle}
+      />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Check for updates now</span>
+      </div>
+      <button
+        class="connect-btn updates-check-btn"
+        onclick={handleManualUpdateCheck}
+        disabled={isCheckingUpdates}
+        type="button"
+      >
+        {#if isCheckingUpdates}
+          <Loader2 size={14} class="spin" />
+          <span>Checking...</span>
+        {:else}
+          <span>Check</span>
+        {/if}
+      </button>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Show what's new on new version launch</span>
+      </div>
+      <Toggle
+        enabled={updatePreferences.showWhatsNewOnLaunch}
+        onchange={handleShowWhatsNewToggle}
+      />
+    </div>
+
+    <div class="setting-row last">
+      <div class="setting-info">
+        <span class="setting-label">Show changelog for current version</span>
+        {#if updatesCurrentVersion}
+          <small class="setting-note">Current version: v{updatesCurrentVersion}</small>
+        {/if}
+      </div>
+      <button
+        class="connect-btn"
+        onclick={handleShowCurrentChangelog}
+        type="button"
+      >
+        Show
+      </button>
+    </div>
+  </section>
+
+  {#if isUpdateResultOpen}
+    <UpdateCheckResultModal
+      isOpen={isUpdateResultOpen}
+      status={updateResultStatus}
+      newVersion={updateResultRelease?.version ?? ''}
+      onClose={handleCloseUpdateResult}
+      onVisitReleasePage={handleVisitReleaseFromResult}
+    />
+  {/if}
+
+  {#if settingsWhatsNewRelease}
+    <WhatsNewModal
+      isOpen={isSettingsWhatsNewOpen}
+      release={settingsWhatsNewRelease}
+      showTitleBar={showTitleBar}
+      onClose={handleCloseSettingsWhatsNew}
+    />
+  {/if}
+
   <!-- Storage Section (Memory Cache) -->
   <section class="section" bind:this={storageSection}>
     <h3 class="section-title">{$t('settings.storage.title')}</h3>
@@ -2760,6 +2923,23 @@ flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
 
   .connect-btn:hover {
     background-color: var(--accent-hover);
+  }
+
+  .updates-check-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 112px;
+  }
+
+  .updates-check-btn :global(.spin) {
+    animation: updates-spin 1s linear infinite;
+  }
+
+  @keyframes updates-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 
   .connect-btn.connected {

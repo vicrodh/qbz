@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { listen, emitTo, type UnlistenFn } from '@tauri-apps/api/event';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -298,6 +298,16 @@
   import CastPicker from '$lib/components/CastPicker.svelte';
   import LyricsSidebar from '$lib/components/lyrics/LyricsSidebar.svelte';
   import OfflinePlaceholder from '$lib/components/OfflinePlaceholder.svelte';
+  import UpdateAvailableModal from '$lib/components/updates/UpdateAvailableModal.svelte';
+  import UpdateReminderModal from '$lib/components/updates/UpdateReminderModal.svelte';
+  import WhatsNewModal from '$lib/components/updates/WhatsNewModal.svelte';
+  import type { ReleaseInfo } from '$lib/stores/updatesStore';
+  import {
+    decideLaunchModals,
+    disableUpdateChecks,
+    ignoreReleaseVersion,
+    openReleasePageAndAcknowledge,
+  } from '$lib/services/updatesService';
 
   // Offline state
   import {
@@ -326,6 +336,14 @@
   // View State (from navigationStore subscription)
   let activeView = $state<ViewType>('home');
   let selectedPlaylistId = $state<number | null>(null);
+  let updatesCurrentVersion = $state('');
+  let updateRelease = $state<ReleaseInfo | null>(null);
+  let whatsNewRelease = $state<ReleaseInfo | null>(null);
+  let isUpdateModalOpen = $state(false);
+  let isReminderModalOpen = $state(false);
+  let isWhatsNewModalOpen = $state(false);
+  let updatesLaunchTriggered = $state(false);
+
   // Album, Artist and Label data are fetched, so kept local
   let selectedAlbum = $state<AlbumDetail | null>(null);
   let selectedArtist = $state<ArtistDetail | null>(null);
@@ -333,6 +351,80 @@
   let selectedMusician = $state<ResolvedMusician | null>(null);
   let musicianModalData = $state<ResolvedMusician | null>(null);
   let isArtistAlbumsLoading = $state(false);
+
+  function waitForHomePaint(): Promise<void> {
+    if (typeof window === 'undefined') return Promise.resolve();
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
+  async function runLaunchUpdateFlow(): Promise<void> {
+    // Ensure the UI has rendered and Home is visible before showing any modal.
+    await tick();
+    await waitForHomePaint();
+    if (activeView !== 'home') return;
+
+    const decision = await decideLaunchModals();
+    updatesCurrentVersion = decision.currentVersion;
+
+    if (decision.updateRelease) {
+      updateRelease = decision.updateRelease;
+      isUpdateModalOpen = true;
+      return;
+    }
+
+    if (decision.whatsNewRelease) {
+      whatsNewRelease = decision.whatsNewRelease;
+      isWhatsNewModalOpen = true;
+    }
+  }
+
+  function handleUpdateVisit(): void {
+    if (!updateRelease) return;
+    void openReleasePageAndAcknowledge(updateRelease);
+    isUpdateModalOpen = false;
+    updateRelease = null;
+  }
+
+  function handleUpdateClose(): void {
+    isUpdateModalOpen = false;
+    if (updateRelease) {
+      isReminderModalOpen = true;
+    }
+  }
+
+  function handleReminderClose(): void {
+    isReminderModalOpen = false;
+    updateRelease = null;
+  }
+
+  function handleReminderLater(): void {
+    // No persistence by design.
+  }
+
+  function handleReminderIgnoreRelease(): void {
+    if (!updateRelease) return;
+    void ignoreReleaseVersion(updateRelease.version);
+  }
+
+  function handleReminderDisableUpdates(): void {
+    void disableUpdateChecks();
+  }
+
+  function handleWhatsNewClose(): void {
+    isWhatsNewModalOpen = false;
+    whatsNewRelease = null;
+  }
+
+  $effect(() => {
+    if (updatesLaunchTriggered) return;
+    if (activeView !== 'home') return;
+    updatesLaunchTriggered = true;
+    void runLaunchUpdateFlow();
+  });
 
   // Artist albums for "By the same artist" section in album view
   let albumArtistAlbums = $state<{ id: string; title: string; artwork: string; quality: string; genre: string; releaseDate?: string }[]>([]);
@@ -2583,6 +2675,7 @@
           userName={userInfo?.userName}
           subscription={userInfo?.subscription}
           subscriptionValidUntil={userInfo?.subscriptionValidUntil}
+          showTitleBar={showTitleBar}
         />
       {:else if activeView === 'album' && selectedAlbum}
         <AlbumDetailView
@@ -2998,6 +3091,33 @@
       isOpen={isAboutModalOpen}
       onClose={() => isAboutModalOpen = false}
     />
+
+    {#if updateRelease}
+      <UpdateAvailableModal
+        isOpen={isUpdateModalOpen}
+        currentVersion={updatesCurrentVersion}
+        newVersion={updateRelease.version}
+        onClose={handleUpdateClose}
+        onVisitReleasePage={handleUpdateVisit}
+      />
+
+      <UpdateReminderModal
+        isOpen={isReminderModalOpen}
+        onClose={handleReminderClose}
+        onRemindLater={handleReminderLater}
+        onIgnoreRelease={handleReminderIgnoreRelease}
+        onDisableAllUpdates={handleReminderDisableUpdates}
+      />
+    {/if}
+
+    {#if whatsNewRelease}
+      <WhatsNewModal
+        isOpen={isWhatsNewModalOpen}
+        release={whatsNewRelease}
+        {showTitleBar}
+        onClose={handleWhatsNewClose}
+      />
+    {/if}
 
     <!-- Track Info Modal -->
     <TrackInfoModal

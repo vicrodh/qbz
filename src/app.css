@@ -494,7 +494,7 @@ select {
 
 .btn-primary {
   background: var(--accent-primary);
-  color: var(--bg-primary);
+  color: var(--text-primary);
 }
 
 .btn-primary:hover:not(:disabled) {

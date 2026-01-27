@@ -30,6 +30,7 @@ pub mod radio_engine;
 pub mod session_store;
 pub mod share;
 pub mod tray;
+pub mod updates;
 
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -191,6 +192,9 @@ pub fn run() {
     // Initialize tray settings state
     let tray_settings_state = config::tray_settings::TraySettingsState::new()
         .expect("Failed to initialize tray settings");
+    // Initialize updates state
+    let updates_state = updates::UpdatesState::new()
+        .expect("Failed to initialize updates state");
     // Initialize subscription validity tracking (for offline download compliance)
     let subscription_state = config::create_subscription_state()
         .expect("Failed to initialize subscription state");
@@ -430,6 +434,7 @@ pub fn run() {
         .manage(playback_prefs_state)
         .manage(favorites_prefs_state)
         .manage(tray_settings_state)
+        .manage(updates_state)
         .manage(musicbrainz_state)
         .manage(listenbrainz_state)
         .manage(remote_metadata_state)
@@ -756,6 +761,19 @@ pub fn run() {
             config::playback_preferences::set_show_context_icon,
             config::favorites_preferences::get_favorites_preferences,
             config::favorites_preferences::save_favorites_preferences,
+            // Updates commands
+            updates::get_update_preferences,
+            updates::set_update_check_on_launch,
+            updates::set_show_whats_new_on_launch,
+            updates::acknowledge_release,
+            updates::ignore_release,
+            updates::is_release_acknowledged,
+            updates::is_release_ignored,
+            updates::has_whats_new_been_shown,
+            updates::mark_whats_new_shown,
+            updates::get_current_version,
+            updates::check_for_updates,
+            updates::fetch_release_for_version,
             offline::commands::set_allow_immediate_scrobbling,
             offline::commands::set_allow_accumulated_scrobbling,
             offline::commands::set_show_network_folders_in_manual_offline,

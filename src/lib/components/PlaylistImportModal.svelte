@@ -3,8 +3,6 @@
   import { X, CloudOff } from 'lucide-svelte';
   import { showToast } from '$lib/stores/toastStore';
   import { t } from '$lib/i18n';
-  import QobuzLegalNotice from '$lib/components/QobuzLegalNotice.svelte';
-  import { qobuzTosAccepted } from '$lib/stores/qobuzLegalStore';
   import {
     subscribe as subscribeOffline,
     isOffline as checkIsOffline
@@ -70,7 +68,7 @@
 
   const detectedProvider = $derived(detectProvider(url));
   const activeProvider = $derived(lockedProvider ?? detectedProvider);
-  const isValid = $derived(!!detectedProvider && !isOffline && $qobuzTosAccepted);
+  const isValid = $derived(!!detectedProvider && !isOffline);
 
   $effect(() => {
     if (isOpen) {
@@ -213,8 +211,6 @@
       </div>
 
       <div class="modal-body">
-        <QobuzLegalNotice checkboxDisabled={loading} />
-
         {#if isOffline}
           <div class="offline-warning" role="alert" aria-live="polite">
             <CloudOff size={16} aria-hidden="true" />
@@ -280,8 +276,8 @@
       </div>
 
       <div class="modal-footer">
-        <button class="btn-secondary" onclick={onClose} disabled={loading}>Close</button>
-        <button class="btn-primary" onclick={handleImport} disabled={!isValid || loading || importCompleted}>
+        <button class="btn btn-secondary" onclick={onClose} disabled={loading}>Close</button>
+        <button class="btn btn-primary" onclick={handleImport} disabled={!isValid || loading || importCompleted}>
           {#if loading}
             Importing...
           {:else}
