@@ -30,6 +30,44 @@
     sample_rate: number;
   }
 
+  // Remote metadata types
+  interface RemoteAlbumSearchResult {
+    provider: 'musicbrainz' | 'discogs';
+    provider_id: string;
+    title: string;
+    artist: string;
+    year?: number;
+    track_count?: number;
+    country?: string;
+    label?: string;
+    catalog_number?: string;
+    confidence?: number;
+    format?: string;
+  }
+
+  interface RemoteTrackMetadata {
+    disc_number?: number;
+    track_number?: number;
+    title: string;
+    duration_ms?: number;
+  }
+
+  interface RemoteAlbumMetadata {
+    provider: 'musicbrainz' | 'discogs';
+    provider_id: string;
+    title: string;
+    artist: string;
+    year?: number;
+    genres?: string[];
+    label?: string;
+    catalog_number?: string;
+    country?: string;
+    barcode?: string;
+    tracks?: RemoteTrackMetadata[];
+    disc_count?: number;
+    source_url?: string;
+  }
+
   interface Props {
     isOpen: boolean;
     album: LocalAlbum | null;
@@ -41,6 +79,7 @@
   let { isOpen, album, tracks, onClose, onSaved }: Props = $props();
 
   type PersistenceMode = 'sidecar' | 'direct';
+  type RemoteProvider = 'musicbrainz' | 'discogs';
 
   let albumTitle = $state('');
   let albumArtist = $state('');
@@ -50,6 +89,14 @@
   let albumTotalDiscs = $state(1);
   let persistence: PersistenceMode = $state('sidecar');
   let saving = $state(false);
+
+  // Remote metadata search state
+  let remoteProvider: RemoteProvider = $state('musicbrainz');
+  let remoteSearching = $state(false);
+  let remoteLoading = $state(false);
+  let remoteResults = $state<RemoteAlbumSearchResult[]>([]);
+  let selectedRemoteId = $state<string | null>(null);
+  let showRemotePanel = $state(false);
 
   type TrackEdit = {
     id: number;
@@ -91,8 +138,84 @@
   $effect(() => {
     if (isOpen) {
       resetFromAlbum();
+      // Reset remote state when modal opens
+      remoteResults = [];
+      selectedRemoteId = null;
+      showRemotePanel = false;
     }
   });
+
+  // Remote metadata functions
+  async function searchRemoteMetadata() {
+    if (!albumTitle.trim() && !albumArtist.trim()) {
+      showToast('Enter album title or artist to search', 'error');
+      return;
+    }
+
+    remoteSearching = true;
+    remoteResults = [];
+    selectedRemoteId = null;
+
+    try {
+      const results = await invoke<RemoteAlbumSearchResult[]>('remote_metadata_search', {
+        provider: remoteProvider,
+        query: albumTitle.trim(),
+        artist: albumArtist.trim() || null,
+        limit: 10
+      });
+      remoteResults = results;
+      if (results.length === 0) {
+        showToast('No results found', 'info');
+      }
+    } catch (err) {
+      console.error('Remote search failed:', err);
+      showToast(`Search failed: ${err}`, 'error');
+    } finally {
+      remoteSearching = false;
+    }
+  }
+
+  async function applyRemoteMetadata() {
+    if (!selectedRemoteId) return;
+
+    remoteLoading = true;
+    try {
+      const metadata = await invoke<RemoteAlbumMetadata>('remote_metadata_get_album', {
+        provider: remoteProvider,
+        providerId: selectedRemoteId
+      });
+
+      // Apply album-level metadata
+      if (metadata.title) albumTitle = metadata.title;
+      if (metadata.artist) albumArtist = metadata.artist;
+      if (metadata.year) yearInput = String(metadata.year);
+      if (metadata.genres && metadata.genres.length > 0) {
+        genre = metadata.genres.slice(0, 3).join(', ');
+      }
+      if (metadata.catalog_number) catalogNumber = metadata.catalog_number;
+      if (metadata.disc_count) albumTotalDiscs = metadata.disc_count;
+
+      // Apply track-level metadata if available
+      if (metadata.tracks && metadata.tracks.length > 0) {
+        // Match tracks by position
+        const remoteTracks = metadata.tracks;
+        for (let i = 0; i < trackEdits.length && i < remoteTracks.length; i++) {
+          const remote = remoteTracks[i];
+          if (remote.title) trackEdits[i].title = remote.title;
+          if (remote.track_number !== undefined) trackEdits[i].trackNumber = remote.track_number;
+          if (remote.disc_number !== undefined) trackEdits[i].discNumber = remote.disc_number;
+        }
+      }
+
+      showToast(`Applied metadata from ${remoteProvider === 'musicbrainz' ? 'MusicBrainz' : 'Discogs'}`, 'success');
+      showRemotePanel = false;
+    } catch (err) {
+      console.error('Failed to fetch metadata:', err);
+      showToast(`Failed to fetch metadata: ${err}`, 'error');
+    } finally {
+      remoteLoading = false;
+    }
+  }
 
     function parseYear(): number | null {
       const trimmed = yearInput.trim();
@@ -237,6 +360,92 @@
             <label>Catalog / Release ID</label>
             <input class="text control-sm" type="text" bind:value={catalogNumber} />
           </div>
+        </div>
+
+        <!-- Remote Metadata Lookup -->
+        <div class="remote-section">
+          <button
+            class="btn btn-ghost btn-sm remote-toggle"
+            onclick={() => showRemotePanel = !showRemotePanel}
+            type="button"
+          >
+            <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"/>
+              <path d="m21 21-4.3-4.3"/>
+            </svg>
+            {showRemotePanel ? 'Hide' : 'Fetch from'} MusicBrainz / Discogs
+            <svg class="icon-inline chevron" class:rotated={showRemotePanel} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+          {#if showRemotePanel}
+            <div class="remote-panel">
+              <div class="remote-controls">
+                <select
+                  class="select-inline control-xs"
+                  bind:value={remoteProvider}
+                >
+                  <option value="musicbrainz">MusicBrainz</option>
+                  <option value="discogs">Discogs</option>
+                </select>
+                <button
+                  class="btn btn-secondary btn-sm"
+                  onclick={searchRemoteMetadata}
+                  disabled={remoteSearching}
+                  type="button"
+                >
+                  {#if remoteSearching}
+                    <span class="spinner-inline"></span>
+                    Searching...
+                  {:else}
+                    Search
+                  {/if}
+                </button>
+              </div>
+
+              {#if remoteResults.length > 0}
+                <div class="remote-results">
+                  {#each remoteResults as result (result.provider_id)}
+                    <button
+                      class="remote-result"
+                      class:selected={selectedRemoteId === result.provider_id}
+                      onclick={() => selectedRemoteId = result.provider_id}
+                      type="button"
+                    >
+                      <div class="result-main">
+                        <span class="result-title">{result.title}</span>
+                        <span class="result-artist">{result.artist}</span>
+                      </div>
+                      <div class="result-meta">
+                        {#if result.year}<span>{result.year}</span>{/if}
+                        {#if result.country}<span>{result.country}</span>{/if}
+                        {#if result.label}<span>{result.label}</span>{/if}
+                        {#if result.catalog_number}<span class="mono">{result.catalog_number}</span>{/if}
+                        {#if result.confidence}<span class="confidence">{result.confidence}%</span>{/if}
+                      </div>
+                    </button>
+                  {/each}
+                </div>
+
+                <div class="remote-actions">
+                  <button
+                    class="btn btn-primary btn-sm"
+                    onclick={applyRemoteMetadata}
+                    disabled={!selectedRemoteId || remoteLoading}
+                    type="button"
+                  >
+                    {#if remoteLoading}
+                      <span class="spinner-inline"></span>
+                      Applying...
+                    {:else}
+                      Apply Selected
+                    {/if}
+                  </button>
+                </div>
+              {/if}
+            </div>
+          {/if}
         </div>
 
         <div class="section">
@@ -582,5 +791,150 @@ input[type="number"] {
   .mono {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
     word-break: break-all;
+  }
+
+  /* Remote metadata panel styles */
+  .remote-section {
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .remote-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--bg-secondary);
+    border: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .remote-toggle:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .remote-toggle .chevron {
+    margin-left: auto;
+    transition: transform 0.2s ease;
+  }
+
+  .remote-toggle .chevron.rotated {
+    transform: rotate(180deg);
+  }
+
+  .remote-panel {
+    border-top: 1px solid var(--bg-tertiary);
+    padding: 12px;
+    background: var(--bg-primary);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .remote-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .remote-results {
+    max-height: 200px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 4px;
+  }
+
+  .remote-result {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 10px 12px;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s ease, border-color 0.15s ease;
+  }
+
+  .remote-result:hover {
+    background: var(--bg-hover);
+  }
+
+  .remote-result.selected {
+    background: rgba(var(--accent-primary-rgb), 0.1);
+    border-color: var(--accent-primary);
+  }
+
+  .result-main {
+    display: flex;
+    gap: 8px;
+    align-items: baseline;
+  }
+
+  .result-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .result-artist {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .result-meta {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .result-meta span {
+    padding: 2px 6px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+  }
+
+  .result-meta .confidence {
+    background: rgba(var(--accent-primary-rgb), 0.15);
+    color: var(--accent-primary);
+  }
+
+  .remote-actions {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .spinner-inline {
+    width: 14px;
+    height: 14px;
+    border: 2px solid transparent;
+    border-top-color: currentColor;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: inline-block;
+    margin-right: 6px;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .icon-inline {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
   }
 </style>
