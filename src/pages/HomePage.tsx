@@ -191,13 +191,13 @@ export function HomePage() {
             <picture>
               <source
                 type="image/avif"
-                srcSet="/assets/screenshots/qbz-home-sm.avif 640w, /assets/screenshots/qbz-home.avif 1280w"
-                sizes="(max-width: 768px) 640px, 1280px"
+                srcSet="/assets/screenshots/qbz-home-xs.avif 400w, /assets/screenshots/qbz-home-sm.avif 640w, /assets/screenshots/qbz-home.avif 1280w"
+                sizes="(max-width: 480px) 400px, (max-width: 768px) 640px, 1280px"
               />
               <source
                 type="image/webp"
-                srcSet="/assets/screenshots/qbz-home-sm.webp 640w, /assets/screenshots/qbz-home.webp 1280w"
-                sizes="(max-width: 768px) 640px, 1280px"
+                srcSet="/assets/screenshots/qbz-home-xs.webp 400w, /assets/screenshots/qbz-home-sm.webp 640w, /assets/screenshots/qbz-home.webp 1280w"
+                sizes="(max-width: 480px) 400px, (max-width: 768px) 640px, 1280px"
               />
               <img
                 src="/assets/screenshots/qbz-home.webp"
@@ -260,13 +260,13 @@ export function HomePage() {
                   <picture>
                     <source
                       type="image/avif"
-                      srcSet={`/assets/screenshots/${imgBase}-sm.avif 640w, /assets/screenshots/${imgBase}.avif 1280w`}
-                      sizes="(max-width: 768px) 640px, 1280px"
+                      srcSet={`/assets/screenshots/${imgBase}-xs.avif 400w, /assets/screenshots/${imgBase}-sm.avif 640w, /assets/screenshots/${imgBase}.avif 1280w`}
+                      sizes="(max-width: 480px) 400px, (max-width: 768px) 640px, 1280px"
                     />
                     <source
                       type="image/webp"
-                      srcSet={`/assets/screenshots/${imgBase}-sm.webp 640w, /assets/screenshots/${imgBase}.webp 1280w`}
-                      sizes="(max-width: 768px) 640px, 1280px"
+                      srcSet={`/assets/screenshots/${imgBase}-xs.webp 400w, /assets/screenshots/${imgBase}-sm.webp 640w, /assets/screenshots/${imgBase}.webp 1280w`}
+                      sizes="(max-width: 480px) 400px, (max-width: 768px) 640px, 1280px"
                     />
                     <img
                       src={`/assets/screenshots/${imgBase}.webp`}
