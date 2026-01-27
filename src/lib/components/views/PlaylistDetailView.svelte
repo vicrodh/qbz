@@ -1458,12 +1458,12 @@
   .artwork-btn.artwork-clear {
     width: 36px;
     height: 36px;
-    background: rgba(255, 0, 0, 0.3);
-    border-color: rgba(255, 100, 100, 0.5);
+    background: var(--danger-bg);
+    border-color: var(--danger-border);
   }
 
   .artwork-btn.artwork-clear:hover {
-    background: rgba(255, 0, 0, 0.5);
+    background: var(--danger-hover);
   }
 
   .metadata {
