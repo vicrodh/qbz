@@ -203,6 +203,8 @@ export function HomePage() {
                 src="/assets/screenshots/qbz-home.webp"
                 alt="QBZ application interface showing home view with queue and playback controls"
                 title="QBZ home view"
+                width={1280}
+                height={800}
                 fetchPriority="high"
               />
             </picture>
@@ -270,6 +272,8 @@ export function HomePage() {
                       src={`/assets/screenshots/${imgBase}.webp`}
                       alt={`QBZ screenshot: ${shot.title}`}
                       title={shot.title}
+                      width={1280}
+                      height={800}
                       loading="lazy"
                     />
                   </picture>

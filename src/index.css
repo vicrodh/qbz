@@ -287,6 +287,11 @@ p {
   box-shadow: var(--shadow-soft);
 }
 
+.hero__image img {
+  width: 100%;
+  height: auto;
+}
+
 .hero__stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
