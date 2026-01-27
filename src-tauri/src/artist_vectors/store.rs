@@ -378,7 +378,7 @@ impl ArtistVectorStore {
     }
 
     /// Get artist name from index
-    fn get_artist_name(&self, mbid: &str) -> Option<String> {
+    pub fn get_artist_name(&self, mbid: &str) -> Option<String> {
         self.conn
             .query_row(
                 "SELECT name FROM artist_index WHERE mbid = ?1",
@@ -438,7 +438,7 @@ impl ArtistVectorStore {
 }
 
 /// Statistics about the vector store
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct StoreStats {
     pub artist_count: usize,
     pub vector_count: usize,

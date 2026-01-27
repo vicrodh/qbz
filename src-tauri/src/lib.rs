@@ -202,6 +202,9 @@ pub fn run() {
     // Initialize MusicBrainz integration state
     let musicbrainz_state = musicbrainz::MusicBrainzSharedState::new()
         .expect("Failed to initialize MusicBrainz state");
+    // Initialize artist vector store for playlist suggestions
+    let artist_vectors_state = artist_vectors::ArtistVectorStoreState::new()
+        .expect("Failed to initialize artist vector store");
     // Initialize ListenBrainz integration state
     let listenbrainz_state = listenbrainz::ListenBrainzSharedState::new()
         .expect("Failed to initialize ListenBrainz state");
@@ -439,6 +442,7 @@ pub fn run() {
         .manage(musicbrainz_state)
         .manage(listenbrainz_state)
         .manage(remote_metadata_state)
+        .manage(artist_vectors_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -528,6 +532,10 @@ pub fn run() {
             // Playlist import commands
             commands::playlist_import_preview,
             commands::playlist_import_execute,
+            // Playlist suggestions commands (v2 vector-based)
+            commands::get_playlist_suggestions_v2,
+            commands::get_vector_store_stats,
+            commands::cleanup_vector_store,
             // Favorites commands
             commands::get_favorites,
             commands::add_favorite,

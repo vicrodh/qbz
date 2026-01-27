@@ -46,9 +46,13 @@
 pub mod builder;
 pub mod sparse_vector;
 pub mod store;
+pub mod suggestions;
 pub mod weights;
 
 pub use builder::{ArtistVectorBuilder, BuildResult};
 pub use sparse_vector::SparseVector;
 pub use store::{ArtistVectorStore, ArtistVectorStoreState, SimilarArtist, StoreStats, VectorEntry};
+pub use suggestions::{
+    extract_artist_mbids, SuggestionConfig, SuggestionResult, SuggestedTrack, SuggestionsEngine,
+};
 pub use weights::RelationshipWeights;
