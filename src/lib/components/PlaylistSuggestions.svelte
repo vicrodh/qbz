@@ -309,6 +309,15 @@
                   }}
                 />
               {/if}
+              {#if onPreviewTrack}
+                <button
+                  class="play-overlay"
+                  onclick={(e) => { e.stopPropagation(); onPreviewTrack(track); }}
+                  aria-label="Preview track"
+                >
+                  <Play size={16} fill="white" color="white" />
+                </button>
+              {/if}
             </div>
 
             <div class="track-info">
@@ -345,15 +354,6 @@
             </div>
 
             <div class="actions">
-              {#if onPreviewTrack}
-                <button
-                  class="action-btn preview"
-                  onclick={(e) => { e.stopPropagation(); onPreviewTrack(track); }}
-                  title="Preview"
-                >
-                  <Play size={14} />
-                </button>
-              {/if}
               <button
                 class="action-btn info"
                 onclick={(e) => { e.stopPropagation(); handleShowTrackInfo(track.track_id); }}
@@ -521,12 +521,35 @@
     border-radius: 4px;
     overflow: hidden;
     flex-shrink: 0;
+    position: relative;
   }
 
   .album-art img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  .play-overlay {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 150ms ease;
+    z-index: 2;
+  }
+
+  .suggestion-row:hover .play-overlay {
+    display: flex;
+  }
+
+  .play-overlay:hover {
+    background: rgba(0, 0, 0, 0.7);
   }
 
   .track-info {
@@ -621,15 +644,6 @@
   .action-btn.dismiss:hover {
     background: var(--bg-tertiary);
     color: var(--text-primary);
-  }
-
-  .action-btn.preview {
-    color: var(--text-muted);
-  }
-
-  .action-btn.preview:hover {
-    background: var(--accent-primary);
-    color: white;
   }
 
   .action-btn.info {
