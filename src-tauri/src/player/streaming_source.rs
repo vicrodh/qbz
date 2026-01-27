@@ -104,7 +104,7 @@ impl StreamingConfig {
         };
 
         log::info!(
-            "📶 Dynamic buffer: {:.1} MB/s detected → {}KB initial buffer",
+            "Dynamic buffer: {:.1} MB/s detected → {}KB initial buffer",
             speed_mbps,
             initial_buffer / 1024
         );

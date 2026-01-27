@@ -119,13 +119,13 @@ pub async fn play_track(
 
     if stream_first_enabled {
         // Use streaming playback - start playing before full download
-        log::info!("🚀 Streaming mode enabled - starting stream-first playback for track {}", track_id);
+        log::info!("Streaming mode enabled - starting stream-first playback for track {}", track_id);
 
         // Get content length, audio info, and measured speed via HEAD request
         let stream_info = get_stream_info(&stream_url.url).await?;
 
         log::info!(
-            "📊 Stream info: {:.2} MB, {}Hz, {} channels, {:.1} MB/s",
+            "Stream info: {:.2} MB, {}Hz, {} channels, {:.1} MB/s",
             stream_info.content_length as f64 / (1024.0 * 1024.0),
             stream_info.sample_rate,
             stream_info.channels,
@@ -152,7 +152,7 @@ pub async fn play_track(
         let content_len = stream_info.content_length;
         tokio::spawn(async move {
             match download_and_stream(&url, buffer_writer, track_id, cache_clone, content_len).await {
-                Ok(()) => log::info!("🎵 Track {} ready for instant replay from cache", track_id),
+                Ok(()) => log::info!("Track {} ready for instant replay from cache", track_id),
                 Err(e) => log::error!("Streaming download failed for track {}: {}", track_id, e),
             }
         });
@@ -350,7 +350,7 @@ async fn get_stream_info(url: &str) -> Result<StreamInfo, String> {
     };
 
     log::info!(
-        "📶 Probe: {}KB in {:.0}ms = {:.1} MB/s",
+        "Probe: {}KB in {:.0}ms = {:.1} MB/s",
         initial_bytes.len() / 1024,
         elapsed.as_millis(),
         speed_mbps
@@ -473,7 +473,7 @@ async fn download_and_stream(
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    log::info!("📥 Starting streaming download for track {} ({:.2} MB total)", 
+    log::info!("Starting streaming download for track {} ({:.2} MB total)", 
         track_id, 
         content_length as f64 / (1024.0 * 1024.0)
     );
@@ -530,7 +530,7 @@ async fn download_and_stream(
             };
 
             log::info!(
-                "📊 Download: {:.1}% ({:.2}/{:.2} MB) | Speed: {:.2} MB/s (avg: {:.2}) | ETA: {:.1}s",
+                "Download: {:.1}% ({:.2}/{:.2} MB) | Speed: {:.2} MB/s (avg: {:.2}) | ETA: {:.1}s",
                 progress,
                 bytes_received as f64 / (1024.0 * 1024.0),
                 content_length as f64 / (1024.0 * 1024.0),
@@ -553,14 +553,14 @@ async fn download_and_stream(
     let avg_speed = (bytes_received as f64 / total_time.as_secs_f64()) / (1024.0 * 1024.0);
     
     log::info!(
-        "✅ Streaming download complete: {:.2} MB in {:.1}s ({:.2} MB/s avg)",
+        "Streaming download complete: {:.2} MB in {:.1}s ({:.2} MB/s avg)",
         bytes_received as f64 / (1024.0 * 1024.0),
         total_time.as_secs_f64(),
         avg_speed
     );
 
     // Cache the complete file for future plays
-    log::info!("💾 Caching track {} for future playback", track_id);
+    log::info!("Caching track {} for future playback", track_id);
     cache.insert(track_id, all_data);
 
     Ok(())

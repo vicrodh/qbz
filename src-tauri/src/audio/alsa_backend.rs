@@ -437,7 +437,7 @@ impl AudioBackend for AlsaBackend {
             })?;
 
         log::info!(
-            "[ALSA Backend] ✓ Output stream created successfully at {}Hz (exclusive: {})",
+            "[ALSA Backend] Output stream created successfully at {}Hz (exclusive: {})",
             config.sample_rate,
             config.exclusive_mode
         );

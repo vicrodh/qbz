@@ -96,7 +96,7 @@ impl AlsaDirectStream {
             pcm.hw_params(&hwp)
                 .map_err(|e| format!("Failed to apply hardware params: {}", e))?;
 
-            log::info!("[ALSA Direct] ✓ Hardware configured: {}Hz, {}ch, buffer: {} frames, format: {:?}",
+            log::info!("[ALSA Direct] Hardware configured: {}Hz, {}ch, buffer: {} frames, format: {:?}",
                 sample_rate, channels, buffer_size, format);
 
             format

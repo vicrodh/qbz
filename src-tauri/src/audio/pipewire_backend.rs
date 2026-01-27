@@ -142,7 +142,7 @@ impl AudioBackend for PipeWireBackend {
 
             match set_result {
                 Ok(output) if output.status.success() => {
-                    log::info!("[PipeWire Backend] ✓ Default sink set to {}", sink_name);
+                    log::info!("[PipeWire Backend] Default sink set to {}", sink_name);
                 }
                 Ok(output) => {
                     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -165,7 +165,7 @@ impl AudioBackend for PipeWireBackend {
 
         match metadata_result {
             Ok(output) if output.status.success() => {
-                log::info!("[PipeWire Backend] ✓ Sample rate forced to {}Hz", config.sample_rate);
+                log::info!("[PipeWire Backend] Sample rate forced to {}Hz", config.sample_rate);
             }
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -260,7 +260,7 @@ impl AudioBackend for PipeWireBackend {
         let stream = OutputStream::try_from_device_config(&device, supported_config)
             .map_err(|e| format!("Failed to create output stream at {}Hz: {}", config.sample_rate, e))?;
 
-        log::info!("[PipeWire Backend] ✓ Output stream created successfully at {}Hz", config.sample_rate);
+        log::info!("[PipeWire Backend] Output stream created successfully at {}Hz", config.sample_rate);
 
         Ok(stream)
     }

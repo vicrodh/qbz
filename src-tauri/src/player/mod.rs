@@ -364,7 +364,7 @@ fn create_output_stream_with_config(
     // Create OutputStream with custom config
     match OutputStream::try_from_device_config(device, supported_config) {
         Ok((stream, handle)) => {
-            log::info!("✅ OutputStream created successfully at {}Hz", sample_rate);
+            log::info!("OutputStream created successfully at {}Hz", sample_rate);
             Ok((stream, handle))
         }
         Err(e) => {
@@ -432,7 +432,7 @@ fn try_init_stream_with_backend(
         // Check if device is hw: or plughw:
         if let Some(ref device_id) = config.device_id {
             if crate::audio::AlsaDirectStream::is_hw_device(device_id) {
-                log::info!("🎵 Detected hw: device, using ALSA Direct for bit-perfect playback");
+                log::info!("Detected hw: device, using ALSA Direct for bit-perfect playback");
 
                 // Downcast backend to AlsaBackend to access try_create_direct_stream
                 if let Some(alsa_backend) = backend.as_any().downcast_ref::<crate::audio::alsa_backend::AlsaBackend>() {
@@ -447,7 +447,7 @@ fn try_init_stream_with_backend(
     // Fallback to regular rodio stream (PipeWire, Pulse, ALSA via CPAL)
     match backend.create_output_stream(&config) {
         Ok(stream) => {
-            log::info!("✅ Stream created via {:?} backend at {}Hz", backend_type, sample_rate);
+            log::info!("Stream created via {:?} backend at {}Hz", backend_type, sample_rate);
             Some(Ok(StreamType::Rodio(stream.0, stream.1)))
         }
         Err(e) => {
@@ -919,13 +919,13 @@ impl Player {
                                     if let Some(settings) = thread_settings.lock().ok() {
                                         if let Some(ref device_name) = settings.output_device {
                                             thread_state.set_current_device(Some(device_name.clone()));
-                                            log::info!("✅ Audio stream ready at {}Hz on device: {}", sample_rate, device_name);
+                                            log::info!("Audio stream ready at {}Hz on device: {}", sample_rate, device_name);
                                         } else {
                                             thread_state.set_current_device(Some("Default".to_string()));
-                                            log::info!("✅ Audio stream ready at {}Hz on default device", sample_rate);
+                                            log::info!("Audio stream ready at {}Hz on default device", sample_rate);
                                         }
                                     } else {
-                                        log::info!("✅ Audio stream ready at {}Hz", sample_rate);
+                                        log::info!("Audio stream ready at {}Hz", sample_rate);
                                     }
 
                                     // Delay to ensure stream is fully initialized before decoder starts
@@ -1155,7 +1155,7 @@ impl Player {
                                     *current_sample_rate = Some(sample_rate);
                                     *current_channels = Some(channels);
                                     thread_state.set_stream_error(false);
-                                    log::info!("✅ Streaming audio stream ready at {}Hz", sample_rate);
+                                    log::info!("Streaming audio stream ready at {}Hz", sample_rate);
                                     std::thread::sleep(Duration::from_millis(150));
                                 }
                                 Err(e) => {
