@@ -181,7 +181,7 @@
   }
 </script>
 
-{#if artists.length > 0}
+{#if artists.length > 0 && !isEmpty}
   <div class="suggestions-section" id="suggestions-anchor">
     <div class="suggestions-header">
       <div class="header-left">
@@ -213,11 +213,6 @@
       <div class="error-state">
         <p>{error}</p>
         <button onclick={() => loadSuggestions(false)}>Retry</button>
-      </div>
-    {:else if isEmpty}
-      <div class="empty-state">
-        <p>No suggestions available for this playlist.</p>
-        <p class="hint">Try adding more tracks with different artists.</p>
       </div>
     {:else}
       <div class="suggestions-list">
@@ -371,8 +366,7 @@
   }
 
   .loading-state,
-  .error-state,
-  .empty-state {
+  .error-state {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -401,11 +395,6 @@
     border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
-  }
-
-  .empty-state .hint {
-    font-size: 12px;
-    margin-top: 4px;
   }
 
   .suggestions-list {
