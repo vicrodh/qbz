@@ -536,12 +536,13 @@
         {/if}
 
         {#if mode === 'addTrack'}
-          <div class="track-info">
-            Adding {trackIds.length} {isLocalTracks ? 'local ' : ''}track{trackIds.length !== 1 ? 's' : ''}
-          </div>
-
           <div class="form-group">
-            <label for="playlist-search">Choose playlist</label>
+            <div class="label-row">
+              <label for="playlist-search">Choose playlist</label>
+              <span class="track-info-inline">
+                Adding {trackIds.length} {isLocalTracks ? 'local ' : ''}track{trackIds.length !== 1 ? 's' : ''}
+              </span>
+            </div>
             <div class="playlist-dropdown" bind:this={dropdownRef}>
               <input
                 type="text"
@@ -746,13 +747,18 @@
     width: 100%;
     max-width: 490px;
     max-height: 90vh;
-    overflow: hidden;
+    overflow: visible;
     display: flex;
     flex-direction: column;
     background: var(--bg-secondary);
     border-radius: 16px;
     border: 1px solid var(--bg-tertiary);
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Taller modal for addTrack mode */
+  .modal:has(.label-row) {
+    min-height: 400px;
   }
 
   .modal-header {
@@ -785,7 +791,8 @@
 
   .modal-body {
     padding: 24px;
-    overflow-y: auto;
+    overflow: visible;
+    flex: 1;
   }
 
   .error-message {
@@ -805,6 +812,22 @@
     padding: 12px;
     background: var(--bg-secondary);
     border-radius: 8px;
+  }
+
+  .label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .label-row label {
+    margin-bottom: 0;
+  }
+
+  .track-info-inline {
+    font-size: 14px;
+    color: var(--text-muted);
   }
 
   .form-group {
@@ -904,8 +927,8 @@
     background: var(--bg-secondary);
     border: 1px solid var(--bg-tertiary);
     border-radius: 8px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10001;
   }
 
   .playlist-dropdown-item {
