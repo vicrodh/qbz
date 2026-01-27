@@ -569,7 +569,12 @@
       <div class="footer-actions">
         <button class="btn btn-secondary" onclick={onClose} disabled={saving}>Cancel</button>
         <button class="btn btn-primary" onclick={handleSave} disabled={saving}>
-          {saving ? 'Saving...' : 'Save'}
+          {#if saving}
+            <span class="spinner-inline"></span>
+            {persistence === 'direct' ? 'Writing tags...' : 'Saving...'}
+          {:else}
+            Save
+          {/if}
         </button>
       </div>
     </div>
