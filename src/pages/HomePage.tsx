@@ -188,7 +188,13 @@ export function HomePage() {
             </div>
           </div>
           <div className="hero__image">
-            <img src="/assets/screenshots/qbz-home.webp" alt="QBZ application interface showing home view with queue and playback controls" title="QBZ home view" />
+            <img
+              src="/assets/screenshots/qbz-home.webp"
+              srcSet="/assets/screenshots/qbz-home-sm.webp 640w, /assets/screenshots/qbz-home.webp 1280w"
+              sizes="(max-width: 768px) 640px, 1280px"
+              alt="QBZ application interface showing home view with queue and playback controls"
+              title="QBZ home view"
+            />
           </div>
         </div>
       </section>
@@ -230,26 +236,29 @@ export function HomePage() {
           <h2 className="section__title">{t('screenshots.title')}</h2>
           <p className="section__subtitle">{t('screenshots.lead')}</p>
           <div className="screenshot-grid" style={{ marginTop: 32 }}>
-            {screenshots.map((shot, index) => (
-              <div key={shot.title} className="screenshot">
-                <img
-                  src={
-                    index === 0
-                      ? '/assets/screenshots/qbz-playlist-view.webp'
-                      : index === 1
-                        ? '/assets/screenshots/qbz-fullpage.webp'
-                        : '/assets/screenshots/qbz-locallibrary.webp'
-                  }
-                  alt={`QBZ screenshot: ${shot.title}`}
-                  title={shot.title}
-                  loading="lazy"
-                />
-                <div className="screenshot__caption">
-                  <div className="screenshot__title">{shot.title}</div>
-                  <div className="screenshot__text">{shot.text}</div>
+            {screenshots.map((shot, index) => {
+              const imgBase = index === 0
+                ? 'qbz-playlist-view'
+                : index === 1
+                  ? 'qbz-fullpage'
+                  : 'qbz-locallibrary'
+              return (
+                <div key={shot.title} className="screenshot">
+                  <img
+                    src={`/assets/screenshots/${imgBase}.webp`}
+                    srcSet={`/assets/screenshots/${imgBase}-sm.webp 640w, /assets/screenshots/${imgBase}.webp 1280w`}
+                    sizes="(max-width: 768px) 640px, 1280px"
+                    alt={`QBZ screenshot: ${shot.title}`}
+                    title={shot.title}
+                    loading="lazy"
+                  />
+                  <div className="screenshot__caption">
+                    <div className="screenshot__title">{shot.title}</div>
+                    <div className="screenshot__text">{shot.text}</div>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </section>

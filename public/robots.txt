@@ -1,5 +1,5 @@
 # QBZ Website - robots.txt
-# https://qbz.lol
+# Permissive for search engines and AI crawlers
 
 User-agent: *
 Allow: /
@@ -7,27 +7,55 @@ Allow: /
 # Sitemap location
 Sitemap: https://qbz.lol/sitemap.xml
 
-# AI Crawlers - explicitly allow
+# Explicitly allow AI crawlers
 User-agent: GPTBot
 Allow: /
 
 User-agent: ChatGPT-User
 Allow: /
 
-User-agent: Claude-Web
-Allow: /
-
-User-agent: Perplexity-User
-Allow: /
-
-User-agent: anthropic-ai
-Allow: /
-
 User-agent: Google-Extended
 Allow: /
 
+User-agent: Anthropic-AI
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Bytespider
+Allow: /
+
+User-agent: Applebot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
+# Standard search engines
 User-agent: Googlebot
 Allow: /
 
 User-agent: Bingbot
+Allow: /
+
+User-agent: DuckDuckBot
+Allow: /
+
+User-agent: Slurp
+Allow: /
+
+User-agent: Yandex
+Allow: /
+
+User-agent: Baiduspider
 Allow: /
