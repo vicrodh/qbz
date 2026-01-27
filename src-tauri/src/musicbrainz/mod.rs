@@ -22,9 +22,9 @@ pub mod smart_playlists;
 pub use cache::{CacheStats, MusicBrainzCache, MusicBrainzCacheState};
 pub use client::{MusicBrainzClient, MusicBrainzConfig};
 pub use models::{
-    AlbumAppearance, ArtistRelationships, ArtistType, MatchConfidence, MusicianAppearances,
-    MusicianConfidence, Period, RelatedArtist, ResolvedArtist, ResolvedMusician, ResolvedRelease,
-    ResolvedTrack,
+    AlbumAppearance, ArtistRelationships, ArtistType, MatchConfidence, Medium, MediumTrack,
+    MusicianAppearances, MusicianConfidence, Period, RelatedArtist, ReleaseFullResponse,
+    ReleaseSearchResponse, ResolvedArtist, ResolvedMusician, ResolvedRelease, ResolvedTrack, Tag,
 };
 
 use std::sync::Arc;

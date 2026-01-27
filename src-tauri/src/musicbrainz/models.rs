@@ -239,6 +239,78 @@ pub struct LabelRef {
     pub name: String,
 }
 
+// ============ Full Release Response (with tracks) ============
+
+/// Full release response from lookup endpoint
+/// Includes media, tracks, and tags when requested via inc parameter
+#[derive(Debug, Deserialize)]
+pub struct ReleaseFullResponse {
+    pub id: String,
+    pub title: String,
+    pub status: Option<String>,
+    pub date: Option<String>,
+    pub country: Option<String>,
+    pub barcode: Option<String>,
+    #[serde(rename = "artist-credit")]
+    pub artist_credit: Option<Vec<ArtistCredit>>,
+    #[serde(rename = "label-info")]
+    pub label_info: Option<Vec<LabelInfo>>,
+    #[serde(rename = "release-group")]
+    pub release_group: Option<ReleaseGroupRef>,
+    /// Media (CDs, vinyl sides, etc.) containing tracks
+    pub media: Option<Vec<Medium>>,
+    /// Community tags (genres)
+    pub tags: Option<Vec<Tag>>,
+}
+
+/// A medium (disc) containing tracks
+#[derive(Debug, Deserialize)]
+pub struct Medium {
+    /// Position of this medium in the release (1-based)
+    pub position: Option<u8>,
+    /// Format (CD, Vinyl, Digital Media, etc.)
+    pub format: Option<String>,
+    /// Track count on this medium
+    #[serde(rename = "track-count")]
+    pub track_count: Option<u16>,
+    /// Tracks on this medium
+    pub tracks: Option<Vec<MediumTrack>>,
+}
+
+/// A track on a medium
+#[derive(Debug, Deserialize)]
+pub struct MediumTrack {
+    /// Track position on the medium (1-based)
+    pub position: Option<u8>,
+    /// Track number as string (may differ from position for vinyl etc.)
+    pub number: Option<String>,
+    /// Track title (may differ from recording title)
+    pub title: Option<String>,
+    /// Track length in milliseconds
+    pub length: Option<i64>,
+    /// The recording this track is linked to
+    pub recording: Option<TrackRecording>,
+}
+
+/// Recording reference within a track
+#[derive(Debug, Deserialize)]
+pub struct TrackRecording {
+    pub id: String,
+    pub title: Option<String>,
+    pub length: Option<i64>,
+    #[serde(rename = "artist-credit")]
+    pub artist_credit: Option<Vec<ArtistCredit>>,
+}
+
+/// Community tag (used for genres)
+#[derive(Debug, Deserialize)]
+pub struct Tag {
+    /// Tag name (e.g., "rock", "electronic")
+    pub name: String,
+    /// Number of times this tag was applied
+    pub count: Option<i32>,
+}
+
 // ============ Resolved Types (Output) ============
 
 /// Resolved track with MusicBrainz data

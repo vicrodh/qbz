@@ -315,6 +315,21 @@ impl MusicBrainzClient {
         title: &str,
         artist: &str,
     ) -> Result<ReleaseSearchResponse, String> {
+        self.search_releases_extended(title, artist, None, 5).await
+    }
+
+    /// Search releases with extended options
+    /// - `title`: Album title to search
+    /// - `artist`: Artist name to search
+    /// - `catalog_number`: Optional catalog number for more precise matching
+    /// - `limit`: Maximum results to return (1-25)
+    pub async fn search_releases_extended(
+        &self,
+        title: &str,
+        artist: &str,
+        catalog_number: Option<&str>,
+        limit: usize,
+    ) -> Result<ReleaseSearchResponse, String> {
         if !self.is_enabled().await {
             return Err("MusicBrainz integration is disabled".to_string());
         }
@@ -322,18 +337,37 @@ impl MusicBrainzClient {
         self.rate_limiter.wait().await;
 
         let base_url = self.base_url().await;
-        let query = format!(
-            "release:\"{}\" AND artist:\"{}\"",
-            Self::escape_query(title),
-            Self::escape_query(artist)
-        );
+
+        // Build query - if catalog number provided, prioritize it
+        let query = if let Some(catno) = catalog_number.filter(|s| !s.trim().is_empty()) {
+            format!(
+                "catno:\"{}\" AND artist:\"{}\"",
+                Self::escape_query(catno),
+                Self::escape_query(artist)
+            )
+        } else {
+            format!(
+                "release:\"{}\" AND artist:\"{}\"",
+                Self::escape_query(title),
+                Self::escape_query(artist)
+            )
+        };
+
+        let limit = limit.min(25).max(1);
         let url = format!(
-            "{}/release?query={}&fmt=json&limit=5",
+            "{}/release?query={}&fmt=json&limit={}",
             base_url,
-            urlencoding::encode(&query)
+            urlencoding::encode(&query),
+            limit
         );
 
-        log::debug!("MusicBrainz release search: {} - {}", artist, title);
+        log::debug!(
+            "MusicBrainz release search: {} - {} (catalog: {:?}, limit: {})",
+            artist,
+            title,
+            catalog_number,
+            limit
+        );
 
         let response = self
             .client
@@ -350,6 +384,44 @@ impl MusicBrainzClient {
 
         response
             .json::<ReleaseSearchResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse MusicBrainz response: {}", e))
+    }
+
+    /// Get full release details including tracks
+    /// Fetches media, recordings, artist credits, labels, and tags
+    pub async fn get_release_with_tracks(&self, release_id: &str) -> Result<ReleaseFullResponse, String> {
+        if !self.is_enabled().await {
+            return Err("MusicBrainz integration is disabled".to_string());
+        }
+
+        self.rate_limiter.wait().await;
+
+        let base_url = self.base_url().await;
+        // inc=recordings gets track info, artist-credits for artist info,
+        // labels for label/catalog, tags for genres
+        let url = format!(
+            "{}/release/{}?inc=recordings+artist-credits+labels+tags&fmt=json",
+            base_url, release_id
+        );
+
+        log::debug!("MusicBrainz release lookup with tracks: {}", release_id);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("MusicBrainz request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("MusicBrainz API error {}: {}", status, text));
+        }
+
+        response
+            .json::<ReleaseFullResponse>()
             .await
             .map_err(|e| format!("Failed to parse MusicBrainz response: {}", e))
     }
