@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
   import { ArrowLeft, ChevronDown, ChevronRight, Loader2 } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
@@ -1552,6 +1553,23 @@
       console.warn('Failed to set zoom:', err);
     }
   }
+
+  // Flatpak copyable command state
+  let copiedCommands = $state<Record<string, boolean>>({});
+
+  async function copyCommand(key: string, command: string) {
+    try {
+      await copyToClipboard(command);
+      copiedCommands[key] = true;
+      setTimeout(() => { copiedCommands[key] = false; }, 1200);
+    } catch {
+      try {
+        await navigator.clipboard.writeText(command);
+        copiedCommands[key] = true;
+        setTimeout(() => { copiedCommands[key] = false; }, 1200);
+      } catch {}
+    }
+  }
 </script>
 
 <div class="settings-view" bind:this={settingsViewEl}>
@@ -1990,9 +2008,26 @@
         <div class="flatpak-guide">
           <h4>Grant Filesystem Access</h4>
           <p>Use <strong>Flatseal</strong> (GUI) or run this command for each folder you want to add:</p>
-          <CopyableCommand command="flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz" />
+          <div class="copyable-command">
+            <pre class="code-block">flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('fs-basic', 'flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz')}>
+              {copiedCommands['fs-basic'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
           <h4>Examples</h4>
-          <CopyableCommand command="# CIFS / Samba mount\nflatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz\n\n# SSHFS mount\nflatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz\n\n# Custom folder (edit as needed)\nflatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz" />
+          <div class="copyable-command">
+            <pre class="code-block"># CIFS / Samba mount
+flatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz
+
+# SSHFS mount
+flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz
+
+# Custom folder (edit as needed)
+flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('fs-examples', `# CIFS / Samba mount\nflatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz\n\n# SSHFS mount\nflatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz\n\n# Custom folder (edit as needed)\nflatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz`)}>
+              {copiedCommands['fs-examples'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
           <p class="flatpak-note">
             <strong>Note:</strong> This setting is persistent and survives reboots and updates.<br />
             <strong>Tip:</strong> You can repeat the command for as many folders as you need.
@@ -2003,7 +2038,12 @@
           <p>
             To detect Chromecast and DLNA devices on your network, you must grant network sharing permissions to the app:
           </p>
-          <CopyableCommand command="flatpak override --user --share=network com.blitzfc.qbz" />
+          <div class="copyable-command">
+            <pre class="code-block">flatpak override --user --share=network com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('network', 'flatpak override --user --share=network com.blitzfc.qbz')}>
+              {copiedCommands['network'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
           <p class="flatpak-note">
             <strong>Note:</strong> Without this, device discovery will not work.<br />
             You only need to do this once.
@@ -2012,37 +2052,6 @@
       </div>
     </section>
   {/if}
-<script lang="ts">
-  // ...existing code...
-  import { onMount } from 'svelte';
-  // ...existing code...
-  import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
-
-  // Componente para comandos copiables
-  export let CopyableCommand: any = (props: { command: string }) => {
-    let copied = false;
-    async function handleCopy() {
-      try {
-        await copyToClipboard(props.command);
-        copied = true;
-        setTimeout(() => (copied = false), 1200);
-      } catch {
-        // fallback
-        try {
-          await navigator.clipboard.writeText(props.command);
-          copied = true;
-          setTimeout(() => (copied = false), 1200);
-        } catch {}
-      }
-    }
-    return (
-      <div class="copyable-command">
-        <pre class="code-block">{props.command}</pre>
-        <button class="copy-btn" on:click={handleCopy}>{copied ? 'Copied!' : 'Copy'}</button>
-      </div>
-    );
-  };
-</script>
 
 <style>
   .copyable-command {

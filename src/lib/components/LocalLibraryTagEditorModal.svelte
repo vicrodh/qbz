@@ -2,7 +2,7 @@
   import Modal from './Modal.svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { ask } from '@tauri-apps/plugin-dialog';
-  import { open } from '@tauri-apps/plugin-opener';
+  import { openUrl } from '@tauri-apps/plugin-opener';
   import { showToast } from '$lib/stores/toastStore';
 
   interface LocalTrack {
@@ -250,7 +250,7 @@
     if (!selected) return;
     const url = getSourceUrl(selected);
     try {
-      await open(url);
+      await openUrl(url);
     } catch (err) {
       console.error('Failed to open URL:', err);
       showToast('Failed to open browser', 'error');
