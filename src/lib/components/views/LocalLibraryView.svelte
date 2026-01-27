@@ -2296,7 +2296,7 @@
   }
 </script>
 
-<div class="library-view" class:virtualized-active={(activeTab === 'albums' && !showHiddenAlbums && albums.length > 0) || (activeTab === 'artists' && artists.length > 0) || (activeTab === 'tracks' && tracks.length > 0)}>
+<div class="library-view" class:virtualized-active={!selectedAlbum && ((activeTab === 'albums' && !showHiddenAlbums && albums.length > 0) || (activeTab === 'artists' && artists.length > 0) || (activeTab === 'tracks' && tracks.length > 0))}>
   {#if selectedAlbum}
     {@const albumSections = buildAlbumSections(albumTracks)}
     {@const showDiscHeaders = albumSections.length > 1}
