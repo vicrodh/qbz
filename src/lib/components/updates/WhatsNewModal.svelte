@@ -116,13 +116,28 @@
 
   :global(.whats-new-modal .prose li) {
     line-height: 1.6;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 14px;
     font-weight: 400;
   }
 
   :global(.whats-new-modal .prose li)::marker {
-    color: color-mix(in srgb, var(--text-muted) 85%, transparent);
+    color: color-mix(in srgb, var(--text-secondary) 85%, transparent);
+  }
+
+  /* Nested/child list items - darker color and proper indentation */
+  :global(.whats-new-modal .prose ul ul) {
+    margin: 4px 0 8px 16px;
+    padding-left: 20px;
+  }
+
+  :global(.whats-new-modal .prose li li) {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  :global(.whats-new-modal .prose li li)::marker {
+    color: color-mix(in srgb, var(--text-muted) 70%, transparent);
   }
 
   :global(.whats-new-modal .prose h3),
