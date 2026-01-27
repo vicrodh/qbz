@@ -81,6 +81,10 @@ impl ArtistVectorBuilder {
         let mut mb_relations_count = 0;
         let mut qobuz_similar_count = 0;
 
+        // Store vectors for later persistence (to avoid deadlock)
+        let mut mb_vec_to_store: Option<SparseVector> = None;
+        let mut qobuz_vec_to_store: Option<SparseVector> = None;
+
         // 1. Get or create index for this artist
         log::info!("[VectorBuilder] Acquiring store lock...");
         {
@@ -98,6 +102,7 @@ impl ArtistVectorBuilder {
                 mb_relations_count = count;
                 if count > 0 {
                     sources.push("musicbrainz".to_string());
+                    mb_vec_to_store = Some(mb_vec);
                 }
             }
             Err(e) => {
@@ -113,6 +118,7 @@ impl ArtistVectorBuilder {
                     qobuz_similar_count = count;
                     if count > 0 {
                         sources.push("qobuz".to_string());
+                        qobuz_vec_to_store = Some(qobuz_vec);
                     }
                 }
                 Err(e) => {
@@ -121,27 +127,24 @@ impl ArtistVectorBuilder {
             }
         }
 
-        // 4. Persist the vector
+        // 4. Persist the vectors (using saved vectors to avoid deadlock)
+        log::info!("[VectorBuilder] Persisting vectors...");
         {
             let mut store = self.store.lock().await;
 
             // Store MB relationships
-            if mb_relations_count > 0 {
-                // We need to rebuild just the MB part for proper source tagging
-                if let Ok((mb_vec, _)) = self.build_from_musicbrainz(artist_mbid).await {
-                    store.set_vector(artist_mbid, &mb_vec, "musicbrainz")?;
-                }
+            if let Some(mb_vec) = mb_vec_to_store {
+                store.set_vector(artist_mbid, &mb_vec, "musicbrainz")?;
+                log::info!("[VectorBuilder] Stored MB vector for {}", artist_mbid);
             }
 
             // Store Qobuz similarities
-            if qobuz_similar_count > 0 {
-                if let Some(qobuz_id) = qobuz_artist_id {
-                    if let Ok((qobuz_vec, _)) = self.build_from_qobuz(qobuz_id).await {
-                        store.set_vector(artist_mbid, &qobuz_vec, "qobuz")?;
-                    }
-                }
+            if let Some(qobuz_vec) = qobuz_vec_to_store {
+                store.set_vector(artist_mbid, &qobuz_vec, "qobuz")?;
+                log::info!("[VectorBuilder] Stored Qobuz vector for {}", artist_mbid);
             }
         }
+        log::info!("[VectorBuilder] build_vector COMPLETE for {}", artist_mbid);
 
         Ok(BuildResult {
             vector,
