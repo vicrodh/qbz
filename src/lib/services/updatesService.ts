@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import {
   acknowledgeRelease,
@@ -122,23 +123,51 @@ function getDevFakeRelease(currentVersion: string): ReleaseInfo | null {
 
 export interface LaunchUpdateDecision {
   currentVersion: string;
-  updateRelease: ReleaseInfo | null;
+  showFlatpakWelcome: boolean;
   whatsNewRelease: ReleaseInfo | null;
+  updateRelease: ReleaseInfo | null;
 }
 
 /**
- * Decide which modal (if any) should be shown on launch.
+ * Check if running in Flatpak and if welcome modal has been shown.
+ */
+async function shouldShowFlatpakWelcome(): Promise<boolean> {
+  try {
+    const isFlatpak = await invoke<boolean>('is_running_in_flatpak');
+    if (!isFlatpak) return false;
+    const alreadyShown = await invoke<boolean>('has_flatpak_welcome_been_shown');
+    return !alreadyShown;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mark Flatpak welcome modal as shown.
+ */
+export async function markFlatpakWelcomeShown(): Promise<void> {
+  try {
+    await invoke('mark_flatpak_welcome_shown');
+  } catch (error) {
+    console.debug('[Updates] Failed to mark flatpak welcome shown:', error);
+  }
+}
+
+/**
+ * Decide which modals should be shown on launch.
  *
- * Priority:
- * 1) Update available modal
- * 2) What's New modal
+ * Priority (shown sequentially, one after another):
+ * 1) Flatpak welcome modal (only for Flatpak users, once ever)
+ * 2) What's New modal (once per version)
+ * 3) Update available modal (when newer version exists)
  */
 export async function decideLaunchModals(): Promise<LaunchUpdateDecision> {
   if (launchFlowStarted) {
     return {
       currentVersion: getCurrentVersion(),
-      updateRelease: null,
+      showFlatpakWelcome: false,
       whatsNewRelease: null,
+      updateRelease: null,
     };
   }
   launchFlowStarted = true;
@@ -150,38 +179,17 @@ export async function decideLaunchModals(): Promise<LaunchUpdateDecision> {
   const currentVersion = getCurrentVersion();
 
   if (getSessionFlag(SESSION_CHECK_DONE_KEY)) {
-    return { currentVersion, updateRelease: null, whatsNewRelease: null };
+    return { currentVersion, showFlatpakWelcome: false, whatsNewRelease: null, updateRelease: null };
   }
   setSessionFlag(SESSION_CHECK_DONE_KEY);
 
-  // Phase 1: update available
-  if (prefs.checkOnLaunch) {
-    const devFake = getDevFakeRelease(currentVersion);
-    if (devFake) {
-      const devScopedKey = `${SESSION_UPDATE_SHOWN_KEY}:${devFake.version}`;
-      if (!getSessionFlag(devScopedKey)) {
-        setSessionFlag(devScopedKey);
-        return {
-          currentVersion,
-          updateRelease: devFake,
-          whatsNewRelease: null,
-        };
-      }
-    }
+  // Collect all modals that need to be shown
+  let showFlatpakWelcome = false;
+  let whatsNewRelease: ReleaseInfo | null = null;
+  let updateRelease: ReleaseInfo | null = null;
 
-    const result = await checkForUpdates('launch');
-    if (result.status === 'update_available' && result.release) {
-      const scopedUpdateKey = `${SESSION_UPDATE_SHOWN_KEY}:${result.release.version}`;
-      if (!getSessionFlag(scopedUpdateKey)) {
-        setSessionFlag(scopedUpdateKey);
-        return {
-          currentVersion,
-          updateRelease: result.release,
-          whatsNewRelease: null,
-        };
-      }
-    }
-  }
+  // Phase 1: Flatpak welcome (highest priority, shown first)
+  showFlatpakWelcome = await shouldShowFlatpakWelcome();
 
   // Phase 2: What's New for current version
   if (prefs.showWhatsNewOnLaunch && currentVersion) {
@@ -192,19 +200,37 @@ export async function decideLaunchModals(): Promise<LaunchUpdateDecision> {
         const release = await fetchReleaseForVersion(currentVersion);
         if (release) {
           setSessionFlag(scopedWhatsNewKey);
-          // Persist "shown once per version" at the time we decide to show it.
           await markWhatsNewShown(currentVersion);
-          return {
-            currentVersion,
-            updateRelease: null,
-            whatsNewRelease: release,
-          };
+          whatsNewRelease = release;
         }
       }
     }
   }
 
-  return { currentVersion, updateRelease: null, whatsNewRelease: null };
+  // Phase 3: Update available (lowest priority, shown last)
+  if (prefs.checkOnLaunch) {
+    const devFake = getDevFakeRelease(currentVersion);
+    if (devFake) {
+      const devScopedKey = `${SESSION_UPDATE_SHOWN_KEY}:${devFake.version}`;
+      if (!getSessionFlag(devScopedKey)) {
+        setSessionFlag(devScopedKey);
+        updateRelease = devFake;
+      }
+    }
+
+    if (!updateRelease) {
+      const result = await checkForUpdates('launch');
+      if (result.status === 'update_available' && result.release) {
+        const scopedUpdateKey = `${SESSION_UPDATE_SHOWN_KEY}:${result.release.version}`;
+        if (!getSessionFlag(scopedUpdateKey)) {
+          setSessionFlag(scopedUpdateKey);
+          updateRelease = result.release;
+        }
+      }
+    }
+  }
+
+  return { currentVersion, showFlatpakWelcome, whatsNewRelease, updateRelease };
 }
 
 export async function openReleasePageAndAcknowledge(release: ReleaseInfo): Promise<void> {

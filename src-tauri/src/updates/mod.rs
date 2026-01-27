@@ -27,7 +27,7 @@ pub struct UpdatePreferences {
 impl Default for UpdatePreferences {
     fn default() -> Self {
         Self {
-            check_on_launch: true,
+            check_on_launch: false,
             show_whats_new_on_launch: true,
         }
     }
@@ -122,6 +122,11 @@ impl UpdatesStore {
 
             CREATE TABLE IF NOT EXISTS whats_new_shown (
                 version TEXT PRIMARY KEY,
+                shown_at INTEGER NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS flatpak_welcome_shown (
+                id INTEGER PRIMARY KEY CHECK (id = 1),
                 shown_at INTEGER NOT NULL
             );",
         )
@@ -231,6 +236,26 @@ impl UpdatesStore {
                 params![version, now_epoch_seconds()],
             )
             .map_err(|e| format!("Failed to mark whats_new_shown: {}", e))?;
+        Ok(())
+    }
+
+    pub fn has_flatpak_welcome_been_shown(&self) -> bool {
+        self.conn
+            .query_row(
+                "SELECT 1 FROM flatpak_welcome_shown WHERE id = 1 LIMIT 1",
+                [],
+                |_row| Ok(()),
+            )
+            .is_ok()
+    }
+
+    pub fn mark_flatpak_welcome_shown(&self) -> Result<(), String> {
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO flatpak_welcome_shown (id, shown_at) VALUES (1, ?1)",
+                params![now_epoch_seconds()],
+            )
+            .map_err(|e| format!("Failed to mark flatpak_welcome_shown: {}", e))?;
         Ok(())
     }
 }
@@ -446,6 +471,16 @@ pub fn has_whats_new_been_shown(version: String, state: tauri::State<UpdatesStat
 #[tauri::command]
 pub fn mark_whats_new_shown(version: String, state: tauri::State<UpdatesState>) -> Result<(), String> {
     state.with_store(|store| store.mark_whats_new_shown(&version))
+}
+
+#[tauri::command]
+pub fn has_flatpak_welcome_been_shown(state: tauri::State<UpdatesState>) -> bool {
+    state.with_store(|store| store.has_flatpak_welcome_been_shown())
+}
+
+#[tauri::command]
+pub fn mark_flatpak_welcome_shown(state: tauri::State<UpdatesState>) -> Result<(), String> {
+    state.with_store(|store| store.mark_flatpak_welcome_shown())
 }
 
 #[tauri::command]

@@ -55,6 +55,13 @@
   let loading = $state(false);
   let error = $state<string | null>(null);
 
+  // Searchable playlist dropdown state
+  let playlistSearchQuery = $state('');
+  let isPlaylistDropdownOpen = $state(false);
+  let highlightedIndex = $state(-1);
+  let dropdownRef = $state<HTMLDivElement | null>(null);
+  let inputRef = $state<HTMLInputElement | null>(null);
+
   // Folders state
   let folders = $state<PlaylistFolder[]>([]);
 
@@ -87,6 +94,85 @@
     const localCount = localTrackCounts.get(pl.id) ?? 0;
     return pl.tracks_count + localCount;
   }
+
+  // Filtered playlists based on search query
+  const filteredPlaylists = $derived(
+    playlistSearchQuery.trim()
+      ? userPlaylists.filter(pl =>
+          pl.name.toLowerCase().includes(playlistSearchQuery.toLowerCase())
+        )
+      : userPlaylists
+  );
+
+  // Get display text for selected playlist
+  const selectedPlaylistDisplay = $derived(() => {
+    if (selectedPlaylistId === null) return '';
+    if (selectedPlaylistId === CREATE_NEW_PLAYLIST) return '+ Create new playlist';
+    const pl = userPlaylists.find(p => p.id === selectedPlaylistId);
+    return pl ? `${pl.name} (${getTotalTrackCount(pl)} tracks)` : '';
+  });
+
+  // Handle dropdown item click
+  function selectPlaylist(id: number | null) {
+    selectedPlaylistId = id;
+    playlistSearchQuery = '';
+    isPlaylistDropdownOpen = false;
+    highlightedIndex = -1;
+  }
+
+  // Handle dropdown keyboard navigation
+  function handleDropdownKeydown(e: KeyboardEvent) {
+    if (!isPlaylistDropdownOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'Enter') {
+        isPlaylistDropdownOpen = true;
+        highlightedIndex = 0;
+        e.preventDefault();
+      }
+      return;
+    }
+
+    const totalItems = filteredPlaylists.length + 1; // +1 for "Create new" option
+
+    switch (e.key) {
+      case 'ArrowDown':
+        e.preventDefault();
+        highlightedIndex = (highlightedIndex + 1) % totalItems;
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        highlightedIndex = highlightedIndex <= 0 ? totalItems - 1 : highlightedIndex - 1;
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (highlightedIndex === 0) {
+          selectPlaylist(CREATE_NEW_PLAYLIST);
+        } else if (highlightedIndex > 0 && highlightedIndex <= filteredPlaylists.length) {
+          selectPlaylist(filteredPlaylists[highlightedIndex - 1].id);
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        isPlaylistDropdownOpen = false;
+        highlightedIndex = -1;
+        break;
+    }
+  }
+
+  // Close dropdown when clicking outside
+  function handleClickOutside(e: MouseEvent) {
+    if (dropdownRef && !dropdownRef.contains(e.target as Node)) {
+      isPlaylistDropdownOpen = false;
+      highlightedIndex = -1;
+    }
+  }
+
+  // Register click outside listener when dropdown opens
+  $effect(() => {
+    if (isPlaylistDropdownOpen) {
+      document.addEventListener('click', handleClickOutside);
+      return () => document.removeEventListener('click', handleClickOutside);
+    }
+  });
 
   // Subscribe to offline state changes
   $effect(() => {
@@ -128,6 +214,9 @@
       } else if (mode === 'addTrack') {
         selectedPlaylistId = null;
         folderId = null;
+        playlistSearchQuery = '';
+        isPlaylistDropdownOpen = false;
+        highlightedIndex = -1;
         loadLocalTrackCounts();
       }
     }
@@ -447,23 +536,67 @@
         {/if}
 
         {#if mode === 'addTrack'}
-          <div class="track-info">
-            Adding {trackIds.length} {isLocalTracks ? 'local ' : ''}track{trackIds.length !== 1 ? 's' : ''}
-          </div>
-
           <div class="form-group">
-            <label for="playlist-select">Choose playlist</label>
-            <select
-              id="playlist-select"
-              bind:value={selectedPlaylistId}
-              disabled={loading}
-            >
-              <option value={null}>Select a playlist...</option>
-              <option value={CREATE_NEW_PLAYLIST}>+ Create new playlist</option>
-              {#each userPlaylists as pl (pl.id)}
-                <option value={pl.id}>{pl.name} ({getTotalTrackCount(pl)} tracks)</option>
-              {/each}
-            </select>
+            <div class="label-row">
+              <label for="playlist-search">Choose playlist</label>
+              <span class="track-info-inline">
+                Adding {trackIds.length} {isLocalTracks ? 'local ' : ''}track{trackIds.length !== 1 ? 's' : ''}
+              </span>
+            </div>
+            <div class="playlist-dropdown" bind:this={dropdownRef}>
+              <input
+                type="text"
+                id="playlist-search"
+                bind:this={inputRef}
+                bind:value={playlistSearchQuery}
+                placeholder={selectedPlaylistId ? selectedPlaylistDisplay() : 'Search playlists...'}
+                disabled={loading}
+                onfocus={() => isPlaylistDropdownOpen = true}
+                onkeydown={handleDropdownKeydown}
+                autocomplete="off"
+              />
+              {#if selectedPlaylistId !== null && !isPlaylistDropdownOpen}
+                <button
+                  type="button"
+                  class="clear-selection"
+                  onclick={() => selectPlaylist(null)}
+                  disabled={loading}
+                >
+                  <X size={14} />
+                </button>
+              {/if}
+              {#if isPlaylistDropdownOpen}
+                <div class="playlist-dropdown-list">
+                  <button
+                    type="button"
+                    class="playlist-dropdown-item create-new"
+                    class:highlighted={highlightedIndex === 0}
+                    onclick={() => selectPlaylist(CREATE_NEW_PLAYLIST)}
+                  >
+                    + Create new playlist
+                  </button>
+                  {#each filteredPlaylists.slice(0, 8) as pl, i (pl.id)}
+                    <button
+                      type="button"
+                      class="playlist-dropdown-item"
+                      class:highlighted={highlightedIndex === i + 1}
+                      onclick={() => selectPlaylist(pl.id)}
+                    >
+                      <span class="playlist-name">{pl.name}</span>
+                      <span class="playlist-count">{getTotalTrackCount(pl)} tracks</span>
+                    </button>
+                  {/each}
+                  {#if filteredPlaylists.length === 0 && playlistSearchQuery.trim()}
+                    <div class="no-results">No playlists found</div>
+                  {/if}
+                  {#if filteredPlaylists.length > 8}
+                    <div class="more-results">
+                      {filteredPlaylists.length - 8} more playlist{filteredPlaylists.length - 8 !== 1 ? 's' : ''}...
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
           </div>
 
           {#if selectedPlaylistId === CREATE_NEW_PLAYLIST}
@@ -614,13 +747,18 @@
     width: 100%;
     max-width: 490px;
     max-height: 90vh;
-    overflow: hidden;
+    overflow: visible;
     display: flex;
     flex-direction: column;
     background: var(--bg-secondary);
     border-radius: 16px;
     border: 1px solid var(--bg-tertiary);
     box-shadow: 0 24px 64px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Taller modal for addTrack mode */
+  .modal:has(.label-row) {
+    min-height: 400px;
   }
 
   .modal-header {
@@ -653,7 +791,8 @@
 
   .modal-body {
     padding: 24px;
-    overflow-y: auto;
+    overflow: visible;
+    flex: 1;
   }
 
   .error-message {
@@ -673,6 +812,22 @@
     padding: 12px;
     background: var(--bg-secondary);
     border-radius: 8px;
+  }
+
+  .label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+  }
+
+  .label-row label {
+    margin-bottom: 0;
+  }
+
+  .track-info-inline {
+    font-size: 14px;
+    color: var(--text-muted);
   }
 
   .form-group {
@@ -713,6 +868,120 @@
     background: var(--bg-primary);
     color: var(--text-primary);
     padding: 10px;
+  }
+
+  /* Searchable playlist dropdown */
+  .playlist-dropdown {
+    position: relative;
+  }
+
+  .playlist-dropdown input {
+    width: 100%;
+    padding: 10px 36px 10px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-primary);
+    transition: border-color 150ms ease;
+  }
+
+  .playlist-dropdown input:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+  }
+
+  .playlist-dropdown input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .clear-selection {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .clear-selection:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .playlist-dropdown-list {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 320px;
+    overflow-y: auto;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10001;
+  }
+
+  .playlist-dropdown-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: 10px 12px;
+    background: none;
+    border: none;
+    font-size: 14px;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 150ms ease;
+  }
+
+  .playlist-dropdown-item:hover,
+  .playlist-dropdown-item.highlighted {
+    background: var(--bg-hover);
+  }
+
+  .playlist-dropdown-item.create-new {
+    color: var(--accent-primary);
+    font-weight: 500;
+    border-bottom: 1px solid var(--bg-tertiary);
+  }
+
+  .playlist-dropdown-item .playlist-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 8px;
+  }
+
+  .playlist-dropdown-item .playlist-count {
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .no-results,
+  .more-results {
+    padding: 10px 12px;
+    font-size: 13px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .more-results {
+    border-top: 1px solid var(--bg-tertiary);
+    font-style: italic;
   }
 
   .form-group input[type="text"]:focus,

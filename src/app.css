@@ -15,6 +15,7 @@
   --accent-primary: #4285F4;
   --accent-hover: #5a9bf4;
   --accent-active: #3275e4;
+  --btn-primary-text: #ffffff;
 
   --danger: #ef4444;
   --danger-bg: rgba(239, 68, 68, 0.1);
@@ -82,6 +83,8 @@
   --text-muted: #666666;
   --text-disabled: #999999;
 
+  --btn-primary-text: #ffffff;
+
   --border-subtle: #e0e0e0;
   --border-strong: #cccccc;
 
@@ -139,6 +142,7 @@
   --accent-primary: #d4a574;
   --accent-hover: #e0b888;
   --accent-active: #c49460;
+  --btn-primary-text: #1a1814;
 
   --border-subtle: #2e2820;
   --border-strong: #3d362a;
@@ -159,6 +163,7 @@
   --accent-primary: #88c0d0;
   --accent-hover: #81a1c1;
   --accent-active: #5e81ac;
+  --btn-primary-text: #2e3440;
 
   --border-subtle: #434c5e;
   --border-strong: #4c566a;
@@ -179,6 +184,7 @@
   --accent-primary: #bd93f9;
   --accent-hover: #ff79c6;
   --accent-active: #8be9fd;
+  --btn-primary-text: #282a36;
 
   --border-subtle: #44475a;
   --border-strong: #6272a4;
@@ -199,6 +205,7 @@
   --accent-primary: #7aa2f7;
   --accent-hover: #bb9af7;
   --accent-active: #2ac3de;
+  --btn-primary-text: #1a1b26;
 
   --border-subtle: #292e42;
   --border-strong: #414868;
@@ -219,6 +226,7 @@
   --accent-primary: #89b4fa;
   --accent-hover: #74c7ec;
   --accent-active: #b4befe;
+  --btn-primary-text: #11111b;
 
   --border-subtle: #1e1e2e;
   --border-strong: #313244;
@@ -239,6 +247,7 @@
   --accent-primary: #907aa9;
   --accent-hover: #286983;
   --accent-active: #d7827e;
+  --btn-primary-text: #faf4ed;
 
   --border-subtle: #f2e9e1;
   --border-strong: #dfdad9;
@@ -259,6 +268,7 @@
   --accent-primary: #3daee9;
   --accent-hover: #9b59b6;
   --accent-active: #1d99f3;
+  --btn-primary-text: #141618;
 
   --border-subtle: #292c30;
   --border-strong: #31363b;
@@ -279,6 +289,7 @@
   --accent-primary: #3daee9;
   --accent-hover: #9b59b6;
   --accent-active: #2980b9;
+  --btn-primary-text: #ffffff;
 
   --border-subtle: #dee0e2;
   --border-strong: #c8cdd3;
@@ -299,6 +310,7 @@
   --accent-primary: #3584e4;
   --accent-hover: #1c71d8;
   --accent-active: #1a5fb4;
+  --btn-primary-text: #ffffff;
 
   --border-subtle: #28282c;
   --border-strong: #2e2e32;
@@ -319,6 +331,7 @@
   --accent-primary: #3584e4;
   --accent-hover: #1c71d8;
   --accent-active: #1a5fb4;
+  --btn-primary-text: #ffffff;
 
   --border-subtle: #f3f3f5;
   --border-strong: #deddda;
@@ -494,7 +507,7 @@ select {
 
 .btn-primary {
   background: var(--accent-primary);
-  color: var(--text-primary);
+  color: var(--btn-primary-text);
 }
 
 .btn-primary:hover:not(:disabled) {

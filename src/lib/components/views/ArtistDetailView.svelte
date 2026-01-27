@@ -2074,15 +2074,20 @@
   .network-sidebar {
     position: fixed;
     top: 32px;
+    bottom: 104px;
     right: 0;
     width: 340px;
-    height: calc(100vh - 32px - 72px);
     background: var(--bg-secondary);
     border-left: 1px solid var(--bg-tertiary);
     z-index: 100;
     display: flex;
     flex-direction: column;
     animation: slideIn 200ms ease-out;
+  }
+
+  /* Adjust sidebar when title bar is hidden */
+  :global(.app.no-titlebar) .network-sidebar {
+    top: 0;
   }
 
   @keyframes slideIn {

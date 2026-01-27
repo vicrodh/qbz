@@ -46,6 +46,18 @@
   const releaseDate = $derived(release ? formatReleaseDate(release.publishedAt) : '');
   const markdownResult = $derived.by(() => renderMarkdownWithToc(release?.body));
   const releaseHtml = $derived(markdownResult.html);
+  const releaseToc = $derived(markdownResult.toc.filter(entry => entry.level === 0));
+
+  let contentRef: HTMLDivElement | null = $state(null);
+
+  function scrollToSection(id: string) {
+    if (!contentRef) return;
+    const target = contentRef.querySelector(`#${id}`);
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
   const modalTitle = $derived(
     release
       ? `What's new in v${release.version}, ${releaseDate}`
@@ -68,8 +80,21 @@
     maxWidth="910px"
   >
     {#if release}
+      {#if releaseToc.length > 0}
+        <nav class="toc-nav">
+          {#each releaseToc as entry}
+            <button
+              class="toc-item"
+              type="button"
+              onclick={() => scrollToSection(entry.id)}
+            >
+              {entry.label}
+            </button>
+          {/each}
+        </nav>
+      {/if}
       {#if releaseHtml}
-        <div class="release-body whats-new-content">
+        <div class="release-body whats-new-content" bind:this={contentRef}>
           {@html releaseHtml}
         </div>
       {:else}
@@ -95,6 +120,32 @@
   :global(.whats-new-modal .modal-overlay) {
     padding-top: var(--updates-overlay-pad-top);
     padding-bottom: var(--updates-overlay-pad-bottom);
+  }
+
+  .toc-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--bg-tertiary);
+  }
+
+  .toc-item {
+    padding: 6px 12px;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .toc-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   .release-body {

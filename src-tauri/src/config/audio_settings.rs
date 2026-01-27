@@ -32,7 +32,7 @@ impl Default for AudioSettings {
             backend_type: None,  // Auto-detect (PipeWire if available, else ALSA)
             alsa_plugin: Some(AlsaPlugin::Hw),  // Default to hw (bit-perfect)
             alsa_hardware_volume: false,  // Disabled by default (maximum compatibility)
-            stream_first_track: false,  // Disabled by default (current behavior)
+            stream_first_track: true,  // Enabled by default for faster playback start
             stream_buffer_seconds: 3,  // 3 seconds initial buffer
         }
     }
