@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { RefreshCw, Plus, X, Info, Sparkles } from 'lucide-svelte';
+  import { RefreshCw, Plus, X, Info, Sparkles, Play } from 'lucide-svelte';
   import {
     type SuggestedTrack,
     type SuggestionResult,
@@ -19,6 +19,7 @@
     onAddTrack?: (trackId: number) => Promise<void>;
     onGoToAlbum?: (albumId: string) => void;
     onGoToArtist?: (artistId: number) => void;
+    onPreviewTrack?: (track: SuggestedTrack) => void;
     showReasons?: boolean;
   }
 
@@ -29,6 +30,7 @@
     onAddTrack,
     onGoToAlbum,
     onGoToArtist,
+    onPreviewTrack,
     showReasons = false
   }: Props = $props();
 
@@ -342,15 +344,23 @@
               {formatDuration(track.duration)}
             </div>
 
-            <button
-              class="info-btn"
-              onclick={(e) => { e.stopPropagation(); handleShowTrackInfo(track.track_id); }}
-              title={showReasons && track.reason ? track.reason : 'Track info'}
-            >
-              <Info size={14} />
-            </button>
-
             <div class="actions">
+              {#if onPreviewTrack}
+                <button
+                  class="action-btn preview"
+                  onclick={(e) => { e.stopPropagation(); onPreviewTrack(track); }}
+                  title="Preview"
+                >
+                  <Play size={14} />
+                </button>
+              {/if}
+              <button
+                class="action-btn info"
+                onclick={(e) => { e.stopPropagation(); handleShowTrackInfo(track.track_id); }}
+                title={showReasons && track.reason ? track.reason : 'Track info'}
+              >
+                <Info size={14} />
+              </button>
               <button
                 class="action-btn add"
                 onclick={() => handleAddTrack(track)}
@@ -370,18 +380,10 @@
         {/each}
       </div>
 
-      {#if filteredPool.length > VISIBLE_COUNT || canLoadMore || canLoadMoreVariety}
-        <div class="pagination-info">
-          {#if loadingMore}
-            Loading more...
-          {:else}
-            Showing {currentPage * VISIBLE_COUNT + 1}-{Math.min((currentPage + 1) * VISIBLE_COUNT, filteredPool.length)} of {filteredPool.length}
-            {#if canLoadMore}
-              <button class="load-more-link" onclick={handleLoadMore}>Load more</button>
-            {:else if showVarietyPrompt}
-              <button class="load-more-link" onclick={handleLoadMoreVariety}>Load more variety</button>
-            {/if}
-          {/if}
+      <!-- Pagination hidden for cleaner UX - auto-loads more when cycling -->
+      {#if loadingMore}
+        <div class="loading-more">
+          <div class="spinner-small"></div>
         </div>
       {/if}
     {/if}
@@ -563,31 +565,6 @@
     flex-shrink: 0;
   }
 
-  .info-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: transparent;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-radius: 4px;
-    opacity: 0;
-    transition: opacity 150ms ease, background-color 150ms ease;
-  }
-
-  .suggestion-row:hover .info-btn {
-    opacity: 0.6;
-  }
-
-  .info-btn:hover {
-    opacity: 1 !important;
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-
   .meta-link {
     background: none;
     border: none;
@@ -646,26 +623,36 @@
     color: var(--text-primary);
   }
 
-  .pagination-info {
-    margin-top: 12px;
-    text-align: center;
-    font-size: 12px;
+  .action-btn.preview {
     color: var(--text-muted);
   }
 
-  .load-more-link {
-    background: none;
-    border: none;
-    color: var(--accent-primary);
-    cursor: pointer;
-    font-size: 12px;
-    margin-left: 8px;
-    padding: 0;
-    text-decoration: underline;
-    text-underline-offset: 2px;
+  .action-btn.preview:hover {
+    background: var(--accent-primary);
+    color: white;
   }
 
-  .load-more-link:hover {
+  .action-btn.info {
+    color: var(--text-muted);
+  }
+
+  .action-btn.info:hover {
+    background: var(--bg-tertiary);
     color: var(--text-primary);
+  }
+
+  .loading-more {
+    display: flex;
+    justify-content: center;
+    padding: 12px 0;
+  }
+
+  .spinner-small {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--bg-tertiary);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
   }
 </style>

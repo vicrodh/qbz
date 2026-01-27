@@ -1203,6 +1203,27 @@
     }
   }
 
+  // Preview a suggested track
+  function handlePreviewSuggestedTrack(track: import('$lib/services/playlistSuggestionsService').SuggestedTrack) {
+    if (!onTrackPlay) return;
+
+    // Convert SuggestedTrack to DisplayTrack format
+    const displayTrack: DisplayTrack = {
+      id: track.track_id,
+      number: 0,
+      title: track.title,
+      artist: track.artist_name,
+      album: track.album_title,
+      albumArt: track.album_image_url,
+      albumId: track.album_id,
+      artistId: track.artist_id,
+      duration: formatDuration(track.duration),
+      durationSeconds: track.duration
+    };
+
+    onTrackPlay(displayTrack);
+  }
+
   async function handlePlayAll() {
     // Get all display tracks (Qobuz + local, respecting search/sort)
     const allTracks = displayTracks;
@@ -1684,6 +1705,7 @@
         onAddTrack={handleAddSuggestedTrack}
         onGoToAlbum={onTrackGoToAlbum}
         onGoToArtist={onTrackGoToArtist}
+        onPreviewTrack={handlePreviewSuggestedTrack}
         showReasons={false}
       />
     {/if}
