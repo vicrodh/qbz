@@ -1,5 +1,12 @@
 <script lang="ts">
   import { ChevronDown } from 'lucide-svelte';
+  import {
+    openMenu as openGlobalMenu,
+    closeMenu as closeGlobalMenu,
+    subscribe as subscribeFloatingMenu,
+    getActiveMenuId,
+    MENU_INACTIVITY_TIMEOUT
+  } from '$lib/stores/floatingMenuStore';
 
   interface Props {
     value: string;
@@ -13,37 +20,91 @@
   let { value, options, onchange, wide = false, expandLeft = false, compact = false }: Props = $props();
 
   let isOpen = $state(false);
+  let isHovering = $state(false);
   let dropdownRef: HTMLDivElement;
+
+  // Unique ID for this dropdown instance
+  const menuId = `dropdown-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
 
   function handleClickOutside(event: MouseEvent) {
     if (dropdownRef && !dropdownRef.contains(event.target as Node)) {
-      isOpen = false;
+      closeDropdown();
     }
   }
+
+  function openDropdown() {
+    openGlobalMenu(menuId);
+    isOpen = true;
+  }
+
+  function closeDropdown() {
+    isOpen = false;
+    closeGlobalMenu(menuId);
+  }
+
+  // Subscribe to global floating menu store
+  $effect(() => {
+    const unsubscribe = subscribeFloatingMenu(() => {
+      const activeId = getActiveMenuId();
+      if (activeId !== null && activeId !== menuId && isOpen) {
+        isOpen = false;
+      }
+    });
+    return unsubscribe;
+  });
 
   $effect(() => {
     if (isOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+
+      // Inactivity timeout
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (isOpen && !isHovering) closeDropdown();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHovering) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHovering) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
     }
   });
 </script>
 
 <div class="dropdown" class:wide bind:this={dropdownRef}>
-  <button class="trigger" onclick={() => (isOpen = !isOpen)}>
+  <button class="trigger" onclick={() => isOpen ? closeDropdown() : openDropdown()}>
     <span class="value-text">{value}</span>
     <ChevronDown size={16} class="chevron" />
   </button>
 
   {#if isOpen}
-    <div class="menu" class:expand-left={expandLeft} class:compact>
+    <div
+      class="menu"
+      class:expand-left={expandLeft}
+      class:compact
+      onmouseenter={() => isHovering = true}
+      onmouseleave={() => isHovering = false}
+    >
       {#each options as option}
         <button
           class="option"
           class:selected={option === value}
           onclick={() => {
             onchange(option);
-            isOpen = false;
+            closeDropdown();
           }}
           title={option}
         >
@@ -170,7 +231,7 @@
     background-color: rgba(66, 133, 244, 0.15);
     color: var(--text-primary);
   }
-  
+
   [data-theme="light"] .option.selected,
   [data-theme="warm"] .option.selected {
     background-color: rgba(var(--accent-primary), 0.15);

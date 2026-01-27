@@ -25,6 +25,7 @@
     setActiveTrackMenuId,
     subscribeActiveTrackMenuId
   } from '$lib/stores/activeTrackMenu';
+  import { MENU_INACTIVITY_TIMEOUT } from '$lib/stores/floatingMenuStore';
 
   interface Props {
     onPlayNow?: () => void;
@@ -265,7 +266,7 @@
 
       // Auto-close after inactivity when the cursor is not hovering any menu/submenu.
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
-      const idleMs = 5_000;
+      const idleMs = MENU_INACTIVITY_TIMEOUT;
 
       const scheduleIdleClose = () => {
         if (idleTimer) clearTimeout(idleTimer);

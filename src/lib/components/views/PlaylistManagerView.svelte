@@ -24,6 +24,13 @@
     movePlaylistToFolder,
     type PlaylistFolder
   } from '$lib/stores/playlistFoldersStore';
+  import {
+    openMenu as openGlobalMenu,
+    closeMenu as closeGlobalMenu,
+    subscribe as subscribeFloatingMenu,
+    getActiveMenuId,
+    MENU_INACTIVITY_TIMEOUT
+  } from '$lib/stores/floatingMenuStore';
 
   interface Playlist {
     id: number;
@@ -91,6 +98,12 @@
   // Dropdown state
   let showFilterMenu = $state(false);
   let showSortMenu = $state(false);
+  let isHoveringFilterMenu = $state(false);
+  let isHoveringSortMenu = $state(false);
+
+  // Unique IDs for global floating menu store
+  const PM_FILTER_MENU_ID = 'playlist-manager-filter';
+  const PM_SORT_MENU_ID = 'playlist-manager-sort';
 
   // Edit modal state
   let editModalOpen = $state(false);
@@ -116,6 +129,85 @@
   $effect(() => { localStorage.setItem('qbz-pm-filter', filter); });
   $effect(() => { localStorage.setItem('qbz-pm-sort', sort); });
   $effect(() => { localStorage.setItem('qbz-pm-view', viewMode); });
+
+  // Helper functions for closing menus with global store
+  function closeFilterMenu() {
+    showFilterMenu = false;
+    closeGlobalMenu(PM_FILTER_MENU_ID);
+  }
+
+  function closeSortMenu() {
+    showSortMenu = false;
+    closeGlobalMenu(PM_SORT_MENU_ID);
+  }
+
+  // Subscribe to global floating menu store
+  $effect(() => {
+    const unsubscribe = subscribeFloatingMenu(() => {
+      const activeId = getActiveMenuId();
+      if (activeId !== null && activeId !== PM_FILTER_MENU_ID && showFilterMenu) {
+        showFilterMenu = false;
+      }
+      if (activeId !== null && activeId !== PM_SORT_MENU_ID && showSortMenu) {
+        showSortMenu = false;
+      }
+    });
+    return unsubscribe;
+  });
+
+  // Inactivity timeout for filter menu
+  $effect(() => {
+    if (showFilterMenu) {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (showFilterMenu && !isHoveringFilterMenu) closeFilterMenu();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHoveringFilterMenu) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHoveringFilterMenu) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
+    }
+  });
+
+  // Inactivity timeout for sort menu
+  $effect(() => {
+    if (showSortMenu) {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (showSortMenu && !isHoveringSortMenu) closeSortMenu();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHoveringSortMenu) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHoveringSortMenu) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
+    }
+  });
 
   // Helper to get local content status for a playlist (calculated from actual data)
   function getLocalContentStatus(playlistId: number): LocalContentStatus {
@@ -699,7 +791,16 @@
 
     <!-- Filter dropdown -->
     <div class="dropdown-container">
-      <button class="control-btn" onclick={() => { showFilterMenu = !showFilterMenu; showSortMenu = false; }}>
+      <button class="control-btn" onclick={() => {
+        if (showFilterMenu) {
+          showFilterMenu = false;
+          closeGlobalMenu(PM_FILTER_MENU_ID);
+        } else {
+          showSortMenu = false;
+          openGlobalMenu(PM_FILTER_MENU_ID);
+          showFilterMenu = true;
+        }
+      }}>
         {#if filter === 'hidden'}
           <EyeOff size={16} />
         {:else if filter === 'offline_unavailable'}
@@ -716,26 +817,30 @@
         </span>
       </button>
       {#if showFilterMenu}
-        <div class="dropdown-menu">
+        <div
+          class="dropdown-menu"
+          onmouseenter={() => isHoveringFilterMenu = true}
+          onmouseleave={() => isHoveringFilterMenu = false}
+        >
           {#if offlineStatus.isOffline}
-            <button class="dropdown-item" class:selected={filter === 'all' || filter === 'offline_all'} onclick={() => { filter = 'offline_all'; showFilterMenu = false; }}>
+            <button class="dropdown-item" class:selected={filter === 'all' || filter === 'offline_all'} onclick={() => { filter = 'offline_all'; closeFilterMenu(); }}>
               {$t('offline.available')}
             </button>
-            <button class="dropdown-item" class:selected={filter === 'offline_partial'} onclick={() => { filter = 'offline_partial'; showFilterMenu = false; }}>
+            <button class="dropdown-item" class:selected={filter === 'offline_partial'} onclick={() => { filter = 'offline_partial'; closeFilterMenu(); }}>
               {$t('offline.partiallyAvailable')}
             </button>
-            <button class="dropdown-item" class:selected={filter === 'offline_unavailable'} onclick={() => { filter = 'offline_unavailable'; showFilterMenu = false; }}>
+            <button class="dropdown-item" class:selected={filter === 'offline_unavailable'} onclick={() => { filter = 'offline_unavailable'; closeFilterMenu(); }}>
               {$t('offline.notAvailableOffline')}
             </button>
             <div class="dropdown-divider"></div>
           {/if}
-          <button class="dropdown-item" class:selected={filter === 'all' && !offlineStatus.isOffline} onclick={() => { filter = 'all'; showFilterMenu = false; }}>
+          <button class="dropdown-item" class:selected={filter === 'all' && !offlineStatus.isOffline} onclick={() => { filter = 'all'; closeFilterMenu(); }}>
             {offlineStatus.isOffline ? $t('filter.all') : 'All'}
           </button>
-          <button class="dropdown-item" class:selected={filter === 'visible'} onclick={() => { filter = 'visible'; showFilterMenu = false; }}>
+          <button class="dropdown-item" class:selected={filter === 'visible'} onclick={() => { filter = 'visible'; closeFilterMenu(); }}>
             Visible
           </button>
-          <button class="dropdown-item" class:selected={filter === 'hidden'} onclick={() => { filter = 'hidden'; showFilterMenu = false; }}>
+          <button class="dropdown-item" class:selected={filter === 'hidden'} onclick={() => { filter = 'hidden'; closeFilterMenu(); }}>
             Hidden
           </button>
         </div>
@@ -744,27 +849,40 @@
 
     <!-- Sort dropdown -->
     <div class="dropdown-container">
-      <button class="control-btn" onclick={() => { showSortMenu = !showSortMenu; showFilterMenu = false; }}>
+      <button class="control-btn" onclick={() => {
+        if (showSortMenu) {
+          showSortMenu = false;
+          closeGlobalMenu(PM_SORT_MENU_ID);
+        } else {
+          showFilterMenu = false;
+          openGlobalMenu(PM_SORT_MENU_ID);
+          showSortMenu = true;
+        }
+      }}>
         <ArrowUpDown size={16} />
         <span>
           {sort === 'name' ? 'Name' : sort === 'recent' ? 'Recent' : sort === 'playcount' ? 'Play Count' : sort === 'tracks' ? 'Track Count' : 'Custom'}
         </span>
       </button>
       {#if showSortMenu}
-        <div class="dropdown-menu">
-          <button class="dropdown-item" class:selected={sort === 'name'} onclick={() => { sort = 'name'; showSortMenu = false; }}>
+        <div
+          class="dropdown-menu"
+          onmouseenter={() => isHoveringSortMenu = true}
+          onmouseleave={() => isHoveringSortMenu = false}
+        >
+          <button class="dropdown-item" class:selected={sort === 'name'} onclick={() => { sort = 'name'; closeSortMenu(); }}>
             Name (A-Z)
           </button>
-          <button class="dropdown-item" class:selected={sort === 'recent'} onclick={() => { sort = 'recent'; showSortMenu = false; }}>
+          <button class="dropdown-item" class:selected={sort === 'recent'} onclick={() => { sort = 'recent'; closeSortMenu(); }}>
             Recent
           </button>
-          <button class="dropdown-item" class:selected={sort === 'playcount'} onclick={() => { sort = 'playcount'; showSortMenu = false; }}>
+          <button class="dropdown-item" class:selected={sort === 'playcount'} onclick={() => { sort = 'playcount'; closeSortMenu(); }}>
             Play Count
           </button>
-          <button class="dropdown-item" class:selected={sort === 'tracks'} onclick={() => { sort = 'tracks'; showSortMenu = false; }}>
+          <button class="dropdown-item" class:selected={sort === 'tracks'} onclick={() => { sort = 'tracks'; closeSortMenu(); }}>
             Track Count
           </button>
-          <button class="dropdown-item" class:selected={sort === 'custom'} onclick={() => { sort = 'custom'; showSortMenu = false; }}>
+          <button class="dropdown-item" class:selected={sort === 'custom'} onclick={() => { sort = 'custom'; closeSortMenu(); }}>
             Custom Order
           </button>
         </div>

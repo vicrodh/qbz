@@ -24,6 +24,13 @@
     movePlaylistToFolder,
     type PlaylistFolder
   } from '$lib/stores/playlistFoldersStore';
+  import {
+    openMenu as openGlobalMenu,
+    closeMenu as closeGlobalMenu,
+    subscribe as subscribeFloatingMenu,
+    getActiveMenuId,
+    MENU_INACTIVITY_TIMEOUT
+  } from '$lib/stores/floatingMenuStore';
 
   interface Playlist {
     id: number;
@@ -137,6 +144,7 @@
   });
 
   function showFolderPopover(event: MouseEvent, folder: PlaylistFolder) {
+    openGlobalMenu(SIDEBAR_FOLDER_POPOVER_ID);
     const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
     folderPopover = {
       visible: true,
@@ -149,6 +157,7 @@
 
   function closeFolderPopover() {
     folderPopover = { ...folderPopover, visible: false, folderId: null };
+    closeGlobalMenu(SIDEBAR_FOLDER_POPOVER_ID);
   }
 
   // Filtered folders for context menu
@@ -175,6 +184,14 @@
   let submenuEl: HTMLDivElement | null = null;
   let menuStyle = $state('');
   let submenuStyle = $state('');
+  let isHoveringDropdown = $state(false);
+  let isHoveringContextMenu = $state(false);
+  let isHoveringFolderPopover = $state(false);
+
+  // Unique IDs for global floating menu store
+  const SIDEBAR_DROPDOWN_ID = 'sidebar-dropdown';
+  const SIDEBAR_CONTEXT_MENU_ID = 'sidebar-context-menu';
+  const SIDEBAR_FOLDER_POPOVER_ID = 'sidebar-folder-popover';
 
   function openSubmenu() {
     if (submenuCloseTimeout) {
@@ -420,6 +437,7 @@
       clearTimeout(submenuCloseTimeout);
       submenuCloseTimeout = null;
     }
+    closeGlobalMenu(SIDEBAR_DROPDOWN_ID);
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -481,6 +499,7 @@
     if (menuOpen) {
       closeMenu();
     } else {
+      openGlobalMenu(SIDEBAR_DROPDOWN_ID);
       menuOpen = true;
       await setMenuPosition();
       document.addEventListener('click', handleClickOutside);
@@ -539,6 +558,114 @@
 
   // Check if any playlists exist in root (no folder)
   let rootPlaylists = $derived(getPlaylistsInFolder(null));
+
+  // Subscribe to global floating menu store
+  $effect(() => {
+    const unsubscribe = subscribeFloatingMenu(() => {
+      const activeId = getActiveMenuId();
+      // Close dropdown if another menu is active
+      if (activeId !== null && activeId !== SIDEBAR_DROPDOWN_ID && menuOpen) {
+        menuOpen = false;
+        sortSubmenuOpen = false;
+        if (submenuCloseTimeout) {
+          clearTimeout(submenuCloseTimeout);
+          submenuCloseTimeout = null;
+        }
+        document.removeEventListener('click', handleClickOutside);
+      }
+      // Close context menu if another menu is active
+      if (activeId !== null && activeId !== SIDEBAR_CONTEXT_MENU_ID && contextMenu.visible) {
+        contextMenu = { ...contextMenu, visible: false };
+        contextMenuSearch = '';
+      }
+      // Close folder popover if another menu is active
+      if (activeId !== null && activeId !== SIDEBAR_FOLDER_POPOVER_ID && folderPopover.visible) {
+        folderPopover = { ...folderPopover, visible: false, folderId: null };
+      }
+    });
+    return unsubscribe;
+  });
+
+  // Inactivity timeout for dropdown menu
+  $effect(() => {
+    if (menuOpen) {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (menuOpen && !isHoveringDropdown) closeMenu();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHoveringDropdown) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHoveringDropdown) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
+    }
+  });
+
+  // Inactivity timeout for context menu
+  $effect(() => {
+    if (contextMenu.visible) {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (contextMenu.visible && !isHoveringContextMenu) closeContextMenu();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHoveringContextMenu) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHoveringContextMenu) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
+    }
+  });
+
+  // Inactivity timeout for folder popover
+  $effect(() => {
+    if (folderPopover.visible) {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (folderPopover.visible && !isHoveringFolderPopover) closeFolderPopover();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHoveringFolderPopover) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHoveringFolderPopover) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
+    }
+  });
 
   $effect(() => {
     if (!menuOpen) {
@@ -680,6 +807,8 @@
     e.preventDefault();
     e.stopPropagation();
 
+    openGlobalMenu(SIDEBAR_CONTEXT_MENU_ID);
+
     // Get the current folder_id from settings
     const settings = playlistSettings.get(playlist.id);
     const currentFolderId = folderId ?? settings?.folder_id ?? null;
@@ -696,6 +825,7 @@
   function closeContextMenu() {
     contextMenu = { ...contextMenu, visible: false };
     contextMenuSearch = '';
+    closeGlobalMenu(SIDEBAR_CONTEXT_MENU_ID);
   }
 
   async function handleMoveToFolder(folderId: string | null) {
@@ -812,7 +942,13 @@
 
       <!-- Dropdown Menu -->
       {#if menuOpen}
-        <div class="dropdown-menu" bind:this={menuEl} style={menuStyle}>
+        <div
+          class="dropdown-menu"
+          bind:this={menuEl}
+          style={menuStyle}
+          onmouseenter={() => isHoveringDropdown = true}
+          onmouseleave={() => isHoveringDropdown = false}
+        >
           <!-- Sort by submenu trigger -->
           <div
             class="menu-item has-submenu"
@@ -1038,6 +1174,8 @@
     class:has-search={showSearch}
     style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
     onclick={(e) => e.stopPropagation()}
+    onmouseenter={() => isHoveringContextMenu = true}
+    onmouseleave={() => isHoveringContextMenu = false}
     role="menu"
   >
     {#if availableFolders.length > 0}
@@ -1095,6 +1233,8 @@
     class="folder-popover"
     style="left: {folderPopover.x}px; top: {folderPopover.y}px;"
     onclick={(e) => e.stopPropagation()}
+    onmouseenter={() => isHoveringFolderPopover = true}
+    onmouseleave={() => isHoveringFolderPopover = false}
     role="menu"
   >
     <div class="folder-popover-header">
