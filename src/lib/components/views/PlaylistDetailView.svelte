@@ -220,6 +220,10 @@
   let draggedTrackIdx = $state<number | null>(null);
   let dragOverIdx = $state<number | null>(null);
 
+  // Batch selection state (for custom order mode)
+  let selectedTrackKeys = $state<Set<string>>(new Set());  // Set of "trackId:isLocal" keys
+  let isSelectionMode = $derived(isCustomOrderMode && selectedTrackKeys.size > 0);
+
   // User ownership state (to show "Copy to Library" button for non-owned playlists)
   let currentUserId = $state<number | null>(null);
   let isOwnPlaylist = $derived(playlist !== null && currentUserId !== null && playlist.owner.id === currentUserId);
@@ -750,6 +754,123 @@
 
     draggedTrackIdx = null;
     dragOverIdx = null;
+  }
+
+  // === Batch Selection Functions ===
+
+  function getTrackKey(track: DisplayTrack): string {
+    const isLocal = track.isLocal ?? false;
+    const trackId = isLocal ? Math.abs(track.id) : track.id;
+    return `${trackId}:${isLocal}`;
+  }
+
+  function toggleTrackSelection(track: DisplayTrack) {
+    const key = getTrackKey(track);
+    const newSet = new Set(selectedTrackKeys);
+    if (newSet.has(key)) {
+      newSet.delete(key);
+    } else {
+      newSet.add(key);
+    }
+    selectedTrackKeys = newSet;
+  }
+
+  function clearSelection() {
+    selectedTrackKeys = new Set();
+  }
+
+  function selectAllTracks() {
+    const newSet = new Set<string>();
+    for (const track of displayTracks) {
+      newSet.add(getTrackKey(track));
+    }
+    selectedTrackKeys = newSet;
+  }
+
+  // Move all selected tracks up one position (as a group)
+  async function moveSelectedUp() {
+    if (selectedTrackKeys.size === 0) return;
+
+    // Get indices of selected tracks (sorted)
+    const selectedIndices: number[] = [];
+    displayTracks.forEach((track, idx) => {
+      if (selectedTrackKeys.has(getTrackKey(track))) {
+        selectedIndices.push(idx);
+      }
+    });
+    selectedIndices.sort((a, b) => a - b);
+
+    // Can't move up if first selected is already at top
+    if (selectedIndices[0] === 0) return;
+
+    // Build new order: swap each selected with the one above
+    const currentOrder = displayTracks.map(t => ({
+      id: t.isLocal ? Math.abs(t.id) : t.id,
+      isLocal: t.isLocal ?? false
+    }));
+
+    // Move from top to bottom to avoid conflicts
+    for (const idx of selectedIndices) {
+      const newIdx = idx - 1;
+      [currentOrder[newIdx], currentOrder[idx]] = [currentOrder[idx], currentOrder[newIdx]];
+    }
+
+    // Save new order
+    const orders: [number, boolean, number][] = currentOrder.map((item, pos) => [item.id, item.isLocal, pos]);
+    try {
+      await invoke('playlist_set_custom_order', { playlistId, orders });
+      // Update local map
+      const newMap = new Map<string, number>();
+      orders.forEach(([id, isLocal, pos]) => {
+        newMap.set(`${id}:${isLocal}`, pos);
+      });
+      customOrderMap = newMap;
+    } catch (err) {
+      console.error('Failed to move selected tracks:', err);
+    }
+  }
+
+  // Move all selected tracks down one position (as a group)
+  async function moveSelectedDown() {
+    if (selectedTrackKeys.size === 0) return;
+
+    // Get indices of selected tracks (sorted descending for moving down)
+    const selectedIndices: number[] = [];
+    displayTracks.forEach((track, idx) => {
+      if (selectedTrackKeys.has(getTrackKey(track))) {
+        selectedIndices.push(idx);
+      }
+    });
+    selectedIndices.sort((a, b) => b - a);  // Descending
+
+    // Can't move down if last selected is already at bottom
+    if (selectedIndices[0] === displayTracks.length - 1) return;
+
+    // Build new order: swap each selected with the one below
+    const currentOrder = displayTracks.map(t => ({
+      id: t.isLocal ? Math.abs(t.id) : t.id,
+      isLocal: t.isLocal ?? false
+    }));
+
+    // Move from bottom to top to avoid conflicts
+    for (const idx of selectedIndices) {
+      const newIdx = idx + 1;
+      [currentOrder[idx], currentOrder[newIdx]] = [currentOrder[newIdx], currentOrder[idx]];
+    }
+
+    // Save new order
+    const orders: [number, boolean, number][] = currentOrder.map((item, pos) => [item.id, item.isLocal, pos]);
+    try {
+      await invoke('playlist_set_custom_order', { playlistId, orders });
+      // Update local map
+      const newMap = new Map<string, number>();
+      orders.forEach(([id, isLocal, pos]) => {
+        newMap.set(`${id}:${isLocal}`, pos);
+      });
+      customOrderMap = newMap;
+    } catch (err) {
+      console.error('Failed to move selected tracks:', err);
+    }
   }
 
   async function selectCustomArtwork() {
@@ -1388,7 +1509,32 @@
 
     <!-- Track List -->
     <div class="track-list">
+      {#if isCustomOrderMode}
+        <div class="batch-controls">
+          <div class="batch-left">
+            {#if selectedTrackKeys.size > 0}
+              <span class="selection-count">{selectedTrackKeys.size} selected</span>
+              <button class="batch-btn" onclick={clearSelection}>Clear</button>
+            {:else}
+              <button class="batch-btn" onclick={selectAllTracks}>Select All</button>
+            {/if}
+          </div>
+          {#if selectedTrackKeys.size > 0}
+            <div class="batch-right">
+              <button class="batch-btn" onclick={moveSelectedUp} title="Move selected up">
+                <ChevronUp size={14} /> Move Up
+              </button>
+              <button class="batch-btn" onclick={moveSelectedDown} title="Move selected down">
+                <ChevronDown size={14} /> Move Down
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/if}
       <div class="track-list-header">
+        {#if isCustomOrderMode}
+          <div class="col-checkbox"></div>
+        {/if}
         <div class="col-number">#</div>
         <div class="col-title">Title</div>
         <div class="col-album">Album</div>
@@ -1422,6 +1568,14 @@
           ondrop={(e) => handleDrop(e, idx)}
         >
           {#if isCustomOrderMode}
+            {@const trackKey = getTrackKey(track)}
+            <label class="track-checkbox" onclick={(e) => e.stopPropagation()}>
+              <input
+                type="checkbox"
+                checked={selectedTrackKeys.has(trackKey)}
+                onchange={() => toggleTrackSelection(track)}
+              />
+            </label>
             <div class="reorder-controls">
               <button
                 class="reorder-btn"
@@ -2112,6 +2266,68 @@
 
   .track-row-wrapper[draggable="true"]:active {
     cursor: grabbing;
+  }
+
+  /* Batch selection controls */
+  .batch-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+
+  .batch-left, .batch-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .selection-count {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .batch-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .batch-btn:hover {
+    background: var(--hover-bg, rgba(255, 255, 255, 0.1));
+    color: var(--text-primary);
+  }
+
+  .col-checkbox {
+    width: 24px;
+    flex-shrink: 0;
+  }
+
+  .track-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .track-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent-color, #6366f1);
   }
 
 </style>

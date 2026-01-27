@@ -459,26 +459,17 @@
     const draggedIndex = currentOrder.indexOf(draggedId);
     const targetIndex = currentOrder.indexOf(targetId);
 
-    if (draggedIndex === -1 || targetIndex === -1) return;
+    if (draggedIndex === -1 || targetIndex === -1) {
+      draggedId = null;
+      dragOverId = null;
+      return;
+    }
 
     // Remove dragged item and insert at target position
     currentOrder.splice(draggedIndex, 1);
     currentOrder.splice(targetIndex, 0, draggedId);
 
-    // Save new order
-    try {
-      await invoke('playlist_reorder', { playlistIds: currentOrder });
-      // Update local settings
-      const updated = new Map(playlistSettings);
-      currentOrder.forEach((id, index) => {
-        const existing = updated.get(id);
-        updated.set(id, { ...existing, qobuz_playlist_id: id, hidden: existing?.hidden ?? false, position: index });
-      });
-      playlistSettings = updated;
-      onPlaylistsChanged?.();
-    } catch (err) {
-      console.error('Failed to reorder playlists:', err);
-    }
+    await savePlaylistOrder(currentOrder);
 
     draggedId = null;
     dragOverId = null;
