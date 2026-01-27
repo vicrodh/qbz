@@ -124,7 +124,16 @@
               <strong>Lucide</strong> — Icon library (ISC)
             </div>
             <div class="attribution">
+              <strong>MusicBrainz</strong> — Music metadata database
+            </div>
+            <div class="attribution">
               <strong>Song.link/Odesli</strong> — Music link aggregation API
+            </div>
+            <div class="attribution">
+              <strong>LRCLIB</strong> — Synced lyrics provider
+            </div>
+            <div class="attribution">
+              <strong>lyrics.ovh</strong> — Lyrics API
             </div>
           </div>
         </div>

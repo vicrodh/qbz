@@ -1140,11 +1140,11 @@
         />
       </div>
       <div class="modal-actions">
-        <button class="btn-secondary" onclick={cancelCreateFolder}>
+        <button class="btn btn-secondary" onclick={cancelCreateFolder}>
           {$t('actions.cancel')}
         </button>
         <button
-          class="btn-primary"
+          class="btn btn-primary"
           onclick={handleCreateFolder}
           disabled={!newFolderName.trim()}
         >

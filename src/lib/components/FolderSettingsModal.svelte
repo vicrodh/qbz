@@ -365,10 +365,10 @@
           {scanning ? $t('library.scanning') : $t('library.scanThisFolder')}
         </button>
         <div class="footer-spacer"></div>
-        <button class="btn-secondary" onclick={onClose} disabled={loading}>
+        <button class="btn btn-secondary" onclick={onClose} disabled={loading}>
           {$t('actions.cancel')}
         </button>
-        <button class="btn-primary" onclick={handleSave} disabled={loading}>
+        <button class="btn btn-primary" onclick={handleSave} disabled={loading}>
           {loading ? $t('actions.saving') : $t('actions.save')}
         </button>
       </div>

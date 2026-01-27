@@ -577,10 +577,10 @@
           </div>
         {/if}
         <div class="footer-right">
-          <button class="btn-secondary" onclick={onClose} disabled={loading}>
+          <button class="btn btn-secondary" onclick={onClose} disabled={loading}>
             Cancel
           </button>
-          <button class="btn-primary" onclick={handleSubmit} disabled={loading}>
+          <button class="btn btn-primary" onclick={handleSubmit} disabled={loading}>
             {#if loading}
               Saving...
             {:else if mode === 'create'}
