@@ -9,6 +9,7 @@ pub mod database;
 pub mod errors;
 pub mod metadata;
 pub mod models;
+pub mod remote_metadata;
 pub mod scanner;
 pub mod tag_sidecar;
 pub mod thumbnails;
