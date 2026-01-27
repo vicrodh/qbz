@@ -1552,6 +1552,7 @@
             ? (track.localTrackId !== undefined && activeTrackId === track.localTrackId)
             : activeTrackId === track.id
         )}
+        {@const isTrackPlaying = isActiveTrack && isPlaybackActive}
         {@const available = isTrackAvailable(track)}
         <div
           class="track-row-wrapper"
@@ -1610,7 +1611,7 @@
               : track.hires
                 ? 'Hi-Res'
                 : '-'}
-            isPlaying={isActiveTrack}
+            isPlaying={isTrackPlaying}
             isLocal={track.isLocal}
             hideFavorite={track.isLocal}
             hideDownload={track.isLocal}
@@ -2206,9 +2207,9 @@
 
   .reorder-controls {
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     margin-right: 8px;
     flex-shrink: 0;
   }
