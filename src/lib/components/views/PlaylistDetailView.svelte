@@ -23,7 +23,12 @@
     duration: number;
     track_number: number;
     performer?: { id?: number; name: string };
-    album?: { id: string; title: string; image: { small?: string; thumbnail?: string; large?: string } };
+    album?: {
+      id: string;
+      title: string;
+      image: { small?: string; thumbnail?: string; large?: string };
+      label?: { id: number; name: string };
+    };
     hires: boolean;
     maximum_bit_depth?: number;
     maximum_sampling_rate?: number;
@@ -62,6 +67,9 @@
     localTrackId?: number;
     artworkPath?: string;
     playlistTrackId?: number; // Qobuz playlist-specific ID for removal
+    label?: string;           // Record label name from Qobuz
+    addedIndex?: number;      // Original position in playlist (proxy for date added)
+    customPosition?: number;  // User-defined position for custom arrange mode
   }
 
   // Local library track from backend
@@ -112,7 +120,7 @@
     last_played_at?: number;
   }
 
-  type SortField = 'default' | 'title' | 'artist' | 'album' | 'duration';
+  type SortField = 'default' | 'title' | 'artist' | 'album' | 'duration' | 'added' | 'label' | 'custom';
   type SortOrder = 'asc' | 'desc';
 
   interface Props {
@@ -422,6 +430,8 @@
               bitDepth: t.maximum_bit_depth,
               samplingRate: t.maximum_sampling_rate,
               isrc: t.isrc,
+              label: t.album?.label?.name,
+              addedIndex: idx,
             }));
 
             // Update duration
@@ -455,6 +465,8 @@
             samplingRate: t.maximum_sampling_rate,
             isrc: t.isrc,
             playlistTrackId: t.playlist_track_id,
+            label: t.album?.label?.name,
+            addedIndex: idx,
           }));
         }
       }
@@ -662,6 +674,23 @@
           case 'duration':
             cmp = a.durationSeconds - b.durationSeconds;
             break;
+          case 'added':
+            // Use original index as proxy for date added
+            // ASC = newest first (higher index = more recent), DESC = oldest first
+            cmp = (b.addedIndex ?? 0) - (a.addedIndex ?? 0);
+            break;
+          case 'label':
+            const labelA = a.label || '';
+            const labelB = b.label || '';
+            // Tracks without label (local tracks) go to end
+            if (!labelA && labelB) return 1;
+            if (labelA && !labelB) return -1;
+            cmp = labelA.localeCompare(labelB);
+            break;
+          case 'custom':
+            // Use customPosition if available, otherwise preserve original order
+            cmp = (a.customPosition ?? a.addedIndex ?? 0) - (b.customPosition ?? b.addedIndex ?? 0);
+            break;
         }
         return sortOrder === 'desc' ? -cmp : cmp;
       });
@@ -676,6 +705,9 @@
     { field: 'artist', label: 'Artist' },
     { field: 'album', label: 'Album' },
     { field: 'duration', label: 'Duration' },
+    { field: 'added', label: 'Added Recently' },
+    { field: 'label', label: 'Label' },
+    { field: 'custom', label: 'Custom Order' },
   ];
 
   function formatDuration(seconds: number): string {
