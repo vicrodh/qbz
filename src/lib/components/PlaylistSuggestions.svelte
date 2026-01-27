@@ -10,12 +10,15 @@
     dismissTrack,
     formatDuration
   } from '$lib/services/playlistSuggestionsService';
+  import TrackInfoModal from './TrackInfoModal.svelte';
 
   interface Props {
     playlistId: number;
     artists: PlaylistArtist[];
     excludeTrackIds: number[];
     onAddTrack?: (trackId: number) => Promise<void>;
+    onGoToAlbum?: (albumId: string) => void;
+    onGoToArtist?: (artistId: number) => void;
     showReasons?: boolean;
   }
 
@@ -24,8 +27,36 @@
     artists,
     excludeTrackIds,
     onAddTrack,
+    onGoToAlbum,
+    onGoToArtist,
     showReasons = false
   }: Props = $props();
+
+  // TrackInfo modal state
+  let trackInfoOpen = $state(false);
+  let trackInfoId = $state<number | null>(null);
+
+  function handleShowTrackInfo(trackId: number) {
+    trackInfoId = trackId;
+    trackInfoOpen = true;
+  }
+
+  function handleCloseTrackInfo() {
+    trackInfoOpen = false;
+    trackInfoId = null;
+  }
+
+  function handleArtistClick(artistId: number | undefined) {
+    if (artistId && onGoToArtist) {
+      onGoToArtist(artistId);
+    }
+  }
+
+  function handleAlbumClick(albumId: string | undefined) {
+    if (albumId && onGoToAlbum) {
+      onGoToAlbum(albumId);
+    }
+  }
 
   // State
   let loading = $state(false);
@@ -40,6 +71,11 @@
   const VISIBLE_COUNT = 6;
   const INITIAL_POOL = 18;  // 3 pages worth
   const EXPANDED_POOL = 60; // Full pool on demand
+  const MAX_POOL = 120; // Maximum pool for "load more variety"
+
+  // Track user interaction to detect when they want more variety
+  let completedCycles = $state(0); // How many times user cycled through all pages
+  let lastAddedAt = $state(0); // Track count when last track was added
 
   // Derived state
   const dismissedIds = $derived(getDismissedTrackIds(playlistId));
@@ -52,7 +88,9 @@
   );
   const hasMorePages = $derived(currentPage < totalPages - 1);
   const canLoadMore = $derived(hasLoadedOnce && pool.length < EXPANDED_POOL && !loadingMore);
+  const canLoadMoreVariety = $derived(hasLoadedOnce && pool.length >= EXPANDED_POOL && pool.length < MAX_POOL && !loadingMore);
   const isEmpty = $derived(filteredPool.length === 0 && !loading && hasLoadedOnce);
+  const showVarietyPrompt = $derived(completedCycles >= 1 && canLoadMoreVariety);
 
   // Track the last playlist we loaded for
   let lastLoadedPlaylistId = $state<number | null>(null);
@@ -74,6 +112,8 @@
       lastLoadedPlaylistId = currentPlaylistId;
       hasLoadedOnce = false;
       pool = [];
+      completedCycles = 0;
+      lastAddedAt = 0;
       void loadSuggestions(false);
     }
   });
@@ -144,15 +184,46 @@
 
   function handleRefresh() {
     if (hasMorePages) {
-      // Rotate to next page
-      currentPage = (currentPage + 1) % totalPages;
-    } else if (canLoadMore) {
-      // Load more tracks
-      void handleLoadMore();
-    } else {
-      // Reload from scratch
-      hasLoadedOnce = false;
-      void loadSuggestions(false);
+      // Go to next page
+      currentPage = currentPage + 1;
+    } else if (totalPages > 0) {
+      // Completed a cycle - wrap to first page
+      currentPage = 0;
+      completedCycles++;
+      log(`Completed cycle ${completedCycles}, pool size: ${pool.length}`);
+
+      // If we can load more, do it automatically after first cycle
+      if (completedCycles === 1 && canLoadMore) {
+        void handleLoadMore();
+      }
+    }
+  }
+
+  async function handleLoadMoreVariety() {
+    if (loadingMore || pool.length >= MAX_POOL) return;
+
+    loadingMore = true;
+    log('Loading more variety...');
+
+    try {
+      const moreResult = await getPlaylistSuggestionsV2(
+        artists,
+        excludeTrackIds,
+        showReasons,
+        { max_pool_size: MAX_POOL }
+      );
+
+      // Merge new tracks, avoiding duplicates
+      const existingIds = new Set(pool.map(t => t.track_id));
+      const newTracks = moreResult.tracks.filter(t => !existingIds.has(t.track_id));
+      pool = [...pool, ...newTracks];
+      result = moreResult;
+      completedCycles = 0; // Reset cycle counter
+      log(`Added ${newTracks.length} new tracks, total pool: ${pool.length}`);
+    } catch (err) {
+      console.error('Failed to load more variety:', err);
+    } finally {
+      loadingMore = false;
     }
   }
 
@@ -163,6 +234,9 @@
       await onAddTrack(track.track_id);
       // Remove from pool locally (will be excluded on next load anyway)
       pool = pool.filter(t => t.track_id !== track.track_id);
+      // Reset cycle counter - user found something they liked
+      completedCycles = 0;
+      lastAddedAt = pool.length;
     } catch (err) {
       console.error('Failed to add track:', err);
     }
@@ -174,12 +248,15 @@
     pool = [...pool];
   }
 
-  function getAlbumArt(albumId: string): string {
-    if (!albumId) return '';
-    // Qobuz album art URL pattern
-    return `https://static.qobuz.com/images/covers/${albumId}_50.jpg`;
-  }
 </script>
+
+<!-- Track Info Modal -->
+<TrackInfoModal
+  isOpen={trackInfoOpen}
+  trackId={trackInfoId}
+  onClose={handleCloseTrackInfo}
+  onArtistClick={onGoToArtist}
+/>
 
 {#if artists.length > 0 && !isEmpty}
   <div class="suggestions-section" id="suggestions-anchor">
@@ -219,9 +296,9 @@
         {#each visibleTracks as track (track.track_id)}
           <div class="suggestion-row">
             <div class="album-art">
-              {#if track.album_id}
+              {#if track.album_image_url}
                 <img
-                  src={getAlbumArt(track.album_id)}
+                  src={track.album_image_url}
                   alt=""
                   loading="lazy"
                   onerror={(e) => {
@@ -235,10 +312,28 @@
             <div class="track-info">
               <div class="track-title">{track.title}</div>
               <div class="track-meta">
-                <span class="artist">{track.artist_name}</span>
+                {#if track.artist_id && onGoToArtist}
+                  <button
+                    class="meta-link artist"
+                    onclick={(e) => { e.stopPropagation(); handleArtistClick(track.artist_id); }}
+                  >
+                    {track.artist_name}
+                  </button>
+                {:else}
+                  <span class="artist">{track.artist_name}</span>
+                {/if}
                 {#if track.album_title}
                   <span class="separator">·</span>
-                  <span class="album">{track.album_title}</span>
+                  {#if track.album_id && onGoToAlbum}
+                    <button
+                      class="meta-link album"
+                      onclick={(e) => { e.stopPropagation(); handleAlbumClick(track.album_id); }}
+                    >
+                      {track.album_title}
+                    </button>
+                  {:else}
+                    <span class="album">{track.album_title}</span>
+                  {/if}
                 {/if}
               </div>
             </div>
@@ -247,14 +342,13 @@
               {formatDuration(track.duration)}
             </div>
 
-            {#if showReasons && track.reason}
-              <button
-                class="reason-btn"
-                title={track.reason}
-              >
-                <Info size={14} />
-              </button>
-            {/if}
+            <button
+              class="info-btn"
+              onclick={(e) => { e.stopPropagation(); handleShowTrackInfo(track.track_id); }}
+              title={showReasons && track.reason ? track.reason : 'Track info'}
+            >
+              <Info size={14} />
+            </button>
 
             <div class="actions">
               <button
@@ -276,7 +370,7 @@
         {/each}
       </div>
 
-      {#if filteredPool.length > VISIBLE_COUNT || canLoadMore}
+      {#if filteredPool.length > VISIBLE_COUNT || canLoadMore || canLoadMoreVariety}
         <div class="pagination-info">
           {#if loadingMore}
             Loading more...
@@ -284,6 +378,8 @@
             Showing {currentPage * VISIBLE_COUNT + 1}-{Math.min((currentPage + 1) * VISIBLE_COUNT, filteredPool.length)} of {filteredPool.length}
             {#if canLoadMore}
               <button class="load-more-link" onclick={handleLoadMore}>Load more</button>
+            {:else if showVarietyPrompt}
+              <button class="load-more-link" onclick={handleLoadMoreVariety}>Load more variety</button>
             {/if}
           {/if}
         </div>
@@ -467,7 +563,7 @@
     flex-shrink: 0;
   }
 
-  .reason-btn {
+  .info-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -476,14 +572,35 @@
     background: transparent;
     border: none;
     color: var(--text-muted);
-    cursor: help;
+    cursor: pointer;
     border-radius: 4px;
-    opacity: 0.5;
-    transition: opacity 150ms ease;
+    opacity: 0;
+    transition: opacity 150ms ease, background-color 150ms ease;
   }
 
-  .suggestion-row:hover .reason-btn {
-    opacity: 1;
+  .suggestion-row:hover .info-btn {
+    opacity: 0.6;
+  }
+
+  .info-btn:hover {
+    opacity: 1 !important;
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .meta-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    color: inherit;
+    cursor: pointer;
+    transition: color 150ms ease;
+  }
+
+  .meta-link:hover {
+    color: var(--accent-primary);
+    text-decoration: underline;
   }
 
   .actions {

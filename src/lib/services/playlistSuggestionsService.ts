@@ -23,9 +23,13 @@ export interface SuggestedTrack {
   track_id: number;
   title: string;
   artist_name: string;
+  /** Qobuz artist ID for navigation */
+  artist_id?: number;
   artist_mbid?: string;
   album_title: string;
   album_id: string;
+  /** Direct URL to album cover image */
+  album_image_url?: string;
   duration: number;
   similarity_score: number;
   reason?: string;
@@ -158,7 +162,7 @@ export async function cleanupVectorStore(maxAgeDays?: number): Promise<number> {
 // ============ Helpers ============
 
 /** Default number of top artists to use for suggestions */
-const DEFAULT_TOP_ARTISTS = 5;
+const DEFAULT_TOP_ARTISTS = 30;
 
 /**
  * Extract top artists from playlist tracks, sorted by frequency (track count)

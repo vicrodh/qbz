@@ -60,12 +60,16 @@ pub struct SuggestedTrack {
     pub title: String,
     /// Artist name
     pub artist_name: String,
+    /// Artist Qobuz ID (for navigation)
+    pub artist_id: Option<u64>,
     /// Artist MBID (if known)
     pub artist_mbid: Option<String>,
     /// Album title
     pub album_title: String,
     /// Album ID for cover art
     pub album_id: String,
+    /// Direct URL to album cover image
+    pub album_image_url: Option<String>,
     /// Duration in seconds
     pub duration: u32,
     /// Similarity score (higher = more similar to playlist)
@@ -118,18 +122,18 @@ impl SuggestionsEngine {
     /// Generate suggestions for a playlist
     ///
     /// # Arguments
-    /// * `playlist_artist_mbids` - MBIDs of artists in the playlist
+    /// * `playlist_artists` - Artist info (MBID, name) from the playlist
     /// * `exclude_track_ids` - Track IDs to exclude (already in playlist)
     /// * `include_reasons` - Whether to include reason strings (dev mode)
     pub async fn generate_suggestions(
         &self,
-        playlist_artist_mbids: &[String],
+        playlist_artists: &[(String, String)], // (mbid, name)
         exclude_track_ids: &HashSet<u64>,
         include_reasons: bool,
     ) -> Result<SuggestionResult, String> {
         use std::time::Instant;
 
-        if playlist_artist_mbids.is_empty() {
+        if playlist_artists.is_empty() {
             log::debug!("[SuggestionsEngine] Empty playlist, returning empty");
             return Ok(SuggestionResult {
                 tracks: Vec::new(),
@@ -139,19 +143,22 @@ impl SuggestionsEngine {
             });
         }
 
+        // Extract MBIDs for vector operations
+        let playlist_artist_mbids: Vec<String> = playlist_artists.iter().map(|(mbid, _)| mbid.clone()).collect();
+
         // 1. Ensure vectors exist for playlist artists (skip if configured)
         let step1_start = Instant::now();
         if self.config.skip_vector_build {
             log::info!("[SuggestionsEngine] Step 1: SKIPPED (skip_vector_build=true), using only cached vectors");
         } else {
-            log::info!("[SuggestionsEngine] Step 1: Ensuring vectors for {} artists", playlist_artist_mbids.len());
-            for (i, mbid) in playlist_artist_mbids.iter().enumerate() {
+            log::info!("[SuggestionsEngine] Step 1: Ensuring vectors for {} artists", playlist_artists.len());
+            for (i, (mbid, name)) in playlist_artists.iter().enumerate() {
                 let artist_start = Instant::now();
                 let _ = self
                     .builder
-                    .ensure_vector(mbid, None, None, self.config.vector_max_age_days)
+                    .ensure_vector(mbid, Some(name), None, self.config.vector_max_age_days)
                     .await;
-                log::debug!("[SuggestionsEngine] ensure_vector {}/{} took {:?}", i + 1, playlist_artist_mbids.len(), artist_start.elapsed());
+                log::debug!("[SuggestionsEngine] ensure_vector {}/{} took {:?}", i + 1, playlist_artists.len(), artist_start.elapsed());
             }
             log::info!("[SuggestionsEngine] Step 1 completed in {:?}", step1_start.elapsed());
         }
@@ -159,7 +166,7 @@ impl SuggestionsEngine {
         // 2. Compute combined playlist vector
         log::info!("[SuggestionsEngine] Step 2: Computing playlist vector");
         let step2_start = Instant::now();
-        let playlist_vector = self.compute_playlist_vector(playlist_artist_mbids).await?;
+        let playlist_vector = self.compute_playlist_vector(&playlist_artist_mbids).await?;
         log::info!("[SuggestionsEngine] Step 2 completed in {:?}, vector empty={}", step2_start.elapsed(), playlist_vector.is_empty());
 
         if playlist_vector.is_empty() {
@@ -172,37 +179,68 @@ impl SuggestionsEngine {
             });
         }
 
-        // 3. Find nearest artists (excluding playlist artists)
-        log::info!("[SuggestionsEngine] Step 3: Finding nearest artists");
+        // 3. Find related artists (using direct relationships, not vector similarity)
+        log::info!("[SuggestionsEngine] Step 3: Finding related artists");
         let step3_start = Instant::now();
         let exclude_vec: Vec<String> = playlist_artist_mbids.to_vec();
         let similar_artists = {
             let store = self.store.lock().await;
-            store.find_nearest(&playlist_vector, self.config.max_artists, &exclude_vec)?
+            // Use direct relationship lookup instead of vector similarity
+            // This finds members, collaborators, etc. from the MusicBrainz data
+            store.get_all_related_artists(&playlist_artist_mbids, &exclude_vec, self.config.max_artists)?
         };
-        log::info!("[SuggestionsEngine] Step 3 completed in {:?}, found {} similar artists", step3_start.elapsed(), similar_artists.len());
+        log::info!("[SuggestionsEngine] Step 3 completed in {:?}, found {} related artists", step3_start.elapsed(), similar_artists.len());
 
         let similar_artists_count = similar_artists.len();
         let mut source_artists = Vec::new();
         let mut all_tracks = Vec::new();
 
-        // 4. Search for tracks by similar artists
-        log::info!("[SuggestionsEngine] Step 4: Searching tracks for similar artists");
-        let step4_start = Instant::now();
+        // 4a. First, search for tracks by playlist artists themselves (highest relevance)
+        log::info!("[SuggestionsEngine] Step 4a: Searching tracks for {} playlist artists", playlist_artists.len());
+        let step4a_start = Instant::now();
+
+        for (mbid, name) in playlist_artists {
+            source_artists.push(name.clone());
+
+            // Search Qobuz for tracks by this playlist artist (similarity = 1.0)
+            // Fetch 1.5x more tracks for playlist artists (higher priority)
+            let playlist_artist_limit = (self.config.tracks_per_artist as f32 * 1.5).ceil() as usize;
+            let tracks = self.search_artist_tracks_with_limit(mbid, Some(name), 1.0, playlist_artist_limit).await;
+
+            for mut track in tracks {
+                // Skip if already in playlist
+                if exclude_track_ids.contains(&track.track_id) {
+                    continue;
+                }
+
+                if include_reasons {
+                    track.reason = Some(format!("More from {}", name));
+                }
+
+                all_tracks.push(track);
+            }
+        }
+        log::info!("[SuggestionsEngine] Step 4a completed in {:?}, got {} tracks from playlist artists", step4a_start.elapsed(), all_tracks.len());
+
+        // 4b. Then search for tracks by related/similar artists
+        log::info!("[SuggestionsEngine] Step 4b: Searching tracks for {} related artists", similar_artists.len());
+        let step4b_start = Instant::now();
+
         for (i, artist) in similar_artists.iter().enumerate() {
             if artist.similarity < self.config.min_similarity {
                 continue;
             }
 
-            source_artists.push(artist.name.clone().unwrap_or_else(|| artist.mbid.clone()));
+            if let Some(name) = &artist.name {
+                if !source_artists.contains(name) {
+                    source_artists.push(name.clone());
+                }
+            }
 
-            // Search Qobuz for tracks by this artist
-            let search_start = Instant::now();
+            // Search Qobuz for tracks by this related artist
             let tracks = self
                 .search_artist_tracks(&artist.mbid, artist.name.as_deref(), artist.similarity)
                 .await;
-            log::debug!("[SuggestionsEngine] search_artist_tracks {}/{} took {:?}, got {} tracks",
-                i + 1, similar_artists.len(), search_start.elapsed(), tracks.len());
 
             for mut track in tracks {
                 // Skip if already in playlist
@@ -216,7 +254,7 @@ impl SuggestionsEngine {
                         &artist.mbid,
                         artist.name.as_deref(),
                         artist.similarity,
-                        playlist_artist_mbids,
+                        &playlist_artist_mbids,
                     ));
                 }
 
@@ -224,19 +262,26 @@ impl SuggestionsEngine {
             }
 
             // Stop if we have enough tracks
-            if all_tracks.len() >= self.config.max_pool_size {
-                log::info!("[SuggestionsEngine] Reached pool size {} after {} artists", all_tracks.len(), i + 1);
+            if all_tracks.len() >= self.config.max_pool_size * 2 {
+                log::info!("[SuggestionsEngine] Reached extended pool size {} after {} related artists", all_tracks.len(), i + 1);
                 break;
             }
         }
-        log::info!("[SuggestionsEngine] Step 4 completed in {:?}, got {} tracks", step4_start.elapsed(), all_tracks.len());
+        log::info!("[SuggestionsEngine] Step 4b completed in {:?}, got {} total tracks", step4b_start.elapsed(), all_tracks.len());
 
-        // 5. Sort by similarity score and limit pool size
-        all_tracks.sort_by(|a, b| {
-            b.similarity_score
-                .partial_cmp(&a.similarity_score)
-                .unwrap_or(std::cmp::Ordering::Equal)
+        // 5. Deduplicate by title+artist (keeps highest similarity version)
+        let mut seen_titles: HashSet<String> = HashSet::new();
+        all_tracks.retain(|track| {
+            let key = format!("{}|{}", track.title.to_lowercase(), track.artist_name.to_lowercase());
+            seen_titles.insert(key)
         });
+
+        // 6. Shuffle tracks for variety (so same artist doesn't dominate)
+        use rand::seq::SliceRandom;
+        let mut rng = rand::thread_rng();
+        all_tracks.shuffle(&mut rng);
+
+        // 7. Limit pool size
         all_tracks.truncate(self.config.max_pool_size);
 
         Ok(SuggestionResult {
@@ -265,12 +310,23 @@ impl SuggestionsEngine {
         Ok(combined.normalize())
     }
 
-    /// Search Qobuz for tracks by an artist
+    /// Search Qobuz for tracks by an artist (uses default tracks_per_artist limit)
     async fn search_artist_tracks(
         &self,
         artist_mbid: &str,
         artist_name: Option<&str>,
         similarity: f32,
+    ) -> Vec<SuggestedTrack> {
+        self.search_artist_tracks_with_limit(artist_mbid, artist_name, similarity, self.config.tracks_per_artist).await
+    }
+
+    /// Search Qobuz for tracks by an artist with custom limit
+    async fn search_artist_tracks_with_limit(
+        &self,
+        artist_mbid: &str,
+        artist_name: Option<&str>,
+        similarity: f32,
+        limit: usize,
     ) -> Vec<SuggestedTrack> {
         let search_query = match artist_name {
             Some(name) => name.to_string(),
@@ -285,16 +341,34 @@ impl SuggestionsEngine {
 
         let client = self.qobuz_client.lock().await;
 
-        // Search for tracks by artist name
+        // Search for tracks by artist name (fetch 3x limit to have room for filtering)
         match client
-            .search_tracks(&search_query, self.config.tracks_per_artist as u32, 0, None)
+            .search_tracks(&search_query, (limit * 3) as u32, 0, None)
             .await
         {
             Ok(results) => {
                 let mut tracks = Vec::new();
+                let search_name_lower = search_query.to_lowercase();
 
                 for item in results.items {
-                    tracks.push(self.track_to_suggested(&item, artist_mbid, similarity));
+                    // Verify the track's performer matches the artist we searched for
+                    let performer_name = item
+                        .performer
+                        .as_ref()
+                        .map(|p| p.name.to_lowercase())
+                        .unwrap_or_default();
+
+                    // Check if performer name matches (fuzzy: contains or is contained)
+                    let is_match = performer_name.contains(&search_name_lower)
+                        || search_name_lower.contains(&performer_name)
+                        || names_similar(&performer_name, &search_name_lower);
+
+                    if is_match {
+                        tracks.push(self.track_to_suggested(&item, artist_mbid, similarity));
+                        if tracks.len() >= limit {
+                            break;
+                        }
+                    }
                 }
 
                 tracks
@@ -308,26 +382,35 @@ impl SuggestionsEngine {
 
     /// Convert a Track to a SuggestedTrack
     fn track_to_suggested(&self, track: &Track, artist_mbid: &str, similarity: f32) -> SuggestedTrack {
-        // Extract album info
-        let (album_title, album_id) = match &track.album {
-            Some(album) => (album.title.clone(), album.id.clone()),
-            None => (String::new(), String::new()),
+        // Extract album info including image URL
+        let (album_title, album_id, album_image_url) = match &track.album {
+            Some(album) => {
+                let image_url = album.image.thumbnail
+                    .as_ref()
+                    .or(album.image.small.as_ref())
+                    .or(album.image.large.as_ref())
+                    .cloned();
+                (album.title.clone(), album.id.clone(), image_url)
+            }
+            None => (String::new(), String::new(), None),
         };
 
-        // Extract artist name from track performer
-        let track_artist = track
+        // Extract artist name and ID from track performer
+        let (track_artist, artist_id) = track
             .performer
             .as_ref()
-            .map(|p| p.name.clone())
+            .map(|p| (p.name.clone(), p.id))
             .unwrap_or_default();
 
         SuggestedTrack {
             track_id: track.id,
             title: track.title.clone(),
             artist_name: track_artist,
+            artist_id,
             artist_mbid: Some(artist_mbid.to_string()),
             album_title,
             album_id,
+            album_image_url,
             duration: track.duration,
             similarity_score: similarity,
             reason: None,
@@ -346,6 +429,37 @@ impl SuggestionsEngine {
         let score_pct = (similarity * 100.0).round() as u32;
 
         format!("Similar to your playlist ({score_pct}% match) - {name}")
+    }
+}
+
+/// Check if two artist names are similar enough to be considered a match
+///
+/// Handles cases like "George Harrison" vs "Harrison, George" or slight variations
+fn names_similar(name1: &str, name2: &str) -> bool {
+    // Exact match
+    if name1 == name2 {
+        return true;
+    }
+
+    // Split into words and check overlap
+    let words1: HashSet<&str> = name1.split_whitespace().collect();
+    let words2: HashSet<&str> = name2.split_whitespace().collect();
+
+    if words1.is_empty() || words2.is_empty() {
+        return false;
+    }
+
+    // Count matching words
+    let matches = words1.intersection(&words2).count();
+    let min_words = words1.len().min(words2.len());
+
+    // If most words match, consider it a match
+    // For 2-word names (like "George Harrison"), need both words
+    // For longer names, allow some flexibility
+    if min_words <= 2 {
+        matches >= min_words
+    } else {
+        matches as f32 / min_words as f32 >= 0.7
     }
 }
 

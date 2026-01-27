@@ -1682,6 +1682,8 @@
         artists={playlistArtists}
         excludeTrackIds={excludeTrackIds}
         onAddTrack={handleAddSuggestedTrack}
+        onGoToAlbum={onTrackGoToAlbum}
+        onGoToArtist={onTrackGoToArtist}
         showReasons={false}
       />
     {/if}
