@@ -240,7 +240,6 @@
         </div>
 
         <div class="section">
-          <h3>Tracklist</h3>
           <div class="track-table">
             <div class="track-head">
               <div class="cell cell-head">Track</div>
@@ -576,8 +575,8 @@ input[type="number"] {
   }
 
   .ref-value {
-    font-size: 13px;
-    color: var(--text-primary);
+    font-size: 11px;
+    color: var(--text-muted);
   }
 
   .mono {
