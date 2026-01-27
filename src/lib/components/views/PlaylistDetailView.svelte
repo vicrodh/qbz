@@ -216,6 +216,10 @@
   let customOrderLoading = $state(false);
   let isCustomOrderMode = $derived(sortBy === 'custom');
 
+  // Drag and drop state
+  let draggedTrackIdx = $state<number | null>(null);
+  let dragOverIdx = $state<number | null>(null);
+
   // User ownership state (to show "Copy to Library" button for non-owned playlists)
   let currentUserId = $state<number | null>(null);
   let isOwnPlaylist = $derived(playlist !== null && currentUserId !== null && playlist.owner.id === currentUserId);
@@ -702,6 +706,50 @@
     const isLocal = track.isLocal ?? false;
     const trackId = isLocal ? Math.abs(track.id) : track.id;
     moveTrack(trackId, isLocal, currentIndex, currentIndex + 1);
+  }
+
+  // Drag and drop handlers
+  function handleDragStart(e: DragEvent, idx: number) {
+    if (!isCustomOrderMode) return;
+    draggedTrackIdx = idx;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(idx));
+    }
+  }
+
+  function handleDragOver(e: DragEvent, idx: number) {
+    if (!isCustomOrderMode || draggedTrackIdx === null) return;
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    dragOverIdx = idx;
+  }
+
+  function handleDragLeave() {
+    dragOverIdx = null;
+  }
+
+  function handleDragEnd() {
+    draggedTrackIdx = null;
+    dragOverIdx = null;
+  }
+
+  function handleDrop(e: DragEvent, toIdx: number) {
+    e.preventDefault();
+    if (!isCustomOrderMode || draggedTrackIdx === null) return;
+
+    const fromIdx = draggedTrackIdx;
+    if (fromIdx !== toIdx) {
+      const track = displayTracks[fromIdx];
+      const isLocal = track.isLocal ?? false;
+      const trackId = isLocal ? Math.abs(track.id) : track.id;
+      moveTrack(trackId, isLocal, fromIdx, toIdx);
+    }
+
+    draggedTrackIdx = null;
+    dragOverIdx = null;
   }
 
   async function selectCustomArtwork() {
@@ -1363,7 +1411,15 @@
           class="track-row-wrapper"
           class:unavailable={!available}
           class:custom-order-mode={isCustomOrderMode}
+          class:dragging={draggedTrackIdx === idx}
+          class:drag-over={dragOverIdx === idx && draggedTrackIdx !== idx}
           title={!available ? $t('offline.trackNotAvailable') : undefined}
+          draggable={isCustomOrderMode}
+          ondragstart={(e) => handleDragStart(e, idx)}
+          ondragover={(e) => handleDragOver(e, idx)}
+          ondragleave={handleDragLeave}
+          ondragend={handleDragEnd}
+          ondrop={(e) => handleDrop(e, idx)}
         >
           {#if isCustomOrderMode}
             <div class="reorder-controls">
@@ -2036,6 +2092,25 @@
   }
 
   .drag-handle:active {
+    cursor: grabbing;
+  }
+
+  /* Drag and drop styles */
+  .track-row-wrapper.dragging {
+    opacity: 0.5;
+    background: var(--drag-bg, rgba(99, 102, 241, 0.2));
+  }
+
+  .track-row-wrapper.drag-over {
+    border-top: 2px solid var(--accent-color, #6366f1);
+    margin-top: -2px;
+  }
+
+  .track-row-wrapper[draggable="true"] {
+    cursor: grab;
+  }
+
+  .track-row-wrapper[draggable="true"]:active {
     cursor: grabbing;
   }
 
