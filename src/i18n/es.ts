@@ -133,6 +133,14 @@ export const es = {
           'Escucha ahora, sincroniza después.',
         ],
       },
+      metadata: {
+        title: 'Metadatos y créditos',
+        bullets: [
+          'Integración con MusicBrainz para enriquecer artistas y álbumes.',
+          'Páginas de músicos con roles, créditos y discografía.',
+          'Editor de tags para biblioteca local con almacenamiento sidecar no destructivo.',
+        ],
+      },
     },
   },
   downloads: {

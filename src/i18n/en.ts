@@ -133,6 +133,14 @@ export const en = {
           'Listen now, scroll and sync later.',
         ],
       },
+      metadata: {
+        title: 'Metadata & credits',
+        bullets: [
+          'MusicBrainz integration for artist and album enrichment.',
+          'Musician pages with roles, credits, and discography.',
+          'Tag editor for local library with non-destructive sidecar storage.',
+        ],
+      },
     },
   },
   downloads: {

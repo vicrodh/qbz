@@ -4,7 +4,7 @@ import { DownloadSection } from '../components/DownloadSection'
 import { useApp } from '../lib/appContext'
 import { buildPath } from '../lib/routes'
 
-const CAPABILITY_KEYS = ['audio', 'library', 'playlists', 'desktop', 'casting', 'radio', 'offline'] as const
+const CAPABILITY_KEYS = ['audio', 'library', 'playlists', 'desktop', 'casting', 'radio', 'offline', 'metadata'] as const
 
 type CapabilityKey = (typeof CAPABILITY_KEYS)[number]
 
@@ -142,6 +142,7 @@ export function HomePage() {
     casting: '/assets/icons/cast-audio.svg',
     radio: '/assets/icons/radio-signal.svg',
     offline: '/assets/icons/offline-small.svg',
+    metadata: '/assets/icons/cd-music.svg',
   }
 
   const goals = t('goals.items', { returnObjects: true }) as Array<{ title: string; text: string }>
