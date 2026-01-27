@@ -127,6 +127,8 @@
   let lyricsCacheStats = $state<{ entries: number; sizeBytes: number } | null>(null);
   let isClearingMusicBrainz = $state(false);
   let musicBrainzCacheStats = $state<{ recordings: number; artists: number; releases: number; relations: number } | null>(null);
+  let isClearingVectorStore = $state(false);
+  let vectorStoreStats = $state<{ artist_count: number; vector_count: number; entry_count: number } | null>(null);
 
   // Migration state
   let showMigrationModal = $state(false);
@@ -555,6 +557,9 @@
 
     // Load MusicBrainz cache stats
     loadMusicBrainzCacheStats();
+
+    // Load vector store stats
+    loadVectorStoreStats();
 
     // Load audio devices first (includes PipeWire sinks), then settings
     // Also load backends and ALSA plugins
@@ -1615,6 +1620,29 @@
     }
   }
 
+  async function loadVectorStoreStats() {
+    try {
+      vectorStoreStats = await invoke('get_vector_store_stats');
+    } catch (err) {
+      console.error('Failed to load vector store stats:', err);
+      vectorStoreStats = null;
+    }
+  }
+
+  async function handleClearVectorStore() {
+    if (isClearingVectorStore) return;
+    isClearingVectorStore = true;
+    try {
+      await invoke('clear_vector_store');
+      console.log('Artist vector store cleared');
+      await loadVectorStoreStats();
+    } catch (err) {
+      console.error('Failed to clear vector store:', err);
+    } finally {
+      isClearingVectorStore = false;
+    }
+  }
+
   function formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -2399,7 +2427,7 @@
         {isClearingLyrics ? $t('settings.storage.clearing') : $t('actions.clear')}
       </button>
     </div>
-    <div class="setting-row last">
+    <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">MusicBrainz Cache</span>
         <small class="setting-note">
@@ -2416,6 +2444,25 @@
         disabled={isClearingMusicBrainz || !musicBrainzCacheStats || (musicBrainzCacheStats.artists === 0 && musicBrainzCacheStats.relations === 0 && musicBrainzCacheStats.recordings === 0)}
       >
         {isClearingMusicBrainz ? $t('settings.storage.clearing') : $t('actions.clear')}
+      </button>
+    </div>
+    <div class="setting-row last">
+      <div class="setting-info">
+        <span class="setting-label">Artist Vectors (Suggestions)</span>
+        <small class="setting-note">
+          {#if vectorStoreStats}
+            {vectorStoreStats.artist_count} artists, {vectorStoreStats.entry_count} relations
+          {:else}
+            -
+          {/if}
+        </small>
+      </div>
+      <button
+        class="clear-btn"
+        onclick={handleClearVectorStore}
+        disabled={isClearingVectorStore || !vectorStoreStats || vectorStoreStats.entry_count === 0}
+      >
+        {isClearingVectorStore ? $t('settings.storage.clearing') : $t('actions.clear')}
       </button>
     </div>
   </section>

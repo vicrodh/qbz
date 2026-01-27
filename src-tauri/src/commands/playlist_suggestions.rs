@@ -59,8 +59,9 @@ pub async fn get_playlist_suggestions_v2(
     let skip_network = config.skip_vector_build;
 
     // Resolve artist names to MBIDs (with caching)
+    // Store (mbid, name) tuples so we can search for tracks by name
     let resolve_start = Instant::now();
-    let mut artist_mbids = Vec::new();
+    let mut artist_info: Vec<(String, String)> = Vec::new(); // (mbid, name)
     let mut cached_count = 0;
     let mut resolved_count = 0;
     let mut skipped_count = 0;
@@ -77,7 +78,7 @@ pub async fn get_playlist_suggestions_v2(
                 if resolved.confidence != MatchConfidence::None
                     && resolved.confidence != MatchConfidence::Low
                 {
-                    artist_mbids.push(mbid);
+                    artist_info.push((mbid, artist.name.clone()));
                     cached_count += 1;
                     continue;
                 }
@@ -117,7 +118,7 @@ pub async fn get_playlist_suggestions_v2(
                             let cache = mb_state.cache.lock().await;
                             let _ = cache.set_artist(&artist.name, &resolved);
                         }
-                        artist_mbids.push(mbid);
+                        artist_info.push((mbid, artist.name.clone()));
                         resolved_count += 1;
                         continue;
                     }
@@ -148,7 +149,7 @@ pub async fn get_playlist_suggestions_v2(
         skip_network
     );
 
-    if artist_mbids.is_empty() {
+    if artist_info.is_empty() {
         log::warn!("[Suggestions] No MBIDs resolved, returning empty result");
         return Ok(SuggestionResult {
             tracks: Vec::new(),
@@ -182,11 +183,11 @@ pub async fn get_playlist_suggestions_v2(
     let exclude_set: HashSet<u64> = input.exclude_track_ids.into_iter().collect();
 
     // Generate suggestions
-    log::info!("[Suggestions] Calling engine.generate_suggestions with {} MBIDs", artist_mbids.len());
+    log::info!("[Suggestions] Calling engine.generate_suggestions with {} artists", artist_info.len());
     let engine_start = std::time::Instant::now();
 
     let result = engine
-        .generate_suggestions(&artist_mbids, &exclude_set, input.include_reasons)
+        .generate_suggestions(&artist_info, &exclude_set, input.include_reasons)
         .await;
 
     let engine_elapsed = engine_start.elapsed();
@@ -228,4 +229,13 @@ pub async fn cleanup_vector_store(
     let max_age_secs = max_age_days.unwrap_or(30) * 24 * 60 * 60;
     let mut store = store_state.store.lock().await;
     store.cleanup_expired(max_age_secs)
+}
+
+/// Clear all vector store data
+#[tauri::command]
+pub async fn clear_vector_store(
+    store_state: State<'_, ArtistVectorStoreState>,
+) -> Result<usize, String> {
+    let mut store = store_state.store.lock().await;
+    store.clear_all()
 }

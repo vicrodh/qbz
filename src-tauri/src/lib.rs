@@ -536,6 +536,7 @@ pub fn run() {
             commands::get_playlist_suggestions_v2,
             commands::get_vector_store_stats,
             commands::cleanup_vector_store,
+            commands::clear_vector_store,
             // Favorites commands
             commands::get_favorites,
             commands::add_favorite,
