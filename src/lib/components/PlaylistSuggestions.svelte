@@ -57,28 +57,45 @@
   // Load suggestions when artists change
   $effect(() => {
     if (artists.length > 0 && !hasLoadedOnce) {
+      console.log('[Suggestions] Effect triggered, artists:', artists.length);
       void loadSuggestions(false);
     }
   });
 
   async function loadSuggestions(expanded: boolean) {
-    if (loading) return;
+    if (loading) {
+      console.log('[Suggestions] Already loading, skipping');
+      return;
+    }
+
+    const poolSize = expanded ? EXPANDED_POOL : INITIAL_POOL;
+    console.log(`[Suggestions] Starting load (expanded=${expanded}, poolSize=${poolSize}, artists=${artists.length})`);
+    const startTime = performance.now();
 
     loading = true;
     error = null;
 
     try {
+      console.log('[Suggestions] Calling backend...');
       result = await getPlaylistSuggestionsV2(
         artists,
         excludeTrackIds,
         showReasons,
-        { max_pool_size: expanded ? EXPANDED_POOL : INITIAL_POOL }
+        { max_pool_size: poolSize }
       );
+      const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+      console.log(`[Suggestions] Backend returned in ${elapsed}s:`, {
+        tracks: result.tracks.length,
+        sourceArtists: result.source_artists.length,
+        playlistArtists: result.playlist_artists_count,
+        similarArtists: result.similar_artists_count
+      });
       pool = result.tracks;
       currentPage = 0;
       hasLoadedOnce = true;
     } catch (err) {
-      console.error('Failed to load suggestions:', err);
+      const elapsed = ((performance.now() - startTime) / 1000).toFixed(2);
+      console.error(`[Suggestions] Failed after ${elapsed}s:`, err);
       error = err instanceof Error ? err.message : 'Failed to load suggestions';
       pool = [];
     } finally {

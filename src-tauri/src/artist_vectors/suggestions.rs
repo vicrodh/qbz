@@ -123,7 +123,10 @@ impl SuggestionsEngine {
         exclude_track_ids: &HashSet<u64>,
         include_reasons: bool,
     ) -> Result<SuggestionResult, String> {
+        use std::time::Instant;
+
         if playlist_artist_mbids.is_empty() {
+            log::debug!("[SuggestionsEngine] Empty playlist, returning empty");
             return Ok(SuggestionResult {
                 tracks: Vec::new(),
                 source_artists: Vec::new(),
@@ -133,17 +136,26 @@ impl SuggestionsEngine {
         }
 
         // 1. Ensure vectors exist for playlist artists
-        for mbid in playlist_artist_mbids {
+        log::info!("[SuggestionsEngine] Step 1: Ensuring vectors for {} artists", playlist_artist_mbids.len());
+        let step1_start = Instant::now();
+        for (i, mbid) in playlist_artist_mbids.iter().enumerate() {
+            let artist_start = Instant::now();
             let _ = self
                 .builder
                 .ensure_vector(mbid, None, None, self.config.vector_max_age_days)
                 .await;
+            log::debug!("[SuggestionsEngine] ensure_vector {}/{} took {:?}", i + 1, playlist_artist_mbids.len(), artist_start.elapsed());
         }
+        log::info!("[SuggestionsEngine] Step 1 completed in {:?}", step1_start.elapsed());
 
         // 2. Compute combined playlist vector
+        log::info!("[SuggestionsEngine] Step 2: Computing playlist vector");
+        let step2_start = Instant::now();
         let playlist_vector = self.compute_playlist_vector(playlist_artist_mbids).await?;
+        log::info!("[SuggestionsEngine] Step 2 completed in {:?}, vector empty={}", step2_start.elapsed(), playlist_vector.is_empty());
 
         if playlist_vector.is_empty() {
+            log::warn!("[SuggestionsEngine] Playlist vector is empty, returning empty result");
             return Ok(SuggestionResult {
                 tracks: Vec::new(),
                 source_artists: Vec::new(),
@@ -153,18 +165,23 @@ impl SuggestionsEngine {
         }
 
         // 3. Find nearest artists (excluding playlist artists)
+        log::info!("[SuggestionsEngine] Step 3: Finding nearest artists");
+        let step3_start = Instant::now();
         let exclude_vec: Vec<String> = playlist_artist_mbids.to_vec();
         let similar_artists = {
             let store = self.store.lock().await;
             store.find_nearest(&playlist_vector, self.config.max_artists, &exclude_vec)?
         };
+        log::info!("[SuggestionsEngine] Step 3 completed in {:?}, found {} similar artists", step3_start.elapsed(), similar_artists.len());
 
         let similar_artists_count = similar_artists.len();
         let mut source_artists = Vec::new();
         let mut all_tracks = Vec::new();
 
         // 4. Search for tracks by similar artists
-        for artist in &similar_artists {
+        log::info!("[SuggestionsEngine] Step 4: Searching tracks for similar artists");
+        let step4_start = Instant::now();
+        for (i, artist) in similar_artists.iter().enumerate() {
             if artist.similarity < self.config.min_similarity {
                 continue;
             }
@@ -172,9 +189,12 @@ impl SuggestionsEngine {
             source_artists.push(artist.name.clone().unwrap_or_else(|| artist.mbid.clone()));
 
             // Search Qobuz for tracks by this artist
+            let search_start = Instant::now();
             let tracks = self
                 .search_artist_tracks(&artist.mbid, artist.name.as_deref(), artist.similarity)
                 .await;
+            log::debug!("[SuggestionsEngine] search_artist_tracks {}/{} took {:?}, got {} tracks",
+                i + 1, similar_artists.len(), search_start.elapsed(), tracks.len());
 
             for mut track in tracks {
                 // Skip if already in playlist
@@ -197,9 +217,11 @@ impl SuggestionsEngine {
 
             // Stop if we have enough tracks
             if all_tracks.len() >= self.config.max_pool_size {
+                log::info!("[SuggestionsEngine] Reached pool size {} after {} artists", all_tracks.len(), i + 1);
                 break;
             }
         }
+        log::info!("[SuggestionsEngine] Step 4 completed in {:?}, got {} tracks", step4_start.elapsed(), all_tracks.len());
 
         // 5. Sort by similarity score and limit pool size
         all_tracks.sort_by(|a, b| {
