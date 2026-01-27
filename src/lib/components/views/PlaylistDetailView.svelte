@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ImagePlus, Edit3, BarChart2, Heart, CloudDownload, ListPlus } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ChevronUp, ImagePlus, Edit3, BarChart2, Heart, CloudDownload, ListPlus, GripVertical } from 'lucide-svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
@@ -23,7 +23,12 @@
     duration: number;
     track_number: number;
     performer?: { id?: number; name: string };
-    album?: { id: string; title: string; image: { small?: string; thumbnail?: string; large?: string } };
+    album?: {
+      id: string;
+      title: string;
+      image: { small?: string; thumbnail?: string; large?: string };
+      label?: { id: number; name: string };
+    };
     hires: boolean;
     maximum_bit_depth?: number;
     maximum_sampling_rate?: number;
@@ -62,6 +67,9 @@
     localTrackId?: number;
     artworkPath?: string;
     playlistTrackId?: number; // Qobuz playlist-specific ID for removal
+    label?: string;           // Record label name from Qobuz
+    addedIndex?: number;      // Original position in playlist (proxy for date added)
+    customPosition?: number;  // User-defined position for custom arrange mode
   }
 
   // Local library track from backend
@@ -112,7 +120,7 @@
     last_played_at?: number;
   }
 
-  type SortField = 'default' | 'title' | 'artist' | 'album' | 'duration';
+  type SortField = 'default' | 'title' | 'artist' | 'album' | 'duration' | 'added' | 'label' | 'custom';
   type SortOrder = 'asc' | 'desc';
 
   interface Props {
@@ -127,6 +135,7 @@
     onTrackShareSonglink?: (track: DisplayTrack) => void;
     onTrackGoToAlbum?: (albumId: string) => void;
     onTrackGoToArtist?: (artistId: number) => void;
+    onTrackShowInfo?: (trackId: number) => void;
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
@@ -155,6 +164,7 @@
     onTrackShareSonglink,
     onTrackGoToAlbum,
     onTrackGoToArtist,
+    onTrackShowInfo,
     onTrackDownload,
     onTrackRemoveDownload,
     onTrackReDownload,
@@ -200,6 +210,19 @@
   let playlistStats = $state<PlaylistStats | null>(null);
   let editModalOpen = $state(false);
   let isFavorite = $state(false);
+
+  // Custom order state
+  let customOrderMap = $state<Map<string, number>>(new Map());  // "trackId:isLocal" -> position
+  let customOrderLoading = $state(false);
+  let isCustomOrderMode = $derived(sortBy === 'custom');
+
+  // Drag and drop state
+  let draggedTrackIdx = $state<number | null>(null);
+  let dragOverIdx = $state<number | null>(null);
+
+  // Batch selection state (for custom order mode)
+  let selectedTrackKeys = $state<Set<string>>(new Set());  // Set of "trackId:isLocal" keys
+  let isSelectionMode = $derived(isCustomOrderMode && selectedTrackKeys.size > 0);
 
   // User ownership state (to show "Copy to Library" button for non-owned playlists)
   let currentUserId = $state<number | null>(null);
@@ -420,6 +443,8 @@
               bitDepth: t.maximum_bit_depth,
               samplingRate: t.maximum_sampling_rate,
               isrc: t.isrc,
+              label: t.album?.label?.name,
+              addedIndex: idx,
             }));
 
             // Update duration
@@ -453,6 +478,8 @@
             samplingRate: t.maximum_sampling_rate,
             isrc: t.isrc,
             playlistTrackId: t.playlist_track_id,
+            label: t.album?.label?.name,
+            addedIndex: idx,
           }));
         }
       }
@@ -472,6 +499,7 @@
     searchQuery = '';
     playlistSettings = null;
     isFavorite = false;
+    customOrderMap = new Map();
 
     // Skip loading settings for pending playlists
     if (playlistId < 0) {
@@ -487,6 +515,11 @@
         customArtworkPath = settings.custom_artwork_path || null;
         searchQuery = settings.last_search_query || '';
         isFavorite = settings.is_favorite ?? false;
+
+        // Load custom order if in custom mode
+        if (sortBy === 'custom') {
+          await loadOrInitCustomOrder();
+        }
       }
     } catch (err) {
       console.error('Failed to load playlist settings:', err);
@@ -541,10 +574,302 @@
     sortBy = field;
     sortOrder = order;
     showSortMenu = false;
+
+    // When switching to custom mode, load or initialize custom order
+    if (field === 'custom') {
+      await loadOrInitCustomOrder();
+    }
+
     try {
       await invoke('playlist_set_sort', { playlistId, sortBy: field, sortOrder: order });
     } catch (err) {
       console.error('Failed to save sort settings:', err);
+    }
+  }
+
+  // Load custom order from backend or initialize if not exists
+  async function loadOrInitCustomOrder() {
+    if (playlistId < 0) return; // Skip for pending playlists
+
+    customOrderLoading = true;
+    try {
+      // Check if custom order exists
+      const hasOrder = await invoke<boolean>('playlist_has_custom_order', { playlistId });
+
+      if (hasOrder) {
+        // Load existing custom order
+        const orders = await invoke<[number, boolean, number][]>('playlist_get_custom_order', { playlistId });
+        const newMap = new Map<string, number>();
+        for (const [trackId, isLocal, position] of orders) {
+          newMap.set(`${trackId}:${isLocal}`, position);
+        }
+        customOrderMap = newMap;
+      } else {
+        // Initialize from current track arrangement
+        await initCustomOrderFromCurrentTracks();
+      }
+    } catch (err) {
+      console.error('Failed to load custom order:', err);
+    } finally {
+      customOrderLoading = false;
+    }
+  }
+
+  // Initialize custom order from the current track list
+  async function initCustomOrderFromCurrentTracks() {
+    // Get all tracks in current display order (before custom sort applied)
+    const allTracks = [...tracks];
+    const localTracksInPlaylist = localTracks.map((t, idx) => ({
+      ...t,
+      playlist_position: idx
+    }));
+
+    // Build track ID list: (trackId, isLocal)
+    const trackIds: [number, boolean][] = [];
+
+    // Add Qobuz tracks first (in original order)
+    for (const t of allTracks) {
+      if (!t.isLocal) {
+        trackIds.push([t.id, false]);
+      }
+    }
+
+    // Add local tracks (by their position)
+    for (const t of localTracksInPlaylist) {
+      trackIds.push([t.id, true]);
+    }
+
+    // Save to backend
+    try {
+      await invoke('playlist_init_custom_order', { playlistId, trackIds });
+
+      // Update local state
+      const newMap = new Map<string, number>();
+      for (let i = 0; i < trackIds.length; i++) {
+        const [trackId, isLocal] = trackIds[i];
+        newMap.set(`${trackId}:${isLocal}`, i);
+      }
+      customOrderMap = newMap;
+    } catch (err) {
+      console.error('Failed to initialize custom order:', err);
+    }
+  }
+
+  // Move a track to a new position
+  async function moveTrack(trackId: number, isLocal: boolean, fromIndex: number, toIndex: number) {
+    if (fromIndex === toIndex) return;
+
+    // Optimistic update: reorder the map
+    const key = `${trackId}:${isLocal}`;
+    const newMap = new Map(customOrderMap);
+
+    // Adjust positions
+    for (const [k, pos] of newMap) {
+      if (k === key) {
+        newMap.set(k, toIndex);
+      } else if (fromIndex < toIndex) {
+        // Moving down: shift tracks between from+1 and to up
+        if (pos > fromIndex && pos <= toIndex) {
+          newMap.set(k, pos - 1);
+        }
+      } else {
+        // Moving up: shift tracks between to and from-1 down
+        if (pos >= toIndex && pos < fromIndex) {
+          newMap.set(k, pos + 1);
+        }
+      }
+    }
+    customOrderMap = newMap;
+
+    // Persist to backend
+    try {
+      await invoke('playlist_move_track', {
+        playlistId,
+        trackId: Math.abs(trackId),
+        isLocal,
+        newPosition: toIndex
+      });
+    } catch (err) {
+      console.error('Failed to move track:', err);
+      // Reload to get consistent state
+      await loadOrInitCustomOrder();
+    }
+  }
+
+  // Helper to move track up one position
+  function moveTrackUp(track: DisplayTrack, currentIndex: number) {
+    if (currentIndex === 0) return;
+    const isLocal = track.isLocal ?? false;
+    const trackId = isLocal ? Math.abs(track.id) : track.id;
+    moveTrack(trackId, isLocal, currentIndex, currentIndex - 1);
+  }
+
+  // Helper to move track down one position
+  function moveTrackDown(track: DisplayTrack, currentIndex: number) {
+    if (currentIndex >= displayTracks.length - 1) return;
+    const isLocal = track.isLocal ?? false;
+    const trackId = isLocal ? Math.abs(track.id) : track.id;
+    moveTrack(trackId, isLocal, currentIndex, currentIndex + 1);
+  }
+
+  // Drag and drop handlers
+  function handleDragStart(e: DragEvent, idx: number) {
+    if (!isCustomOrderMode) return;
+    draggedTrackIdx = idx;
+    if (e.dataTransfer) {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', String(idx));
+    }
+  }
+
+  function handleDragOver(e: DragEvent, idx: number) {
+    if (!isCustomOrderMode || draggedTrackIdx === null) return;
+    e.preventDefault();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = 'move';
+    }
+    dragOverIdx = idx;
+  }
+
+  function handleDragLeave() {
+    dragOverIdx = null;
+  }
+
+  function handleDragEnd() {
+    draggedTrackIdx = null;
+    dragOverIdx = null;
+  }
+
+  function handleDrop(e: DragEvent, toIdx: number) {
+    e.preventDefault();
+    if (!isCustomOrderMode || draggedTrackIdx === null) return;
+
+    const fromIdx = draggedTrackIdx;
+    if (fromIdx !== toIdx) {
+      const track = displayTracks[fromIdx];
+      const isLocal = track.isLocal ?? false;
+      const trackId = isLocal ? Math.abs(track.id) : track.id;
+      moveTrack(trackId, isLocal, fromIdx, toIdx);
+    }
+
+    draggedTrackIdx = null;
+    dragOverIdx = null;
+  }
+
+  // === Batch Selection Functions ===
+
+  function getTrackKey(track: DisplayTrack): string {
+    const isLocal = track.isLocal ?? false;
+    const trackId = isLocal ? Math.abs(track.id) : track.id;
+    return `${trackId}:${isLocal}`;
+  }
+
+  function toggleTrackSelection(track: DisplayTrack) {
+    const key = getTrackKey(track);
+    const newSet = new Set(selectedTrackKeys);
+    if (newSet.has(key)) {
+      newSet.delete(key);
+    } else {
+      newSet.add(key);
+    }
+    selectedTrackKeys = newSet;
+  }
+
+  function clearSelection() {
+    selectedTrackKeys = new Set();
+  }
+
+  function selectAllTracks() {
+    const newSet = new Set<string>();
+    for (const track of displayTracks) {
+      newSet.add(getTrackKey(track));
+    }
+    selectedTrackKeys = newSet;
+  }
+
+  // Move all selected tracks up one position (as a group)
+  async function moveSelectedUp() {
+    if (selectedTrackKeys.size === 0) return;
+
+    // Get indices of selected tracks (sorted)
+    const selectedIndices: number[] = [];
+    displayTracks.forEach((track, idx) => {
+      if (selectedTrackKeys.has(getTrackKey(track))) {
+        selectedIndices.push(idx);
+      }
+    });
+    selectedIndices.sort((a, b) => a - b);
+
+    // Can't move up if first selected is already at top
+    if (selectedIndices[0] === 0) return;
+
+    // Build new order: swap each selected with the one above
+    const currentOrder = displayTracks.map(t => ({
+      id: t.isLocal ? Math.abs(t.id) : t.id,
+      isLocal: t.isLocal ?? false
+    }));
+
+    // Move from top to bottom to avoid conflicts
+    for (const idx of selectedIndices) {
+      const newIdx = idx - 1;
+      [currentOrder[newIdx], currentOrder[idx]] = [currentOrder[idx], currentOrder[newIdx]];
+    }
+
+    // Save new order
+    const orders: [number, boolean, number][] = currentOrder.map((item, pos) => [item.id, item.isLocal, pos]);
+    try {
+      await invoke('playlist_set_custom_order', { playlistId, orders });
+      // Update local map
+      const newMap = new Map<string, number>();
+      orders.forEach(([id, isLocal, pos]) => {
+        newMap.set(`${id}:${isLocal}`, pos);
+      });
+      customOrderMap = newMap;
+    } catch (err) {
+      console.error('Failed to move selected tracks:', err);
+    }
+  }
+
+  // Move all selected tracks down one position (as a group)
+  async function moveSelectedDown() {
+    if (selectedTrackKeys.size === 0) return;
+
+    // Get indices of selected tracks (sorted descending for moving down)
+    const selectedIndices: number[] = [];
+    displayTracks.forEach((track, idx) => {
+      if (selectedTrackKeys.has(getTrackKey(track))) {
+        selectedIndices.push(idx);
+      }
+    });
+    selectedIndices.sort((a, b) => b - a);  // Descending
+
+    // Can't move down if last selected is already at bottom
+    if (selectedIndices[0] === displayTracks.length - 1) return;
+
+    // Build new order: swap each selected with the one below
+    const currentOrder = displayTracks.map(t => ({
+      id: t.isLocal ? Math.abs(t.id) : t.id,
+      isLocal: t.isLocal ?? false
+    }));
+
+    // Move from bottom to top to avoid conflicts
+    for (const idx of selectedIndices) {
+      const newIdx = idx + 1;
+      [currentOrder[idx], currentOrder[newIdx]] = [currentOrder[newIdx], currentOrder[idx]];
+    }
+
+    // Save new order
+    const orders: [number, boolean, number][] = currentOrder.map((item, pos) => [item.id, item.isLocal, pos]);
+    try {
+      await invoke('playlist_set_custom_order', { playlistId, orders });
+      // Update local map
+      const newMap = new Map<string, number>();
+      orders.forEach(([id, isLocal, pos]) => {
+        newMap.set(`${id}:${isLocal}`, pos);
+      });
+      customOrderMap = newMap;
+    } catch (err) {
+      console.error('Failed to move selected tracks:', err);
     }
   }
 
@@ -660,6 +985,29 @@
           case 'duration':
             cmp = a.durationSeconds - b.durationSeconds;
             break;
+          case 'added':
+            // Use original index as proxy for date added
+            // ASC = newest first (higher index = more recent), DESC = oldest first
+            cmp = (b.addedIndex ?? 0) - (a.addedIndex ?? 0);
+            break;
+          case 'label':
+            const labelA = a.label || '';
+            const labelB = b.label || '';
+            // Tracks without label (local tracks) go to end
+            if (!labelA && labelB) return 1;
+            if (labelA && !labelB) return -1;
+            cmp = labelA.localeCompare(labelB);
+            break;
+          case 'custom':
+            // Get positions from customOrderMap
+            const aIsLocal = a.isLocal ?? false;
+            const bIsLocal = b.isLocal ?? false;
+            const aKey = `${aIsLocal ? Math.abs(a.id) : a.id}:${aIsLocal}`;
+            const bKey = `${bIsLocal ? Math.abs(b.id) : b.id}:${bIsLocal}`;
+            const aPos = customOrderMap.get(aKey) ?? a.addedIndex ?? 0;
+            const bPos = customOrderMap.get(bKey) ?? b.addedIndex ?? 0;
+            cmp = aPos - bPos;
+            break;
         }
         return sortOrder === 'desc' ? -cmp : cmp;
       });
@@ -674,6 +1022,9 @@
     { field: 'artist', label: 'Artist' },
     { field: 'album', label: 'Album' },
     { field: 'duration', label: 'Duration' },
+    { field: 'added', label: 'Added Recently' },
+    { field: 'label', label: 'Label' },
+    { field: 'custom', label: 'Custom Order' },
   ];
 
   function formatDuration(seconds: number): string {
@@ -1158,7 +1509,32 @@
 
     <!-- Track List -->
     <div class="track-list">
+      {#if isCustomOrderMode}
+        <div class="batch-controls">
+          <div class="batch-left">
+            {#if selectedTrackKeys.size > 0}
+              <span class="selection-count">{selectedTrackKeys.size} selected</span>
+              <button class="batch-btn" onclick={clearSelection}>Clear</button>
+            {:else}
+              <button class="batch-btn" onclick={selectAllTracks}>Select All</button>
+            {/if}
+          </div>
+          {#if selectedTrackKeys.size > 0}
+            <div class="batch-right">
+              <button class="batch-btn" onclick={moveSelectedUp} title="Move selected up">
+                <ChevronUp size={14} /> Move Up
+              </button>
+              <button class="batch-btn" onclick={moveSelectedDown} title="Move selected down">
+                <ChevronDown size={14} /> Move Down
+              </button>
+            </div>
+          {/if}
+        </div>
+      {/if}
       <div class="track-list-header">
+        {#if isCustomOrderMode}
+          <div class="col-checkbox"></div>
+        {/if}
         <div class="col-number">#</div>
         <div class="col-title">Title</div>
         <div class="col-album">Album</div>
@@ -1176,12 +1552,53 @@
             ? (track.localTrackId !== undefined && activeTrackId === track.localTrackId)
             : activeTrackId === track.id
         )}
+        {@const isTrackPlaying = isActiveTrack && isPlaybackActive}
         {@const available = isTrackAvailable(track)}
         <div
           class="track-row-wrapper"
           class:unavailable={!available}
+          class:custom-order-mode={isCustomOrderMode}
+          class:dragging={draggedTrackIdx === idx}
+          class:drag-over={dragOverIdx === idx && draggedTrackIdx !== idx}
           title={!available ? $t('offline.trackNotAvailable') : undefined}
+          draggable={isCustomOrderMode}
+          ondragstart={(e) => handleDragStart(e, idx)}
+          ondragover={(e) => handleDragOver(e, idx)}
+          ondragleave={handleDragLeave}
+          ondragend={handleDragEnd}
+          ondrop={(e) => handleDrop(e, idx)}
         >
+          {#if isCustomOrderMode}
+            {@const trackKey = getTrackKey(track)}
+            <label class="track-checkbox" onclick={(e) => e.stopPropagation()}>
+              <input
+                type="checkbox"
+                checked={selectedTrackKeys.has(trackKey)}
+                onchange={() => toggleTrackSelection(track)}
+              />
+            </label>
+            <div class="reorder-controls">
+              <button
+                class="reorder-btn"
+                onclick={() => moveTrackUp(track, idx)}
+                disabled={idx === 0}
+                title="Move up"
+              >
+                <ChevronUp size={16} />
+              </button>
+              <div class="drag-handle" title="Drag to reorder">
+                <GripVertical size={16} />
+              </div>
+              <button
+                class="reorder-btn"
+                onclick={() => moveTrackDown(track, idx)}
+                disabled={idx === displayTracks.length - 1}
+                title="Move down"
+              >
+                <ChevronDown size={16} />
+              </button>
+            </div>
+          {/if}
           <TrackRow
             trackId={track.isLocal ? undefined : track.id}
             number={idx + 1}
@@ -1194,7 +1611,7 @@
               : track.hires
                 ? 'Hi-Res'
                 : '-'}
-            isPlaying={isActiveTrack}
+            isPlaying={isTrackPlaying}
             isLocal={track.isLocal}
             hideFavorite={track.isLocal}
             hideDownload={track.isLocal}
@@ -1213,6 +1630,7 @@
               onShareSonglink: !track.isLocal && onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined,
               onGoToAlbum: !track.isLocal && track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId!) : undefined,
               onGoToArtist: !track.isLocal && track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
+              onShowInfo: !track.isLocal && onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined,
               onDownload: !track.isLocal && onTrackDownload ? () => onTrackDownload(track) : undefined,
               isTrackDownloaded: !track.isLocal ? downloadInfo.status === 'ready' : false,
               onReDownload: !track.isLocal && downloadInfo.status === 'ready' && onTrackReDownload ? () => onTrackReDownload(track) : undefined,
@@ -1249,6 +1667,7 @@
 <style>
   .playlist-detail {
     padding: 24px;
+    padding-left: 18px;
     padding-right: 8px;
     padding-bottom: 100px;
     overflow-y: auto;
@@ -1454,12 +1873,12 @@
   .artwork-btn.artwork-clear {
     width: 36px;
     height: 36px;
-    background: rgba(255, 0, 0, 0.3);
-    border-color: rgba(255, 100, 100, 0.5);
+    background: var(--danger-bg);
+    border-color: var(--danger-border);
   }
 
   .artwork-btn.artwork-clear:hover {
-    background: rgba(255, 0, 0, 0.5);
+    background: var(--danger-hover);
   }
 
   .metadata {
@@ -1779,6 +2198,137 @@
 
   .track-row-wrapper.unavailable :global(.track-row) {
     filter: grayscale(100%);
+  }
+
+  /* Custom order mode */
+  .track-row-wrapper.custom-order-mode {
+    padding-left: 0;
+  }
+
+  .reorder-controls {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+
+  .reorder-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary, #888);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s, color 0.15s;
+  }
+
+  .reorder-btn:hover:not(:disabled) {
+    background: var(--hover-bg, rgba(255, 255, 255, 0.1));
+    color: var(--text-primary, #fff);
+  }
+
+  .reorder-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
+
+  .drag-handle {
+    color: var(--text-secondary, #888);
+    cursor: grab;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+
+  /* Drag and drop styles */
+  .track-row-wrapper.dragging {
+    opacity: 0.5;
+    background: var(--drag-bg, rgba(99, 102, 241, 0.2));
+  }
+
+  .track-row-wrapper.drag-over {
+    border-top: 2px solid var(--accent-color, #6366f1);
+    margin-top: -2px;
+  }
+
+  .track-row-wrapper[draggable="true"] {
+    cursor: grab;
+  }
+
+  .track-row-wrapper[draggable="true"]:active {
+    cursor: grabbing;
+  }
+
+  /* Batch selection controls */
+  .batch-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 16px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+
+  .batch-left, .batch-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .selection-count {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  .batch-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .batch-btn:hover {
+    background: var(--hover-bg, rgba(255, 255, 255, 0.1));
+    color: var(--text-primary);
+  }
+
+  .col-checkbox {
+    width: 24px;
+    flex-shrink: 0;
+  }
+
+  .track-checkbox {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
+  .track-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    accent-color: var(--accent-color, #6366f1);
   }
 
 </style>

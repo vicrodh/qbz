@@ -37,6 +37,7 @@
     qualityLevel?: number;
     bitDepth?: number;
     samplingRate?: number;
+    format?: string;
     isPlaying?: boolean;
     onTogglePlay?: () => void;
     onSkipBack?: () => void;
@@ -75,6 +76,7 @@
     qualityLevel = 0,
     bitDepth,
     samplingRate,
+    format,
     isPlaying = false,
     onTogglePlay,
     onSkipBack,
@@ -318,7 +320,7 @@
           </div>
 
           <div class="quality-indicator">
-            <QualityBadge {quality} {bitDepth} {samplingRate} />
+            <QualityBadge {quality} {bitDepth} {samplingRate} {format} />
             <div class="audio-badges-row">
               <AudioOutputBadges {samplingRate} />
             </div>

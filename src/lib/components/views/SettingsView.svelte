@@ -2,10 +2,13 @@
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
+  import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
   import { ArrowLeft, ChevronDown, ChevronRight, Loader2 } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import VolumeSlider from '../VolumeSlider.svelte';
+  import UpdateCheckResultModal from '../updates/UpdateCheckResultModal.svelte';
+  import WhatsNewModal from '../updates/WhatsNewModal.svelte';
   import {
     getOfflineCacheStats,
     clearOfflineCache,
@@ -55,6 +58,20 @@
     setShowContextIcon,
     type AutoplayMode
   } from '$lib/stores/playbackPreferencesStore';
+  import {
+    subscribe as subscribeUpdates,
+    checkForUpdates,
+    fetchReleaseForVersion,
+    getCurrentVersion as getUpdatesCurrentVersion,
+    getPreferences as getUpdatePreferences,
+    initUpdatesStore,
+    setCheckOnLaunch,
+    setShowWhatsNewOnLaunch,
+    type ReleaseInfo,
+    type UpdateCheckStatus,
+    type UpdatePreferences
+  } from '$lib/stores/updatesStore';
+  import { openReleasePageAndAcknowledge } from '$lib/services/updatesService';
 
   interface Props {
     onBack?: () => void;
@@ -63,6 +80,7 @@
     userEmail?: string;
     subscription?: string;
     subscriptionValidUntil?: string | null;
+    showTitleBar?: boolean;
   }
 
   interface CacheStats {
@@ -91,7 +109,8 @@
     userName = 'User',
     userEmail = '',
     subscription = 'Qobuz™',
-    subscriptionValidUntil = null
+    subscriptionValidUntil = null,
+    showTitleBar = true
   }: Props = $props();
 
   // Cache state (memory cache)
@@ -106,6 +125,8 @@
   // Lyrics cache state
   let isClearingLyrics = $state(false);
   let lyricsCacheStats = $state<{ entries: number; sizeBytes: number } | null>(null);
+  let isClearingMusicBrainz = $state(false);
+  let musicBrainzCacheStats = $state<{ recordings: number; artists: number; releases: number; relations: number } | null>(null);
 
   // Migration state
   let showMigrationModal = $state(false);
@@ -120,6 +141,16 @@
   let flatpakHelpText = $state('');
   let isCheckingNetwork = $state(false);
 
+  // Updates state
+  let updatePreferences = $state<UpdatePreferences>(getUpdatePreferences());
+  let updatesCurrentVersion = $state(getUpdatesCurrentVersion());
+  let isCheckingUpdates = $state(false);
+  let isUpdateResultOpen = $state(false);
+  let updateResultStatus = $state<UpdateCheckStatus>('no_updates');
+  let updateResultRelease = $state<ReleaseInfo | null>(null);
+  let isSettingsWhatsNewOpen = $state(false);
+  let settingsWhatsNewRelease = $state<ReleaseInfo | null>(null);
+
   // Section navigation
   let settingsViewEl: HTMLDivElement;
   let audioSection: HTMLElement;
@@ -129,11 +160,13 @@
   let downloadsSection: HTMLElement;
   let librarySection: HTMLElement;
   let integrationsSection: HTMLElement;
+  let updatesSection: HTMLElement;
   let storageSection: HTMLElement;
+  let flatpakSection: HTMLElement;
   let activeSection = $state('audio');
 
-  // Navigation section definitions (static, refs resolved at click/scroll time)
-  const navSectionDefs = [
+  // Base navigation sections (always present)
+  const baseNavSectionDefs = [
     { id: 'audio', label: 'Audio' },
     { id: 'playback', label: 'Playback' },
     { id: 'offline', label: 'Offline' },
@@ -141,8 +174,17 @@
     { id: 'downloads', label: 'Offline Library' },
     { id: 'library', label: 'Library' },
     { id: 'integrations', label: 'Integrations' },
+    { id: 'updates', label: 'Updates' },
     { id: 'storage', label: 'Storage' },
   ];
+
+  // Navigation section definitions (dynamic: includes Flatpak only when running in Flatpak)
+  // NOTE: If adding new sections, add them BEFORE Flatpak. Flatpak must always be last.
+  const navSectionDefs = $derived(
+    isFlatpak
+      ? [...baseNavSectionDefs, { id: 'flatpak', label: 'Flatpak' }]
+      : baseNavSectionDefs
+  );
 
   // Get section element by id (resolved at call time, not definition time)
   function getSectionEl(id: string): HTMLElement | undefined {
@@ -154,7 +196,9 @@
       case 'downloads': return downloadsSection;
       case 'library': return librarySection;
       case 'integrations': return integrationsSection;
+      case 'updates': return updatesSection;
       case 'storage': return storageSection;
+      case 'flatpak': return flatpakSection;
       default: return undefined;
     }
   }
@@ -164,6 +208,51 @@
     if (!el) return;
     activeSection = id;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function handleUpdateCheckOnLaunchToggle(enabled: boolean): Promise<void> {
+    await setCheckOnLaunch(enabled);
+  }
+
+  async function handleShowWhatsNewToggle(enabled: boolean): Promise<void> {
+    await setShowWhatsNewOnLaunch(enabled);
+  }
+
+  async function handleManualUpdateCheck(): Promise<void> {
+    if (isCheckingUpdates) return;
+    isCheckingUpdates = true;
+    try {
+      const result = await checkForUpdates('manual');
+      updateResultStatus = result.status;
+      updateResultRelease = result.release;
+      isUpdateResultOpen = true;
+    } finally {
+      isCheckingUpdates = false;
+    }
+  }
+
+  function handleCloseUpdateResult(): void {
+    isUpdateResultOpen = false;
+  }
+
+  function handleVisitReleaseFromResult(): void {
+    if (!updateResultRelease) return;
+    void openReleasePageAndAcknowledge(updateResultRelease);
+    isUpdateResultOpen = false;
+  }
+
+  async function handleShowCurrentChangelog(): Promise<void> {
+    const version = updatesCurrentVersion || getUpdatesCurrentVersion();
+    if (!version) return;
+    const release = await fetchReleaseForVersion(version);
+    if (!release) return;
+    settingsWhatsNewRelease = release;
+    isSettingsWhatsNewOpen = true;
+  }
+
+  function handleCloseSettingsWhatsNew(): void {
+    isSettingsWhatsNewOpen = false;
+    settingsWhatsNewRelease = null;
   }
 
   // Audio device state - use PipeWire sinks directly for friendly names
@@ -248,6 +337,8 @@
   let selectedBackend = $state<string>('Auto');
   let selectedAlsaPlugin = $state<string>('hw (Direct Hardware)');
   let alsaHardwareVolume = $state(false);
+  let streamFirstTrack = $state(false);
+  let streamBufferSeconds = $state(3);
 
   // Backend system state
   let availableBackends = $state<BackendInfo[]>([]);
@@ -396,6 +487,17 @@
   let showLastfmConfig = $state(false);
   let hasEmbeddedCredentials = $state(false);
 
+  // MusicBrainz integration state
+  let musicbrainzEnabled = $state(true);
+
+  // ListenBrainz integration state
+  let listenbrainzConnected = $state(false);
+  let listenbrainzUsername = $state('');
+  let listenbrainzEnabled = $state(true);
+  let listenbrainzToken = $state('');
+  let listenbrainzConnecting = $state(false);
+  let showListenBrainzConfig = $state(false);
+
   // Load saved settings on mount
   onMount(() => {
     // Load theme
@@ -451,6 +553,9 @@
     // Load lyrics cache stats
     loadLyricsCacheStats();
 
+    // Load MusicBrainz cache stats
+    loadMusicBrainzCacheStats();
+
     // Load audio devices first (includes PipeWire sinks), then settings
     // Also load backends and ALSA plugins
     Promise.all([
@@ -461,6 +566,12 @@
 
     // Load Last.fm state
     loadLastfmState();
+
+    // Load MusicBrainz state
+    loadMusicBrainzState();
+
+    // Load ListenBrainz state
+    loadListenBrainzState();
 
     // Load notification preferences
     loadToastsPreference();
@@ -473,6 +584,13 @@
 
     // Load tray settings
     loadTraySettings();
+
+    // Initialize updates preferences/version state
+    initUpdatesStore();
+    const unsubscribeUpdates = subscribeUpdates(() => {
+      updatePreferences = getUpdatePreferences();
+      updatesCurrentVersion = getUpdatesCurrentVersion();
+    });
 
     // Detect if running in Flatpak
     loadFlatpakStatus();
@@ -519,6 +637,7 @@
       unsubscribeOffline();
       unsubscribeZoom();
       unsubscribeTitleBar();
+      unsubscribeUpdates();
       settingsViewEl?.removeEventListener('scroll', handleScroll);
     };
   });
@@ -658,6 +777,81 @@
     localStorage.setItem('qbz-lastfm-scrobbling', String(enabled));
   }
 
+  async function loadMusicBrainzState() {
+    try {
+      musicbrainzEnabled = await invoke<boolean>('musicbrainz_is_enabled');
+    } catch (err) {
+      console.error('Failed to load MusicBrainz state:', err);
+    }
+  }
+
+  async function handleMusicBrainzChange(enabled: boolean) {
+    try {
+      await invoke('musicbrainz_set_enabled', { enabled });
+      musicbrainzEnabled = enabled;
+    } catch (err) {
+      console.error('Failed to update MusicBrainz setting:', err);
+    }
+  }
+
+  // ListenBrainz functions
+  async function loadListenBrainzState() {
+    try {
+      const status = await invoke<{
+        connected: boolean;
+        userName: string | null;
+        enabled: boolean;
+      }>('listenbrainz_get_status');
+      listenbrainzConnected = status.connected;
+      listenbrainzUsername = status.userName || '';
+      listenbrainzEnabled = status.enabled;
+    } catch (err) {
+      console.error('Failed to load ListenBrainz state:', err);
+    }
+  }
+
+  async function handleListenBrainzConnect() {
+    if (!listenbrainzToken.trim()) {
+      showListenBrainzConfig = true;
+      return;
+    }
+
+    listenbrainzConnecting = true;
+    try {
+      const userInfo = await invoke<{ user_name: string }>('listenbrainz_connect', {
+        token: listenbrainzToken.trim()
+      });
+      listenbrainzConnected = true;
+      listenbrainzUsername = userInfo.user_name;
+      listenbrainzToken = '';
+      showListenBrainzConfig = false;
+    } catch (err) {
+      console.error('Failed to connect to ListenBrainz:', err);
+      alert(`ListenBrainz error: ${err}`);
+    } finally {
+      listenbrainzConnecting = false;
+    }
+  }
+
+  async function handleListenBrainzDisconnect() {
+    try {
+      await invoke('listenbrainz_disconnect');
+      listenbrainzConnected = false;
+      listenbrainzUsername = '';
+    } catch (err) {
+      console.error('Failed to disconnect ListenBrainz:', err);
+    }
+  }
+
+  async function handleListenBrainzEnabledChange(enabled: boolean) {
+    try {
+      await invoke('listenbrainz_set_enabled', { enabled });
+      listenbrainzEnabled = enabled;
+    } catch (err) {
+      console.error('Failed to update ListenBrainz setting:', err);
+    }
+  }
+
   async function handleShowDownloadsChange(enabled: boolean) {
     try {
       await invoke('set_show_downloads_in_library', { show: enabled });
@@ -794,6 +988,8 @@
     backend_type: 'PipeWire' | 'Alsa' | 'Pulse' | null;
     alsa_plugin: 'Hw' | 'PlugHw' | 'Pcm' | null;
     alsa_hardware_volume: boolean;
+    stream_first_track: boolean;
+    stream_buffer_seconds: number;
   }
 
   interface BackendInfo {
@@ -939,6 +1135,8 @@
       }
 
       alsaHardwareVolume = settings.alsa_hardware_volume ?? false;
+      streamFirstTrack = settings.stream_first_track ?? false;
+      streamBufferSeconds = settings.stream_buffer_seconds ?? 3;
 
       // Validate mutual exclusion: DAC Passthrough disables Gapless + Crossfade
       if (dacPassthrough) {
@@ -1102,6 +1300,28 @@
       console.log('[Audio] ALSA hardware volume changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change ALSA hardware volume:', err);
+    }
+  }
+
+  async function handleStreamFirstTrackChange(enabled: boolean) {
+    streamFirstTrack = enabled;
+    try {
+      await invoke('set_audio_stream_first_track', { enabled });
+      console.log('[Audio] Stream first track changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change stream first track:', err);
+    }
+  }
+
+  async function handleStreamBufferSecondsChange(seconds: number) {
+    // Clamp to valid range
+    const clamped = Math.max(1, Math.min(10, Math.round(seconds)));
+    streamBufferSeconds = clamped;
+    try {
+      await invoke('set_audio_stream_buffer_seconds', { seconds: clamped });
+      console.log('[Audio] Stream buffer seconds changed:', clamped);
+    } catch (err) {
+      console.error('[Audio] Failed to change stream buffer seconds:', err);
     }
   }
 
@@ -1372,6 +1592,29 @@
     }
   }
 
+  async function handleClearMusicBrainzCache() {
+    if (isClearingMusicBrainz) return;
+    isClearingMusicBrainz = true;
+    try {
+      await invoke('musicbrainz_clear_cache');
+      console.log('MusicBrainz cache cleared');
+      await loadMusicBrainzCacheStats();
+    } catch (err) {
+      console.error('Failed to clear MusicBrainz cache:', err);
+    } finally {
+      isClearingMusicBrainz = false;
+    }
+  }
+
+  async function loadMusicBrainzCacheStats() {
+    try {
+      musicBrainzCacheStats = await invoke('musicbrainz_get_cache_stats');
+    } catch (err) {
+      console.error('Failed to load MusicBrainz cache stats:', err);
+      musicBrainzCacheStats = null;
+    }
+  }
+
   function formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -1402,6 +1645,23 @@
       await getCurrentWebview().setZoom(zoom);
     } catch (err) {
       console.warn('Failed to set zoom:', err);
+    }
+  }
+
+  // Flatpak copyable command state
+  let copiedCommands = $state<Record<string, boolean>>({});
+
+  async function copyCommand(key: string, command: string) {
+    try {
+      await copyToClipboard(command);
+      copiedCommands[key] = true;
+      setTimeout(() => { copiedCommands[key] = false; }, 1200);
+    } catch {
+      try {
+        await navigator.clipboard.writeText(command);
+        copiedCommands[key] = true;
+        setTimeout(() => { copiedCommands[key] = false; }, 1200);
+      } catch {}
     }
   }
 </script>
@@ -1557,6 +1817,30 @@
         <br />
         <strong>Recommended:</strong> Switch to ALSA Direct backend for true bit-perfect audio.
       </div>
+    </div>
+    {/if}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Stream Uncached Tracks</span>
+        <span class="setting-desc">Start playback faster when track is not in cache. Seeking may be limited during initial buffering.</span>
+      </div>
+      <Toggle enabled={streamFirstTrack} onchange={handleStreamFirstTrackChange} />
+    </div>
+    {#if streamFirstTrack}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Initial Buffer Size</span>
+        <span class="setting-desc">Seconds to buffer before starting playback ({streamBufferSeconds}s)</span>
+      </div>
+      <input
+        type="range"
+        min="1"
+        max="10"
+        step="1"
+        value={streamBufferSeconds}
+        oninput={(e) => handleStreamBufferSecondsChange(parseInt(e.currentTarget.value))}
+        class="buffer-slider"
+      />
     </div>
     {/if}
     <div class="setting-row last">
@@ -1767,6 +2051,7 @@
     </div>
   </section>
 
+
   <!-- Offline Library Section -->
   <section class="section" bind:this={downloadsSection}>
     <h3 class="section-title">{$t('settings.offlineLibrary.title')}</h3>
@@ -1780,13 +2065,6 @@
           Loading...
         {/if}
       </span>
-    </div>
-    <div class="setting-row">
-      <div class="setting-with-description">
-        <span class="setting-label">Show in Local Library</span>
-        <span class="setting-description">Display offline Qobuz™ tracks in your Local Library</span>
-      </div>
-      <Toggle enabled={showQobuzDownloadsInLibrary} onchange={handleShowDownloadsChange} />
     </div>
     <div class="setting-row">
       <div class="setting-with-description">
@@ -1918,7 +2196,155 @@
         </div>
       {/if}
     {/if}
+
+    <!-- ListenBrainz Integration -->
+    {#if listenbrainzConnected}
+      <div class="setting-row">
+        <div class="lastfm-connected">
+          <span class="setting-label">ListenBrainz</span>
+          <span class="lastfm-username">{$t('settings.integrations.connectedAs', { values: { username: listenbrainzUsername }})}</span>
+        </div>
+        <button
+          class="connect-btn connected"
+          onclick={handleListenBrainzDisconnect}
+        >
+          {$t('settings.integrations.disconnect')}
+        </button>
+      </div>
+      <div class="setting-row">
+        <span class="setting-label">Scrobbling</span>
+        <Toggle enabled={listenbrainzEnabled} onchange={handleListenBrainzEnabledChange} />
+      </div>
+    {:else}
+      <div class="setting-row" class:last={!showListenBrainzConfig}>
+        <span class="setting-label">ListenBrainz</span>
+        <button
+          class="connect-btn"
+          onclick={() => showListenBrainzConfig = !showListenBrainzConfig}
+          disabled={listenbrainzConnecting}
+        >
+          {listenbrainzConnecting ? 'Connecting...' : $t('settings.integrations.connect')}
+        </button>
+      </div>
+
+      {#if showListenBrainzConfig}
+        <div class="lastfm-config">
+          <p class="config-info">
+            Get your personal token from
+            <a href="https://listenbrainz.org/settings/" target="_blank" rel="noopener">
+              listenbrainz.org/settings
+            </a>
+          </p>
+          <div class="config-field">
+            <label for="listenbrainz-token">User Token</label>
+            <input
+              id="listenbrainz-token"
+              type="password"
+              bind:value={listenbrainzToken}
+              placeholder="Paste your ListenBrainz token"
+            />
+          </div>
+          <button
+            class="auth-start-btn"
+            onclick={handleListenBrainzConnect}
+            disabled={!listenbrainzToken.trim() || listenbrainzConnecting}
+          >
+            {listenbrainzConnecting ? 'Connecting...' : 'Connect'}
+          </button>
+        </div>
+      {/if}
+    {/if}
+
+    <!-- MusicBrainz Integration -->
+    <div class="setting-row last">
+      <div class="setting-info">
+        <span class="setting-label">MusicBrainz</span>
+        <small class="setting-note">
+          Enable artist relationships and enhanced metadata from MusicBrainz.
+        </small>
+      </div>
+      <Toggle enabled={musicbrainzEnabled} onchange={handleMusicBrainzChange} />
+    </div>
   </section>
+
+  <!-- Updates Section -->
+  <section class="section" bind:this={updatesSection}>
+    <h3 class="section-title">Updates</h3>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Check for new releases on launch</span>
+      </div>
+      <Toggle
+        enabled={updatePreferences.checkOnLaunch}
+        onchange={handleUpdateCheckOnLaunchToggle}
+      />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Check for updates now</span>
+      </div>
+      <button
+        class="connect-btn updates-check-btn"
+        onclick={handleManualUpdateCheck}
+        disabled={isCheckingUpdates}
+        type="button"
+      >
+        {#if isCheckingUpdates}
+          <Loader2 size={14} class="spin" />
+          <span>Checking...</span>
+        {:else}
+          <span>Check</span>
+        {/if}
+      </button>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Show what's new on new version launch</span>
+      </div>
+      <Toggle
+        enabled={updatePreferences.showWhatsNewOnLaunch}
+        onchange={handleShowWhatsNewToggle}
+      />
+    </div>
+
+    <div class="setting-row last">
+      <div class="setting-info">
+        <span class="setting-label">Show changelog for current version</span>
+        {#if updatesCurrentVersion}
+          <small class="setting-note">Current version: v{updatesCurrentVersion}</small>
+        {/if}
+      </div>
+      <button
+        class="connect-btn"
+        onclick={handleShowCurrentChangelog}
+        type="button"
+      >
+        Show
+      </button>
+    </div>
+  </section>
+
+  {#if isUpdateResultOpen}
+    <UpdateCheckResultModal
+      isOpen={isUpdateResultOpen}
+      status={updateResultStatus}
+      newVersion={updateResultRelease?.version ?? ''}
+      onClose={handleCloseUpdateResult}
+      onVisitReleasePage={handleVisitReleaseFromResult}
+    />
+  {/if}
+
+  {#if settingsWhatsNewRelease}
+    <WhatsNewModal
+      isOpen={isSettingsWhatsNewOpen}
+      release={settingsWhatsNewRelease}
+      showTitleBar={showTitleBar}
+      onClose={handleCloseSettingsWhatsNew}
+    />
+  {/if}
 
   <!-- Storage Section (Memory Cache) -->
   <section class="section" bind:this={storageSection}>
@@ -1949,7 +2375,7 @@
         {isClearing ? $t('settings.storage.clearing') : $t('actions.clear')}
       </button>
     </div>
-    <div class="setting-row last">
+    <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.lyrics.clearLyrics')}</span>
         <small class="setting-note">
@@ -1973,11 +2399,31 @@
         {isClearingLyrics ? $t('settings.storage.clearing') : $t('actions.clear')}
       </button>
     </div>
+    <div class="setting-row last">
+      <div class="setting-info">
+        <span class="setting-label">MusicBrainz Cache</span>
+        <small class="setting-note">
+          {#if musicBrainzCacheStats}
+            {musicBrainzCacheStats.artists} artists, {musicBrainzCacheStats.relations} relations, {musicBrainzCacheStats.recordings} recordings
+          {:else}
+            -
+          {/if}
+        </small>
+      </div>
+      <button
+        class="clear-btn"
+        onclick={handleClearMusicBrainzCache}
+        disabled={isClearingMusicBrainz || !musicBrainzCacheStats || (musicBrainzCacheStats.artists === 0 && musicBrainzCacheStats.relations === 0 && musicBrainzCacheStats.recordings === 0)}
+      >
+        {isClearingMusicBrainz ? $t('settings.storage.clearing') : $t('actions.clear')}
+      </button>
+    </div>
   </section>
 
   <!-- Flatpak Section (only shown when running in Flatpak) -->
+  <!-- NOTE: Keep this section LAST. If adding new settings sections, add them BEFORE this one. -->
   {#if isFlatpak}
-    <section class="section flatpak-section">
+    <section class="section flatpak-section" id="flatpak" bind:this={flatpakSection}>
       <h3 class="section-title">Flatpak Sandbox</h3>
       <div class="flatpak-info">
         <p class="flatpak-intro">
@@ -1985,16 +2431,46 @@
         </p>
         <div class="flatpak-guide">
           <h4>Grant Filesystem Access</h4>
-          <p>Use <strong>Flatseal</strong> (GUI) or run this command:</p>
-          <pre class="code-block">flatpak override --user --filesystem=/path/to/music com.blitzfc.qbz</pre>
+          <p>Use <strong>Flatseal</strong> (GUI) or run this command for each folder you want to add:</p>
+          <div class="copyable-command">
+            <pre class="code-block">flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('fs-basic', 'flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz')}>
+              {copiedCommands['fs-basic'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
           <h4>Examples</h4>
-          <pre class="code-block"># CIFS / Samba mount
+          <div class="copyable-command">
+            <pre class="code-block"># CIFS / Samba mount
 flatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz
 
 # SSHFS mount
-flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
+flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz
+
+# Custom folder (edit as needed)
+flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('fs-examples', `# CIFS / Samba mount\nflatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz\n\n# SSHFS mount\nflatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz\n\n# Custom folder (edit as needed)\nflatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz`)}>
+              {copiedCommands['fs-examples'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
           <p class="flatpak-note">
-            <strong>Note:</strong> This setting is persistent and survives reboots and updates.
+            <strong>Note:</strong> This setting is persistent and survives reboots and updates.<br />
+            <strong>Tip:</strong> You can repeat the command for as many folders as you need.
+          </p>
+        </div>
+        <div class="flatpak-guide" style="margin-top:2em;">
+          <h4>Chromecast &amp; DLNA Device Discovery</h4>
+          <p>
+            To detect Chromecast and DLNA devices on your network, you must grant network sharing permissions to the app:
+          </p>
+          <div class="copyable-command">
+            <pre class="code-block">flatpak override --user --share=network com.blitzfc.qbz</pre>
+            <button class="copy-btn" onclick={() => copyCommand('network', 'flatpak override --user --share=network com.blitzfc.qbz')}>
+              {copiedCommands['network'] ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
+          <p class="flatpak-note">
+            <strong>Note:</strong> Without this, device discovery will not work.<br />
+            You only need to do this once.
           </p>
         </div>
       </div>
@@ -2013,7 +2489,7 @@ flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
     width: 100%;
     height: 100%;
     overflow-y: auto;
-    padding: 0 32px 24px 32px;
+    padding: 0 32px 24px 18px;
     padding-right: 24px; /* Less padding on right for scrollbar */
   }
 
@@ -2400,6 +2876,23 @@ flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
     background-color: var(--accent-hover);
   }
 
+  .updates-check-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-width: 112px;
+  }
+
+  .updates-check-btn :global(.spin) {
+    animation: updates-spin 1s linear infinite;
+  }
+
+  @keyframes updates-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
   .connect-btn.connected {
     background: none;
     border: 1px solid var(--text-muted);
@@ -2734,6 +3227,79 @@ flatpak override --user --filesystem=$HOME/music-nas com.blitzfc.qbz</pre>
   .warning-content strong {
     color: rgb(251, 191, 36);
     font-weight: 600;
+  }
+
+  /* Buffer slider styling */
+  .buffer-slider {
+    width: 120px;
+    height: 4px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--alpha-20);
+    border-radius: 2px;
+    cursor: pointer;
+  }
+
+  .buffer-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 14px;
+    height: 14px;
+    background: var(--accent-color, #3b82f6);
+    border-radius: 50%;
+    cursor: pointer;
+    transition: transform 0.1s ease;
+  }
+
+  .buffer-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.1);
+  }
+
+  .buffer-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    background: var(--accent-color, #3b82f6);
+    border-radius: 50%;
+    cursor: pointer;
+    border: none;
+  }
+
+  /* Flatpak copyable command styling */
+  .copyable-command {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .copyable-command .code-block {
+    margin: 0;
+    font-size: 13px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    padding: 8px 12px;
+    user-select: all;
+    min-width: 0;
+    flex: 1;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .copy-btn {
+    background: var(--accent-primary);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.15s;
+    flex-shrink: 0;
+  }
+
+  .copy-btn:hover {
+    background: var(--accent-secondary);
   }
 </style>
 

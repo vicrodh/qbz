@@ -14,6 +14,8 @@
     artwork: string;
     title: string;
     artist: string;
+    genre?: string;
+    releaseDate?: string;
     quality?: string;
     size?: 'standard' | 'large';
     searchId?: string;
@@ -27,6 +29,7 @@
     onDownload?: () => void;
     showFavorite?: boolean;
     favoriteEnabled?: boolean;
+    showGenre?: boolean;
     isAlbumFullyDownloaded?: boolean;
     onOpenContainingFolder?: () => void;
     onReDownloadAlbum?: () => void;
@@ -38,6 +41,8 @@
     artwork,
     title,
     artist,
+    genre,
+    releaseDate,
     quality,
     size = 'standard',
     searchId,
@@ -51,6 +56,7 @@
     onDownload,
     showFavorite,
     favoriteEnabled,
+    showGenre = true,
     isAlbumFullyDownloaded = false,
     onOpenContainingFolder,
     onReDownloadAlbum,
@@ -87,6 +93,19 @@
   function handleImageError() {
     imageError = true;
   }
+
+  function formatReleaseDate(dateStr: string | undefined): string {
+    if (!dateStr) return '';
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
+    });
+  }
+
+  const formattedDate = $derived(formatReleaseDate(releaseDate));
 
   async function handleToggleFavorite(event: MouseEvent) {
     event.stopPropagation();
@@ -182,6 +201,14 @@
     <!-- Action Overlay -->
     {#if hasOverlay}
       <div class="action-overlay" class:menu-open={menuOpen}>
+        {#if showGenre && (genre || formattedDate)}
+          <div class="overlay-info">
+            {#if genre}<span class="overlay-genre">{genre}</span>{/if}
+            {#if formattedDate}
+              <span class="overlay-date">{formattedDate}</span>
+            {/if}
+          </div>
+        {/if}
         <div class="action-buttons">
           {#if showFavoriteButton}
             <button
@@ -196,6 +223,9 @@
             >
               <Heart size={18} fill={isFavorite ? 'white' : 'none'} color="white" />
             </button>
+          {:else}
+            <!-- Spacer to keep Play button centered -->
+            <div class="overlay-btn--spacer"></div>
           {/if}
           {#if onPlay}
             <button class="overlay-btn" type="button" onclick={handlePlay} title="Play">
@@ -322,9 +352,9 @@
     justify-content: center;
     opacity: 0;
     transition: opacity 150ms ease;
-    background: rgba(10, 10, 10, 0.25);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
+    background: rgba(10, 10, 10, 0.75);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     pointer-events: auto;
     border-radius: inherit;
     z-index: 2;
@@ -345,6 +375,24 @@
     left: 50%;
     top: 75%;
     transform: translate(-50%, -50%);
+    opacity: 0;
+  }
+
+  .album-card:hover .action-buttons,
+  .action-overlay:focus-within .action-buttons,
+  .action-overlay.menu-open .action-buttons {
+    animation: slide-in-down 0.4s ease-out forwards;
+  }
+
+  @keyframes slide-in-down {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, calc(-50% - 12px));
+    }
+    100% {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
   }
 
   .overlay-btn {
@@ -388,6 +436,57 @@
   .overlay-btn--minor {
     width: 30px;
     height: 30px;
+  }
+
+  .overlay-btn--spacer {
+    width: 30px;
+    height: 30px;
+    visibility: hidden;
+  }
+
+  .overlay-info {
+    align-self: flex-start;
+    width: 100%;
+    text-align: left;
+    padding: 14px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  .album-card:hover .overlay-info,
+  .action-overlay:focus-within .overlay-info,
+  .action-overlay.menu-open .overlay-info {
+    animation: slide-in-up 0.4s ease-out forwards;
+  }
+
+  @keyframes slide-in-up {
+    0% {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .overlay-genre {
+    font-size: 14px;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  .overlay-date {
+    font-size: 12px;
+    font-weight: 400;
+    color: rgba(255, 255, 255, 0.85);
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   }
 
   :global(.album-card .album-menu) {

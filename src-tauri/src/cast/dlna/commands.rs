@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 use crate::api::models::Quality;
 use crate::AppState;
 use crate::cast::dlna::{
-    DiscoveredDlnaDevice, DlnaConnection, DlnaDiscovery, DlnaError, DlnaMetadata, DlnaStatus,
+    DiscoveredDlnaDevice, DlnaConnection, DlnaDiscovery, DlnaError, DlnaMetadata, DlnaPositionInfo, DlnaStatus,
 };
 use crate::cast::MediaServer;
 
@@ -101,6 +101,14 @@ pub async fn dlna_get_status(state: State<'_, DlnaState>) -> Result<DlnaStatus, 
     Ok(conn.get_status())
 }
 
+/// Get current playback position from DLNA device
+#[tauri::command]
+pub async fn dlna_get_position(state: State<'_, DlnaState>) -> Result<DlnaPositionInfo, String> {
+    let connection = state.connection.lock().await;
+    let conn = connection.as_ref().ok_or_else(|| "Not connected".to_string())?;
+    conn.get_position_info().await.map_err(|e| e.to_string())
+}
+
 // === Playback ===
 
 /// Play a Qobuz track on the DLNA device
@@ -111,6 +119,8 @@ pub async fn dlna_play_track(
     dlna_state: State<'_, DlnaState>,
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
+    log::info!("DLNA: dlna_play_track called for track_id={}", track_id);
+    
     // Get stream URL from Qobuz
     let stream_url = {
         let client = app_state.client.lock().await;
@@ -152,11 +162,14 @@ pub async fn dlna_play_track(
         url.ok_or_else(|| "Failed to build media URL".to_string())?
     };
 
+    log::info!("DLNA: Playing track {} via MediaServer URL: {}", track_id, url);
+    log::info!("DLNA: Content-Type from Qobuz: {}", content_type);
+
     // Load media on DLNA device
     {
         let mut connection = dlna_state.connection.lock().await;
         let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
-        conn.load_media(&url, &metadata).await.map_err(|e| e.to_string())?;
+        conn.load_media(&url, &metadata, &content_type).await.map_err(|e| e.to_string())?;
     }
 
     // Start playback

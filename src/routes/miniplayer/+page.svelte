@@ -364,7 +364,7 @@
     width: 100%;
     height: 100%;
     background: transparent;
-    color: white;
+    color: var(--text-primary);
     user-select: none;
     overflow: hidden;
     padding: 8px;
@@ -441,8 +441,8 @@
   }
 
   .restore-btn:hover {
-    background: rgba(99, 102, 241, 0.3);
-    color: #a5b4fc;
+    background: var(--accent-bg);
+    color: var(--accent-primary);
   }
 
   .track-info {
@@ -461,7 +461,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: #fff;
+    color: var(--text-primary);
     line-height: 1.4;
   }
 
@@ -513,7 +513,7 @@
 
   .progress-fill {
     height: 100%;
-    background: #6366f1;
+    background: var(--accent-primary);
     border-radius: 2px;
     transition: width 100ms linear;
   }
@@ -568,7 +568,7 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: #fff;
+    background: var(--text-primary);
     opacity: 0;
     transition: opacity 150ms ease;
   }
@@ -584,7 +584,7 @@
     padding: 2px 6px;
     border-radius: 999px;
     background: rgba(0, 0, 0, 0.6);
-    color: #fff;
+    color: var(--text-primary);
     font-size: 11px;
     opacity: 0;
     transform: translateY(4px);
@@ -612,7 +612,7 @@
 
   .ctrl-btn:hover {
     background: var(--alpha-8);
-    color: #fff;
+    color: var(--text-primary);
   }
 
   .ctrl-btn:active {
@@ -620,7 +620,7 @@
   }
 
   .ctrl-btn.active {
-    color: #818cf8;
+    color: var(--accent-primary);
   }
 
   .ctrl-btn.play {

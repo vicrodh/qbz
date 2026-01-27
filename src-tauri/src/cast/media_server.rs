@@ -38,8 +38,14 @@ pub struct MediaServer {
 
 impl MediaServer {
     /// Start server on available port
+    /// Uses port 9876 by default for DLNA compatibility, falls back to random port if busy
     pub fn start() -> Result<Self, CastError> {
-        let server = Server::http("0.0.0.0:0")
+        // Try fixed port first for easier firewall configuration
+        let server = Server::http("0.0.0.0:9876")
+            .or_else(|_| {
+                log::warn!("MediaServer: Port 9876 busy, using random port");
+                Server::http("0.0.0.0:0")
+            })
             .map_err(|e| CastError::Server(format!("Failed to start HTTP server: {}", e)))?;
 
         let port = server
@@ -50,14 +56,18 @@ impl MediaServer {
 
         let base_ip = local_ip().unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
         let base_url = format_base_url(base_ip, port);
+        
+        log::info!("MediaServer: Started on {}:{} (base_url: {})", base_ip, port, base_url);
 
         let entries = Arc::new(Mutex::new(HashMap::new()));
         let shutdown = Arc::new(AtomicBool::new(false));
 
         let entries_clone = entries.clone();
         let shutdown_clone = shutdown.clone();
+        let port_for_log = port;
 
         let handle = thread::spawn(move || {
+            log::info!("MediaServer: Thread started, listening on port {}", port_for_log);
             while !shutdown_clone.load(Ordering::SeqCst) {
                 match server.recv_timeout(Duration::from_millis(250)) {
                     Ok(Some(request)) => {
@@ -65,9 +75,13 @@ impl MediaServer {
                         let _ = request.respond(response);
                     }
                     Ok(None) => {}
-                    Err(_) => break,
+                    Err(e) => {
+                        log::error!("MediaServer: Thread error: {:?}, exiting", e);
+                        break;
+                    }
                 }
             }
+            log::info!("MediaServer: Thread exiting");
         });
 
         Ok(Self {
@@ -177,18 +191,31 @@ fn handle_request(
     request: &tiny_http::Request,
     entries: &Arc<Mutex<HashMap<u64, MediaEntry>>>,
 ) -> Response<std::io::Cursor<Vec<u8>>> {
+    // Log all incoming requests for debugging
+    log::info!("MediaServer: {} request from {:?} for {}", method, request.remote_addr(), url);
+    
     if method != &Method::Get {
+        log::warn!("MediaServer: Rejected non-GET request: {}", method);
         return Response::from_data(Vec::new()).with_status_code(StatusCode(405));
     }
 
     let id = match parse_audio_id(url) {
         Some(id) => id,
-        None => return Response::from_data(Vec::new()).with_status_code(StatusCode(404)),
+        None => {
+            log::warn!("MediaServer: 404 - Could not parse audio ID from URL: {}", url);
+            return Response::from_data(Vec::new()).with_status_code(StatusCode(404));
+        }
     };
 
     let entry = match entries.lock().ok().and_then(|map| map.get(&id).cloned()) {
-        Some(entry) => entry,
-        None => return Response::from_data(Vec::new()).with_status_code(StatusCode(404)),
+        Some(entry) => {
+            log::info!("MediaServer: Found entry for ID {}, content-type: {}, size: {} bytes", id, entry.content_type, entry.size);
+            entry
+        }
+        None => {
+            log::warn!("MediaServer: 404 - No entry found for ID: {}", id);
+            return Response::from_data(Vec::new()).with_status_code(StatusCode(404));
+        }
     };
 
     let range_header = request

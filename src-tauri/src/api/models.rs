@@ -105,6 +105,8 @@ pub struct Album {
     pub tracks: Option<TracksContainer>,
     /// Universal Product Code for the album
     pub upc: Option<String>,
+    /// Editorial description/review of the album
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -140,6 +142,12 @@ pub struct Track {
     pub parental_warning: bool,
     /// Playlist-specific: ID within the playlist (for removal)
     pub playlist_track_id: Option<u64>,
+    /// Performers/credits string from Qobuz (format: "Name, Role - Name, Role")
+    pub performers: Option<String>,
+    /// Composer information
+    pub composer: Option<Artist>,
+    /// Copyright information
+    pub copyright: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -150,6 +158,8 @@ pub struct AlbumSummary {
     pub title: String,
     #[serde(default)]
     pub image: ImageSet,
+    /// Label (if returned in track response)
+    pub label: Option<Label>,
 }
 
 /// Artist model
@@ -246,11 +256,22 @@ impl ImageSet {
     }
 }
 
-/// Label model
+/// Label model (basic reference)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Label {
     pub id: u64,
     pub name: String,
+}
+
+/// Label detail with albums
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelDetail {
+    pub id: u64,
+    pub name: String,
+    pub description: Option<String>,
+    pub image: Option<ImageSet>,
+    pub albums: Option<SearchResultsPage<Album>>,
+    pub albums_count: Option<u32>,
 }
 
 /// Genre model

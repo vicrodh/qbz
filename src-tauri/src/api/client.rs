@@ -195,17 +195,33 @@ impl QobuzClient {
     // === Search endpoints ===
 
     /// Search for albums
-    pub async fn search_albums(&self, query: &str, limit: u32, offset: u32) -> Result<SearchResultsPage<Album>> {
+    /// Optional search_type: "MainArtist", "Performer", "Composer", "Label", "ReleaseName"
+    pub async fn search_albums(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        search_type: Option<&str>,
+    ) -> Result<SearchResultsPage<Album>> {
         let url = endpoints::build_url(paths::ALBUM_SEARCH);
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+
+        let mut params: Vec<(&str, &str)> = vec![
+            ("query", query),
+            ("limit", &limit_str),
+            ("offset", &offset_str),
+        ];
+
+        if let Some(st) = search_type {
+            params.push(("type", st));
+        }
+
         let response: Value = self
             .http
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
-            .query(&[
-                ("query", query),
-                ("limit", &limit.to_string()),
-                ("offset", &offset.to_string()),
-            ])
+            .query(&params)
             .send()
             .await?
             .json()
@@ -219,17 +235,33 @@ impl QobuzClient {
     }
 
     /// Search for tracks
-    pub async fn search_tracks(&self, query: &str, limit: u32, offset: u32) -> Result<SearchResultsPage<Track>> {
+    /// Optional search_type: "MainArtist", "Performer", "Composer", "Label", "ReleaseName"
+    pub async fn search_tracks(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        search_type: Option<&str>,
+    ) -> Result<SearchResultsPage<Track>> {
         let url = endpoints::build_url(paths::TRACK_SEARCH);
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+
+        let mut params: Vec<(&str, &str)> = vec![
+            ("query", query),
+            ("limit", &limit_str),
+            ("offset", &offset_str),
+        ];
+
+        if let Some(st) = search_type {
+            params.push(("type", st));
+        }
+
         let response: Value = self
             .http
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
-            .query(&[
-                ("query", query),
-                ("limit", &limit.to_string()),
-                ("offset", &offset.to_string()),
-            ])
+            .query(&params)
             .send()
             .await?
             .json()
@@ -243,17 +275,33 @@ impl QobuzClient {
     }
 
     /// Search for artists
-    pub async fn search_artists(&self, query: &str, limit: u32, offset: u32) -> Result<SearchResultsPage<Artist>> {
+    /// Optional search_type: "MainArtist", "Performer", "Composer", "Label", "ReleaseName"
+    pub async fn search_artists(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+        search_type: Option<&str>,
+    ) -> Result<SearchResultsPage<Artist>> {
         let url = endpoints::build_url(paths::ARTIST_SEARCH);
+        let limit_str = limit.to_string();
+        let offset_str = offset.to_string();
+
+        let mut params: Vec<(&str, &str)> = vec![
+            ("query", query),
+            ("limit", &limit_str),
+            ("offset", &offset_str),
+        ];
+
+        if let Some(st) = search_type {
+            params.push(("type", st));
+        }
+
         let response: Value = self
             .http
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
-            .query(&[
-                ("query", query),
-                ("limit", &limit.to_string()),
-                ("offset", &offset.to_string()),
-            ])
+            .query(&params)
             .send()
             .await?
             .json()
@@ -474,6 +522,30 @@ impl QobuzClient {
         }
 
         let response: Value = request.send().await?.json().await?;
+
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get label by ID with albums
+    pub async fn get_label(&self, label_id: u64, limit: u32, offset: u32) -> Result<LabelDetail> {
+        let url = endpoints::build_url(paths::LABEL_GET);
+        let locale = self.locale().await;
+
+        let response: Value = self
+            .http
+            .get(&url)
+            .header("X-App-Id", self.app_id().await?)
+            .query(&[
+                ("label_id", label_id.to_string()),
+                ("extra", "albums".to_string()),
+                ("limit", limit.to_string()),
+                ("offset", offset.to_string()),
+                ("lang", locale),
+            ])
+            .send()
+            .await?
+            .json()
+            .await?;
 
         Ok(serde_json::from_value(response)?)
     }

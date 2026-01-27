@@ -365,10 +365,10 @@
           {scanning ? $t('library.scanning') : $t('library.scanThisFolder')}
         </button>
         <div class="footer-spacer"></div>
-        <button class="btn-secondary" onclick={onClose} disabled={loading}>
+        <button class="btn btn-secondary" onclick={onClose} disabled={loading}>
           {$t('actions.cancel')}
         </button>
-        <button class="btn-primary" onclick={handleSave} disabled={loading}>
+        <button class="btn btn-primary" onclick={handleSave} disabled={loading}>
           {loading ? $t('actions.saving') : $t('actions.save')}
         </button>
       </div>
@@ -384,7 +384,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 10000;
   }
 
   .modal {
@@ -685,42 +685,6 @@
   }
 
   .btn-scan:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-secondary,
-  .btn-primary {
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .btn-secondary {
-    background: transparent;
-    border: 1px solid var(--text-muted);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    border-color: var(--text-primary);
-  }
-
-  .btn-primary {
-    background: var(--accent-primary);
-    border: none;
-    color: white;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--accent-hover);
-  }
-
-  .btn-secondary:disabled,
-  .btn-primary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

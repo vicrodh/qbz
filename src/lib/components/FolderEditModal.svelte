@@ -429,47 +429,8 @@
     gap: 12px;
   }
 
-  .btn {
-    padding: 8px 20px;
-    border-radius: 6px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 150ms ease;
-    border: 1px solid transparent;
-  }
-
-  .btn-secondary {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover:not(:disabled) {
-    background: var(--bg-tertiary);
-  }
-
-  .btn-primary {
-    background: var(--accent-primary);
-    color: var(--bg-primary);
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    opacity: 0.9;
-  }
-
-  .btn-danger {
+  /* Layout-specific: push danger button to the left */
+  .modal-actions :global(.btn-danger) {
     margin-right: auto;
-    background: rgba(239, 68, 68, 0.1);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    color: #ef4444;
-  }
-
-  .btn-danger:hover:not(:disabled) {
-    background: rgba(239, 68, 68, 0.2);
-  }
-
-  .btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 </style>

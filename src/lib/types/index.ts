@@ -21,12 +21,67 @@ export interface QobuzTrack {
     id?: string;
     title: string;
     image?: QobuzImage;
+    label?: { id: number; name: string };
+    genre?: { name: string };
   };
   performer?: { id?: number; name: string };
   hires_streamable?: boolean;
   maximum_bit_depth?: number;
   maximum_sampling_rate?: number;
   isrc?: string;
+  performers?: string;
+  composer?: { id?: number; name: string };
+  copyright?: string;
+}
+
+// Parsed performer from performers string
+export interface Performer {
+  name: string;
+  roles: string[];
+}
+
+// Track info response with parsed performers
+export interface TrackInfo {
+  track: QobuzTrack;
+  performers: Performer[];
+}
+
+// Album credits - consolidated view from album header
+export interface AlbumCredits {
+  album: AlbumInfo;
+  tracks: TrackCredits[];
+}
+
+export interface AlbumInfo {
+  id: string;
+  artwork: string;
+  title: string;
+  artist: string;
+  artist_id?: number;
+  year: string;
+  release_date?: string;
+  label: string;
+  label_id?: number;
+  genre: string;
+  quality: string;
+  track_count: number;
+  duration: string;
+  bit_depth?: number;
+  sampling_rate?: number;
+  description?: string;
+}
+
+export interface TrackCredits {
+  id: number;
+  number: number;
+  title: string;
+  artist: string;
+  duration: string;
+  duration_seconds: number;
+  performers: Performer[];
+  copyright?: string;
+  album_id?: string;
+  artist_id?: number;
 }
 
 export interface QobuzAlbum {
@@ -38,7 +93,7 @@ export interface QobuzAlbum {
   hires_streamable?: boolean;
   tracks_count?: number;
   duration?: number;
-  label?: { name: string };
+  label?: { id?: number; name: string };
   genre?: { name: string };
   maximum_bit_depth?: number;
   maximum_sampling_rate?: number;
@@ -109,6 +164,7 @@ export interface AlbumDetail {
   year: string;
   releaseDate?: string; // Full date in YYYY-MM-DD format
   label: string;
+  labelId?: number;
   genre: string;
   quality: string;
   trackCount: number;
@@ -132,42 +188,54 @@ export interface ArtistDetail {
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
+    genre: string;
   }[];
   epsSingles: {
     id: string;
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
+    genre: string;
   }[];
   liveAlbums: {
     id: string;
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
+    genre: string;
   }[];
   compilations: {
     id: string;
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
+    genre: string;
   }[];
   tributes: {
     id: string;
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
+    genre: string;
   }[];
   others: {
     id: string;
     title: string;
     artwork: string;
     year?: string;
+    releaseDate?: string;
     quality: string;
+    genre: string;
   }[];
   playlists: {
     id: number;
@@ -176,6 +244,20 @@ export interface ArtistDetail {
     trackCount?: number;
     owner?: string;
   }[];
+  labels: {
+    id: number;
+    name: string;
+  }[];
+  totalAlbums: number;
+  albumsFetched: number;
+}
+
+export interface LabelDetail {
+  id: number;
+  name: string;
+  description?: string;
+  image?: QobuzImage;
+  albums: QobuzAlbum[];
   totalAlbums: number;
   albumsFetched: number;
 }
@@ -246,6 +328,51 @@ export interface SongLinkResponse {
   platforms: Record<string, string>;
   identifier: string;
   contentType: string;
+}
+
+// ============ Musician Types ============
+
+/**
+ * Musician confidence level for MusicBrainz ↔ Qobuz matching
+ * Determines what UI is shown when a musician is clicked:
+ * - confirmed (3): Navigate to Qobuz Artist Page
+ * - contextual (2): Navigate to Musician Page
+ * - weak (1): Show Informational Modal only
+ * - none (0): Show Informational Modal only
+ */
+export type MusicianConfidence = 'confirmed' | 'contextual' | 'weak' | 'none';
+
+/**
+ * Resolved musician with confidence assessment
+ */
+export interface ResolvedMusician {
+  name: string;
+  role: string;
+  mbid?: string;
+  qobuz_artist_id?: number;
+  confidence: MusicianConfidence;
+  bands: string[];
+  appears_on_count: number;
+}
+
+/**
+ * Album appearance for a musician
+ */
+export interface AlbumAppearance {
+  album_id: string;
+  album_title: string;
+  album_artwork: string;
+  artist_name: string;
+  year?: string;
+  role_on_album: string;
+}
+
+/**
+ * Musician appearances response
+ */
+export interface MusicianAppearances {
+  albums: AlbumAppearance[];
+  total: number;
 }
 
 // ============ Preferences Types ============

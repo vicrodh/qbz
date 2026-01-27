@@ -49,6 +49,7 @@
     onShareSonglink?: () => void;
     onGoToAlbum?: () => void;
     onGoToArtist?: () => void;
+    onShowInfo?: () => void;
     onDownload?: () => void;
     isTrackDownloaded?: boolean;
     onReDownload?: () => void;
@@ -248,6 +249,7 @@
       onShareSonglink={menuActions?.onShareSonglink}
       onGoToAlbum={menuActions?.onGoToAlbum}
       onGoToArtist={menuActions?.onGoToArtist}
+      onShowInfo={menuActions?.onShowInfo}
       onDownload={menuActions?.onDownload}
       isTrackDownloaded={menuActions?.isTrackDownloaded}
       onReDownload={menuActions?.onReDownload}

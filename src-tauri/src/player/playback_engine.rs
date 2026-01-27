@@ -23,6 +23,7 @@ pub enum PlaybackEngine {
     AlsaDirect {
         stream: Arc<AlsaDirectStream>,
         is_playing: Arc<AtomicBool>,
+        should_stop: Arc<AtomicBool>,  // Separate flag for full stop vs pause
         position_frames: Arc<AtomicU64>,
         duration_frames: Arc<AtomicU64>,
         playback_thread: Option<thread::JoinHandle<()>>,
@@ -44,6 +45,7 @@ impl PlaybackEngine {
         Self::AlsaDirect {
             stream,
             is_playing: Arc::new(AtomicBool::new(false)),
+            should_stop: Arc::new(AtomicBool::new(false)),
             position_frames: Arc::new(AtomicU64::new(0)),
             duration_frames: Arc::new(AtomicU64::new(0)),
             playback_thread: None,
@@ -64,6 +66,7 @@ impl PlaybackEngine {
             Self::AlsaDirect {
                 stream,
                 is_playing,
+                should_stop,
                 position_frames,
                 duration_frames,
                 playback_thread,
@@ -74,15 +77,18 @@ impl PlaybackEngine {
                 // 2. Converts i16 samples to f32
                 // 3. Writes to ALSA PCM
                 // 4. Tracks position
+                // 5. Supports pause/resume without terminating
 
                 let stream_clone = stream.clone();
                 let is_playing_clone = is_playing.clone();
+                let should_stop_clone = should_stop.clone();
                 let position_clone = position_frames.clone();
                 let duration_clone = duration_frames.clone();
 
                 let channels = stream.channels();
 
                 is_playing.store(true, Ordering::SeqCst);
+                should_stop.store(false, Ordering::SeqCst);
                 position_clone.store(0, Ordering::SeqCst);
 
                 log::info!("[ALSA Direct Engine] Starting streaming playback thread");
@@ -98,11 +104,22 @@ impl PlaybackEngine {
                     let mut source_iter = source.into_iter();
                     let mut natural_end = false;
 
-                    loop {
-                        // Check if we should stop
-                        if !is_playing_clone.load(Ordering::SeqCst) {
-                            log::info!("[ALSA Direct Engine] Playback paused/stopped");
-                            break;
+                    'playback: loop {
+                        // Check if we should stop completely (not just pause)
+                        if should_stop_clone.load(Ordering::SeqCst) {
+                            log::info!("[ALSA Direct Engine] Stop requested, terminating thread");
+                            break 'playback;
+                        }
+
+                        // Check if paused - wait instead of terminating
+                        while !is_playing_clone.load(Ordering::SeqCst) {
+                            // Still check for stop while paused
+                            if should_stop_clone.load(Ordering::SeqCst) {
+                                log::info!("[ALSA Direct Engine] Stop requested while paused");
+                                break 'playback;
+                            }
+                            // Sleep briefly to avoid busy-waiting
+                            std::thread::sleep(Duration::from_millis(50));
                         }
 
                         // Fill buffer from source
@@ -118,13 +135,14 @@ impl PlaybackEngine {
                             // End of stream
                             log::info!("[ALSA Direct Engine] Stream ended (total frames: {})", total_frames);
                             natural_end = true;
-                            break;
+                            break 'playback;
                         }
 
                         // Write to ALSA (auto-converts based on detected format)
+                        // This is bit-perfect: no resampling, no mixing, direct to hardware
                         if let Err(e) = stream_clone.write(&buffer_i16) {
                             log::error!("[ALSA Direct Engine] Write failed: {}", e);
-                            break;
+                            break 'playback;
                         }
 
                         // Update position
@@ -160,6 +178,7 @@ impl PlaybackEngine {
         match self {
             Self::Rodio { sink } => sink.play(),
             Self::AlsaDirect { is_playing, .. } => {
+                log::info!("[ALSA Direct Engine] Resume requested");
                 is_playing.store(true, Ordering::SeqCst);
             }
         }
@@ -170,6 +189,7 @@ impl PlaybackEngine {
         match self {
             Self::Rodio { sink } => sink.pause(),
             Self::AlsaDirect { is_playing, .. } => {
+                log::info!("[ALSA Direct Engine] Pause requested");
                 is_playing.store(false, Ordering::SeqCst);
             }
         }
@@ -184,9 +204,13 @@ impl PlaybackEngine {
             Self::AlsaDirect {
                 stream,
                 is_playing,
+                should_stop,
                 playback_thread,
                 ..
             } => {
+                log::info!("[ALSA Direct Engine] Stop requested");
+                // Signal thread to stop completely
+                should_stop.store(true, Ordering::SeqCst);
                 is_playing.store(false, Ordering::SeqCst);
 
                 // Wait for playback thread to finish

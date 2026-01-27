@@ -15,8 +15,10 @@ pub mod offline_cache;
 pub mod flatpak;
 pub mod lastfm;
 pub mod library;
+pub mod listenbrainz;
 pub mod lyrics;
 pub mod media_controls;
+pub mod musicbrainz;
 pub mod network;
 pub mod offline;
 pub mod playback_context;
@@ -28,6 +30,7 @@ pub mod radio_engine;
 pub mod session_store;
 pub mod share;
 pub mod tray;
+pub mod updates;
 
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -189,9 +192,25 @@ pub fn run() {
     // Initialize tray settings state
     let tray_settings_state = config::tray_settings::TraySettingsState::new()
         .expect("Failed to initialize tray settings");
+    // Initialize updates state
+    let updates_state = updates::UpdatesState::new()
+        .expect("Failed to initialize updates state");
     // Initialize subscription validity tracking (for offline download compliance)
     let subscription_state = config::create_subscription_state()
         .expect("Failed to initialize subscription state");
+    // Initialize MusicBrainz integration state
+    let musicbrainz_state = musicbrainz::MusicBrainzSharedState::new()
+        .expect("Failed to initialize MusicBrainz state");
+    // Initialize ListenBrainz integration state
+    let listenbrainz_state = listenbrainz::ListenBrainzSharedState::new()
+        .expect("Failed to initialize ListenBrainz state");
+    // Initialize remote metadata state (for Tag Editor service integration)
+    let remote_metadata_state = commands::RemoteMetadataSharedState {
+        inner: Arc::new(Mutex::new(library::remote_metadata::RemoteMetadataState::new(
+            Some(Arc::new(musicbrainz::MusicBrainzSharedState::new()
+                .expect("Failed to initialize MusicBrainz for remote metadata")))
+        ))),
+    };
 
     // Read saved audio device and settings for player initialization
     let (saved_device, audio_settings) = audio_settings_state
@@ -382,6 +401,20 @@ pub fn run() {
                     log::info!("Close to tray: hiding window instead of closing");
                     let _ = window.hide();
                     api.prevent_close();
+                } else {
+                    // Cleanup cast devices on actual close
+                    log::info!("App closing: cleaning up cast devices");
+                    
+                    // Disconnect Chromecast if connected (sends message through channel)
+                    if let Some(cast_state) = window.app_handle().try_state::<cast::CastState>() {
+                        log::info!("Disconnecting Chromecast on app exit");
+                        cast_state.chromecast.disconnect();
+                    }
+                    
+                    // Note: DLNA connection will be dropped when the app exits,
+                    // which will naturally close the connection. The tokio Mutex
+                    // prevents us from synchronously stopping playback here.
+                    log::info!("DLNA connection will be cleaned up on drop");
                 }
             }
         })
@@ -401,6 +434,10 @@ pub fn run() {
         .manage(playback_prefs_state)
         .manage(favorites_prefs_state)
         .manage(tray_settings_state)
+        .manage(updates_state)
+        .manage(musicbrainz_state)
+        .manage(listenbrainz_state)
+        .manage(remote_metadata_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -426,6 +463,7 @@ pub fn run() {
             commands::get_artist_detail,
             commands::get_artist_albums,
             commands::get_similar_artists,
+            commands::get_label,
             // Playback commands
             commands::play_track,
             commands::prefetch_track,
@@ -484,6 +522,8 @@ pub fn run() {
             commands::get_tracks_by_ids,
             commands::get_current_user_id,
             commands::subscribe_playlist,
+            commands::get_track_info,
+            commands::get_album_credits,
             // Playlist import commands
             commands::playlist_import_preview,
             commands::playlist_import_execute,
@@ -561,6 +601,13 @@ pub fn run() {
             library::commands::playlist_get_stats,
             library::commands::playlist_get_all_stats,
             library::commands::playlist_increment_play_count,
+            // Playlist custom order commands
+            library::commands::playlist_get_custom_order,
+            library::commands::playlist_init_custom_order,
+            library::commands::playlist_set_custom_order,
+            library::commands::playlist_move_track,
+            library::commands::playlist_has_custom_order,
+            library::commands::playlist_clear_custom_order,
             // Playlist folders commands
             library::commands::create_playlist_folder,
             library::commands::get_playlist_folders,
@@ -584,6 +631,9 @@ pub fn run() {
             // Album settings commands
             library::commands::library_get_album_settings,
             library::commands::library_set_album_hidden,
+            library::commands::library_update_album_metadata,
+            library::commands::library_write_album_metadata_to_files,
+            library::commands::library_refresh_album_metadata_from_files,
             library::commands::library_get_hidden_albums,
             library::commands::library_backfill_downloads,
             // Artist images commands
@@ -606,6 +656,7 @@ pub fn run() {
             cast::commands::cast_connect,
             cast::commands::cast_disconnect,
             cast::commands::cast_get_status,
+            cast::commands::cast_get_position,
             cast::commands::cast_play_track,
             cast::commands::cast_play_local_track,
             cast::commands::cast_play,
@@ -620,6 +671,7 @@ pub fn run() {
             cast::dlna::commands::dlna_connect,
             cast::dlna::commands::dlna_disconnect,
             cast::dlna::commands::dlna_get_status,
+            cast::dlna::commands::dlna_get_position,
             cast::dlna::commands::dlna_play_track,
             cast::dlna::commands::dlna_load_media,
             cast::dlna::commands::dlna_play,
@@ -686,6 +738,8 @@ pub fn run() {
             config::audio_settings::set_audio_backend_type,
             config::audio_settings::set_audio_alsa_plugin,
             config::audio_settings::set_audio_alsa_hardware_volume,
+            config::audio_settings::set_audio_stream_first_track,
+            config::audio_settings::set_audio_stream_buffer_seconds,
             // Audio backend commands
             commands::get_available_backends,
             commands::get_devices_for_backend,
@@ -707,6 +761,21 @@ pub fn run() {
             config::playback_preferences::set_show_context_icon,
             config::favorites_preferences::get_favorites_preferences,
             config::favorites_preferences::save_favorites_preferences,
+            // Updates commands
+            updates::get_update_preferences,
+            updates::set_update_check_on_launch,
+            updates::set_show_whats_new_on_launch,
+            updates::acknowledge_release,
+            updates::ignore_release,
+            updates::is_release_acknowledged,
+            updates::is_release_ignored,
+            updates::has_whats_new_been_shown,
+            updates::mark_whats_new_shown,
+            updates::has_flatpak_welcome_been_shown,
+            updates::mark_flatpak_welcome_shown,
+            updates::get_current_version,
+            updates::check_for_updates,
+            updates::fetch_release_for_version,
             offline::commands::set_allow_immediate_scrobbling,
             offline::commands::set_allow_accumulated_scrobbling,
             offline::commands::set_show_network_folders_in_manual_offline,
@@ -738,6 +807,43 @@ pub fn run() {
             config::tray_settings::set_enable_tray,
             config::tray_settings::set_minimize_to_tray,
             config::tray_settings::set_close_to_tray,
+            // MusicBrainz integration commands
+            commands::musicbrainz_resolve_track,
+            commands::musicbrainz_resolve_artist,
+            commands::musicbrainz_resolve_release,
+            commands::musicbrainz_get_artist_relationships,
+            commands::musicbrainz_is_enabled,
+            commands::musicbrainz_set_enabled,
+            commands::musicbrainz_get_cache_stats,
+            commands::musicbrainz_clear_cache,
+            commands::musicbrainz_cleanup_cache,
+            // Musician resolution commands
+            commands::resolve_musician,
+            commands::get_musician_appearances,
+            // ListenBrainz integration commands
+            commands::listenbrainz_get_status,
+            commands::listenbrainz_is_enabled,
+            commands::listenbrainz_set_enabled,
+            commands::listenbrainz_connect,
+            commands::listenbrainz_disconnect,
+            commands::listenbrainz_now_playing,
+            commands::listenbrainz_scrobble,
+            commands::listenbrainz_queue_listen,
+            commands::listenbrainz_get_queue,
+            commands::listenbrainz_get_queue_count,
+            commands::listenbrainz_mark_sent,
+            commands::listenbrainz_flush_queue,
+            commands::listenbrainz_clear_queue,
+            commands::listenbrainz_cleanup_queue,
+            // Smart playlist generation commands
+            commands::smart_playlist_preview,
+            commands::smart_playlist_resolve_artist,
+            commands::smart_playlist_get_available_types,
+            // Remote metadata commands (Tag Editor service integration)
+            commands::remote_metadata_search,
+            commands::remote_metadata_get_album,
+            commands::remote_metadata_cache_stats,
+            commands::remote_metadata_clear_cache,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

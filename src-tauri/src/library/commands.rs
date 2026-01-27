@@ -1,10 +1,12 @@
 //! Tauri commands for local library
 
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
-use tauri::State;
+use serde::Deserialize;
+use tauri::{Emitter, State};
 use tokio::sync::Mutex;
 
 use crate::discogs::DiscogsClient;
@@ -69,7 +71,7 @@ pub async fn library_add_folder(
 
     log::info!("Folder network info: is_network={}, fs_type={:?}", is_network, fs_type);
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     let id = db.add_folder_with_network_info(&path, is_network, fs_type.as_deref())
         .map_err(|e| e.to_string())?;
 
@@ -86,7 +88,7 @@ pub async fn library_remove_folder(
 ) -> Result<(), String> {
     log::info!("Command: library_remove_folder {}", path);
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     db.remove_folder(&path).map_err(|e| e.to_string())?;
     db.delete_tracks_in_folder(&path).map_err(|e| e.to_string())?;
     Ok(())
@@ -96,7 +98,7 @@ pub async fn library_remove_folder(
 pub async fn library_get_folders(state: State<'_, LibraryState>) -> Result<Vec<String>, String> {
     log::info!("Command: library_get_folders");
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     db.get_folders().map_err(|e| e.to_string())
 }
 
@@ -108,7 +110,7 @@ pub async fn library_get_folders_with_metadata(
 ) -> Result<Vec<LibraryFolder>, String> {
     log::info!("Command: library_get_folders_with_metadata");
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     let mut folders = db.get_folders_with_metadata().map_err(|e| e.to_string())?;
 
     // Refresh network detection for folders without user override
@@ -163,7 +165,7 @@ pub async fn library_get_folder(
 ) -> Result<Option<LibraryFolder>, String> {
     log::info!("Command: library_get_folder {}", id);
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     db.get_folder_by_id(id).map_err(|e| e.to_string())
 }
 
@@ -180,7 +182,7 @@ pub async fn library_update_folder_settings(
 ) -> Result<LibraryFolder, String> {
     log::info!("Command: library_update_folder_settings {} alias={:?} enabled={}", id, alias, enabled);
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     db.update_folder_settings(
         id,
         alias.as_deref(),
@@ -204,7 +206,7 @@ pub async fn library_set_folder_enabled(
 ) -> Result<(), String> {
     log::info!("Command: library_set_folder_enabled {} enabled={}", id, enabled);
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     db.set_folder_enabled(id, enabled).map_err(|e| e.to_string())
 }
 
@@ -226,7 +228,7 @@ pub async fn library_update_folder_path(
         return Err("The selected path is not a folder".to_string());
     }
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     db.update_folder_path(id, &new_path).map_err(|e| e.to_string())?;
 
     // Check if it's a network folder and update network info
@@ -323,6 +325,7 @@ pub async fn library_scan(state: State<'_, LibraryState>) -> Result<(), String> 
 
     let scanner = LibraryScanner::new();
     let mut all_errors: Vec<ScanError> = Vec::new();
+    let mut sidecar_cache: HashMap<String, Option<crate::library::AlbumTagSidecar>> = HashMap::new();
 
     for folder in &folders {
         log::info!("Scanning folder: {}", folder);
@@ -418,6 +421,7 @@ pub async fn library_scan(state: State<'_, LibraryState>) -> Result<(), String> 
 
             match MetadataExtractor::extract(&canonical_path) {
                 Ok(mut track) => {
+                    apply_sidecar_override_if_present(&mut track, &mut sidecar_cache);
                     // Try to extract embedded artwork, fallback to cached folder artwork
                     let artwork_cache = get_artwork_cache_dir();
                     let mut artwork_path =
@@ -500,6 +504,22 @@ async fn process_cue_file(cue_path: &Path, state: &State<'_, LibraryState>) -> R
     // Convert CUE to tracks
     let mut tracks = cue_to_tracks(&cue, properties.duration_secs, format, &properties);
 
+    // Apply sidecar overrides if present (matches by file_path + cue_start_secs)
+    if let Some(group_key) = tracks
+        .first()
+        .map(|track| track.album_group_key.trim().to_string())
+        .filter(|k| !k.is_empty())
+    {
+        let album_dir = Path::new(&group_key);
+        if album_dir.is_dir() {
+            if let Ok(Some(sidecar)) = crate::library::read_album_sidecar(album_dir) {
+                for track in tracks.iter_mut() {
+                    crate::library::apply_sidecar_to_track(track, &sidecar);
+                }
+            }
+        }
+    }
+
     let artwork_cache = get_artwork_cache_dir();
     let mut artwork_path = MetadataExtractor::extract_artwork(audio_path.as_path(), &artwork_cache);
     if artwork_path.is_none() {
@@ -520,7 +540,7 @@ async fn process_cue_file(cue_path: &Path, state: &State<'_, LibraryState>) -> R
     }
 
     // Insert tracks
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     let group_key = tracks
         .first()
         .map(|track| track.album_group_key.clone())
@@ -535,6 +555,59 @@ async fn process_cue_file(cue_path: &Path, state: &State<'_, LibraryState>) -> R
     }
 
     Ok(())
+}
+
+fn apply_sidecar_override_if_present(
+    track: &mut LocalTrack,
+    cache: &mut HashMap<String, Option<crate::library::AlbumTagSidecar>>,
+) {
+    let group_key = track.album_group_key.trim();
+    if group_key.is_empty() {
+        return;
+    }
+
+    let cached = cache.entry(group_key.to_string()).or_insert_with(|| {
+        let album_dir = Path::new(group_key);
+        if !album_dir.is_dir() {
+            return None;
+        }
+
+        match crate::library::read_album_sidecar(album_dir) {
+            Ok(sidecar) => sidecar,
+            Err(err) => {
+                log::warn!(
+                    "Failed to read LocalLibrary sidecar for {}: {}",
+                    album_dir.display(),
+                    err
+                );
+                None
+            }
+        }
+    });
+
+    if let Some(sidecar) = cached.as_ref() {
+        crate::library::apply_sidecar_to_track(track, sidecar);
+    }
+}
+
+fn compute_track_artist_match(tracks: &[LocalTrack]) -> Option<String> {
+    let mut artists: HashSet<String> = HashSet::new();
+    for track in tracks {
+        let value = track
+            .album_artist
+            .as_deref()
+            .unwrap_or(track.artist.as_str())
+            .trim();
+        if value.is_empty() {
+            continue;
+        }
+        artists.insert(value.to_string());
+        if artists.len() > 1 {
+            return None;
+        }
+    }
+
+    artists.into_iter().next()
 }
 
 #[tauri::command]
@@ -620,6 +693,7 @@ pub async fn library_scan_folder(
 
     let scanner = LibraryScanner::new();
     let mut all_errors: Vec<ScanError> = Vec::new();
+    let mut sidecar_cache: HashMap<String, Option<crate::library::AlbumTagSidecar>> = HashMap::new();
 
     log::info!("Scanning single folder: {}", folder.path);
 
@@ -713,6 +787,7 @@ pub async fn library_scan_folder(
 
         match MetadataExtractor::extract(&canonical_path) {
             Ok(mut track) => {
+                apply_sidecar_override_if_present(&mut track, &mut sidecar_cache);
                 let artwork_cache = get_artwork_cache_dir();
                 let mut artwork_path = MetadataExtractor::extract_artwork(&canonical_path, &artwork_cache);
                 if artwork_path.is_none() {
@@ -796,7 +871,7 @@ pub async fn library_get_albums(
         .map(|s| s.show_in_library)
         .unwrap_or(false);
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
 
     // Use optimized SQL-based filtering instead of N+1 query pattern
     let albums = db.get_albums_with_full_filter(
@@ -816,7 +891,7 @@ pub async fn library_get_album_tracks(
 ) -> Result<Vec<LocalTrack>, String> {
     log::info!("Command: library_get_album_tracks {}", album_group_key);
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     db.get_album_tracks(&album_group_key)
         .map_err(|e| e.to_string())
 }
@@ -837,7 +912,7 @@ pub async fn library_get_artists(
         .map(|s| s.show_in_library)
         .unwrap_or(false);
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
 
     // Use optimized SQL-based filtering instead of N+1 query pattern
     let artists = db.get_artists_with_filter(
@@ -867,7 +942,7 @@ pub async fn library_search(
         .map(|s| s.show_in_library)
         .unwrap_or(false);
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
 
     // Use optimized SQL-based filtering
     // limit = 0 means no limit (fetch all tracks)
@@ -886,7 +961,7 @@ pub async fn library_search(
 pub async fn library_get_stats(state: State<'_, LibraryState>) -> Result<LibraryStats, String> {
     log::info!("Command: library_get_stats");
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     db.get_stats().map_err(|e| e.to_string())
 }
 
@@ -894,7 +969,7 @@ pub async fn library_get_stats(state: State<'_, LibraryState>) -> Result<Library
 pub async fn library_clear(state: State<'_, LibraryState>) -> Result<(), String> {
     log::info!("Command: library_clear");
 
-    let db = state.db.lock().await;
+    let mut db = state.db.lock().await;
     db.clear_all_tracks().map_err(|e| e.to_string())
 }
 
@@ -1263,6 +1338,92 @@ pub async fn playlist_increment_play_count(
         .map_err(|e| e.to_string())
 }
 
+// === Playlist Custom Track Order ===
+
+/// Get custom track order for a playlist
+/// Returns Vec of (track_id, is_local, position)
+#[tauri::command]
+pub async fn playlist_get_custom_order(
+    playlist_id: u64,
+    state: State<'_, LibraryState>,
+) -> Result<Vec<(i64, bool, i32)>, String> {
+    log::info!("Command: playlist_get_custom_order {}", playlist_id);
+
+    let db = state.db.lock().await;
+    db.get_playlist_custom_order(playlist_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Initialize custom order for a playlist from current track arrangement
+#[tauri::command]
+pub async fn playlist_init_custom_order(
+    playlist_id: u64,
+    track_ids: Vec<(i64, bool)>,  // (track_id, is_local)
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("Command: playlist_init_custom_order {} ({} tracks)", playlist_id, track_ids.len());
+
+    let db = state.db.lock().await;
+    db.init_playlist_custom_order(playlist_id, &track_ids)
+        .map_err(|e| e.to_string())
+}
+
+/// Set entire custom order for a playlist (batch update)
+#[tauri::command]
+pub async fn playlist_set_custom_order(
+    playlist_id: u64,
+    orders: Vec<(i64, bool, i32)>,  // (track_id, is_local, position)
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("Command: playlist_set_custom_order {} ({} tracks)", playlist_id, orders.len());
+
+    let db = state.db.lock().await;
+    db.set_playlist_custom_order(playlist_id, &orders)
+        .map_err(|e| e.to_string())
+}
+
+/// Move a single track to a new position
+#[tauri::command]
+pub async fn playlist_move_track(
+    playlist_id: u64,
+    track_id: i64,
+    is_local: bool,
+    new_position: i32,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("Command: playlist_move_track {} track {} -> pos {}", playlist_id, track_id, new_position);
+
+    let db = state.db.lock().await;
+    db.move_playlist_track(playlist_id, track_id, is_local, new_position)
+        .map_err(|e| e.to_string())
+}
+
+/// Check if a playlist has custom order defined
+#[tauri::command]
+pub async fn playlist_has_custom_order(
+    playlist_id: u64,
+    state: State<'_, LibraryState>,
+) -> Result<bool, String> {
+    log::info!("Command: playlist_has_custom_order {}", playlist_id);
+
+    let db = state.db.lock().await;
+    db.has_playlist_custom_order(playlist_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Clear custom order for a playlist
+#[tauri::command]
+pub async fn playlist_clear_custom_order(
+    playlist_id: u64,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!("Command: playlist_clear_custom_order {}", playlist_id);
+
+    let db = state.db.lock().await;
+    db.clear_playlist_custom_order(playlist_id)
+        .map_err(|e| e.to_string())
+}
+
 // === Discogs Artwork ===
 
 /// Check if Discogs credentials are configured (proxy handles credentials)
@@ -1416,6 +1577,394 @@ pub async fn library_set_album_hidden(
     let db = state.db.lock().await;
     db.set_album_hidden(&album_group_key, hidden)
         .map_err(|e| e.to_string())
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumTrackMetadataUpdate {
+    pub id: i64,
+    pub file_path: String,
+    pub cue_start_secs: Option<f64>,
+    pub title: String,
+    pub disc_number: Option<u32>,
+    pub track_number: Option<u32>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryAlbumMetadataUpdateRequest {
+    pub album_group_key: String,
+    pub album_title: String,
+    pub album_artist: String,
+    pub year: Option<u32>,
+    pub genre: Option<String>,
+    pub catalog_number: Option<String>,
+    pub tracks: Vec<LibraryAlbumTrackMetadataUpdate>,
+}
+
+#[tauri::command]
+pub async fn library_update_album_metadata(
+    request: LibraryAlbumMetadataUpdateRequest,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!(
+        "Command: library_update_album_metadata {}",
+        request.album_group_key
+    );
+
+    if request.album_group_key.trim().is_empty() {
+        return Err("Album ID is required.".to_string());
+    }
+    if request.album_title.trim().is_empty() {
+        return Err("Album title is required.".to_string());
+    }
+    if request.tracks.is_empty() {
+        return Err("Album track list is empty.".to_string());
+    }
+
+    let album_dir = PathBuf::from(request.album_group_key.trim());
+    if !album_dir.is_dir() {
+        return Err("Album folder not found on disk.".to_string());
+    }
+
+    // Write sidecar first (persistence), then update DB.
+    let sidecar_result = tokio::task::spawn_blocking({
+        let album_dir = album_dir.clone();
+        let request = request.clone();
+        move || -> Result<(), String> {
+            let album = crate::library::AlbumMetadataOverride {
+                album_title: Some(request.album_title.trim().to_string()),
+                album_artist: Some(request.album_artist.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+                year: request.year,
+                genre: request.genre.as_ref().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()),
+                catalog_number: request
+                    .catalog_number
+                    .as_ref()
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+            };
+
+            let tracks = request
+                .tracks
+                .iter()
+                .map(|t| crate::library::TrackMetadataOverride {
+                    file_path: t.file_path.clone(),
+                    cue_start_secs: t.cue_start_secs,
+                    title: Some(t.title.trim().to_string()),
+                    disc_number: t.disc_number,
+                    track_number: t.track_number,
+                })
+                .collect::<Vec<_>>();
+
+            let sidecar = crate::library::AlbumTagSidecar::new(album, tracks);
+            crate::library::write_album_sidecar(&album_dir, &sidecar)
+                .map_err(|e| format!("Failed to write sidecar: {}", e))?;
+
+            Ok(())
+        }
+    })
+    .await
+    .map_err(|e| format!("Failed to write sidecar: {}", e))?;
+    sidecar_result?;
+
+    let mut db = state.db.lock().await;
+    let existing_tracks = db
+        .get_album_tracks(&request.album_group_key)
+        .map_err(|e| e.to_string())?;
+
+    let track_artist_match = compute_track_artist_match(&existing_tracks);
+    let track_updates = request
+        .tracks
+        .iter()
+        .map(|t| crate::library::AlbumTrackUpdate {
+            id: t.id,
+            title: t.title.clone(),
+            disc_number: t.disc_number,
+            track_number: t.track_number,
+        })
+        .collect::<Vec<_>>();
+
+    db.update_album_group_metadata(
+        &request.album_group_key,
+        &request.album_title,
+        &request.album_artist,
+        request.year,
+        request.genre.as_deref(),
+        request.catalog_number.as_deref(),
+        track_artist_match.as_deref(),
+        &track_updates,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn library_write_album_metadata_to_files(
+    app: tauri::AppHandle,
+    request: LibraryAlbumMetadataUpdateRequest,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!(
+        "Command: library_write_album_metadata_to_files {}",
+        request.album_group_key
+    );
+
+    if request.album_group_key.trim().is_empty() {
+        return Err("Album ID is required.".to_string());
+    }
+    if request.album_title.trim().is_empty() {
+        return Err("Album title is required.".to_string());
+    }
+    if request.tracks.is_empty() {
+        return Err("Album track list is empty.".to_string());
+    }
+
+    let db = state.db.lock().await;
+    let existing_tracks = db
+        .get_album_tracks(&request.album_group_key)
+        .map_err(|e| e.to_string())?;
+    if existing_tracks
+        .iter()
+        .any(|t| t.cue_file_path.is_some() || t.cue_start_secs.is_some())
+    {
+        return Err("Writing tags to files is not supported for CUE-based albums. Use sidecar mode instead.".to_string());
+    }
+    drop(db);
+
+    let album_dir = PathBuf::from(request.album_group_key.trim());
+    if !album_dir.is_dir() {
+        return Err("Album folder not found on disk.".to_string());
+    }
+
+    // Write embedded tags for each track file.
+    let write_result = tokio::task::spawn_blocking({
+        let request = request.clone();
+        move || -> Result<(), String> {
+            use lofty::{Accessor, AudioFile, ItemKey, Tag, TagExt, TaggedFileExt, TagType};
+
+            // Ensure we only write each file once.
+            let mut by_file: HashMap<String, &LibraryAlbumTrackMetadataUpdate> = HashMap::new();
+            for track in &request.tracks {
+                by_file.entry(track.file_path.clone()).or_insert(track);
+            }
+
+            let total = by_file.len();
+            let mut current = 0usize;
+
+            for (file_path, track) in by_file {
+                current += 1;
+                // Emit progress event
+                let _ = app.emit("library:tag_write_progress", serde_json::json!({
+                    "current": current,
+                    "total": total
+                }));
+                let path = Path::new(&file_path);
+                if !path.is_file() {
+                    return Err("One or more audio files were not found on disk.".to_string());
+                }
+
+                let mut tagged_file =
+                    lofty::read_from_path(path).map_err(|_| "Failed to read audio file tags.".to_string())?;
+
+                let primary_type = tagged_file.primary_tag_type();
+                if tagged_file.primary_tag_mut().is_none() && tagged_file.first_tag_mut().is_none() {
+                    tagged_file.insert_tag(Tag::new(primary_type));
+                }
+
+                {
+                    let tag = if let Some(tag) = tagged_file.primary_tag_mut() {
+                        tag
+                    } else if let Some(tag) = tagged_file.first_tag_mut() {
+                        tag
+                    } else {
+                        return Err("Failed to access audio file tags.".to_string());
+                    };
+
+                    tag.set_title(track.title.trim().to_string());
+                    tag.set_album(request.album_title.trim().to_string());
+                    tag.set_artist(request.album_artist.trim().to_string());
+
+                    if let Some(no) = track.track_number {
+                        tag.set_track(no);
+                    }
+                    if let Some(disc) = track.disc_number {
+                        tag.set_disk(disc);
+                    }
+
+                    // Album artist (not part of Accessor).
+                    if request.album_artist.trim().is_empty() {
+                        tag.remove_key(&ItemKey::AlbumArtist);
+                    } else {
+                        tag.insert_text(ItemKey::AlbumArtist, request.album_artist.trim().to_string());
+                    }
+
+                    // Year / Genre
+                    if let Some(year) = request.year {
+                        tag.set_year(year);
+                    } else {
+                        tag.remove_year();
+                    }
+
+                    if let Some(ref genre) = request.genre {
+                        let g = genre.trim();
+                        if g.is_empty() {
+                            tag.remove_genre();
+                        } else {
+                            tag.set_genre(g.to_string());
+                        }
+                    } else {
+                        tag.remove_genre();
+                    }
+
+                    if let Some(ref cat) = request.catalog_number {
+                        let c = cat.trim();
+                        if c.is_empty() {
+                            tag.remove_key(&ItemKey::CatalogNumber);
+                        } else {
+                            tag.insert_text(ItemKey::CatalogNumber, c.to_string());
+                        }
+                    } else {
+                        tag.remove_key(&ItemKey::CatalogNumber);
+                    }
+                }
+
+                tagged_file
+                    .save_to_path(path)
+                    .map_err(|_| "Failed to write tags to audio files. Check that the album folder is mounted read-write and you have permissions.".to_string())?;
+            }
+
+            Ok(())
+        }
+    })
+    .await
+    .map_err(|e| format!("Failed to write tags: {}", e))?;
+    write_result?;
+
+    // Remove sidecar (direct-edit mode disables sidecar persistence).
+    let _ = tokio::task::spawn_blocking({
+        let album_dir = album_dir.clone();
+        move || crate::library::delete_album_sidecar(&album_dir)
+    })
+    .await;
+
+    // Update DB from the requested values.
+    let mut db = state.db.lock().await;
+    let existing_tracks = db
+        .get_album_tracks(&request.album_group_key)
+        .map_err(|e| e.to_string())?;
+    let track_artist_match = compute_track_artist_match(&existing_tracks);
+    let track_updates = request
+        .tracks
+        .iter()
+        .map(|t| crate::library::AlbumTrackUpdate {
+            id: t.id,
+            title: t.title.clone(),
+            disc_number: t.disc_number,
+            track_number: t.track_number,
+        })
+        .collect::<Vec<_>>();
+
+    db.update_album_group_metadata(
+        &request.album_group_key,
+        &request.album_title,
+        &request.album_artist,
+        request.year,
+        request.genre.as_deref(),
+        request.catalog_number.as_deref(),
+        track_artist_match.as_deref(),
+        &track_updates,
+    )
+    .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn library_refresh_album_metadata_from_files(
+    album_group_key: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    log::info!(
+        "Command: library_refresh_album_metadata_from_files {}",
+        album_group_key
+    );
+
+    if album_group_key.trim().is_empty() {
+        return Err("Album ID is required.".to_string());
+    }
+
+    let db = state.db.lock().await;
+    let existing_tracks = db.get_album_tracks(&album_group_key).map_err(|e| e.to_string())?;
+    if existing_tracks.is_empty() {
+        return Err("Album not found.".to_string());
+    }
+    if existing_tracks
+        .iter()
+        .any(|t| t.cue_file_path.is_some() || t.cue_start_secs.is_some())
+    {
+        return Err(
+            "Refreshing metadata from files is not supported for CUE-based albums.".to_string(),
+        );
+    }
+    drop(db);
+
+    let album_dir = PathBuf::from(album_group_key.trim());
+    if !album_dir.is_dir() {
+        return Err("Album folder not found on disk.".to_string());
+    }
+
+    // Delete sidecar, then refresh DB from embedded tags.
+    let refresh = tokio::task::spawn_blocking({
+        let existing_tracks = existing_tracks.clone();
+        let album_dir = album_dir.clone();
+        move || -> Result<Vec<crate::library::TrackMetadataUpdateFull>, String> {
+            let _ = crate::library::delete_album_sidecar(&album_dir);
+
+            let mut updates: Vec<crate::library::TrackMetadataUpdateFull> = Vec::new();
+            for track in existing_tracks {
+                let path = Path::new(&track.file_path);
+                if !path.is_file() {
+                    return Err("One or more audio files were not found on disk.".to_string());
+                }
+
+                let extracted =
+                    MetadataExtractor::extract(path).map_err(|_| "Failed to read audio file tags.".to_string())?;
+
+                let album_group_title = if extracted.album_group_title.trim().is_empty() {
+                    extracted.album.clone()
+                } else {
+                    extracted.album_group_title.clone()
+                };
+
+                updates.push(crate::library::TrackMetadataUpdateFull {
+                    id: track.id,
+                    title: extracted.title,
+                    artist: extracted.artist,
+                    album: extracted.album,
+                    album_artist: extracted.album_artist,
+                    album_group_title,
+                    track_number: extracted.track_number,
+                    disc_number: extracted.disc_number,
+                    year: extracted.year,
+                    genre: extracted.genre,
+                    catalog_number: extracted.catalog_number,
+                });
+            }
+
+            Ok(updates)
+        }
+    })
+    .await
+    .map_err(|e| format!("Failed to refresh metadata: {}", e))?;
+    let updates = refresh?;
+
+    let mut db = state.db.lock().await;
+    db.update_tracks_metadata_by_id(&updates)
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
 }
 
 #[tauri::command]

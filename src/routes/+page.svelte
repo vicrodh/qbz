@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { listen, emitTo, type UnlistenFn } from '@tauri-apps/api/event';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
@@ -25,6 +25,9 @@
     subscribe as subscribeToast,
     type Toast as ToastData
   } from '$lib/stores/toastStore';
+
+  // Search state for performer search
+  import { setSearchState } from '$lib/stores/searchState';
 
   // Playback context and preferences
   import { 
@@ -90,7 +93,7 @@
   // Favorites state management
   import { loadFavorites } from '$lib/stores/favoritesStore';
   import { getDefaultFavoritesTab } from '$lib/utils/favorites';
-  import type { FavoritesPreferences } from '$lib/types';
+  import type { FavoritesPreferences, ResolvedMusician } from '$lib/types';
 
   // Navigation state management
   import {
@@ -174,6 +177,7 @@
     Track,
     AlbumDetail,
     ArtistDetail,
+    LabelDetail,
     PlaylistTrack,
     DisplayTrack,
     LocalLibraryTrack,
@@ -238,10 +242,14 @@
   // MiniPlayer
   import { enterMiniplayerMode } from '$lib/services/miniplayerService';
 
+  // Sidebar mutual exclusion
+  import { closeContentSidebar, subscribeContentSidebar, type ContentSidebarType } from '$lib/stores/sidebarStore';
+
   // Lyrics state management
   import {
     subscribe as subscribeLyrics,
     toggleSidebar as toggleLyricsSidebar,
+    hideSidebar as hideLyricsSidebar,
     startWatching as startLyricsWatching,
     stopWatching as stopLyricsWatching,
     startActiveLineUpdates,
@@ -271,6 +279,8 @@
   import SettingsView from '$lib/components/views/SettingsView.svelte';
   import AlbumDetailView from '$lib/components/views/AlbumDetailView.svelte';
   import ArtistDetailView from '$lib/components/views/ArtistDetailView.svelte';
+  import MusicianPageView from '$lib/components/views/MusicianPageView.svelte';
+  import LabelView from '$lib/components/views/LabelView.svelte';
   import PlaylistDetailView from '$lib/components/views/PlaylistDetailView.svelte';
   import FavoritesView from '$lib/components/views/FavoritesView.svelte';
   import LocalLibraryView from '$lib/components/views/LocalLibraryView.svelte';
@@ -282,9 +292,24 @@
   import FocusMode from '$lib/components/FocusMode.svelte';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import PlaylistImportModal from '$lib/components/PlaylistImportModal.svelte';
+  import TrackInfoModal from '$lib/components/TrackInfoModal.svelte';
+  import AlbumCreditsModal from '$lib/components/AlbumCreditsModal.svelte';
+  import MusicianModal from '$lib/components/MusicianModal.svelte';
   import CastPicker from '$lib/components/CastPicker.svelte';
   import LyricsSidebar from '$lib/components/lyrics/LyricsSidebar.svelte';
   import OfflinePlaceholder from '$lib/components/OfflinePlaceholder.svelte';
+  import UpdateAvailableModal from '$lib/components/updates/UpdateAvailableModal.svelte';
+  import UpdateReminderModal from '$lib/components/updates/UpdateReminderModal.svelte';
+  import WhatsNewModal from '$lib/components/updates/WhatsNewModal.svelte';
+  import FlatpakWelcomeModal from '$lib/components/updates/FlatpakWelcomeModal.svelte';
+  import type { ReleaseInfo } from '$lib/stores/updatesStore';
+  import {
+    decideLaunchModals,
+    disableUpdateChecks,
+    ignoreReleaseVersion,
+    markFlatpakWelcomeShown,
+    openReleasePageAndAcknowledge,
+  } from '$lib/services/updatesService';
 
   // Offline state
   import {
@@ -313,13 +338,132 @@
   // View State (from navigationStore subscription)
   let activeView = $state<ViewType>('home');
   let selectedPlaylistId = $state<number | null>(null);
-  // Album and Artist data are fetched, so kept local
+  let updatesCurrentVersion = $state('');
+  let updateRelease = $state<ReleaseInfo | null>(null);
+  let whatsNewRelease = $state<ReleaseInfo | null>(null);
+  let isUpdateModalOpen = $state(false);
+  let isReminderModalOpen = $state(false);
+  let isWhatsNewModalOpen = $state(false);
+  let isFlatpakWelcomeOpen = $state(false);
+  let updatesLaunchTriggered = $state(false);
+
+  // Sequential modal queue: Flatpak → What's new → Update available
+  let pendingWhatsNewRelease = $state<ReleaseInfo | null>(null);
+  let pendingUpdateRelease = $state<ReleaseInfo | null>(null);
+
+  // Album, Artist and Label data are fetched, so kept local
   let selectedAlbum = $state<AlbumDetail | null>(null);
   let selectedArtist = $state<ArtistDetail | null>(null);
+  let selectedLabel = $state<{ id: number; name: string } | null>(null);
+  let selectedMusician = $state<ResolvedMusician | null>(null);
+  let musicianModalData = $state<ResolvedMusician | null>(null);
   let isArtistAlbumsLoading = $state(false);
 
+  function waitForHomePaint(): Promise<void> {
+    if (typeof window === 'undefined') return Promise.resolve();
+    return new Promise((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
+  async function runLaunchUpdateFlow(): Promise<void> {
+    // Ensure the UI has rendered and Home is visible before showing any modal.
+    await tick();
+    await waitForHomePaint();
+    if (activeView !== 'home') return;
+
+    const decision = await decideLaunchModals();
+    updatesCurrentVersion = decision.currentVersion;
+
+    // Store pending modals for sequential display
+    // Order: Flatpak → What's new → Update available
+    pendingWhatsNewRelease = decision.whatsNewRelease;
+    pendingUpdateRelease = decision.updateRelease;
+
+    // Show first modal in queue (Flatpak has highest priority)
+    if (decision.showFlatpakWelcome) {
+      isFlatpakWelcomeOpen = true;
+      return;
+    }
+
+    // No Flatpak modal, try What's New
+    showNextModalInQueue();
+  }
+
+  function showNextModalInQueue(): void {
+    // What's New has second priority
+    if (pendingWhatsNewRelease) {
+      whatsNewRelease = pendingWhatsNewRelease;
+      pendingWhatsNewRelease = null;
+      isWhatsNewModalOpen = true;
+      return;
+    }
+
+    // Update Available has lowest priority
+    if (pendingUpdateRelease) {
+      updateRelease = pendingUpdateRelease;
+      pendingUpdateRelease = null;
+      isUpdateModalOpen = true;
+    }
+  }
+
+  function handleUpdateVisit(): void {
+    if (!updateRelease) return;
+    void openReleasePageAndAcknowledge(updateRelease);
+    isUpdateModalOpen = false;
+    updateRelease = null;
+  }
+
+  function handleUpdateClose(): void {
+    isUpdateModalOpen = false;
+    if (updateRelease) {
+      isReminderModalOpen = true;
+    }
+  }
+
+  function handleReminderClose(): void {
+    isReminderModalOpen = false;
+    updateRelease = null;
+  }
+
+  function handleReminderLater(): void {
+    // No persistence by design.
+  }
+
+  function handleReminderIgnoreRelease(): void {
+    if (!updateRelease) return;
+    void ignoreReleaseVersion(updateRelease.version);
+  }
+
+  function handleReminderDisableUpdates(): void {
+    void disableUpdateChecks();
+  }
+
+  function handleFlatpakWelcomeClose(): void {
+    isFlatpakWelcomeOpen = false;
+    void markFlatpakWelcomeShown();
+    // Show next modal in queue
+    showNextModalInQueue();
+  }
+
+  function handleWhatsNewClose(): void {
+    isWhatsNewModalOpen = false;
+    whatsNewRelease = null;
+    // Show next modal in queue
+    showNextModalInQueue();
+  }
+
+  $effect(() => {
+    if (updatesLaunchTriggered) return;
+    if (activeView !== 'home') return;
+    updatesLaunchTriggered = true;
+    void runLaunchUpdateFlow();
+  });
+
   // Artist albums for "By the same artist" section in album view
-  let albumArtistAlbums = $state<{ id: string; title: string; artwork: string; quality: string }[]>([]);
+  let albumArtistAlbums = $state<{ id: string; title: string; artwork: string; quality: string; genre: string; releaseDate?: string }[]>([]);
 
   // Overlay States (from uiStore subscription)
   let isQueueOpen = $state(false);
@@ -337,7 +481,15 @@
   let playlistModalTracksAreLocal = $state(false);
   let isPlaylistImportOpen = $state(false);
   let isAboutModalOpen = $state(false);
+
+  // Track Info Modal State
+  let isTrackInfoOpen = $state(false);
+  let trackInfoTrackId = $state<number | null>(null);
   let userPlaylists = $state<{ id: number; name: string; tracks_count: number }[]>([]);
+
+  // Album Credits Modal State
+  let isAlbumCreditsOpen = $state(false);
+  let albumCreditsAlbumId = $state<string | null>(null);
   
   // Sidebar reference for refreshing playlists
   let sidebarRef: { getPlaylists: () => { id: number; name: string; tracks_count: number }[], refreshPlaylists: () => void } | undefined;
@@ -431,13 +583,17 @@
           id: a.id,
           title: a.title,
           artwork: a.artwork,
-          quality: a.quality
+          quality: a.quality,
+          genre: a.genre,
+          releaseDate: a.releaseDate
         })),
         ...artistDetail.liveAlbums.map(a => ({
           id: a.id,
           title: a.title,
           artwork: a.artwork,
-          quality: a.quality
+          quality: a.quality,
+          genre: a.genre,
+          releaseDate: a.releaseDate
         }))
       ].slice(0, 16);
 
@@ -481,6 +637,83 @@
       console.error('Failed to load artist:', err);
       showToast('Failed to load artist', 'error');
     }
+  }
+
+  function handleLabelClick(labelId: number, labelName?: string) {
+    selectedLabel = { id: labelId, name: labelName || '' };
+    navigateTo('label');
+  }
+
+  /**
+   * Handle musician click from credits
+   * Resolves musician and routes based on confidence level:
+   * - Confirmed (3): Navigate to Qobuz Artist Page
+   * - Contextual (2): Navigate to Musician Page
+   * - Weak (1), None (0): Show Informational Modal
+   */
+  async function handleMusicianClick(name: string, role: string) {
+    showToast(`Looking up ${name}...`, 'info');
+    try {
+      const musician = await invoke<ResolvedMusician>('resolve_musician', { name, role });
+      console.log('Resolved musician:', musician);
+
+      switch (musician.confidence) {
+        case 'confirmed':
+          // Has a Qobuz artist page - navigate there
+          if (musician.qobuz_artist_id) {
+            handleArtistClick(musician.qobuz_artist_id);
+          } else {
+            // Fallback: show modal
+            musicianModalData = musician;
+          }
+          break;
+
+        case 'contextual':
+          // Show full Musician Page
+          selectedMusician = musician;
+          navigateTo('musician');
+          break;
+
+        case 'weak':
+        case 'none':
+        default:
+          // Show Informational Modal only
+          musicianModalData = musician;
+          break;
+      }
+    } catch (err) {
+      console.error('Failed to resolve musician:', err);
+      showToast('Could not look up musician info', 'error');
+      // Fallback: open modal with basic info
+      musicianModalData = {
+        name,
+        role,
+        confidence: 'none',
+        bands: [],
+        appears_on_count: 0
+      };
+    }
+  }
+
+  function closeMusicianModal() {
+    musicianModalData = null;
+  }
+
+  /**
+   * Search for a performer by name (from track credits)
+   */
+  function searchForPerformer(name: string) {
+    // Set search state with performer name, clear previous results to trigger auto-search
+    setSearchState({
+      query: name,
+      activeTab: 'all',
+      filterType: null,
+      albumResults: null,
+      trackResults: null,
+      artistResults: null,
+      allResults: null
+    });
+    navigateTo('search');
   }
 
   /**
@@ -1609,6 +1842,7 @@
       quality,
       bitDepth: track.bit_depth,
       samplingRate: track.sample_rate ? track.sample_rate / 1000 : undefined,  // Convert Hz to kHz (44100 → 44.1) - NO ROUNDING
+      format: track.format,
       isLocal: true
     }, { isLocal: true });
   }
@@ -1665,6 +1899,18 @@
     if (summary.qobuz_playlist_id) {
       selectPlaylist(summary.qobuz_playlist_id);
     }
+  }
+
+  // Track Info Modal
+  function showTrackInfo(trackId: number) {
+    trackInfoTrackId = trackId;
+    isTrackInfoOpen = true;
+  }
+
+  // Album Credits Modal
+  function showAlbumCredits(albumId: string) {
+    albumCreditsAlbumId = albumId;
+    isAlbumCreditsOpen = true;
   }
 
   // Auth Handlers
@@ -2025,6 +2271,10 @@
     // Subscribe to UI state changes
     const unsubscribeUI = subscribeUI(() => {
       const uiState = getUIState();
+      // Close network sidebar when queue opens
+      if (uiState.isQueueOpen && !isQueueOpen) {
+        closeContentSidebar('network');
+      }
       isQueueOpen = uiState.isQueueOpen;
       isFullScreenOpen = uiState.isFullScreenOpen;
       isFocusModeOpen = uiState.isFocusModeOpen;
@@ -2126,6 +2376,18 @@
       lyricsActiveIndex = state.activeIndex;
       lyricsActiveProgress = state.activeProgress;
       lyricsSidebarVisible = state.sidebarVisible;
+      // Close network sidebar when lyrics opens
+      if (state.sidebarVisible) {
+        closeContentSidebar('network');
+      }
+    });
+
+    // Subscribe to content sidebar for mutual exclusion (network closes lyrics/queue)
+    const unsubscribeContentSidebar = subscribeContentSidebar((active: ContentSidebarType) => {
+      if (active === 'network') {
+        hideLyricsSidebar();
+        closeQueue();
+      }
     });
 
     // Subscribe to cast state changes
@@ -2254,6 +2516,7 @@
       unsubscribePlayer();
       unsubscribeQueue();
       unsubscribeLyrics();
+      unsubscribeContentSidebar();
       unsubscribeCast();
       stopLyricsWatching();
       stopActiveLineUpdates();
@@ -2392,6 +2655,7 @@
             onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
             onTrackGoToAlbum={handleAlbumClick}
             onTrackGoToArtist={handleArtistClick}
+            onTrackShowInfo={showTrackInfo}
             onTrackDownload={handleDisplayTrackDownload}
             onTrackReDownload={handleDisplayTrackDownload}
             onTrackRemoveDownload={handleTrackRemoveDownload}
@@ -2430,6 +2694,7 @@
             onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
             onTrackGoToAlbum={handleAlbumClick}
             onTrackGoToArtist={handleArtistClick}
+            onTrackShowInfo={showTrackInfo}
             onTrackDownload={handleDisplayTrackDownload}
             onTrackReDownload={handleDisplayTrackDownload}
             onTrackRemoveDownload={handleTrackRemoveDownload}
@@ -2446,6 +2711,7 @@
           userName={userInfo?.userName}
           subscription={userInfo?.subscription}
           subscriptionValidUntil={userInfo?.subscriptionValidUntil}
+          showTitleBar={showTitleBar}
         />
       {:else if activeView === 'album' && selectedAlbum}
         <AlbumDetailView
@@ -2454,6 +2720,7 @@
           isPlaybackActive={isPlaying}
           onBack={navGoBack}
           onArtistClick={() => selectedAlbum?.artistId && handleArtistClick(selectedAlbum.artistId)}
+          onLabelClick={handleLabelClick}
           onTrackPlay={handleAlbumTrackPlay}
           onTrackPlayNext={handleAlbumTrackPlayNext}
           onTrackPlayLater={handleAlbumTrackPlayLater}
@@ -2462,6 +2729,7 @@
           onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
+          onTrackShowInfo={showTrackInfo}
           onPlayAll={handlePlayAllAlbum}
           onShuffleAll={handleShuffleAlbum}
           onPlayAllNext={handleAddAlbumToQueueNext}
@@ -2488,6 +2756,7 @@
           onRelatedAlbumShareSonglink={shareAlbumSonglinkById}
           onViewArtistDiscography={handleViewArtistDiscography}
           checkRelatedAlbumDownloaded={checkAlbumFullyDownloaded}
+          onShowAlbumCredits={() => selectedAlbum && showAlbumCredits(selectedAlbum.id)}
         />
       {:else if activeView === 'artist' && selectedArtist}
         <ArtistDetailView
@@ -2517,8 +2786,35 @@
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
           onPlaylistClick={selectPlaylist}
+          onLabelClick={handleLabelClick}
+          onMusicianClick={handleMusicianClick}
           activeTrackId={currentTrack?.id ?? null}
           isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'musician' && selectedMusician}
+        <MusicianPageView
+          musician={selectedMusician}
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onArtistClick={handleArtistClick}
+        />
+      {:else if activeView === 'label' && selectedLabel}
+        <LabelView
+          labelId={selectedLabel.id}
+          labelName={selectedLabel.name}
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
         />
       {:else if activeView === 'library' || activeView === 'library-album'}
         <LocalLibraryView
@@ -2546,6 +2842,7 @@
           onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
           onTrackGoToAlbum={handleAlbumClick}
           onTrackGoToArtist={handleArtistClick}
+          onTrackShowInfo={showTrackInfo}
           onTrackDownload={handleDisplayTrackDownload}
           onTrackRemoveDownload={handleTrackRemoveDownload}
           onTrackReDownload={handleDisplayTrackDownload}
@@ -2598,6 +2895,7 @@
             onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
             onTrackGoToAlbum={handleAlbumClick}
             onTrackGoToArtist={handleArtistClick}
+            onTrackShowInfo={showTrackInfo}
             onTrackDownload={handleDisplayTrackDownload}
             onTrackRemoveDownload={handleTrackRemoveDownload}
             onTrackReDownload={handleDisplayTrackDownload}
@@ -2648,6 +2946,7 @@
         quality={currentTrack.quality}
         bitDepth={currentTrack.bitDepth}
         samplingRate={currentTrack.samplingRate}
+        format={currentTrack.format}
         {isPlaying}
         onTogglePlay={togglePlay}
         onSkipBack={handleSkipBack}
@@ -2732,6 +3031,7 @@
         qualityLevel={currentTrack.quality.includes('24') ? 5 : 3}
         bitDepth={currentTrack.bitDepth}
         samplingRate={currentTrack.samplingRate}
+        format={currentTrack.format}
         {isPlaying}
         onTogglePlay={togglePlay}
         onSkipBack={handleSkipBack}
@@ -2828,6 +3128,81 @@
       onClose={() => isAboutModalOpen = false}
     />
 
+    {#if updateRelease}
+      <UpdateAvailableModal
+        isOpen={isUpdateModalOpen}
+        currentVersion={updatesCurrentVersion}
+        newVersion={updateRelease.version}
+        onClose={handleUpdateClose}
+        onVisitReleasePage={handleUpdateVisit}
+      />
+
+      <UpdateReminderModal
+        isOpen={isReminderModalOpen}
+        onClose={handleReminderClose}
+        onRemindLater={handleReminderLater}
+        onIgnoreRelease={handleReminderIgnoreRelease}
+        onDisableAllUpdates={handleReminderDisableUpdates}
+      />
+    {/if}
+
+    {#if whatsNewRelease}
+      <WhatsNewModal
+        isOpen={isWhatsNewModalOpen}
+        release={whatsNewRelease}
+        {showTitleBar}
+        onClose={handleWhatsNewClose}
+      />
+    {/if}
+
+    <FlatpakWelcomeModal
+      isOpen={isFlatpakWelcomeOpen}
+      onClose={handleFlatpakWelcomeClose}
+    />
+
+    <!-- Track Info Modal -->
+    <TrackInfoModal
+      isOpen={isTrackInfoOpen}
+      trackId={trackInfoTrackId}
+      onClose={() => {
+        isTrackInfoOpen = false;
+        trackInfoTrackId = null;
+      }}
+      onArtistClick={handleArtistClick}
+      onLabelClick={handleLabelClick}
+      onMusicianClick={handleMusicianClick}
+    />
+
+    <!-- Album Credits Modal -->
+    <AlbumCreditsModal
+      isOpen={isAlbumCreditsOpen}
+      albumId={albumCreditsAlbumId}
+      onClose={() => {
+        isAlbumCreditsOpen = false;
+        albumCreditsAlbumId = null;
+      }}
+      onTrackPlay={(trackCredits) => {
+        // Find the corresponding track in the selected album and play it
+        if (selectedAlbum?.tracks) {
+          const track = selectedAlbum.tracks.find(t => t.id === trackCredits.id);
+          if (track) {
+            handleAlbumTrackPlay(track);
+          }
+        }
+      }}
+      onLabelClick={handleLabelClick}
+      onMusicianClick={handleMusicianClick}
+    />
+
+    <!-- Musician Modal (for confidence level 0-1) -->
+    {#if musicianModalData}
+      <MusicianModal
+        musician={musicianModalData}
+        onClose={closeMusicianModal}
+        onNavigateToArtist={handleArtistClick}
+      />
+    {/if}
+
     <!-- Cast Picker -->
     <CastPicker
       isOpen={isCastPickerOpen}
@@ -2861,7 +3236,6 @@
     height: calc(100vh - 136px); /* 104px NowPlayingBar + 32px TitleBar */
     overflow: hidden;
     position: relative;
-    z-index: 1;
   }
 
   .main-content {

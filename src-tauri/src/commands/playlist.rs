@@ -1,9 +1,18 @@
 //! Playlist-related Tauri commands
 
+use serde::Serialize;
 use tauri::State;
 
-use crate::api::models::{Playlist, SearchResultsPage};
+use crate::api::models::{Playlist, SearchResultsPage, Track};
+use crate::api::performers::{parse_performers, Performer};
 use crate::AppState;
+
+/// Track info with parsed performers for display
+#[derive(Debug, Clone, Serialize)]
+pub struct TrackInfo {
+    pub track: Track,
+    pub performers: Vec<Performer>,
+}
 
 /// Get user's playlists
 #[tauri::command]
@@ -217,4 +226,28 @@ pub async fn subscribe_playlist(
         tracks_count: track_ids.len() as u32,
         ..new_playlist
     })
+}
+
+/// Get track info with parsed performers/credits
+#[tauri::command]
+pub async fn get_track_info(
+    track_id: u64,
+    state: State<'_, AppState>,
+) -> Result<TrackInfo, String> {
+    log::info!("Command: get_track_info {}", track_id);
+
+    let client = state.client.lock().await;
+    let track = client
+        .get_track(track_id)
+        .await
+        .map_err(|e| format!("Failed to get track: {}", e))?;
+
+    // Parse the performers string if available
+    let performers = track
+        .performers
+        .as_ref()
+        .map(|p| parse_performers(p))
+        .unwrap_or_default();
+
+    Ok(TrackInfo { track, performers })
 }

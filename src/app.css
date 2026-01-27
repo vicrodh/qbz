@@ -15,6 +15,17 @@
   --accent-primary: #4285F4;
   --accent-hover: #5a9bf4;
   --accent-active: #3275e4;
+  --btn-primary-text: #ffffff;
+
+  --danger: #ef4444;
+  --danger-bg: rgba(239, 68, 68, 0.1);
+  --danger-border: rgba(239, 68, 68, 0.3);
+  --danger-hover: rgba(239, 68, 68, 0.2);
+
+  --warning: #fbbf24;
+  --warning-bg: rgba(251, 191, 36, 0.1);
+  --warning-border: rgba(251, 191, 36, 0.3);
+  --warning-hover: rgba(251, 191, 36, 0.2);
 
   --border-subtle: #2a2a2a;
   --border-strong: #3a3a3a;
@@ -72,8 +83,20 @@
   --text-muted: #666666;
   --text-disabled: #999999;
 
+  --btn-primary-text: #ffffff;
+
   --border-subtle: #e0e0e0;
   --border-strong: #cccccc;
+
+  --danger: #dc2626;
+  --danger-bg: rgba(220, 38, 38, 0.1);
+  --danger-border: rgba(220, 38, 38, 0.3);
+  --danger-hover: rgba(220, 38, 38, 0.15);
+
+  --warning: #d97706;
+  --warning-bg: rgba(217, 119, 6, 0.1);
+  --warning-border: rgba(217, 119, 6, 0.3);
+  --warning-hover: rgba(217, 119, 6, 0.15);
 
   /* Alpha overrides for light theme - use black-based */
   --alpha-4: rgba(0, 0, 0, 0.04);
@@ -119,6 +142,7 @@
   --accent-primary: #d4a574;
   --accent-hover: #e0b888;
   --accent-active: #c49460;
+  --btn-primary-text: #1a1814;
 
   --border-subtle: #2e2820;
   --border-strong: #3d362a;
@@ -139,6 +163,7 @@
   --accent-primary: #88c0d0;
   --accent-hover: #81a1c1;
   --accent-active: #5e81ac;
+  --btn-primary-text: #2e3440;
 
   --border-subtle: #434c5e;
   --border-strong: #4c566a;
@@ -159,6 +184,7 @@
   --accent-primary: #bd93f9;
   --accent-hover: #ff79c6;
   --accent-active: #8be9fd;
+  --btn-primary-text: #282a36;
 
   --border-subtle: #44475a;
   --border-strong: #6272a4;
@@ -179,6 +205,7 @@
   --accent-primary: #7aa2f7;
   --accent-hover: #bb9af7;
   --accent-active: #2ac3de;
+  --btn-primary-text: #1a1b26;
 
   --border-subtle: #292e42;
   --border-strong: #414868;
@@ -199,6 +226,7 @@
   --accent-primary: #89b4fa;
   --accent-hover: #74c7ec;
   --accent-active: #b4befe;
+  --btn-primary-text: #11111b;
 
   --border-subtle: #1e1e2e;
   --border-strong: #313244;
@@ -219,6 +247,7 @@
   --accent-primary: #907aa9;
   --accent-hover: #286983;
   --accent-active: #d7827e;
+  --btn-primary-text: #faf4ed;
 
   --border-subtle: #f2e9e1;
   --border-strong: #dfdad9;
@@ -239,6 +268,7 @@
   --accent-primary: #3daee9;
   --accent-hover: #9b59b6;
   --accent-active: #1d99f3;
+  --btn-primary-text: #141618;
 
   --border-subtle: #292c30;
   --border-strong: #31363b;
@@ -259,6 +289,7 @@
   --accent-primary: #3daee9;
   --accent-hover: #9b59b6;
   --accent-active: #2980b9;
+  --btn-primary-text: #ffffff;
 
   --border-subtle: #dee0e2;
   --border-strong: #c8cdd3;
@@ -279,6 +310,7 @@
   --accent-primary: #3584e4;
   --accent-hover: #1c71d8;
   --accent-active: #1a5fb4;
+  --btn-primary-text: #ffffff;
 
   --border-subtle: #28282c;
   --border-strong: #2e2e32;
@@ -299,6 +331,7 @@
   --accent-primary: #3584e4;
   --accent-hover: #1c71d8;
   --accent-active: #1a5fb4;
+  --btn-primary-text: #ffffff;
 
   --border-subtle: #f3f3f5;
   --border-strong: #deddda;
@@ -447,4 +480,98 @@ select {
   background: rgba(var(--accent-primary-rgb, 66, 133, 244), 0.15);
   box-shadow: inset 0 0 0 1px var(--accent-primary);
   color: var(--accent-primary);
+}
+
+/* ============ Standard Buttons ============ */
+/* Reusable button styles for modals, forms, and actions */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 150ms ease;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  color: var(--btn-primary-text);
+}
+
+.btn-primary:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: var(--bg-secondary);
+  border-color: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: var(--bg-tertiary);
+}
+
+.btn-danger {
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-border);
+  color: var(--danger);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: var(--danger-hover);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Button sizes */
+.btn-sm {
+  padding: 6px 14px;
+  font-size: 13px;
+  border-radius: 6px;
+}
+
+.btn-lg {
+  padding: 12px 28px;
+  font-size: 15px;
+  border-radius: 10px;
+}
+
+/* ============ Utility Classes ============ */
+
+/* Icon inline with text */
+.icon-inline {
+  display: inline;
+  vertical-align: middle;
+  margin-right: 4px;
+}
+
+/* Warning badge (complements .btn-danger) */
+.badge-warning {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 13px;
 }

@@ -52,6 +52,7 @@
     onShareSonglink?: (track: Track) => void;
     onGoToAlbum?: (albumId: string) => void;
     onGoToArtist?: (artistId: number) => void;
+    onShowInfo?: (trackId: number) => void;
     onReDownload?: (track: Track) => void;
     // For getting artist/album IDs from non-local tracks
     getArtistId?: (track: Track) => number | undefined;
@@ -92,6 +93,7 @@
     onShareSonglink,
     onGoToAlbum,
     onGoToArtist,
+    onShowInfo,
     onReDownload,
     getArtistId,
     getAlbumId,
@@ -335,6 +337,7 @@
               onShareSonglink: onShareSonglink ? () => onShareSonglink(item.track) : undefined,
               onGoToAlbum: albumId && onGoToAlbum ? () => onGoToAlbum(albumId) : undefined,
               onGoToArtist: artistId && onGoToArtist ? () => onGoToArtist(artistId) : undefined,
+              onShowInfo: !isLocal && onShowInfo ? () => onShowInfo(trackId) : undefined,
               onDownload: onDownload ? () => onDownload(item.track) : undefined,
               isTrackDownloaded,
               onReDownload: isTrackDownloaded && onReDownload ? () => onReDownload(item.track) : undefined,

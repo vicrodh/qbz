@@ -16,6 +16,7 @@
     id: string;
     title: string;
     artist: { id: number; name: string };
+    genre?: { name: string };
     image: { small?: string; thumbnail?: string; large?: string };
     release_date_original?: string;
     hires: boolean;
@@ -74,6 +75,7 @@
     onTrackShareSonglink?: (track: DisplayTrack) => void;
     onTrackGoToAlbum?: (albumId: string) => void;
     onTrackGoToArtist?: (artistId: number) => void;
+    onTrackShowInfo?: (trackId: number) => void;
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
@@ -124,6 +126,7 @@
     onTrackShareSonglink,
     onTrackGoToAlbum,
     onTrackGoToArtist,
+    onTrackShowInfo,
     onTrackDownload,
     onTrackRemoveDownload,
     onTrackReDownload,
@@ -554,6 +557,10 @@
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  function getGenreLabel(album: FavoriteAlbum): string {
+    return album.genre?.name || 'Unknown genre'
   }
 
   function getQualityLabel(item: { hires?: boolean; maximum_bit_depth?: number; maximum_sampling_rate?: number }): string {
@@ -1239,6 +1246,7 @@
               onShareSonglink={onTrackShareSonglink ? (t) => onTrackShareSonglink(buildDisplayTrackFromFavorite(t)) : undefined}
               onGoToAlbum={onTrackGoToAlbum}
               onGoToArtist={onTrackGoToArtist}
+              onShowInfo={onTrackShowInfo}
               onReDownload={onTrackReDownload ? (t) => onTrackReDownload(buildDisplayTrackFromFavorite(t)) : undefined}
             />
           </div>
@@ -1292,6 +1300,9 @@
                         artwork={album.image?.large || album.image?.thumbnail || ''}
                         title={album.title}
                         artist={album.artist.name}
+                        genre={getGenreLabel(album)}
+                        releaseDate={album.release_date_original}
+                        size="large"
                         quality={getQualityLabel(album)}
                         onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                         onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -1363,6 +1374,9 @@
                 artwork={album.image?.large || album.image?.thumbnail || ''}
                 title={album.title}
                 artist={album.artist.name}
+                genre={getGenreLabel(album)}
+                releaseDate={album.release_date_original}
+                size="large"
                 quality={getQualityLabel(album)}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -1532,6 +1546,7 @@
 <style>
   .favorites-view {
     padding: 24px;
+    padding-left: 18px;
     padding-right: 8px;
     padding-bottom: 100px;
     overflow-y: auto;
@@ -2029,9 +2044,9 @@
   }
 
   .album-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-    gap: 24px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 24px 14px;
   }
 
   .album-sections {

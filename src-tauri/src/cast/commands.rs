@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 use crate::api::models::Quality;
 use crate::AppState;
 use crate::cast::{
-    CastError, CastStatus, DeviceDiscovery, DiscoveredDevice, MediaMetadata, MediaServer,
+    CastError, CastStatus, CastPositionInfo, DeviceDiscovery, DiscoveredDevice, MediaMetadata, MediaServer,
 };
 use crate::cast::chromecast_thread::ChromecastHandle;
 use crate::library::{AudioFormat, LibraryState};
@@ -108,6 +108,11 @@ pub async fn cast_disconnect(state: State<'_, CastState>) -> Result<(), String> 
 #[tauri::command]
 pub async fn cast_get_status(state: State<'_, CastState>) -> Result<CastStatus, String> {
     state.chromecast.get_status().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn cast_get_position(state: State<'_, CastState>) -> Result<CastPositionInfo, String> {
+    state.chromecast.get_media_position().map_err(|e| e.to_string())
 }
 
 // === Playback ===

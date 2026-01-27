@@ -11,6 +11,9 @@
 //! Supports both rodio (PipeWire/Pulse) and direct ALSA (hw: devices).
 
 mod playback_engine;
+mod streaming_source;
+
+pub use streaming_source::{BufferedMediaSource, BufferWriter, StreamingConfig, IncrementalStreamingSource};
 
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::panic::{self, AssertUnwindSafe};
@@ -47,6 +50,15 @@ enum AudioCommand {
         duration_secs: u64,
         sample_rate: u32,
         channels: u16,
+    },
+    /// Play from streaming source (BufferedMediaSource)
+    /// The download task should already be running and pushing to the source
+    PlayStreaming {
+        source: Arc<BufferedMediaSource>,
+        track_id: u64,
+        sample_rate: u32,
+        channels: u16,
+        duration_secs: u64,
     },
     /// Pause playback
     Pause,
@@ -1046,6 +1058,216 @@ impl Player {
                             actual_duration
                         );
                     }
+                    AudioCommand::PlayStreaming { source, track_id, sample_rate, channels, duration_secs } => {
+                        log::info!(
+                            "Audio thread: starting streaming playback for track {} ({}Hz, {} channels, {}s)",
+                            track_id,
+                            sample_rate,
+                            channels,
+                            duration_secs
+                        );
+                        *pause_suspend_deadline = None;
+
+                        // Get DAC passthrough setting
+                        let dac_passthrough = thread_settings
+                            .lock()
+                            .ok()
+                            .map(|s| s.dac_passthrough)
+                            .unwrap_or(false);
+
+                        // Check if we need to recreate the stream
+                        let format_changed = *current_sample_rate != Some(sample_rate)
+                            || *current_channels != Some(channels);
+
+                        let using_alsa_direct = thread_settings
+                            .lock()
+                            .ok()
+                            .and_then(|s| s.backend_type)
+                            .map(|b| b == AudioBackendType::Alsa)
+                            .unwrap_or(false);
+
+                        let needs_new_stream = stream_opt.is_none()
+                            || (dac_passthrough && format_changed)
+                            || (using_alsa_direct && format_changed);
+
+                        if needs_new_stream {
+                            if stream_opt.is_some() {
+                                if (dac_passthrough || using_alsa_direct) && format_changed {
+                                    let mode = if using_alsa_direct { "ALSA Direct" } else { "DAC passthrough" };
+                                    log::info!(
+                                        "Streaming: Sample rate/channels changed to {}Hz/{}ch - recreating OutputStream ({})",
+                                        sample_rate,
+                                        channels,
+                                        mode
+                                    );
+                                }
+                                drop(stream_opt.take());
+                            }
+
+                            let stream_result = if let Some(settings) = thread_settings.lock().ok() {
+                                match try_init_stream_with_backend(&settings, sample_rate, channels) {
+                                    Some(result) => result,
+                                    None => {
+                                        log::info!("Backend system not configured, using legacy CPAL path");
+                                        let device = if let Some(ref name) = *current_device_name {
+                                            host.output_devices()
+                                                .ok()
+                                                .and_then(|mut devices| {
+                                                    devices.find(|d| d.name().ok().as_ref() == Some(name))
+                                                })
+                                                .or_else(|| host.default_output_device())
+                                        } else {
+                                            host.default_output_device()
+                                        };
+
+                                        let Some(device) = device else {
+                                            log::error!("No audio output device available for streaming");
+                                            thread_state.set_stream_error(true);
+                                            return;
+                                        };
+
+                                        if let Ok(name) = device.name() {
+                                            thread_state.set_current_device(Some(name));
+                                        }
+
+                                        create_output_stream_with_config(
+                                            &device,
+                                            sample_rate,
+                                            channels,
+                                            dac_passthrough,
+                                        ).map(|(stream, handle)| StreamType::Rodio(stream, handle))
+                                    }
+                                }
+                            } else {
+                                let device = host.default_output_device();
+                                let Some(device) = device else {
+                                    log::error!("No audio output device available for streaming");
+                                    thread_state.set_stream_error(true);
+                                    return;
+                                };
+                                create_output_stream_with_config(&device, sample_rate, channels, dac_passthrough)
+                                    .map(|(stream, handle)| StreamType::Rodio(stream, handle))
+                            };
+
+                            match stream_result {
+                                Ok(stream) => {
+                                    *stream_opt = Some(stream);
+                                    *current_sample_rate = Some(sample_rate);
+                                    *current_channels = Some(channels);
+                                    thread_state.set_stream_error(false);
+                                    log::info!("✅ Streaming audio stream ready at {}Hz", sample_rate);
+                                    std::thread::sleep(Duration::from_millis(150));
+                                }
+                                Err(e) => {
+                                    log::error!("❌ Failed to create stream for streaming at {}Hz: {}", sample_rate, e);
+                                    thread_state.set_stream_error(true);
+                                    return;
+                                }
+                            }
+                        }
+
+                        let Some(ref stream) = *stream_opt else {
+                            log::error!("Audio thread: no audio device available for streaming");
+                            return;
+                        };
+
+                        // Stop previous engine
+                        if let Some(engine) = current_engine.take() {
+                            engine.stop();
+                            std::thread::sleep(Duration::from_millis(50));
+                        }
+
+                        // Create PlaybackEngine
+                        let mut engine = match stream {
+                            StreamType::Rodio(_stream, handle) => {
+                                match PlaybackEngine::new_rodio(handle) {
+                                    Ok(e) => {
+                                        *consecutive_sink_failures = 0;
+                                        thread_state.set_stream_error(false);
+                                        e
+                                    }
+                                    Err(e) => {
+                                        log::error!("Failed to create engine for streaming: {}", e);
+                                        return;
+                                    }
+                                }
+                            }
+                            #[cfg(target_os = "linux")]
+                            StreamType::AlsaDirect(alsa_stream) => {
+                                let hardware_volume = thread_settings
+                                    .lock()
+                                    .ok()
+                                    .map(|s| s.alsa_hardware_volume)
+                                    .unwrap_or(false);
+                                PlaybackEngine::new_alsa_direct(alsa_stream.clone(), hardware_volume)
+                            }
+                        };
+
+                        let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
+                        engine.set_volume(volume);
+
+                        // Wait for minimum buffer before starting playback
+                        log::info!("Streaming: waiting for initial buffer...");
+                        let start_wait = Instant::now();
+                        let max_wait = Duration::from_secs(30);
+
+                        while !source.has_min_buffer() && start_wait.elapsed() < max_wait {
+                            std::thread::sleep(Duration::from_millis(50));
+                        }
+
+                        if !source.has_min_buffer() {
+                            log::error!("Streaming: timeout waiting for initial buffer");
+                            return;
+                        }
+
+                        let buffer_wait_ms = start_wait.elapsed().as_millis();
+                        log::info!(
+                            "Streaming: initial buffer ready in {}ms, creating incremental decoder...",
+                            buffer_wait_ms
+                        );
+
+                        // Create incremental streaming source - this starts playback IMMEDIATELY
+                        // while continuing to decode/download in background
+                        let incremental_source = match IncrementalStreamingSource::new(source.clone()) {
+                            Ok(s) => s,
+                            Err(e) => {
+                                log::error!("Failed to create incremental streaming source: {}", e);
+                                return;
+                            }
+                        };
+
+                        // Verify sample rate/channels match what we expected
+                        let actual_sr = incremental_source.get_sample_rate();
+                        let actual_ch = incremental_source.get_channels();
+                        if actual_sr != sample_rate || actual_ch != channels {
+                            log::warn!(
+                                "Streaming: detected format {}Hz/{}ch differs from expected {}Hz/{}ch",
+                                actual_sr, actual_ch, sample_rate, channels
+                            );
+                        }
+
+                        // Set duration from track metadata (passed from frontend)
+                        // This allows the seekbar to show progress even during streaming
+                        thread_state.duration.store(duration_secs, Ordering::SeqCst);
+
+                        // Box the incremental source to match the expected type
+                        let source_to_play: Box<dyn Source<Item = i16> + Send> = Box::new(incremental_source);
+                        if let Err(e) = engine.append(source_to_play) {
+                            log::error!("Failed to append streaming source to engine: {}", e);
+                            return;
+                        }
+
+                        thread_state.is_playing.store(true, Ordering::SeqCst);
+                        thread_state.position.store(0, Ordering::SeqCst);
+                        thread_state.current_track_id.store(track_id, Ordering::SeqCst);
+                        thread_state.start_playback_timer(0);
+
+                        *current_engine = Some(engine);
+                        log::info!(
+                            "Audio thread: streaming playback STARTED in {}ms (incremental decode active)",
+                            start_wait.elapsed().as_millis()
+                        );
+                    }
                     AudioCommand::Pause => {
                         if let Some(ref engine) = *current_engine {
                             engine.pause();
@@ -1436,6 +1658,93 @@ impl Player {
 
         log::info!("Player: Playback initiated successfully");
         Ok(())
+    }
+
+    /// Play from streaming source (starts playback before full download)
+    /// Returns the BufferWriter so caller can push data as it downloads
+    pub fn play_streaming(
+        &self,
+        track_id: u64,
+        sample_rate: u32,
+        channels: u16,
+        content_length: u64,
+        buffer_seconds: u8,
+        duration_secs: u64,
+    ) -> Result<BufferWriter, String> {
+        log::info!(
+            "Player: Starting streaming playback for track {} ({}Hz, {}ch, {} bytes total, {}s)",
+            track_id,
+            sample_rate,
+            channels,
+            content_length,
+            duration_secs
+        );
+
+        // Use StreamingConfig::from_seconds for proper buffer sizing
+        let config = StreamingConfig::from_seconds(buffer_seconds);
+
+        let (source, writer) = BufferedMediaSource::new(config, Some(content_length));
+        let source = Arc::new(source);
+
+        self.tx
+            .send(AudioCommand::PlayStreaming {
+                source: source.clone(),
+                track_id,
+                sample_rate,
+                channels,
+                duration_secs,
+            })
+            .map_err(|e| {
+                log::error!("Player: Failed to send streaming command: {}", e);
+                format!("Failed to send streaming play command: {}", e)
+            })?;
+
+        log::info!("Player: Streaming playback initiated");
+        Ok(writer)
+    }
+
+    /// Play from streaming source with dynamic buffer based on measured speed
+    /// Returns the BufferWriter so caller can push data as it downloads
+    pub fn play_streaming_dynamic(
+        &self,
+        track_id: u64,
+        sample_rate: u32,
+        channels: u16,
+        content_length: u64,
+        speed_mbps: f64,
+        duration_secs: u64,
+    ) -> Result<BufferWriter, String> {
+        log::info!(
+            "Player: Starting dynamic streaming for track {} ({}Hz, {}ch, {:.2} MB, {:.1} MB/s, {}s)",
+            track_id,
+            sample_rate,
+            channels,
+            content_length as f64 / (1024.0 * 1024.0),
+            speed_mbps,
+            duration_secs
+        );
+
+        // Use StreamingConfig::from_speed_mbps for dynamic buffer sizing
+        let config = StreamingConfig::from_speed_mbps(speed_mbps);
+
+        let (source, writer) = BufferedMediaSource::new(config, Some(content_length));
+        let source = Arc::new(source);
+
+        self.tx
+            .send(AudioCommand::PlayStreaming {
+                source: source.clone(),
+                track_id,
+                sample_rate,
+                channels,
+                duration_secs,
+            })
+            .map_err(|e| {
+                log::error!("Player: Failed to send streaming command: {}", e);
+                format!("Failed to send streaming play command: {}", e)
+            })?;
+
+        log::info!("Player: Dynamic streaming playback initiated");
+        Ok(writer)
     }
 
     /// Download audio from URL with timeout

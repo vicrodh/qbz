@@ -1,0 +1,541 @@
+//! MusicBrainz API response models
+//!
+//! Types for deserializing MusicBrainz JSON responses
+
+use serde::{Deserialize, Serialize};
+
+/// Match confidence levels for MusicBrainz lookups
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MatchConfidence {
+    Exact,  // ISRC/UPC exact match
+    High,   // Score >= 95
+    Medium, // Score >= 80
+    Low,    // Score >= 60
+    None,   // No match found
+}
+
+impl MatchConfidence {
+    pub fn from_score(score: Option<i32>) -> Self {
+        match score {
+            Some(s) if s >= 100 => Self::Exact,
+            Some(s) if s >= 95 => Self::High,
+            Some(s) if s >= 80 => Self::Medium,
+            Some(s) if s >= 60 => Self::Low,
+            _ => Self::None,
+        }
+    }
+}
+
+/// Artist type classification
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ArtistType {
+    Person,
+    Group,
+    Orchestra,
+    Choir,
+    Character,
+    Other,
+}
+
+impl Default for ArtistType {
+    fn default() -> Self {
+        Self::Other
+    }
+}
+
+impl From<Option<&str>> for ArtistType {
+    fn from(s: Option<&str>) -> Self {
+        match s.map(|s| s.to_lowercase()).as_deref() {
+            Some("person") => Self::Person,
+            Some("group") => Self::Group,
+            Some("orchestra") => Self::Orchestra,
+            Some("choir") => Self::Choir,
+            Some("character") => Self::Character,
+            _ => Self::Other,
+        }
+    }
+}
+
+// ============ API Response Types ============
+
+/// Recording search response
+#[derive(Debug, Deserialize)]
+pub struct RecordingSearchResponse {
+    pub created: Option<String>,
+    pub count: i32,
+    pub offset: i32,
+    pub recordings: Vec<RecordingResult>,
+}
+
+/// Single recording in search results
+#[derive(Debug, Deserialize)]
+pub struct RecordingResult {
+    pub id: String,
+    pub score: Option<i32>,
+    pub title: Option<String>,
+    pub length: Option<i64>,
+    #[serde(rename = "artist-credit")]
+    pub artist_credit: Option<Vec<ArtistCredit>>,
+    pub isrcs: Option<Vec<String>>,
+    pub releases: Option<Vec<ReleaseRef>>,
+}
+
+/// Artist credit entry
+#[derive(Debug, Deserialize)]
+pub struct ArtistCredit {
+    pub name: Option<String>,
+    pub joinphrase: Option<String>,
+    pub artist: ArtistRef,
+}
+
+/// Reference to an artist
+#[derive(Debug, Deserialize)]
+pub struct ArtistRef {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "sort-name")]
+    pub sort_name: Option<String>,
+    pub disambiguation: Option<String>,
+}
+
+/// Reference to a release (album)
+#[derive(Debug, Deserialize)]
+pub struct ReleaseRef {
+    pub id: String,
+    pub title: Option<String>,
+    pub status: Option<String>,
+    pub date: Option<String>,
+    pub country: Option<String>,
+    #[serde(rename = "release-group")]
+    pub release_group: Option<ReleaseGroupRef>,
+}
+
+/// Reference to a release group
+#[derive(Debug, Deserialize)]
+pub struct ReleaseGroupRef {
+    pub id: String,
+    #[serde(rename = "primary-type")]
+    pub primary_type: Option<String>,
+}
+
+/// Artist search response
+#[derive(Debug, Deserialize)]
+pub struct ArtistSearchResponse {
+    pub created: Option<String>,
+    pub count: i32,
+    pub offset: i32,
+    pub artists: Vec<ArtistResult>,
+}
+
+/// Single artist in search results
+#[derive(Debug, Deserialize)]
+pub struct ArtistResult {
+    pub id: String,
+    pub score: Option<i32>,
+    pub name: String,
+    #[serde(rename = "sort-name")]
+    pub sort_name: Option<String>,
+    #[serde(rename = "type")]
+    pub artist_type: Option<String>,
+    pub country: Option<String>,
+    pub disambiguation: Option<String>,
+    pub aliases: Option<Vec<Alias>>,
+    #[serde(rename = "life-span")]
+    pub life_span: Option<LifeSpan>,
+}
+
+/// Artist alias
+#[derive(Debug, Deserialize)]
+pub struct Alias {
+    pub name: String,
+    #[serde(rename = "sort-name")]
+    pub sort_name: Option<String>,
+    #[serde(rename = "type")]
+    pub alias_type: Option<String>,
+    pub locale: Option<String>,
+    pub primary: Option<bool>,
+}
+
+/// Life span for an artist
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct LifeSpan {
+    pub begin: Option<String>,
+    pub end: Option<String>,
+    pub ended: Option<bool>,
+}
+
+/// Full artist response (with includes)
+#[derive(Debug, Deserialize)]
+pub struct ArtistFullResponse {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "sort-name")]
+    pub sort_name: Option<String>,
+    #[serde(rename = "type")]
+    pub artist_type: Option<String>,
+    pub country: Option<String>,
+    pub disambiguation: Option<String>,
+    #[serde(rename = "life-span")]
+    pub life_span: Option<LifeSpan>,
+    pub relations: Option<Vec<Relation>>,
+}
+
+/// Relation between entities
+#[derive(Debug, Deserialize)]
+pub struct Relation {
+    #[serde(rename = "type")]
+    pub relation_type: String,
+    #[serde(rename = "type-id")]
+    pub type_id: Option<String>,
+    pub direction: Option<String>,
+    pub begin: Option<String>,
+    pub end: Option<String>,
+    pub ended: Option<bool>,
+    pub attributes: Option<Vec<String>>,
+    pub artist: Option<ArtistRef>,
+}
+
+/// Release search response
+#[derive(Debug, Deserialize)]
+pub struct ReleaseSearchResponse {
+    pub created: Option<String>,
+    pub count: i32,
+    pub offset: i32,
+    pub releases: Vec<ReleaseResult>,
+}
+
+/// Single release in search results
+#[derive(Debug, Deserialize)]
+pub struct ReleaseResult {
+    pub id: String,
+    pub score: Option<i32>,
+    pub title: String,
+    pub status: Option<String>,
+    pub date: Option<String>,
+    pub country: Option<String>,
+    pub barcode: Option<String>,
+    #[serde(rename = "label-info")]
+    pub label_info: Option<Vec<LabelInfo>>,
+    #[serde(rename = "release-group")]
+    pub release_group: Option<ReleaseGroupRef>,
+    #[serde(rename = "artist-credit")]
+    pub artist_credit: Option<Vec<ArtistCredit>>,
+    /// Media info (contains track counts per disc)
+    pub media: Option<Vec<ReleaseSearchMedium>>,
+    /// Total track count across all media
+    #[serde(rename = "track-count")]
+    pub track_count: Option<u16>,
+}
+
+/// Simplified medium info for search results
+#[derive(Debug, Deserialize)]
+pub struct ReleaseSearchMedium {
+    pub format: Option<String>,
+    #[serde(rename = "track-count")]
+    pub track_count: Option<u16>,
+}
+
+/// Label information
+#[derive(Debug, Deserialize)]
+pub struct LabelInfo {
+    #[serde(rename = "catalog-number")]
+    pub catalog_number: Option<String>,
+    pub label: Option<LabelRef>,
+}
+
+/// Reference to a label
+#[derive(Debug, Deserialize)]
+pub struct LabelRef {
+    pub id: String,
+    pub name: String,
+}
+
+// ============ Full Release Response (with tracks) ============
+
+/// Full release response from lookup endpoint
+/// Includes media, tracks, and tags when requested via inc parameter
+#[derive(Debug, Deserialize)]
+pub struct ReleaseFullResponse {
+    pub id: String,
+    pub title: String,
+    pub status: Option<String>,
+    pub date: Option<String>,
+    pub country: Option<String>,
+    pub barcode: Option<String>,
+    #[serde(rename = "artist-credit")]
+    pub artist_credit: Option<Vec<ArtistCredit>>,
+    #[serde(rename = "label-info")]
+    pub label_info: Option<Vec<LabelInfo>>,
+    #[serde(rename = "release-group")]
+    pub release_group: Option<ReleaseGroupRef>,
+    /// Media (CDs, vinyl sides, etc.) containing tracks
+    pub media: Option<Vec<Medium>>,
+    /// Community tags (genres)
+    pub tags: Option<Vec<Tag>>,
+}
+
+/// A medium (disc) containing tracks
+#[derive(Debug, Deserialize)]
+pub struct Medium {
+    /// Position of this medium in the release (1-based)
+    pub position: Option<u8>,
+    /// Format (CD, Vinyl, Digital Media, etc.)
+    pub format: Option<String>,
+    /// Track count on this medium
+    #[serde(rename = "track-count")]
+    pub track_count: Option<u16>,
+    /// Tracks on this medium
+    pub tracks: Option<Vec<MediumTrack>>,
+}
+
+/// A track on a medium
+#[derive(Debug, Deserialize)]
+pub struct MediumTrack {
+    /// Track position on the medium (1-based)
+    pub position: Option<u8>,
+    /// Track number as string (may differ from position for vinyl etc.)
+    pub number: Option<String>,
+    /// Track title (may differ from recording title)
+    pub title: Option<String>,
+    /// Track length in milliseconds
+    pub length: Option<i64>,
+    /// The recording this track is linked to
+    pub recording: Option<TrackRecording>,
+}
+
+/// Recording reference within a track
+#[derive(Debug, Deserialize)]
+pub struct TrackRecording {
+    pub id: String,
+    pub title: Option<String>,
+    pub length: Option<i64>,
+    #[serde(rename = "artist-credit")]
+    pub artist_credit: Option<Vec<ArtistCredit>>,
+}
+
+/// Community tag (used for genres)
+#[derive(Debug, Deserialize)]
+pub struct Tag {
+    /// Tag name (e.g., "rock", "electronic")
+    pub name: String,
+    /// Number of times this tag was applied
+    pub count: Option<i32>,
+}
+
+// ============ Resolved Types (Output) ============
+
+/// Resolved track with MusicBrainz data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedTrack {
+    pub mbid: Option<String>,
+    pub title: Option<String>,
+    pub artist_credit: Option<String>,
+    pub artist_mbids: Option<Vec<String>>,
+    pub release_mbid: Option<String>,
+    pub release_title: Option<String>,
+    pub confidence: MatchConfidence,
+}
+
+impl ResolvedTrack {
+    pub fn empty() -> Self {
+        Self {
+            mbid: None,
+            title: None,
+            artist_credit: None,
+            artist_mbids: None,
+            release_mbid: None,
+            release_title: None,
+            confidence: MatchConfidence::None,
+        }
+    }
+}
+
+/// Resolved artist with MusicBrainz data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedArtist {
+    pub mbid: Option<String>,
+    pub name: Option<String>,
+    pub sort_name: Option<String>,
+    pub artist_type: Option<ArtistType>,
+    pub country: Option<String>,
+    pub disambiguation: Option<String>,
+    pub confidence: MatchConfidence,
+}
+
+impl ResolvedArtist {
+    pub fn empty() -> Self {
+        Self {
+            mbid: None,
+            name: None,
+            sort_name: None,
+            artist_type: None,
+            country: None,
+            disambiguation: None,
+            confidence: MatchConfidence::None,
+        }
+    }
+}
+
+/// Resolved release with MusicBrainz data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedRelease {
+    pub mbid: Option<String>,
+    pub title: Option<String>,
+    pub release_group_mbid: Option<String>,
+    pub label: Option<String>,
+    pub catalog_number: Option<String>,
+    pub country: Option<String>,
+    pub date: Option<String>,
+    pub confidence: MatchConfidence,
+}
+
+impl ResolvedRelease {
+    pub fn empty() -> Self {
+        Self {
+            mbid: None,
+            title: None,
+            release_group_mbid: None,
+            label: None,
+            catalog_number: None,
+            country: None,
+            date: None,
+            confidence: MatchConfidence::None,
+        }
+    }
+}
+
+/// Related artist (for relationships)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelatedArtist {
+    pub mbid: String,
+    pub name: String,
+    pub role: Option<String>,
+    pub period: Option<Period>,
+    pub ended: bool,
+}
+
+/// Time period for a relationship
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Period {
+    pub begin: Option<String>,
+    pub end: Option<String>,
+}
+
+/// Artist relationships
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtistRelationships {
+    pub members: Vec<RelatedArtist>,
+    pub past_members: Vec<RelatedArtist>,
+    pub groups: Vec<RelatedArtist>,
+    pub collaborators: Vec<RelatedArtist>,
+}
+
+impl ArtistRelationships {
+    pub fn empty() -> Self {
+        Self {
+            members: Vec::new(),
+            past_members: Vec::new(),
+            groups: Vec::new(),
+            collaborators: Vec::new(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.members.is_empty()
+            && self.past_members.is_empty()
+            && self.groups.is_empty()
+            && self.collaborators.is_empty()
+    }
+}
+
+// ============ Musician Types ============
+
+/// Musician confidence level for MusicBrainz ↔ Qobuz matching
+///
+/// This determines what UI is shown when a musician is clicked:
+/// - Confirmed (3): Navigate to Qobuz Artist Page
+/// - Contextual (2): Navigate to Musician Page
+/// - Weak (1): Show Informational Modal only
+/// - None (0): Show Informational Modal only
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum MusicianConfidence {
+    /// Level 3: Dedicated Qobuz artist page exists
+    Confirmed,
+    /// Level 2: Appears in Qobuz credits, no standalone artist page
+    Contextual,
+    /// Level 1: MusicBrainz entity exists, sparse Qobuz results
+    Weak,
+    /// Level 0: No safe match, high risk of incorrect association
+    None,
+}
+
+impl MusicianConfidence {
+    pub fn level(&self) -> u8 {
+        match self {
+            Self::Confirmed => 3,
+            Self::Contextual => 2,
+            Self::Weak => 1,
+            Self::None => 0,
+        }
+    }
+}
+
+impl Default for MusicianConfidence {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+/// Resolved musician with confidence assessment
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolvedMusician {
+    /// Musician name (from credits or MusicBrainz)
+    pub name: String,
+    /// Primary role (e.g., "drums", "piano")
+    pub role: String,
+    /// MusicBrainz ID (if resolved)
+    pub mbid: Option<String>,
+    /// Qobuz artist ID (if exists)
+    pub qobuz_artist_id: Option<i64>,
+    /// Confidence level
+    pub confidence: MusicianConfidence,
+    /// Known bands/projects (from MusicBrainz)
+    pub bands: Vec<String>,
+    /// Number of albums the musician appears on (Qobuz)
+    pub appears_on_count: usize,
+}
+
+impl ResolvedMusician {
+    pub fn empty(name: String, role: String) -> Self {
+        Self {
+            name,
+            role,
+            mbid: None,
+            qobuz_artist_id: None,
+            confidence: MusicianConfidence::None,
+            bands: Vec::new(),
+            appears_on_count: 0,
+        }
+    }
+}
+
+/// Album appearance for a musician
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlbumAppearance {
+    pub album_id: String,
+    pub album_title: String,
+    pub album_artwork: String,
+    pub artist_name: String,
+    pub year: Option<String>,
+    pub role_on_album: String,
+}
+
+/// Musician appearances response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MusicianAppearances {
+    pub albums: Vec<AlbumAppearance>,
+    pub total: usize,
+}

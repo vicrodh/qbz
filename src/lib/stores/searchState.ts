@@ -1,5 +1,8 @@
 export type SearchTab = 'all' | 'albums' | 'tracks' | 'artists';
 
+// Search filter types supported by Qobuz API
+export type SearchFilterType = 'MainArtist' | 'Performer' | 'Composer' | 'Label' | 'ReleaseName' | null;
+
 export interface SearchResults<T> {
   items: T[];
   total: number;
@@ -16,6 +19,7 @@ export interface SearchAllResults<Album, Track, Artist> {
 export interface SearchState<Album, Track, Artist> {
   query: string;
   activeTab: SearchTab;
+  filterType: SearchFilterType;
   albumResults: SearchResults<Album> | null;
   trackResults: SearchResults<Track> | null;
   artistResults: SearchResults<Artist> | null;
@@ -25,6 +29,7 @@ export interface SearchState<Album, Track, Artist> {
 let searchState: SearchState<unknown, unknown, unknown> = {
   query: '',
   activeTab: 'all',
+  filterType: null,
   albumResults: null,
   trackResults: null,
   artistResults: null,

@@ -13,7 +13,11 @@ import {
   castPause,
   castSeek,
   castSetVolume,
-  castStop
+  castStop,
+  getCastPosition,
+  subscribe as subscribeToCast,
+  setOnCastTrackEnded,
+  setOnCastDisconnected
 } from '$lib/stores/castStore';
 
 // ============ Types ============
@@ -28,10 +32,13 @@ export interface PlayingTrack {
   quality: string;
   bitDepth?: number;
   samplingRate?: number;
+  format?: string;
   isLocal?: boolean;
   // Optional IDs for recommendation tracking
   albumId?: string;
   artistId?: number;
+  // ISRC for MusicBrainz/ListenBrainz enrichment
+  isrc?: string;
 }
 
 interface BackendPlaybackState {
@@ -61,6 +68,7 @@ let volume = 75;
 let isFavorite = false;
 // Event listener state (replaces polling)
 let eventUnlisten: UnlistenFn | null = null;
+let castUnsubscribe: (() => void) | null = null;
 let isAdvancingTrack = false;
 let isSkipping = false;
 let queueEnded = false;
@@ -242,8 +250,8 @@ export async function togglePlay(): Promise<void> {
           console.log('[Player] Restoring local track:', localTrackId);
           await invoke('library_play_track', { trackId: localTrackId });
         } else {
-          // Qobuz track - use play_track
-          await invoke('play_track', { trackId: currentTrack.id });
+          // Qobuz track - use play_track with duration for seekbar
+          await invoke('play_track', { trackId: currentTrack.id, durationSecs: currentTrack.duration });
         }
 
         // Seek to saved position after a short delay to let audio load
@@ -347,6 +355,8 @@ export async function stop(): Promise<void> {
  */
 export function setOnTrackEnded(callback: () => Promise<void>): void {
   onTrackEnded = callback;
+  // Also set the same callback for cast track ended (DLNA auto-advance)
+  setOnCastTrackEnded(callback);
 }
 
 /**
@@ -398,6 +408,25 @@ export async function startPolling(): Promise<void> {
   } catch (err) {
     console.error('Failed to start playback event listener:', err);
   }
+
+  // Also subscribe to cast store for DLNA position updates
+  if (!castUnsubscribe) {
+    castUnsubscribe = subscribeToCast(() => {
+      if (isCasting()) {
+        const castPos = getCastPosition();
+        if (castPos.positionSecs !== currentTime) {
+          currentTime = castPos.positionSecs;
+          notifyListeners();
+        }
+      }
+    });
+
+    // Set callback for when cast disconnects - reset player state
+    setOnCastDisconnected(() => {
+      isPlaying = false;
+      notifyListeners();
+    });
+  }
 }
 
 /**
@@ -408,6 +437,10 @@ export function stopPolling(): void {
     eventUnlisten();
     eventUnlisten = null;
     console.log('Stopped listening for playback events');
+  }
+  if (castUnsubscribe) {
+    castUnsubscribe();
+    castUnsubscribe = null;
   }
 }
 

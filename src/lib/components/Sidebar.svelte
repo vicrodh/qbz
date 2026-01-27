@@ -24,6 +24,13 @@
     movePlaylistToFolder,
     type PlaylistFolder
   } from '$lib/stores/playlistFoldersStore';
+  import {
+    openMenu as openGlobalMenu,
+    closeMenu as closeGlobalMenu,
+    subscribe as subscribeFloatingMenu,
+    getActiveMenuId,
+    MENU_INACTIVITY_TIMEOUT
+  } from '$lib/stores/floatingMenuStore';
 
   interface Playlist {
     id: number;
@@ -115,6 +122,44 @@
   let contextMenuSearch = $state('');
   const FOLDER_SEARCH_THRESHOLD = 8;
 
+  // Collapsed folder popover state
+  let folderPopover = $state<{
+    visible: boolean;
+    folderId: string | null;
+    folderName: string;
+    x: number;
+    y: number;
+  }>({
+    visible: false,
+    folderId: null,
+    folderName: '',
+    x: 0,
+    y: 0
+  });
+
+  // Get playlists for the folder popover
+  const folderPopoverPlaylists = $derived.by(() => {
+    if (!folderPopover.folderId) return [];
+    return getPlaylistsInFolder(folderPopover.folderId);
+  });
+
+  function showFolderPopover(event: MouseEvent, folder: PlaylistFolder) {
+    openGlobalMenu(SIDEBAR_FOLDER_POPOVER_ID);
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    folderPopover = {
+      visible: true,
+      folderId: folder.id,
+      folderName: folder.name,
+      x: rect.right + 8,
+      y: rect.top
+    };
+  }
+
+  function closeFolderPopover() {
+    folderPopover = { ...folderPopover, visible: false, folderId: null };
+    closeGlobalMenu(SIDEBAR_FOLDER_POPOVER_ID);
+  }
+
   // Filtered folders for context menu
   const filteredContextFolders = $derived.by(() => {
     const available = folders.filter(f => f.id !== contextMenu.currentFolderId);
@@ -139,6 +184,14 @@
   let submenuEl: HTMLDivElement | null = null;
   let menuStyle = $state('');
   let submenuStyle = $state('');
+  let isHoveringDropdown = $state(false);
+  let isHoveringContextMenu = $state(false);
+  let isHoveringFolderPopover = $state(false);
+
+  // Unique IDs for global floating menu store
+  const SIDEBAR_DROPDOWN_ID = 'sidebar-dropdown';
+  const SIDEBAR_CONTEXT_MENU_ID = 'sidebar-context-menu';
+  const SIDEBAR_FOLDER_POPOVER_ID = 'sidebar-folder-popover';
 
   function openSubmenu() {
     if (submenuCloseTimeout) {
@@ -384,6 +437,7 @@
       clearTimeout(submenuCloseTimeout);
       submenuCloseTimeout = null;
     }
+    closeGlobalMenu(SIDEBAR_DROPDOWN_ID);
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -445,6 +499,7 @@
     if (menuOpen) {
       closeMenu();
     } else {
+      openGlobalMenu(SIDEBAR_DROPDOWN_ID);
       menuOpen = true;
       await setMenuPosition();
       document.addEventListener('click', handleClickOutside);
@@ -503,6 +558,114 @@
 
   // Check if any playlists exist in root (no folder)
   let rootPlaylists = $derived(getPlaylistsInFolder(null));
+
+  // Subscribe to global floating menu store
+  $effect(() => {
+    const unsubscribe = subscribeFloatingMenu(() => {
+      const activeId = getActiveMenuId();
+      // Close dropdown if another menu is active
+      if (activeId !== null && activeId !== SIDEBAR_DROPDOWN_ID && menuOpen) {
+        menuOpen = false;
+        sortSubmenuOpen = false;
+        if (submenuCloseTimeout) {
+          clearTimeout(submenuCloseTimeout);
+          submenuCloseTimeout = null;
+        }
+        document.removeEventListener('click', handleClickOutside);
+      }
+      // Close context menu if another menu is active
+      if (activeId !== null && activeId !== SIDEBAR_CONTEXT_MENU_ID && contextMenu.visible) {
+        contextMenu = { ...contextMenu, visible: false };
+        contextMenuSearch = '';
+      }
+      // Close folder popover if another menu is active
+      if (activeId !== null && activeId !== SIDEBAR_FOLDER_POPOVER_ID && folderPopover.visible) {
+        folderPopover = { ...folderPopover, visible: false, folderId: null };
+      }
+    });
+    return unsubscribe;
+  });
+
+  // Inactivity timeout for dropdown menu
+  $effect(() => {
+    if (menuOpen) {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (menuOpen && !isHoveringDropdown) closeMenu();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHoveringDropdown) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHoveringDropdown) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
+    }
+  });
+
+  // Inactivity timeout for context menu
+  $effect(() => {
+    if (contextMenu.visible) {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (contextMenu.visible && !isHoveringContextMenu) closeContextMenu();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHoveringContextMenu) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHoveringContextMenu) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
+    }
+  });
+
+  // Inactivity timeout for folder popover
+  $effect(() => {
+    if (folderPopover.visible) {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (folderPopover.visible && !isHoveringFolderPopover) closeFolderPopover();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHoveringFolderPopover) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHoveringFolderPopover) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
+    }
+  });
 
   $effect(() => {
     if (!menuOpen) {
@@ -644,6 +807,8 @@
     e.preventDefault();
     e.stopPropagation();
 
+    openGlobalMenu(SIDEBAR_CONTEXT_MENU_ID);
+
     // Get the current folder_id from settings
     const settings = playlistSettings.get(playlist.id);
     const currentFolderId = folderId ?? settings?.folder_id ?? null;
@@ -660,6 +825,7 @@
   function closeContextMenu() {
     contextMenu = { ...contextMenu, visible: false };
     contextMenuSearch = '';
+    closeGlobalMenu(SIDEBAR_CONTEXT_MENU_ID);
   }
 
   async function handleMoveToFolder(folderId: string | null) {
@@ -685,10 +851,16 @@
     closeContextMenu();
   }
 
-  // Close context menu when clicking outside
+  // Close context menu and folder popover when clicking outside
   function handleGlobalClick(e: MouseEvent) {
     if (contextMenu.visible) {
       closeContextMenu();
+    }
+    if (folderPopover.visible) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.folder-popover') && !target.closest('.collapsed-folder-btn')) {
+        closeFolderPopover();
+      }
     }
   }
 </script>
@@ -770,7 +942,13 @@
 
       <!-- Dropdown Menu -->
       {#if menuOpen}
-        <div class="dropdown-menu" bind:this={menuEl} style={menuStyle}>
+        <div
+          class="dropdown-menu"
+          bind:this={menuEl}
+          style={menuStyle}
+          onmouseenter={() => isHoveringDropdown = true}
+          onmouseleave={() => isHoveringDropdown = false}
+        >
           <!-- Sort by submenu trigger -->
           <div
             class="menu-item has-submenu"
@@ -891,7 +1069,7 @@
                   <!-- Collapsed sidebar: show folder icon only -->
                   <button
                     class="collapsed-folder-btn"
-                    onclick={() => handleToggleFolder(folder.id)}
+                    onclick={(e) => showFolderPopover(e, folder)}
                     title="{folder.name} ({folderPlaylists.length})"
                   >
                     <Folder size={14} />
@@ -996,6 +1174,8 @@
     class:has-search={showSearch}
     style="left: {contextMenu.x}px; top: {contextMenu.y}px;"
     onclick={(e) => e.stopPropagation()}
+    onmouseenter={() => isHoveringContextMenu = true}
+    onmouseleave={() => isHoveringContextMenu = false}
     role="menu"
   >
     {#if availableFolders.length > 0}
@@ -1047,6 +1227,42 @@
   </div>
 {/if}
 
+<!-- Collapsed Folder Popover -->
+{#if folderPopover.visible}
+  <div
+    class="folder-popover"
+    style="left: {folderPopover.x}px; top: {folderPopover.y}px;"
+    onclick={(e) => e.stopPropagation()}
+    onmouseenter={() => isHoveringFolderPopover = true}
+    onmouseleave={() => isHoveringFolderPopover = false}
+    role="menu"
+  >
+    <div class="folder-popover-header">
+      <Folder size={14} />
+      <span>{folderPopover.folderName}</span>
+    </div>
+    {#if folderPopoverPlaylists.length > 0}
+      <div class="folder-popover-list">
+        {#each folderPopoverPlaylists as playlist (playlist.id)}
+          <button
+            class="folder-popover-item"
+            class:active={activeView === 'playlist' && selectedPlaylistId === playlist.id}
+            onclick={() => { handlePlaylistClick(playlist); closeFolderPopover(); }}
+          >
+            <ListMusic size={14} />
+            <span class="folder-popover-item-name">{playlist.name}</span>
+            <span class="folder-popover-item-count">{playlist.tracks_count}</span>
+          </button>
+        {/each}
+      </div>
+    {:else}
+      <div class="folder-popover-empty">
+        No playlists
+      </div>
+    {/if}
+  </div>
+{/if}
+
 <!-- Create Folder Modal -->
 {#if showCreateFolderModal}
   <div class="modal-overlay" onclick={cancelCreateFolder} role="presentation">
@@ -1064,11 +1280,11 @@
         />
       </div>
       <div class="modal-actions">
-        <button class="btn-secondary" onclick={cancelCreateFolder}>
+        <button class="btn btn-secondary" onclick={cancelCreateFolder}>
           {$t('actions.cancel')}
         </button>
         <button
-          class="btn-primary"
+          class="btn btn-primary"
           onclick={handleCreateFolder}
           disabled={!newFolderName.trim()}
         >
@@ -1253,6 +1469,7 @@
 
   .playlists-scroll {
     overflow-y: overlay;
+    overflow-x: hidden;
     margin-right: 1px;
     min-height: 0;
     flex: 1;
@@ -1358,17 +1575,99 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
+    width: 100%;
+    height: 32px;
     background: transparent;
     border: none;
-    border-radius: 8px;
+    border-radius: 6px;
     cursor: pointer;
-    transition: background-color 150ms ease;
+    color: var(--text-muted);
+    transition: background-color 150ms ease, color 150ms ease;
   }
 
   .collapsed-folder-btn:hover {
     background: var(--bg-hover);
+  }
+
+  /* Folder Popover (collapsed sidebar) */
+  .folder-popover {
+    position: fixed;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 8px;
+    min-width: 180px;
+    max-width: 260px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 10001;
+  }
+
+  .folder-popover-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    border-bottom: 1px solid var(--border-subtle);
+    margin-bottom: 4px;
+  }
+
+  .folder-popover-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 300px;
+    overflow-y: auto;
+  }
+
+  .folder-popover-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    text-align: left;
+    transition: all 150ms ease;
+  }
+
+  .folder-popover-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .folder-popover-item.active {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .folder-popover-item-name {
+    flex: 1;
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .folder-popover-item-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+
+  .folder-popover-empty {
+    padding: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
   }
 
   /* Create Folder Modal */
@@ -1379,7 +1678,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 10000;
   }
 
   .modal-content {
@@ -1435,41 +1734,6 @@
     display: flex;
     gap: 12px;
     justify-content: flex-end;
-  }
-
-  .btn-secondary,
-  .btn-primary {
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 150ms ease, opacity 150ms ease;
-  }
-
-  .btn-secondary {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--alpha-10);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover {
-    background: var(--bg-hover);
-  }
-
-  .btn-primary {
-    background: var(--accent-primary);
-    border: none;
-    color: white;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--accent-secondary);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
   }
 
   .toggle-btn {

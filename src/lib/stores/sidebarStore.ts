@@ -81,3 +81,65 @@ export function collapseSidebar(): void {
 export function toggleSidebar(): void {
   setExpanded(!isExpanded);
 }
+
+// ============================================
+// Content Sidebars (Lyrics, Queue, Network)
+// Only one can be open at a time
+// ============================================
+
+export type ContentSidebarType = 'lyrics' | 'queue' | 'network' | null;
+
+let activeContentSidebar: ContentSidebarType = null;
+const contentSidebarListeners = new Set<(type: ContentSidebarType) => void>();
+
+function notifyContentSidebarListeners(): void {
+  for (const listener of contentSidebarListeners) {
+    listener(activeContentSidebar);
+  }
+}
+
+/**
+ * Subscribe to content sidebar changes
+ */
+export function subscribeContentSidebar(listener: (type: ContentSidebarType) => void): () => void {
+  contentSidebarListeners.add(listener);
+  listener(activeContentSidebar);
+  return () => contentSidebarListeners.delete(listener);
+}
+
+/**
+ * Get active content sidebar
+ */
+export function getActiveContentSidebar(): ContentSidebarType {
+  return activeContentSidebar;
+}
+
+/**
+ * Open a content sidebar (closes others)
+ */
+export function openContentSidebar(type: ContentSidebarType): void {
+  activeContentSidebar = type;
+  notifyContentSidebarListeners();
+}
+
+/**
+ * Close a content sidebar
+ */
+export function closeContentSidebar(type: ContentSidebarType): void {
+  if (activeContentSidebar === type) {
+    activeContentSidebar = null;
+    notifyContentSidebarListeners();
+  }
+}
+
+/**
+ * Toggle a content sidebar
+ */
+export function toggleContentSidebar(type: ContentSidebarType): void {
+  if (activeContentSidebar === type) {
+    activeContentSidebar = null;
+  } else {
+    activeContentSidebar = type;
+  }
+  notifyContentSidebarListeners();
+}

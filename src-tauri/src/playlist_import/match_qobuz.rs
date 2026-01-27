@@ -20,7 +20,7 @@ pub async fn match_tracks(
     for track in tracks {
         let query = format!("{} {}", track.artist, track.title);
         let search = client
-            .search_tracks(&query, SEARCH_LIMIT, 0)
+            .search_tracks(&query, SEARCH_LIMIT, 0, None)
             .await
             .map_err(|e| PlaylistImportError::Qobuz(e.to_string()))?;
 

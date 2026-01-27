@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, Filter, ArrowUpDown, LayoutGrid, List, GripVertical, EyeOff, Eye, BarChart2, Play, Pencil, Search, X, Cloud, CloudOff, Wifi, Heart, Folder, FolderPlus, ChevronRight, ChevronDown, Trash2, Star, Music, Disc, Library, Info } from 'lucide-svelte';
+  import { ArrowLeft, Filter, ArrowUpDown, LayoutGrid, List, GripVertical, EyeOff, Eye, BarChart2, Play, Pencil, Search, X, Cloud, CloudOff, Wifi, Heart, Folder, FolderPlus, ChevronRight, ChevronDown, ChevronUp, Trash2, Star, Music, Disc, Library, Info } from 'lucide-svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
   import FolderEditModal from '../FolderEditModal.svelte';
@@ -24,6 +24,13 @@
     movePlaylistToFolder,
     type PlaylistFolder
   } from '$lib/stores/playlistFoldersStore';
+  import {
+    openMenu as openGlobalMenu,
+    closeMenu as closeGlobalMenu,
+    subscribe as subscribeFloatingMenu,
+    getActiveMenuId,
+    MENU_INACTIVITY_TIMEOUT
+  } from '$lib/stores/floatingMenuStore';
 
   interface Playlist {
     id: number;
@@ -91,6 +98,12 @@
   // Dropdown state
   let showFilterMenu = $state(false);
   let showSortMenu = $state(false);
+  let isHoveringFilterMenu = $state(false);
+  let isHoveringSortMenu = $state(false);
+
+  // Unique IDs for global floating menu store
+  const PM_FILTER_MENU_ID = 'playlist-manager-filter';
+  const PM_SORT_MENU_ID = 'playlist-manager-sort';
 
   // Edit modal state
   let editModalOpen = $state(false);
@@ -116,6 +129,85 @@
   $effect(() => { localStorage.setItem('qbz-pm-filter', filter); });
   $effect(() => { localStorage.setItem('qbz-pm-sort', sort); });
   $effect(() => { localStorage.setItem('qbz-pm-view', viewMode); });
+
+  // Helper functions for closing menus with global store
+  function closeFilterMenu() {
+    showFilterMenu = false;
+    closeGlobalMenu(PM_FILTER_MENU_ID);
+  }
+
+  function closeSortMenu() {
+    showSortMenu = false;
+    closeGlobalMenu(PM_SORT_MENU_ID);
+  }
+
+  // Subscribe to global floating menu store
+  $effect(() => {
+    const unsubscribe = subscribeFloatingMenu(() => {
+      const activeId = getActiveMenuId();
+      if (activeId !== null && activeId !== PM_FILTER_MENU_ID && showFilterMenu) {
+        showFilterMenu = false;
+      }
+      if (activeId !== null && activeId !== PM_SORT_MENU_ID && showSortMenu) {
+        showSortMenu = false;
+      }
+    });
+    return unsubscribe;
+  });
+
+  // Inactivity timeout for filter menu
+  $effect(() => {
+    if (showFilterMenu) {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (showFilterMenu && !isHoveringFilterMenu) closeFilterMenu();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHoveringFilterMenu) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHoveringFilterMenu) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
+    }
+  });
+
+  // Inactivity timeout for sort menu
+  $effect(() => {
+    if (showSortMenu) {
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (showSortMenu && !isHoveringSortMenu) closeSortMenu();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      if (!isHoveringSortMenu) scheduleIdleClose();
+
+      const onActivity = () => {
+        if (!isHoveringSortMenu) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onActivity, true);
+
+      return () => {
+        window.removeEventListener('pointermove', onActivity, true);
+        if (idleTimer) clearTimeout(idleTimer);
+      };
+    }
+  });
 
   // Helper to get local content status for a playlist (calculated from actual data)
   function getLocalContentStatus(playlistId: number): LocalContentStatus {
@@ -459,26 +551,17 @@
     const draggedIndex = currentOrder.indexOf(draggedId);
     const targetIndex = currentOrder.indexOf(targetId);
 
-    if (draggedIndex === -1 || targetIndex === -1) return;
+    if (draggedIndex === -1 || targetIndex === -1) {
+      draggedId = null;
+      dragOverId = null;
+      return;
+    }
 
     // Remove dragged item and insert at target position
     currentOrder.splice(draggedIndex, 1);
     currentOrder.splice(targetIndex, 0, draggedId);
 
-    // Save new order
-    try {
-      await invoke('playlist_reorder', { playlistIds: currentOrder });
-      // Update local settings
-      const updated = new Map(playlistSettings);
-      currentOrder.forEach((id, index) => {
-        const existing = updated.get(id);
-        updated.set(id, { ...existing, qobuz_playlist_id: id, hidden: existing?.hidden ?? false, position: index });
-      });
-      playlistSettings = updated;
-      onPlaylistsChanged?.();
-    } catch (err) {
-      console.error('Failed to reorder playlists:', err);
-    }
+    await savePlaylistOrder(currentOrder);
 
     draggedId = null;
     dragOverId = null;
@@ -488,6 +571,51 @@
     draggedId = null;
     dragOverId = null;
     dragOverFolderId = null;
+  }
+
+  // Move playlist up one position
+  async function movePlaylistUp(playlistId: number) {
+    if (sort !== 'custom') return;
+    const currentOrder = displayPlaylists.map(p => p.id);
+    const currentIndex = currentOrder.indexOf(playlistId);
+    if (currentIndex <= 0) return;
+
+    // Swap with previous
+    [currentOrder[currentIndex - 1], currentOrder[currentIndex]] =
+      [currentOrder[currentIndex], currentOrder[currentIndex - 1]];
+
+    await savePlaylistOrder(currentOrder);
+  }
+
+  // Move playlist down one position
+  async function movePlaylistDown(playlistId: number) {
+    if (sort !== 'custom') return;
+    const currentOrder = displayPlaylists.map(p => p.id);
+    const currentIndex = currentOrder.indexOf(playlistId);
+    if (currentIndex < 0 || currentIndex >= currentOrder.length - 1) return;
+
+    // Swap with next
+    [currentOrder[currentIndex], currentOrder[currentIndex + 1]] =
+      [currentOrder[currentIndex + 1], currentOrder[currentIndex]];
+
+    await savePlaylistOrder(currentOrder);
+  }
+
+  // Helper to save playlist order
+  async function savePlaylistOrder(newOrder: number[]) {
+    try {
+      await invoke('playlist_reorder', { playlistIds: newOrder });
+      // Update local settings
+      const updated = new Map(playlistSettings);
+      newOrder.forEach((id, index) => {
+        const existing = updated.get(id);
+        if (existing) updated.set(id, { ...existing, position: index });
+      });
+      playlistSettings = updated;
+      onPlaylistsChanged?.();
+    } catch (err) {
+      console.error('Failed to reorder playlists:', err);
+    }
   }
 
   // === Folder Navigation ===
@@ -663,7 +791,16 @@
 
     <!-- Filter dropdown -->
     <div class="dropdown-container">
-      <button class="control-btn" onclick={() => { showFilterMenu = !showFilterMenu; showSortMenu = false; }}>
+      <button class="control-btn" onclick={() => {
+        if (showFilterMenu) {
+          showFilterMenu = false;
+          closeGlobalMenu(PM_FILTER_MENU_ID);
+        } else {
+          showSortMenu = false;
+          openGlobalMenu(PM_FILTER_MENU_ID);
+          showFilterMenu = true;
+        }
+      }}>
         {#if filter === 'hidden'}
           <EyeOff size={16} />
         {:else if filter === 'offline_unavailable'}
@@ -680,26 +817,30 @@
         </span>
       </button>
       {#if showFilterMenu}
-        <div class="dropdown-menu">
+        <div
+          class="dropdown-menu"
+          onmouseenter={() => isHoveringFilterMenu = true}
+          onmouseleave={() => isHoveringFilterMenu = false}
+        >
           {#if offlineStatus.isOffline}
-            <button class="dropdown-item" class:selected={filter === 'all' || filter === 'offline_all'} onclick={() => { filter = 'offline_all'; showFilterMenu = false; }}>
+            <button class="dropdown-item" class:selected={filter === 'all' || filter === 'offline_all'} onclick={() => { filter = 'offline_all'; closeFilterMenu(); }}>
               {$t('offline.available')}
             </button>
-            <button class="dropdown-item" class:selected={filter === 'offline_partial'} onclick={() => { filter = 'offline_partial'; showFilterMenu = false; }}>
+            <button class="dropdown-item" class:selected={filter === 'offline_partial'} onclick={() => { filter = 'offline_partial'; closeFilterMenu(); }}>
               {$t('offline.partiallyAvailable')}
             </button>
-            <button class="dropdown-item" class:selected={filter === 'offline_unavailable'} onclick={() => { filter = 'offline_unavailable'; showFilterMenu = false; }}>
+            <button class="dropdown-item" class:selected={filter === 'offline_unavailable'} onclick={() => { filter = 'offline_unavailable'; closeFilterMenu(); }}>
               {$t('offline.notAvailableOffline')}
             </button>
             <div class="dropdown-divider"></div>
           {/if}
-          <button class="dropdown-item" class:selected={filter === 'all' && !offlineStatus.isOffline} onclick={() => { filter = 'all'; showFilterMenu = false; }}>
+          <button class="dropdown-item" class:selected={filter === 'all' && !offlineStatus.isOffline} onclick={() => { filter = 'all'; closeFilterMenu(); }}>
             {offlineStatus.isOffline ? $t('filter.all') : 'All'}
           </button>
-          <button class="dropdown-item" class:selected={filter === 'visible'} onclick={() => { filter = 'visible'; showFilterMenu = false; }}>
+          <button class="dropdown-item" class:selected={filter === 'visible'} onclick={() => { filter = 'visible'; closeFilterMenu(); }}>
             Visible
           </button>
-          <button class="dropdown-item" class:selected={filter === 'hidden'} onclick={() => { filter = 'hidden'; showFilterMenu = false; }}>
+          <button class="dropdown-item" class:selected={filter === 'hidden'} onclick={() => { filter = 'hidden'; closeFilterMenu(); }}>
             Hidden
           </button>
         </div>
@@ -708,27 +849,40 @@
 
     <!-- Sort dropdown -->
     <div class="dropdown-container">
-      <button class="control-btn" onclick={() => { showSortMenu = !showSortMenu; showFilterMenu = false; }}>
+      <button class="control-btn" onclick={() => {
+        if (showSortMenu) {
+          showSortMenu = false;
+          closeGlobalMenu(PM_SORT_MENU_ID);
+        } else {
+          showFilterMenu = false;
+          openGlobalMenu(PM_SORT_MENU_ID);
+          showSortMenu = true;
+        }
+      }}>
         <ArrowUpDown size={16} />
         <span>
           {sort === 'name' ? 'Name' : sort === 'recent' ? 'Recent' : sort === 'playcount' ? 'Play Count' : sort === 'tracks' ? 'Track Count' : 'Custom'}
         </span>
       </button>
       {#if showSortMenu}
-        <div class="dropdown-menu">
-          <button class="dropdown-item" class:selected={sort === 'name'} onclick={() => { sort = 'name'; showSortMenu = false; }}>
+        <div
+          class="dropdown-menu"
+          onmouseenter={() => isHoveringSortMenu = true}
+          onmouseleave={() => isHoveringSortMenu = false}
+        >
+          <button class="dropdown-item" class:selected={sort === 'name'} onclick={() => { sort = 'name'; closeSortMenu(); }}>
             Name (A-Z)
           </button>
-          <button class="dropdown-item" class:selected={sort === 'recent'} onclick={() => { sort = 'recent'; showSortMenu = false; }}>
+          <button class="dropdown-item" class:selected={sort === 'recent'} onclick={() => { sort = 'recent'; closeSortMenu(); }}>
             Recent
           </button>
-          <button class="dropdown-item" class:selected={sort === 'playcount'} onclick={() => { sort = 'playcount'; showSortMenu = false; }}>
+          <button class="dropdown-item" class:selected={sort === 'playcount'} onclick={() => { sort = 'playcount'; closeSortMenu(); }}>
             Play Count
           </button>
-          <button class="dropdown-item" class:selected={sort === 'tracks'} onclick={() => { sort = 'tracks'; showSortMenu = false; }}>
+          <button class="dropdown-item" class:selected={sort === 'tracks'} onclick={() => { sort = 'tracks'; closeSortMenu(); }}>
             Track Count
           </button>
-          <button class="dropdown-item" class:selected={sort === 'custom'} onclick={() => { sort = 'custom'; showSortMenu = false; }}>
+          <button class="dropdown-item" class:selected={sort === 'custom'} onclick={() => { sort = 'custom'; closeSortMenu(); }}>
             Custom Order
           </button>
         </div>
@@ -922,11 +1076,30 @@
           ondrop={(e) => !isUnavailable && handleDrop(e, playlist.id)}
           ondragend={handleDragEnd}
         >
-          <!-- Top row: drag handle only (when in custom sort mode) -->
+          <!-- Top row: reorder controls (when in custom sort mode) -->
           {#if sort === 'custom' && !isUnavailable}
+            {@const playlistIndex = displayPlaylists.findIndex(p => p.id === playlist.id)}
             <div class="grid-item-header">
-              <div class="drag-handle">
-                <GripVertical size={14} />
+              <div class="reorder-controls">
+                <button
+                  class="reorder-btn"
+                  onclick={(e) => { e.stopPropagation(); movePlaylistUp(playlist.id); }}
+                  disabled={playlistIndex === 0}
+                  title="Move up"
+                >
+                  <ChevronUp size={14} />
+                </button>
+                <div class="drag-handle">
+                  <GripVertical size={14} />
+                </div>
+                <button
+                  class="reorder-btn"
+                  onclick={(e) => { e.stopPropagation(); movePlaylistDown(playlist.id); }}
+                  disabled={playlistIndex === displayPlaylists.length - 1}
+                  title="Move down"
+                >
+                  <ChevronDown size={14} />
+                </button>
               </div>
             </div>
           {/if}
@@ -1026,8 +1199,27 @@
           title={isUnavailable ? $t('offline.viewOnly') : undefined}
         >
           {#if sort === 'custom' && !isUnavailable}
-            <div class="drag-handle">
-              <GripVertical size={16} />
+            {@const playlistIndex = displayPlaylists.findIndex(p => p.id === playlist.id)}
+            <div class="reorder-controls horizontal">
+              <button
+                class="reorder-btn"
+                onclick={(e) => { e.stopPropagation(); movePlaylistUp(playlist.id); }}
+                disabled={playlistIndex === 0}
+                title="Move up"
+              >
+                <ChevronUp size={14} />
+              </button>
+              <div class="drag-handle">
+                <GripVertical size={16} />
+              </div>
+              <button
+                class="reorder-btn"
+                onclick={(e) => { e.stopPropagation(); movePlaylistDown(playlist.id); }}
+                disabled={playlistIndex === displayPlaylists.length - 1}
+                title="Move down"
+              >
+                <ChevronDown size={14} />
+              </button>
             </div>
           {/if}
           <div class="artwork-small">
@@ -1125,6 +1317,7 @@
 <style>
   .playlist-manager {
     padding: 24px;
+    padding-left: 18px;
     padding-right: 8px;
     padding-bottom: 100px;
     height: 100%;
@@ -1473,7 +1666,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 10000;
   }
 
   .modal-content {
@@ -1531,56 +1724,6 @@
   .modal-actions-right {
     display: flex;
     gap: 12px;
-  }
-
-  .btn-secondary,
-  .btn-primary,
-  .btn-danger {
-    padding: 8px 16px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    transition: background-color 150ms ease, opacity 150ms ease;
-  }
-
-  .btn-secondary {
-    background: var(--bg-tertiary);
-    border: 1px solid var(--alpha-10);
-    color: var(--text-primary);
-  }
-
-  .btn-secondary:hover {
-    background: var(--bg-hover);
-  }
-
-  .btn-primary {
-    background: var(--accent-primary);
-    border: none;
-    color: white;
-  }
-
-  .btn-primary:hover:not(:disabled) {
-    background: var(--accent-secondary);
-  }
-
-  .btn-primary:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  .btn-danger {
-    background: transparent;
-    border: 1px solid var(--error);
-    color: var(--error);
-  }
-
-  .btn-danger:hover {
-    background: var(--error);
-    color: white;
   }
 
   .controls {
@@ -1831,6 +1974,42 @@
 
   .grid-item .drag-handle:active {
     cursor: grabbing;
+  }
+
+  /* Reorder controls for custom sort mode */
+  .reorder-controls {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .reorder-controls.horizontal {
+    flex-direction: row;
+    margin-right: 8px;
+  }
+
+  .reorder-btn {
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.15s, color 0.15s;
+  }
+
+  .reorder-btn:hover:not(:disabled) {
+    background: var(--hover-bg, rgba(255, 255, 255, 0.1));
+    color: var(--text-primary, #fff);
+  }
+
+  .reorder-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
   }
 
   .drag-handle-placeholder {

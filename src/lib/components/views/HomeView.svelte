@@ -36,7 +36,9 @@
     artwork: string;
     title: string;
     artist: string;
+    genre: string;
     quality?: string;
+    releaseDate?: string;
   }
 
   interface ArtistCardData {
@@ -69,6 +71,7 @@
     onTrackShareSonglink?: (track: DisplayTrack) => void;
     onTrackGoToAlbum?: (albumId: string) => void;
     onTrackGoToArtist?: (artistId: number) => void;
+    onTrackShowInfo?: (trackId: number) => void;
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
@@ -101,6 +104,7 @@
     onTrackShareSonglink,
     onTrackGoToAlbum,
     onTrackGoToArtist,
+    onTrackShowInfo,
     onTrackDownload,
     onTrackRemoveDownload,
     onTrackReDownload,
@@ -330,7 +334,9 @@
       artwork: getQobuzImage(album.image),
       title: album.title,
       artist: album.artist?.name || 'Unknown Artist',
-      quality: formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate)
+      genre: album.genre?.name || 'Unknown genre',
+      quality: formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate),
+      releaseDate: album.release_date_original
     };
   }
 
@@ -642,6 +648,9 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
+                releaseDate={album.releaseDate}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -671,6 +680,9 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
+                releaseDate={album.releaseDate}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -700,6 +712,9 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
+                releaseDate={album.releaseDate}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -729,6 +744,9 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
+                releaseDate={album.releaseDate}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -758,6 +776,9 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
+                releaseDate={album.releaseDate}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -787,6 +808,9 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
+                releaseDate={album.releaseDate}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -838,6 +862,7 @@
                   onShareSonglink: onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined,
                   onGoToAlbum: track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId!) : undefined,
                   onGoToArtist: track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
+                  onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined,
                   onDownload: onTrackDownload ? () => onTrackDownload(track) : undefined,
                   isTrackDownloaded,
                   onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(track) : undefined,
@@ -886,6 +911,9 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                genre={album.genre}
+                releaseDate={album.releaseDate}
+                size="large"
                 quality={album.quality}
                 onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
                 onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
@@ -928,6 +956,7 @@
     width: 100%;
     height: 100%;
     padding: 24px;
+    padding-left: 18px;
     padding-right: 8px;
     padding-bottom: 100px;
     overflow-y: auto;

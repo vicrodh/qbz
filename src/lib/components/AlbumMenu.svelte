@@ -12,6 +12,13 @@
     Link,
     RefreshCw
   } from 'lucide-svelte';
+  import {
+    openMenu as openGlobalMenu,
+    closeMenu as closeGlobalMenu,
+    subscribe as subscribeGlobal,
+    getActiveMenuId,
+    MENU_INACTIVITY_TIMEOUT
+  } from '$lib/stores/floatingMenuStore';
 
   interface Props {
     onPlayNext?: () => void;
@@ -53,7 +60,11 @@
   let submenuStyle = $state('');
   let downloadSubmenuStyle = $state('');
   let portalTarget: HTMLElement | null = null;
-  const menuId = Symbol('album-menu');
+  let isHoveringMenu = $state(false);
+
+  // Unique menu ID for global store
+  let menuIdCounter = 0;
+  const menuId = `album-menu-${++menuIdCounter}-${Date.now()}`;
 
   const hasQueue = $derived(!!(onPlayNext || onPlayLater));
   const hasLibrary = $derived(!!onAddToPlaylist);
@@ -66,6 +77,16 @@
     shareOpen = false;
     downloadOpen = false;
     onOpenChange?.(false);
+    closeGlobalMenu(menuId);
+  }
+
+  function doOpenMenu() {
+    openGlobalMenu(menuId);
+    isOpen = true;
+    shareOpen = false;
+    downloadOpen = false;
+    onOpenChange?.(true);
+    setMenuPosition();
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -79,16 +100,17 @@
 
   onMount(() => {
     portalTarget = document.body;
-    const handleOtherOpen = (event: Event) => {
-      const detail = (event as CustomEvent<symbol>).detail;
-      if (detail !== menuId && isOpen) {
-        closeMenu();
+    // Subscribe to global floating menu store
+    const unsubscribe = subscribeGlobal(() => {
+      const activeId = getActiveMenuId();
+      if (activeId !== null && activeId !== menuId && isOpen) {
+        isOpen = false;
+        shareOpen = false;
+        downloadOpen = false;
+        onOpenChange?.(false);
       }
-    };
-    window.addEventListener('qbz-album-menu-open', handleOtherOpen as EventListener);
-    return () => {
-      window.removeEventListener('qbz-album-menu-open', handleOtherOpen as EventListener);
-    };
+    });
+    return unsubscribe;
   });
 
   async function setMenuPosition(retries = 2) {
@@ -210,10 +232,40 @@
 
       window.addEventListener('resize', handleResize);
       window.addEventListener('scroll', handleScroll, true);
+
+      // Auto-close after inactivity
+      let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+      const scheduleIdleClose = () => {
+        if (idleTimer) clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          if (isOpen && !isHoveringMenu) closeMenu();
+        }, MENU_INACTIVITY_TIMEOUT);
+      };
+
+      const cancelIdleClose = () => {
+        if (idleTimer) {
+          clearTimeout(idleTimer);
+          idleTimer = null;
+        }
+      };
+
+      if (!isHoveringMenu) scheduleIdleClose();
+
+      const onAnyActivity = () => {
+        if (!isHoveringMenu) scheduleIdleClose();
+      };
+
+      window.addEventListener('pointermove', onAnyActivity, true);
+      window.addEventListener('wheel', onAnyActivity, true);
+
       return () => {
         document.removeEventListener('mousedown', handleClickOutside);
         window.removeEventListener('resize', handleResize);
         window.removeEventListener('scroll', handleScroll, true);
+        window.removeEventListener('pointermove', onAnyActivity, true);
+        window.removeEventListener('wheel', onAnyActivity, true);
+        cancelIdleClose();
       };
     }
   });
@@ -231,14 +283,10 @@
       bind:this={triggerRef}
       onclick={(e) => {
         e.stopPropagation();
-        const nextOpen = !isOpen;
-        isOpen = nextOpen;
-        shareOpen = false;
-        downloadOpen = false;
-        onOpenChange?.(nextOpen);
-        if (nextOpen) {
-          window.dispatchEvent(new CustomEvent('qbz-album-menu-open', { detail: menuId }));
-          setMenuPosition();
+        if (isOpen) {
+          closeMenu();
+        } else {
+          doOpenMenu();
         }
       }}
       aria-label="Album actions"
@@ -248,7 +296,14 @@
 
     {#if isOpen && portalTarget}
       <Portal target={portalTarget}>
-        <div class="menu" bind:this={menuEl} style={menuStyle} onmousedown={(e) => e.stopPropagation()}>
+        <div
+          class="menu"
+          bind:this={menuEl}
+          style={menuStyle}
+          onmousedown={(e) => e.stopPropagation()}
+          onmouseenter={() => isHoveringMenu = true}
+          onmouseleave={() => isHoveringMenu = false}
+        >
           {#if hasQueue}
             {#if onPlayNext}
               <button class="menu-item" onclick={() => handleAction(onPlayNext)}>
@@ -259,7 +314,7 @@
             {#if onPlayLater}
               <button class="menu-item" onclick={() => handleAction(onPlayLater)}>
                 <ListEnd size={14} />
-                <span>Play later</span>
+                <span>Add to queue</span>
               </button>
             {/if}
           {/if}
