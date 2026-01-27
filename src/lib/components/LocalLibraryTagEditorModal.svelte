@@ -96,7 +96,7 @@
   let remoteSearching = $state(false);
   let remoteLoading = $state(false);
   let remoteResults = $state<RemoteAlbumSearchResult[]>([]);
-  let selectedRemoteId = $state<string | null>(null);
+  let selectedResult = $state<RemoteAlbumSearchResult | null>(null);
   let showRemotePanel = $state(false);
   let hasSearched = $state(false);
 
@@ -142,7 +142,7 @@
       resetFromAlbum();
       // Reset remote state when modal opens
       remoteResults = [];
-      selectedRemoteId = null;
+      selectedResult = null;
       showRemotePanel = false;
       hasSearched = false;
     }
@@ -157,7 +157,7 @@
 
     remoteSearching = true;
     remoteResults = [];
-    selectedRemoteId = null;
+    selectedResult = null;
 
     try {
       const results = await invoke<RemoteAlbumSearchResult[]>('remote_metadata_search', {
@@ -179,13 +179,13 @@
   }
 
   async function applyRemoteMetadata() {
-    if (!selectedRemoteId) return;
+    if (!selectedResult) return;
 
     remoteLoading = true;
     try {
       const metadata = await invoke<RemoteAlbumMetadata>('remote_metadata_get_album', {
-        provider: remoteProvider,
-        providerId: selectedRemoteId
+        provider: selectedResult.provider,
+        providerId: selectedResult.provider_id
       });
 
       // Apply album-level metadata
@@ -215,7 +215,7 @@
         }
       }
 
-      const providerName = remoteProvider === 'musicbrainz' ? 'MusicBrainz' : 'Discogs';
+      const providerName = selectedResult?.provider === 'musicbrainz' ? 'MusicBrainz' : 'Discogs';
       if (hasMismatch) {
         showToast(
           `Applied from ${providerName}. Track count differs: local=${localTrackCount}, remote=${remoteTrackCount}`,
@@ -248,9 +248,8 @@
   }
 
   async function openInBrowser() {
-    const selected = remoteResults.find(r => r.provider_id === selectedRemoteId);
-    if (!selected) return;
-    const url = getSourceUrl(selected);
+    if (!selectedResult) return;
+    const url = getSourceUrl(selectedResult);
     try {
       await openUrl(url);
     } catch (err) {
@@ -456,8 +455,8 @@
                 {#each remoteResults as result (result.provider_id)}
                   <button
                     class="remote-result"
-                    class:selected={selectedRemoteId === result.provider_id}
-                    onclick={() => selectedRemoteId = result.provider_id}
+                    class:selected={selectedResult?.provider_id === result.provider_id}
+                    onclick={() => selectedResult = result}
                     type="button"
                   >
                     <span class="result-title">{result.title}</span>
@@ -482,7 +481,7 @@
                 <button
                   class="btn btn-ghost btn-xs"
                   onclick={openInBrowser}
-                  disabled={!selectedRemoteId}
+                  disabled={!selectedResult}
                   type="button"
                   title="Open in browser"
                 >
@@ -495,7 +494,7 @@
                 <button
                   class="btn btn-primary btn-sm"
                   onclick={applyRemoteMetadata}
-                  disabled={!selectedRemoteId || remoteLoading}
+                  disabled={!selectedResult || remoteLoading}
                   type="button"
                 >
                   {#if remoteLoading}
