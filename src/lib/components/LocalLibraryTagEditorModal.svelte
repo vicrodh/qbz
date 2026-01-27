@@ -404,100 +404,95 @@
 
         <!-- Remote Metadata Lookup -->
         <div class="remote-section">
-          <button
-            class="btn btn-ghost btn-sm remote-toggle"
-            onclick={() => showRemotePanel = !showRemotePanel}
-            type="button"
-          >
-            <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="11" cy="11" r="8"/>
-              <path d="m21 21-4.3-4.3"/>
-            </svg>
-            {showRemotePanel ? 'Hide' : 'Fetch from'} MusicBrainz / Discogs
-            <svg class="icon-inline chevron" class:rotated={showRemotePanel} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <polyline points="6 9 12 15 18 9"/>
-            </svg>
-          </button>
+          <div class="remote-header">
+            <select
+              class="select-inline control-xs"
+              bind:value={remoteProvider}
+            >
+              <option value="musicbrainz">MusicBrainz</option>
+              <option value="discogs">Discogs</option>
+            </select>
+            <button
+              class="btn btn-secondary btn-sm"
+              onclick={searchRemoteMetadata}
+              disabled={remoteSearching}
+              type="button"
+            >
+              {#if remoteSearching}
+                <span class="spinner-inline"></span>
+                Searching...
+              {:else}
+                <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <circle cx="11" cy="11" r="8"/>
+                  <path d="m21 21-4.3-4.3"/>
+                </svg>
+                Search
+              {/if}
+            </button>
+            {#if remoteResults.length > 0}
+              <button
+                class="btn btn-ghost btn-sm chevron-toggle"
+                onclick={() => showRemotePanel = !showRemotePanel}
+                type="button"
+                title={showRemotePanel ? 'Hide results' : 'Show results'}
+              >
+                <svg class="icon-inline chevron" class:rotated={showRemotePanel} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+                <span class="result-count">{remoteResults.length}</span>
+              </button>
+            {/if}
+          </div>
 
-          {#if showRemotePanel}
+          {#if showRemotePanel && remoteResults.length > 0}
             <div class="remote-panel">
-              <div class="remote-controls">
-                <select
-                  class="select-inline control-xs"
-                  bind:value={remoteProvider}
-                >
-                  <option value="musicbrainz">MusicBrainz</option>
-                  <option value="discogs">Discogs</option>
-                </select>
+
+              <div class="remote-results">
+                {#each remoteResults as result (result.provider_id)}
+                  <button
+                    class="remote-result"
+                    class:selected={selectedRemoteId === result.provider_id}
+                    onclick={() => selectedRemoteId = result.provider_id}
+                    type="button"
+                  >
+                    <span class="result-title">{result.title}</span>
+                    <span class="result-artist">{result.artist}</span>
+                    <span class="result-meta">
+                      {#if result.year}{result.year}{/if}
+                      {#if result.year && result.country} · {/if}
+                      {#if result.country}{result.country}{/if}
+                    </span>
+                  </button>
+                {/each}
+              </div>
+
+              <div class="remote-actions">
                 <button
-                  class="btn btn-secondary btn-sm"
-                  onclick={searchRemoteMetadata}
-                  disabled={remoteSearching}
+                  class="btn btn-ghost btn-xs"
+                  onclick={openInBrowser}
+                  disabled={!selectedRemoteId}
+                  type="button"
+                  title="Open in browser"
+                >
+                  <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                  </svg>
+                </button>
+                <button
+                  class="btn btn-primary btn-sm"
+                  onclick={applyRemoteMetadata}
+                  disabled={!selectedRemoteId || remoteLoading}
                   type="button"
                 >
-                  {#if remoteSearching}
+                  {#if remoteLoading}
                     <span class="spinner-inline"></span>
-                    Searching...
                   {:else}
-                    Search
+                    Apply
                   {/if}
                 </button>
               </div>
-
-              {#if remoteResults.length > 0}
-                <div class="remote-results">
-                  {#each remoteResults as result (result.provider_id)}
-                    <button
-                      class="remote-result"
-                      class:selected={selectedRemoteId === result.provider_id}
-                      onclick={() => selectedRemoteId = result.provider_id}
-                      type="button"
-                    >
-                      <div class="result-main">
-                        <span class="result-title">{result.title}</span>
-                        <span class="result-artist">{result.artist}</span>
-                      </div>
-                      <div class="result-meta">
-                        {#if result.year}<span>{result.year}</span>{/if}
-                        {#if result.country}<span>{result.country}</span>{/if}
-                        {#if result.label}<span>{result.label}</span>{/if}
-                        {#if result.catalog_number}<span class="mono">{result.catalog_number}</span>{/if}
-                        {#if result.confidence}<span class="confidence">{result.confidence}%</span>{/if}
-                      </div>
-                    </button>
-                  {/each}
-                </div>
-
-                <div class="remote-actions">
-                  <button
-                    class="btn btn-ghost btn-sm"
-                    onclick={openInBrowser}
-                    disabled={!selectedRemoteId}
-                    type="button"
-                    title="Open in browser"
-                  >
-                    <svg class="icon-inline" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                      <polyline points="15 3 21 3 21 9"/>
-                      <line x1="10" y1="14" x2="21" y2="3"/>
-                    </svg>
-                    Open
-                  </button>
-                  <button
-                    class="btn btn-primary btn-sm"
-                    onclick={applyRemoteMetadata}
-                    disabled={!selectedRemoteId || remoteLoading}
-                    type="button"
-                  >
-                    {#if remoteLoading}
-                      <span class="spinner-inline"></span>
-                      Applying...
-                    {:else}
-                      Apply Selected
-                    {/if}
-                  </button>
-                </div>
-              {/if}
             </div>
           {/if}
         </div>
@@ -574,12 +569,17 @@
   .tag-editor {
     display: flex;
     flex-direction: column;
-    gap: 18px;
+    gap: 14px;
+  }
+
+  :global(.btn-xs) {
+    padding: 4px 8px !important;
+    font-size: 11px !important;
   }
 
   .grid {
     display: grid;
-    gap: 12px;
+    gap: 10px;
   }
 
     .grid-2 {
@@ -641,7 +641,7 @@
 }
 
 .track-table {
-  --track-row-height: 44px;
+  --track-row-height: 36px;
   border: 1px solid var(--bg-tertiary);
   border-radius: 10px;
   overflow: hidden;
@@ -669,7 +669,7 @@
   }
 
   .track-body {
-    max-height: calc(var(--track-row-height) * 5);
+    max-height: calc(var(--track-row-height) * 6);
     overflow-y: auto;
     scroll-snap-type: y mandatory;
     scrollbar-gutter: stable;
@@ -688,7 +688,7 @@
 
   .cell {
     border-right: 1px solid var(--bg-tertiary);
-    padding: 10px;
+    padding: 6px 10px;
     display: flex;
     align-items: center;
   }
@@ -718,15 +718,17 @@
     width: 100%;
     background: transparent;
     border: none;
+    border-radius: 0;
     color: var(--text-primary);
-    padding: 0;
-    height: 100%;
+    padding: 2px 0;
+    height: auto;
     border-bottom: 1px solid transparent;
   }
 
   .table-input:focus {
     outline: none;
-    border-bottom-color: var(--accent-primary);
+    border-bottom: 2px solid var(--accent-primary);
+    margin-bottom: -1px;
   }
 
 .track-row:focus-within,
@@ -850,75 +852,76 @@ input[type="number"] {
   /* Remote metadata panel styles */
   .remote-section {
     border: 1px solid var(--bg-tertiary);
-    border-radius: 10px;
+    border-radius: 8px;
     overflow: hidden;
   }
 
-  .remote-toggle {
-    width: 100%;
+  .remote-header {
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 10px 12px;
+    padding: 8px 10px;
     background: var(--bg-secondary);
-    border: none;
-    color: var(--text-muted);
-    font-size: 13px;
-    cursor: pointer;
-    transition: background 0.15s ease, color 0.15s ease;
   }
 
-  .remote-toggle:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-  }
-
-  .remote-toggle .chevron {
+  .chevron-toggle {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px !important;
+  }
+
+  .chevron-toggle .chevron {
     transition: transform 0.2s ease;
   }
 
-  .remote-toggle .chevron.rotated {
+  .chevron-toggle .chevron.rotated {
     transform: rotate(180deg);
+  }
+
+  .result-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
   }
 
   .remote-panel {
     border-top: 1px solid var(--bg-tertiary);
-    padding: 12px;
+    padding: 8px;
     background: var(--bg-primary);
     display: flex;
     flex-direction: column;
-    gap: 12px;
-  }
-
-  .remote-controls {
-    display: flex;
-    gap: 10px;
-    align-items: center;
+    gap: 8px;
   }
 
   .remote-results {
-    max-height: 200px;
+    max-height: 140px;
     overflow-y: auto;
-    display: flex;
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 4px;
     border: 1px solid var(--bg-tertiary);
-    border-radius: 8px;
+    border-radius: 6px;
     padding: 4px;
   }
 
   .remote-result {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 10px 12px;
+    gap: 2px;
+    padding: 6px 8px;
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 6px;
+    border-radius: 4px;
     text-align: left;
     cursor: pointer;
     transition: background 0.15s ease, border-color 0.15s ease;
+    overflow: hidden;
   }
 
   .remote-result:hover {
@@ -930,46 +933,34 @@ input[type="number"] {
     border-color: var(--accent-primary);
   }
 
-  .result-main {
-    display: flex;
-    gap: 8px;
-    align-items: baseline;
-  }
-
   .result-title {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
     color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .result-artist {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .result-meta {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    font-size: 11px;
+    font-size: 10px;
     color: var(--text-muted);
-  }
-
-  .result-meta span {
-    padding: 2px 6px;
-    background: var(--bg-secondary);
-    border-radius: 4px;
-  }
-
-  .result-meta .confidence {
-    background: rgba(var(--accent-primary-rgb), 0.15);
-    color: var(--accent-primary);
+    opacity: 0.8;
   }
 
   .remote-actions {
     display: flex;
     justify-content: flex-end;
-    gap: 8px;
+    align-items: center;
+    gap: 6px;
   }
 
   .spinner-inline {
