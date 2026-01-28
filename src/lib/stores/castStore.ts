@@ -6,6 +6,13 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import {
+  getCurrentTrack,
+  getIsPlaying,
+  getCurrentTime,
+  setIsPlaying,
+  type PlayingTrack
+} from './playerStore';
 
 export type CastProtocol = 'chromecast' | 'dlna' | 'airplay';
 
@@ -104,9 +111,36 @@ export function getConnectedProtocol(): CastProtocol | null {
 
 /**
  * Connect to a cast device
+ *
+ * IMPORTANT: If local playback is active, we capture the current track/position,
+ * stop local playback, establish the cast connection, then resume on the cast device.
  */
 export async function connectToDevice(device: CastDevice, protocol: CastProtocol): Promise<void> {
+  // Capture current playback state BEFORE stopping
+  const wasPlaying = getIsPlaying();
+  const currentTrack = getCurrentTrack();
+  const currentPosition = getCurrentTime();
+
+  console.log('[CastStore] Connecting to device, current state:', {
+    wasPlaying,
+    trackId: currentTrack?.id,
+    position: currentPosition
+  });
+
+  // Stop local playback BEFORE connecting to avoid stream conflicts
+  if (wasPlaying || currentTrack) {
+    console.log('[CastStore] Stopping local playback before cast connection...');
+    try {
+      await invoke('stop_playback');
+      setIsPlaying(false);
+    } catch (err) {
+      // Ignore errors - player might not be playing
+      console.log('[CastStore] stop_playback returned:', err);
+    }
+  }
+
   try {
+    // Now establish the cast connection
     switch (protocol) {
       case 'chromecast':
         await invoke('cast_connect', { deviceId: device.id });
@@ -128,6 +162,36 @@ export async function connectToDevice(device: CastDevice, protocol: CastProtocol
       currentTrackId: null
     };
     notifyListeners();
+
+    // If there was a track playing, resume it on the cast device
+    if (wasPlaying && currentTrack && !currentTrack.isLocal) {
+      console.log('[CastStore] Resuming track on cast device:', currentTrack.title);
+      try {
+        await castTrack(currentTrack.id, {
+          title: currentTrack.title,
+          artist: currentTrack.artist,
+          album: currentTrack.album,
+          artworkUrl: currentTrack.artwork,
+          durationSecs: currentTrack.duration
+        });
+
+        // Try to seek to the saved position (if significant)
+        if (currentPosition > 5) {
+          console.log('[CastStore] Seeking to saved position:', currentPosition);
+          // Small delay to let the stream start
+          setTimeout(async () => {
+            try {
+              await castSeek(currentPosition);
+            } catch (seekErr) {
+              console.log('[CastStore] Could not restore position:', seekErr);
+            }
+          }, 2000);
+        }
+      } catch (castErr) {
+        console.error('[CastStore] Failed to resume track on cast device:', castErr);
+        // Don't throw - connection succeeded, just playback resume failed
+      }
+    }
   } catch (err) {
     console.error('[CastStore] Failed to connect:', err);
     throw err;
