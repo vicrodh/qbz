@@ -2229,12 +2229,15 @@
     selectedArtistName = name;
 
     // Scroll to the artist card after DOM updates
+    // Use multiple ticks + small delay to ensure content is fully rendered
     tick().then(() => {
-      const artistId = `local-artist-${normalizeArtistName(name)}`;
-      const artistCard = document.getElementById(artistId);
-      if (artistCard) {
-        artistCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
+      setTimeout(() => {
+        const artistId = `local-artist-${normalizeArtistName(name)}`;
+        const artistCard = document.getElementById(artistId);
+        if (artistCard) {
+          artistCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 100);
     });
   }
 
@@ -5793,7 +5796,8 @@
   .artist-two-column-layout {
     display: flex;
     gap: 24px;
-    height: calc(100vh - 320px);
+    /* 320px for header/tabs, 104px for NowPlayingBar */
+    height: calc(100vh - 424px);
     min-height: 400px;
   }
 
