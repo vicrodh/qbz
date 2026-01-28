@@ -569,6 +569,7 @@ pub fn run() {
             // Local library commands
             library::commands::library_add_folder,
             library::commands::library_remove_folder,
+            library::commands::library_cleanup_missing_files,
             library::commands::library_get_folders,
             library::commands::library_get_folders_with_metadata,
             library::commands::library_get_folder,

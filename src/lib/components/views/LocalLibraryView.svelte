@@ -76,6 +76,7 @@
     id: string;
     title: string;
     artist: string;
+    all_artists?: string; // Comma-separated list of all contributing artists
     year?: number;
     catalog_number?: string;
     artwork_path?: string;
@@ -439,8 +440,8 @@
   let scanProgress = $state<ScanProgress | null>(null);
 
   // Reactive counters based on filtered data
+  // Note: filteredArtistCount is defined after mergedArtists below
   let filteredAlbumCount = $derived(albums.length);
-  let filteredArtistCount = $derived(artists.length);
   let filteredTrackCount = $derived.by(() => {
     // When in tracks view with search results, use actual filtered count
     if (activeTab === 'tracks' && tracks.length > 0) {
@@ -459,11 +460,144 @@
     return albums.reduce((sum, album) => sum + album.track_count, 0);
   });
 
-  // Memoized filtered artists
+  // Merge artists with same normalized name (e.g., "Alice in Chains" and "Alice In Chains")
+  // Priority goes to the variant with most albums, then tracks
+  // Returns both merged list and canonical name mappings
+  let artistMergeResult = $derived.by(() => {
+    const byNormalized = new Map<string, LocalArtist[]>();
+
+    // Group by normalized name (skip empty names)
+    for (const artist of artists) {
+      if (!artist.name || !artist.name.trim()) continue;
+      const normalized = normalizeArtistName(artist.name);
+      if (!normalized) continue; // Skip if normalized name is empty
+      if (!byNormalized.has(normalized)) {
+        byNormalized.set(normalized, []);
+      }
+      byNormalized.get(normalized)!.push(artist);
+    }
+
+    // Build a map of normalized artist -> unique album IDs
+    // This gives us accurate album counts even when same album has tracks with different artist spellings
+    const artistAlbumIds = new Map<string, Set<string>>();
+    for (const album of albums) {
+      const normalizedAlbumArtist = normalizeArtistName(album.artist);
+      const isVariousArtists = normalizedAlbumArtist === 'various artists';
+
+      // For all albums with all_artists, credit each artist
+      if (album.all_artists) {
+        const allArtistsList = album.all_artists.split(',').map(a => normalizeArtistName(a.trim()));
+        for (const normalizedArtist of allArtistsList) {
+          if (!normalizedArtist || normalizedArtist === 'various artists') continue;
+          if (!artistAlbumIds.has(normalizedArtist)) {
+            artistAlbumIds.set(normalizedArtist, new Set());
+          }
+          artistAlbumIds.get(normalizedArtist)!.add(album.id);
+        }
+      } else if (!isVariousArtists) {
+        // Fallback to album.artist (only if not Various Artists)
+        if (!artistAlbumIds.has(normalizedAlbumArtist)) {
+          artistAlbumIds.set(normalizedAlbumArtist, new Set());
+        }
+        artistAlbumIds.get(normalizedAlbumArtist)!.add(album.id);
+      }
+    }
+
+    // Helper to get album count for an artist (handles multi-artist names)
+    function getAlbumCountForArtist(artistName: string, normalized: string): number {
+      // First try direct lookup
+      const direct = artistAlbumIds.get(normalized);
+      if (direct && direct.size > 0) return direct.size;
+
+      // For multi-artist names like "A, B, C", find albums where ANY part appears
+      const parts = artistName.split(/,|&|feat\.|ft\.|featuring|with/i)
+        .map(p => normalizeArtistName(p.trim()))
+        .filter(p => p.length > 0);
+
+      if (parts.length > 1) {
+        // Union of all albums where ANY artist appears
+        const unionAlbums = new Set<string>();
+        for (const part of parts) {
+          const partAlbums = artistAlbumIds.get(part);
+          if (partAlbums) {
+            for (const albumId of partAlbums) {
+              unionAlbums.add(albumId);
+            }
+          }
+        }
+        return unionAlbums.size;
+      }
+
+      return 0;
+    }
+
+    // Merge groups and build canonical mappings
+    const merged: LocalArtist[] = [];
+    const newCanonicalMappings = new Map<string, string>();
+
+    for (const [normalized, variants] of byNormalized) {
+      if (variants.length === 1) {
+        // Single variant - use actual album count
+        const actualAlbumCount = getAlbumCountForArtist(variants[0].name, normalized);
+        merged.push({
+          ...variants[0],
+          album_count: actualAlbumCount || variants[0].album_count
+        });
+        continue;
+      }
+
+      // Find the canonical variant (most albums, then most tracks)
+      const sorted = [...variants].sort((a, b) => {
+        if (b.album_count !== a.album_count) return b.album_count - a.album_count;
+        return b.track_count - a.track_count;
+      });
+      const canonical = sorted[0];
+
+      // Get actual unique album count using helper
+      const actualAlbumCount = getAlbumCountForArtist(canonical.name, normalized);
+      // Sum track counts (tracks are unique per artist spelling in DB)
+      const totalTracks = variants.reduce((sum, v) => sum + v.track_count, 0);
+
+      // Create merged artist with canonical name and accurate album count
+      merged.push({
+        name: canonical.name,
+        album_count: actualAlbumCount || canonical.album_count,
+        track_count: totalTracks
+      });
+
+      // Map all variants to canonical name
+      for (const variant of variants) {
+        if (variant.name !== canonical.name) {
+          newCanonicalMappings.set(variant.name, canonical.name);
+        }
+      }
+    }
+
+    return { merged, canonicalMappings: newCanonicalMappings };
+  });
+
+  // Extract merged artists list
+  let mergedArtists = $derived(artistMergeResult.merged);
+
+  // Artist count uses merged artists (after deduplication)
+  let filteredArtistCount = $derived(mergedArtists.length);
+
+  // Combined canonical names: merge mappings + Qobuz mappings
+  // This is a derived that combines both sources without causing infinite loops
+  let allCanonicalNames = $derived.by(() => {
+    const combined = new Map(canonicalNames); // Start with Qobuz mappings
+    // Add merge mappings (these take precedence for case normalization)
+    for (const [variant, canonical] of artistMergeResult.canonicalMappings) {
+      combined.set(variant, canonical);
+    }
+    return combined;
+  });
+
+  // Memoized filtered artists (uses merged artists)
   let filteredArtistsMemo = $derived.by(() => {
-    if (!debouncedArtistSearch) return artists;
+    if (!debouncedArtistSearch) return mergedArtists;
     const needle = debouncedArtistSearch.toLowerCase();
-    return artists.filter(artist => artist.name.toLowerCase().includes(needle));
+    return mergedArtists.filter(artist => artist.name.toLowerCase().includes(needle));
   });
 
   // Memoized grouped artists with alpha index and display names
@@ -473,7 +607,7 @@
     // Add display names from canonical names mapping
     const withDisplayNames = filtered.map(artist => ({
       ...artist,
-      displayName: canonicalNames.get(artist.name) || artist.name
+      displayName: allCanonicalNames.get(artist.name) || artist.name
     }));
 
     if (!artistGroupingEnabled) {
@@ -557,15 +691,44 @@
   let selectedArtistAlbums = $derived.by(() => {
     if (!selectedArtistName) return [];
     const normalizedSelected = normalizeArtistName(selectedArtistName);
+
+    // Split selected artist into parts for multi-artist matching
+    // e.g., "Katsutoshi Kitagawa, Mina Kubota" -> ["katsutoshi kitagawa", "mina kubota"]
+    const selectedParts = selectedArtistName.split(/,|&|feat\.|ft\.|featuring|with/i)
+      .map(p => normalizeArtistName(p.trim()))
+      .filter(p => p.length > 0);
+
     return albums.filter(album => {
       const normalizedArtist = normalizeArtistName(album.artist);
-      // Exact match
+      const allArtistsList = album.all_artists
+        ? album.all_artists.split(',').map(a => normalizeArtistName(a.trim()))
+        : [];
+
+      // For "Various Artists" albums: include if ANY part of the artist name is in all_artists
+      if (normalizedArtist === 'various artists') {
+        if (allArtistsList.length === 0) return false;
+        // Check exact match first
+        if (allArtistsList.includes(normalizedSelected)) return true;
+        // Check if ANY part of a multi-artist name is present
+        if (selectedParts.length > 1 && selectedParts.some(part => allArtistsList.includes(part))) {
+          return true;
+        }
+        return false;
+      }
+
+      // Exact match on display artist
       if (normalizedArtist === normalizedSelected) return true;
-      // Check if artist appears in the album artist string (for multi-artist albums)
-      // e.g., "Artist A & Artist B" or "Artist A, Artist B" or "Artist A feat. Artist B"
-      if (normalizedArtist.includes(normalizedSelected)) return true;
-      // Also check individual parts split by common separators
-      const artistParts = album.artist.split(/[,&]|feat\.|ft\.|featuring|with|y|und|et|e /i)
+
+      // Check all_artists field for EXACT matches
+      if (allArtistsList.includes(normalizedSelected)) return true;
+
+      // Check if ANY part of a multi-artist name is present in all_artists
+      if (selectedParts.length > 1 && allArtistsList.length > 0) {
+        if (selectedParts.some(part => allArtistsList.includes(part))) return true;
+      }
+
+      // Also check individual parts split by common separators in album.artist
+      const artistParts = album.artist.split(/,|&|feat\.|ft\.|featuring|with/i)
         .map(p => normalizeArtistName(p.trim()))
         .filter(p => p.length > 0);
       return artistParts.includes(normalizedSelected);
@@ -590,7 +753,7 @@
     for (const album of items) {
       // Use canonical name for artist grouping to merge "Alice in Chains" and "Alice In Chains"
       const key = mode === 'artist'
-        ? (canonicalNames.get(album.artist) || album.artist)
+        ? (allCanonicalNames.get(album.artist) || album.artist)
         : alphaGroupKey(album.title);
       let group = groups.get(key);
       if (!group) {
@@ -1171,6 +1334,40 @@
   }
 
   let clearingLibrary = $state(false);
+  let cleaningUpMissingFiles = $state(false);
+  let cleanupStatus = $state('');
+
+  async function handleCleanupMissingFiles() {
+    if (cleaningUpMissingFiles) return;
+
+    cleaningUpMissingFiles = true;
+    cleanupStatus = 'Scanning track paths...';
+    try {
+      const result = await invoke<{ checked: number; removed: number }>('library_cleanup_missing_files');
+
+      if (result.removed > 0) {
+        cleanupStatus = `Removed ${result.removed} of ${result.checked} tracks`;
+        showToast(`Removed ${result.removed} tracks with missing files`, 'success');
+        // Reload library data
+        cleanupStatus = 'Refreshing library...';
+        await loadAlbums();
+        await loadArtists();
+      } else {
+        cleanupStatus = `Checked ${result.checked} tracks - all OK`;
+        showToast('No missing files found', 'info');
+      }
+    } catch (err) {
+      console.error('Failed to cleanup missing files:', err);
+      cleanupStatus = 'Error during cleanup';
+      showToast('Failed to cleanup missing files', 'error');
+    } finally {
+      cleaningUpMissingFiles = false;
+      // Clear status after a delay
+      setTimeout(() => {
+        cleanupStatus = '';
+      }, 3000);
+    }
+  }
 
   async function handleClearLibrary(event: MouseEvent) {
     event.preventDefault();
@@ -1835,8 +2032,8 @@
     const sorted = [...items].sort((a, b) => {
       if (mode === 'artist') {
         // Use canonical names for sorting to keep "Alice in Chains" and "Alice In Chains" together
-        const aArtist = canonicalNames.get(a.artist) || a.artist;
-        const bArtist = canonicalNames.get(b.artist) || b.artist;
+        const aArtist = allCanonicalNames.get(a.artist) || a.artist;
+        const bArtist = allCanonicalNames.get(b.artist) || b.artist;
         const artistCmp = aArtist.localeCompare(bArtist);
         if (artistCmp !== 0) return artistCmp;
         return a.title.localeCompare(b.title);
@@ -1848,7 +2045,7 @@
     for (const album of sorted) {
       // Use canonical name for artist grouping
       const key = mode === 'artist'
-        ? (canonicalNames.get(album.artist) || album.artist)
+        ? (allCanonicalNames.get(album.artist) || album.artist)
         : alphaGroupKey(album.title);
       if (!groups.has(key)) {
         groups.set(key, []);
@@ -2020,42 +2217,6 @@
     if (normalizeArtistName(name) === 'various artists') return;
     // Select artist to show their albums in the right column
     selectedArtistName = name;
-
-    // Debug: Log artist selection and matching albums
-    const normalizedSelected = normalizeArtistName(name);
-    console.log('[Artist Debug] Selected artist:', name);
-    console.log('[Artist Debug] Normalized name:', normalizedSelected);
-
-    // Find albums that should match
-    const matchingAlbums = albums.filter(album => {
-      const normalizedArtist = normalizeArtistName(album.artist);
-      const exactMatch = normalizedArtist === normalizedSelected;
-      const partialMatch = normalizedArtist.includes(normalizedSelected);
-      if (exactMatch || partialMatch) {
-        console.log('[Artist Debug] Match found:', album.title, '- Artist:', album.artist);
-      }
-      return exactMatch || partialMatch;
-    });
-
-    console.log('[Artist Debug] Total matching albums:', matchingAlbums.length);
-    console.log('[Artist Debug] Total albums in library:', albums.length);
-
-    // Also check artist data
-    const artistData = artists.find(a => a.name === name);
-    if (artistData) {
-      console.log('[Artist Debug] Artist from artists array:', artistData);
-      console.log('[Artist Debug] Claimed album count:', artistData.album_count, 'track count:', artistData.track_count);
-    }
-
-    // Debug: Find albums with similar artist name (first word match)
-    const firstWord = name.split(' ')[0].toLowerCase();
-    const similarAlbums = albums.filter(album =>
-      album.artist.toLowerCase().includes(firstWord)
-    );
-    console.log('[Artist Debug] Albums with "' + firstWord + '" in artist name:');
-    similarAlbums.slice(0, 10).forEach(album => {
-      console.log('  -', album.title, '| Artist:', album.artist);
-    });
   }
 
   /**
@@ -2096,7 +2257,7 @@
    * Get the display name for an artist (canonical if available, otherwise original).
    */
   function getArtistDisplayName(name: string): string {
-    return canonicalNames.get(name) || name;
+    return allCanonicalNames.get(name) || name;
   }
 
   /**
@@ -2268,8 +2429,8 @@
       }
       if (mode === 'artist') {
         // Use canonical names for sorting to keep variants together
-        const aArtist = canonicalNames.get(a.artist) || a.artist;
-        const bArtist = canonicalNames.get(b.artist) || b.artist;
+        const aArtist = allCanonicalNames.get(a.artist) || a.artist;
+        const bArtist = allCanonicalNames.get(b.artist) || b.artist;
         const artistCmp = aArtist.localeCompare(bArtist);
         if (artistCmp !== 0) return artistCmp;
         const albumCmp = a.album.localeCompare(b.album);
@@ -2315,7 +2476,7 @@
       } else if (mode === 'artist') {
         const rawArtist = track.artist || 'Unknown Artist';
         // Use canonical name for grouping to merge "Alice in Chains" and "Alice In Chains"
-        const canonicalArtist = canonicalNames.get(rawArtist) || rawArtist;
+        const canonicalArtist = allCanonicalNames.get(rawArtist) || rawArtist;
         if (!groups.has(canonicalArtist)) {
           groups.set(canonicalArtist, { title: canonicalArtist, tracks: [], artists: new Set([rawArtist]) });
         } else {
@@ -2643,12 +2804,31 @@
           {/if}
         </div>
 
-        <div class="danger-zone">
-          <div class="danger-zone-label">Danger Zone</div>
-          <button class="danger-btn-small" onclick={(e) => handleClearLibrary(e)} disabled={clearingLibrary}>
-            <Trash2 size={12} />
-            <span>{clearingLibrary ? 'Clearing...' : 'Clear Library Database'}</span>
-          </button>
+        <div class="settings-bottom-row">
+          <div class="maintenance-section">
+            <div class="maintenance-label">Maintenance</div>
+            <button
+              class="btn btn-secondary"
+              onclick={handleCleanupMissingFiles}
+              disabled={cleaningUpMissingFiles}
+            >
+              <RefreshCw size={14} class={cleaningUpMissingFiles ? 'spinning' : ''} />
+              <span>{cleaningUpMissingFiles ? 'Cleaning up...' : 'Cleanup missing files'}</span>
+            </button>
+            {#if cleanupStatus}
+              <div class="cleanup-status">{cleanupStatus}</div>
+            {/if}
+          </div>
+
+          <div class="settings-divider"></div>
+
+          <div class="danger-zone">
+            <div class="danger-zone-label">Danger Zone</div>
+            <button class="danger-btn-small" onclick={(e) => handleClearLibrary(e)} disabled={clearingLibrary}>
+              <Trash2 size={12} />
+              <span>{clearingLibrary ? 'Clearing...' : 'Clear Library Database'}</span>
+            </button>
+          </div>
         </div>
       </div>
     {/if}
@@ -3830,10 +4010,48 @@
     flex: 1;
   }
 
+  .settings-bottom-row {
+    display: flex;
+    gap: 24px;
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--bg-tertiary);
+  }
+
+  .settings-divider {
+    width: 1px;
+    background: var(--bg-tertiary);
+    align-self: stretch;
+  }
+
+  .maintenance-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .maintenance-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 12px;
+  }
+
+  .cleanup-status {
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    padding: 6px 10px;
+    background: var(--bg-tertiary);
+    border-radius: 4px;
+  }
+
   .danger-zone {
-    margin-top: 24px;
-    padding-top: 20px;
-    border-top: 2px solid var(--bg-tertiary);
+    flex: 1;
+    display: flex;
+    flex-direction: column;
   }
 
   .danger-zone-label {

@@ -980,6 +980,46 @@ impl LibraryDatabase {
         Ok(())
     }
 
+    /// Get all file paths for local tracks (for cleanup check)
+    pub fn get_all_track_paths(&self) -> Result<Vec<(i64, String)>, LibraryError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, file_path FROM local_tracks WHERE source IS NULL OR source = 'user'")
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let rows = stmt
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        let mut paths = Vec::new();
+        for row in rows {
+            paths.push(row.map_err(|e| LibraryError::Database(e.to_string()))?);
+        }
+        Ok(paths)
+    }
+
+    /// Delete tracks by their IDs
+    pub fn delete_tracks_by_ids(&self, ids: &[i64]) -> Result<usize, LibraryError> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+
+        let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
+        let query = format!(
+            "DELETE FROM local_tracks WHERE id IN ({})",
+            placeholders.join(",")
+        );
+
+        let params: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+
+        let count = self
+            .conn
+            .execute(&query, params.as_slice())
+            .map_err(|e| LibraryError::Database(e.to_string()))?;
+
+        Ok(count)
+    }
+
     // === Query Methods ===
 
     /// Get all albums with optional hidden filter
@@ -1031,6 +1071,7 @@ impl LibraryDatabase {
                     WHEN COUNT(DISTINCT artist) > 1 THEN 'Various Artists'
                     ELSE MIN(artist)
                 END as artist,
+                GROUP_CONCAT(DISTINCT artist) as all_artists,
                 MIN(year) as year,
                 MIN(catalog_number) as catalog_number,
                 MAX(CASE WHEN artwork_path IS NOT NULL THEN artwork_path END) as artwork,
@@ -1072,6 +1113,7 @@ impl LibraryDatabase {
                     WHEN COUNT(DISTINCT artist) > 1 THEN 'Various Artists'
                     ELSE MIN(artist)
                 END as artist,
+                GROUP_CONCAT(DISTINCT artist) as all_artists,
                 MIN(year) as year,
                 MIN(catalog_number) as catalog_number,
                 MAX(CASE WHEN artwork_path IS NOT NULL THEN artwork_path END) as artwork,
@@ -1118,7 +1160,8 @@ impl LibraryDatabase {
                 let group_key: String = row.get(0)?;
                 let album: String = row.get(1)?;
                 let artist: String = row.get(2)?;
-                let artwork_path: Option<String> = row.get(5)?;
+                let all_artists: String = row.get::<_, Option<String>>(3)?.unwrap_or_default();
+                let artwork_path: Option<String> = row.get(6)?;
 
                 log::debug!("Album {} by {}: artwork_path = {:?}", album, artist, artwork_path);
 
@@ -1126,20 +1169,21 @@ impl LibraryDatabase {
                     id: group_key.clone(),
                     title: album,
                     artist,
-                    year: row.get(3)?,
-                    catalog_number: row.get(4)?,
+                    all_artists,
+                    year: row.get(4)?,
+                    catalog_number: row.get(5)?,
                     artwork_path,
-                    track_count: row.get(6)?,
-                    total_duration_secs: row.get(7)?,
+                    track_count: row.get(7)?,
+                    total_duration_secs: row.get(8)?,
                     format: Self::parse_format(
-                        &row.get::<_, Option<String>>(8)?.unwrap_or_default(),
+                        &row.get::<_, Option<String>>(9)?.unwrap_or_default(),
                     ),
-                    bit_depth: row.get(9)?,
-                    sample_rate: row.get::<_, Option<f64>>(10)?.unwrap_or(44100.0),
+                    bit_depth: row.get(10)?,
+                    sample_rate: row.get::<_, Option<f64>>(11)?.unwrap_or(44100.0),
                     directory_path: row
-                        .get::<_, Option<String>>(11)?
+                        .get::<_, Option<String>>(12)?
                         .unwrap_or_else(|| group_key.clone()),
-                    source: row.get::<_, Option<String>>(12)?.unwrap_or_else(|| "user".to_string()),
+                    source: row.get::<_, Option<String>>(13)?.unwrap_or_else(|| "user".to_string()),
                 })
             })
             .map_err(|e| LibraryError::Database(e.to_string()))?;

@@ -94,6 +94,59 @@ pub async fn library_remove_folder(
     Ok(())
 }
 
+/// Result of cleanup operation
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CleanupResult {
+    pub checked: usize,
+    pub removed: usize,
+}
+
+/// Clean up tracks whose files no longer exist on disk
+#[tauri::command]
+pub async fn library_cleanup_missing_files(
+    state: State<'_, LibraryState>,
+) -> Result<CleanupResult, String> {
+    log::info!("Command: library_cleanup_missing_files");
+
+    let mut db = state.db.lock().await;
+
+    // Get all track paths
+    let tracks = db.get_all_track_paths().map_err(|e| e.to_string())?;
+    let total = tracks.len();
+    log::info!("Checking {} tracks for missing files...", total);
+
+    // Find tracks whose files don't exist
+    let mut missing_ids: Vec<i64> = Vec::new();
+    for (id, path) in &tracks {
+        if !std::path::Path::new(path).exists() {
+            log::debug!("Missing file: {}", path);
+            missing_ids.push(*id);
+        }
+    }
+
+    log::info!("Found {} missing files out of {} tracks", missing_ids.len(), total);
+
+    // Delete missing tracks in batches
+    let removed = if !missing_ids.is_empty() {
+        let mut total_removed = 0;
+        for chunk in missing_ids.chunks(500) {
+            let count = db.delete_tracks_by_ids(chunk).map_err(|e| e.to_string())?;
+            total_removed += count;
+        }
+        total_removed
+    } else {
+        0
+    };
+
+    log::info!("Removed {} tracks with missing files", removed);
+
+    Ok(CleanupResult {
+        checked: total,
+        removed,
+    })
+}
+
 #[tauri::command]
 pub async fn library_get_folders(state: State<'_, LibraryState>) -> Result<Vec<String>, String> {
     log::info!("Command: library_get_folders");

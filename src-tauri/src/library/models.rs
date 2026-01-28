@@ -127,6 +127,10 @@ pub struct LocalAlbum {
     pub id: String,
     pub title: String,
     pub artist: String,
+    /// All contributing artists (comma-separated) - used for matching in artist view
+    /// This includes all unique album_artist/artist values from the album's tracks
+    #[serde(default)]
+    pub all_artists: String,
     pub year: Option<u32>,
     pub catalog_number: Option<String>,
     pub artwork_path: Option<String>,
