@@ -837,7 +837,7 @@
             <h2>{$t('home.continueListening')}</h2>
           </div>
           <div class="track-list compact">
-            {#each continueTracks as track, index}
+            {#each continueTracks as track, index (`${track.id}-${downloadStateVersion}`)}
               {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
               {@const isTrackDownloaded = checkTrackDownloaded?.(track.id) || false}
               <TrackRow
