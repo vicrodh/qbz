@@ -66,6 +66,18 @@ jobs:
           cargo_text = cargo_path.read_text(encoding="utf-8")
           cargo_text = re.sub(r'(?m)^version = \"[^\"]+\"', f'version = \"{version}\"', cargo_text, count=1)
           cargo_path.write_text(cargo_text, encoding="utf-8")
+
+          # Update Flatpak metainfo.xml with version and date
+          from datetime import date
+          metainfo_path = pathlib.Path("packaging/flatpak/com.blitzfc.qbz.metainfo.xml")
+          metainfo_text = metainfo_path.read_text(encoding="utf-8")
+          today = date.today().isoformat()
+          metainfo_text = re.sub(
+              r'<release version="[^"]*" date="[^"]*">',
+              f'<release version="{version}" date="{today}">',
+              metainfo_text
+          )
+          metainfo_path.write_text(metainfo_text, encoding="utf-8")
           PY
 
       - name: Install flatpak tooling

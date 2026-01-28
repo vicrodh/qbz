@@ -46,4 +46,11 @@
   <provides>
     <binary>qbz</binary>
   </provides>
+  <releases>
+    <release version="0.0.0" date="1970-01-01">
+      <description>
+        <p>See GitHub releases for changelog.</p>
+      </description>
+    </release>
+  </releases>
 </component>
