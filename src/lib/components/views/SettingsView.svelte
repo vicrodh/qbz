@@ -2553,7 +2553,15 @@
         <span class="setting-label">Artwork Thumbnails</span>
         <small class="setting-note">
           {#if artworkCacheStats}
-            {artworkCacheStats.thumbnail_file_count} thumbnails ({formatBytes(artworkCacheStats.thumbnails_cache_bytes)}){#if artworkCacheStats.artwork_file_count > 0}, {artworkCacheStats.artwork_file_count} legacy files ({formatBytes(artworkCacheStats.artwork_cache_bytes)}){/if}
+            {@const thumbCount = artworkCacheStats.thumbnail_file_count ?? 0}
+            {@const thumbBytes = artworkCacheStats.thumbnails_cache_bytes ?? 0}
+            {@const legacyCount = artworkCacheStats.artwork_file_count ?? 0}
+            {@const legacyBytes = artworkCacheStats.artwork_cache_bytes ?? 0}
+            {#if thumbCount > 0 || legacyCount > 0}
+              {#if thumbCount > 0}{thumbCount} thumbnails ({formatBytes(thumbBytes)}){/if}{#if thumbCount > 0 && legacyCount > 0}, {/if}{#if legacyCount > 0}{legacyCount} legacy files ({formatBytes(legacyBytes)}){/if}
+            {:else}
+              No cached artwork
+            {/if}
           {:else}
             -
           {/if}
@@ -2562,7 +2570,7 @@
       <button
         class="clear-btn"
         onclick={handleClearArtworkCache}
-        disabled={isClearingArtwork || !artworkCacheStats || (artworkCacheStats.thumbnails_cache_bytes === 0 && artworkCacheStats.artwork_cache_bytes === 0)}
+        disabled={isClearingArtwork || !artworkCacheStats || ((artworkCacheStats.thumbnails_cache_bytes ?? 0) === 0 && (artworkCacheStats.artwork_cache_bytes ?? 0) === 0)}
       >
         {isClearingArtwork ? $t('settings.storage.clearing') : $t('actions.clear')}
       </button>
@@ -2571,11 +2579,11 @@
       <div class="setting-info">
         <span class="setting-label">Clear All Caches</span>
         <small class="setting-note">
-          Clears all cached data above (queue, lyrics, metadata, vectors, artwork)
+          Clears all cached data above
         </small>
       </div>
       <button
-        class="clear-btn danger"
+        class="clear-btn"
         onclick={handleClearAllCaches}
         disabled={isClearingAllCaches}
       >
@@ -3087,17 +3095,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .clear-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
-  }
-
-  .clear-btn.danger {
-    background: #ff6b6b;
-    color: white;
-    border-color: #ff6b6b;
-  }
-
-  .clear-btn.danger:hover:not(:disabled) {
-    background: #ff5252;
-    border-color: #ff5252;
   }
 
   .folder-btn {
