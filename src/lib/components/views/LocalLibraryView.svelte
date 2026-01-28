@@ -391,6 +391,8 @@
   let artistViewMode = $state<'grid' | 'list'>('grid');
   let artistGroupingEnabled = $state(true); // Enable alpha grouping by default
   let showArtistGroupMenu = $state(false);
+  // Selected artist for the two-column layout
+  let selectedArtistName = $state<string | null>(null);
   let artistImageFetchInProgress = false; // Guard against concurrent fetches
   let artistImageFetchAborted = false; // Flag to abort fetching
   let trackSearch = $state('');
@@ -529,6 +531,16 @@
       : new Set<string>();
 
     return { filtered, grouped, alphaGroups };
+  });
+
+  // Albums for the selected artist (used in artist view two-column layout)
+  let selectedArtistAlbums = $derived.by(() => {
+    if (!selectedArtistName) return [];
+    const normalizedSelected = normalizeArtistName(selectedArtistName);
+    return albums.filter(album => {
+      const normalizedArtist = normalizeArtistName(album.artist);
+      return normalizedArtist === normalizedSelected;
+    });
   });
 
   // Fast album search without function call overhead
@@ -1961,19 +1973,11 @@
     return (exactMatch ?? results.items[0]).id;
   }
 
-  async function handleLocalArtistClick(name?: string) {
-    if (!name || !onQobuzArtistClick) return;
+  function handleLocalArtistClick(name?: string) {
+    if (!name) return;
     if (normalizeArtistName(name) === 'various artists') return;
-    try {
-      const artistId = await resolveQobuzArtistId(name);
-      if (artistId) {
-        onQobuzArtistClick(artistId);
-      } else {
-        console.warn('No Qobuz artist match for local artist:', name);
-      }
-    } catch (err) {
-      console.error('Failed to resolve Qobuz artist for local artist:', name, err);
-    }
+    // Select artist to show their albums in the right column
+    selectedArtistName = name;
   }
 
   /**
@@ -2936,96 +2940,108 @@
         {:else}
           {@const { grouped: groupedArtists, alphaGroups: artistAlphaGroups } = groupedArtistsMemo}
           {@const filteredArtists = filteredArtistsMemo}
-          <div class="artist-controls">
-            <div class="dropdown-container">
+
+          <!-- Horizontal alphabetical index at the top -->
+          <div class="artist-alpha-index-horizontal">
+            {#each alphaIndexLetters as letter}
               <button
-                class="control-btn"
-                onclick={() => (showArtistGroupMenu = !showArtistGroupMenu)}
-                title="Group artists"
+                class="alpha-letter-horizontal"
+                class:disabled={!artistAlphaGroups.has(letter)}
+                onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroups)}
               >
-                <span>{!artistGroupingEnabled ? 'Group: Off' : 'Group: A-Z'}</span>
+                {letter}
               </button>
-              {#if showArtistGroupMenu}
-                <div class="dropdown-menu">
-                  <button
-                    class="dropdown-item"
-                    class:selected={!artistGroupingEnabled}
-                    onclick={() => { artistGroupingEnabled = false; showArtistGroupMenu = false; }}
-                  >
-                    Off
-                  </button>
-                  <button
-                    class="dropdown-item"
-                    class:selected={artistGroupingEnabled}
-                    onclick={() => { artistGroupingEnabled = true; showArtistGroupMenu = false; }}
-                  >
-                    Alphabetical (A-Z)
-                  </button>
-                </div>
-              {/if}
-            </div>
-
-            <button
-              class="control-btn icon-only"
-              onclick={() => (artistViewMode = artistViewMode === 'list' ? 'grid' : 'list')}
-              title={artistViewMode === 'list' ? 'Grid view' : 'List view'}
-            >
-              {#if artistViewMode === 'list'}
-                <LayoutGrid size={16} />
-              {:else}
-                <List size={16} />
-              {/if}
-            </button>
-
-            <span class="album-count">{filteredArtists.length} artists</span>
+            {/each}
           </div>
 
-          {#if filteredArtists.length === 0}
-            <div class="empty">
-              <Mic2 size={48} />
-              <p>No artists match your search</p>
-            </div>
-          {:else}
-            <!-- Always use virtualization for artists - handles any library size efficiently -->
-            <div class="artist-sections virtualized">
-              {#if artistViewMode === 'grid'}
-                <div class="virtualized-container">
-                  <VirtualizedArtistGrid
-                    groups={groupedArtists}
-                    {artistImages}
-                    {showSettings}
-                    showGroupHeaders={artistGroupingEnabled}
-                    onArtistClick={handleLocalArtistClick}
-                    onUploadImage={handleUploadArtistImage}
-                  />
+          <!-- Two-column layout: Artists | Albums -->
+          <div class="artist-two-column-layout">
+            <!-- Left column: Artist cards (single column with scroll) -->
+            <div class="artist-column">
+              <div class="artist-column-header">
+                <span class="artist-count">{filteredArtists.length} artists</span>
+              </div>
+              {#if filteredArtists.length === 0}
+                <div class="empty-small">
+                  <Mic2 size={32} />
+                  <p>No artists match your search</p>
                 </div>
               {:else}
-                <!-- Artist list view (virtualized) -->
-                <div class="virtualized-container">
-                  <VirtualizedArtistList
-                    groups={groupedArtists}
-                    {artistImages}
-                    showGroupHeaders={artistGroupingEnabled}
-                    onArtistClick={handleLocalArtistClick}
-                  />
-                </div>
-              {/if}
-
-              {#if artistGroupingEnabled}
-                <div class="alpha-index">
-                  {#each alphaIndexLetters as letter}
-                    <button
-                      class="alpha-letter"
-                      class:disabled={!artistAlphaGroups.has(letter)}
-                      onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroups)}
-                    >
-                      {letter}
-                    </button>
+                <div class="artist-list-scroll">
+                  {#each groupedArtists as group}
+                    {#if group.key}
+                      <div class="artist-group-header" id="artist-alpha-{group.id}">
+                        {group.key}
+                      </div>
+                    {/if}
+                    {#each group.artists as artist}
+                      {@const displayName = getArtistDisplayName(artist.name)}
+                      {@const artistImage = artistImages.get(artist.name)}
+                      <button
+                        class="artist-card-compact"
+                        class:selected={selectedArtistName === artist.name}
+                        onclick={() => handleLocalArtistClick(artist.name)}
+                      >
+                        <div class="artist-card-image">
+                          {#if artistImage}
+                            <img src={artistImage} alt={displayName} />
+                          {:else}
+                            <div class="artist-placeholder">
+                              <Mic2 size={24} />
+                            </div>
+                          {/if}
+                        </div>
+                        <div class="artist-card-info">
+                          <span class="artist-name">{displayName}</span>
+                          <span class="artist-meta">{artist.album_count} albums &bull; {artist.track_count} tracks</span>
+                        </div>
+                      </button>
+                    {/each}
                   {/each}
                 </div>
               {/if}
             </div>
-          {/if}
+
+            <!-- Right column: Selected artist's albums -->
+            <div class="artist-albums-column">
+              {#if selectedArtistName}
+                <div class="artist-albums-header">
+                  <h3>{getArtistDisplayName(selectedArtistName)}</h3>
+                  <span class="album-count">{selectedArtistAlbums.length} albums</span>
+                </div>
+                {#if selectedArtistAlbums.length === 0}
+                  <div class="empty-small">
+                    <Disc3 size={32} />
+                    <p>No albums found</p>
+                  </div>
+                {:else}
+                  <div class="artist-albums-grid">
+                    {#each selectedArtistAlbums as album}
+                      <AlbumCard
+                        artwork={getArtworkUrl(album.artwork_path)}
+                        title={album.title}
+                        artist={album.artist}
+                        quality={getAlbumQualityBadge(album)}
+                        size="large"
+                        showFavorite={false}
+                        showGenre={false}
+                        onPlay={() => handleAlbumPlayFromGrid(album)}
+                        onPlayNext={() => handleAlbumQueueNextFromGrid(album)}
+                        onPlayLater={() => handleAlbumQueueLaterFromGrid(album)}
+                        onclick={() => handleAlbumClick(album)}
+                        sourceBadge={album.source === 'qobuz_download' ? 'qobuz_download' : 'user'}
+                      />
+                    {/each}
+                  </div>
+                {/if}
+              {:else}
+                <div class="empty-small centered">
+                  <Mic2 size={48} />
+                  <p>Select an artist to view their albums</p>
+                </div>
+              {/if}
+            </div>
+          </div>
         {/if}
       {:else if activeTab === 'tracks'}
         {#if tracks.length === 0}
@@ -5391,5 +5407,222 @@
 
   .footer-hint {
     margin-top: 0;
+  }
+
+  /* Artist View - Two Column Layout */
+  .artist-alpha-index-horizontal {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    padding: 8px 0 16px;
+    border-bottom: 1px solid var(--bg-tertiary);
+    margin-bottom: 16px;
+  }
+
+  .alpha-letter-horizontal {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .alpha-letter-horizontal:hover:not(.disabled) {
+    background: var(--accent-primary);
+    color: white;
+  }
+
+  .alpha-letter-horizontal.disabled {
+    opacity: 0.3;
+    cursor: default;
+    pointer-events: none;
+  }
+
+  .artist-two-column-layout {
+    display: flex;
+    gap: 24px;
+    height: calc(100vh - 320px);
+    min-height: 400px;
+  }
+
+  .artist-column {
+    width: 220px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-secondary);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .artist-column-header {
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--bg-tertiary);
+  }
+
+  .artist-count {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .artist-list-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .artist-group-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    padding: 12px 8px 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .artist-card-compact {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 8px;
+    background: transparent;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 150ms ease;
+    text-align: left;
+  }
+
+  .artist-card-compact:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .artist-card-compact.selected {
+    background: var(--accent-primary);
+  }
+
+  .artist-card-compact.selected .artist-name {
+    color: white;
+  }
+
+  .artist-card-compact.selected .artist-meta {
+    color: rgba(255, 255, 255, 0.7);
+  }
+
+  .artist-card-image {
+    width: 48px;
+    height: 48px;
+    flex-shrink: 0;
+    border-radius: 50%;
+    overflow: hidden;
+  }
+
+  .artist-card-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .artist-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-primary) 100%);
+    color: var(--text-muted);
+  }
+
+  .artist-card-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .artist-card-info .artist-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .artist-card-info .artist-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .artist-albums-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .artist-albums-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--bg-tertiary);
+    margin-bottom: 16px;
+  }
+
+  .artist-albums-header h3 {
+    margin: 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .artist-albums-header .album-count {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .artist-albums-grid {
+    flex: 1;
+    overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px;
+    align-content: start;
+    padding-right: 8px;
+  }
+
+  .empty-small {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 32px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+
+  .empty-small.centered {
+    flex: 1;
+  }
+
+  .empty-small p {
+    margin: 0;
+    font-size: 13px;
   }
 </style>
