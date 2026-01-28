@@ -2212,7 +2212,7 @@
     return (exactMatch ?? results.items[0]).id;
   }
 
-  function handleLocalArtistClick(name?: string) {
+  async function handleLocalArtistClick(name?: string) {
     if (!name) return;
     if (normalizeArtistName(name) === 'various artists') return;
 
@@ -2225,20 +2225,24 @@
     // Switch to artists tab
     activeTab = 'artists';
 
+    // Load artists if not already loaded
+    if (artists.length === 0) {
+      await loadArtists();
+    }
+
     // Select artist to show their albums in the right column
     selectedArtistName = name;
 
     // Scroll to the artist card after DOM updates
     // Use multiple ticks + small delay to ensure content is fully rendered
-    tick().then(() => {
-      setTimeout(() => {
-        const artistId = `local-artist-${normalizeArtistName(name)}`;
-        const artistCard = document.getElementById(artistId);
-        if (artistCard) {
-          artistCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-      }, 100);
-    });
+    await tick();
+    setTimeout(() => {
+      const artistId = `local-artist-${normalizeArtistName(name)}`;
+      const artistCard = document.getElementById(artistId);
+      if (artistCard) {
+        artistCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }, 150);
   }
 
   /**
