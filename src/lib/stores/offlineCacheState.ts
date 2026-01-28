@@ -112,12 +112,12 @@ export async function startOfflineCacheEventListeners(): Promise<void> {
       setOfflineCacheState(trackId, { status: 'downloading', progress: progressPercent });
     });
 
-    const unlistenCompleted = await listen<{ trackId: number; size: number }>('offline:cached', (event) => {
+    const unlistenCompleted = await listen<{ trackId: number; size: number }>('offline:caching_completed', (event) => {
       console.log('Offline caching completed:', event.payload.trackId);
       setOfflineCacheState(event.payload.trackId, { status: 'ready', progress: 100 });
     });
 
-    const unlistenFailed = await listen<{ trackId: number; error: string }>('offline:cache_failed', (event) => {
+    const unlistenFailed = await listen<{ trackId: number; error: string }>('offline:caching_failed', (event) => {
       console.error('Offline caching failed:', event.payload.trackId, event.payload.error);
       setOfflineCacheState(event.payload.trackId, {
         status: 'failed',

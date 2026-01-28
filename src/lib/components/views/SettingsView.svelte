@@ -1570,6 +1570,15 @@
     }
   }
 
+  async function handleOpenCacheFolder() {
+    try {
+      await invoke('open_offline_cache_folder');
+    } catch (err) {
+      console.error('Failed to open cache folder:', err);
+      showToast('Failed to open cache folder', 'error');
+    }
+  }
+
   async function handleClearCache() {
     if (isClearing) return;
     isClearing = true;
@@ -2107,7 +2116,7 @@
         {isRepairingDownloads ? 'Repairing...' : 'Repair'}
       </button>
     </div>
-    <div class="setting-row last">
+    <div class="setting-row">
       <span class="setting-label">Clear Offline Library</span>
       <button
         class="clear-btn"
@@ -2115,6 +2124,18 @@
         disabled={isClearingDownloads || !downloadStats || downloadStats.readyTracks === 0}
       >
         {isClearingDownloads ? 'Clearing...' : 'Clear All'}
+      </button>
+    </div>
+    <div class="setting-row last">
+      <div class="setting-with-description">
+        <span class="setting-label">Manage Offline Cache</span>
+        <span class="setting-description">Open the cache folder in your file manager</span>
+      </div>
+      <button
+        class="clear-btn"
+        onclick={handleOpenCacheFolder}
+      >
+        Open Folder
       </button>
     </div>
   </section>
