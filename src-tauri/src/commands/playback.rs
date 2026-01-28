@@ -13,16 +13,29 @@ use crate::player::PlaybackState;
 use crate::queue::QueueManager;
 use crate::AppState;
 
+/// Convert quality string from frontend to Quality enum
+fn parse_quality(quality_str: Option<&str>) -> Quality {
+    match quality_str {
+        Some("MP3") => Quality::Mp3,
+        Some("CD Quality") => Quality::Lossless,
+        Some("Hi-Res") => Quality::HiRes,
+        Some("Hi-Res+") => Quality::UltraHiRes,
+        _ => Quality::UltraHiRes, // Default to highest
+    }
+}
+
 /// Play a track by ID (with caching support)
 #[tauri::command]
 pub async fn play_track(
     track_id: u64,
     duration_secs: Option<u64>,
+    quality: Option<String>,
     state: State<'_, AppState>,
     offline_cache: State<'_, OfflineCacheState>,
     audio_settings: State<'_, AudioSettingsState>,
 ) -> Result<(), String> {
-    log::info!("Command: play_track {} (duration: {:?}s)", track_id, duration_secs);
+    let preferred_quality = parse_quality(quality.as_deref());
+    log::info!("Command: play_track {} (duration: {:?}s, quality: {:?})", track_id, duration_secs, preferred_quality);
 
     // First check offline cache (persistent disk cache)
     {
@@ -47,6 +60,7 @@ pub async fn play_track(
                     state.client.clone(),
                     state.audio_cache.clone(),
                     &state.queue,
+                    preferred_quality,
                 );
 
                 return Ok(());
@@ -66,6 +80,7 @@ pub async fn play_track(
             state.client.clone(),
             state.audio_cache.clone(),
             &state.queue,
+            preferred_quality,
         );
 
         return Ok(());
@@ -86,6 +101,7 @@ pub async fn play_track(
                 state.client.clone(),
                 state.audio_cache.clone(),
                 &state.queue,
+                preferred_quality,
             );
 
             return Ok(());
@@ -109,9 +125,9 @@ pub async fn play_track(
 
     let client = state.client.lock().await;
 
-    // Get the stream URL with highest quality available
+    // Get the stream URL with preferred quality
     let stream_url = client
-        .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
+        .get_stream_url_with_fallback(track_id, preferred_quality)
         .await
         .map_err(|e| format!("Failed to get stream URL: {}", e))?;
 
@@ -162,6 +178,7 @@ pub async fn play_track(
             state.client.clone(),
             state.audio_cache.clone(),
             &state.queue,
+            preferred_quality,
         );
 
         return Ok(());
@@ -190,6 +207,7 @@ pub async fn play_track(
         state.client.clone(),
         state.audio_cache.clone(),
         &state.queue,
+        preferred_quality,
     );
 
     Ok(())
@@ -199,10 +217,12 @@ pub async fn play_track(
 #[tauri::command]
 pub async fn prefetch_track(
     track_id: u64,
+    quality: Option<String>,
     state: State<'_, AppState>,
     offline_cache: State<'_, OfflineCacheState>,
 ) -> Result<(), String> {
-    log::info!("Command: prefetch_track {}", track_id);
+    let preferred_quality = parse_quality(quality.as_deref());
+    log::info!("Command: prefetch_track {} (quality: {:?})", track_id, preferred_quality);
 
     let cache = state.audio_cache.clone();
 
@@ -236,7 +256,7 @@ pub async fn prefetch_track(
 
         let client = state.client.lock().await;
         let stream_url = client
-            .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
+            .get_stream_url_with_fallback(track_id, preferred_quality)
             .await
             .map_err(|e| format!("Failed to get stream URL: {}", e))?;
         drop(client);
@@ -578,6 +598,7 @@ fn spawn_prefetch(
     client: Arc<Mutex<QobuzClient>>,
     cache: Arc<AudioCache>,
     queue: &QueueManager,
+    quality: Quality,
 ) {
     // Look further ahead to find Qobuz tracks in mixed playlists
     let upcoming_tracks = queue.peek_upcoming(PREFETCH_LOOKAHEAD);
@@ -631,7 +652,7 @@ fn spawn_prefetch(
             let result = async {
                 let client_guard = client_clone.lock().await;
                 let stream_url = client_guard
-                    .get_stream_url_with_fallback(track_id, Quality::UltraHiRes)
+                    .get_stream_url_with_fallback(track_id, quality)
                     .await
                     .map_err(|e| format!("Failed to get stream URL: {}", e))?;
                 drop(client_guard);

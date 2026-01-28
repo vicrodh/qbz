@@ -10,6 +10,15 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+
+/**
+ * Get the preferred streaming quality from localStorage
+ * Returns: 'MP3', 'CD Quality', 'Hi-Res', or 'Hi-Res+' (default)
+ */
+function getStreamingQuality(): string {
+  if (typeof localStorage === 'undefined') return 'Hi-Res+';
+  return localStorage.getItem('qbz-streaming-quality') || 'Hi-Res+';
+}
 import {
   setCurrentTrack,
   setIsPlaying,
@@ -114,7 +123,11 @@ export async function playTrack(
       if (isLocal) {
         await invoke('library_play_track', { trackId: track.id });
       } else {
-        await invoke('play_track', { trackId: track.id, durationSecs: track.duration });
+        await invoke('play_track', {
+          trackId: track.id,
+          durationSecs: track.duration,
+          quality: getStreamingQuality()
+        });
       }
     }
 

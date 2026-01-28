@@ -6,6 +6,14 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+
+/**
+ * Get the preferred streaming quality from localStorage
+ */
+function getStreamingQuality(): string {
+  if (typeof localStorage === 'undefined') return 'Hi-Res+';
+  return localStorage.getItem('qbz-streaming-quality') || 'Hi-Res+';
+}
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {
   isCasting,
@@ -251,7 +259,11 @@ export async function togglePlay(): Promise<void> {
           await invoke('library_play_track', { trackId: localTrackId });
         } else {
           // Qobuz track - use play_track with duration for seekbar
-          await invoke('play_track', { trackId: currentTrack.id, durationSecs: currentTrack.duration });
+          await invoke('play_track', {
+            trackId: currentTrack.id,
+            durationSecs: currentTrack.duration,
+            quality: getStreamingQuality()
+          });
         }
 
         // Seek to saved position after a short delay to let audio load
