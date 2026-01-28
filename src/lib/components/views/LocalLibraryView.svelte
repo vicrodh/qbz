@@ -2046,6 +2046,16 @@
       console.log('[Artist Debug] Artist from artists array:', artistData);
       console.log('[Artist Debug] Claimed album count:', artistData.album_count, 'track count:', artistData.track_count);
     }
+
+    // Debug: Find albums with similar artist name (first word match)
+    const firstWord = name.split(' ')[0].toLowerCase();
+    const similarAlbums = albums.filter(album =>
+      album.artist.toLowerCase().includes(firstWord)
+    );
+    console.log('[Artist Debug] Albums with "' + firstWord + '" in artist name:');
+    similarAlbums.slice(0, 10).forEach(album => {
+      console.log('  -', album.title, '| Artist:', album.artist);
+    });
   }
 
   /**
