@@ -254,18 +254,23 @@
   let filterAac = $state(false);
   let filterOther = $state(false);
 
+  // Source filters (OR within this group)
+  let filterLocalFiles = $state(false);
+  let filterOfflineCache = $state(false);
+
   const LOSSLESS_FORMATS = ['flac', 'wav', 'aiff', 'alac', 'ape', 'dsd', 'dsf', 'dff'];
   const LOSSY_FORMATS = ['mp3', 'aac', 'm4a', 'ogg', 'opus', 'wma'];
 
   // Derived: check if any filter is active
   let hasActiveFilters = $derived(
     filterHiRes || filterCdQuality || filterLossy ||
-    filterFlac || filterAlac || filterApe || filterWav || filterMp3 || filterAac || filterOther
+    filterFlac || filterAlac || filterApe || filterWav || filterMp3 || filterAac || filterOther ||
+    filterLocalFiles || filterOfflineCache
   );
 
   // Count active filters for badge
   let activeFilterCount = $derived(
-    [filterHiRes, filterCdQuality, filterLossy, filterFlac, filterAlac, filterApe, filterWav, filterMp3, filterAac, filterOther]
+    [filterHiRes, filterCdQuality, filterLossy, filterFlac, filterAlac, filterApe, filterWav, filterMp3, filterAac, filterOther, filterLocalFiles, filterOfflineCache]
       .filter(Boolean).length
   );
 
@@ -304,8 +309,18 @@
       if (filterOther && !['flac', 'alac', 'ape', 'wav', 'wave', 'mp3', 'aac', 'm4a'].includes(format)) passesFormat = true;
     }
 
+    // Check source (OR logic - pass if any selected matches, or none selected)
+    const sourceFiltersActive = filterLocalFiles || filterOfflineCache;
+    let passesSource = !sourceFiltersActive; // Pass if no source filters
+
+    if (sourceFiltersActive) {
+      const source = album.source ?? 'user';
+      if (filterLocalFiles && source === 'user') passesSource = true;
+      if (filterOfflineCache && source === 'qobuz_download') passesSource = true;
+    }
+
     // AND between sections
-    return passesQuality && passesFormat;
+    return passesQuality && passesFormat && passesSource;
   }
 
   function clearAllFilters() {
@@ -319,6 +334,8 @@
     filterMp3 = false;
     filterAac = false;
     filterOther = false;
+    filterLocalFiles = false;
+    filterOfflineCache = false;
   }
 
   // Album sorting state
@@ -2860,6 +2877,24 @@
                       </label>
                     </div>
                   </div>
+
+                  <div class="filter-section">
+                    <div class="filter-section-label">Source</div>
+                    <div class="filter-checkboxes">
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterLocalFiles} />
+                        <span class="checkmark"></span>
+                        <HardDrive size={14} class="filter-icon" />
+                        <span class="label-text">Local</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterOfflineCache} />
+                        <span class="checkmark"></span>
+                        <img src="/qobuz-logo-filled.svg" alt="" class="filter-icon qobuz-icon" />
+                        <span class="label-text">Offline cache</span>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               {/if}
             </div>
@@ -4263,6 +4298,16 @@
     font-size: 11px;
     color: var(--text-muted);
     margin-left: auto;
+  }
+
+  .filter-checkbox .filter-icon {
+    color: var(--text-muted);
+    margin-right: 4px;
+  }
+
+  .filter-checkbox .filter-icon.qobuz-icon {
+    width: 14px;
+    height: 14px;
   }
 
   /* Sort dropdown */

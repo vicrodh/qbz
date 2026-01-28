@@ -366,10 +366,8 @@
   }
 
   .source-badge .qobuz-badge-icon {
-    width: 14px;
-    height: 14px;
-    filter: brightness(0) invert(1);
-    opacity: 0.85;
+    width: 16px;
+    height: 16px;
   }
 
   .play-overlay {
