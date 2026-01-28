@@ -257,7 +257,7 @@
 
     <!-- Source Badge (Local Library only) -->
     {#if sourceBadge}
-      <div class="source-badge" title={sourceBadge === 'user' ? 'Local file' : 'Qobuz offline'}>
+      <div class="source-badge" class:local-badge={sourceBadge === 'user'} title={sourceBadge === 'user' ? 'Local file' : 'Qobuz offline'}>
         {#if sourceBadge === 'user'}
           <HardDrive size={14} />
         {:else}
@@ -359,15 +359,18 @@
     justify-content: center;
     width: 24px;
     height: 24px;
+    color: var(--text-secondary);
+  }
+
+  .source-badge.local-badge {
     background: rgba(0, 0, 0, 0.7);
     border-radius: 4px;
-    color: var(--text-secondary);
     backdrop-filter: blur(4px);
   }
 
   .source-badge .qobuz-badge-icon {
-    width: 16px;
-    height: 16px;
+    width: 24px;
+    height: 24px;
   }
 
   .play-overlay {

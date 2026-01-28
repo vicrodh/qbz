@@ -2020,6 +2020,32 @@
     if (normalizeArtistName(name) === 'various artists') return;
     // Select artist to show their albums in the right column
     selectedArtistName = name;
+
+    // Debug: Log artist selection and matching albums
+    const normalizedSelected = normalizeArtistName(name);
+    console.log('[Artist Debug] Selected artist:', name);
+    console.log('[Artist Debug] Normalized name:', normalizedSelected);
+
+    // Find albums that should match
+    const matchingAlbums = albums.filter(album => {
+      const normalizedArtist = normalizeArtistName(album.artist);
+      const exactMatch = normalizedArtist === normalizedSelected;
+      const partialMatch = normalizedArtist.includes(normalizedSelected);
+      if (exactMatch || partialMatch) {
+        console.log('[Artist Debug] Match found:', album.title, '- Artist:', album.artist);
+      }
+      return exactMatch || partialMatch;
+    });
+
+    console.log('[Artist Debug] Total matching albums:', matchingAlbums.length);
+    console.log('[Artist Debug] Total albums in library:', albums.length);
+
+    // Also check artist data
+    const artistData = artists.find(a => a.name === name);
+    if (artistData) {
+      console.log('[Artist Debug] Artist from artists array:', artistData);
+      console.log('[Artist Debug] Claimed album count:', artistData.album_count, 'track count:', artistData.track_count);
+    }
   }
 
   /**
