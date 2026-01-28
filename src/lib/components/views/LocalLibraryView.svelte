@@ -393,6 +393,8 @@
   let showArtistGroupMenu = $state(false);
   // Selected artist for the two-column layout
   let selectedArtistName = $state<string | null>(null);
+  // Reference to the artist list scroll container
+  let artistListScrollRef: HTMLDivElement | null = $state(null);
   let artistImageFetchInProgress = false; // Guard against concurrent fetches
   let artistImageFetchAborted = false; // Flag to abort fetching
   let trackSearch = $state('');
@@ -534,12 +536,22 @@
   });
 
   // Albums for the selected artist (used in artist view two-column layout)
+  // Includes multi-artist albums where the selected artist appears
   let selectedArtistAlbums = $derived.by(() => {
     if (!selectedArtistName) return [];
     const normalizedSelected = normalizeArtistName(selectedArtistName);
     return albums.filter(album => {
       const normalizedArtist = normalizeArtistName(album.artist);
-      return normalizedArtist === normalizedSelected;
+      // Exact match
+      if (normalizedArtist === normalizedSelected) return true;
+      // Check if artist appears in the album artist string (for multi-artist albums)
+      // e.g., "Artist A & Artist B" or "Artist A, Artist B" or "Artist A feat. Artist B"
+      if (normalizedArtist.includes(normalizedSelected)) return true;
+      // Also check individual parts split by common separators
+      const artistParts = album.artist.split(/[,&]|feat\.|ft\.|featuring|with|y|und|et|e /i)
+        .map(p => normalizeArtistName(p.trim()))
+        .filter(p => p.length > 0);
+      return artistParts.includes(normalizedSelected);
     });
   });
 
@@ -1849,6 +1861,19 @@
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  // Scroll within the artist list container (for two-column layout)
+  function scrollToArtistGroup(letter: string, available: Set<string>) {
+    if (!available.has(letter) || !artistListScrollRef) return;
+    const id = groupIdForKey('artist-alpha', letter);
+    const target = document.getElementById(id);
+    if (target && artistListScrollRef) {
+      const containerTop = artistListScrollRef.getBoundingClientRect().top;
+      const targetTop = target.getBoundingClientRect().top;
+      const scrollOffset = targetTop - containerTop + artistListScrollRef.scrollTop;
+      artistListScrollRef.scrollTo({ top: scrollOffset, behavior: 'smooth' });
+    }
+  }
+
   function scrollToGroupId(groupId?: string) {
     if (!groupId) return;
     const target = document.getElementById(groupId);
@@ -2947,7 +2972,7 @@
               <button
                 class="alpha-letter-horizontal"
                 class:disabled={!artistAlphaGroups.has(letter)}
-                onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroups)}
+                onclick={() => scrollToArtistGroup(letter, artistAlphaGroups)}
               >
                 {letter}
               </button>
@@ -2967,10 +2992,10 @@
                   <p>No artists match your search</p>
                 </div>
               {:else}
-                <div class="artist-list-scroll">
+                <div class="artist-list-scroll" bind:this={artistListScrollRef}>
                   {#each groupedArtists as group}
                     {#if group.key}
-                      <div class="artist-group-header" id="artist-alpha-{group.id}">
+                      <div class="artist-group-header" id={group.id}>
                         {group.key}
                       </div>
                     {/if}
