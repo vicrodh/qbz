@@ -60,6 +60,10 @@ let onCastTrackEnded: (() => Promise<void>) | null = null;
 // Callback for when cast disconnects (to reset player state)
 let onCastDisconnected: (() => void) | null = null;
 
+// Callback for asking user if they want to continue locally after disconnect
+// Returns true if user wants to continue, false otherwise
+let onAskContinueLocally: ((track: PlayingTrack, position: number) => Promise<boolean>) | null = null;
+
 // Track end detection state
 let lastTransportState: string = '';
 let trackEndDetected = false;
@@ -175,6 +179,9 @@ export async function connectToDevice(device: CastDevice, protocol: CastProtocol
           durationSecs: currentTrack.duration
         });
 
+        // Update playerStore to reflect playing state (fixes play button UI)
+        setIsPlaying(true);
+
         // Try to seek to the saved position (if significant)
         if (currentPosition > 5) {
           console.log('[CastStore] Seeking to saved position:', currentPosition);
@@ -200,16 +207,30 @@ export async function connectToDevice(device: CastDevice, protocol: CastProtocol
 
 /**
  * Disconnect from current device
+ *
+ * If a track was playing, asks user if they want to continue locally.
  */
 export async function disconnect(): Promise<void> {
   if (!state.isConnected || !state.protocol) return;
+
+  // Capture current state BEFORE disconnecting
+  const wasPlaying = state.isPlaying;
+  const currentTrack = getCurrentTrack();
+  const currentPosition = state.positionSecs;
+  const savedProtocol = state.protocol;
+
+  console.log('[CastStore] Disconnecting, current state:', {
+    wasPlaying,
+    trackId: currentTrack?.id,
+    position: currentPosition
+  });
 
   // Stop position polling first
   stopPositionPolling();
 
   try {
     await castStop();
-    switch (state.protocol) {
+    switch (savedProtocol) {
       case 'chromecast':
         await invoke('cast_disconnect');
         break;
@@ -235,9 +256,33 @@ export async function disconnect(): Promise<void> {
   };
   notifyListeners();
 
-  // Notify player to reset its state
-  if (onCastDisconnected) {
-    onCastDisconnected();
+  // If there was a track playing, ask user if they want to continue locally
+  if (wasPlaying && currentTrack && !currentTrack.isLocal && onAskContinueLocally) {
+    console.log('[CastStore] Asking user if they want to continue locally...');
+    try {
+      const continueLocally = await onAskContinueLocally(currentTrack, currentPosition);
+      if (continueLocally) {
+        console.log('[CastStore] User wants to continue locally, starting playback...');
+        // Start local playback - the callback handler will do this
+        // since it has access to playbackService
+      } else {
+        console.log('[CastStore] User declined to continue locally');
+        // Just notify that cast disconnected
+        if (onCastDisconnected) {
+          onCastDisconnected();
+        }
+      }
+    } catch (err) {
+      console.error('[CastStore] Failed to handle continue locally:', err);
+      if (onCastDisconnected) {
+        onCastDisconnected();
+      }
+    }
+  } else {
+    // Notify player to reset its state
+    if (onCastDisconnected) {
+      onCastDisconnected();
+    }
   }
 }
 
@@ -246,6 +291,14 @@ export async function disconnect(): Promise<void> {
  */
 export function setOnCastDisconnected(callback: () => void): void {
   onCastDisconnected = callback;
+}
+
+/**
+ * Set callback for asking user if they want to continue locally after disconnect
+ * The callback receives the track and position, and should return true if user wants to continue
+ */
+export function setOnAskContinueLocally(callback: (track: PlayingTrack, position: number) => Promise<boolean>): void {
+  onAskContinueLocally = callback;
 }
 
 /**

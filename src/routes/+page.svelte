@@ -262,7 +262,8 @@
   import {
     subscribe as subscribeCast,
     getCastState,
-    isCasting
+    isCasting,
+    setOnAskContinueLocally
   } from '$lib/stores/castStore';
 
   // Components
@@ -2254,6 +2255,37 @@
     } catch {
       // Ignore storage errors
     }
+
+    // Set up callback for cast disconnect handoff
+    setOnAskContinueLocally(async (track, position) => {
+      // Ask user if they want to continue locally
+      const continueLocally = window.confirm(
+        `Continue playing "${track.title}" on this device?`
+      );
+
+      if (continueLocally) {
+        try {
+          // Start local playback
+          await playTrack(track, { showLoadingToast: false });
+
+          // Seek to saved position after a short delay
+          if (position > 5) {
+            setTimeout(async () => {
+              try {
+                await playerSeek(position);
+                console.log('[CastHandoff] Seeked to position:', position);
+              } catch (seekErr) {
+                console.log('[CastHandoff] Could not restore position:', seekErr);
+              }
+            }, 1000);
+          }
+        } catch (err) {
+          console.error('[CastHandoff] Failed to resume local playback:', err);
+        }
+      }
+
+      return continueLocally;
+    });
 
     // Note: loadFavorites() is called in handleLoginSuccess after login is confirmed
     // This prevents API calls before authentication is complete
