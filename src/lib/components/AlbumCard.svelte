@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { Play, Disc3, Heart } from 'lucide-svelte';
+  import { Play, Disc3, Heart, HardDrive } from 'lucide-svelte';
   import AlbumMenu from './AlbumMenu.svelte';
   import {
     subscribe as subscribeAlbumFavorites,
@@ -34,6 +34,8 @@
     onOpenContainingFolder?: () => void;
     onReDownloadAlbum?: () => void;
     downloadStateVersion?: number;
+    /** Source badge for local library: 'user' for local files, 'qobuz_download' for Qobuz offline */
+    sourceBadge?: 'user' | 'qobuz_download';
   }
 
   let {
@@ -60,7 +62,8 @@
     isAlbumFullyDownloaded = false,
     onOpenContainingFolder,
     onReDownloadAlbum,
-    downloadStateVersion
+    downloadStateVersion,
+    sourceBadge
   }: Props = $props();
   
   const isDownloaded = $derived.by(() => {
@@ -251,6 +254,17 @@
         </div>
       </div>
     {/if}
+
+    <!-- Source Badge (Local Library only) -->
+    {#if sourceBadge}
+      <div class="source-badge" title={sourceBadge === 'user' ? 'Local file' : 'Qobuz offline'}>
+        {#if sourceBadge === 'user'}
+          <HardDrive size={14} />
+        {:else}
+          <img src="/qobuz-logo-filled.svg" alt="Qobuz" class="qobuz-badge-icon" />
+        {/if}
+      </div>
+    {/if}
   </div>
 
   <!-- Text Info -->
@@ -332,6 +346,30 @@
     color: rgba(40, 42, 54, 0.85) !important;
     background: #ffffff !important;
     border: 1px solid rgba(40, 42, 54, 0.95) !important;
+  }
+
+  /* Source badge for Local Library albums */
+  .source-badge {
+    position: absolute;
+    bottom: 6px;
+    right: 6px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 4px;
+    color: var(--text-secondary);
+    backdrop-filter: blur(4px);
+  }
+
+  .source-badge .qobuz-badge-icon {
+    width: 14px;
+    height: 14px;
+    filter: brightness(0) invert(1);
+    opacity: 0.85;
   }
 
   .play-overlay {

@@ -85,6 +85,7 @@
     bit_depth?: number;
     sample_rate: number;
     directory_path: string;
+    source?: string; // 'user' for local files, 'qobuz_download' for offline cached
   }
 
   interface LocalArtist {
@@ -2902,6 +2903,7 @@
                   onAlbumQueueNext={handleAlbumQueueNextFromGrid}
                   onAlbumQueueLater={handleAlbumQueueLaterFromGrid}
                   scrollToGroupId={virtualizedScrollTarget}
+                  showSourceBadge={true}
                 />
               </div>
 

@@ -136,6 +136,13 @@ pub struct LocalAlbum {
     pub bit_depth: Option<u32>,
     pub sample_rate: f64,  // Changed from u32 to f64 for decimal precision
     pub directory_path: String,
+    /// Source of the album: "user" for local files, "qobuz_download" for offline cached
+    #[serde(default = "default_source")]
+    pub source: String,
+}
+
+fn default_source() -> String {
+    "user".to_string()
 }
 
 /// An artist aggregated from local tracks

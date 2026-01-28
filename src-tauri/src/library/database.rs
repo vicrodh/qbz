@@ -1039,7 +1039,8 @@ impl LibraryDatabase {
                 MAX(format) as format,
                 MAX(bit_depth) as bit_depth,
                 MAX(sample_rate) as sample_rate,
-                MAX(group_key) as directory_path
+                MAX(group_key) as directory_path,
+                MAX(source) as source
             FROM (
                 SELECT
                     COALESCE(album_group_key, album || '|' || COALESCE(album_artist, artist)) as group_key,
@@ -1051,7 +1052,8 @@ impl LibraryDatabase {
                     duration_secs,
                     format,
                     bit_depth,
-                    sample_rate
+                    sample_rate,
+                    COALESCE(source, 'user') as source
                 FROM local_tracks
                 WHERE 1=1 {} {}
             )
@@ -1078,7 +1080,8 @@ impl LibraryDatabase {
                 MAX(format) as format,
                 MAX(bit_depth) as bit_depth,
                 MAX(sample_rate) as sample_rate,
-                MAX(group_key) as directory_path
+                MAX(group_key) as directory_path,
+                MAX(source) as source
             FROM (
                 SELECT
                     COALESCE(album_group_key, album || '|' || COALESCE(album_artist, artist)) as group_key,
@@ -1090,7 +1093,8 @@ impl LibraryDatabase {
                     duration_secs,
                     format,
                     bit_depth,
-                    sample_rate
+                    sample_rate,
+                    COALESCE(source, 'user') as source
                 FROM local_tracks
                 WHERE 1=1 {} {}
             )
@@ -1135,6 +1139,7 @@ impl LibraryDatabase {
                     directory_path: row
                         .get::<_, Option<String>>(11)?
                         .unwrap_or_else(|| group_key.clone()),
+                    source: row.get::<_, Option<String>>(12)?.unwrap_or_else(|| "user".to_string()),
                 })
             })
             .map_err(|e| LibraryError::Database(e.to_string()))?;

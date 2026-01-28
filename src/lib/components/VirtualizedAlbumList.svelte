@@ -17,6 +17,7 @@
     bit_depth?: number;
     sample_rate: number;
     directory_path: string;
+    source?: string; // 'user' for local files, 'qobuz_download' for offline cached
   }
 
   interface AlbumGroup {
@@ -43,6 +44,8 @@
     onAlbumQueueNext: (album: LocalAlbum) => void;
     onAlbumQueueLater: (album: LocalAlbum) => void;
     scrollToGroupId?: string;
+    /** Show source badge on albums (for Local Library) */
+    showSourceBadge?: boolean;
   }
 
   let {
@@ -58,6 +61,7 @@
     onAlbumQueueNext,
     onAlbumQueueLater,
     scrollToGroupId,
+    showSourceBadge = false,
   }: Props = $props();
 
   // Constants
@@ -320,6 +324,7 @@
                 onPlayNext={() => onAlbumQueueNext(album)}
                 onPlayLater={() => onAlbumQueueLater(album)}
                 onclick={() => onAlbumClick(album)}
+                sourceBadge={showSourceBadge ? (album.source === 'qobuz_download' ? 'qobuz_download' : 'user') : undefined}
               />
             {/each}
           </div>
