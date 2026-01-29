@@ -1820,7 +1820,7 @@
     border-radius: 8px;
     padding: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-    z-index: 10;
+    z-index: 100;
     max-height: 260px;
     overflow-y: auto;
     scrollbar-width: thin;
