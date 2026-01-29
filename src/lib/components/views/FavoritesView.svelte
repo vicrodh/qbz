@@ -2017,14 +2017,14 @@
   .track-sections.virtualized {
     flex: 1;
     min-height: 0;
-    height: 100%;
     flex-direction: column;
+    overflow: hidden;
   }
 
   .virtualized-container {
     flex: 1;
-    height: 100%;
-    min-height: 400px;
+    min-height: 0;
+    overflow: hidden;
   }
 
   /* Track list header - matches PlaylistDetailView style */
@@ -2043,6 +2043,7 @@
     box-sizing: border-box;
     border-bottom: 1px solid var(--bg-tertiary);
     margin-bottom: 8px;
+    flex-shrink: 0;
   }
 
   .track-list-header .col-number {
