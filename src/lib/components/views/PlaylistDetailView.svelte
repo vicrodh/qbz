@@ -8,7 +8,7 @@
   import { open } from '@tauri-apps/plugin-dialog';
   import TrackRow from '../TrackRow.svelte';
   import PlaylistSuggestions from '../PlaylistSuggestions.svelte';
-  import { extractTopArtists } from '$lib/services/playlistSuggestionsService';
+  import { extractAdaptiveArtists } from '$lib/services/playlistSuggestionsService';
   import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import {
     subscribe as subscribeOffline,
@@ -194,9 +194,10 @@
   let localTracksDuration = $derived(localTracks.reduce((sum, t) => sum + t.duration_secs, 0));
   let totalDuration = $derived((playlist?.duration ?? 0) + localTracksDuration);
 
-  // Playlist suggestions: extract top 5 artists by track count (not local tracks)
+  // Playlist suggestions: adaptive artist selection (quantity scales with playlist size,
+  // mix of top artists for coherence + random artists for discovery)
   const playlistArtists = $derived(
-    extractTopArtists(tracks.filter(t => !t.isLocal), 5)
+    extractAdaptiveArtists(tracks.filter(t => !t.isLocal))
   );
   // Track IDs to exclude from suggestions (already in playlist)
   const excludeTrackIds = $derived(
@@ -1187,14 +1188,39 @@
   }
 
   // Add a suggested track to the playlist
-  async function handleAddSuggestedTrack(trackId: number) {
+  async function handleAddSuggestedTrack(suggestedTrack: import('$lib/services/playlistSuggestionsService').SuggestedTrack) {
     try {
+      // Add to Qobuz playlist
       await invoke('add_tracks_to_playlist', {
         playlistId,
-        trackIds: [trackId]
+        trackIds: [suggestedTrack.track_id]
       });
-      // Reload to show the new track
-      await loadPlaylist();
+
+      // Add to local tracks array immediately (no reload needed)
+      const newTrack: DisplayTrack = {
+        id: suggestedTrack.track_id,
+        number: tracks.length + 1,
+        title: suggestedTrack.title,
+        artist: suggestedTrack.artist_name,
+        artistId: suggestedTrack.artist_id,
+        album: suggestedTrack.album_title,
+        albumId: suggestedTrack.album_id,
+        albumArt: suggestedTrack.album_image_url,
+        duration: formatDuration(suggestedTrack.duration),
+        durationSeconds: suggestedTrack.duration,
+        addedIndex: tracks.length, // Latest added
+      };
+
+      // Append to tracks array
+      tracks = [...tracks, newTrack];
+
+      // Update playlist count
+      if (playlist) {
+        playlist.tracks_count = (playlist.tracks_count || 0) + 1;
+        playlist.duration = (playlist.duration || 0) + suggestedTrack.duration;
+      }
+
+      // Notify parent (sidebar count update, etc.)
       notifyParentOfCounts();
       onPlaylistUpdated?.();
     } catch (err) {
@@ -1702,6 +1728,7 @@
         playlistId={playlistId}
         artists={playlistArtists}
         excludeTrackIds={excludeTrackIds}
+        existingTracks={tracks.filter(t => !t.isLocal).map(t => ({ title: t.title, artist: t.artist }))}
         onAddTrack={handleAddSuggestedTrack}
         onGoToAlbum={onTrackGoToAlbum}
         onGoToArtist={onTrackGoToArtist}
@@ -2159,6 +2186,7 @@
   .sort-btn {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     gap: 8px;
     padding: 8px 12px;
     background-color: var(--bg-tertiary);
@@ -2168,6 +2196,8 @@
     font-size: 13px;
     cursor: pointer;
     transition: color 150ms ease;
+    min-width: 200px;
+    white-space: nowrap;
   }
 
   .sort-btn:hover {
@@ -2192,7 +2222,7 @@
     border: 1px solid var(--bg-tertiary);
     border-radius: 8px;
     padding: 4px;
-    min-width: 140px;
+    min-width: 200px;
     z-index: 100;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
@@ -2209,6 +2239,7 @@
     cursor: pointer;
     border-radius: 4px;
     transition: all 150ms ease;
+    white-space: nowrap;
   }
 
   .sort-option:hover {

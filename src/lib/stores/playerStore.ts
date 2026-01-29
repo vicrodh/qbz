@@ -68,11 +68,34 @@ interface PlaybackEvent {
 
 // ============ State ============
 
+/**
+ * Load persisted volume from localStorage
+ */
+function loadPersistedVolume(): number {
+  if (typeof localStorage === 'undefined') return 75;
+  const stored = localStorage.getItem('qbz-volume');
+  if (stored) {
+    const parsed = parseFloat(stored);
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+      return parsed;
+    }
+  }
+  return 75;
+}
+
+/**
+ * Save volume to localStorage
+ */
+function persistVolume(vol: number): void {
+  if (typeof localStorage === 'undefined') return;
+  localStorage.setItem('qbz-volume', String(vol));
+}
+
 let currentTrack: PlayingTrack | null = null;
 let isPlaying = false;
 let currentTime = 0;
 let duration = 0;
-let volume = 75;
+let volume = loadPersistedVolume();
 let isFavorite = false;
 // Event listener state (replaces polling)
 let eventUnlisten: UnlistenFn | null = null;
@@ -322,10 +345,13 @@ export async function seek(position: number): Promise<void> {
 
 /**
  * Set volume (0-100)
+ * Always persists the volume, even when nothing is playing.
+ * The volume will be applied when playback starts.
  */
 export async function setVolume(newVolume: number): Promise<void> {
   const clampedVolume = Math.max(0, Math.min(100, newVolume));
   volume = clampedVolume;
+  persistVolume(clampedVolume);
   notifyListeners();
 
   try {
@@ -334,9 +360,11 @@ export async function setVolume(newVolume: number): Promise<void> {
       return;
     }
 
+    // Try to set volume on backend - will fail silently if no track is loaded
     await invoke('set_volume', { volume: clampedVolume / 100 });
   } catch (err) {
-    console.error('Failed to set volume:', err);
+    // Ignore errors when nothing is playing - volume is saved and will apply on next play
+    console.debug('Volume set locally (no active playback):', clampedVolume);
   }
 }
 

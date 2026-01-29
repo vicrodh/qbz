@@ -736,6 +736,8 @@ impl Player {
             let mut current_engine: Option<PlaybackEngine> = None;
             // Store audio data for seeking (we need to re-decode from the beginning)
             let mut current_audio_data: Option<Vec<u8>> = None;
+            // Store streaming source for resume (when download completes, we can get the data)
+            let mut current_streaming_source: Option<Arc<BufferedMediaSource>> = None;
             // Track consecutive sink creation failures to detect broken streams
             let mut consecutive_sink_failures: u32 = 0;
             const MAX_SINK_FAILURES: u32 = 3;
@@ -749,6 +751,7 @@ impl Player {
             let mut handle_command = |command: AudioCommand,
                                       current_engine: &mut Option<PlaybackEngine>,
                                       current_audio_data: &mut Option<Vec<u8>>,
+                                      current_streaming_source: &mut Option<Arc<BufferedMediaSource>>,
                                       stream_opt: &mut Option<StreamType>,
                                       current_device_name: &mut Option<String>,
                                       consecutive_sink_failures: &mut u32,
@@ -966,6 +969,7 @@ impl Player {
                         }
 
                         *current_audio_data = Some(data.clone());
+                        *current_streaming_source = None; // Clear streaming source for non-streaming playback
 
                         // Create PlaybackEngine from StreamType
                         let mut engine = match stream {
@@ -1067,6 +1071,11 @@ impl Player {
                             duration_secs
                         );
                         *pause_suspend_deadline = None;
+
+                        // Store streaming source for resume capability
+                        // When download completes, we can extract the data for resume
+                        *current_streaming_source = Some(source.clone());
+                        *current_audio_data = None; // Clear regular audio data
 
                         // Get DAC passthrough setting
                         let dac_passthrough = thread_settings
@@ -1284,7 +1293,30 @@ impl Player {
                     AudioCommand::Resume => {
                         *pause_suspend_deadline = None;
                         if current_engine.is_none() {
-                            let Some(ref audio_data) = *current_audio_data else {
+                            // Try to get audio data from regular storage or streaming source
+                            let audio_data: Vec<u8> = if let Some(ref data) = *current_audio_data {
+                                data.clone()
+                            } else if let Some(ref streaming_src) = *current_streaming_source {
+                                // Try to get complete data from streaming source
+                                if streaming_src.is_complete() {
+                                    match streaming_src.take_complete_data() {
+                                        Some(data) => {
+                                            log::info!("Resume: using complete streaming data ({} bytes)", data.len());
+                                            // Store it in current_audio_data for future use
+                                            *current_audio_data = Some(data.clone());
+                                            data
+                                        }
+                                        None => {
+                                            log::warn!("Audio thread: cannot resume - streaming source complete but data unavailable");
+                                            return;
+                                        }
+                                    }
+                                } else {
+                                    log::warn!("Audio thread: cannot resume - streaming not complete yet ({} bytes buffered)",
+                                        streaming_src.buffer_size());
+                                    return;
+                                }
+                            } else {
                                 log::warn!("Audio thread: cannot resume - no audio data available");
                                 return;
                             };
@@ -1326,7 +1358,7 @@ impl Player {
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
                             engine.set_volume(volume);
 
-                            let source = match decode_with_fallback(audio_data) {
+                            let source = match decode_with_fallback(&audio_data) {
                                 Ok(s) => s,
                                 Err(e) => {
                                     log::error!("Failed to decode audio for resume: {}", e);
@@ -1366,6 +1398,7 @@ impl Player {
                             engine.stop();
                         }
                         *current_audio_data = None;
+                        *current_streaming_source = None;
                         thread_state.is_playing.store(false, Ordering::SeqCst);
                         thread_state.position.store(0, Ordering::SeqCst);
                         thread_state.playback_start_millis.store(0, Ordering::SeqCst);
@@ -1504,6 +1537,7 @@ impl Player {
                             command,
                             &mut current_engine,
                             &mut current_audio_data,
+                            &mut current_streaming_source,
                             &mut stream_opt,
                             &mut current_device_name,
                             &mut consecutive_sink_failures,
@@ -1554,6 +1588,7 @@ impl Player {
                                     command,
                                     &mut current_engine,
                                     &mut current_audio_data,
+                                    &mut current_streaming_source,
                                     &mut stream_opt,
                                     &mut current_device_name,
                                     &mut consecutive_sink_failures,
@@ -1577,6 +1612,7 @@ impl Player {
                             command,
                             &mut current_engine,
                             &mut current_audio_data,
+                            &mut current_streaming_source,
                             &mut stream_opt,
                             &mut current_device_name,
                             &mut consecutive_sink_failures,

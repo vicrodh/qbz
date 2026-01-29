@@ -161,18 +161,111 @@ export async function cleanupVectorStore(maxAgeDays?: number): Promise<number> {
 
 // ============ Helpers ============
 
-/** Default number of top artists to use for suggestions */
-const DEFAULT_TOP_ARTISTS = 30;
+/**
+ * Calculate adaptive artist limit based on playlist size
+ * Larger playlists = more seed artists for better discovery
+ */
+function calculateAdaptiveLimit(trackCount: number): number {
+  if (trackCount < 15) return Math.max(3, Math.min(5, trackCount));
+  if (trackCount < 50) return Math.min(10, Math.ceil(trackCount * 0.3));
+  if (trackCount < 100) return Math.min(15, Math.ceil(trackCount * 0.2));
+  return Math.min(20, Math.ceil(trackCount * 0.15));
+}
+
+/**
+ * Shuffle array using Fisher-Yates algorithm
+ */
+function shuffleArray<T>(array: T[]): T[] {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+/**
+ * Extract artists from playlist tracks with adaptive quantity and mixed selection
+ *
+ * This function balances coherence (top artists by frequency) with discovery
+ * (random selection from less frequent artists).
+ *
+ * @param tracks - Playlist tracks
+ * @param options - Configuration options
+ * @param options.topRatio - Ratio of top artists vs random (default: 0.6 = 60% top, 40% random)
+ * @param options.forceLimit - Override adaptive limit with fixed number
+ */
+export function extractAdaptiveArtists(
+  tracks: Array<{ artist?: string; artistId?: number }>,
+  options: { topRatio?: number; forceLimit?: number } = {}
+): PlaylistArtist[] {
+  const { topRatio = 0.6, forceLimit } = options;
+
+  // Count tracks per artist
+  const artistCounts = new Map<string, { count: number; qobuzId?: number }>();
+
+  for (const track of tracks) {
+    if (track.artist) {
+      const existing = artistCounts.get(track.artist);
+      if (existing) {
+        existing.count++;
+      } else {
+        artistCounts.set(track.artist, { count: 1, qobuzId: track.artistId });
+      }
+    }
+  }
+
+  const uniqueArtistCount = artistCounts.size;
+  if (uniqueArtistCount === 0) return [];
+
+  // Calculate how many artists to select
+  const limit = forceLimit ?? calculateAdaptiveLimit(tracks.length);
+  const actualLimit = Math.min(limit, uniqueArtistCount);
+
+  // If we have few artists, just return all of them shuffled
+  if (uniqueArtistCount <= actualLimit) {
+    const all = [...artistCounts.entries()].map(([name, data]) => ({
+      name,
+      qobuzId: data.qobuzId
+    }));
+    return shuffleArray(all);
+  }
+
+  // Sort by count descending
+  const sorted = [...artistCounts.entries()]
+    .sort((a, b) => b[1].count - a[1].count);
+
+  // Split into top artists and the rest
+  const topCount = Math.max(1, Math.floor(actualLimit * topRatio));
+  const randomCount = actualLimit - topCount;
+
+  // Take top artists (coherence)
+  const topArtists = sorted.slice(0, topCount);
+
+  // Randomly select from remaining artists (discovery)
+  const remaining = sorted.slice(topCount);
+  const randomArtists = shuffleArray(remaining).slice(0, randomCount);
+
+  // Combine and shuffle the final selection
+  const combined = [...topArtists, ...randomArtists];
+  const shuffled = shuffleArray(combined);
+
+  return shuffled.map(([name, data]) => ({
+    name,
+    qobuzId: data.qobuzId
+  }));
+}
 
 /**
  * Extract top artists from playlist tracks, sorted by frequency (track count)
+ * @deprecated Use extractAdaptiveArtists for better discovery
  *
  * @param tracks - Playlist tracks
- * @param limit - Maximum number of artists to return (default: 5)
+ * @param limit - Maximum number of artists to return
  */
 export function extractTopArtists(
   tracks: Array<{ artist?: string; artistId?: number }>,
-  limit: number = DEFAULT_TOP_ARTISTS
+  limit: number = 30
 ): PlaylistArtist[] {
   // Count tracks per artist
   const artistCounts = new Map<string, { count: number; qobuzId?: number }>();
