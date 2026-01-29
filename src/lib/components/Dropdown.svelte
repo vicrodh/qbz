@@ -42,8 +42,10 @@
   // Menu positioning state
   let menuPosition = $state<{ top?: string; bottom?: string; left?: string; right?: string }>({});
 
-  // Item height for calculations (40px option + 0px padding = 40px)
-  const ITEM_HEIGHT = 40;
+  // Item height depends on compact mode
+  const ITEM_HEIGHT_NORMAL = 40;
+  const ITEM_HEIGHT_COMPACT = 36;
+  const itemHeight = $derived(compact ? ITEM_HEIGHT_COMPACT : ITEM_HEIGHT_NORMAL);
   const SEARCH_HEIGHT = 48; // search input height including margin
   const MENU_PADDING = 8; // 4px top + 4px bottom
   const MAX_VISIBLE_ITEMS = 4;
@@ -204,8 +206,8 @@
   // Calculate menu max-height based on whether search is shown
   const menuMaxHeight = $derived(
     showSearch
-      ? `${SEARCH_HEIGHT + (MAX_VISIBLE_ITEMS * ITEM_HEIGHT) + MENU_PADDING}px`
-      : `${Math.min(options.length, 8) * ITEM_HEIGHT + MENU_PADDING}px`
+      ? `${SEARCH_HEIGHT + (MAX_VISIBLE_ITEMS * itemHeight) + MENU_PADDING}px`
+      : `${Math.min(options.length, 8) * itemHeight + MENU_PADDING}px`
   );
 </script>
 
@@ -244,7 +246,11 @@
           />
         </div>
       {/if}
-      <div class="options-container" class:with-search={showSearch}>
+      <div
+        class="options-container"
+        class:with-search={showSearch}
+        style:max-height={showSearch ? `${MAX_VISIBLE_ITEMS * itemHeight}px` : undefined}
+      >
         {#each filteredOptions as option}
           <button
             class="option"
@@ -369,10 +375,7 @@
     min-height: 0;
   }
 
-  .options-container.with-search {
-    /* Fixed height for 4 items when search is shown */
-    max-height: calc(4 * 40px);
-  }
+  /* max-height for .with-search is set via inline style for compact mode support */
 
   .options-container::-webkit-scrollbar {
     width: 6px;
