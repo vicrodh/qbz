@@ -1192,8 +1192,7 @@
     padding-left: 18px;
     padding-right: 24px;
     padding-bottom: 100px;
-    overflow-y: auto;
-    scrollbar-gutter: stable;
+    overflow-y: scroll;
   }
 
   /* Custom scrollbar */
@@ -1239,9 +1238,9 @@
   }
 
   .sticky-header.scrolled {
-    top: 0;
+    top: -24px;
     background-color: var(--bg-primary);
-    padding-top: 16px;
+    padding-top: 24px;
     padding-bottom: 8px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   }
