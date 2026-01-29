@@ -581,6 +581,9 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+    /* Fixed height to prevent layout jump during add/dismiss animations */
+    /* 6 rows × 56px (40px content + 16px padding) + 5 gaps × 2px = 346px */
+    min-height: 346px;
   }
 
   .suggestion-row {
