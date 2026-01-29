@@ -2195,6 +2195,8 @@
     font-size: 13px;
     cursor: pointer;
     transition: color 150ms ease;
+    min-width: 160px;
+    white-space: nowrap;
   }
 
   .sort-btn:hover {
@@ -2219,7 +2221,7 @@
     border: 1px solid var(--bg-tertiary);
     border-radius: 8px;
     padding: 4px;
-    min-width: 140px;
+    min-width: 160px;
     z-index: 100;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
@@ -2236,6 +2238,7 @@
     cursor: pointer;
     border-radius: 4px;
     transition: all 150ms ease;
+    white-space: nowrap;
   }
 
   .sort-option:hover {
