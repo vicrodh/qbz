@@ -16,6 +16,8 @@
     playlistId: number;
     artists: PlaylistArtist[];
     excludeTrackIds: number[];
+    /** Existing tracks in playlist for title+artist deduplication */
+    existingTracks?: Array<{ title: string; artist?: string }>;
     onAddTrack?: (trackId: number) => Promise<void>;
     onGoToAlbum?: (albumId: string) => void;
     onGoToArtist?: (artistId: number) => void;
@@ -27,12 +29,49 @@
     playlistId,
     artists,
     excludeTrackIds,
+    existingTracks = [],
     onAddTrack,
     onGoToAlbum,
     onGoToArtist,
     onPreviewTrack,
     showReasons = false
   }: Props = $props();
+
+  /**
+   * Normalize a string for comparison (lowercase, trim, remove extra whitespace)
+   */
+  function normalizeForComparison(str: string): string {
+    return str.toLowerCase().trim().replace(/\s+/g, ' ');
+  }
+
+  /**
+   * Create a key for title+artist deduplication
+   */
+  function makeTrackKey(title: string, artist: string): string {
+    return `${normalizeForComparison(title)}|${normalizeForComparison(artist)}`;
+  }
+
+  /**
+   * Build set of existing track keys for fast lookup
+   */
+  const existingTrackKeys = $derived.by(() => {
+    const keys = new Set<string>();
+    for (const track of existingTracks) {
+      if (track.title && track.artist) {
+        keys.add(makeTrackKey(track.title, track.artist));
+      }
+    }
+    return keys;
+  });
+
+  /**
+   * Check if a suggested track is a duplicate of an existing track
+   */
+  function isDuplicateOfExisting(track: SuggestedTrack): boolean {
+    if (!track.title || !track.artist_name) return false;
+    const key = makeTrackKey(track.title, track.artist_name);
+    return existingTrackKeys.has(key);
+  }
 
   // TrackInfo modal state
   let trackInfoOpen = $state(false);
@@ -81,9 +120,24 @@
 
   // Derived state
   const dismissedIds = $derived(getDismissedTrackIds(playlistId));
-  const filteredPool = $derived(
-    pool.filter(t => !dismissedIds.has(t.track_id) && !excludeTrackIds.includes(t.track_id))
-  );
+  const filteredPool = $derived.by(() => {
+    // First filter by ID and dismissed
+    const byId = pool.filter(t =>
+      !dismissedIds.has(t.track_id) && !excludeTrackIds.includes(t.track_id)
+    );
+
+    // Then filter by title+artist to avoid duplicates from compilations, live albums, etc.
+    const filtered = byId.filter(t => !isDuplicateOfExisting(t));
+
+    // Also deduplicate within the pool itself (same song from different albums)
+    const seenKeys = new Set<string>();
+    return filtered.filter(t => {
+      const key = makeTrackKey(t.title, t.artist_name);
+      if (seenKeys.has(key)) return false;
+      seenKeys.add(key);
+      return true;
+    });
+  });
   const totalPages = $derived(Math.ceil(filteredPool.length / VISIBLE_COUNT));
   const visibleTracks = $derived(
     filteredPool.slice(currentPage * VISIBLE_COUNT, (currentPage + 1) * VISIBLE_COUNT)

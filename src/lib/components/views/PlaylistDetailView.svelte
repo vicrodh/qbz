@@ -8,7 +8,7 @@
   import { open } from '@tauri-apps/plugin-dialog';
   import TrackRow from '../TrackRow.svelte';
   import PlaylistSuggestions from '../PlaylistSuggestions.svelte';
-  import { extractTopArtists } from '$lib/services/playlistSuggestionsService';
+  import { extractAdaptiveArtists } from '$lib/services/playlistSuggestionsService';
   import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import {
     subscribe as subscribeOffline,
@@ -194,9 +194,10 @@
   let localTracksDuration = $derived(localTracks.reduce((sum, t) => sum + t.duration_secs, 0));
   let totalDuration = $derived((playlist?.duration ?? 0) + localTracksDuration);
 
-  // Playlist suggestions: extract top 5 artists by track count (not local tracks)
+  // Playlist suggestions: adaptive artist selection (quantity scales with playlist size,
+  // mix of top artists for coherence + random artists for discovery)
   const playlistArtists = $derived(
-    extractTopArtists(tracks.filter(t => !t.isLocal), 5)
+    extractAdaptiveArtists(tracks.filter(t => !t.isLocal))
   );
   // Track IDs to exclude from suggestions (already in playlist)
   const excludeTrackIds = $derived(
@@ -1702,6 +1703,7 @@
         playlistId={playlistId}
         artists={playlistArtists}
         excludeTrackIds={excludeTrackIds}
+        existingTracks={tracks.filter(t => !t.isLocal).map(t => ({ title: t.title, artist: t.artist }))}
         onAddTrack={handleAddSuggestedTrack}
         onGoToAlbum={onTrackGoToAlbum}
         onGoToArtist={onTrackGoToArtist}
