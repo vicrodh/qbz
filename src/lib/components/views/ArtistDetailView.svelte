@@ -643,6 +643,13 @@
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
+  function getQualityLabel(track: Track): string {
+    if (track.hires_streamable && track.maximum_bit_depth && track.maximum_sampling_rate) {
+      return `${track.maximum_bit_depth}bit/${track.maximum_sampling_rate}kHz`;
+    }
+    return 'CD Quality';
+  }
+
   function handlePausePlayback(event: MouseEvent) {
     event.stopPropagation();
     void togglePlay();
@@ -1418,8 +1425,25 @@
                   <div class="track-album">{track.album?.title || ''}</div>
                 {/if}
               </div>
+              <div class="track-quality">
+                <span class="quality-badge" class:hires={track.hires_streamable}>
+                  {getQualityLabel(track)}
+                </span>
+              </div>
               <div class="track-duration">{formatDuration(track.duration)}</div>
               <div class="track-actions">
+                {#if onTrackAddFavorite}
+                  <button
+                    class="favorite-btn"
+                    onclick={(e) => {
+                      e.stopPropagation();
+                      onTrackAddFavorite(track.id);
+                    }}
+                    title="Add to favorites"
+                  >
+                    <Heart size={16} />
+                  </button>
+                {/if}
                 <TrackMenu
                   onPlayNow={() => handleTrackPlay(track, index)}
                   onPlayNext={onTrackPlayNext ? () => onTrackPlayNext(track) : undefined}
@@ -3406,6 +3430,25 @@
     text-underline-offset: 2px;
   }
 
+  .track-quality {
+    display: flex;
+    align-items: center;
+  }
+
+  .track-quality .quality-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background-color: var(--bg-tertiary);
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  .track-quality .quality-badge.hires {
+    background-color: rgba(168, 85, 247, 0.15);
+    color: #a855f7;
+  }
+
   .track-duration {
     font-size: 13px;
     color: var(--text-muted);
@@ -3415,6 +3458,7 @@
   .track-actions {
     display: flex;
     align-items: center;
+    gap: 4px;
     margin-left: 8px;
     opacity: 0.7;
     transition: opacity 150ms ease;
@@ -3422,6 +3466,25 @@
 
   .track-row:hover .track-actions {
     opacity: 1;
+  }
+
+  .favorite-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 4px;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .favorite-btn:hover {
+    background-color: var(--bg-tertiary);
+    color: var(--accent-primary);
   }
 
   /* Responsive */

@@ -43,3 +43,17 @@ export function getSearchState<Album, Track, Artist>(): SearchState<Album, Track
 export function setSearchState<Album, Track, Artist>(next: SearchState<Album, Track, Artist>): void {
   searchState = next as SearchState<unknown, unknown, unknown>;
 }
+
+// Signal to trigger scroll-to-top and focus on search input
+let focusTrigger = 0;
+const focusListeners: Set<() => void> = new Set();
+
+export function triggerSearchFocus(): void {
+  focusTrigger++;
+  focusListeners.forEach(fn => fn());
+}
+
+export function subscribeSearchFocus(callback: () => void): () => void {
+  focusListeners.add(callback);
+  return () => focusListeners.delete(callback);
+}

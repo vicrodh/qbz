@@ -27,7 +27,7 @@
   } from '$lib/stores/toastStore';
 
   // Search state for performer search
-  import { setSearchState } from '$lib/stores/searchState';
+  import { setSearchState, triggerSearchFocus } from '$lib/stores/searchState';
 
   // Playback context and preferences
   import { 
@@ -542,6 +542,11 @@
     if (view === 'favorites') {
       await loadFavoritesDefaultTab();
       navigateToFavorites(favoritesDefaultTab);
+      return;
+    }
+    // If already on search, trigger scroll to top and focus
+    if (view === 'search' && activeView === 'search') {
+      triggerSearchFocus();
       return;
     }
     navTo(view as ViewType);

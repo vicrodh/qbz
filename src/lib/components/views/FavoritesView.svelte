@@ -608,6 +608,9 @@
   }
 
   function getAlbumQualityLabel(album: FavoriteAlbum): string {
+    if (album.hires && album.maximum_bit_depth && album.maximum_sampling_rate) {
+      return `${album.maximum_bit_depth}bit/${album.maximum_sampling_rate}kHz`;
+    }
     return album.hires ? 'Hi-Res' : 'CD Quality';
   }
 

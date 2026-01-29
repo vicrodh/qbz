@@ -4,7 +4,7 @@
   import { Search, Disc3, Music, Mic2, User, X, ChevronLeft, ChevronRight, Crown } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
-  import { getSearchState, setSearchState, type SearchResults, type SearchAllResults, type SearchTab, type SearchFilterType } from '$lib/stores/searchState';
+  import { getSearchState, setSearchState, subscribeSearchFocus, type SearchResults, type SearchAllResults, type SearchTab, type SearchFilterType } from '$lib/stores/searchState';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { togglePlay } from '$lib/stores/playerStore';
   import { t } from '$lib/i18n';
@@ -34,7 +34,16 @@
       performSearch();
     }
 
-    return () => window.removeEventListener('resize', handleResize);
+    // Subscribe to focus trigger (when user re-clicks Search in sidebar)
+    const unsubscribeFocus = subscribeSearchFocus(() => {
+      scrollContainer?.scrollTo({ top: 0, behavior: 'smooth' });
+      searchInput?.focus();
+    });
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      unsubscribeFocus();
+    };
   });
 
   function handleScroll(event: Event) {
