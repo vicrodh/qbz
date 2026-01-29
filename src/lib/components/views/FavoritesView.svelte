@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { onMount, tick } from 'svelte';
-  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library } from 'lucide-svelte';
+  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library, CloudDownload } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import QualityBadge from '../QualityBadge.svelte';
@@ -799,6 +799,7 @@
   const getFavoriteTrackArtist = (t: FavoriteTrack) => t.performer?.name;
   const getFavoriteTrackDuration = (t: FavoriteTrack) => t.duration;
   const getFavoriteTrackAlbumKey = (t: FavoriteTrack) => t.album?.id;
+  const getFavoriteTrackAlbum = (t: FavoriteTrack) => t.album?.title;
   const getFavoriteArtistId = (t: FavoriteTrack) => t.performer?.id;
   const getFavoriteAlbumId = (t: FavoriteTrack) => t.album?.id;
 
@@ -1208,7 +1209,21 @@
             ? new Set(trackIndexTargets.keys())
             : new Set<string>()}
 
-        <!-- Always use virtualization for tracks - handles any favorites size efficiently -->
+        <!-- Track list header - outside virtualized container -->
+        <div class="track-list-header">
+          <div class="col-number">#</div>
+          <div class="col-title">Title</div>
+          {#if !trackGroupingEnabled || trackGroupMode !== 'album'}
+            <div class="col-album">Album</div>
+          {/if}
+          <div class="col-duration">Duration</div>
+          <div class="col-quality">Quality</div>
+          <div class="col-icon"><Heart size={14} /></div>
+          <div class="col-icon"><CloudDownload size={14} /></div>
+          <div class="col-spacer"></div>
+        </div>
+
+        <!-- Virtualized track list -->
         <div class="track-sections virtualized">
           <div class="virtualized-container">
             <VirtualizedTrackList
@@ -1230,6 +1245,8 @@
               getTrackArtist={getFavoriteTrackArtist}
               getTrackDuration={getFavoriteTrackDuration}
               getTrackAlbumKey={getFavoriteTrackAlbumKey}
+              getTrackAlbum={getFavoriteTrackAlbum}
+              showAlbum={!trackGroupingEnabled || trackGroupMode !== 'album'}
               getArtistId={getFavoriteArtistId}
               getAlbumId={getFavoriteAlbumId}
               isLocal={false}
@@ -1774,6 +1791,7 @@
 
   .dropdown-container {
     position: relative;
+    z-index: 1000;
   }
 
   .control-btn {
@@ -1813,14 +1831,14 @@
   .dropdown-menu {
     position: absolute;
     top: calc(100% + 6px);
-    right: 0;
+    left: 0;
     min-width: 170px;
     background: var(--bg-secondary);
     border: 1px solid var(--bg-tertiary);
     border-radius: 8px;
     padding: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-    z-index: 10;
+    z-index: 100;
     max-height: 260px;
     overflow-y: auto;
     scrollbar-width: thin;
@@ -1998,14 +2016,72 @@
 
   .track-sections.virtualized {
     flex: 1;
-    min-height: 0;
-    height: 100%;
+    height: calc(100vh - 380px);
+    min-height: 400px;
+    overflow: hidden;
   }
 
   .virtualized-container {
     flex: 1;
     height: 100%;
-    min-height: 400px;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  /* Track list header - matches PlaylistDetailView style */
+  .track-list-header {
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: #666666;
+    font-weight: 400;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--bg-tertiary);
+    margin-bottom: 8px;
+  }
+
+  .track-list-header .col-number {
+    width: 48px;
+    text-align: center;
+  }
+
+  .track-list-header .col-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .track-list-header .col-album {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .track-list-header .col-duration {
+    width: 80px;
+    text-align: center;
+  }
+
+  .track-list-header .col-quality {
+    width: 80px;
+    text-align: center;
+  }
+
+  .track-list-header .col-icon {
+    width: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.5;
+  }
+
+  .track-list-header .col-spacer {
+    width: 28px;
   }
 
   .track-group-list {

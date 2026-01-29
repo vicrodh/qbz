@@ -38,6 +38,9 @@
     getTrackArtist?: (track: Track) => string | undefined;
     getTrackDuration?: (track: Track) => number;
     getTrackAlbumKey?: (track: Track) => string | undefined;
+    getTrackAlbum?: (track: Track) => string | undefined;
+    // Whether to show the album column (false when grouping by album to avoid redundancy)
+    showAlbum?: boolean;
     // Optional props for non-local tracks (Favorites, Search, etc.)
     isLocal?: boolean;
     hideDownload?: boolean;
@@ -81,6 +84,8 @@
     getTrackArtist = (t: Track) => t.artist,
     getTrackDuration = (t: Track) => t.duration_secs,
     getTrackAlbumKey = (t: Track) => t.album_group_key,
+    getTrackAlbum = (t: Track) => t.album,
+    showAlbum = false,
     // Non-local defaults
     isLocal = true,
     hideDownload = true,
@@ -305,6 +310,7 @@
           {@const trackId = getTrackId(item.track)}
           {@const trackArtist = getTrackArtist(item.track)}
           {@const albumKey = getTrackAlbumKey(item.track)}
+          {@const albumName = showAlbum ? getTrackAlbum(item.track) : undefined}
           {@const artistId = getArtistId?.(item.track)}
           {@const albumId = getAlbumId?.(item.track)}
           {@const downloadInfo = getOfflineCacheStatus?.(trackId) ?? { status: 'none' as const, progress: 0 }}
@@ -314,6 +320,7 @@
             number={getTrackNumber(item.track, item.index)}
             title={getTrackTitle(item.track)}
             artist={trackArtist}
+            album={albumName}
             duration={formatDuration(getTrackDuration(item.track))}
             quality={getQualityBadge(item.track)}
             isPlaying={isPlaybackActive && activeTrackId === trackId}
