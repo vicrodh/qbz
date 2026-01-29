@@ -337,7 +337,7 @@
     border: 1px solid var(--alpha-15);
     border-radius: 4px;
     padding: 4px 6px;
-    min-width: 72px;
+    min-width: 90px;
     text-align: center;
     box-sizing: border-box;
   }

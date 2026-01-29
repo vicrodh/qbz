@@ -4840,14 +4840,14 @@
     border: 1px solid var(--alpha-15);
     border-radius: 6px;
     padding: 3px 8px;
-    min-width: 72px;
+    min-width: 90px;
     text-align: center;
     box-sizing: border-box;
   }
 
   .album-row-quality .quality-badge.hires {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    color: white;
+    background: linear-gradient(135deg, #fbbf24 0%, #b8860b 100%);
+    color: #1a1a1a;
     border-color: transparent;
   }
 

@@ -458,15 +458,17 @@
     font-weight: 600;
     padding: 4px 8px;
     border-radius: 6px;
-    background: var(--bg-tertiary);
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
+    background: var(--alpha-10);
+    color: var(--alpha-85);
+    border: 1px solid var(--alpha-15);
+    min-width: 90px;
+    text-align: center;
   }
 
   .quality-badge.hires {
-    background: var(--accent-gradient, linear-gradient(135deg, #667eea 0%, #764ba2 100%));
-    color: white;
+    background: linear-gradient(135deg, #fbbf24 0%, #b8860b 100%);
+    color: #1a1a1a;
+    border-color: transparent;
   }
 
   /* Album Grid Row (Grid Mode) */

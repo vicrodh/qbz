@@ -1434,7 +1434,7 @@
               <div class="track-actions">
                 {#if onTrackAddFavorite}
                   <button
-                    class="favorite-btn"
+                    class="track-favorite-btn"
                     onclick={(e) => {
                       e.stopPropagation();
                       onTrackAddFavorite(track.id);
@@ -3444,13 +3444,13 @@
     color: var(--alpha-85);
     border: 1px solid var(--alpha-15);
     white-space: nowrap;
-    min-width: 72px;
+    min-width: 90px;
     text-align: center;
   }
 
   .track-quality .quality-badge.hires {
-    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-    color: white;
+    background: linear-gradient(135deg, #fbbf24 0%, #b8860b 100%);
+    color: #1a1a1a;
     border-color: transparent;
   }
 
@@ -3467,7 +3467,7 @@
     margin-left: 8px;
   }
 
-  .favorite-btn {
+  .track-favorite-btn {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3482,16 +3482,16 @@
     transition: opacity 150ms ease, background-color 150ms ease;
   }
 
-  .favorite-btn:hover {
+  .track-favorite-btn:hover {
     opacity: 1;
     background-color: var(--bg-tertiary);
   }
 
-  .track-row:hover .favorite-btn {
+  .track-row:hover .track-favorite-btn {
     opacity: 0.6;
   }
 
-  .track-row:hover .favorite-btn:hover {
+  .track-row:hover .track-favorite-btn:hover {
     opacity: 1;
   }
 
