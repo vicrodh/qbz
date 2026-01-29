@@ -2196,7 +2196,7 @@
     font-size: 13px;
     cursor: pointer;
     transition: color 150ms ease;
-    min-width: 160px;
+    min-width: 180px;
     white-space: nowrap;
   }
 
@@ -2222,7 +2222,7 @@
     border: 1px solid var(--bg-tertiary);
     border-radius: 8px;
     padding: 4px;
-    min-width: 160px;
+    min-width: 180px;
     z-index: 100;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
