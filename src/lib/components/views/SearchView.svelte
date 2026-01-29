@@ -4,6 +4,7 @@
   import { Search, Disc3, Music, Mic2, User, X, ChevronLeft, ChevronRight, Crown } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
+  import QualityBadge from '../QualityBadge.svelte';
   import { getSearchState, setSearchState, subscribeSearchFocus, type SearchResults, type SearchAllResults, type SearchTab, type SearchFilterType } from '$lib/stores/searchState';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { togglePlay } from '$lib/stores/playerStore';
@@ -988,7 +989,13 @@
                         <div class="track-artist">{track.performer?.name || 'Unknown Artist'}</div>
                       {/if}
                     </div>
-                    <div class="track-quality">{getQualityLabel(track)}</div>
+                    <div class="track-quality">
+                      <QualityBadge
+                        bitDepth={track.maximum_bit_depth}
+                        samplingRate={track.maximum_sampling_rate}
+                        compact
+                      />
+                    </div>
                     <div class="track-duration">{formatDuration(track.duration)}</div>
                     <div class="track-actions">
                       <TrackMenu
@@ -1126,7 +1133,13 @@
                   <div class="track-artist">{track.performer?.name || 'Unknown Artist'}</div>
                 {/if}
               </div>
-              <div class="track-quality">{getQualityLabel(track)}</div>
+              <div class="track-quality">
+                <QualityBadge
+                  bitDepth={track.maximum_bit_depth}
+                  samplingRate={track.maximum_sampling_rate}
+                  compact
+                />
+              </div>
               <div class="track-duration">{formatDuration(track.duration)}</div>
               <div class="track-actions">
                 <TrackMenu
@@ -1574,15 +1587,8 @@
   }
 
   .track-quality {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--alpha-85);
-    background: var(--alpha-10);
-    border: 1px solid var(--alpha-15);
-    padding: 3px 8px;
-    border-radius: 6px;
-    min-width: 90px;
-    text-align: center;
+    display: flex;
+    align-items: center;
   }
 
   .track-duration {

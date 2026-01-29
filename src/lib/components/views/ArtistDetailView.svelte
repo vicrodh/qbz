@@ -4,6 +4,7 @@
   import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
+  import QualityBadge from '../QualityBadge.svelte';
   import { consumeContextTrackFocus, setPlaybackContext, getPlaybackContext } from '$lib/stores/playbackContextStore';
   import { togglePlay } from '$lib/stores/playerStore';
   import { getQueue, syncQueueState, playQueueIndex } from '$lib/stores/queueStore';
@@ -641,13 +642,6 @@
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  function getQualityLabel(track: Track): string {
-    if (track.hires_streamable && track.maximum_bit_depth && track.maximum_sampling_rate) {
-      return `${track.maximum_bit_depth}bit/${track.maximum_sampling_rate}kHz`;
-    }
-    return 'CD Quality';
   }
 
   function handlePausePlayback(event: MouseEvent) {
@@ -1426,9 +1420,11 @@
                 {/if}
               </div>
               <div class="track-quality">
-                <span class="quality-badge" class:hires={track.hires_streamable}>
-                  {getQualityLabel(track)}
-                </span>
+                <QualityBadge
+                  bitDepth={track.maximum_bit_depth}
+                  samplingRate={track.maximum_sampling_rate}
+                  compact
+                />
               </div>
               <div class="track-duration">{formatDuration(track.duration)}</div>
               <div class="track-actions">
@@ -3433,25 +3429,6 @@
   .track-quality {
     display: flex;
     align-items: center;
-  }
-
-  .track-quality .quality-badge {
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 8px;
-    border-radius: 6px;
-    background: var(--alpha-10);
-    color: var(--alpha-85);
-    border: 1px solid var(--alpha-15);
-    white-space: nowrap;
-    min-width: 90px;
-    text-align: center;
-  }
-
-  .track-quality .quality-badge.hires {
-    background: linear-gradient(135deg, #fbbf24 0%, #b8860b 100%);
-    color: #1a1a1a;
-    border-color: transparent;
   }
 
   .track-duration {

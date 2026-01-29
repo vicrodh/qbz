@@ -4,13 +4,15 @@
     bitDepth?: number;
     samplingRate?: number;
     format?: string;
+    compact?: boolean;
   }
 
   let {
     quality = '',
     bitDepth,
     samplingRate,
-    format
+    format,
+    compact = false
   }: Props = $props();
 
   // Determine quality tier
@@ -53,7 +55,7 @@
     return 'cd'; // Default to CD instead of unknown
   });
 
-  // Format the display text
+  // Format the display text for full mode
   const displayText = $derived.by(() => {
     if (tier === 'max') {
       const depth = bitDepth || 24;
@@ -77,6 +79,19 @@
     return '16-bit / 44.1 kHz';
   });
 
+  // Format the compact display text
+  const compactText = $derived.by(() => {
+    if (tier === 'max' || tier === 'hires') {
+      const depth = bitDepth || 24;
+      const rate = samplingRate || (tier === 'max' ? 192 : 96);
+      return `${depth}bit/${rate}kHz`;
+    }
+    if (tier === 'mp3') {
+      return 'MP3';
+    }
+    return 'CD Quality';
+  });
+
   const tierLabel = $derived.by(() => {
     if (tier === 'max') return 'Hi-Res';
     if (tier === 'hires') return 'Hi-Res';
@@ -96,23 +111,52 @@
   const isHiRes = $derived(tier === 'max' || tier === 'hires');
 </script>
 
-<div class="quality-badge" title="{tierLabel}: {displayText}">
-  <!-- Icon -->
-  <img
-    src={iconPath}
-    alt={tierLabel}
-    class="badge-icon"
-    class:hires={isHiRes}
-  />
+{#if compact}
+  <span class="quality-badge-compact" class:hires={isHiRes} title="{tierLabel}: {displayText}">
+    {compactText}
+  </span>
+{:else}
+  <div class="quality-badge" title="{tierLabel}: {displayText}">
+    <!-- Icon -->
+    <img
+      src={iconPath}
+      alt={tierLabel}
+      class="badge-icon"
+      class:hires={isHiRes}
+    />
 
-  <!-- Text -->
-  <div class="badge-text">
-    <span class="tier-label">{tierLabel}</span>
-    <span class="quality-info">{displayText}</span>
+    <!-- Text -->
+    <div class="badge-text">
+      <span class="tier-label">{tierLabel}</span>
+      <span class="quality-info">{displayText}</span>
+    </div>
   </div>
-</div>
+{/if}
 
 <style>
+  /* Compact mode styles */
+  .quality-badge-compact {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 6px;
+    background: var(--alpha-10);
+    color: var(--alpha-85);
+    border: 1px solid var(--alpha-15);
+    min-width: 90px;
+    text-align: center;
+    box-sizing: border-box;
+    white-space: nowrap;
+  }
+
+  .quality-badge-compact.hires {
+    background: linear-gradient(135deg, #fbbf24 0%, #b8860b 100%);
+    color: #1a1a1a;
+    border-color: transparent;
+  }
+
+  /* Full mode styles */
   .quality-badge {
     display: inline-flex;
     align-items: center;
@@ -125,21 +169,21 @@
     box-sizing: border-box;
     cursor: help;
   }
-  
+
   [data-theme="light"] .quality-badge {
     background: rgba(40, 42, 54, 0.85);
     border: 1px solid rgba(40, 42, 54, 0.95);
   }
-  
+
   [data-theme="light"] .tier-label,
   [data-theme="light"] .quality-info {
     color: #ffffff;
   }
-  
+
   [data-theme="light"] .badge-icon {
     filter: invert(1) brightness(1.5);
   }
-  
+
   [data-theme="light"] .badge-icon.hires {
     filter: brightness(1.2);
   }

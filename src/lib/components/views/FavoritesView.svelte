@@ -4,6 +4,7 @@
   import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
+  import QualityBadge from '../QualityBadge.svelte';
   import VirtualizedTrackList from '../VirtualizedTrackList.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import FavoritesEditModal from '../FavoritesEditModal.svelte';
@@ -605,13 +606,6 @@
   function getAlbumYear(album: FavoriteAlbum): string | null {
     if (!album.release_date_original) return null;
     return album.release_date_original.slice(0, 4);
-  }
-
-  function getAlbumQualityLabel(album: FavoriteAlbum): string {
-    if (album.hires && album.maximum_bit_depth && album.maximum_sampling_rate) {
-      return `${album.maximum_bit_depth}bit/${album.maximum_sampling_rate}kHz`;
-    }
-    return album.hires ? 'Hi-Res' : 'CD Quality';
   }
 
   function groupAlbums(items: FavoriteAlbum[], mode: AlbumGroupMode) {
@@ -1342,9 +1336,11 @@
                           </div>
                         </div>
                         <div class="album-row-quality">
-                          <span class="quality-badge" class:hires={album.hires}>
-                            {getAlbumQualityLabel(album)}
-                          </span>
+                          <QualityBadge
+                            bitDepth={album.maximum_bit_depth}
+                            samplingRate={album.maximum_sampling_rate}
+                            compact
+                          />
                         </div>
                       </div>
                     {/each}
@@ -1416,9 +1412,11 @@
                   </div>
                 </div>
                 <div class="album-row-quality">
-                  <span class="quality-badge" class:hires={album.hires}>
-                    {getAlbumQualityLabel(album)}
-                  </span>
+                  <QualityBadge
+                    bitDepth={album.maximum_bit_depth}
+                    samplingRate={album.maximum_sampling_rate}
+                    compact
+                  />
                 </div>
               </div>
             {/each}
@@ -2158,25 +2156,6 @@
   .album-row-quality {
     display: flex;
     justify-content: flex-end;
-  }
-
-  .album-row-quality .quality-badge {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--alpha-85);
-    background: var(--alpha-10);
-    border: 1px solid var(--alpha-15);
-    border-radius: 6px;
-    padding: 3px 8px;
-    min-width: 90px;
-    text-align: center;
-    box-sizing: border-box;
-  }
-
-  .album-row-quality .quality-badge.hires {
-    background: linear-gradient(135deg, #fbbf24 0%, #b8860b 100%);
-    color: #1a1a1a;
-    border-color: transparent;
   }
 
   .artist-grid {
