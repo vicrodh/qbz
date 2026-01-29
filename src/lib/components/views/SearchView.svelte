@@ -12,6 +12,8 @@
   let searchInput: HTMLInputElement | null = null;
   let albumsCarouselContainer: HTMLDivElement | null = null;
   let artistsCarouselContainer: HTMLDivElement | null = null;
+  let scrollContainer: HTMLDivElement | null = null;
+  let isScrolled = $state(false);
   let currentAlbumPage = $state(0);
   let currentArtistPage = $state(0);
   let albumsPerPage = $state(5);
@@ -34,6 +36,11 @@
 
     return () => window.removeEventListener('resize', handleResize);
   });
+
+  function handleScroll(event: Event) {
+    const target = event.target as HTMLDivElement;
+    isScrolled = target.scrollTop > 60;
+  }
 
   function handleResize() {
     calculateAlbumsPerPage();
@@ -548,12 +555,18 @@
   );
 </script>
 
-<div class="search-view">
-  <!-- Search Header -->
-  <div class="search-header">
-    <h1>{$t('search.title')}</h1>
-    <div class="search-input-container">
-      <Search size={20} class="search-icon" />
+<div class="search-view" bind:this={scrollContainer} onscroll={handleScroll}>
+  <!-- Search Header - title only when not scrolled -->
+  {#if !isScrolled}
+    <div class="search-header">
+      <h1>{$t('search.title')}</h1>
+    </div>
+  {/if}
+
+  <!-- Sticky Header Container -->
+  <div class="sticky-header" class:scrolled={isScrolled}>
+    <div class="search-input-container" class:compact={isScrolled}>
+      <Search size={isScrolled ? 18 : 20} class="search-icon" />
       <input
         type="text"
         placeholder={$t('search.placeholder')}
@@ -568,10 +581,9 @@
         </button>
       {/if}
     </div>
-  </div>
 
-  <!-- Tabs and Filters Row -->
-  <div class="tabs-row">
+    <!-- Tabs and Filters Row -->
+    <div class="tabs-row">
     <div class="tabs">
       <button
         class="tab"
@@ -666,6 +678,7 @@
         </button>
       </div>
     {/if}
+  </div>
   </div>
 
   <!-- Results -->
@@ -1180,6 +1193,7 @@
     padding-right: 24px;
     padding-bottom: 100px;
     overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 
   /* Custom scrollbar */
@@ -1201,18 +1215,45 @@
   }
 
   .search-header {
-    margin-bottom: 24px;
+    margin-bottom: 16px;
   }
 
   .search-header h1 {
     font-size: 24px;
     font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: 16px;
+    margin-bottom: 0;
+  }
+
+  /* Sticky header */
+  .sticky-header {
+    position: sticky;
+    top: -24px;
+    z-index: 100;
+    padding-top: 0;
+    margin-left: -18px;
+    margin-right: -24px;
+    padding-left: 18px;
+    padding-right: 24px;
+    transition: background-color 150ms ease, padding-top 150ms ease, box-shadow 150ms ease;
+  }
+
+  .sticky-header.scrolled {
+    top: 0;
+    background-color: var(--bg-primary);
+    padding-top: 16px;
+    padding-bottom: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   }
 
   .search-input-container {
     position: relative;
+    margin-bottom: 16px;
+    transition: margin-bottom 150ms ease;
+  }
+
+  .search-input-container.compact {
+    margin-bottom: 12px;
   }
 
   .search-input-container :global(.search-icon) {
@@ -1233,7 +1274,7 @@
     font-size: 16px;
     color: var(--text-primary);
     outline: none;
-    transition: border-color 150ms ease;
+    transition: all 150ms ease;
   }
 
   .search-input:focus {
@@ -1242,6 +1283,31 @@
 
   .search-input::placeholder {
     color: var(--text-muted);
+  }
+
+  /* Compact search input when scrolled */
+  .search-input-container.compact .search-input {
+    height: 40px;
+    padding: 0 40px 0 40px;
+    background-color: transparent;
+    border: none;
+    border-bottom: 2px solid var(--text-muted);
+    border-radius: 0;
+    font-size: 15px;
+  }
+
+  .search-input-container.compact .search-input:focus {
+    border-bottom-color: var(--accent-muted, var(--text-secondary));
+  }
+
+  .search-input-container.compact :global(.search-icon) {
+    left: 8px;
+  }
+
+  .search-input-container.compact .search-clear {
+    right: 4px;
+    width: 28px;
+    height: 28px;
   }
 
   .search-clear {
@@ -1272,9 +1338,13 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 24px;
+    margin-bottom: 0;
     border-bottom: 1px solid var(--bg-tertiary);
-    padding-bottom: 16px;
+    padding-bottom: 12px;
+  }
+
+  .sticky-header:not(.scrolled) .tabs-row {
+    margin-bottom: 24px;
   }
 
   .tabs {
@@ -1366,6 +1436,7 @@
 
   .results {
     min-height: 300px;
+    padding-top: 16px;
   }
 
   .loading, .empty-state, .error, .no-results {
