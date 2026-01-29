@@ -1574,11 +1574,15 @@
   }
 
   .track-quality {
-    font-size: 12px;
-    color: var(--text-muted);
-    padding: 4px 8px;
-    background-color: var(--bg-tertiary);
-    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--alpha-85);
+    background: var(--alpha-10);
+    border: 1px solid var(--alpha-15);
+    padding: 3px 8px;
+    border-radius: 6px;
+    min-width: 90px;
+    text-align: center;
   }
 
   .track-duration {
