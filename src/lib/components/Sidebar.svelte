@@ -716,6 +716,42 @@
     }
   }
 
+  // Sidebar collapse state persistence
+  const SIDEBAR_COLLAPSE_KEY = 'qbz-sidebar-collapse-state';
+
+  interface SidebarCollapseState {
+    favoritesExpanded: boolean;
+    playlistsCollapsed: boolean;
+    localLibraryCollapsed: boolean;
+  }
+
+  function loadSidebarCollapseState() {
+    try {
+      const stored = localStorage.getItem(SIDEBAR_COLLAPSE_KEY);
+      if (stored) {
+        const state: SidebarCollapseState = JSON.parse(stored);
+        favoritesExpanded = state.favoritesExpanded ?? false;
+        playlistsCollapsed = state.playlistsCollapsed ?? false;
+        localLibraryCollapsed = state.localLibraryCollapsed ?? false;
+      }
+    } catch (err) {
+      console.debug('[Sidebar] Failed to load collapse state:', err);
+    }
+  }
+
+  function saveSidebarCollapseState() {
+    try {
+      const state: SidebarCollapseState = {
+        favoritesExpanded,
+        playlistsCollapsed,
+        localLibraryCollapsed
+      };
+      localStorage.setItem(SIDEBAR_COLLAPSE_KEY, JSON.stringify(state));
+    } catch (err) {
+      console.debug('[Sidebar] Failed to save collapse state:', err);
+    }
+  }
+
   onMount(() => {
     loadSortPreference();
     loadUserPlaylists();
@@ -723,6 +759,7 @@
     loadLocalTrackCounts();
     loadFolders(); // Load playlist folders
     loadFavoritesPreferences(); // Load favorites tab order
+    loadSidebarCollapseState(); // Load collapse states
 
     // Subscribe to offline state changes
     const unsubscribeOffline = subscribeOffline(() => {
@@ -1013,14 +1050,17 @@
             <Heart size={14} />
           </div>
           <span class="label">{$t('nav.favorites')}</span>
-          <button
+          <span
             class="favorites-chevron"
             class:expanded={favoritesExpanded}
-            onclick={(e) => { e.stopPropagation(); favoritesExpanded = !favoritesExpanded; }}
+            role="button"
+            tabindex="0"
+            onclick={(e) => { e.stopPropagation(); favoritesExpanded = !favoritesExpanded; saveSidebarCollapseState(); }}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); favoritesExpanded = !favoritesExpanded; saveSidebarCollapseState(); }}}
             title={favoritesExpanded ? 'Collapse' : 'Expand'}
           >
             <ChevronRight size={12} />
-          </button>
+          </span>
         </button>
         {#if favoritesExpanded}
           <div class="favorites-subitems">
@@ -1110,7 +1150,7 @@
             >
               <MoreHorizontal size={14} />
             </button>
-            <button class="icon-btn" onclick={() => playlistsCollapsed = !playlistsCollapsed} title={playlistsCollapsed ? $t('actions.open') : $t('actions.close')}>
+            <button class="icon-btn" onclick={() => { playlistsCollapsed = !playlistsCollapsed; saveSidebarCollapseState(); }} title={playlistsCollapsed ? $t('actions.open') : $t('actions.close')}>
               {#if playlistsCollapsed}
                 <ChevronDown size={14} />
               {:else}
@@ -1290,7 +1330,7 @@
     <!-- Local Library Section -->
     <div class="section local-library-section">
       {#if isExpanded}
-        <button class="section-header-btn" onclick={() => localLibraryCollapsed = !localLibraryCollapsed}>
+        <button class="section-header-btn" onclick={() => { localLibraryCollapsed = !localLibraryCollapsed; saveSidebarCollapseState(); }}>
           <span class="section-header">{$t('library.title')}</span>
           {#if localLibraryCollapsed}
             <ChevronDown size={12} />
