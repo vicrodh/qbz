@@ -2279,21 +2279,66 @@
   .favorites-nav-wrapper {
     display: flex;
     align-items: center;
-    gap: 0;
+    position: relative;
   }
 
+  /* Copy nav-item styles for favorites button */
   .favorites-nav-item {
+    position: relative;
+    width: 100%;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 8px;
+    padding-right: 28px; /* Space for chevron */
+    border-radius: 6px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 150ms ease;
+    text-align: left;
+  }
+
+  .favorites-nav-item:hover {
+    background-color: var(--bg-hover);
+  }
+
+  .favorites-nav-item.active {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .favorites-nav-item .icon-container {
+    width: 14px;
+    height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .favorites-nav-item .label {
+    font-size: 13px;
+    font-weight: 400;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     flex: 1;
     min-width: 0;
   }
 
   .favorites-expand-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 24px;
-    height: 24px;
-    margin-right: 4px;
+    width: 20px;
+    height: 20px;
     background: none;
     border: none;
     border-radius: 4px;
