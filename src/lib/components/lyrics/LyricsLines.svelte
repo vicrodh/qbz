@@ -211,9 +211,14 @@
       opacity 200ms ease-out,
       transform 200ms ease-out,
       font-size 150ms ease-out,
-      font-weight 150ms ease-out,
       color 250ms ease-out;
     transform-origin: left center;
+    /* will-change removed from all lines - only active line gets GPU layer */
+  }
+
+  /* Only promote active and adjacent lines to GPU layers */
+  .lyrics-line.active,
+  .lyrics-line.active + .lyrics-line {
     will-change: opacity, transform;
   }
 
