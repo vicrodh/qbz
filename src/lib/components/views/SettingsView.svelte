@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import ViewTransition from '../ViewTransition.svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
   import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-svelte';
@@ -679,15 +680,7 @@
     };
   });
 
-  // Reload playback preferences each time the view becomes visible
-  // This ensures settings are fresh when navigating back to settings
-  $effect(() => {
-    // This effect runs whenever the component is rendered
-    // We reload preferences to ensure they're in sync with backend
-    console.log('[Settings] Component rendered, reloading playback preferences');
-    loadPlaybackPreferences();
-  });
-
+  
   async function loadLastfmState() {
     try {
       // Check if embedded (build-time) credentials are available
@@ -1789,6 +1782,7 @@
   }
 </script>
 
+<ViewTransition duration={200} distance={12} direction="up">
 <div class="settings-view" bind:this={settingsViewEl}>
   <!-- Loading Overlay for Device Enumeration -->
   {#if isLoadingDevices}
@@ -2659,6 +2653,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     </section>
   {/if}
 </div>
+</ViewTransition>
 
 {#if isCheckingNetwork}
   <div class="network-check-overlay" aria-busy="true" aria-label={$t('offline.checkingNetwork')}>
