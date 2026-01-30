@@ -1197,10 +1197,14 @@
   <!-- Content -->
   <div class="content">
     {#if loading}
+      {#key activeTab}
+      <ViewTransition duration={200} distance={12} direction="down">
       <div class="loading" class:fading={spinnerFading}>
         <div class="spinner"></div>
         <p>Loading favorites...</p>
       </div>
+      </ViewTransition>
+      {/key}
     {:else if error}
       <div class="error">
         <p>Failed to load favorites</p>
@@ -1560,10 +1564,14 @@
       </ViewTransition>
     {:else if activeTab === 'playlists'}
       {#if loadingPlaylists}
+        {#key activeTab}
+        <ViewTransition duration={200} distance={12} direction="down">
         <div class="loading" class:fading={spinnerFading}>
           <div class="spinner"></div>
           <p>Loading playlists...</p>
         </div>
+        </ViewTransition>
+        {/key}
       {:else}
         <ViewTransition duration={200} distance={12} direction="up">
         {#if favoritePlaylists.length === 0}
