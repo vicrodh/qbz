@@ -357,7 +357,13 @@ export function convertQobuzAlbum(album: QobuzAlbum): AlbumDetail {
  * Categorize an album into the appropriate section
  * Priority order matters - check most specific categories first
  */
-function categorizeAlbum(album: QobuzAlbum, mainArtistId: number): 'tributes' | 'others' | 'live' | 'eps' | 'albums' {
+export type AlbumCategory = 'tributes' | 'others' | 'live' | 'eps' | 'albums';
+
+/**
+ * Categorize an album into the appropriate section
+ * Exported for use in Favorites view to filter to Discography only
+ */
+export function categorizeAlbum(album: QobuzAlbum, mainArtistId: number): AlbumCategory {
   // 1. Albums by different artists -> Tributes (highest priority)
   // These are tribute albums, covers, or albums that somehow ended up in the discography
   if (isTributeAlbum(album, mainArtistId)) {

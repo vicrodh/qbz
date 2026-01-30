@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { onMount, tick } from 'svelte';
-  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library, CloudDownload, Shuffle, MoreHorizontal } from 'lucide-svelte';
+  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library, CloudDownload, Shuffle, MoreHorizontal, PanelLeftClose, Loader2 } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import QualityBadge from '../QualityBadge.svelte';
@@ -15,7 +15,8 @@
   import { syncCache as syncTrackCache } from '$lib/stores/favoritesStore';
   import { syncCache as syncAlbumCache } from '$lib/stores/albumFavoritesStore';
   import { syncCache as syncArtistCache } from '$lib/stores/artistFavoritesStore';
-  import type { FavoritesPreferences } from '$lib/types';
+  import { categorizeAlbum, getQobuzImage, formatQuality } from '$lib/adapters/qobuzAdapters';
+  import type { FavoritesPreferences, QobuzAlbum } from '$lib/types';
 
   interface FavoriteAlbum {
     id: string;
@@ -244,6 +245,23 @@
 
   let showArtistGroupMenu = $state(false);
   let artistGroupingEnabled = $state(false);
+
+  // Artist view mode: grid (cards) or sidepanel (two-column with albums)
+  type ArtistViewMode = 'grid' | 'sidepanel';
+  let artistViewMode = $state<ArtistViewMode>('grid');
+  let selectedFavoriteArtist = $state<FavoriteArtist | null>(null);
+  let selectedArtistAlbums = $state<QobuzAlbum[]>([]);
+  let loadingArtistAlbums = $state(false);
+  let artistAlbumsError = $state<string | null>(null);
+
+  // Filtered to show only Discography albums (not EPs, Singles, Live, etc.)
+  const discographyAlbums = $derived.by(() => {
+    if (!selectedFavoriteArtist || selectedArtistAlbums.length === 0) return [];
+    return selectedArtistAlbums.filter(album =>
+      categorizeAlbum(album, selectedFavoriteArtist!.id) === 'albums'
+    );
+  });
+
   let showTracksContextMenu = $state(false);
   function resolveCustomIconSrc(path: string | null): string | null {
     if (!path) return null;
@@ -401,6 +419,7 @@
     albumGroupingEnabled = loadStoredBool('qbz-favorites-album-group-enabled', false);
     trackGroupingEnabled = loadStoredBool('qbz-favorites-track-group-enabled', false);
     artistGroupingEnabled = loadStoredBool('qbz-favorites-artist-group-enabled', false);
+    artistViewMode = loadStoredString('qbz-favorites-artist-view-mode', 'grid', ['grid', 'sidepanel']) as ArtistViewMode;
     loadFavoritesPreferences().then(() => {
       preferencesLoaded = true;
       if (selectedTab) {
@@ -446,6 +465,7 @@
       localStorage.setItem('qbz-favorites-album-group-enabled', String(albumGroupingEnabled));
       localStorage.setItem('qbz-favorites-track-group-enabled', String(trackGroupingEnabled));
       localStorage.setItem('qbz-favorites-artist-group-enabled', String(artistGroupingEnabled));
+      localStorage.setItem('qbz-favorites-artist-view-mode', artistViewMode);
     } catch {
       // localStorage not available
     }
@@ -581,6 +601,28 @@
         spinnerFading = false;
         contentVisible = true;
       }, 200); // Match fadeout duration
+    }
+  }
+
+  // Handle artist selection in sidepanel mode - fetch albums from Qobuz
+  async function handleArtistSelect(artist: FavoriteArtist) {
+    selectedFavoriteArtist = artist;
+    selectedArtistAlbums = [];
+    loadingArtistAlbums = true;
+    artistAlbumsError = null;
+
+    try {
+      const result = await invoke<{ items: QobuzAlbum[]; total: number }>('get_artist_albums', {
+        artistId: artist.id,
+        limit: 500, // Fetch more to ensure we have enough Discography albums after filtering
+        offset: 0
+      });
+      selectedArtistAlbums = result.items || [];
+    } catch (err) {
+      console.error('Failed to load artist albums:', err);
+      artistAlbumsError = String(err);
+    } finally {
+      loadingArtistAlbums = false;
     }
   }
 
@@ -1207,30 +1249,68 @@
       </div>
     {:else if activeTab === 'artists'}
       <div class="toolbar-controls">
-        <div class="dropdown-container">
-          <button class="control-btn" onclick={() => (showArtistGroupMenu = !showArtistGroupMenu)}>
-            <span>{artistGroupingEnabled ? 'Group: A-Z' : 'Group: Off'}</span>
-            <ChevronDown size={14} />
-          </button>
-          {#if showArtistGroupMenu}
-            <div class="dropdown-menu">
-              <button
-                class="dropdown-item"
-                class:selected={!artistGroupingEnabled}
-                onclick={() => { artistGroupingEnabled = false; showArtistGroupMenu = false; }}
-              >
-                Off
-              </button>
-              <button
-                class="dropdown-item"
-                class:selected={artistGroupingEnabled}
-                onclick={() => { artistGroupingEnabled = true; showArtistGroupMenu = false; }}
-              >
-                Alphabetical (A-Z)
-              </button>
-            </div>
+        <!-- Single toggle button: Grid <-> Browse (sidepanel) -->
+        <button
+          class="view-btn"
+          onclick={() => {
+            if (artistViewMode === 'grid') {
+              artistViewMode = 'sidepanel';
+            } else {
+              artistViewMode = 'grid';
+              selectedFavoriteArtist = null;
+            }
+          }}
+          title={artistViewMode === 'grid' ? 'Browse view' : 'Grid view'}
+        >
+          {#if artistViewMode === 'grid'}
+            <PanelLeftClose size={16} />
+          {:else}
+            <LayoutGrid size={16} />
           {/if}
-        </div>
+        </button>
+        {#if artistViewMode === 'grid'}
+          <div class="dropdown-container">
+            <button class="control-btn" onclick={() => (showArtistGroupMenu = !showArtistGroupMenu)}>
+              <span>{artistGroupingEnabled ? 'Group: A-Z' : 'Group: Off'}</span>
+              <ChevronDown size={14} />
+            </button>
+            {#if showArtistGroupMenu}
+              <div class="dropdown-menu">
+                <button
+                  class="dropdown-item"
+                  class:selected={!artistGroupingEnabled}
+                  onclick={() => { artistGroupingEnabled = false; showArtistGroupMenu = false; }}
+                >
+                  Off
+                </button>
+                <button
+                  class="dropdown-item"
+                  class:selected={artistGroupingEnabled}
+                  onclick={() => { artistGroupingEnabled = true; showArtistGroupMenu = false; }}
+                >
+                  Alphabetical (A-Z)
+                </button>
+              </div>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
+    <!-- Alpha Index inline for artists in Browse (sidepanel) view -->
+    {#if activeTab === 'artists' && artistViewMode === 'sidepanel' && filteredArtists.length > 0}
+      {@const groupedArtistsForIndex = groupArtists(filteredArtists)}
+      {@const artistAlphaGroupsForIndex = new Set(groupedArtistsForIndex.map(group => group.key))}
+      <div class="alpha-index-inline">
+        {#each alphaIndexLetters as letter}
+          <button
+            class="alpha-letter"
+            class:disabled={!artistAlphaGroupsForIndex.has(letter)}
+            onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroupsForIndex)}
+          >
+            {letter}
+          </button>
+        {/each}
       </div>
     {/if}
 
@@ -1534,7 +1614,106 @@
           <Search size={48} />
           <p>No artists match "{artistSearch}"</p>
         </div>
+      {:else if artistViewMode === 'sidepanel'}
+        <!-- Two-column sidepanel view -->
+        {@const groupedArtistsSidepanel = groupArtists(filteredArtists)}
+        <div class="artist-two-column-layout">
+          <!-- Left column: Artists list grouped A-Z -->
+          <div class="artist-column">
+            <div class="artist-list-scroll">
+              {#each groupedArtistsSidepanel as group (group.id)}
+                <div class="artist-list-group" id={group.id}>
+                  <div class="artist-list-group-header">{group.key}</div>
+                  {#each group.artists as artist (artist.id)}
+                    <button
+                      class="artist-list-item"
+                      class:selected={selectedFavoriteArtist?.id === artist.id}
+                      onclick={() => handleArtistSelect(artist)}
+                    >
+                      <div class="artist-list-image">
+                        {#if artist.image?.thumbnail || artist.image?.small}
+                          <img src={artist.image?.thumbnail || artist.image?.small} alt={artist.name} />
+                        {:else}
+                          <div class="artist-list-placeholder">
+                            <Mic2 size={20} />
+                          </div>
+                        {/if}
+                      </div>
+                      <div class="artist-list-info">
+                        <div class="artist-list-name">{artist.name}</div>
+                        {#if artist.albums_count}
+                          <div class="artist-list-meta">{artist.albums_count} albums</div>
+                        {/if}
+                      </div>
+                    </button>
+                  {/each}
+                </div>
+              {/each}
+            </div>
+          </div>
+
+          <!-- Right column: Selected artist's albums from Qobuz -->
+          <div class="artist-albums-column">
+            {#if !selectedFavoriteArtist}
+              <div class="artist-albums-empty">
+                <Mic2 size={48} />
+                <p>Select an artist to see their albums</p>
+              </div>
+            {:else if loadingArtistAlbums}
+              <div class="artist-albums-loading">
+                <Loader2 size={32} class="spinner-icon" />
+                <p>Loading albums...</p>
+              </div>
+            {:else if artistAlbumsError}
+              <div class="artist-albums-error">
+                <p>Failed to load albums</p>
+                <p class="error-detail">{artistAlbumsError}</p>
+              </div>
+            {:else}
+              <div class="artist-albums-header">
+                <span class="artist-albums-title">Discography</span>
+                <span class="artist-albums-count">{discographyAlbums.length} albums</span>
+              </div>
+              {#if discographyAlbums.length === 0}
+                <div class="artist-albums-empty">
+                  <Disc3 size={32} />
+                  <p>No studio albums found</p>
+                </div>
+              {:else}
+                <div class="artist-albums-grid">
+                  {#each discographyAlbums as album (album.id)}
+                    <AlbumCard
+                      albumId={album.id}
+                      artwork={getQobuzImage(album.image)}
+                      title={album.title}
+                      artist={album.artist.name}
+                      genre={album.genre?.name}
+                      releaseDate={album.release_date_original}
+                      quality={formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate)}
+                      onclick={() => onAlbumClick?.(album.id)}
+                      onPlay={() => onAlbumPlay?.(album.id)}
+                      onPlayNext={() => onAlbumPlayNext?.(album.id)}
+                      onPlayLater={() => onAlbumPlayLater?.(album.id)}
+                      onShareQobuz={() => onAlbumShareQobuz?.(album.id)}
+                      onShareSonglink={() => onAlbumShareSonglink?.(album.id)}
+                      onDownload={() => onAlbumDownload?.(album.id)}
+                    />
+                  {/each}
+                </div>
+                <div class="artist-albums-footer">
+                  <p class="footer-hint">
+                    To view EPs, Singles, and Live albums,
+                    <button class="link-btn" onclick={() => onArtistClick?.(selectedFavoriteArtist!.id)}>
+                      go to {selectedFavoriteArtist.name}'s page
+                    </button>
+                  </p>
+                </div>
+              {/if}
+            {/if}
+          </div>
+        </div>
       {:else if artistGroupingEnabled}
+        <!-- Grid view with grouping -->
         {@const groupedArtists = groupArtists(filteredArtists)}
         {@const artistAlphaGroups = new Set(groupedArtists.map(group => group.key))}
 
@@ -1582,6 +1761,7 @@
           </div>
         </div>
       {:else}
+        <!-- Grid view without grouping -->
         <div class="artist-grid">
           {#each filteredArtists as artist (artist.id)}
             <button class="artist-card" onclick={() => onArtistClick?.(artist.id)}>
@@ -2501,5 +2681,207 @@
     font-size: 12px;
     color: var(--text-muted);
     margin-top: 4px;
+  }
+
+  /* Artist Two-Column Sidepanel Layout */
+  .artist-two-column-layout {
+    display: flex;
+    gap: 0;
+    flex: 1;
+    min-height: 0;
+    height: 100%;
+  }
+
+  .artist-column {
+    width: 280px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--bg-tertiary);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .artist-list-scroll {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+  }
+
+  .artist-list-group {
+    margin-bottom: 8px;
+  }
+
+  .artist-list-group-header {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 8px 8px 4px;
+    position: sticky;
+    top: 0;
+    background: var(--bg-secondary);
+    z-index: 1;
+  }
+
+  .artist-list-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 8px;
+    border: none;
+    background: transparent;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+    text-align: left;
+  }
+
+  .artist-list-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .artist-list-item.selected {
+    background: var(--bg-tertiary);
+  }
+
+  .artist-list-image {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--bg-tertiary);
+  }
+
+  .artist-list-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .artist-list-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+  }
+
+  .artist-list-info {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .artist-list-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .artist-list-meta {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-top: 2px;
+  }
+
+  .artist-albums-column {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .artist-albums-header {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--bg-tertiary);
+  }
+
+  .artist-albums-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .artist-albums-count {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  .artist-albums-grid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+    align-content: start;
+  }
+
+  .artist-albums-empty,
+  .artist-albums-loading,
+  .artist-albums-error {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-muted);
+  }
+
+  .artist-albums-loading :global(.spinner-icon) {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+
+  .artist-albums-error {
+    color: var(--danger);
+  }
+
+  .artist-albums-error .error-detail {
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .artist-albums-footer {
+    padding: 16px 24px 24px;
+    text-align: center;
+    border-top: 1px solid var(--border);
+  }
+
+  .artist-albums-footer .footer-hint {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin: 0;
+  }
+
+  .artist-albums-footer .link-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    color: var(--accent-primary);
+    cursor: pointer;
+    font-size: inherit;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+    transition: text-decoration-color 150ms ease;
+  }
+
+  .artist-albums-footer .link-btn:hover {
+    text-decoration-color: var(--accent-primary);
   }
 </style>
