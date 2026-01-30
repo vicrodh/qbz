@@ -25,8 +25,8 @@ const MAX_CACHE_SIZE = 20;
  */
 export async function generateBlurredBackground(
   artworkUrl: string,
-  size: number = 512,
-  blurRadius: number = 40
+  size: number = 128,
+  blurRadius: number = 60
 ): Promise<string> {
   // Check cache first
   const cacheKey = `${artworkUrl}-${size}-${blurRadius}`;
