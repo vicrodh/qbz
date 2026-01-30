@@ -1106,35 +1106,6 @@
       {/if}
     </nav>
 
-    <!-- Favorites menu popover (when sidebar collapsed) -->
-    {#if showFavoritesMenu && !isExpanded}
-      <div
-        class="favorites-popover"
-        style="left: {favoritesMenuPos.x}px; top: {favoritesMenuPos.y}px;"
-      >
-        <button class="popover-item" onclick={() => { handleViewChange('favorites'); showFavoritesMenu = false; }}>
-          <Heart size={14} />
-          <span>{$t('favorites.title')}</span>
-        </button>
-        <div class="popover-divider"></div>
-        {#each favoritesTabOrder as tab}
-          <button
-            class="popover-item"
-            onclick={() => { handleViewChange(`favorites-${tab}`); showFavoritesMenu = false; }}
-          >
-            {#if tab === 'artists'}
-              <User size={14} />
-            {:else if tab === 'albums'}
-              <Disc size={14} />
-            {:else if tab === 'tracks'}
-              <Music size={14} />
-            {/if}
-            <span>{$t(`favorites.${tab}`)}</span>
-          </button>
-        {/each}
-      </div>
-    {/if}
-
     <!-- Playlists Section (hidden in offline mode) -->
     {#if !isOffline}
     <div class="section playlists-section">
@@ -1388,6 +1359,35 @@
     {/if}
   </div>
 </aside>
+
+<!-- Favorites menu popover (when sidebar collapsed) - outside sidebar to avoid overflow clipping -->
+{#if showFavoritesMenu && !isExpanded}
+  <div
+    class="favorites-popover"
+    style="left: {favoritesMenuPos.x}px; top: {favoritesMenuPos.y}px;"
+  >
+    <button class="popover-item" onclick={() => { handleViewChange('favorites'); showFavoritesMenu = false; }}>
+      <Heart size={14} />
+      <span>{$t('favorites.title')}</span>
+    </button>
+    <div class="popover-divider"></div>
+    {#each favoritesTabOrder as tab}
+      <button
+        class="popover-item"
+        onclick={() => { handleViewChange(`favorites-${tab}`); showFavoritesMenu = false; }}
+      >
+        {#if tab === 'artists'}
+          <User size={14} />
+        {:else if tab === 'albums'}
+          <Disc size={14} />
+        {:else if tab === 'tracks'}
+          <Music size={14} />
+        {/if}
+        <span>{$t(`favorites.${tab}`)}</span>
+      </button>
+    {/each}
+  </div>
+{/if}
 
 <!-- Playlist Context Menu -->
 {#if contextMenu.visible}
