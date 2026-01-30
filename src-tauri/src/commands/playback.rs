@@ -169,7 +169,7 @@ pub async fn play_track(
         tokio::spawn(async move {
             match download_and_stream(&url, buffer_writer, track_id, cache_clone, content_len).await {
                 Ok(()) => log::info!("Track {} ready for instant replay from cache", track_id),
-                Err(e) => log::error!("Streaming download failed for track {}: {}", track_id, e),
+                Err(e) => log::error!("Streaming cache failed for track {}: {}", track_id, e),
             }
         });
 
@@ -185,7 +185,7 @@ pub async fn play_track(
     }
 
     // Standard download path (streaming disabled)
-    log::info!("Standard download mode for track {}", track_id);
+    log::info!("Standard caching mode for track {}", track_id);
 
     // Download the audio
     let audio_data = download_audio(&stream_url.url).await?;
@@ -281,7 +281,7 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    log::info!("Downloading audio...");
+    log::info!("Caching audio...");
 
     let response = client
         .get(url)
@@ -299,7 +299,7 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
         .await
         .map_err(|e| format!("Failed to read audio bytes: {}", e))?;
 
-    log::info!("Downloaded {} bytes", bytes.len());
+    log::info!("Cached {} bytes", bytes.len());
     Ok(bytes.to_vec())
 }
 
@@ -493,7 +493,7 @@ async fn download_and_stream(
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    log::info!("Starting streaming download for track {} ({:.2} MB total)", 
+    log::info!("Starting streaming cache for track {} ({:.2} MB total)", 
         track_id, 
         content_length as f64 / (1024.0 * 1024.0)
     );
@@ -573,7 +573,7 @@ async fn download_and_stream(
     let avg_speed = (bytes_received as f64 / total_time.as_secs_f64()) / (1024.0 * 1024.0);
     
     log::info!(
-        "Streaming download complete: {:.2} MB in {:.1}s ({:.2} MB/s avg)",
+        "Streaming cache complete: {:.2} MB in {:.1}s ({:.2} MB/s avg)",
         bytes_received as f64 / (1024.0 * 1024.0),
         total_time.as_secs_f64(),
         avg_speed

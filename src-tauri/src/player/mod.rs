@@ -1654,12 +1654,12 @@ impl Player {
         log::info!("Player: Got stream URL: {} (format: {})", stream_url.url, stream_url.mime_type);
 
         // Download the audio data
-        log::info!("Player: Starting audio download...");
+        log::info!("Player: Starting audio caching...");
         let audio_data = self.download_audio(&stream_url.url).await.map_err(|e| {
-            log::error!("Player: Download failed: {}", e);
+            log::error!("Player: Caching failed: {}", e);
             e
         })?;
-        log::info!("Player: Downloaded {} bytes of audio data", audio_data.len());
+        log::info!("Player: Cached {} bytes of audio data", audio_data.len());
 
         // Send to audio thread
         self.play_data(audio_data, track_id)
@@ -1793,7 +1793,7 @@ impl Player {
             .build()
             .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-        log::info!("Downloading audio from URL...");
+        log::info!("Caching audio from URL...");
 
         let response = client
             .get(url)
@@ -1806,14 +1806,14 @@ impl Player {
             return Err(format!("HTTP error: {}", response.status()));
         }
 
-        log::info!("Download response received, reading bytes...");
+        log::info!("Response received, reading bytes...");
 
         let bytes = response
             .bytes()
             .await
             .map_err(|e| format!("Failed to read audio bytes: {}", e))?;
 
-        log::info!("Downloaded {} bytes", bytes.len());
+        log::info!("Cached {} bytes", bytes.len());
         Ok(bytes.to_vec())
     }
 
