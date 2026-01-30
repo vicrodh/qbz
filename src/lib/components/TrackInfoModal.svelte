@@ -272,9 +272,9 @@
   }
 
   .track-modal {
-    background: rgba(26, 26, 26, 0.95);
+    background: var(--bg-secondary);
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-subtle);
     border-radius: 12px;
     width: 100%;
     max-width: 560px;
@@ -358,7 +358,7 @@
 
   .album-title {
     font-size: 13px;
-    color: var(--text-tertiary, #888888);
+    color: var(--text-muted);
   }
 
   .artist-link {
@@ -439,7 +439,7 @@
   .metadata-value.mono {
     font-family: monospace;
     font-size: 13px;
-    color: var(--text-tertiary, #888888);
+    color: var(--text-muted);
   }
 
   /* Divider */

@@ -301,9 +301,9 @@
   }
 
   .credits-modal {
-    background: rgba(26, 26, 26, 0.95);
+    background: var(--bg-secondary);
     backdrop-filter: blur(20px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+    border: 1px solid var(--border-subtle);
     border-radius: 12px;
     width: 100%;
     max-width: 850px;
@@ -392,7 +392,7 @@
 
   .album-artist {
     font-size: 13px;
-    color: var(--text-tertiary, #888888);
+    color: var(--text-muted);
   }
 
   .close-btn {
