@@ -42,6 +42,8 @@ export function getSearchState<Album, Track, Artist>(): SearchState<Album, Track
 
 export function setSearchState<Album, Track, Artist>(next: SearchState<Album, Track, Artist>): void {
   searchState = next as SearchState<unknown, unknown, unknown>;
+  // Notify query listeners when query changes
+  queryListeners.forEach(fn => fn(searchState.query));
 }
 
 // Signal to trigger scroll-to-top and focus on search input
@@ -56,4 +58,34 @@ export function triggerSearchFocus(): void {
 export function subscribeSearchFocus(callback: () => void): () => void {
   focusListeners.add(callback);
   return () => focusListeners.delete(callback);
+}
+
+// Query synchronization for sidebar input
+const queryListeners: Set<(query: string) => void> = new Set();
+
+export function getSearchQuery(): string {
+  return searchState.query;
+}
+
+export function setSearchQuery(query: string): void {
+  searchState.query = query;
+  queryListeners.forEach(fn => fn(query));
+}
+
+export function subscribeSearchQuery(callback: (query: string) => void): () => void {
+  queryListeners.add(callback);
+  return () => queryListeners.delete(callback);
+}
+
+export function clearSearchState(): void {
+  searchState = {
+    query: '',
+    activeTab: 'all',
+    filterType: null,
+    albumResults: null,
+    trackResults: null,
+    artistResults: null,
+    allResults: null,
+  };
+  queryListeners.forEach(fn => fn(''));
 }

@@ -1,11 +1,17 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus } from 'lucide-svelte';
+  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus, X } from 'lucide-svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import NavigationItem from './NavigationItem.svelte';
   import UserCard from './UserCard.svelte';
   import { t } from '$lib/i18n';
+  import {
+    getSearchQuery,
+    setSearchQuery,
+    subscribeSearchQuery,
+    clearSearchState
+  } from '$lib/stores/searchState';
   import {
     subscribe as subscribeOffline,
     getStatus as getOfflineStatus,
@@ -96,6 +102,10 @@
   let playlistsLoading = $state(false);
   let playlistsCollapsed = $state(false);
   let localLibraryCollapsed = $state(false);
+
+  // Sidebar search state - synced with SearchView
+  let sidebarSearchQuery = $state(getSearchQuery());
+  let sidebarSearchInput: HTMLInputElement;
 
   // Folder state
   let folders = $state<PlaylistFolder[]>([]);
@@ -707,11 +717,58 @@
       folders = getVisibleFolders();
     });
 
+    // Subscribe to search query changes (sync with SearchView)
+    const unsubscribeSearch = subscribeSearchQuery((query) => {
+      sidebarSearchQuery = query;
+    });
+
     return () => {
       unsubscribeOffline();
       unsubscribeFolders();
+      unsubscribeSearch();
     };
   });
+
+  // Sidebar search handlers
+  function handleSidebarSearchInput(e: Event) {
+    const target = e.target as HTMLInputElement;
+    const newQuery = target.value;
+    sidebarSearchQuery = newQuery;
+    setSearchQuery(newQuery);
+
+    // Navigate to search view when typing
+    if (activeView !== 'search') {
+      onNavigate('search');
+    }
+  }
+
+  function handleSidebarSearchClick() {
+    // Navigate to search when clicking on input with text
+    if (sidebarSearchQuery.trim() && activeView !== 'search') {
+      onNavigate('search');
+    }
+  }
+
+  function handleSidebarSearchFocus() {
+    // Navigate to search when focusing on the input
+    if (activeView !== 'search') {
+      onNavigate('search');
+    }
+  }
+
+  function handleSidebarSearchClear() {
+    sidebarSearchQuery = '';
+    clearSearchState();
+    // Keep focus on the sidebar input
+    sidebarSearchInput?.focus();
+  }
+
+  function handleSidebarSearchKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && sidebarSearchQuery) {
+      handleSidebarSearchClear();
+      e.preventDefault();
+    }
+  }
 
   async function loadUserPlaylists() {
     playlistsLoading = true;
@@ -871,21 +928,43 @@
   <!-- Scrollable Content Area -->
   <div class="content">
     <!-- Search Bar -->
-    <button
-      type="button"
+    <div
       class="search-container"
       class:collapsed={!isExpanded}
-      onclick={() => {
-        console.log('Search button clicked!');
-        handleViewChange('search');
-      }}
-      title={isExpanded ? undefined : $t('nav.search')}
+      class:has-text={sidebarSearchQuery.trim().length > 0}
     >
       <Search class="search-icon" size={16} />
       {#if isExpanded}
-        <span class="search-placeholder">{$t('nav.search')}</span>
+        <input
+          type="text"
+          class="search-input"
+          placeholder={$t('nav.search')}
+          bind:value={sidebarSearchQuery}
+          bind:this={sidebarSearchInput}
+          oninput={handleSidebarSearchInput}
+          onclick={handleSidebarSearchClick}
+          onfocus={handleSidebarSearchFocus}
+          onkeydown={handleSidebarSearchKeydown}
+        />
+        {#if sidebarSearchQuery.trim()}
+          <button
+            type="button"
+            class="search-clear"
+            onclick={handleSidebarSearchClear}
+            title={$t('actions.clear')}
+          >
+            <X size={14} />
+          </button>
+        {/if}
+      {:else}
+        <button
+          type="button"
+          class="search-collapsed-btn"
+          onclick={() => handleViewChange('search')}
+          title={$t('nav.search')}
+        ></button>
       {/if}
-    </button>
+    </div>
 
     <!-- Navigation Section -->
     <nav class="nav-section">
@@ -1331,7 +1410,7 @@
   .search-container {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     width: 100%;
     height: 32px;
     min-height: 32px;
@@ -1339,14 +1418,19 @@
     background-color: var(--bg-tertiary);
     border-radius: 6px;
     padding: 0 10px;
-    border: none;
-    cursor: pointer;
-    transition: background-color 150ms ease;
+    border: 1px solid transparent;
+    transition: background-color 150ms ease, border-color 150ms ease;
     flex-shrink: 0;
+    position: relative;
   }
 
   .search-container:hover {
     background-color: var(--bg-hover);
+  }
+
+  .search-container:focus-within {
+    border-color: var(--accent-primary);
+    background-color: var(--bg-tertiary);
   }
 
   .search-container.collapsed {
@@ -1355,18 +1439,56 @@
     padding: 0;
     justify-content: center;
     border-radius: 8px;
+    cursor: pointer;
   }
 
   .search-container :global(.search-icon) {
     color: var(--text-muted);
     flex-shrink: 0;
-    pointer-events: none;
   }
 
-  .search-placeholder {
+  .search-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    outline: none;
     font-size: 13px;
+    color: var(--text-primary);
+    padding: 0;
+    min-width: 0;
+  }
+
+  .search-input::placeholder {
     color: var(--text-muted);
-    pointer-events: none;
+  }
+
+  .search-clear {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    background: var(--alpha-10);
+    border: none;
+    border-radius: 50%;
+    color: var(--text-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .search-clear:hover {
+    background: var(--alpha-20);
+    color: var(--text-primary);
+  }
+
+  .search-collapsed-btn {
+    position: absolute;
+    inset: 0;
+    background: transparent;
+    border: none;
+    cursor: pointer;
   }
 
   .nav-section {

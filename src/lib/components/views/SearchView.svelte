@@ -5,7 +5,7 @@
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import QualityBadge from '../QualityBadge.svelte';
-  import { getSearchState, setSearchState, subscribeSearchFocus, type SearchResults, type SearchAllResults, type SearchTab, type SearchFilterType } from '$lib/stores/searchState';
+  import { getSearchState, setSearchState, subscribeSearchFocus, subscribeSearchQuery, setSearchQuery, type SearchResults, type SearchAllResults, type SearchTab, type SearchFilterType } from '$lib/stores/searchState';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { togglePlay } from '$lib/stores/playerStore';
   import { t } from '$lib/i18n';
@@ -41,9 +41,18 @@
       searchInput?.focus();
     });
 
+    // Subscribe to query changes from sidebar (1:1 sync)
+    const unsubscribeQuery = subscribeSearchQuery((newQuery) => {
+      if (newQuery !== query) {
+        query = newQuery;
+        debounceSearch();
+      }
+    });
+
     return () => {
       window.removeEventListener('resize', handleResize);
       unsubscribeFocus();
+      unsubscribeQuery();
     };
   });
 
@@ -214,6 +223,8 @@
     if (searchTimeout) clearTimeout(searchTimeout);
     // Reset filter when user types a new search
     filterType = null;
+    // Sync query to sidebar
+    setSearchQuery(query);
     if (query.trim().length < 2) {
       albumResults = null;
       trackResults = null;
@@ -237,6 +248,8 @@
     trackResults = null;
     artistResults = null;
     allResults = null;
+    // Sync clear to sidebar
+    setSearchQuery('');
   }
 
   $effect(() => {
