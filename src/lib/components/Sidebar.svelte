@@ -975,7 +975,7 @@
     }
     if (showFavoritesMenu) {
       const target = e.target as HTMLElement;
-      if (!target.closest('.favorites-popover') && !target.closest('.collapsed-section-btn')) {
+      if (!target.closest('.favorites-popover') && !target.closest('.favorites-section .nav-item')) {
         showFavoritesMenu = false;
       }
     }
@@ -1038,31 +1038,41 @@
       </NavigationItem>
     </nav>
 
-    <!-- Favorites Section (collapsible, matches Playlists style) -->
-    <div class="section favorites-section">
+    <!-- Favorites Section (hybrid: Home style with expandable sub-items) -->
+    <nav class="nav-section favorites-section">
       {#if isExpanded}
-        <div class="favorites-header">
-          <button class="section-header-btn" onclick={() => handleViewChange('favorites')}>
-            <span class="section-header">{$t('nav.favorites').toUpperCase()}</span>
+        <!-- Main Favorites item with chevron -->
+        <div class="favorites-nav-wrapper">
+          <button
+            class="nav-item favorites-nav-item"
+            class:active={activeView === 'favorites' || activeView.startsWith('favorites-')}
+            onclick={() => handleViewChange('favorites')}
+          >
+            <div class="icon-container">
+              <Heart size={14} />
+            </div>
+            <span class="label">{$t('nav.favorites')}</span>
           </button>
-          <div class="header-actions">
-            <button class="icon-btn" onclick={() => { favoritesExpanded = !favoritesExpanded; saveSidebarCollapseState(); }} title={favoritesExpanded ? $t('actions.close') : $t('actions.open')}>
-              {#if favoritesExpanded}
-                <ChevronUp size={14} />
-              {:else}
-                <ChevronDown size={14} />
-              {/if}
-            </button>
-          </div>
+          <button
+            class="favorites-expand-btn"
+            onclick={() => { favoritesExpanded = !favoritesExpanded; saveSidebarCollapseState(); }}
+            title={favoritesExpanded ? $t('actions.close') : $t('actions.open')}
+          >
+            <span class="favorites-chevron" class:expanded={favoritesExpanded}>
+              <ChevronRight size={12} />
+            </span>
+          </button>
         </div>
+        <!-- Sub-items when expanded -->
         {#if favoritesExpanded}
-          <div class="favorites-items">
+          <div class="favorites-subitems">
             {#each favoritesTabOrder as tab}
               <NavigationItem
                 label={$t(`favorites.${tab}`)}
                 active={activeView === `favorites-${tab}`}
                 onclick={() => handleViewChange(`favorites-${tab}`)}
                 showLabel={true}
+                indented={true}
               >
                 {#snippet icon()}
                   {#if tab === 'artists'}
@@ -1080,7 +1090,7 @@
       {:else}
         <!-- Collapsed sidebar: show heart with menu on click -->
         <button
-          class="collapsed-section-btn"
+          class="nav-item"
           class:active={activeView.startsWith('favorites-')}
           onclick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
@@ -1089,10 +1099,12 @@
           }}
           title={$t('nav.favorites')}
         >
-          <Heart size={14} />
+          <div class="icon-container">
+            <Heart size={14} />
+          </div>
         </button>
       {/if}
-    </div>
+    </nav>
 
     <!-- Favorites menu popover (when sidebar collapsed) -->
     {#if showFavoritesMenu && !isExpanded}
@@ -2258,49 +2270,57 @@
     text-align: center;
   }
 
-  /* Favorites Section (matches Playlists style) */
+  /* Favorites Section (hybrid: nav-item style with expandable children) */
   .favorites-section {
     display: flex;
     flex-direction: column;
   }
 
-  .favorites-header {
+  .favorites-nav-wrapper {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    padding: 0 8px;
-    margin-bottom: 6px;
+    gap: 0;
   }
 
-  .favorites-header .section-header-btn {
+  .favorites-nav-item {
     flex: 1;
-    justify-content: flex-start;
+    min-width: 0;
   }
 
-  .favorites-items {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .collapsed-section-btn {
+  .favorites-expand-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
-    margin: 0 auto;
+    width: 24px;
+    height: 24px;
+    margin-right: 4px;
     background: none;
     border: none;
-    border-radius: 6px;
-    color: var(--text-muted);
+    border-radius: 4px;
     cursor: pointer;
+    color: var(--text-muted);
     transition: background-color 150ms ease, color 150ms ease;
   }
 
-  .collapsed-section-btn:hover,
-  .collapsed-section-btn.active {
+  .favorites-expand-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+  }
+
+  .favorites-chevron {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 150ms ease;
+  }
+
+  .favorites-chevron.expanded {
+    transform: rotate(90deg);
+  }
+
+  .favorites-subitems {
+    display: flex;
+    flex-direction: column;
   }
 
   /* Favorites Popover (collapsed sidebar) */
