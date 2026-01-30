@@ -8,9 +8,18 @@
   import CreditsPanel from './panels/CreditsPanel.svelte';
   import SuggestionsPanel from './panels/SuggestionsPanel.svelte';
   import VisualizerPanel from './panels/VisualizerPanel.svelte';
+  import QueuePanel from './panels/QueuePanel.svelte';
 
   interface LyricsLine {
     text: string;
+  }
+
+  interface QueueTrack {
+    id: string | number;
+    title: string;
+    artist: string;
+    artwork: string;
+    duration?: string | number;
   }
 
   interface Props {
@@ -56,6 +65,11 @@
     enableCredits?: boolean;
     enableSuggestions?: boolean;
     enableVisualizer?: boolean;
+    // Queue
+    queueTracks?: QueueTrack[];
+    queueCurrentIndex?: number;
+    onQueuePlayTrack?: (index: number) => void;
+    onQueueClear?: () => void;
   }
 
   let {
@@ -94,7 +108,11 @@
     lyricsError = null,
     enableCredits = true,
     enableSuggestions = true,
-    enableVisualizer = false
+    enableVisualizer = false,
+    queueTracks = [],
+    queueCurrentIndex = 0,
+    onQueuePlayTrack,
+    onQueueClear
   }: Props = $props();
 
   // UI State
@@ -158,6 +176,10 @@
       case 'v':
       case 'V':
         if (enableVisualizer) activeTab = 'visualizer';
+        break;
+      case 'q':
+      case 'Q':
+        activeTab = 'queue';
         break;
     }
     resetHideTimer();
@@ -232,6 +254,13 @@
           <SuggestionsPanel {trackId} {artistId} />
         {:else if activeTab === 'visualizer'}
           <VisualizerPanel {isPlaying} />
+        {:else if activeTab === 'queue'}
+          <QueuePanel
+            tracks={queueTracks}
+            currentIndex={queueCurrentIndex}
+            onPlayTrack={(index) => onQueuePlayTrack?.(index)}
+            onClear={onQueueClear}
+          />
         {/if}
       </div>
     </div>

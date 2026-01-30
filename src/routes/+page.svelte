@@ -3109,6 +3109,18 @@
         enableCredits={true}
         enableSuggestions={true}
         enableVisualizer={false}
+        queueTracks={[
+          ...(currentQueueTrack ? [currentQueueTrack] : []),
+          ...queue
+        ]}
+        queueCurrentIndex={0}
+        onQueuePlayTrack={(index) => {
+          // Index 0 is current track, 1+ is upcoming (index - 1 in queue array)
+          if (index > 0) {
+            handleQueueTrackPlay(queue[index - 1]?.id?.toString() ?? '');
+          }
+        }}
+        onQueueClear={handleClearQueue}
       />
     {/if}
 

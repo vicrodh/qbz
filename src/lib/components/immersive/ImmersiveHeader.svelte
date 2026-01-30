@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { X, Maximize2, Minimize2, Music2, Info, Radio, BarChart3 } from 'lucide-svelte';
+  import { X, Maximize2, Minimize2, Music2, Info, Radio, BarChart3, ListMusic } from 'lucide-svelte';
   import { t } from '$lib/i18n';
 
-  export type ImmersiveTab = 'lyrics' | 'credits' | 'suggestions' | 'visualizer';
+  export type ImmersiveTab = 'lyrics' | 'credits' | 'suggestions' | 'visualizer' | 'queue';
 
   interface Props {
     activeTab: ImmersiveTab;
@@ -31,6 +31,7 @@
     { id: 'credits' as const, label: $t('player.credits') || 'Credits', icon: Info, enabled: hasCredits },
     { id: 'suggestions' as const, label: $t('player.suggestions') || 'Suggestions', icon: Radio, enabled: hasSuggestions },
     { id: 'visualizer' as const, label: $t('player.visualizer') || 'Visualizer', icon: BarChart3, enabled: hasVisualizer },
+    { id: 'queue' as const, label: $t('player.queue') || 'Queue', icon: ListMusic, enabled: true },
   ].filter(tab => tab.enabled));
 </script>
 
