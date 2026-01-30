@@ -975,7 +975,7 @@
     }
     if (showFavoritesMenu) {
       const target = e.target as HTMLElement;
-      if (!target.closest('.favorites-popover') && !target.closest('.favorites-section .nav-item')) {
+      if (!target.closest('.favorites-popover') && !target.closest('.collapsed-section-btn')) {
         showFavoritesMenu = false;
       }
     }
@@ -1038,56 +1038,49 @@
       </NavigationItem>
     </nav>
 
-    <!-- Favorites Section (collapsible) -->
-    <nav class="nav-section favorites-section">
+    <!-- Favorites Section (collapsible, matches Playlists style) -->
+    <div class="section favorites-section">
       {#if isExpanded}
-        <button
-          class="nav-item favorites-header"
-          class:active={activeView.startsWith('favorites-')}
-          onclick={() => handleViewChange('favorites')}
-        >
-          <div class="icon-container">
-            <Heart size={14} />
+        <div class="favorites-header">
+          <button class="section-header-btn" onclick={() => handleViewChange('favorites')}>
+            <span class="section-header">{$t('nav.favorites').toUpperCase()}</span>
+          </button>
+          <div class="header-actions">
+            <button class="icon-btn" onclick={() => { favoritesExpanded = !favoritesExpanded; saveSidebarCollapseState(); }} title={favoritesExpanded ? $t('actions.close') : $t('actions.open')}>
+              {#if favoritesExpanded}
+                <ChevronUp size={14} />
+              {:else}
+                <ChevronDown size={14} />
+              {/if}
+            </button>
           </div>
-          <span class="label">{$t('nav.favorites')}</span>
-          <span
-            class="favorites-chevron"
-            class:expanded={favoritesExpanded}
-            role="button"
-            tabindex="0"
-            onclick={(e) => { e.stopPropagation(); favoritesExpanded = !favoritesExpanded; saveSidebarCollapseState(); }}
-            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); e.preventDefault(); favoritesExpanded = !favoritesExpanded; saveSidebarCollapseState(); }}}
-            title={favoritesExpanded ? 'Collapse' : 'Expand'}
-          >
-            <ChevronRight size={12} />
-          </span>
-        </button>
+        </div>
         {#if favoritesExpanded}
-          <div class="favorites-subitems">
+          <div class="favorites-items">
             {#each favoritesTabOrder as tab}
-              <button
-                class="nav-item favorites-subitem"
-                class:active={activeView === `favorites-${tab}`}
+              <NavigationItem
+                label={$t(`favorites.${tab}`)}
+                active={activeView === `favorites-${tab}`}
                 onclick={() => handleViewChange(`favorites-${tab}`)}
+                showLabel={true}
               >
-                <div class="icon-container">
+                {#snippet icon()}
                   {#if tab === 'artists'}
-                    <User size={12} />
+                    <User size={14} />
                   {:else if tab === 'albums'}
-                    <Disc size={12} />
+                    <Disc size={14} />
                   {:else if tab === 'tracks'}
-                    <Music size={12} />
+                    <Music size={14} />
                   {/if}
-                </div>
-                <span class="label">{$t(`favorites.${tab}`)}</span>
-              </button>
+                {/snippet}
+              </NavigationItem>
             {/each}
           </div>
         {/if}
       {:else}
         <!-- Collapsed sidebar: show heart with menu on click -->
         <button
-          class="nav-item"
+          class="collapsed-section-btn"
           class:active={activeView.startsWith('favorites-')}
           onclick={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
@@ -1096,12 +1089,10 @@
           }}
           title={$t('nav.favorites')}
         >
-          <div class="icon-container">
-            <Heart size={14} />
-          </div>
+          <Heart size={14} />
         </button>
       {/if}
-    </nav>
+    </div>
 
     <!-- Favorites menu popover (when sidebar collapsed) -->
     {#if showFavoritesMenu && !isExpanded}
@@ -2267,58 +2258,49 @@
     text-align: center;
   }
 
-  /* Favorites Section */
+  /* Favorites Section (matches Playlists style) */
   .favorites-section {
-    position: relative;
+    display: flex;
+    flex-direction: column;
   }
 
   .favorites-header {
-    position: relative;
-    padding-right: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    margin-bottom: 6px;
   }
 
-  .favorites-chevron {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
+  .favorites-header .section-header-btn {
+    flex: 1;
+    justify-content: flex-start;
+  }
+
+  .favorites-items {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .collapsed-section-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 18px;
-    height: 18px;
-    padding: 0;
-    background: transparent;
+    width: 32px;
+    height: 32px;
+    margin: 0 auto;
+    background: none;
     border: none;
-    border-radius: 4px;
-    cursor: pointer;
+    border-radius: 6px;
     color: var(--text-muted);
-    transition: transform 150ms ease, color 150ms ease, background 150ms ease;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
   }
 
-  .favorites-chevron:hover {
+  .collapsed-section-btn:hover,
+  .collapsed-section-btn.active {
     background: var(--bg-hover);
     color: var(--text-primary);
-  }
-
-  .favorites-chevron.expanded {
-    transform: translateY(-50%) rotate(90deg);
-  }
-
-  .favorites-subitems {
-    display: flex;
-    flex-direction: column;
-    padding-left: 12px;
-  }
-
-  .favorites-subitem {
-    padding: 6px 10px;
-    font-size: 12px;
-  }
-
-  .favorites-subitem .icon-container {
-    width: 18px;
-    height: 18px;
   }
 
   /* Favorites Popover (collapsed sidebar) */
