@@ -165,6 +165,7 @@
   let contentVisible = $state(false); // For content entrance animation
   let editModalOpen = $state(false);
   let scrollContainer: HTMLDivElement | null = $state(null);
+  let virtualizedTrackListRef: { scrollToGroup: (groupId: string) => void } | null = $state(null);
   let favoritesPreferences = $state<FavoritesPreferences>({
     custom_icon_path: null,
     custom_icon_preset: 'heart',
@@ -635,6 +636,22 @@
     target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  function scrollToTrackGroup(letter: string, trackAlphaGroups: Set<string>, trackIndexTargets: Map<string, string>) {
+    if (!trackAlphaGroups.has(letter)) return;
+
+    let groupId: string;
+    if (trackGroupMode === 'name') {
+      groupId = groupIdForKey('track-name', letter);
+    } else {
+      // 'artist' mode - use the pre-computed map
+      const targetId = trackIndexTargets.get(letter);
+      if (!targetId) return;
+      groupId = targetId;
+    }
+
+    virtualizedTrackListRef?.scrollToGroup(groupId);
+  }
+
   function getAlbumYear(album: FavoriteAlbum): string | null {
     if (!album.release_date_original) return null;
     return album.release_date_original.slice(0, 4);
@@ -970,6 +987,36 @@
     </div>
     <div class="header-content">
       <h1>Favorites</h1>
+      {#if activeTab === 'tracks' && !loading && filteredTracks.length > 0}
+        <div class="header-actions">
+          <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
+            <Play size={20} fill="currentColor" color="currentColor" />
+          </button>
+          <button class="action-btn-circle" onclick={handleShuffleAllTracks} title="Shuffle">
+            <Shuffle size={18} />
+          </button>
+          <div class="context-menu-wrapper">
+            <button
+              class="action-btn-circle"
+              onclick={() => showTracksContextMenu = !showTracksContextMenu}
+              title="More options"
+            >
+              <MoreHorizontal size={18} />
+            </button>
+            {#if showTracksContextMenu}
+              <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
+              <div class="context-menu">
+                <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
+                  Play Next
+                </button>
+                <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
+                  Add to Queue
+                </button>
+              </div>
+            {/if}
+          </div>
+        </div>
+      {/if}
     </div>
     <button class="edit-btn" onclick={() => editModalOpen = true} title="Edit Favorites settings">
       <Edit3 size={16} />
@@ -1207,35 +1254,34 @@
       </div>
     {/if}
 
-    <!-- Actions (for tracks tab) -->
-    {#if activeTab === 'tracks' && filteredTracks.length > 0}
-      <div class="actions">
-        <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
-          <Play size={20} fill="currentColor" color="currentColor" />
-        </button>
-        <button class="action-btn-circle" onclick={handleShuffleAllTracks} title="Shuffle">
-          <Shuffle size={18} />
-        </button>
-        <div class="context-menu-wrapper">
+    <!-- Alpha Index (inline in toolbar for tracks when grouping by name or artist) -->
+    {#if activeTab === 'tracks' && !loading && trackGroupingEnabled && (trackGroupMode === 'name' || trackGroupMode === 'artist')}
+      {@const groupedTracks = groupTracks(filteredTracks, trackGroupMode)}
+      {@const trackIndexTargets = trackGroupMode === 'artist'
+        ? (() => {
+            const map = new Map<string, string>();
+            for (const group of groupedTracks) {
+              const letter = alphaGroupKey(group.title);
+              if (!map.has(letter)) {
+                map.set(letter, group.id);
+              }
+            }
+            return map;
+          })()
+        : new Map<string, string>()}
+      {@const trackAlphaGroups = trackGroupMode === 'name'
+        ? new Set(groupedTracks.map(group => group.key))
+        : new Set(trackIndexTargets.keys())}
+      <div class="alpha-index-inline">
+        {#each alphaIndexLetters as letter}
           <button
-            class="action-btn-circle"
-            onclick={() => showTracksContextMenu = !showTracksContextMenu}
-            title="More options"
+            class="alpha-letter"
+            class:disabled={!trackAlphaGroups.has(letter)}
+            onclick={() => scrollToTrackGroup(letter, trackAlphaGroups, trackIndexTargets)}
           >
-            <MoreHorizontal size={18} />
+            {letter}
           </button>
-          {#if showTracksContextMenu}
-            <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
-            <div class="context-menu">
-              <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
-                Play Next
-              </button>
-              <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
-                Add to Queue
-              </button>
-            </div>
-          {/if}
-        </div>
+        {/each}
       </div>
     {/if}
 
@@ -1252,37 +1298,6 @@
       {/if}
     </span>
   </div>
-
-  <!-- Horizontal Alpha Index (for tracks when grouping by name or artist) -->
-  {#if activeTab === 'tracks' && !loading && trackGroupingEnabled && (trackGroupMode === 'name' || trackGroupMode === 'artist')}
-    {@const groupedTracks = groupTracks(filteredTracks, trackGroupMode)}
-    {@const trackIndexTargets = trackGroupMode === 'artist'
-      ? (() => {
-          const map = new Map<string, string>();
-          for (const group of groupedTracks) {
-            const letter = alphaGroupKey(group.title);
-            if (!map.has(letter)) {
-              map.set(letter, group.id);
-            }
-          }
-          return map;
-        })()
-      : new Map<string, string>()}
-    {@const trackAlphaGroups = trackGroupMode === 'name'
-      ? new Set(groupedTracks.map(group => group.key))
-      : new Set(trackIndexTargets.keys())}
-    <div class="alpha-index-horizontal">
-      {#each alphaIndexLetters as letter}
-        <button
-          class="alpha-letter"
-          class:disabled={!trackAlphaGroups.has(letter)}
-          onclick={() => scrollToGroup(trackGroupMode === 'name' ? 'track-name' : 'track-artist', letter, trackAlphaGroups)}
-        >
-          {letter}
-        </button>
-      {/each}
-    </div>
-  {/if}
 
   <!-- Content -->
   <div class="content">
@@ -1323,6 +1338,7 @@
         <div class="track-sections virtualized">
           <div class="virtualized-container">
             <VirtualizedTrackList
+              bind:this={virtualizedTrackListRef}
               groups={groupedTracks}
               groupingEnabled={trackGroupingEnabled}
               groupMode={trackGroupMode}
@@ -1698,8 +1714,8 @@
   }
 
   .header-icon {
-    width: 80px;
-    height: 80px;
+    width: 94px;
+    height: 94px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1723,6 +1739,13 @@
     font-weight: 700;
     color: var(--text-primary);
     margin: 0;
+  }
+
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 12px;
   }
 
   .edit-btn {
@@ -2406,17 +2429,18 @@
     background: rgba(0, 0, 0, 0.2);
   }
 
-  .alpha-index-horizontal {
+  .alpha-index-inline {
     display: flex;
     flex-wrap: wrap;
-    gap: 4px;
-    padding: 8px 0;
-    margin-bottom: 12px;
+    gap: 2px;
+    flex: 1;
+    justify-content: center;
   }
 
-  .alpha-index-horizontal .alpha-letter {
-    width: 24px;
-    height: 24px;
+  .alpha-index-inline .alpha-letter {
+    width: 22px;
+    height: 22px;
+    font-size: 10px;
   }
 
   .alpha-letter {
