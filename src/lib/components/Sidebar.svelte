@@ -730,30 +730,29 @@
   });
 
   // Sidebar search handlers
+  const SEARCH_NAV_THRESHOLD = 3; // Navigate to search after this many characters
+
   function handleSidebarSearchInput(e: Event) {
     const target = e.target as HTMLInputElement;
     const newQuery = target.value;
     sidebarSearchQuery = newQuery;
     setSearchQuery(newQuery);
 
-    // Navigate to search view when typing
-    if (activeView !== 'search') {
+    // Navigate to search view only after threshold characters
+    if (newQuery.trim().length >= SEARCH_NAV_THRESHOLD && activeView !== 'search') {
       onNavigate('search');
     }
   }
 
   function handleSidebarSearchClick() {
-    // Navigate to search when clicking on input with text
+    // Navigate to search when clicking on input with text (any amount)
     if (sidebarSearchQuery.trim() && activeView !== 'search') {
       onNavigate('search');
     }
   }
 
   function handleSidebarSearchFocus() {
-    // Navigate to search when focusing on the input
-    if (activeView !== 'search') {
-      onNavigate('search');
-    }
+    // Don't auto-navigate on focus - let user type first
   }
 
   function handleSidebarSearchClear() {

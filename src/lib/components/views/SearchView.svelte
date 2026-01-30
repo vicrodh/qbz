@@ -3,6 +3,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { Search, Disc3, Music, Mic2, User, X, ChevronLeft, ChevronRight, Crown } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
+  import ViewTransition from '../ViewTransition.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import QualityBadge from '../QualityBadge.svelte';
   import { getSearchState, setSearchState, subscribeSearchFocus, subscribeSearchQuery, setSearchQuery, type SearchResults, type SearchAllResults, type SearchTab, type SearchFilterType } from '$lib/stores/searchState';
@@ -578,6 +579,7 @@
   );
 </script>
 
+<ViewTransition duration={200} distance={12} direction="up">
 <div class="search-view" bind:this={scrollContainer} onscroll={handleScroll}>
   <!-- Search Header - title only when not scrolled -->
   {#if !isScrolled}
@@ -1218,6 +1220,7 @@
     {/if}
   </div>
 </div>
+</ViewTransition>
 
 <style>
   .search-view {
