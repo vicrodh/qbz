@@ -204,6 +204,8 @@ impl AlsaBackend {
                         is_default: false,
                         max_sample_rate: Some(384000), // Assume high sample rate capability
                         supported_sample_rates: None, // Can't detect without CPAL access
+                        device_bus: None,
+                        is_hardware: true,
                     });
                 }
             } else {
@@ -235,6 +237,8 @@ impl AlsaBackend {
                     is_default: false,
                     max_sample_rate,
                     supported_sample_rates,
+                    device_bus: None,
+                    is_hardware: true,
                 });
             }
 
@@ -247,6 +251,8 @@ impl AlsaBackend {
                 is_default: false,
                 max_sample_rate: Some(384000),
                 supported_sample_rates: None, // plughw can convert, so all rates are "supported"
+                device_bus: None,
+                is_hardware: true,
             });
         }
 
@@ -326,6 +332,8 @@ impl AlsaBackend {
                 is_default,
                 max_sample_rate,
                 supported_sample_rates,
+                device_bus: None,
+                is_hardware: true,
             });
         }
 

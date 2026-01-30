@@ -84,6 +84,12 @@ pub struct AudioDevice {
     /// Supported sample rates (common audio rates that the device supports)
     /// Contains values like 44100, 48000, 88200, 96000, 176400, 192000, etc.
     pub supported_sample_rates: Option<Vec<u32>>,
+
+    /// Device bus type (for PipeWire): "usb", "pci", "bluetooth", or None
+    pub device_bus: Option<String>,
+
+    /// Whether this is a hardware device (has HARDWARE flag in PipeWire)
+    pub is_hardware: bool,
 }
 
 /// Audio backend configuration

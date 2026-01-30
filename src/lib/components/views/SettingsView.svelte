@@ -462,10 +462,17 @@
     return map;
   });
 
-  // Device options for grouped dropdown (ALSA Direct only)
+  // Device options for grouped dropdown (works for both ALSA and PipeWire)
   let groupedDeviceOptions = $derived.by(() => {
     // System Default is always first
-    const options: { value: string; id: string; isDefault?: boolean; sampleRates?: number[] }[] = [
+    const options: {
+      value: string;
+      id: string;
+      isDefault?: boolean;
+      sampleRates?: number[];
+      deviceBus?: string;
+      isHardware?: boolean;
+    }[] = [
       { value: 'System Default', id: 'system-default', isDefault: true }
     ];
 
@@ -489,7 +496,9 @@
         value: displayName,
         id: device.id,
         isDefault: device.is_default,
-        sampleRates: device.supported_sample_rates ?? undefined
+        sampleRates: device.supported_sample_rates ?? undefined,
+        deviceBus: device.device_bus ?? undefined,
+        isHardware: device.is_hardware
       });
     });
 
@@ -1084,6 +1093,8 @@
     is_default: boolean;
     max_sample_rate: number | null;
     supported_sample_rates: number[] | null;
+    device_bus: string | null;  // "usb", "pci", "bluetooth", etc.
+    is_hardware: boolean;
   }
 
   interface AlsaPluginInfo {
@@ -1924,6 +1935,16 @@
           value={outputDevice}
           devices={groupedDeviceOptions}
           onchange={handleBackendDeviceChange}
+          backend="alsa"
+          wide
+          expandLeft
+        />
+      {:else if selectedBackend === 'PipeWire'}
+        <DeviceDropdown
+          value={outputDevice}
+          devices={groupedDeviceOptions}
+          onchange={handleBackendDeviceChange}
+          backend="pipewire"
           wide
           expandLeft
         />

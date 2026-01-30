@@ -13,6 +13,8 @@
     id: string;           // Device ID (for categorization)
     isDefault?: boolean;
     sampleRates?: number[]; // Supported sample rates in Hz (e.g., 44100, 48000, 96000, 192000)
+    deviceBus?: string;   // "usb", "pci", "bluetooth" (PipeWire)
+    isHardware?: boolean; // Has HARDWARE flag (PipeWire)
   }
 
   interface DeviceGroup {
@@ -27,9 +29,10 @@
     onchange: (value: string) => void;
     wide?: boolean;
     expandLeft?: boolean;
+    backend?: 'alsa' | 'pipewire' | 'pulse';
   }
 
-  let { value, devices, onchange, wide = false, expandLeft = false }: Props = $props();
+  let { value, devices, onchange, wide = false, expandLeft = false, backend = 'alsa' }: Props = $props();
 
   let isOpen = $state(false);
   let isHovering = $state(false);
@@ -43,53 +46,62 @@
   // Show search when many devices
   const showSearch = $derived(devices.length > 5);
 
-  // Group devices by category
+  // Group devices by category (different logic for ALSA vs PipeWire)
   const groupedDevices = $derived.by(() => {
     const groups: DeviceGroup[] = [];
 
-    // Defaults group
-    const defaults: DeviceOption[] = [];
-    // Bit-perfect group (hw: devices)
-    const bitPerfect: DeviceOption[] = [];
-    // Plugin Hardware group (plughw: devices)
-    const pluginHw: DeviceOption[] = [];
-    // Other devices
-    const others: DeviceOption[] = [];
+    if (backend === 'alsa') {
+      // ALSA grouping: Defaults, Bit-perfect, Plugin Hardware, Other
+      const defaults: DeviceOption[] = [];
+      const bitPerfect: DeviceOption[] = [];
+      const pluginHw: DeviceOption[] = [];
+      const others: DeviceOption[] = [];
 
-    for (const device of devices) {
-      // System Default is always first
-      if (device.value === 'System Default') {
-        defaults.push(device);
+      for (const device of devices) {
+        if (device.value === 'System Default') {
+          defaults.push(device);
+        } else if (device.id === 'default' || device.isDefault) {
+          defaults.push(device);
+        } else if (device.id.startsWith('hw:')) {
+          bitPerfect.push(device);
+        } else if (device.id.startsWith('plughw:')) {
+          pluginHw.push(device);
+        } else {
+          others.push(device);
+        }
       }
-      // Default ALSA Output
-      else if (device.id === 'default' || device.isDefault) {
-        defaults.push(device);
-      }
-      // Bit-perfect direct hardware (hw:X,Y)
-      else if (device.id.startsWith('hw:')) {
-        bitPerfect.push(device);
-      }
-      // Plugin hardware (plughw:X,Y)
-      else if (device.id.startsWith('plughw:')) {
-        pluginHw.push(device);
-      }
-      // Everything else
-      else {
-        others.push(device);
-      }
-    }
 
-    if (defaults.length > 0) {
-      groups.push({ key: 'defaults', label: 'Defaults', devices: defaults });
-    }
-    if (bitPerfect.length > 0) {
-      groups.push({ key: 'bitperfect', label: 'Bit-perfect (Auto-detected)', devices: bitPerfect });
-    }
-    if (pluginHw.length > 0) {
-      groups.push({ key: 'pluginhw', label: 'Plugin Hardware', devices: pluginHw });
-    }
-    if (others.length > 0) {
-      groups.push({ key: 'others', label: 'Other Outputs', devices: others });
+      if (defaults.length > 0) groups.push({ key: 'defaults', label: 'Defaults', devices: defaults });
+      if (bitPerfect.length > 0) groups.push({ key: 'bitperfect', label: 'Bit-perfect (Auto-detected)', devices: bitPerfect });
+      if (pluginHw.length > 0) groups.push({ key: 'pluginhw', label: 'Plugin Hardware', devices: pluginHw });
+      if (others.length > 0) groups.push({ key: 'others', label: 'Other Outputs', devices: others });
+    } else {
+      // PipeWire/PulseAudio grouping: USB Audio, HDMI/DisplayPort, Other Hardware, Virtual
+      const defaults: DeviceOption[] = [];
+      const usbAudio: DeviceOption[] = [];
+      const hdmi: DeviceOption[] = [];
+      const otherHw: DeviceOption[] = [];
+      const virtual: DeviceOption[] = [];
+
+      for (const device of devices) {
+        if (device.value === 'System Default') {
+          defaults.push(device);
+        } else if (device.deviceBus === 'usb' && device.isHardware) {
+          usbAudio.push(device);
+        } else if (device.isHardware && (device.value.includes('HDMI') || device.value.includes('DisplayPort'))) {
+          hdmi.push(device);
+        } else if (device.isHardware) {
+          otherHw.push(device);
+        } else {
+          virtual.push(device);
+        }
+      }
+
+      if (defaults.length > 0) groups.push({ key: 'defaults', label: 'Defaults', devices: defaults });
+      if (usbAudio.length > 0) groups.push({ key: 'usb', label: 'USB Audio (Bit-perfect capable)', devices: usbAudio });
+      if (hdmi.length > 0) groups.push({ key: 'hdmi', label: 'HDMI / DisplayPort', devices: hdmi });
+      if (otherHw.length > 0) groups.push({ key: 'otherhw', label: 'Other Hardware', devices: otherHw });
+      if (virtual.length > 0) groups.push({ key: 'virtual', label: 'Virtual Sinks', devices: virtual });
     }
 
     return groups;
@@ -324,7 +336,7 @@
                   <span class="option-sample-rates">{sampleRatesText}</span>
                 {/if}
               </div>
-              {#if group.key === 'bitperfect'}
+              {#if group.key === 'bitperfect' || group.key === 'usb'}
                 <span class="badge bit-perfect">BP</span>
               {/if}
             </button>
