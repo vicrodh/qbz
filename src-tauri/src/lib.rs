@@ -196,6 +196,13 @@ pub fn run() {
     // Initialize tray settings state
     let tray_settings_state = config::tray_settings::TraySettingsState::new()
         .expect("Failed to initialize tray settings");
+    // Initialize legal settings state (ToS acceptance persistence)
+    let legal_settings_state = config::legal_settings::LegalSettingsState::new(
+        std::sync::Mutex::new(
+            config::legal_settings::LegalSettingsStore::new()
+                .expect("Failed to initialize legal settings")
+        )
+    );
     // Initialize updates state
     let updates_state = updates::UpdatesState::new()
         .expect("Failed to initialize updates state");
@@ -442,6 +449,7 @@ pub fn run() {
         .manage(favorites_prefs_state)
         .manage(favorites_cache_state)
         .manage(tray_settings_state)
+        .manage(legal_settings_state)
         .manage(updates_state)
         .manage(musicbrainz_state)
         .manage(listenbrainz_state)
@@ -841,6 +849,10 @@ pub fn run() {
             config::tray_settings::set_enable_tray,
             config::tray_settings::set_minimize_to_tray,
             config::tray_settings::set_close_to_tray,
+            // Legal settings commands
+            config::legal_settings::get_legal_settings,
+            config::legal_settings::get_qobuz_tos_accepted,
+            config::legal_settings::set_qobuz_tos_accepted,
             // MusicBrainz integration commands
             commands::musicbrainz_resolve_track,
             commands::musicbrainz_resolve_artist,

@@ -16,6 +16,7 @@ pub mod favorites_preferences;
 pub mod favorites_cache;
 pub mod subscription_state;
 pub mod tray_settings;
+pub mod legal_settings;
 
 pub use audio_settings::{
     AudioSettings,
@@ -82,4 +83,13 @@ pub use favorites_cache::{
     sync_cached_favorite_albums,
     sync_cached_favorite_artists,
     clear_favorites_cache,
+};
+
+pub use legal_settings::{
+    LegalSettings,
+    LegalSettingsState,
+    LegalSettingsStore,
+    get_legal_settings,
+    get_qobuz_tos_accepted,
+    set_qobuz_tos_accepted,
 };

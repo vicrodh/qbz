@@ -3,7 +3,7 @@
   import TitleBar from '../TitleBar.svelte';
   import { t } from '$lib/i18n';
   import { setManualOffline } from '$lib/stores/offlineStore';
-  import { qobuzTosAccepted } from '$lib/stores/qobuzLegalStore';
+  import { qobuzTosAccepted, loadTosAcceptance } from '$lib/stores/qobuzLegalStore';
   import { get } from 'svelte/store';
 
   interface UserInfo {
@@ -82,6 +82,10 @@
         }
         return;
       }
+
+      // Load ToS acceptance from Rust (persisted, survives app updates)
+      initStatus = 'Loading preferences...';
+      await loadTosAcceptance();
 
       // Check for saved credentials and auto-login
       initStatus = 'Checking saved credentials...';
