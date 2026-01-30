@@ -7,6 +7,7 @@
   import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
+  import DeviceDropdown from '../DeviceDropdown.svelte';
   import VolumeSlider from '../VolumeSlider.svelte';
   import UpdateCheckResultModal from '../updates/UpdateCheckResultModal.svelte';
   import WhatsNewModal from '../updates/WhatsNewModal.svelte';
@@ -459,6 +460,39 @@
     });
 
     return map;
+  });
+
+  // Device options for grouped dropdown (ALSA Direct only)
+  let groupedDeviceOptions = $derived.by(() => {
+    // System Default is always first
+    const options: { value: string; id: string; isDefault?: boolean }[] = [
+      { value: 'System Default', id: 'system-default', isDefault: true }
+    ];
+
+    // Generate unique display names (same logic as deviceOptions)
+    const displayNames = backendDevices.map(d => {
+      if (d.description && selectedBackend === 'ALSA Direct') {
+        return d.description;
+      }
+      return needsTranslation(d.name) ? getDevicePrettyName(d.name) : d.name;
+    });
+
+    backendDevices.forEach((device, idx) => {
+      let displayName = displayNames[idx];
+
+      // If duplicate, append device ID to make unique
+      if (displayNames.filter(n => n === displayName).length > 1) {
+        displayName = `${displayName} [${device.name}]`;
+      }
+
+      options.push({
+        value: displayName,
+        id: device.id,
+        isDefault: device.is_default
+      });
+    });
+
+    return options;
   });
 
   // ALSA plugin options (derived)
@@ -1883,6 +1917,14 @@
       </div>
       {#if isLoadingDevices}
         <span class="loading-text">Loading devices...</span>
+      {:else if selectedBackend === 'ALSA Direct'}
+        <DeviceDropdown
+          value={outputDevice}
+          devices={groupedDeviceOptions}
+          onchange={handleBackendDeviceChange}
+          wide
+          expandLeft
+        />
       {:else}
         <Dropdown
           value={outputDevice}
