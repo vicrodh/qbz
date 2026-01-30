@@ -2443,13 +2443,18 @@
     setOnTrackEnded(async () => {
       if (!isAutoplayEnabled()) {
         setQueueEnded(true);
+        await stopPlayback();
+        setIsPlaying(false);
         return;
       }
       const nextTrackResult = await nextTrack();
       if (nextTrackResult) {
         await playQueueTrack(nextTrackResult);
       } else {
+        // Queue ended - stop playback and clear player
         setQueueEnded(true);
+        await stopPlayback();
+        setIsPlaying(false);
       }
     });
 
