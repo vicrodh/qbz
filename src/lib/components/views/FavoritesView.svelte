@@ -898,6 +898,7 @@
 
 </script>
 
+<ViewTransition duration={200} distance={12} direction="down">
 <div class="favorites-view" bind:this={scrollContainer}>
   <!-- Header -->
   <div class="header">
@@ -1594,6 +1595,7 @@
     {/if}
   </div>
 </div>
+</ViewTransition>
 
 <FavoritesEditModal
   isOpen={editModalOpen}
