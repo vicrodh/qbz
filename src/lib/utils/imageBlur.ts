@@ -19,14 +19,14 @@ const MAX_CACHE_SIZE = 20;
  * Returns a data URL that can be used as background-image.
  *
  * @param artworkUrl - The original artwork URL
- * @param size - Output canvas size (default 256, higher = smoother result)
- * @param blurRadius - Canvas blur radius (default 20, effective ~80px at fullscreen)
+ * @param size - Output canvas size (default 512, higher = smoother result)
+ * @param blurRadius - Canvas blur radius (default 40, produces smooth gradient effect)
  * @returns Promise<string> - Data URL of blurred image
  */
 export async function generateBlurredBackground(
   artworkUrl: string,
-  size: number = 256,
-  blurRadius: number = 20
+  size: number = 512,
+  blurRadius: number = 40
 ): Promise<string> {
   // Check cache first
   const cacheKey = `${artworkUrl}-${size}-${blurRadius}`;
