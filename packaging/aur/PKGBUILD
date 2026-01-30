@@ -8,7 +8,7 @@ url="https://github.com/vicrodh/qbz"
 license=('MIT')
 depends=('webkit2gtk-4.1' 'gtk3' 'alsa-lib' 'libappindicator-gtk3' 'libxkbcommon' 'openssl')
 optdepends=(
-    'alsa-utils: Better ALSA device names and descriptions'
+    'alsa-utils: Required for bit-perfect device detection and better ALSA device names'
     'pipewire-alsa: PipeWire audio support'
     'pipewire-pulse: PulseAudio compatibility'
 )

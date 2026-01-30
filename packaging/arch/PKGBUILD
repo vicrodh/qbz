@@ -23,6 +23,11 @@ makedepends=(
   pkgconf
   clang
 )
+optdepends=(
+  'alsa-utils: Required for bit-perfect device detection and better ALSA device names'
+  'pipewire-alsa: PipeWire audio support'
+  'pipewire-pulse: PulseAudio compatibility'
+)
 source=("https://github.com/vicrodh/qbz/archive/refs/tags/v${pkgver}.tar.gz")
 sha256sums=('SKIP')
 

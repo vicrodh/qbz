@@ -100,3 +100,69 @@ pub fn get_alsa_plugins() -> Result<Vec<AlsaPluginInfo>, String> {
 
     Ok(plugins)
 }
+
+/// Check if alsa-utils is installed (aplay command available)
+#[tauri::command]
+pub fn check_alsa_utils_installed() -> bool {
+    use std::process::Command;
+
+    Command::new("which")
+        .arg("aplay")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// Linux distribution info for install commands
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LinuxDistroInfo {
+    pub distro_id: String,
+    pub distro_name: String,
+    pub install_command: String,
+}
+
+/// Detect Linux distribution and return appropriate install command for alsa-utils
+#[tauri::command]
+pub fn get_linux_distro() -> LinuxDistroInfo {
+    use std::fs;
+
+    // Try to read /etc/os-release
+    let os_release = fs::read_to_string("/etc/os-release").unwrap_or_default();
+
+    let mut distro_id = String::new();
+    let mut distro_name = String::new();
+
+    for line in os_release.lines() {
+        if let Some(id) = line.strip_prefix("ID=") {
+            distro_id = id.trim_matches('"').to_lowercase();
+        }
+        if let Some(name) = line.strip_prefix("NAME=") {
+            distro_name = name.trim_matches('"').to_string();
+        }
+    }
+
+    // Determine install command based on distro
+    let install_command = match distro_id.as_str() {
+        "arch" | "manjaro" | "endeavouros" | "garuda" | "artix" =>
+            "sudo pacman -S alsa-utils".to_string(),
+        "debian" | "ubuntu" | "linuxmint" | "pop" | "elementary" | "zorin" | "kali" =>
+            "sudo apt install alsa-utils".to_string(),
+        "fedora" | "rhel" | "centos" | "rocky" | "alma" =>
+            "sudo dnf install alsa-utils".to_string(),
+        "opensuse" | "opensuse-leap" | "opensuse-tumbleweed" =>
+            "sudo zypper install alsa-utils".to_string(),
+        "void" =>
+            "sudo xbps-install alsa-utils".to_string(),
+        "gentoo" =>
+            "sudo emerge media-sound/alsa-utils".to_string(),
+        "nixos" =>
+            "nix-env -iA nixpkgs.alsa-utils".to_string(),
+        _ => "# Install alsa-utils using your package manager".to_string(),
+    };
+
+    LinuxDistroInfo {
+        distro_id,
+        distro_name,
+        install_command,
+    }
+}

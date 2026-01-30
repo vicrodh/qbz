@@ -4,10 +4,11 @@
   import ViewTransition from '../ViewTransition.svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
-  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon } from 'lucide-svelte';
+  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, HelpCircle } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import DeviceDropdown from '../DeviceDropdown.svelte';
+  import AlsaUtilsHelpModal from '../AlsaUtilsHelpModal.svelte';
   import VolumeSlider from '../VolumeSlider.svelte';
   import UpdateCheckResultModal from '../updates/UpdateCheckResultModal.svelte';
   import WhatsNewModal from '../updates/WhatsNewModal.svelte';
@@ -140,6 +141,9 @@
   // Migration state
   let showMigrationModal = $state(false);
   let legacyTracksCount = $state(0);
+
+  // ALSA Utils help modal
+  let showAlsaUtilsHelpModal = $state(false);
 
   // Offline mode state
   let offlineStatus = $state<OfflineStatus>(getOfflineStatus());
@@ -1931,14 +1935,23 @@
       {#if isLoadingDevices}
         <span class="loading-text">Loading devices...</span>
       {:else if selectedBackend === 'ALSA Direct'}
-        <DeviceDropdown
-          value={outputDevice}
-          devices={groupedDeviceOptions}
-          onchange={handleBackendDeviceChange}
-          backend="alsa"
-          wide
-          expandLeft
-        />
+        <div class="dropdown-with-help">
+          <DeviceDropdown
+            value={outputDevice}
+            devices={groupedDeviceOptions}
+            onchange={handleBackendDeviceChange}
+            backend="alsa"
+            wide
+            expandLeft
+          />
+          <button
+            class="help-icon-btn"
+            onclick={() => showAlsaUtilsHelpModal = true}
+            title="Help with bit-perfect device detection"
+          >
+            <HelpCircle size={16} />
+          </button>
+        </div>
       {:else if selectedBackend === 'PipeWire'}
         <DeviceDropdown
           value={outputDevice}
@@ -2806,6 +2819,32 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     font-style: italic;
   }
 
+  .dropdown-with-help {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .help-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .help-icon-btn:hover {
+    background: var(--bg-hover);
+    color: var(--accent);
+  }
+
   .loading-overlay {
     position: fixed;
     top: 0;
@@ -3667,4 +3706,9 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   isOpen={showMigrationModal}
   onClose={closeMigrationModal}
   totalTracks={legacyTracksCount}
+/>
+
+<AlsaUtilsHelpModal
+  isOpen={showAlsaUtilsHelpModal}
+  onClose={() => showAlsaUtilsHelpModal = false}
 />

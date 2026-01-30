@@ -762,6 +762,8 @@ pub fn run() {
             commands::get_available_backends,
             commands::get_devices_for_backend,
             commands::get_alsa_plugins,
+            commands::check_alsa_utils_installed,
+            commands::get_linux_distro,
             // Download settings commands
             config::download_settings::get_download_settings,
             config::download_settings::set_download_root,
