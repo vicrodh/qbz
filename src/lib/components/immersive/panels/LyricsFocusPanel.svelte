@@ -74,17 +74,19 @@
   .lyrics-line {
     text-align: center;
     max-width: 90%;
-    animation: fadeInUp 400ms ease-out forwards;
+    animation: fadeInUp 500ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
   @keyframes fadeInUp {
-    from {
+    0% {
       opacity: 0;
-      transform: translateY(30px);
+      transform: translateY(40px) scale(0.95);
+      filter: blur(4px);
     }
-    to {
+    100% {
       opacity: 1;
-      transform: translateY(0);
+      transform: translateY(0) scale(1);
+      filter: blur(0);
     }
   }
 
@@ -94,11 +96,14 @@
     color: var(--text-primary, white);
     line-height: 1.3;
     text-shadow:
+      0 0 40px rgba(255, 255, 255, 0.15),
       0 2px 20px rgba(0, 0, 0, 0.5),
       0 4px 40px rgba(0, 0, 0, 0.3);
     /* Word wrap for long lines */
     word-wrap: break-word;
     overflow-wrap: break-word;
+    /* Subtle letter spacing for readability */
+    letter-spacing: 0.01em;
   }
 
   .lyrics-state {
