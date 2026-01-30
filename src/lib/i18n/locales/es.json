@@ -17,7 +17,9 @@
     "pressAwards": "Premios",
     "radio": "Radio",
     "recentlyAdded": "Agregado Recientemente",
-    "backTo": "Volver a"
+    "backTo": "Volver a",
+    "updates": "Actualizaciones",
+    "flatpak": "Flatpak"
   },
   "home": {
     "title": "Inicio",

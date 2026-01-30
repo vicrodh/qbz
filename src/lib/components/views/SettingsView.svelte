@@ -4,7 +4,7 @@
   import ViewTransition from '../ViewTransition.svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
-  import { ArrowLeft, ChevronRight, Loader2 } from 'lucide-svelte';
+  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import VolumeSlider from '../VolumeSlider.svelte';
@@ -173,25 +173,29 @@
   let flatpakSection: HTMLElement;
   let activeSection = $state('audio');
 
-  // Base navigation sections (always present)
-  const baseNavSectionDefs = [
-    { id: 'audio', label: 'Audio' },
-    { id: 'playback', label: 'Playback' },
-    { id: 'offline', label: 'Offline' },
-    { id: 'appearance', label: 'Appearance' },
-    { id: 'downloads', label: 'Offline Library' },
-    { id: 'library', label: 'Library' },
-    { id: 'integrations', label: 'Integrations' },
-    { id: 'updates', label: 'Updates' },
-    { id: 'storage', label: 'Storage' },
+  // Collapsible sections state (closed by default)
+  let offlineLibraryCollapsed = $state(true);
+  let storageCollapsed = $state(true);
+
+  // Navigation section IDs with translation keys
+  const navSectionIds = [
+    { id: 'audio', labelKey: 'settings.audio.title' },
+    { id: 'playback', labelKey: 'settings.playback.title' },
+    { id: 'offline', labelKey: 'offline.title' },
+    { id: 'appearance', labelKey: 'settings.appearance.title' },
+    { id: 'downloads', labelKey: 'settings.offlineLibrary.title' },
+    { id: 'library', labelKey: 'settings.library.title' },
+    { id: 'integrations', labelKey: 'settings.integrations.title' },
+    { id: 'updates', labelKey: 'nav.updates' },
+    { id: 'storage', labelKey: 'settings.storage.title' },
   ];
 
   // Navigation section definitions (dynamic: includes Flatpak only when running in Flatpak)
   // NOTE: If adding new sections, add them BEFORE Flatpak. Flatpak must always be last.
   const navSectionDefs = $derived(
     isFlatpak
-      ? [...baseNavSectionDefs, { id: 'flatpak', label: 'Flatpak' }]
-      : baseNavSectionDefs
+      ? [...navSectionIds, { id: 'flatpak', labelKey: 'nav.flatpak' }]
+      : navSectionIds
   );
 
   // Get section element by id (resolved at call time, not definition time)
@@ -288,62 +292,71 @@
   // Options for dropdown - use PipeWire descriptions directly (already friendly names)
   let audioDeviceOptions = $derived(['System Default', ...pipewireSinks.map(s => s.description)]);
 
-  // Theme mapping: display name -> data-theme value
-  const themeMap: Record<string, string> = {
-    'Dark': '',
-    'Light': 'light',
-    'OLED Black': 'oled',
-    'Rumi': 'rumi',
-    'Zoey': 'zoey',
-    'Mira': 'mira',
-    'Warm': 'warm',
-    'Nord': 'nord',
-    'Dracula': 'dracula',
-    'Tokyo Night': 'tokyo-night',
-    'Catppuccin Mocha': 'catppuccin-mocha',
-    'Rose Pine Dawn': 'rose-pine-dawn',
-    'Breeze Dark': 'breeze-dark',
-    'Breeze Light': 'breeze-light',
-    'Adwaita Dark': 'adwaita-dark',
-    'Adwaita Light': 'adwaita-light',
-    'Duotone Snow': 'duotone-snow',
-    'Alucard': 'alucard',
-    'Snow Storm': 'snow-storm',
-    'Frost': 'frost',
-    'Aurora': 'aurora',
-    'Ikari': 'ikari',
-    'Langley': 'langley',
-    'Ayanami': 'ayanami',
-    'Iscariot': 'iscariot'
+  // Theme metadata with type classification
+  type ThemeType = 'dark' | 'light';
+  interface ThemeInfo {
+    value: string;      // data-theme value
+    type: ThemeType;    // dark or light
+  }
+
+  const themes: Record<string, ThemeInfo> = {
+    // Dark themes
+    'Dark':              { value: '',                 type: 'dark' },
+    'OLED Black':        { value: 'oled',             type: 'dark' },
+    'Warm':              { value: 'warm',             type: 'dark' },
+    'Nord':              { value: 'nord',             type: 'dark' },
+    'Dracula':           { value: 'dracula',          type: 'dark' },
+    'Tokyo Night':       { value: 'tokyo-night',      type: 'dark' },
+    'Catppuccin Mocha':  { value: 'catppuccin-mocha', type: 'dark' },
+    'Breeze Dark':       { value: 'breeze-dark',      type: 'dark' },
+    'Adwaita Dark':      { value: 'adwaita-dark',     type: 'dark' },
+    'Alucard':           { value: 'alucard',          type: 'light' },
+    'Aurora':            { value: 'aurora',           type: 'dark' },
+    'Ikari':             { value: 'ikari',            type: 'dark' },
+    'Ayanami':           { value: 'ayanami',          type: 'dark' },
+    'Iscariot':          { value: 'iscariot',         type: 'dark' },
+    'Rumi':              { value: 'rumi',             type: 'dark' },
+    'Zoey':              { value: 'zoey',             type: 'dark' },
+    'Mira':              { value: 'mira',             type: 'dark' },
+    // Light themes
+    'Light':             { value: 'light',            type: 'light' },
+    'Rose Pine Dawn':    { value: 'rose-pine-dawn',   type: 'light' },
+    'Breeze Light':      { value: 'breeze-light',     type: 'light' },
+    'Adwaita Light':     { value: 'adwaita-light',    type: 'light' },
+    'Duotone Snow':      { value: 'duotone-snow',     type: 'light' },
+    'Snow Storm':        { value: 'snow-storm',       type: 'light' },
+    'Frost':             { value: 'frost',            type: 'light' },
+    'Langley':           { value: 'langley',          type: 'light' },
+    'Kurosaki':          { value: 'kurosaki',         type: 'light' },
   };
 
-  const themeReverseMap: Record<string, string> = {
-    '': 'Dark',
-    'light': 'Light',
-    'oled': 'OLED Black',
-    'rumi': 'Rumi',
-    'zoey': 'Zoey',
-    'mira': 'Mira',
-    'warm': 'Warm',
-    'nord': 'Nord',
-    'dracula': 'Dracula',
-    'tokyo-night': 'Tokyo Night',
-    'catppuccin-mocha': 'Catppuccin Mocha',
-    'rose-pine-dawn': 'Rose Pine Dawn',
-    'breeze-dark': 'Breeze Dark',
-    'breeze-light': 'Breeze Light',
-    'adwaita-dark': 'Adwaita Dark',
-    'adwaita-light': 'Adwaita Light',
-    'duotone-snow': 'Duotone Snow',
-    'alucard': 'Alucard',
-    'snow-storm': 'Snow Storm',
-    'frost': 'Frost',
-    'aurora': 'Aurora',
-    'ikari': 'Ikari',
-    'langley': 'Langley',
-    'ayanami': 'Ayanami',
-    'iscariot': 'Iscariot'
-  };
+  // Generate maps from themes object for compatibility
+  const themeMap: Record<string, string> = Object.fromEntries(
+    Object.entries(themes).map(([name, info]) => [name, info.value])
+  );
+
+  const themeReverseMap: Record<string, string> = Object.fromEntries(
+    Object.entries(themes).map(([name, info]) => [info.value, name])
+  );
+
+  // Theme filter state: 'all' | 'dark' | 'light'
+  type ThemeFilter = 'all' | 'dark' | 'light';
+  let themeFilter = $state<ThemeFilter>('all');
+
+  // Filtered theme options based on current filter
+  const filteredThemeOptions = $derived(
+    themeFilter === 'all'
+      ? Object.keys(themes)
+      : Object.entries(themes)
+          .filter(([_, info]) => info.type === themeFilter)
+          .map(([name]) => name)
+  );
+
+  function cycleThemeFilter() {
+    if (themeFilter === 'all') themeFilter = 'dark';
+    else if (themeFilter === 'dark') themeFilter = 'light';
+    else themeFilter = 'all';
+  }
 
   // Language mapping: display name -> locale code
   const languageToLocale: Record<string, string | null> = {
@@ -1806,24 +1819,18 @@
     <h1 class="title">{$t('settings.title')}</h1>
   </div>
 
-  <!-- Account Section -->
-  <section class="section">
-    <h3 class="section-title">{$t('settings.account.title')}</h3>
-    <div class="account-card">
-      <div class="avatar">{userName.charAt(0).toUpperCase()}</div>
-      <div class="account-info">
-        <div class="username">{userName}</div>
-        {#if userEmail}
-          <div class="email">{userEmail}</div>
-        {/if}
-        <div class="subscription">{subscription}</div>
+  <!-- Account Section (compact) -->
+  <section class="section account-section">
+    <div class="account-card-compact">
+      <div class="avatar-small">{userName.charAt(0).toUpperCase()}</div>
+      <div class="account-info-compact">
+        <span class="username-compact">{userName}</span>
+        <span class="subscription-badge">{subscription}</span>
         {#if subscriptionValidUntil}
-          <div class="subscription-until">
-            {$t('settings.account.validUntil', { values: { date: subscriptionValidUntil } })}
-          </div>
+          <span class="valid-until">({subscriptionValidUntil})</span>
         {/if}
       </div>
-      <button class="logout-btn" onclick={onLogout}>{$t('settings.account.logout')}</button>
+      <button class="logout-btn-compact" onclick={onLogout}>{$t('settings.account.logout')}</button>
     </div>
   </section>
 
@@ -1835,7 +1842,7 @@
         class:active={activeSection === section.id}
         onclick={() => scrollToSection(section.id)}
       >
-        {section.label}
+        {$t(section.labelKey)}
       </button>
     {/each}
   </nav>
@@ -2092,11 +2099,26 @@
     <h3 class="section-title">{$t('settings.appearance.title')}</h3>
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.theme')}</span>
-      <Dropdown
-        value={theme}
-        options={Object.keys(themeMap)}
-        onchange={handleThemeChange}
-      />
+      <div class="theme-selector">
+        <button
+          class="theme-filter-btn"
+          onclick={cycleThemeFilter}
+          title={themeFilter === 'all' ? 'All themes' : themeFilter === 'dark' ? 'Dark themes' : 'Light themes'}
+        >
+          {#if themeFilter === 'all'}
+            <SunMoon size={16} />
+          {:else if themeFilter === 'dark'}
+            <Moon size={16} />
+          {:else}
+            <Sun size={16} />
+          {/if}
+        </button>
+        <Dropdown
+          value={theme}
+          options={filteredThemeOptions}
+          onchange={handleThemeChange}
+        />
+      </div>
     </div>
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.language')}</span>
@@ -2157,54 +2179,64 @@
 
 
   <!-- Offline Library Section -->
-  <section class="section" bind:this={downloadsSection}>
-    <h3 class="section-title">{$t('settings.offlineLibrary.title')}</h3>
-    <p class="section-note">{$t('settings.offlineLibrary.disclaimer')}</p>
-    <div class="setting-row">
-      <span class="setting-label">{$t('settings.offlineLibrary.cachedTracks')}</span>
-      <span class="setting-value">
-        {#if downloadStats}
-          {downloadStats.readyTracks} tracks ({formatBytes(downloadStats.totalSizeBytes)})
-        {:else}
-          Loading...
-        {/if}
-      </span>
-    </div>
-    <div class="setting-row">
-      <div class="setting-with-description">
-        <span class="setting-label">Repair Offline Library</span>
-        <span class="setting-description">Fix offline markers lost during library scans</span>
+  <section class="section collapsible-section" bind:this={downloadsSection}>
+    <button class="section-title-btn" onclick={() => offlineLibraryCollapsed = !offlineLibraryCollapsed}>
+      <h3 class="section-title">{$t('settings.offlineLibrary.title')}</h3>
+      <span class="section-summary">Cached tracks for offline playback</span>
+      {#if offlineLibraryCollapsed}
+        <ChevronDown size={16} />
+      {:else}
+        <ChevronUp size={16} />
+      {/if}
+    </button>
+    {#if !offlineLibraryCollapsed}
+      <p class="section-note">{$t('settings.offlineLibrary.disclaimer')}</p>
+      <div class="setting-row">
+        <span class="setting-label">{$t('settings.offlineLibrary.cachedTracks')}</span>
+        <span class="setting-value">
+          {#if downloadStats}
+            {downloadStats.readyTracks} tracks ({formatBytes(downloadStats.totalSizeBytes)})
+          {:else}
+            Loading...
+          {/if}
+        </span>
       </div>
-      <button
-        class="clear-btn"
-        onclick={handleRepairDownloads}
-        disabled={isRepairingDownloads || !downloadStats || downloadStats.readyTracks === 0}
-      >
-        {isRepairingDownloads ? 'Repairing...' : 'Repair'}
-      </button>
-    </div>
-    <div class="setting-row">
-      <span class="setting-label">Clear Offline Library</span>
-      <button
-        class="clear-btn"
-        onclick={handleClearDownloads}
-        disabled={isClearingDownloads || !downloadStats || downloadStats.readyTracks === 0}
-      >
-        {isClearingDownloads ? 'Clearing...' : 'Clear All'}
-      </button>
-    </div>
-    <div class="setting-row last">
-      <div class="setting-with-description">
-        <span class="setting-label">Manage Offline Cache</span>
-        <span class="setting-description">Open the cache folder in your file manager</span>
+      <div class="setting-row">
+        <div class="setting-with-description">
+          <span class="setting-label">Repair Offline Library</span>
+          <span class="setting-description">Fix offline markers lost during library scans</span>
+        </div>
+        <button
+          class="clear-btn"
+          onclick={handleRepairDownloads}
+          disabled={isRepairingDownloads || !downloadStats || downloadStats.readyTracks === 0}
+        >
+          {isRepairingDownloads ? 'Repairing...' : 'Repair'}
+        </button>
       </div>
-      <button
-        class="clear-btn"
-        onclick={handleOpenCacheFolder}
-      >
-        Open Folder
-      </button>
-    </div>
+      <div class="setting-row">
+        <span class="setting-label">Clear Offline Library</span>
+        <button
+          class="clear-btn"
+          onclick={handleClearDownloads}
+          disabled={isClearingDownloads || !downloadStats || downloadStats.readyTracks === 0}
+        >
+          {isClearingDownloads ? 'Clearing...' : 'Clear All'}
+        </button>
+      </div>
+      <div class="setting-row last">
+        <div class="setting-with-description">
+          <span class="setting-label">Manage Offline Cache</span>
+          <span class="setting-description">Open the cache folder in your file manager</span>
+        </div>
+        <button
+          class="clear-btn"
+          onclick={handleOpenCacheFolder}
+        >
+          Open Folder
+        </button>
+      </div>
+    {/if}
   </section>
 
   <!-- Library Section -->
@@ -2463,8 +2495,17 @@
   {/if}
 
   <!-- Storage Section (Memory Cache) -->
-  <section class="section" bind:this={storageSection}>
-    <h3 class="section-title">{$t('settings.storage.title')}</h3>
+  <section class="section collapsible-section" bind:this={storageSection}>
+    <button class="section-title-btn" onclick={() => storageCollapsed = !storageCollapsed}>
+      <h3 class="section-title">{$t('settings.storage.title')}</h3>
+      <span class="section-summary">Queue, lyrics, artwork, and metadata caches</span>
+      {#if storageCollapsed}
+        <ChevronDown size={16} />
+      {:else}
+        <ChevronUp size={16} />
+      {/if}
+    </button>
+    {#if !storageCollapsed}
     <p class="section-note">{$t('settings.storage.queueCacheNote')}</p>
     <div class="setting-row">
       <div class="setting-info">
@@ -2595,6 +2636,7 @@
         {isClearingAllCaches ? $t('settings.storage.clearing') : 'Clear All'}
       </button>
     </div>
+    {/if}
   </section>
 
   <!-- Flatpak Section (only shown when running in Flatpak) -->
@@ -2844,66 +2886,114 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     line-height: 1.4;
   }
 
-  .account-card {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    padding: 16px 0;
+  /* Compact Account Section */
+  .account-section {
+    padding-bottom: 8px;
   }
 
-  .avatar {
-    width: 72px;
-    height: 72px;
+  .account-card-compact {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+  }
+
+  .avatar-small {
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
     background-color: var(--accent-primary);
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
-    font-size: 24px;
+    font-size: 14px;
     font-weight: 600;
+    flex-shrink: 0;
   }
 
-  .account-info {
+  .account-info-compact {
     flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
   }
 
-  .username {
-    font-size: 18px;
-    font-weight: 600;
+  .username-compact {
+    font-size: 14px;
+    font-weight: 500;
     color: var(--text-primary);
   }
 
-  .email {
-    font-size: 14px;
-    color: var(--text-muted);
-  }
-
-  .subscription {
-    font-size: 14px;
+  .subscription-badge {
+    font-size: 11px;
+    font-weight: 500;
     color: var(--accent-primary);
+    background: var(--alpha-10);
+    padding: 2px 8px;
+    border-radius: 10px;
   }
 
-  .subscription-until {
-    font-size: 12px;
+  .valid-until {
+    font-size: 11px;
     color: var(--text-muted);
-    margin-top: 2px;
   }
 
-  .logout-btn {
-    padding: 8px 24px;
-    border-radius: 8px;
-    border: 1px solid #ff6b6b;
+  .logout-btn-compact {
+    padding: 6px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--danger);
     background: none;
-    color: #ff6b6b;
-    font-size: 14px;
+    color: var(--danger);
+    font-size: 12px;
     font-weight: 500;
     cursor: pointer;
     transition: background-color 150ms ease;
+    flex-shrink: 0;
   }
 
-  .logout-btn:hover {
-    background-color: rgba(255, 107, 107, 0.1);
+  .logout-btn-compact:hover {
+    background-color: var(--danger-bg);
+  }
+
+  /* Collapsible sections */
+  .collapsible-section .section-title-btn {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    width: 100%;
+    padding: 0;
+    margin-bottom: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+
+  .collapsible-section .section-title-btn .section-title {
+    margin-bottom: 0;
+    flex-shrink: 0;
+  }
+
+  .section-summary {
+    flex: 1;
+    font-size: 12px;
+    color: var(--text-muted);
+    text-align: left;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .collapsible-section .section-title-btn :global(svg) {
+    flex-shrink: 0;
+    color: var(--text-muted);
+    transition: color 150ms ease;
+  }
+
+  .collapsible-section .section-title-btn:hover :global(svg) {
+    color: var(--text-primary);
   }
 
   .setting-row {
@@ -3478,6 +3568,32 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
 
   .copy-btn:hover {
     background: var(--accent-secondary);
+  }
+
+  /* Theme selector with filter button */
+  .theme-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .theme-filter-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 8px;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .theme-filter-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
 </style>

@@ -1154,6 +1154,63 @@
   --alpha-95: rgba(255, 255, 255, 0.95);
 }
 
+/* Kurosaki Theme (Light - inspired by Ichigo's inner world) */
+[data-theme="kurosaki"] {
+  /* Backgrounds */
+  --bg-primary: #fbf9f2;
+  --bg-secondary: #f3f0e8;
+  --bg-tertiary: #e8e2d4;
+  --bg-hover: #e1dac8;
+
+  /* Text */
+  --text-primary: #262424;
+  --text-secondary: #544d48;
+  --text-muted: #827d78;
+  --text-disabled: #b3ada7;
+
+  /* Accent and buttons */
+  --accent-primary: #d5be58;
+  --accent-hover: #e8ce66;
+  --accent-active: #b49f45;
+  --btn-primary-text: #fbf9f2;
+
+  /* Status colours */
+  --danger: #c0392b;
+  --danger-bg: rgba(192, 57, 43, 0.1);
+  --danger-border: rgba(192, 57, 43, 0.3);
+  --danger-hover: rgba(192, 57, 43, 0.2);
+  --warning: #d89b1c;
+  --warning-bg: rgba(216, 155, 28, 0.1);
+  --warning-border: rgba(216, 155, 28, 0.3);
+  --warning-hover: rgba(216, 155, 28, 0.2);
+
+  /* Borders */
+  --border-subtle: #e4dcb4;
+  --border-strong: #d1c7aa;
+
+  /* Alpha tokens (black-based for light theme) */
+  --alpha-4: rgba(0, 0, 0, 0.04);
+  --alpha-5: rgba(0, 0, 0, 0.05);
+  --alpha-6: rgba(0, 0, 0, 0.06);
+  --alpha-8: rgba(0, 0, 0, 0.08);
+  --alpha-10: rgba(0, 0, 0, 0.1);
+  --alpha-15: rgba(0, 0, 0, 0.15);
+  --alpha-18: rgba(0, 0, 0, 0.18);
+  --alpha-20: rgba(0, 0, 0, 0.2);
+  --alpha-25: rgba(0, 0, 0, 0.25);
+  --alpha-30: rgba(0, 0, 0, 0.3);
+  --alpha-35: rgba(0, 0, 0, 0.35);
+  --alpha-40: rgba(0, 0, 0, 0.4);
+  --alpha-45: rgba(0, 0, 0, 0.45);
+  --alpha-50: rgba(0, 0, 0, 0.5);
+  --alpha-60: rgba(0, 0, 0, 0.6);
+  --alpha-70: rgba(0, 0, 0, 0.7);
+  --alpha-80: rgba(0, 0, 0, 0.8);
+  --alpha-85: rgba(0, 0, 0, 0.85);
+  --alpha-90: rgba(0, 0, 0, 0.9);
+  --alpha-95: rgba(0, 0, 0, 0.95);
+}
+
 * {
   margin: 0;
   padding: 0;
