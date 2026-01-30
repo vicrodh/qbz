@@ -1,6 +1,7 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus, X } from 'lucide-svelte';
+  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus, X, User, Disc, Music } from 'lucide-svelte';
+  import type { FavoritesPreferences } from '$lib/types';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import NavigationItem from './NavigationItem.svelte';
@@ -102,6 +103,12 @@
   let playlistsLoading = $state(false);
   let playlistsCollapsed = $state(false);
   let localLibraryCollapsed = $state(false);
+
+  // Favorites section state
+  let favoritesExpanded = $state(false);
+  let favoritesTabOrder = $state<string[]>(['tracks', 'albums', 'artists']);
+  let showFavoritesMenu = $state(false);
+  let favoritesMenuPos = $state({ x: 0, y: 0 });
 
   // Sidebar search state - synced with SearchView
   let sidebarSearchQuery = $state(getSearchQuery());
@@ -699,12 +706,23 @@
     }
   });
 
+  async function loadFavoritesPreferences() {
+    try {
+      const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      // Filter out 'playlists' from tab order for sidebar display
+      favoritesTabOrder = (prefs.tab_order || ['tracks', 'albums', 'artists']).filter(t => t !== 'playlists');
+    } catch (err) {
+      console.debug('[Sidebar] Failed to load favorites preferences:', err);
+    }
+  }
+
   onMount(() => {
     loadSortPreference();
     loadUserPlaylists();
     loadPlaylistSettings();
     loadLocalTrackCounts();
     loadFolders(); // Load playlist folders
+    loadFavoritesPreferences(); // Load favorites tab order
 
     // Subscribe to offline state changes
     const unsubscribeOffline = subscribeOffline(() => {
@@ -918,6 +936,12 @@
         closeFolderPopover();
       }
     }
+    if (showFavoritesMenu) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.favorites-popover') && !target.closest('.favorites-section .nav-item')) {
+        showFavoritesMenu = false;
+      }
+    }
   }
 </script>
 
@@ -977,17 +1001,96 @@
       </NavigationItem>
     </nav>
 
-    <!-- Favorites Section (standalone) -->
-    <nav class="nav-section">
-      <NavigationItem
-        label={$t('nav.favorites')}
-        active={activeView.startsWith('favorites-')}
-        onclick={() => handleViewChange('favorites')}
-        showLabel={isExpanded}
-      >
-        {#snippet icon()}<Heart size={14} />{/snippet}
-      </NavigationItem>
+    <!-- Favorites Section (collapsible) -->
+    <nav class="nav-section favorites-section">
+      {#if isExpanded}
+        <button
+          class="nav-item favorites-header"
+          class:active={activeView.startsWith('favorites-')}
+          onclick={() => handleViewChange('favorites')}
+        >
+          <div class="icon-container">
+            <Heart size={14} />
+          </div>
+          <span class="label">{$t('nav.favorites')}</span>
+          <button
+            class="favorites-chevron"
+            class:expanded={favoritesExpanded}
+            onclick={(e) => { e.stopPropagation(); favoritesExpanded = !favoritesExpanded; }}
+            title={favoritesExpanded ? 'Collapse' : 'Expand'}
+          >
+            <ChevronRight size={12} />
+          </button>
+        </button>
+        {#if favoritesExpanded}
+          <div class="favorites-subitems">
+            {#each favoritesTabOrder as tab}
+              <button
+                class="nav-item favorites-subitem"
+                class:active={activeView === `favorites-${tab}`}
+                onclick={() => handleViewChange(`favorites-${tab}`)}
+              >
+                <div class="icon-container">
+                  {#if tab === 'artists'}
+                    <User size={12} />
+                  {:else if tab === 'albums'}
+                    <Disc size={12} />
+                  {:else if tab === 'tracks'}
+                    <Music size={12} />
+                  {/if}
+                </div>
+                <span class="label">{$t(`favorites.${tab}`)}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+      {:else}
+        <!-- Collapsed sidebar: show heart with menu on click -->
+        <button
+          class="nav-item"
+          class:active={activeView.startsWith('favorites-')}
+          onclick={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            favoritesMenuPos = { x: rect.right + 8, y: rect.top };
+            showFavoritesMenu = !showFavoritesMenu;
+          }}
+          title={$t('nav.favorites')}
+        >
+          <div class="icon-container">
+            <Heart size={14} />
+          </div>
+        </button>
+      {/if}
     </nav>
+
+    <!-- Favorites menu popover (when sidebar collapsed) -->
+    {#if showFavoritesMenu && !isExpanded}
+      <div
+        class="favorites-popover"
+        style="left: {favoritesMenuPos.x}px; top: {favoritesMenuPos.y}px;"
+      >
+        <button class="popover-item" onclick={() => { handleViewChange('favorites'); showFavoritesMenu = false; }}>
+          <Heart size={14} />
+          <span>{$t('favorites.title')}</span>
+        </button>
+        <div class="popover-divider"></div>
+        {#each favoritesTabOrder as tab}
+          <button
+            class="popover-item"
+            onclick={() => { handleViewChange(`favorites-${tab}`); showFavoritesMenu = false; }}
+          >
+            {#if tab === 'artists'}
+              <User size={14} />
+            {:else if tab === 'albums'}
+              <Disc size={14} />
+            {:else if tab === 'tracks'}
+              <Music size={14} />
+            {/if}
+            <span>{$t(`favorites.${tab}`)}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
 
     <!-- Playlists Section (hidden in offline mode) -->
     {#if !isOffline}
@@ -2122,5 +2225,103 @@
     font-size: 12px;
     color: var(--text-muted);
     text-align: center;
+  }
+
+  /* Favorites Section */
+  .favorites-section {
+    position: relative;
+  }
+
+  .favorites-header {
+    position: relative;
+    padding-right: 28px;
+  }
+
+  .favorites-chevron {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    background: transparent;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    color: var(--text-muted);
+    transition: transform 150ms ease, color 150ms ease, background 150ms ease;
+  }
+
+  .favorites-chevron:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .favorites-chevron.expanded {
+    transform: translateY(-50%) rotate(90deg);
+  }
+
+  .favorites-subitems {
+    display: flex;
+    flex-direction: column;
+    padding-left: 12px;
+  }
+
+  .favorites-subitem {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .favorites-subitem .icon-container {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* Favorites Popover (collapsed sidebar) */
+  .favorites-popover {
+    position: fixed;
+    z-index: 9999;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    padding: 6px;
+    min-width: 160px;
+    animation: fade-in 150ms ease;
+  }
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .popover-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 150ms ease;
+  }
+
+  .popover-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .popover-divider {
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 6px 0;
   }
 </style>
