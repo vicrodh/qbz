@@ -291,8 +291,7 @@
 
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
-  import ExpandedPlayer from '$lib/components/ExpandedPlayer.svelte';
-  import FocusMode from '$lib/components/FocusMode.svelte';
+  import { ImmersivePlayer } from '$lib/components/immersive';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import PlaylistImportModal from '$lib/components/PlaylistImportModal.svelte';
   import TrackInfoModal from '$lib/components/TrackInfoModal.svelte';
@@ -3065,20 +3064,22 @@
       {isPlaying}
     />
 
-    <!-- Expanded Player -->
+    <!-- Immersive Player (replaces ExpandedPlayer + FocusMode) -->
     {#if currentTrack}
-      <ExpandedPlayer
-        isOpen={isFullScreenOpen}
-        onClose={closeFullScreen}
+      <ImmersivePlayer
+        isOpen={isFullScreenOpen || isFocusModeOpen}
+        onClose={() => {
+          if (isFullScreenOpen) closeFullScreen();
+          if (isFocusModeOpen) closeFocusMode();
+        }}
         artwork={currentTrack.artwork}
         trackTitle={currentTrack.title}
         artist={currentTrack.artist}
         album={currentTrack.album}
+        trackId={currentTrack.id}
         quality={currentTrack.quality}
-        qualityLevel={currentTrack.quality.includes('24') ? 5 : 3}
         bitDepth={currentTrack.bitDepth}
         samplingRate={currentTrack.samplingRate}
-        format={currentTrack.format}
         {isPlaying}
         onTogglePlay={togglePlay}
         onSkipBack={handleSkipBack}
@@ -3096,48 +3097,18 @@
         onToggleFavorite={toggleFavorite}
         onOpenQueue={() => {
           closeFullScreen();
+          closeFocusMode();
           toggleQueue();
         }}
-        onOpenFocusMode={() => {
-          closeFullScreen();
-          openFocusMode();
-        }}
-        onCast={openCastPicker}
-        {isCastConnected}
-        onContextClick={handleContextNavigation}
         lyricsLines={lyricsLines.map(l => ({ text: l.text }))}
         lyricsActiveIndex={lyricsActiveIndex}
         lyricsActiveProgress={lyricsActiveProgress}
         lyricsSynced={lyricsIsSynced}
         lyricsLoading={lyricsStatus === 'loading'}
         lyricsError={lyricsStatus === 'error' ? lyricsError : (lyricsStatus === 'not_found' ? 'No lyrics found' : null)}
-      />
-    {/if}
-
-    <!-- Focus Mode -->
-    {#if currentTrack}
-      <FocusMode
-        isOpen={isFocusModeOpen}
-        onClose={closeFocusMode}
-        artwork={currentTrack.artwork}
-        trackTitle={currentTrack.title}
-        artist={currentTrack.artist}
-        {isPlaying}
-        onTogglePlay={togglePlay}
-        onSkipBack={handleSkipBack}
-        onSkipForward={handleSkipForward}
-        {currentTime}
-        {duration}
-        onSeek={handleSeek}
-        {volume}
-        onVolumeChange={handleVolumeChange}
-        lyricsLines={lyricsLines.map(l => ({ text: l.text }))}
-        lyricsActiveIndex={lyricsActiveIndex}
-        lyricsActiveProgress={lyricsActiveProgress}
-        lyricsSynced={lyricsIsSynced}
-        lyricsLoading={lyricsStatus === 'loading'}
-        lyricsError={lyricsStatus === 'error' ? lyricsError : (lyricsStatus === 'not_found' ? 'No lyrics found' : null)}
-        onContextClick={handleContextNavigation}
+        enableCredits={true}
+        enableSuggestions={true}
+        enableVisualizer={false}
       />
     {/if}
 
