@@ -11,6 +11,9 @@
   import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { normalizeFavoritesTabOrder } from '$lib/utils/favorites';
+  import { syncCache as syncTrackCache } from '$lib/stores/favoritesStore';
+  import { syncCache as syncAlbumCache } from '$lib/stores/albumFavoritesStore';
+  import { syncCache as syncArtistCache } from '$lib/stores/artistFavoritesStore';
   import type { FavoritesPreferences } from '$lib/types';
 
   interface FavoriteAlbum {
@@ -490,11 +493,20 @@
 
       if (type === 'tracks') {
         favoriteTracks = items as FavoriteTrack[];
+        // Sync to local cache for other views
+        const trackIds = favoriteTracks.map(t => t.id);
+        void syncTrackCache(trackIds);
       } else if (type === 'albums') {
         favoriteAlbums = items as FavoriteAlbum[];
         await loadAllAlbumOfflineCacheStatuses(favoriteAlbums);
+        // Sync to local cache for other views
+        const albumIds = favoriteAlbums.map(a => a.id);
+        void syncAlbumCache(albumIds);
       } else if (type === 'artists') {
         favoriteArtists = items as FavoriteArtist[];
+        // Sync to local cache for other views
+        const artistIds = favoriteArtists.map(a => a.id);
+        void syncArtistCache(artistIds);
       }
     } catch (err) {
       console.error(`Failed to load ${type} favorites:`, err);

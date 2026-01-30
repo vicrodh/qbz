@@ -190,6 +190,9 @@ pub fn run() {
     // Initialize favorites preferences state
     let favorites_prefs_state = config::favorites_preferences::FavoritesPreferencesState::new()
         .expect("Failed to initialize favorites preferences");
+    // Initialize favorites cache state (local persistence for favorite IDs)
+    let favorites_cache_state = config::favorites_cache::FavoritesCacheState::new()
+        .expect("Failed to initialize favorites cache");
     // Initialize tray settings state
     let tray_settings_state = config::tray_settings::TraySettingsState::new()
         .expect("Failed to initialize tray settings");
@@ -437,6 +440,7 @@ pub fn run() {
         .manage(offline_state)
         .manage(playback_prefs_state)
         .manage(favorites_prefs_state)
+        .manage(favorites_cache_state)
         .manage(tray_settings_state)
         .manage(updates_state)
         .manage(musicbrainz_state)
@@ -775,6 +779,20 @@ pub fn run() {
             config::playback_preferences::set_show_context_icon,
             config::favorites_preferences::get_favorites_preferences,
             config::favorites_preferences::save_favorites_preferences,
+            // Favorites cache commands (local persistence)
+            config::favorites_cache::get_cached_favorite_tracks,
+            config::favorites_cache::get_cached_favorite_albums,
+            config::favorites_cache::get_cached_favorite_artists,
+            config::favorites_cache::cache_favorite_track,
+            config::favorites_cache::uncache_favorite_track,
+            config::favorites_cache::cache_favorite_album,
+            config::favorites_cache::uncache_favorite_album,
+            config::favorites_cache::cache_favorite_artist,
+            config::favorites_cache::uncache_favorite_artist,
+            config::favorites_cache::sync_cached_favorite_tracks,
+            config::favorites_cache::sync_cached_favorite_albums,
+            config::favorites_cache::sync_cached_favorite_artists,
+            config::favorites_cache::clear_favorites_cache,
             // Updates commands
             updates::get_update_preferences,
             updates::set_update_check_on_launch,

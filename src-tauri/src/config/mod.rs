@@ -13,6 +13,7 @@ pub mod audio_settings;
 pub mod download_settings;
 pub mod playback_preferences;
 pub mod favorites_preferences;
+pub mod favorites_cache;
 pub mod subscription_state;
 pub mod tray_settings;
 
@@ -64,4 +65,21 @@ pub use tray_settings::{
     set_enable_tray,
     set_minimize_to_tray,
     set_close_to_tray,
+};
+
+pub use favorites_cache::{
+    FavoritesCacheState,
+    get_cached_favorite_tracks,
+    get_cached_favorite_albums,
+    get_cached_favorite_artists,
+    cache_favorite_track,
+    uncache_favorite_track,
+    cache_favorite_album,
+    uncache_favorite_album,
+    cache_favorite_artist,
+    uncache_favorite_artist,
+    sync_cached_favorite_tracks,
+    sync_cached_favorite_albums,
+    sync_cached_favorite_artists,
+    clear_favorites_cache,
 };

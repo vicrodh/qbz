@@ -2,7 +2,12 @@
  * Favorites Store
  *
  * Centralized store for tracking favorite tracks.
- * Components can check if a track is favorite and toggle status without prop drilling.
+ * Uses local SQLite persistence for instant UI updates.
+ *
+ * Sync strategy:
+ * - On login: Fetch from Qobuz API → sync to local cache → populate store
+ * - On toggle: API call first → on success → update local cache → notify UI
+ * - UI reads from in-memory store (backed by local cache)
  */
 
 import { invoke } from '@tauri-apps/api/core';
@@ -60,39 +65,90 @@ export function isFavoritesLoaded(): boolean {
 }
 
 /**
- * Load favorites from backend (call once on app init)
+ * Load favorites from local cache first, then sync from API
+ * Call once on app init/login
  */
 export async function loadFavorites(): Promise<void> {
-  if (isLoading || isLoaded) return;
+  if (isLoading) return;
 
   isLoading = true;
   try {
-    const response = await invoke<{ tracks?: { items?: Array<{ id: number }> } }>('get_favorites', {
-      favType: 'track',
-      limit: 500
-    });
-
-    // Defensive: handle missing tracks or items
-    if (response?.tracks?.items) {
-      favoriteTrackIds = new Set(response.tracks.items.map(t => t.id));
-    } else {
-      // No favorites or unexpected response structure
-      favoriteTrackIds = new Set();
+    // Step 1: Load from local cache for instant UI (if available)
+    try {
+      const cachedIds = await invoke<number[]>('get_cached_favorite_tracks');
+      if (cachedIds.length > 0) {
+        favoriteTrackIds = new Set(cachedIds);
+        isLoaded = true;
+        notifyListeners();
+        console.log(`[Favorites] Loaded ${cachedIds.length} tracks from local cache`);
+      }
+    } catch (cacheErr) {
+      console.debug('[Favorites] No local cache available:', cacheErr);
     }
 
-    isLoaded = true;
-    notifyListeners();
+    // Step 2: Fetch from API and sync to local cache
+    await syncFromApi();
+
   } catch (err) {
-    console.error('Failed to load favorites:', err);
-    // On error, initialize as empty set
-    favoriteTrackIds = new Set();
+    console.error('[Favorites] Failed to load favorites:', err);
+    // If no cache was loaded, initialize as empty
+    if (!isLoaded) {
+      favoriteTrackIds = new Set();
+      isLoaded = true;
+      notifyListeners();
+    }
   } finally {
     isLoading = false;
   }
 }
 
 /**
+ * Sync favorites from Qobuz API to local cache
+ * Called on login and when FavoritesView loads
+ */
+export async function syncFromApi(): Promise<void> {
+  try {
+    // Fetch all favorites from API (paginated)
+    const allTrackIds: number[] = [];
+    let offset = 0;
+    const limit = 500;
+
+    while (true) {
+      const response = await invoke<{ tracks?: { items?: Array<{ id: number }>; total?: number } }>('get_favorites', {
+        favType: 'tracks',
+        limit,
+        offset
+      });
+
+      const items = response?.tracks?.items ?? [];
+      if (items.length === 0) break;
+
+      allTrackIds.push(...items.map(t => t.id));
+      offset += items.length;
+
+      // Check if we've fetched all
+      if (items.length < limit) break;
+      if (response.tracks?.total && offset >= response.tracks.total) break;
+    }
+
+    // Sync to local cache
+    await invoke('sync_cached_favorite_tracks', { trackIds: allTrackIds });
+
+    // Update in-memory store
+    favoriteTrackIds = new Set(allTrackIds);
+    isLoaded = true;
+    notifyListeners();
+
+    console.log(`[Favorites] Synced ${allTrackIds.length} tracks from API`);
+  } catch (err) {
+    console.error('[Favorites] Failed to sync from API:', err);
+    throw err;
+  }
+}
+
+/**
  * Toggle favorite status for a track
+ * API call first → on success → update local cache → notify UI
  * Returns the new favorite state
  */
 export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
@@ -104,18 +160,19 @@ export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
   const wasFavorite = favoriteTrackIds.has(trackId);
   const newState = !wasFavorite;
 
-  // Optimistic update + mark as toggling
-  if (newState) {
-    favoriteTrackIds.add(trackId);
-  } else {
-    favoriteTrackIds.delete(trackId);
-  }
+  // Mark as toggling (UI shows loading state)
   togglingTrackIds.add(trackId);
   notifyListeners();
 
   try {
+    // Call API first - no optimistic update
     if (newState) {
       await invoke('add_favorite', { favType: 'track', itemId: String(trackId) });
+      // API succeeded - update local cache
+      await invoke('cache_favorite_track', { trackId });
+      // Update in-memory store
+      favoriteTrackIds.add(trackId);
+      // Log for recommendations
       void logRecoEvent({
         eventType: 'favorite',
         itemType: 'track',
@@ -123,16 +180,16 @@ export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
       });
     } else {
       await invoke('remove_favorite', { favType: 'track', itemId: String(trackId) });
+      // API succeeded - update local cache
+      await invoke('uncache_favorite_track', { trackId });
+      // Update in-memory store
+      favoriteTrackIds.delete(trackId);
     }
+
     return newState;
   } catch (err) {
-    // Rollback on error
-    if (newState) {
-      favoriteTrackIds.delete(trackId);
-    } else {
-      favoriteTrackIds.add(trackId);
-    }
-    console.error('Failed to toggle favorite:', err);
+    // API failed - no state change, just log error
+    console.error('[Favorites] Failed to toggle favorite:', err);
     return wasFavorite;
   } finally {
     // Always clear toggling state
@@ -159,32 +216,50 @@ export async function removeTrackFavorite(trackId: number): Promise<boolean> {
 }
 
 /**
- * Manually add a track ID to the local set (for when we add favorites elsewhere)
+ * Sync local cache from an array of track IDs
+ * Used by FavoritesView after fetching from API
  */
-export function markAsFavorite(trackId: number): void {
-  if (!favoriteTrackIds.has(trackId)) {
-    favoriteTrackIds.add(trackId);
+export async function syncCache(trackIds: number[]): Promise<void> {
+  try {
+    await invoke('sync_cached_favorite_tracks', { trackIds });
+    favoriteTrackIds = new Set(trackIds);
     notifyListeners();
+  } catch (err) {
+    console.error('[Favorites] Failed to sync cache:', err);
   }
 }
 
 /**
- * Manually remove a track ID from the local set
+ * Reset store (for logout)
  */
-export function unmarkAsFavorite(trackId: number): void {
-  if (favoriteTrackIds.has(trackId)) {
-    favoriteTrackIds.delete(trackId);
-    notifyListeners();
+export async function reset(): Promise<void> {
+  try {
+    await invoke('clear_favorites_cache');
+  } catch (err) {
+    console.debug('[Favorites] Failed to clear cache:', err);
   }
-}
-
-/**
- * Reset store (for testing or logout)
- */
-export function reset(): void {
   favoriteTrackIds = new Set();
   togglingTrackIds = new Set();
   isLoaded = false;
   isLoading = false;
   notifyListeners();
+}
+
+// Legacy functions for backwards compatibility
+export function markAsFavorite(trackId: number): void {
+  if (!favoriteTrackIds.has(trackId)) {
+    favoriteTrackIds.add(trackId);
+    // Also update cache
+    invoke('cache_favorite_track', { trackId }).catch(() => {});
+    notifyListeners();
+  }
+}
+
+export function unmarkAsFavorite(trackId: number): void {
+  if (favoriteTrackIds.has(trackId)) {
+    favoriteTrackIds.delete(trackId);
+    // Also update cache
+    invoke('uncache_favorite_track', { trackId }).catch(() => {});
+    notifyListeners();
+  }
 }
