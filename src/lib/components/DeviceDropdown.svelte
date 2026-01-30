@@ -62,7 +62,9 @@
           defaults.push(device);
         } else if (device.id === 'default' || device.isDefault) {
           defaults.push(device);
-        } else if (device.id.startsWith('hw:')) {
+        } else if (device.id.startsWith('hw:') || device.id.startsWith('iec958:')) {
+          // hw: = direct hardware access, iec958: = S/PDIF digital output
+          // Both are bit-perfect capable
           bitPerfect.push(device);
         } else if (device.id.startsWith('plughw:')) {
           pluginHw.push(device);
@@ -72,7 +74,7 @@
       }
 
       if (defaults.length > 0) groups.push({ key: 'defaults', label: 'Defaults', devices: defaults });
-      if (bitPerfect.length > 0) groups.push({ key: 'bitperfect', label: 'Bit-perfect (Auto-detected)', devices: bitPerfect });
+      if (bitPerfect.length > 0) groups.push({ key: 'bitperfect', label: 'Bit-perfect (Hardware / Digital)', devices: bitPerfect });
       if (pluginHw.length > 0) groups.push({ key: 'pluginhw', label: 'Plugin Hardware', devices: pluginHw });
       if (others.length > 0) groups.push({ key: 'others', label: 'Other Outputs', devices: others });
     } else {
