@@ -21,7 +21,7 @@
 </script>
 
 <div class="immersive-background" class:loading={isLoading}>
-  <!-- Full artwork as background -->
+  <!-- Heavily blurred artwork - just color blobs -->
   {#if artwork}
     <img
       src={artwork}
@@ -32,11 +32,8 @@
     />
   {/if}
 
-  <!-- Vignette overlay - strong fade to black at edges -->
-  <div class="vignette-overlay"></div>
-
-  <!-- Gradient overlay for text readability -->
-  <div class="gradient-overlay"></div>
+  <!-- Dark overlay for better contrast -->
+  <div class="dark-overlay"></div>
 </div>
 
 <style>
@@ -50,50 +47,27 @@
 
   .background-image {
     position: absolute;
-    /* Scale larger than viewport to hide edges */
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%) scale(1.15);
-    min-width: 115%;
-    min-height: 115%;
-    width: auto;
-    height: auto;
+    /* Extend beyond viewport to hide blur edges */
+    inset: -100px;
+    width: calc(100% + 200px);
+    height: calc(100% + 200px);
     object-fit: cover;
     object-position: center;
-    transition: opacity 400ms ease-out;
-    /* Slight desaturation for better text contrast */
-    filter: saturate(0.85) brightness(0.9);
+    /* Heavy blur - should be unrecognizable, just color blobs */
+    filter: blur(120px) saturate(1.3) brightness(0.6);
+    transform: scale(1.2);
+    transition: opacity 500ms ease-out;
   }
 
   .loading .background-image {
     opacity: 0;
   }
 
-  /* Strong vignette - fades to black at edges */
-  .vignette-overlay {
+  /* Subtle dark overlay */
+  .dark-overlay {
     position: absolute;
     inset: 0;
-    background: radial-gradient(
-      ellipse 80% 80% at 50% 45%,
-      transparent 0%,
-      transparent 30%,
-      rgba(0, 0, 0, 0.4) 60%,
-      rgba(0, 0, 0, 0.85) 100%
-    );
-    pointer-events: none;
-  }
-
-  /* Gradient for text areas - darker where text appears */
-  .gradient-overlay {
-    position: absolute;
-    inset: 0;
-    background:
-      /* Top gradient for header */
-      linear-gradient(to bottom, rgba(0, 0, 0, 0.5) 0%, transparent 15%),
-      /* Bottom gradient for controls */
-      linear-gradient(to top, rgba(0, 0, 0, 0.7) 0%, transparent 25%),
-      /* Right side gradient for lyrics panel */
-      linear-gradient(to left, rgba(0, 0, 0, 0.4) 0%, transparent 40%);
+    background: rgba(0, 0, 0, 0.15);
     pointer-events: none;
   }
 </style>
