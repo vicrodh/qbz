@@ -40,11 +40,11 @@
   ].filter(tab => tab.enabled));
 
   const displayModes: { id: DisplayMode; icon: typeof Disc3; title: string }[] = [
-    { id: 'coverflow', icon: Disc3, title: 'Coverflow' },
-    { id: 'split', icon: LayoutGrid, title: 'Split View' },
-    { id: 'lyrics-focus', icon: MessageSquareText, title: 'Lyrics Focus' },
-    { id: 'queue-focus', icon: ListMusic, title: 'Queue Focus' },
-    { id: 'visualizer-focus', icon: BarChart3, title: 'Visualizer' },
+    { id: 'coverflow', icon: Disc3, title: 'Coverflow (1)' },
+    { id: 'split', icon: LayoutGrid, title: 'Split View (2)' },
+    { id: 'lyrics-focus', icon: MessageSquareText, title: 'Lyrics Focus (3)' },
+    { id: 'queue-focus', icon: ListMusic, title: 'Queue Focus (4)' },
+    { id: 'visualizer-focus', icon: BarChart3, title: 'Visualizer (5)' },
   ];
 
   // Only show tabs in split mode
@@ -127,7 +127,9 @@
     align-items: center;
     gap: 2px;
     padding: 4px;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
     border-radius: 10px;
   }
@@ -165,7 +167,9 @@
     align-items: center;
     gap: 4px;
     padding: 4px;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
     border-radius: 12px;
   }
@@ -209,7 +213,9 @@
     justify-content: center;
     width: 40px;
     height: 40px;
-    background: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
     border-radius: 50%;
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
