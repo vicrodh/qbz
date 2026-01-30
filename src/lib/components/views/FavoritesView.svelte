@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { onMount, tick } from 'svelte';
-  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library, CloudDownload } from 'lucide-svelte';
+  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library, CloudDownload, Shuffle, MoreHorizontal } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import QualityBadge from '../QualityBadge.svelte';
@@ -223,6 +223,7 @@
 
   let showArtistGroupMenu = $state(false);
   let artistGroupingEnabled = $state(false);
+  let showTracksContextMenu = $state(false);
   function resolveCustomIconSrc(path: string | null): string | null {
     if (!path) return null;
     if (path.startsWith('asset://') || path.startsWith('http://asset.localhost') || path.startsWith('https://asset.localhost')) {
@@ -896,10 +897,47 @@
     }
   }
 
+  async function handleShuffleAllTracks() {
+    if (filteredTracks.length === 0 || !onTrackPlay) return;
+
+    try {
+      // Shuffle the tracks
+      const shuffled = [...filteredTracks].sort(() => Math.random() - 0.5);
+      const queueTracks = buildFavoritesQueueTracks(shuffled);
+      await invoke('set_queue', { tracks: queueTracks, startIndex: 0 });
+      await setFavoritesContext(shuffled.map(t => t.id), 0);
+      onTrackPlay(buildDisplayTrack(shuffled[0], 0));
+    } catch (err) {
+      console.error('Failed to shuffle queue:', err);
+    }
+  }
+
+  async function handlePlayAllTracksNext() {
+    if (filteredTracks.length === 0) return;
+
+    try {
+      const queueTracks = buildFavoritesQueueTracks(filteredTracks);
+      await invoke('add_to_queue_next', { tracks: queueTracks });
+    } catch (err) {
+      console.error('Failed to add tracks next:', err);
+    }
+  }
+
+  async function handlePlayAllTracksLater() {
+    if (filteredTracks.length === 0) return;
+
+    try {
+      const queueTracks = buildFavoritesQueueTracks(filteredTracks);
+      await invoke('add_to_queue', { tracks: queueTracks });
+    } catch (err) {
+      console.error('Failed to add tracks to queue:', err);
+    }
+  }
+
 </script>
 
 <ViewTransition duration={200} distance={12} direction="down">
-<div class="favorites-view" bind:this={scrollContainer}>
+<div class="favorites-view" class:no-outer-scroll={activeTab === 'tracks' && !loading && filteredTracks.length > 0} bind:this={scrollContainer}>
   <!-- Header -->
   <div class="header">
     <div
@@ -1173,10 +1211,32 @@
     <!-- Actions (for tracks tab) -->
     {#if activeTab === 'tracks' && filteredTracks.length > 0}
       <div class="actions">
-        <button class="play-btn" onclick={handlePlayAllTracks}>
-          <Play size={16} fill="white" />
-          <span>Play All</span>
+        <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
+          <Play size={20} fill="currentColor" color="currentColor" />
         </button>
+        <button class="action-btn-circle" onclick={handleShuffleAllTracks} title="Shuffle">
+          <Shuffle size={18} />
+        </button>
+        <div class="context-menu-wrapper">
+          <button
+            class="action-btn-circle"
+            onclick={() => showTracksContextMenu = !showTracksContextMenu}
+            title="More options"
+          >
+            <MoreHorizontal size={18} />
+          </button>
+          {#if showTracksContextMenu}
+            <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
+            <div class="context-menu">
+              <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
+                Play Next
+              </button>
+              <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
+                Add to Queue
+              </button>
+            </div>
+          {/if}
+        </div>
       </div>
     {/if}
 
@@ -1626,6 +1686,10 @@
     background: var(--text-muted);
   }
 
+  .favorites-view.no-outer-scroll {
+    overflow: hidden;
+  }
+
   .header {
     display: flex;
     align-items: center;
@@ -1972,23 +2036,45 @@
     gap: 12px;
   }
 
-  .play-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 24px;
-    background-color: var(--accent-primary);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 14px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background-color 150ms ease;
+  .context-menu-wrapper {
+    position: relative;
   }
 
-  .play-btn:hover {
-    background-color: var(--accent-hover);
+  .context-menu-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+  }
+
+  .context-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    min-width: 160px;
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 2px 0;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .context-menu-item {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .context-menu-item:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
   }
 
 
