@@ -1620,9 +1620,6 @@
         <div class="artist-two-column-layout">
           <!-- Left column: Artists list grouped A-Z -->
           <div class="artist-column">
-            <div class="artist-column-header">
-              <span class="artist-column-count">{filteredArtists.length} artists</span>
-            </div>
             <div class="artist-list-scroll">
               {#each groupedArtistsSidepanel as group (group.id)}
                 <div class="artist-list-group-header" id={group.id}>{group.key}</div>
@@ -2730,15 +2727,6 @@
     border-right: 1px solid var(--bg-tertiary);
     overflow: hidden;
     padding-left: 18px;
-  }
-
-  .artist-column-header {
-    padding: 8px 16px 8px 0;
-  }
-
-  .artist-column-count {
-    font-size: 12px;
-    color: var(--text-muted);
   }
 
   .artist-list-scroll {
