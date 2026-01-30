@@ -284,7 +284,7 @@
       <!-- Visualizer Focus: Full screen visualizer -->
       <div class="focus-panel">
         <div class="focus-panel-content visualizer-content">
-          <VisualizerPanel {isPlaying} />
+          <VisualizerPanel {isPlaying} {artwork} />
         </div>
       </div>
     {:else}
@@ -311,7 +311,7 @@
           {:else if activeTab === 'suggestions'}
             <SuggestionsPanel {trackId} {artistId} />
           {:else if activeTab === 'visualizer'}
-            <VisualizerPanel {isPlaying} />
+            <VisualizerPanel {isPlaying} {artwork} />
           {:else if activeTab === 'queue'}
             <QueuePanel
               tracks={queueTracks}
