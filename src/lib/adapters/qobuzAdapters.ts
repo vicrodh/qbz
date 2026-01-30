@@ -346,7 +346,8 @@ export function convertQobuzAlbum(album: QobuzAlbum): AlbumDetail {
       samplingRate: track.maximum_sampling_rate,
       albumId: album.id,
       artistId: track.performer?.id ?? album.artist?.id,
-      isrc: track.isrc
+      isrc: track.isrc,
+      streamable: track.streamable ?? true
     })) || [],
     upc: album.upc
   };

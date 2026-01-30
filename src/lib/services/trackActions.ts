@@ -27,6 +27,12 @@ function showToast(message: string, type: ToastType): void {
 
 export function buildQueueTrackFromQobuz(track: QobuzTrack): BackendQueueTrack {
   const artwork = track.album?.image?.large || track.album?.image?.thumbnail || track.album?.image?.small || '';
+
+  // Log if track is not streamable (for debugging unavailable tracks)
+  if (track.streamable === false) {
+    console.warn(`[Track] Non-streamable track: "${track.title}" by ${track.performer?.name} (ID: ${track.id})`);
+  }
+
   return {
     id: track.id,
     title: track.title,
@@ -39,7 +45,8 @@ export function buildQueueTrackFromQobuz(track: QobuzTrack): BackendQueueTrack {
     sample_rate: track.maximum_sampling_rate ?? null,
     is_local: false,
     album_id: track.album?.id || null,
-    artist_id: track.performer?.id ?? null
+    artist_id: track.performer?.id ?? null,
+    streamable: track.streamable ?? true
   };
 }
 
@@ -51,6 +58,11 @@ export function buildQueueTrackFromAlbumTrack(
   albumId?: string,
   artistId?: number
 ): BackendQueueTrack {
+  // Log if track is not streamable
+  if (track.streamable === false) {
+    console.warn(`[Track] Non-streamable track: "${track.title}" (ID: ${track.id})`);
+  }
+
   return {
     id: track.id,
     title: track.title,
@@ -63,11 +75,17 @@ export function buildQueueTrackFromAlbumTrack(
     sample_rate: track.samplingRate ?? null,
     is_local: false,
     album_id: track.albumId || albumId || null,
-    artist_id: track.artistId ?? artistId ?? null
+    artist_id: track.artistId ?? artistId ?? null,
+    streamable: track.streamable ?? true
   };
 }
 
 export function buildQueueTrackFromPlaylistTrack(track: PlaylistTrack): BackendQueueTrack {
+  // Log if track is not streamable
+  if (track.streamable === false) {
+    console.warn(`[Track] Non-streamable playlist track: "${track.title}" (ID: ${track.id})`);
+  }
+
   return {
     id: track.id,
     title: track.title,
@@ -80,7 +98,8 @@ export function buildQueueTrackFromPlaylistTrack(track: PlaylistTrack): BackendQ
     sample_rate: track.samplingRate ?? null,
     is_local: false,
     album_id: track.albumId || null,
-    artist_id: track.artistId ?? null
+    artist_id: track.artistId ?? null,
+    streamable: track.streamable ?? true
   };
 }
 
@@ -100,7 +119,8 @@ export function buildQueueTrackFromLocalTrack(track: LocalLibraryTrack): Backend
     sample_rate: track.sample_rate ?? null,
     is_local: true,
     album_id: null,  // Local tracks don't have Qobuz album IDs
-    artist_id: null  // Local tracks don't have Qobuz artist IDs
+    artist_id: null,  // Local tracks don't have Qobuz artist IDs
+    streamable: true  // Local tracks are always playable
   };
 }
 

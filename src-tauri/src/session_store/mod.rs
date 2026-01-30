@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+fn default_streamable() -> bool {
+    true
+}
+
 /// Represents a track in the persisted queue
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PersistedQueueTrack {
@@ -20,6 +24,8 @@ pub struct PersistedQueueTrack {
     pub is_local: bool,
     pub album_id: Option<String>,
     pub artist_id: Option<u64>,
+    #[serde(default = "default_streamable")]
+    pub streamable: bool,
 }
 
 /// Represents the full persisted session state
@@ -261,6 +267,7 @@ impl SessionStore {
                     is_local: row.get::<_, i64>(9).unwrap_or(0) != 0,
                     album_id: row.get(10)?,
                     artist_id: row.get::<_, Option<i64>>(11)?.map(|v| v as u64),
+                    streamable: true, // Default to true for persisted tracks
                 })
             })
             .map_err(|e| format!("Failed to query queue tracks: {}", e))?

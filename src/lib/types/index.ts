@@ -26,6 +26,8 @@ export interface QobuzTrack {
   };
   performer?: { id?: number; name: string };
   hires_streamable?: boolean;
+  /** Whether the track is streamable (false = removed/unavailable on Qobuz) */
+  streamable?: boolean;
   maximum_bit_depth?: number;
   maximum_sampling_rate?: number;
   isrc?: string;
@@ -153,6 +155,8 @@ export interface Track {
   albumId?: string;
   artistId?: number;
   isrc?: string;
+  /** Whether the track is streamable (false = unavailable on Qobuz) */
+  streamable?: boolean;
 }
 
 export interface AlbumDetail {
@@ -277,6 +281,8 @@ export interface PlaylistTrack {
   albumId?: string;
   artistId?: number;
   isrc?: string;
+  /** Whether the track is streamable (false = unavailable on Qobuz) */
+  streamable?: boolean;
 }
 
 /**

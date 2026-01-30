@@ -268,6 +268,14 @@ fn track_to_queue_track(track: &Track) -> QueueTrack {
     let album_id = track.album.as_ref().map(|a| a.id.clone());
     let artist_id = track.performer.as_ref().map(|p| p.id);
 
+    // Log if track is not streamable
+    if !track.streamable {
+        log::warn!(
+            "[Radio] Track not streamable: {} - {} (ID: {})",
+            artist, track.title, track.id
+        );
+    }
+
     QueueTrack {
         id: track.id,
         title: track.title.clone(),
@@ -281,6 +289,7 @@ fn track_to_queue_track(track: &Track) -> QueueTrack {
         is_local: false,
         album_id,
         artist_id,
+        streamable: track.streamable,
     }
 }
 

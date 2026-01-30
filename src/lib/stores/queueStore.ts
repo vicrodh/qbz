@@ -30,6 +30,8 @@ export interface BackendQueueTrack {
   is_local?: boolean;
   album_id?: string | null;
   artist_id?: number | null;
+  /** Whether the track is streamable on Qobuz (false = removed/unavailable) */
+  streamable?: boolean;
 }
 
 interface BackendQueueState {

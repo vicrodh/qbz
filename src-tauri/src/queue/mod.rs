@@ -30,6 +30,13 @@ pub struct QueueTrack {
     pub album_id: Option<String>,
     /// Artist ID for navigation (Qobuz artist ID)
     pub artist_id: Option<u64>,
+    /// Whether the track is streamable on Qobuz (false = removed/unavailable)
+    #[serde(default = "default_streamable")]
+    pub streamable: bool,
+}
+
+fn default_streamable() -> bool {
+    true // Default to true for backwards compatibility with existing queue data
 }
 
 /// Repeat mode options

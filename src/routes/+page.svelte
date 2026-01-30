@@ -1244,6 +1244,28 @@
   async function playQueueTrack(track: BackendQueueTrack, skippedIds = new Set<number>()) {
     const isLocal = isLocalTrack(track.id);
 
+    // DEBUG: Log track metadata from Qobuz
+    console.log('[DEBUG] Track metadata:', {
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      duration_secs: track.duration_secs,
+      bit_depth: track.bit_depth,
+      sample_rate: track.sample_rate,
+      hires: track.hires,
+      artwork_url: track.artwork_url,
+      album_id: track.album_id,
+      artist_id: track.artist_id,
+      streamable: track.streamable,
+      isLocal
+    });
+
+    // Warn if trying to play a non-streamable track
+    if (track.streamable === false && !isLocal) {
+      console.warn(`[Player] Attempting to play non-streamable track: "${track.title}" (ID: ${track.id})`);
+    }
+
     // In offline mode, check if track is available
     if (offlineStatus.isOffline && !isLocal) {
       const available = await isTrackAvailable(track);
