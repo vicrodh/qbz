@@ -48,7 +48,7 @@
     </div>
     {#if hasUpcoming && onClear}
       <button class="clear-btn" onclick={onClear}>
-        {$t('actions.clearQueue') || 'Clear'}
+        {$t('player.clearQueue') || 'Clear'}
       </button>
     {/if}
   </div>

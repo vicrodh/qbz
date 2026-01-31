@@ -2,7 +2,7 @@
   import { X, Disc3, LayoutGrid, Mic2, ListMusic, Music2, Info, Radio } from 'lucide-svelte';
   import { t } from '$lib/i18n';
 
-  export type ImmersiveTab = 'lyrics' | 'credits' | 'suggestions' | 'queue';
+  export type ImmersiveTab = 'lyrics' | 'trackInfo' | 'suggestions' | 'queue';
   export type DisplayMode = 'coverflow' | 'split' | 'lyrics-focus' | 'queue-focus';
 
   interface Props {
@@ -13,7 +13,7 @@
     onClose: () => void;
     visible?: boolean;
     hasLyrics?: boolean;
-    hasCredits?: boolean;
+    hasTrackInfo?: boolean;
     hasSuggestions?: boolean;
   }
 
@@ -25,13 +25,13 @@
     onClose,
     visible = true,
     hasLyrics = true,
-    hasCredits = true,
+    hasTrackInfo = true,
     hasSuggestions = true
   }: Props = $props();
 
   const tabs = $derived([
     { id: 'lyrics' as const, label: $t('player.lyrics'), icon: Music2, enabled: hasLyrics },
-    { id: 'credits' as const, label: $t('player.credits') || 'Credits', icon: Info, enabled: hasCredits },
+    { id: 'trackInfo' as const, label: $t('player.trackInfo') || 'Track Info', icon: Info, enabled: hasTrackInfo },
     { id: 'suggestions' as const, label: $t('player.suggestions') || 'Suggestions', icon: Radio, enabled: hasSuggestions },
     { id: 'queue' as const, label: $t('player.queue') || 'Queue', icon: ListMusic, enabled: true },
   ].filter(tab => tab.enabled));

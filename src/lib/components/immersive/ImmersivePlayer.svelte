@@ -5,7 +5,7 @@
   import ImmersiveHeader, { type ImmersiveTab, type DisplayMode } from './ImmersiveHeader.svelte';
   import ImmersiveControls from './ImmersiveControls.svelte';
   import LyricsPanel from './panels/LyricsPanel.svelte';
-  import CreditsPanel from './panels/CreditsPanel.svelte';
+  import TrackInfoPanel from './panels/TrackInfoPanel.svelte';
   import SuggestionsPanel from './panels/SuggestionsPanel.svelte';
   import QueuePanel from './panels/QueuePanel.svelte';
   import CoverflowPanel from './panels/CoverflowPanel.svelte';
@@ -177,9 +177,9 @@
       case 'L':
         if (displayMode === 'split') activeTab = 'lyrics';
         break;
-      case 'c':
-      case 'C':
-        if (displayMode === 'split' && enableCredits) activeTab = 'credits';
+      case 't':
+      case 'T':
+        if (displayMode === 'split' && enableCredits) activeTab = 'trackInfo';
         break;
       case 's':
       case 'S':
@@ -235,7 +235,7 @@
       {onClose}
       visible={showUI}
       hasLyrics={true}
-      hasCredits={enableCredits}
+      hasTrackInfo={enableCredits}
       hasSuggestions={enableSuggestions}
     />
 
@@ -292,8 +292,8 @@
               isLoading={lyricsLoading}
               error={lyricsError}
             />
-          {:else if activeTab === 'credits'}
-            <CreditsPanel {trackId} />
+          {:else if activeTab === 'trackInfo'}
+            <TrackInfoPanel {trackId} />
           {:else if activeTab === 'suggestions'}
             <SuggestionsPanel {trackId} {artistId} />
           {:else if activeTab === 'queue'}
