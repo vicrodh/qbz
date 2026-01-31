@@ -3086,6 +3086,7 @@
         artist={currentTrack.artist}
         album={currentTrack.album}
         trackId={currentTrack.id}
+        artistId={currentTrack.artistId}
         quality={currentTrack.quality}
         bitDepth={currentTrack.bitDepth}
         samplingRate={currentTrack.samplingRate}
