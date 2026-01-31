@@ -41,7 +41,7 @@
     </div>
   {:else if error}
     <div class="lyrics-state">
-      <span class="error-text">{error}</span>
+      <span class="no-lyrics">{$t('player.noLyrics') || 'No lyrics available'}</span>
     </div>
   {:else if hasLyrics && currentLine}
     {#key animationKey}
