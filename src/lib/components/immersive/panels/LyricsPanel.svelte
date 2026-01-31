@@ -106,10 +106,6 @@
     font-size: 14px;
   }
 
-  .error-text {
-    color: var(--alpha-40, rgba(255, 255, 255, 0.4));
-  }
-
   .no-lyrics {
     font-style: italic;
   }

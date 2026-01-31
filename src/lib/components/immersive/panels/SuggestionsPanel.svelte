@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { Loader2, Play, Radio, AlertCircle } from 'lucide-svelte';
+  import { Loader2, Play, Radio, AlertCircle, ListMusic } from 'lucide-svelte';
   import { t } from '$lib/i18n';
 
   interface Playlist {
@@ -32,11 +32,12 @@
     artistId?: number;
     artistName?: string;
     trackName?: string;
+    currentArtwork?: string;
     onPlayPlaylist?: (playlistId: number) => void;
     onPlayTrack?: (trackId: number) => void;
   }
 
-  let { trackId, artistId, artistName, trackName, onPlayPlaylist, onPlayTrack }: Props = $props();
+  let { trackId, artistId, artistName, trackName, currentArtwork, onPlayPlaylist, onPlayTrack }: Props = $props();
 
   // State
   let artistPlaylists = $state<Playlist[]>([]);
@@ -51,6 +52,32 @@
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  }
+
+  /**
+   * Normalize track title to detect duplicates (different remasters, editions, etc.)
+   * "Song Title (2023 Remaster)" -> "song title"
+   * "Song Title [Deluxe Edition]" -> "song title"
+   */
+  function normalizeTitle(title: string): string {
+    return title
+      .toLowerCase()
+      .replace(/\s*[\(\[][^\)\]]*(?:remaster|edition|version|mix|remix|live|mono|stereo|deluxe|bonus|anniversary).*?[\)\]]/gi, '')
+      .replace(/\s*-\s*(?:remaster|edition|version|mix|remix|live|mono|stereo|deluxe|bonus|anniversary).*$/gi, '')
+      .trim();
+  }
+
+  /**
+   * Dedupe tracks by normalized title, keeping the first occurrence
+   */
+  function dedupeByTitle(tracks: Track[]): Track[] {
+    const seen = new Set<string>();
+    return tracks.filter(track => {
+      const normalized = normalizeTitle(track.title);
+      if (seen.has(normalized)) return false;
+      seen.add(normalized);
+      return true;
+    });
   }
 
   // Load data when artistId changes
@@ -82,10 +109,10 @@
 
       // Extract tracks for recommendations
       if (artist.tracks_appears_on?.items) {
-        // Shuffle and take 10, excluding current track
-        const shuffled = artist.tracks_appears_on.items
-          .filter(t => t.id !== trackId)
-          .sort(() => Math.random() - 0.5);
+        // Filter current track, dedupe by title, shuffle, and take 10
+        const filtered = artist.tracks_appears_on.items.filter(t => t.id !== trackId);
+        const deduped = dedupeByTitle(filtered);
+        const shuffled = deduped.sort(() => Math.random() - 0.5);
         recommendedTracks = shuffled.slice(0, 10);
       } else {
         recommendedTracks = [];
@@ -99,6 +126,19 @@
       loading = false;
     }
   }
+
+  // Get unique artwork URLs for radio collage (from recommended tracks)
+  const radioCollageImages = $derived(() => {
+    const images: string[] = [];
+    if (currentArtwork) images.push(currentArtwork);
+    for (const track of recommendedTracks) {
+      if (track.album?.image?.large && !images.includes(track.album.image.large)) {
+        images.push(track.album.image.large);
+      }
+      if (images.length >= 4) break;
+    }
+    return images;
+  });
 
   async function startSongRadio() {
     if (!trackId || !artistId || loadingRadio) return;
@@ -158,11 +198,16 @@
               {#if playlist.images?.[0]}
                 <img src={playlist.images[0]} alt="" class="card-image" />
               {:else}
-                <div class="card-image-placeholder"></div>
+                <div class="card-image-placeholder">
+                  <ListMusic size={32} />
+                </div>
               {/if}
               <div class="card-content">
                 <span class="card-title">{playlist.name}</span>
-                <span class="card-subtitle">{playlist.tracks_count} tracks</span>
+                <span class="card-subtitle">
+                  <ListMusic size={10} />
+                  Playlist · {playlist.tracks_count} tracks
+                </span>
               </div>
               <div class="card-play">
                 <Play size={16} fill="currentColor" />
@@ -179,18 +224,41 @@
             title={$t('player.radioExperimental') || 'Song Radio - Experimental QBZ feature'}
           >
             <div class="card-badge qbz">
-              <span class="qbz-logo">Q</span>
+              <img src="/qbz-logo.svg" alt="QBZ" class="badge-icon qbz-icon" />
             </div>
-            <div class="card-icon-bg">
+            <div class="radio-collage">
               {#if loadingRadio}
-                <Loader2 size={32} class="spinner" />
+                <div class="collage-loading">
+                  <Loader2 size={32} class="spinner" />
+                </div>
               {:else}
-                <Radio size={32} />
+                {@const images = radioCollageImages()}
+                {#if images.length >= 4}
+                  <!-- Diamond/rotated collage layout -->
+                  <div class="collage-diamond">
+                    <img src={images[0]} alt="" class="diamond-img top" />
+                    <img src={images[1]} alt="" class="diamond-img left" />
+                    <img src={images[2]} alt="" class="diamond-img right" />
+                    <img src={images[3]} alt="" class="diamond-img bottom" />
+                  </div>
+                {:else if images.length > 0}
+                  <img src={images[0]} alt="" class="collage-single" />
+                  <div class="collage-radio-overlay">
+                    <Radio size={24} />
+                  </div>
+                {:else}
+                  <div class="card-icon-bg">
+                    <Radio size={32} />
+                  </div>
+                {/if}
               {/if}
             </div>
             <div class="card-content">
               <span class="card-title">{$t('player.songRadio') || 'Song Radio'}</span>
-              <span class="card-subtitle">{$t('player.basedOnTrack') || 'Based on this track'}</span>
+              <span class="card-subtitle">
+                <Radio size={10} />
+                {$t('player.basedOnTrack') || 'Based on this track'}
+              </span>
             </div>
             <div class="card-info" title={$t('player.radioExperimentalTooltip') || 'Radio is an experimental QBZ feature that generates a playlist based on the current track.'}>
               <AlertCircle size={14} />
@@ -391,6 +459,9 @@
   .card-subtitle {
     font-size: 11px;
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
+    display: flex;
+    align-items: center;
+    gap: 4px;
   }
 
   .card-play {
@@ -425,6 +496,94 @@
 
   .card-info:hover {
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
+  }
+
+  /* QBZ Badge Icon */
+  .qbz-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+  }
+
+  /* Radio Collage */
+  .radio-collage {
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+    background: var(--alpha-10, rgba(255, 255, 255, 0.1));
+  }
+
+  .collage-loading {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--alpha-40, rgba(255, 255, 255, 0.4));
+  }
+
+  .collage-single {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: brightness(0.7);
+  }
+
+  .collage-radio-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    background: rgba(0, 0, 0, 0.3);
+  }
+
+  /* Diamond collage - rotated squares pattern */
+  .collage-diamond {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .diamond-img {
+    position: absolute;
+    width: 70%;
+    height: 70%;
+    object-fit: cover;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+
+  .diamond-img.top {
+    top: -10%;
+    left: 50%;
+    transform: translateX(-50%) rotate(5deg);
+    z-index: 4;
+  }
+
+  .diamond-img.left {
+    top: 50%;
+    left: -15%;
+    transform: translateY(-50%) rotate(-8deg);
+    z-index: 2;
+  }
+
+  .diamond-img.right {
+    top: 50%;
+    right: -15%;
+    transform: translateY(-50%) rotate(8deg);
+    z-index: 3;
+  }
+
+  .diamond-img.bottom {
+    bottom: -10%;
+    left: 50%;
+    transform: translateX(-50%) rotate(-3deg);
+    z-index: 1;
   }
 
   /* Tracks Section */

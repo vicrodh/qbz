@@ -300,6 +300,7 @@
               {artistId}
               artistName={artist}
               trackName={trackTitle}
+              currentArtwork={artwork}
             />
           {:else if activeTab === 'queue'}
             <QueuePanel
