@@ -9,9 +9,9 @@
   let isLoading = $state(true);
   let currentArtwork = $state('');
 
-  // Generate a tiny blurred version using Canvas (GPU-free approach)
-  // Instead of CSS blur(120px) which kills WebKit performance,
-  // we resize the image to 8x8 pixels and scale it up - natural blur effect
+  // Generate a small blurred version using Canvas
+  // Key insight: blur(30px) on a 64x64 image is MUCH cheaper than blur(120px) on full image
+  // The small source + small blur = smooth result with minimal CPU
   async function generateBlurredBackground(imageUrl: string): Promise<void> {
     if (!canvasRef || !imageUrl) return;
 
@@ -22,35 +22,34 @@
     img.crossOrigin = 'anonymous';
 
     img.onload = () => {
-      // Draw to tiny size (8x8) - this creates natural blur when scaled
-      const tinySize = 8;
-      canvasRef!.width = tinySize;
-      canvasRef!.height = tinySize;
+      // Use 64x64 - large enough to avoid blocky pixels, small enough to be efficient
+      const size = 64;
+      canvasRef!.width = size;
+      canvasRef!.height = size;
 
-      // Draw image scaled down to 8x8
-      ctx.drawImage(img, 0, 0, tinySize, tinySize);
+      // Draw image scaled down
+      ctx.drawImage(img, 0, 0, size, size);
 
-      // Slightly boost saturation by adjusting colors
-      const imageData = ctx.getImageData(0, 0, tinySize, tinySize);
+      // Apply color adjustments
+      const imageData = ctx.getImageData(0, 0, size, size);
       const data = imageData.data;
 
       for (let i = 0; i < data.length; i += 4) {
-        // Simple saturation boost
         const r = data[i];
         const g = data[i + 1];
         const b = data[i + 2];
         const avg = (r + g + b) / 3;
 
-        // Saturation factor (1.3x)
+        // Saturation boost (1.3x)
         const satFactor = 1.3;
-        data[i] = Math.min(255, avg + (r - avg) * satFactor);
-        data[i + 1] = Math.min(255, avg + (g - avg) * satFactor);
-        data[i + 2] = Math.min(255, avg + (b - avg) * satFactor);
+        let newR = avg + (r - avg) * satFactor;
+        let newG = avg + (g - avg) * satFactor;
+        let newB = avg + (b - avg) * satFactor;
 
-        // Brightness reduction (0.6x)
-        data[i] = data[i] * 0.6;
-        data[i + 1] = data[i + 1] * 0.6;
-        data[i + 2] = data[i + 2] * 0.6;
+        // Brightness reduction (0.55x) - slightly darker for better text contrast
+        data[i] = Math.min(255, Math.max(0, newR * 0.55));
+        data[i + 1] = Math.min(255, Math.max(0, newG * 0.55));
+        data[i + 2] = Math.min(255, Math.max(0, newB * 0.55));
       }
 
       ctx.putImageData(imageData, 0, 0);
@@ -96,16 +95,17 @@
 
   .background-canvas {
     position: absolute;
-    /* Extend beyond viewport for seamless edges */
-    inset: -50px;
-    width: calc(100% + 100px);
-    height: calc(100% + 100px);
-    /* Scale up tiny canvas - creates natural blur effect */
-    /* Using image-rendering: auto for smooth interpolation */
+    /* Extend beyond viewport to hide blur edges */
+    inset: -80px;
+    width: calc(100% + 160px);
+    height: calc(100% + 160px);
+    /* Smooth interpolation when scaling up */
     image-rendering: auto;
-    /* GPU layer for smooth transitions */
-    transform: scale(1.1) translateZ(0);
-    will-change: opacity;
+    /* Small blur to smooth out the 64x64 canvas - MUCH cheaper than 120px on full image */
+    filter: blur(40px);
+    /* GPU layer for performance */
+    transform: scale(1.15) translateZ(0);
+    will-change: opacity, filter;
     transition: opacity 500ms ease-out;
   }
 
