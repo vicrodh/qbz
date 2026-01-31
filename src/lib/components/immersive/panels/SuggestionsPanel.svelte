@@ -210,8 +210,10 @@
               <img src="/qobuz-logo-filled.svg" alt="Qobuz" class="badge-icon badge-qobuz" />
             </div>
             <div class="card-image-wrapper">
-              {#if playlist.images?.[0]}
-                <img src={playlist.images[0]} alt="" class="card-image" />
+              <!-- Use largest available image (last in array, or fallback to first) -->
+              {@const playlistImage = playlist.images?.[playlist.images.length - 1] || playlist.images?.[0]}
+              {#if playlistImage}
+                <img src={playlistImage} alt="" class="card-image" />
               {:else}
                 <div class="card-image-placeholder">
                   <img src="/playlist.svg" alt="" class="placeholder-icon" />
@@ -273,7 +275,7 @@
               </div>
               <!-- Glyph that hides on hover -->
               <div class="card-glyph">
-                <Radio size={24} />
+                <Radio size={26} />
               </div>
               <!-- Hover overlay with actions -->
               <div class="card-overlay">
@@ -430,16 +432,16 @@
     object-fit: contain;
   }
 
-  /* Qobuz icon: viewBox 1001x1006, content fills box */
+  /* Qobuz icon: viewBox 1001x1006, Q icon with ~15% whitespace around content */
   .badge-qobuz {
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
   }
 
-  /* QBZ icon: viewBox 1083x1083, circular vinyl that fills box - needs to appear same size */
+  /* QBZ icon: viewBox 1083x1083, circular vinyl fills entire box - smaller to match Qobuz visually */
   .badge-qbz {
-    width: 22px;
-    height: 22px;
+    width: 17px;
+    height: 17px;
   }
 
   .card-info {
@@ -504,9 +506,10 @@
     transition: opacity 150ms ease;
   }
 
+  /* Playlist SVG: 20x20 viewBox but content only fills ~77% - needs larger size to match Lucide Radio */
   .glyph-icon {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     filter: invert(1);
     opacity: 0.9;
   }
