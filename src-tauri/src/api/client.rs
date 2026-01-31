@@ -582,6 +582,7 @@ impl QobuzClient {
         match response.status() {
             StatusCode::OK => {
                 let json: Value = response.json().await?;
+                log::debug!("Stream URL response JSON keys: {:?}", json.as_object().map(|o| o.keys().collect::<Vec<_>>()));
 
                 // Check for restrictions
                 let restrictions: Vec<StreamRestriction> = json
@@ -589,8 +590,15 @@ impl QobuzClient {
                     .and_then(|v| serde_json::from_value(v.clone()).ok())
                     .unwrap_or_default();
 
+                // Validate that we got an actual URL
+                let url = json["url"].as_str().unwrap_or("").to_string();
+                if url.is_empty() {
+                    log::error!("Stream URL response missing 'url' field. Response: {:?}", json);
+                    return Err(ApiError::ApiResponse("Stream URL response missing 'url' field".to_string()));
+                }
+
                 Ok(StreamUrl {
-                    url: json["url"].as_str().unwrap_or("").to_string(),
+                    url,
                     format_id: json["format_id"].as_u64().unwrap_or(0) as u32,
                     mime_type: json["mime_type"].as_str().unwrap_or("").to_string(),
                     sampling_rate: json["sampling_rate"].as_f64().unwrap_or(0.0),
