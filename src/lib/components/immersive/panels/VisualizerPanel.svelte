@@ -1,10 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { listen } from '@tauri-apps/api/event';
-  import { invoke } from '@tauri-apps/api/core';
   import { Settings } from 'lucide-svelte';
 
-  type VisualizerMode = 'bars' | 'wave' | 'mirror';
+  type VisualizerMode = 'bars' | 'wave' | 'circular';
 
   interface Props {
     isPlaying?: boolean;
@@ -13,17 +11,22 @@
 
   let { isPlaying = false, artwork }: Props = $props();
 
-  // FFT bins from Rust backend (32 values, 0.0 to 1.0)
-  let bins: number[] = $state(Array(32).fill(0));
+  let canvas: HTMLCanvasElement | null = $state(null);
+  let animationId: number | null = null;
   let mode: VisualizerMode = $state('bars');
-  let isEnabled = $state(false);
+  let showSettings = $state(false);
 
-  // Colors extracted from artwork or defaults
-  let primaryColor = $state('#7c3aed');
-  let secondaryColor = $state('#a78bfa');
+  // Extracted colors from artwork
+  let colors = $state(['#7c3aed', '#a78bfa', '#c4b5fd']);
 
-  // Extract dominant color from artwork
-  async function extractColor(imageUrl: string) {
+  // Optimized: fewer bars, throttled updates
+  const BAR_COUNT = 32;
+  let bars: number[] = [];
+  let lastUpdate = 0;
+  const UPDATE_INTERVAL = 50; // ms between visual updates (20fps)
+
+  // Extract colors from artwork
+  async function extractColors(imageUrl: string) {
     try {
       const img = new Image();
       img.crossOrigin = 'anonymous';
@@ -34,125 +37,233 @@
         img.src = imageUrl;
       });
 
-      const canvas = document.createElement('canvas');
-      canvas.width = 10;
-      canvas.height = 10;
-      const ctx = canvas.getContext('2d');
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = 10;
+      tempCanvas.height = 10;
+      const ctx = tempCanvas.getContext('2d');
       if (!ctx) return;
 
       ctx.drawImage(img, 0, 0, 10, 10);
       const data = ctx.getImageData(0, 0, 10, 10).data;
 
-      // Get color from center
-      const idx = (5 * 10 + 5) * 4;
-      const r = Math.min(255, Math.round(data[idx] * 1.2));
-      const g = Math.min(255, Math.round(data[idx + 1] * 1.2));
-      const b = Math.min(255, Math.round(data[idx + 2] * 1.2));
+      // Sample a few pixels
+      const samples = [[0, 0], [9, 0], [0, 9], [4, 4], [9, 9]];
+      const extractedColors: string[] = [];
 
-      primaryColor = `rgb(${r}, ${g}, ${b})`;
-      // Lighter version for secondary
-      secondaryColor = `rgb(${Math.min(255, r + 60)}, ${Math.min(255, g + 60)}, ${Math.min(255, b + 60)})`;
+      for (const [x, y] of samples) {
+        const idx = (y * 10 + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        // Slightly brighten for visibility
+        const br = Math.min(255, Math.round(r * 1.2));
+        const bg = Math.min(255, Math.round(g * 1.2));
+        const bb = Math.min(255, Math.round(b * 1.2));
+        extractedColors.push(`rgb(${br}, ${bg}, ${bb})`);
+      }
+
+      colors = [...new Set(extractedColors)].slice(0, 3);
+      if (colors.length < 3) {
+        colors = ['#7c3aed', '#a78bfa', '#c4b5fd'];
+      }
     } catch {
-      primaryColor = '#7c3aed';
-      secondaryColor = '#a78bfa';
+      // Use default colors on error
+      colors = ['#7c3aed', '#a78bfa', '#c4b5fd'];
     }
   }
 
   // Watch artwork changes
   $effect(() => {
     if (artwork) {
-      extractColor(artwork);
+      extractColors(artwork);
     }
   });
 
-  // Enable visualizer when component mounts and playing
-  $effect(() => {
-    if (isPlaying && !isEnabled) {
-      invoke('set_visualizer_enabled', { enabled: true });
-      isEnabled = true;
-    } else if (!isPlaying && isEnabled) {
-      // Keep enabled but bins will naturally decay
+  function initBars() {
+    bars = Array(BAR_COUNT).fill(0).map(() => Math.random() * 0.2 + 0.1);
+  }
+
+  function animate(timestamp: number) {
+    if (!canvas) return;
+
+    // Throttle updates for performance
+    if (timestamp - lastUpdate < UPDATE_INTERVAL) {
+      animationId = requestAnimationFrame(animate);
+      return;
     }
-  });
+    lastUpdate = timestamp;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width / window.devicePixelRatio;
+    const height = canvas.height / window.devicePixelRatio;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+    // Update bars with smooth animation
+    bars = bars.map((bar, i) => {
+      if (isPlaying) {
+        const target = Math.random() * 0.85 + 0.15;
+        return bar + (target - bar) * 0.2;
+      } else {
+        const idle = Math.sin(Date.now() / 2000 + i * 0.3) * 0.08 + 0.12;
+        return bar + (idle - bar) * 0.08;
+      }
+    });
+
+    // Create gradient
+    const gradient = ctx.createLinearGradient(0, height, 0, 0);
+    gradient.addColorStop(0, colors[0]);
+    gradient.addColorStop(0.5, colors[1] || colors[0]);
+    gradient.addColorStop(1, colors[2] || colors[0]);
+
+    if (mode === 'bars') {
+      drawBars(ctx, width, height, gradient);
+    } else if (mode === 'wave') {
+      drawWave(ctx, width, height, gradient);
+    } else if (mode === 'circular') {
+      drawCircular(ctx, width, height, gradient);
+    }
+
+    ctx.restore();
+    animationId = requestAnimationFrame(animate);
+  }
+
+  function drawBars(ctx: CanvasRenderingContext2D, width: number, height: number, gradient: CanvasGradient) {
+    const barWidth = width / BAR_COUNT * 0.7;
+    const gap = width / BAR_COUNT * 0.3;
+    const maxHeight = height * 0.7;
+
+    ctx.fillStyle = gradient;
+
+    bars.forEach((bar, i) => {
+      const x = i * (barWidth + gap) + gap / 2;
+      const barHeight = bar * maxHeight;
+      const y = (height - barHeight) / 2;
+      const radius = barWidth / 2;
+
+      // Rounded rectangle
+      ctx.beginPath();
+      ctx.moveTo(x + radius, y);
+      ctx.lineTo(x + barWidth - radius, y);
+      ctx.quadraticCurveTo(x + barWidth, y, x + barWidth, y + radius);
+      ctx.lineTo(x + barWidth, y + barHeight - radius);
+      ctx.quadraticCurveTo(x + barWidth, y + barHeight, x + barWidth - radius, y + barHeight);
+      ctx.lineTo(x + radius, y + barHeight);
+      ctx.quadraticCurveTo(x, y + barHeight, x, y + barHeight - radius);
+      ctx.lineTo(x, y + radius);
+      ctx.quadraticCurveTo(x, y, x + radius, y);
+      ctx.fill();
+    });
+  }
+
+  function drawWave(ctx: CanvasRenderingContext2D, width: number, height: number, gradient: CanvasGradient) {
+    const centerY = height / 2;
+    const amplitude = height * 0.35;
+
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+
+    ctx.beginPath();
+    bars.forEach((bar, i) => {
+      const x = (i / (bars.length - 1)) * width;
+      const y = centerY + (bar - 0.5) * amplitude * 2;
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        const prevX = ((i - 1) / (bars.length - 1)) * width;
+        const cpX = (prevX + x) / 2;
+        ctx.quadraticCurveTo(cpX, centerY + (bars[i - 1] - 0.5) * amplitude * 2, x, y);
+      }
+    });
+    ctx.stroke();
+
+    // Mirror wave
+    ctx.globalAlpha = 0.3;
+    ctx.beginPath();
+    bars.forEach((bar, i) => {
+      const x = (i / (bars.length - 1)) * width;
+      const y = centerY - (bar - 0.5) * amplitude * 2;
+      if (i === 0) {
+        ctx.moveTo(x, y);
+      } else {
+        const prevX = ((i - 1) / (bars.length - 1)) * width;
+        const cpX = (prevX + x) / 2;
+        ctx.quadraticCurveTo(cpX, centerY - (bars[i - 1] - 0.5) * amplitude * 2, x, y);
+      }
+    });
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+
+  function drawCircular(ctx: CanvasRenderingContext2D, width: number, height: number, gradient: CanvasGradient) {
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const baseRadius = Math.min(width, height) * 0.2;
+    const maxRadius = Math.min(width, height) * 0.4;
+
+    ctx.strokeStyle = gradient;
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+
+    bars.forEach((bar, i) => {
+      const angle = (i / bars.length) * Math.PI * 2 - Math.PI / 2;
+      const innerRadius = baseRadius;
+      const outerRadius = baseRadius + bar * (maxRadius - baseRadius);
+
+      const x1 = centerX + Math.cos(angle) * innerRadius;
+      const y1 = centerY + Math.sin(angle) * innerRadius;
+      const x2 = centerX + Math.cos(angle) * outerRadius;
+      const y2 = centerY + Math.sin(angle) * outerRadius;
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    });
+
+    // Center circle
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+    ctx.beginPath();
+    ctx.arc(centerX, centerY, baseRadius * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  function resizeCanvas() {
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * window.devicePixelRatio;
+    canvas.height = rect.height * window.devicePixelRatio;
+  }
 
   function cycleMode() {
-    const modes: VisualizerMode[] = ['bars', 'wave', 'mirror'];
+    const modes: VisualizerMode[] = ['bars', 'wave', 'circular'];
     const currentIndex = modes.indexOf(mode);
     mode = modes[(currentIndex + 1) % modes.length];
   }
 
   onMount(() => {
-    // Enable visualizer on mount
-    invoke('set_visualizer_enabled', { enabled: true });
-    isEnabled = true;
-
-    // Listen for spectrum data from Rust
-    const unlisten = listen<number[]>('audio-spectrum', (event) => {
-      bins = event.payload;
-    });
+    initBars();
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    animationId = requestAnimationFrame(animate);
 
     return () => {
-      // Disable visualizer on unmount
-      invoke('set_visualizer_enabled', { enabled: false });
-      isEnabled = false;
-      unlisten.then(fn => fn());
+      window.removeEventListener('resize', resizeCanvas);
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
     };
   });
 </script>
 
 <div class="visualizer-panel">
-  {#if mode === 'bars'}
-    <div class="bars-container">
-      {#each bins as bin, i}
-        <div
-          class="bar"
-          style="
-            --height: {Math.max(5, bin * 100)}%;
-            --color: {primaryColor};
-            --delay: {i * 10}ms;
-          "
-        ></div>
-      {/each}
-    </div>
-  {:else if mode === 'wave'}
-    <div class="wave-container">
-      <svg viewBox="0 0 320 100" preserveAspectRatio="none" class="wave-svg">
-        <defs>
-          <linearGradient id="waveGradient" x1="0%" y1="100%" x2="0%" y2="0%">
-            <stop offset="0%" style="stop-color:{primaryColor};stop-opacity:0.8" />
-            <stop offset="100%" style="stop-color:{secondaryColor};stop-opacity:0.4" />
-          </linearGradient>
-        </defs>
-        <path
-          d={`M 0 50 ${bins.map((bin, i) => {
-            const x = (i / (bins.length - 1)) * 320;
-            const y = 50 - bin * 45;
-            return `L ${x} ${y}`;
-          }).join(' ')} L 320 50`}
-          fill="none"
-          stroke="url(#waveGradient)"
-          stroke-width="3"
-          stroke-linecap="round"
-          stroke-linejoin="round"
-        />
-      </svg>
-    </div>
-  {:else if mode === 'mirror'}
-    <div class="mirror-container">
-      {#each bins as bin, i}
-        <div class="mirror-bar-wrapper">
-          <div
-            class="mirror-bar top"
-            style="--height: {Math.max(3, bin * 100)}%; --color: {primaryColor};"
-          ></div>
-          <div
-            class="mirror-bar bottom"
-            style="--height: {Math.max(3, bin * 100)}%; --color: {secondaryColor};"
-          ></div>
-        </div>
-      {/each}
-    </div>
-  {/if}
+  <canvas bind:this={canvas} class="visualizer-canvas"></canvas>
 
   <!-- Mode indicator -->
   <button class="mode-btn" onclick={cycleMode} title="Change visualizer style">
@@ -168,95 +279,22 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 80px 40px 140px;
+    /* Account for header and controls */
+    padding: 70px 20px 120px;
     z-index: 5;
   }
 
-  /* Bars mode - GPU accelerated with transform */
-  .bars-container {
-    display: flex;
-    align-items: flex-end;
-    justify-content: center;
-    gap: 4px;
-    height: 60%;
-    width: 90%;
-    max-width: 800px;
-  }
-
-  .bar {
-    flex: 1;
-    max-width: 20px;
-    height: var(--height);
-    background: var(--color);
-    border-radius: 4px 4px 0 0;
-    transform-origin: bottom;
-    transition: height 35ms linear;
-    will-change: height;
-    opacity: 0.9;
-  }
-
-  /* Wave mode */
-  .wave-container {
-    width: 90%;
-    max-width: 900px;
-    height: 40%;
-  }
-
-  .wave-svg {
+  .visualizer-canvas {
     width: 100%;
     height: 100%;
+    max-width: 100%;
+    max-height: 100%;
   }
 
-  .wave-svg path {
-    transition: d 35ms linear;
-  }
-
-  /* Mirror mode - bars going up and down from center */
-  .mirror-container {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 3px;
-    height: 70%;
-    width: 90%;
-    max-width: 800px;
-  }
-
-  .mirror-bar-wrapper {
-    flex: 1;
-    max-width: 18px;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 2px;
-  }
-
-  .mirror-bar {
-    width: 100%;
-    height: var(--height);
-    max-height: 48%;
-    background: var(--color);
-    border-radius: 3px;
-    transition: height 35ms linear;
-    will-change: height;
-  }
-
-  .mirror-bar.top {
-    transform-origin: bottom;
-  }
-
-  .mirror-bar.bottom {
-    transform: scaleY(-1);
-    transform-origin: top;
-  }
-
-  /* Mode button */
   .mode-btn {
     position: absolute;
-    bottom: 160px;
-    right: 40px;
+    bottom: 140px;
+    right: 30px;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -279,29 +317,5 @@
 
   .mode-label {
     font-weight: 500;
-  }
-
-  /* Responsive */
-  @media (max-width: 768px) {
-    .visualizer-panel {
-      padding: 70px 20px 130px;
-    }
-
-    .bars-container {
-      gap: 2px;
-    }
-
-    .bar {
-      max-width: 12px;
-    }
-
-    .mirror-bar-wrapper {
-      max-width: 10px;
-    }
-
-    .mode-btn {
-      bottom: 145px;
-      right: 20px;
-    }
   }
 </style>

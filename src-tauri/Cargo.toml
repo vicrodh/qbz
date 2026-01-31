@@ -53,9 +53,6 @@ rand = "0.8"
 rodio = { version = "0.19", features = ["symphonia-all"] }
 symphonia = { version = "0.5", features = ["all"] }
 
-# Audio visualization (FFT)
-rustfft = "6.2"
-
 # Media controls (MPRIS on Linux)
 souvlaki = "0.7"
 

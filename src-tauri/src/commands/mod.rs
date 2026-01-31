@@ -24,7 +24,6 @@ pub mod search;
 pub mod share;
 pub mod smart_playlists;
 pub mod remote_metadata;
-pub mod visualizer;
 
 pub use audio_backends::*;
 pub use audio_diagnostics::*;
@@ -48,4 +47,3 @@ pub use search::*;
 pub use share::*;
 pub use smart_playlists::*;
 pub use remote_metadata::*;
-pub use visualizer::*;

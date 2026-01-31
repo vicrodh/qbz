@@ -32,7 +32,6 @@ pub mod session_store;
 pub mod share;
 pub mod tray;
 pub mod updates;
-pub mod visualizer;
 
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -284,9 +283,6 @@ pub fn run() {
             app.state::<AppState>()
                 .media_controls
                 .init(app.handle().clone());
-
-            // Initialize audio visualizer
-            visualizer::init_visualizer(app.handle().clone());
 
             // Purge offline downloads if the subscription has been invalid for > 3 days
             // (compliance requirement for cached content).
@@ -894,9 +890,6 @@ pub fn run() {
             commands::remote_metadata_get_album,
             commands::remote_metadata_cache_stats,
             commands::remote_metadata_clear_cache,
-            // Audio visualizer commands
-            commands::set_visualizer_enabled,
-            commands::get_visualizer_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

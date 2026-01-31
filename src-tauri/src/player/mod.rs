@@ -39,7 +39,6 @@ use symphonia::default::{get_codecs, get_probe};
 use crate::api::{client::QobuzClient, models::Quality};
 use crate::audio::{AudioBackendType, BackendConfig, BackendManager};
 use crate::config::audio_settings::AudioSettings;
-use crate::visualizer::VisualizerSource;
 use playback_engine::PlaybackEngine;
 
 /// Commands sent to the audio thread
@@ -1047,9 +1046,6 @@ impl Player {
                             .unwrap_or(duration_secs);
                         thread_state.duration.store(actual_duration, Ordering::SeqCst);
 
-                        // Wrap with visualizer tap (zero-copy passthrough)
-                        let source = VisualizerSource::new(source);
-
                         if let Err(e) = engine.append(source) {
                             log::error!("Failed to append source to engine: {}", e);
                             return;
@@ -1263,11 +1259,8 @@ impl Player {
                         // This allows the seekbar to show progress even during streaming
                         thread_state.duration.store(duration_secs, Ordering::SeqCst);
 
-                        // Wrap with visualizer tap (zero-copy passthrough)
-                        let visualized_source = VisualizerSource::new(incremental_source);
-
-                        // Box the source to match the expected type
-                        let source_to_play: Box<dyn Source<Item = i16> + Send> = Box::new(visualized_source);
+                        // Box the incremental source to match the expected type
+                        let source_to_play: Box<dyn Source<Item = i16> + Send> = Box::new(incremental_source);
                         if let Err(e) = engine.append(source_to_play) {
                             log::error!("Failed to append streaming source to engine: {}", e);
                             return;
@@ -1375,11 +1368,9 @@ impl Player {
 
                             let resume_pos = thread_state.position.load(Ordering::SeqCst);
                             let skipped_source: Box<dyn Source<Item = i16> + Send> = if resume_pos > 0 {
-                                // Wrap with visualizer tap, then skip
-                                let viz_source = VisualizerSource::new(source);
-                                Box::new(viz_source.skip_duration(Duration::from_secs(resume_pos)))
+                                Box::new(source.skip_duration(Duration::from_secs(resume_pos)))
                             } else {
-                                Box::new(VisualizerSource::new(source))
+                                source
                             };
 
                             if let Err(e) = engine.append(skipped_source) {
@@ -1476,10 +1467,8 @@ impl Player {
                             }
                         };
 
-                        // Wrap with visualizer tap, then skip
-                        let viz_source = VisualizerSource::new(source);
                         let skip_duration = Duration::from_secs(position_secs);
-                        let skipped_source = viz_source.skip_duration(skip_duration);
+                        let skipped_source = source.skip_duration(skip_duration);
 
                         if let Err(e) = engine.append(skipped_source) {
                             log::error!("Failed to append source for seek: {}", e);
