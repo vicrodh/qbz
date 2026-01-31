@@ -7,7 +7,6 @@
   import LyricsPanel from './panels/LyricsPanel.svelte';
   import CreditsPanel from './panels/CreditsPanel.svelte';
   import SuggestionsPanel from './panels/SuggestionsPanel.svelte';
-  import VisualizerPanel from './panels/VisualizerPanel.svelte';
   import QueuePanel from './panels/QueuePanel.svelte';
   import CoverflowPanel from './panels/CoverflowPanel.svelte';
   import LyricsFocusPanel from './panels/LyricsFocusPanel.svelte';
@@ -65,7 +64,6 @@
     // Feature flags
     enableCredits?: boolean;
     enableSuggestions?: boolean;
-    enableVisualizer?: boolean;
     // Queue
     queueTracks?: QueueTrack[];
     queueCurrentIndex?: number;
@@ -108,7 +106,6 @@
     lyricsError = null,
     enableCredits = true,
     enableSuggestions = true,
-    enableVisualizer = false,
     queueTracks = [],
     queueCurrentIndex = 0,
     onQueuePlayTrack,
@@ -175,9 +172,6 @@
       case '4':
         displayMode = 'queue-focus';
         break;
-      case '5':
-        displayMode = 'visualizer-focus';
-        break;
       // Tab shortcuts (only in split mode)
       case 'l':
       case 'L':
@@ -190,10 +184,6 @@
       case 's':
       case 'S':
         if (displayMode === 'split' && enableSuggestions) activeTab = 'suggestions';
-        break;
-      case 'v':
-      case 'V':
-        if (displayMode === 'split' && enableVisualizer) activeTab = 'visualizer';
         break;
       case 'q':
       case 'Q':
@@ -247,7 +237,6 @@
       hasLyrics={true}
       hasCredits={enableCredits}
       hasSuggestions={enableSuggestions}
-      hasVisualizer={enableVisualizer}
     />
 
     <!-- Content based on display mode -->
@@ -280,13 +269,6 @@
           />
         </div>
       </div>
-    {:else if displayMode === 'visualizer-focus'}
-      <!-- Visualizer Focus: Full screen visualizer -->
-      <div class="focus-panel">
-        <div class="focus-panel-content visualizer-content">
-          <VisualizerPanel {isPlaying} />
-        </div>
-      </div>
     {:else}
       <!-- Split: Artwork + Panel side by side -->
       <div class="main-content">
@@ -310,8 +292,6 @@
             <CreditsPanel {trackId} />
           {:else if activeTab === 'suggestions'}
             <SuggestionsPanel {trackId} {artistId} />
-          {:else if activeTab === 'visualizer'}
-            <VisualizerPanel {isPlaying} />
           {:else if activeTab === 'queue'}
             <QueuePanel
               tracks={queueTracks}
@@ -407,7 +387,7 @@
     flex-direction: column;
   }
 
-  /* Focus mode panels (queue, visualizer) */
+  /* Focus mode panels (queue) */
   .focus-panel {
     position: absolute;
     inset: 0;
@@ -428,10 +408,6 @@
 
   .focus-panel-content.queue-content {
     max-width: 500px;
-  }
-
-  .focus-panel-content.visualizer-content {
-    max-width: 800px;
   }
 
   /* Responsive */

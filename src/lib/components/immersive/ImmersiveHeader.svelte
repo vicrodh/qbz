@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { X, Disc3, LayoutGrid, MessageSquareText, ListMusic, BarChart3, Music2, Info, Radio } from 'lucide-svelte';
+  import { X, Disc3, LayoutGrid, MessageSquareText, ListMusic, Music2, Info, Radio } from 'lucide-svelte';
   import { t } from '$lib/i18n';
 
-  export type ImmersiveTab = 'lyrics' | 'credits' | 'suggestions' | 'visualizer' | 'queue';
-  export type DisplayMode = 'coverflow' | 'split' | 'lyrics-focus' | 'queue-focus' | 'visualizer-focus';
+  export type ImmersiveTab = 'lyrics' | 'credits' | 'suggestions' | 'queue';
+  export type DisplayMode = 'coverflow' | 'split' | 'lyrics-focus' | 'queue-focus';
 
   interface Props {
     activeTab: ImmersiveTab;
@@ -15,7 +15,6 @@
     hasLyrics?: boolean;
     hasCredits?: boolean;
     hasSuggestions?: boolean;
-    hasVisualizer?: boolean;
   }
 
   let {
@@ -27,15 +26,13 @@
     visible = true,
     hasLyrics = true,
     hasCredits = true,
-    hasSuggestions = true,
-    hasVisualizer = false
+    hasSuggestions = true
   }: Props = $props();
 
   const tabs = $derived([
     { id: 'lyrics' as const, label: $t('player.lyrics'), icon: Music2, enabled: hasLyrics },
     { id: 'credits' as const, label: $t('player.credits') || 'Credits', icon: Info, enabled: hasCredits },
     { id: 'suggestions' as const, label: $t('player.suggestions') || 'Suggestions', icon: Radio, enabled: hasSuggestions },
-    { id: 'visualizer' as const, label: $t('player.visualizer') || 'Visualizer', icon: BarChart3, enabled: hasVisualizer },
     { id: 'queue' as const, label: $t('player.queue') || 'Queue', icon: ListMusic, enabled: true },
   ].filter(tab => tab.enabled));
 
@@ -44,7 +41,6 @@
     { id: 'split', icon: LayoutGrid, title: 'Split View (2)' },
     { id: 'lyrics-focus', icon: MessageSquareText, title: 'Lyrics Focus (3)' },
     { id: 'queue-focus', icon: ListMusic, title: 'Queue Focus (4)' },
-    { id: 'visualizer-focus', icon: BarChart3, title: 'Visualizer (5)' },
   ];
 
   // Only show tabs in split mode

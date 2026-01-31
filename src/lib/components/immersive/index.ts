@@ -9,7 +9,6 @@ export { default as ImmersiveControls } from './ImmersiveControls.svelte';
 export { default as LyricsPanel } from './panels/LyricsPanel.svelte';
 export { default as CreditsPanel } from './panels/CreditsPanel.svelte';
 export { default as SuggestionsPanel } from './panels/SuggestionsPanel.svelte';
-export { default as VisualizerPanel } from './panels/VisualizerPanel.svelte';
 
 // Shared
 export { default as ProgressBar } from './shared/ProgressBar.svelte';

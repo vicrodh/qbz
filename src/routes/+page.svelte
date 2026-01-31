@@ -3112,7 +3112,6 @@
         lyricsError={lyricsStatus === 'error' ? lyricsError : (lyricsStatus === 'not_found' ? 'No lyrics found' : null)}
         enableCredits={true}
         enableSuggestions={true}
-        enableVisualizer={false}
         queueTracks={[
           ...(currentQueueTrack ? [currentQueueTrack] : []),
           ...queue
