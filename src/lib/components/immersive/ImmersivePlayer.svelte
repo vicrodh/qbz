@@ -295,7 +295,12 @@
           {:else if activeTab === 'trackInfo'}
             <TrackInfoPanel {trackId} />
           {:else if activeTab === 'suggestions'}
-            <SuggestionsPanel {trackId} {artistId} />
+            <SuggestionsPanel
+              {trackId}
+              {artistId}
+              artistName={artist}
+              trackName={trackTitle}
+            />
           {:else if activeTab === 'queue'}
             <QueuePanel
               tracks={queueTracks}
