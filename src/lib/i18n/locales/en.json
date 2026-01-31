@@ -253,6 +253,8 @@
     "lyrics": "Lyrics",
     "noLyrics": "No lyrics available",
     "fetchingLyrics": "Fetching lyrics...",
+    "credits": "Credits",
+    "suggestions": "Suggestions",
     "shuffle": "Shuffle",
     "repeat": "Repeat",
     "repeatAll": "Repeat All",

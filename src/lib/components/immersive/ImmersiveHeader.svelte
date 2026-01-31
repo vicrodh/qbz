@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { X, Disc3, LayoutGrid, Mic, ListMusic, Music2, Info, Radio } from 'lucide-svelte';
+  import { X, Disc3, LayoutGrid, Mic2, ListMusic, Music2, Info, Radio } from 'lucide-svelte';
   import { t } from '$lib/i18n';
 
   export type ImmersiveTab = 'lyrics' | 'credits' | 'suggestions' | 'queue';
@@ -39,7 +39,7 @@
   const displayModes: { id: DisplayMode; icon: typeof Disc3; title: string }[] = [
     { id: 'coverflow', icon: Disc3, title: 'Coverflow (1)' },
     { id: 'split', icon: LayoutGrid, title: 'Split View (2)' },
-    { id: 'lyrics-focus', icon: Mic, title: 'Lyrics Focus (3)' },
+    { id: 'lyrics-focus', icon: Mic2, title: 'Lyrics Focus (3)' },
     { id: 'queue-focus', icon: ListMusic, title: 'Queue Focus (4)' },
   ];
 
@@ -123,9 +123,7 @@
     align-items: center;
     gap: 2px;
     padding: 4px;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(0, 0, 0, 0.6);
     border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
     border-radius: 10px;
   }
@@ -163,9 +161,7 @@
     align-items: center;
     gap: 4px;
     padding: 4px;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(0, 0, 0, 0.6);
     border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
     border-radius: 12px;
   }
@@ -209,9 +205,7 @@
     justify-content: center;
     width: 40px;
     height: 40px;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: rgba(0, 0, 0, 0.6);
     border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
     border-radius: 50%;
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));

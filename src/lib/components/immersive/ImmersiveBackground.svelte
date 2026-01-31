@@ -5,32 +5,81 @@
 
   let { artwork }: Props = $props();
 
+  let canvasRef: HTMLCanvasElement | undefined = $state();
   let isLoading = $state(true);
   let currentArtwork = $state('');
 
-  // Track artwork changes for fade transition
+  // Generate a tiny blurred version using Canvas (GPU-free approach)
+  // Instead of CSS blur(120px) which kills WebKit performance,
+  // we resize the image to 8x8 pixels and scale it up - natural blur effect
+  async function generateBlurredBackground(imageUrl: string): Promise<void> {
+    if (!canvasRef || !imageUrl) return;
+
+    const ctx = canvasRef.getContext('2d');
+    if (!ctx) return;
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+
+    img.onload = () => {
+      // Draw to tiny size (8x8) - this creates natural blur when scaled
+      const tinySize = 8;
+      canvasRef!.width = tinySize;
+      canvasRef!.height = tinySize;
+
+      // Draw image scaled down to 8x8
+      ctx.drawImage(img, 0, 0, tinySize, tinySize);
+
+      // Slightly boost saturation by adjusting colors
+      const imageData = ctx.getImageData(0, 0, tinySize, tinySize);
+      const data = imageData.data;
+
+      for (let i = 0; i < data.length; i += 4) {
+        // Simple saturation boost
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        const avg = (r + g + b) / 3;
+
+        // Saturation factor (1.3x)
+        const satFactor = 1.3;
+        data[i] = Math.min(255, avg + (r - avg) * satFactor);
+        data[i + 1] = Math.min(255, avg + (g - avg) * satFactor);
+        data[i + 2] = Math.min(255, avg + (b - avg) * satFactor);
+
+        // Brightness reduction (0.6x)
+        data[i] = data[i] * 0.6;
+        data[i + 1] = data[i + 1] * 0.6;
+        data[i + 2] = data[i + 2] * 0.6;
+      }
+
+      ctx.putImageData(imageData, 0, 0);
+      isLoading = false;
+    };
+
+    img.onerror = () => {
+      isLoading = false;
+    };
+
+    img.src = imageUrl;
+  }
+
+  // Track artwork changes
   $effect(() => {
     if (!artwork || artwork === currentArtwork) return;
     currentArtwork = artwork;
     isLoading = true;
+    generateBlurredBackground(artwork);
   });
-
-  function handleImageLoad() {
-    isLoading = false;
-  }
 </script>
 
 <div class="immersive-background" class:loading={isLoading}>
-  <!-- Heavily blurred artwork - just color blobs -->
-  {#if artwork}
-    <img
-      src={artwork}
-      alt=""
-      class="background-image"
-      aria-hidden="true"
-      onload={handleImageLoad}
-    />
-  {/if}
+  <!-- Canvas-generated tiny image, scaled up via CSS -->
+  <canvas
+    bind:this={canvasRef}
+    class="background-canvas"
+    aria-hidden="true"
+  ></canvas>
 
   <!-- Dark overlay for better contrast -->
   <div class="dark-overlay"></div>
@@ -45,21 +94,22 @@
     background-color: #0a0a0b;
   }
 
-  .background-image {
+  .background-canvas {
     position: absolute;
-    /* Extend beyond viewport to hide blur edges */
-    inset: -100px;
-    width: calc(100% + 200px);
-    height: calc(100% + 200px);
-    object-fit: cover;
-    object-position: center;
-    /* Heavy blur - should be unrecognizable, just color blobs */
-    filter: blur(120px) saturate(1.3) brightness(0.6);
-    transform: scale(1.2);
+    /* Extend beyond viewport for seamless edges */
+    inset: -50px;
+    width: calc(100% + 100px);
+    height: calc(100% + 100px);
+    /* Scale up tiny canvas - creates natural blur effect */
+    /* Using image-rendering: auto for smooth interpolation */
+    image-rendering: auto;
+    /* GPU layer for smooth transitions */
+    transform: scale(1.1) translateZ(0);
+    will-change: opacity;
     transition: opacity 500ms ease-out;
   }
 
-  .loading .background-image {
+  .loading .background-canvas {
     opacity: 0;
   }
 
