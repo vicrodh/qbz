@@ -48,6 +48,7 @@
     onPlayLater?: () => void;
     onAddToPlaylist?: () => void;
     onRemoveFromPlaylist?: () => void;
+    onFindReplacement?: () => void;
     onShareQobuz?: () => void;
     onShareSonglink?: () => void;
     onGoToAlbum?: () => void;
@@ -262,6 +263,7 @@
       onAddFavorite={trackId !== undefined ? () => toggleTrackFavorite(trackId) : undefined}
       onAddToPlaylist={menuActions?.onAddToPlaylist}
       onRemoveFromPlaylist={menuActions?.onRemoveFromPlaylist}
+      onFindReplacement={menuActions?.onFindReplacement}
       onShareQobuz={menuActions?.onShareQobuz}
       onShareSonglink={menuActions?.onShareSonglink}
       onGoToAlbum={menuActions?.onGoToAlbum}
