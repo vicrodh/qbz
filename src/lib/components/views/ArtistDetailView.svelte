@@ -183,25 +183,47 @@
   let currentSearchIndex = $state(0);
 
   // Album sorting state - independent per section
-  type AlbumSortMode = 'default' | 'newest' | 'oldest' | 'title-asc' | 'title-desc';
-  let albumSortMode = $state<AlbumSortMode>('default');
+  const sortOptions = ['default', 'newest', 'oldest', 'title-asc', 'title-desc'] as const;
+  type AlbumSortMode = typeof sortOptions[number];
+  const STORAGE_SORT_KEYS = {
+    ALBUMS: 'qbz-artist-albums-sort',
+    EPS_SINGLES: 'qbz-artist-eps-singles-sort',
+    LIVE_ALBUMS: 'qbz-artist-live-albums-sort',
+    COMPILATIONS: 'qbz-artist-compilations-sort',
+    TRIBUTES: 'qbz-artist-tributes-sort',
+    OTHERS: 'qbz-artist-others-sort'
+  } as const;
+
+  let albumSortMode = $state<AlbumSortMode>(loadAlbumSortMode(STORAGE_SORT_KEYS.ALBUMS));
   let showAlbumSortMenu = $state(false);
-  let epsSinglesSortMode = $state<AlbumSortMode>('default');
+  let epsSinglesSortMode = $state<AlbumSortMode>(loadAlbumSortMode(STORAGE_SORT_KEYS.EPS_SINGLES));
   let showEpsSinglesSortMenu = $state(false);
-  let liveAlbumsSortMode = $state<AlbumSortMode>('default');
+  let liveAlbumsSortMode = $state<AlbumSortMode>(loadAlbumSortMode(STORAGE_SORT_KEYS.LIVE_ALBUMS));
   let showLiveAlbumsSortMenu = $state(false);
-  let compilationsSortMode = $state<AlbumSortMode>('default');
+  let compilationsSortMode = $state<AlbumSortMode>(loadAlbumSortMode(STORAGE_SORT_KEYS.COMPILATIONS));
   let showCompilationsSortMenu = $state(false);
-  let tributesSortMode = $state<AlbumSortMode>('default');
+  let tributesSortMode = $state<AlbumSortMode>(loadAlbumSortMode(STORAGE_SORT_KEYS.TRIBUTES));
   let showTributesSortMenu = $state(false);
   let tributesExpanded = $state(false); // Collapsed by default
   let tributesVisibleCount = $state(20); // Load 20 at a time
-  let othersSortMode = $state<AlbumSortMode>('default');
+  let othersSortMode = $state<AlbumSortMode>(loadAlbumSortMode(STORAGE_SORT_KEYS.OTHERS));
   let showOthersSortMenu = $state(false);
 
   // Popular tracks display state
   let visibleTracksCount = $state(5);
   let showTracksContextMenu = $state(false);
+
+  function loadAlbumSortMode(key: string, fallback: AlbumSortMode = 'default'): AlbumSortMode {
+    try {
+      const value = localStorage.getItem(key);
+      if (value && sortOptions.includes(value as AlbumSortMode)) {
+        return value as AlbumSortMode;
+      }
+    } catch {
+      return fallback;
+    }
+    return fallback;
+  }
 
   // Computed visible tracks
   let visibleTracks = $derived(topTracks.slice(0, visibleTracksCount));
@@ -273,13 +295,6 @@
     similarArtists = [];
     similarArtistImageErrors = new Set();
     activeJumpSection = 'about';
-    // Reset all sort modes when artist changes
-    albumSortMode = 'default';
-    epsSinglesSortMode = 'default';
-    liveAlbumsSortMode = 'default';
-    compilationsSortMode = 'default';
-    tributesSortMode = 'default';
-    othersSortMode = 'default';
     tributesExpanded = false;
     tributesVisibleCount = 20;
 
@@ -288,6 +303,20 @@
     loadMusicBrainzRelationships();
     checkFavoriteStatus();
     loadArtistAlbumDownloadStatuses();
+  });
+
+  // Persist sort mode changes to localStorage
+  $effect(() => {
+    try {
+      localStorage.setItem(STORAGE_SORT_KEYS.ALBUMS, albumSortMode);
+      localStorage.setItem(STORAGE_SORT_KEYS.EPS_SINGLES, epsSinglesSortMode);
+      localStorage.setItem(STORAGE_SORT_KEYS.LIVE_ALBUMS, liveAlbumsSortMode);
+      localStorage.setItem(STORAGE_SORT_KEYS.COMPILATIONS, compilationsSortMode);
+      localStorage.setItem(STORAGE_SORT_KEYS.TRIBUTES, tributesSortMode);
+      localStorage.setItem(STORAGE_SORT_KEYS.OTHERS, othersSortMode);
+    } catch {
+      // localStorage not available
+    }
   });
 
   // Close sort menu when clicking outside
