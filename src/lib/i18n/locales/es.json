@@ -194,7 +194,16 @@
     "private": "Privada",
     "import": "Importar",
     "manage": "Administrar listas",
-    "allHidden": "Todas las listas están ocultas"
+    "allHidden": "Todas las listas están ocultas",
+    "findReplacement": "Buscar Versión Disponible",
+    "searchingFor": "Buscando",
+    "noReplacementsFound": "No se encontraron versiones disponibles",
+    "tryDifferentSearch": "Intenta con otra búsqueda",
+    "searchToFindReplacement": "Busca para encontrar un reemplazo",
+    "replaceTrack": "Reemplazar Pista",
+    "lookForAvailableVersion": "Buscar versión disponible",
+    "trackReplaced": "Pista reemplazada exitosamente",
+    "trackReplaceFailed": "Error al reemplazar pista"
   },
   "sort": {
     "nameAZ": "Nombre (A-Z)",
@@ -253,7 +262,7 @@
     "lyrics": "Letras",
     "noLyrics": "No hay letras disponibles",
     "fetchingLyrics": "Buscando letras...",
-    "trackUnavailable": "ya no está disponible",
+    "trackUnavailable": "Pista ya no disponible en la biblioteca de Qobuz",
     "shuffle": "Aleatorio",
     "repeat": "Repetir",
     "repeatAll": "Repetir Todo",

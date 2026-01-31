@@ -3,6 +3,7 @@
   import AlbumMenu from '../AlbumMenu.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
+  import TrackReplacementModal from '../TrackReplacementModal.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
   import { invoke } from '@tauri-apps/api/core';
@@ -17,7 +18,8 @@
     type OfflineStatus
   } from '$lib/stores/offlineStore';
   import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
-  import { isTrackUnavailable, subscribe as subscribeUnavailable } from '$lib/stores/unavailableTracksStore';
+  import { isTrackUnavailable, clearTrackUnavailable, subscribe as subscribeUnavailable } from '$lib/stores/unavailableTracksStore';
+  import { showToast } from '$lib/stores/toastStore';
   import { t } from '$lib/i18n';
   import { onMount, tick } from 'svelte';
 
@@ -249,6 +251,10 @@
   let isOwnPlaylist = $derived(playlist !== null && currentUserId !== null && playlist.owner.id === currentUserId);
   let isCopying = $state(false);
   let isCopied = $state(false);
+
+  // Track replacement modal state
+  let replacementModalOpen = $state(false);
+  let trackToReplace = $state<DisplayTrack | null>(null);
 
   // Track copied playlists in localStorage
   const COPIED_PLAYLISTS_KEY = 'qbz_copied_playlists';
@@ -1235,6 +1241,95 @@
     }
   }
 
+  // Open replacement modal for an unavailable track
+  function openReplacementModal(track: DisplayTrack) {
+    trackToReplace = track;
+    replacementModalOpen = true;
+  }
+
+  // Handle track replacement selection
+  interface ReplacementTrack {
+    id: number;
+    title: string;
+    duration: number;
+    performer?: { id?: number; name: string };
+    album?: {
+      id: string;
+      title: string;
+      image?: { small?: string; thumbnail?: string; large?: string };
+    };
+    hires: boolean;
+    maximum_bit_depth?: number;
+    maximum_sampling_rate?: number;
+  }
+
+  async function handleTrackReplacement(newTrack: ReplacementTrack) {
+    if (!trackToReplace || !trackToReplace.playlistTrackId) {
+      console.error('No track to replace or missing playlist_track_id');
+      return;
+    }
+
+    try {
+      // Get the current position of the track being replaced
+      const currentIndex = displayTracks.findIndex(t => t.id === trackToReplace!.id);
+
+      // Remove the old track
+      await invoke('remove_tracks_from_playlist', {
+        playlistId,
+        playlistTrackIds: [trackToReplace.playlistTrackId]
+      });
+
+      // Add the new track
+      await invoke('add_tracks_to_playlist', {
+        playlistId,
+        trackIds: [newTrack.id]
+      });
+
+      // Clear the unavailable status for the old track (if it was in the store)
+      clearTrackUnavailable(trackToReplace.id);
+
+      // Reload the playlist to get updated data
+      await loadPlaylist();
+      notifyParentOfCounts();
+      onPlaylistUpdated?.();
+
+      // Show success message
+      showToast($t('playlist.trackReplaced'), 'success');
+
+      // Close modal
+      replacementModalOpen = false;
+      trackToReplace = null;
+
+      console.log(`[Playlist] Track replaced: ${trackToReplace?.title} -> ${newTrack.title} at position ${currentIndex}`);
+    } catch (err) {
+      console.error('Failed to replace track:', err);
+      showToast($t('playlist.trackReplaceFailed'), 'error');
+    }
+  }
+
+  // Preview a replacement track
+  function handlePreviewReplacement(track: ReplacementTrack) {
+    if (!onTrackPlay) return;
+
+    const displayTrack: DisplayTrack = {
+      id: track.id,
+      number: 0,
+      title: track.title,
+      artist: track.performer?.name,
+      album: track.album?.title,
+      albumArt: track.album?.image?.large || track.album?.image?.thumbnail,
+      albumId: track.album?.id,
+      artistId: track.performer?.id,
+      duration: formatDuration(track.duration),
+      durationSeconds: track.duration,
+      hires: track.hires,
+      bitDepth: track.maximum_bit_depth,
+      samplingRate: track.maximum_sampling_rate
+    };
+
+    onTrackPlay(displayTrack);
+  }
+
   // Add a suggested track to the playlist
   async function handleAddSuggestedTrack(suggestedTrack: import('$lib/services/playlistSuggestionsService').SuggestedTrack) {
     try {
@@ -1738,8 +1833,9 @@
             onDownload={available && !track.isLocal && onTrackDownload ? () => onTrackDownload(track) : undefined}
             onRemoveDownload={available && !track.isLocal && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
             menuActions={removedFromQobuz ? (isOwnPlaylist ? {
-              // Only allow remove from playlist for tracks removed from Qobuz (owned playlists only)
-              onRemoveFromPlaylist: () => removeTrackFromPlaylist(track)
+              // Only allow remove from playlist and find replacement for tracks removed from Qobuz (owned playlists only)
+              onRemoveFromPlaylist: () => removeTrackFromPlaylist(track),
+              onFindReplacement: () => openReplacementModal(track)
             } : {}) : available ? {
               onPlayNow: () => handleTrackClick(track, idx),
               onPlayNext: track.isLocal ? () => handleTrackPlayNext(track) : (onTrackPlayNext ? () => onTrackPlayNext(track) : undefined),
@@ -1799,6 +1895,16 @@
     onDelete={handleDelete}
   />
 {/if}
+
+<!-- Track Replacement Modal -->
+<TrackReplacementModal
+  isOpen={replacementModalOpen}
+  trackTitle={trackToReplace?.title ?? ''}
+  trackArtist={trackToReplace?.artist}
+  onClose={() => { replacementModalOpen = false; trackToReplace = null; }}
+  onSelect={handleTrackReplacement}
+  onPreview={handlePreviewReplacement}
+/>
 
 <style>
   .playlist-detail {

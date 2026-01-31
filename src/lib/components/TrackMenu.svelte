@@ -16,7 +16,8 @@
     CloudDownload,
     RefreshCw,
     Radio,
-    Info
+    Info,
+    Search
   } from 'lucide-svelte';
   import { shouldHidePlaylistFeatures } from '$lib/utils/offlineHelpers';
   import {
@@ -37,6 +38,7 @@
     onAddFavorite?: () => void;
     onAddToPlaylist?: () => void;
     onRemoveFromPlaylist?: () => void;
+    onFindReplacement?: () => void;
     onShareQobuz?: () => void;
     onShareSonglink?: () => void;
     onGoToAlbum?: () => void;
@@ -58,6 +60,7 @@
     onAddFavorite,
     onAddToPlaylist,
     onRemoveFromPlaylist,
+    onFindReplacement,
     onShareQobuz,
     onShareSonglink,
     onGoToAlbum,
@@ -100,7 +103,7 @@
   }
 
   const hasPlayback = $derived(!!(onPlayNow || onPlayTrackOnly || onPlayFromHere || onPlayNext || onPlayLater || onCreateRadio));
-  const hasLibrary = $derived(!!(onAddFavorite || onAddToPlaylist || onRemoveFromPlaylist));
+  const hasLibrary = $derived(!!(onAddFavorite || onAddToPlaylist || onRemoveFromPlaylist || onFindReplacement));
   const hasShare = $derived(!!(onShareQobuz || onShareSonglink));
   const hasDownload = $derived(!!onDownload || isTrackDownloaded);
   const hasNav = $derived(!!(onGoToAlbum || onGoToArtist || onShowInfo));
@@ -412,6 +415,12 @@
               <button class="menu-item danger" onclick={() => handleAction(onRemoveFromPlaylist)}>
                 <Trash2 size={14} />
                 <span>Remove from playlist</span>
+              </button>
+            {/if}
+            {#if onFindReplacement}
+              <button class="menu-item" onclick={() => handleAction(onFindReplacement)}>
+                <Search size={14} />
+                <span>Find available version</span>
               </button>
             {/if}
           {/if}

@@ -194,7 +194,16 @@
     "private": "Private",
     "import": "Import",
     "manage": "Manage playlists",
-    "allHidden": "All playlists are hidden"
+    "allHidden": "All playlists are hidden",
+    "findReplacement": "Find Available Version",
+    "searchingFor": "Searching for",
+    "noReplacementsFound": "No available versions found",
+    "tryDifferentSearch": "Try a different search query",
+    "searchToFindReplacement": "Search to find a replacement track",
+    "replaceTrack": "Replace Track",
+    "lookForAvailableVersion": "Look for available version",
+    "trackReplaced": "Track replaced successfully",
+    "trackReplaceFailed": "Failed to replace track"
   },
   "sort": {
     "nameAZ": "Name (A-Z)",
@@ -253,7 +262,7 @@
     "lyrics": "Lyrics",
     "noLyrics": "No lyrics available",
     "fetchingLyrics": "Fetching lyrics...",
-    "trackUnavailable": "is no longer available",
+    "trackUnavailable": "Track no longer available in Qobuz library",
     "shuffle": "Shuffle",
     "repeat": "Repeat",
     "repeatAll": "Repeat All",
