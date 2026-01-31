@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { Loader2, Play, Radio, AlertCircle, ListMusic } from 'lucide-svelte';
+  import { Loader2, Play, Radio, AlertCircle, ListPlus, ListEnd } from 'lucide-svelte';
   import { t } from '$lib/i18n';
 
   interface Playlist {
@@ -20,6 +20,11 @@
     duration: number;
   }
 
+  interface TracksContainer {
+    items: Track[];
+    total: number;
+  }
+
   interface ArtistDetail {
     id: number;
     name: string;
@@ -35,9 +40,11 @@
     currentArtwork?: string;
     onPlayPlaylist?: (playlistId: number) => void;
     onPlayTrack?: (trackId: number) => void;
+    onAddToQueue?: (type: 'playlist' | 'radio', id: number) => void;
+    onPlayNext?: (type: 'playlist' | 'radio', id: number) => void;
   }
 
-  let { trackId, artistId, artistName, trackName, currentArtwork, onPlayPlaylist, onPlayTrack }: Props = $props();
+  let { trackId, artistId, artistName, trackName, currentArtwork, onPlayPlaylist, onPlayTrack, onAddToQueue, onPlayNext }: Props = $props();
 
   // State
   let artistPlaylists = $state<Playlist[]>([]);
@@ -56,8 +63,6 @@
 
   /**
    * Dedupe tracks by exact lowercase title, keeping the first occurrence.
-   * This removes exact duplicates but keeps different versions (Remaster, Live, etc.)
-   * to give users variety to choose from.
    */
   function dedupeByExactTitle(tracks: Track[]): Track[] {
     const seen = new Set<string>();
@@ -97,20 +102,41 @@
       }
 
       // Extract tracks for recommendations
+      let tracks: Track[] = [];
       if (artist.tracks_appears_on?.items) {
-        // Filter current track, dedupe exact titles, shuffle, and take 10
         const filtered = artist.tracks_appears_on.items.filter(t => t.id !== trackId);
-        const deduped = dedupeByExactTitle(filtered);
-        const shuffled = deduped.sort(() => Math.random() - 0.5);
-        recommendedTracks = shuffled.slice(0, 10);
-
-        // Log for debugging sparse recommendations
-        if (deduped.length < 3) {
-          console.log(`[Suggestions] Sparse data for artist ${id}: ${artist.tracks_appears_on.items.length} tracks → ${filtered.length} after filter → ${deduped.length} after dedupe`);
-        }
-      } else {
-        recommendedTracks = [];
+        tracks = dedupeByExactTitle(filtered);
       }
+
+      // If sparse data, fallback to artist's popular tracks
+      if (tracks.length < 5) {
+        console.log(`[Suggestions] Sparse tracks_appears_on (${tracks.length}), fetching artist tracks...`);
+        try {
+          const artistTracks = await invoke<TracksContainer>('get_artist_tracks', {
+            artistId: id,
+            limit: 30,
+            offset: 0
+          });
+          if (artistTracks.items) {
+            const filtered = artistTracks.items.filter(t => t.id !== trackId);
+            const deduped = dedupeByExactTitle(filtered);
+            // Merge with existing, prioritizing new tracks
+            const existingIds = new Set(tracks.map(t => t.id));
+            for (const t of deduped) {
+              if (!existingIds.has(t.id)) {
+                tracks.push(t);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[Suggestions] Failed to fetch artist tracks:', e);
+        }
+      }
+
+      // Shuffle and take 10
+      const shuffled = tracks.sort(() => Math.random() - 0.5);
+      recommendedTracks = shuffled.slice(0, 10);
+
     } catch (e) {
       console.error('Failed to load suggestions:', e);
       error = 'Failed to load suggestions';
@@ -121,7 +147,7 @@
     }
   }
 
-  // Get unique artwork URLs for radio collage (from recommended tracks)
+  // Get unique artwork URLs for radio collage
   const radioCollageImages = $derived.by(() => {
     const images: string[] = [];
     if (currentArtwork) images.push(currentArtwork);
@@ -144,7 +170,6 @@
         trackName: trackName || 'Unknown Track',
         artistId
       });
-      // Radio will auto-start playing via queue update
     } catch (e) {
       console.error('Failed to start song radio:', e);
       error = 'Failed to start radio';
@@ -162,7 +187,6 @@
   }
 
   const isLoading = $derived(loading && !artistPlaylists.length && !recommendedTracks.length);
-  const hasContent = $derived(artistPlaylists.length > 0 || recommendedTracks.length > 0 || trackId);
 </script>
 
 <div class="suggestions-panel">
@@ -181,56 +205,58 @@
       <div class="cards-section">
         <!-- Artist Playlists from Qobuz -->
         {#each artistPlaylists as playlist (playlist.id)}
-            <button
-              class="card playlist-card"
-              onclick={() => handlePlayPlaylist(playlist.id)}
-              title={playlist.description || playlist.name}
-            >
-              <div class="card-badge qobuz">
-                <img src="/qobuz-logo-filled.svg" alt="Qobuz" class="badge-icon" />
-              </div>
+          <div class="card playlist-card">
+            <div class="card-badge qobuz">
+              <img src="/qobuz-logo-filled.svg" alt="Qobuz" class="badge-icon badge-qobuz" />
+            </div>
+            <div class="card-image-wrapper">
               {#if playlist.images?.[0]}
                 <img src={playlist.images[0]} alt="" class="card-image" />
               {:else}
                 <div class="card-image-placeholder">
-                  <ListMusic size={32} />
+                  <img src="/playlist.svg" alt="" class="placeholder-icon" />
                 </div>
               {/if}
-              <div class="card-content">
-                <span class="card-title">{playlist.name}</span>
-                <span class="card-subtitle">
-                  <ListMusic size={10} />
-                  Playlist · {playlist.tracks_count} tracks
-                </span>
+              <!-- Glyph that hides on hover -->
+              <div class="card-glyph">
+                <img src="/playlist.svg" alt="" class="glyph-icon" />
               </div>
-              <div class="card-play">
-                <Play size={16} fill="currentColor" />
+              <!-- Hover overlay with actions -->
+              <div class="card-overlay">
+                <button class="overlay-btn secondary" onclick={() => onAddToQueue?.('playlist', playlist.id)} title="Add to queue">
+                  <ListPlus size={16} />
+                </button>
+                <button class="overlay-btn primary" onclick={() => handlePlayPlaylist(playlist.id)} title="Play">
+                  <Play size={20} fill="currentColor" />
+                </button>
+                <button class="overlay-btn secondary" onclick={() => onPlayNext?.('playlist', playlist.id)} title="Play next">
+                  <ListEnd size={16} />
+                </button>
               </div>
-            </button>
+            </div>
+            <div class="card-content">
+              <span class="card-title">{playlist.name}</span>
+              <span class="card-subtitle">Playlist · {playlist.tracks_count} tracks</span>
+            </div>
+          </div>
         {/each}
 
         <!-- Song Radio Card -->
         {#if trackId}
-          <button
-            class="card radio-card"
-            onclick={startSongRadio}
-            disabled={loadingRadio}
-            title={$t('player.radioExperimental') || 'Song Radio - Experimental QBZ feature'}
-          >
+          <div class="card radio-card">
             <div class="card-info" title={$t('player.radioExperimentalTooltip') || 'Radio is an experimental QBZ feature that generates a playlist based on the current track.'}>
               <AlertCircle size={14} />
             </div>
             <div class="card-badge qbz">
-              <img src="/qbz-logo.svg" alt="QBZ" class="badge-icon qbz-icon" />
+              <img src="/qbz-logo.svg" alt="QBZ" class="badge-icon badge-qbz" />
             </div>
-            <div class="radio-collage">
-              {#if loadingRadio}
-                <div class="collage-loading">
-                  <Loader2 size={32} class="spinner" />
-                </div>
-              {:else}
-                {#if radioCollageImages.length >= 4}
-                  <!-- Diamond/rotated collage layout -->
+            <div class="card-image-wrapper">
+              <div class="radio-collage">
+                {#if loadingRadio}
+                  <div class="collage-loading">
+                    <Loader2 size={32} class="spinner" />
+                  </div>
+                {:else if radioCollageImages.length >= 4}
                   <div class="collage-diamond">
                     <img src={radioCollageImages[0]} alt="" class="diamond-img top" />
                     <img src={radioCollageImages[1]} alt="" class="diamond-img left" />
@@ -239,27 +265,34 @@
                   </div>
                 {:else if radioCollageImages.length > 0}
                   <img src={radioCollageImages[0]} alt="" class="collage-single" />
-                  <div class="collage-radio-overlay">
-                    <Radio size={24} />
-                  </div>
                 {:else}
-                  <div class="card-icon-bg">
+                  <div class="card-image-placeholder">
                     <Radio size={32} />
                   </div>
                 {/if}
-              {/if}
+              </div>
+              <!-- Glyph that hides on hover -->
+              <div class="card-glyph">
+                <Radio size={24} />
+              </div>
+              <!-- Hover overlay with actions -->
+              <div class="card-overlay">
+                <button class="overlay-btn secondary" onclick={() => onAddToQueue?.('radio', trackId)} title="Add to queue">
+                  <ListPlus size={16} />
+                </button>
+                <button class="overlay-btn primary" onclick={startSongRadio} disabled={loadingRadio} title="Play">
+                  <Play size={20} fill="currentColor" />
+                </button>
+                <button class="overlay-btn secondary" onclick={() => onPlayNext?.('radio', trackId)} title="Play next">
+                  <ListEnd size={16} />
+                </button>
+              </div>
             </div>
             <div class="card-content">
               <span class="card-title">{$t('player.songRadio') || 'Song Radio'}</span>
-              <span class="card-subtitle">
-                <Radio size={10} />
-                {$t('player.basedOnTrack') || 'Based on this track'}
-              </span>
+              <span class="card-subtitle">{$t('player.basedOnTrack') || 'Based on this track'}</span>
             </div>
-            <div class="card-play">
-              <Play size={16} fill="currentColor" />
-            </div>
-          </button>
+          </div>
         {/if}
       </div>
 
@@ -268,29 +301,29 @@
         <div class="tracks-section">
           <h3 class="section-title">{$t('player.recommendedTracks') || 'Recommended'}</h3>
           <div class="tracks-list">
-              {#each recommendedTracks as track (track.id)}
-                <button
-                  class="track-item"
-                  onclick={() => handlePlayTrack(track.id)}
-                >
-                  <div class="track-artwork">
-                    {#if track.album?.image?.large}
-                      <img src={track.album.image.large} alt="" />
-                    {:else}
-                      <div class="artwork-placeholder"></div>
-                    {/if}
-                    <div class="track-play-overlay">
-                      <Play size={14} fill="currentColor" />
-                    </div>
+            {#each recommendedTracks as track (track.id)}
+              <button
+                class="track-item"
+                onclick={() => handlePlayTrack(track.id)}
+              >
+                <div class="track-artwork">
+                  {#if track.album?.image?.large}
+                    <img src={track.album.image.large} alt="" />
+                  {:else}
+                    <div class="artwork-placeholder"></div>
+                  {/if}
+                  <div class="track-play-overlay">
+                    <Play size={14} fill="currentColor" />
                   </div>
-                  <div class="track-info">
-                    <span class="track-title">{track.title}</span>
-                    <span class="track-artist">{track.performer?.name || 'Unknown'}</span>
-                  </div>
-                  <span class="track-duration">{formatDuration(track.duration)}</span>
-                </button>
-              {/each}
-            </div>
+                </div>
+                <div class="track-info">
+                  <span class="track-title">{track.title}</span>
+                  <span class="track-artist">{track.performer?.name || 'Unknown'}</span>
+                </div>
+                <span class="track-duration">{formatDuration(track.duration)}</span>
+              </button>
+            {/each}
+          </div>
         </div>
       {/if}
 
@@ -356,6 +389,7 @@
     display: flex;
     gap: 12px;
     flex-wrap: wrap;
+    padding-top: 4px; /* Space for hover effect */
   }
 
   .card {
@@ -369,65 +403,173 @@
     display: flex;
     flex-direction: column;
     gap: 10px;
-    cursor: pointer;
-    transition: all 150ms ease;
     position: relative;
     text-align: left;
+    transition: background 150ms ease, border-color 150ms ease;
   }
 
   .card:hover {
     background: var(--alpha-15, rgba(255, 255, 255, 0.15));
     border-color: var(--alpha-20, rgba(255, 255, 255, 0.2));
-    transform: translateY(-2px);
-  }
-
-  .card:disabled {
-    opacity: 0.6;
-    cursor: wait;
   }
 
   .card-badge {
     position: absolute;
     top: 8px;
     right: 8px;
-    width: 20px;
-    height: 20px;
+    width: 22px;
+    height: 22px;
     border-radius: 4px;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 10px;
-    font-weight: 700;
-    z-index: 2;
+    z-index: 3;
   }
 
   .badge-icon {
+    object-fit: contain;
+  }
+
+  /* Qobuz icon: viewBox 1001x1006, content fills box */
+  .badge-qobuz {
     width: 18px;
     height: 18px;
   }
 
-  .qbz-icon {
-    width: 20px;
-    height: 20px;
+  /* QBZ icon: viewBox 1083x1083, circular vinyl that fills box - needs to appear same size */
+  .badge-qbz {
+    width: 22px;
+    height: 22px;
+  }
+
+  .card-info {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    color: var(--alpha-50, rgba(255, 255, 255, 0.5));
+    cursor: help;
+    z-index: 3;
+  }
+
+  .card-info:hover {
+    color: var(--alpha-80, rgba(255, 255, 255, 0.8));
+  }
+
+  /* Image wrapper with hover effects */
+  .card-image-wrapper {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 8px;
+    overflow: hidden;
+    transition: transform 150ms ease;
+  }
+
+  .card:hover .card-image-wrapper {
+    transform: translateY(-4px);
   }
 
   .card-image {
     width: 100%;
-    aspect-ratio: 1;
-    border-radius: 8px;
+    height: 100%;
     object-fit: cover;
   }
 
-  .card-image-placeholder,
-  .card-icon-bg {
+  .card-image-placeholder {
     width: 100%;
-    aspect-ratio: 1;
-    border-radius: 8px;
+    height: 100%;
     background: var(--alpha-10, rgba(255, 255, 255, 0.1));
     display: flex;
     align-items: center;
     justify-content: center;
     color: var(--alpha-40, rgba(255, 255, 255, 0.4));
+  }
+
+  .placeholder-icon {
+    width: 32px;
+    height: 32px;
+    opacity: 0.4;
+    filter: invert(1);
+  }
+
+  /* Glyph overlay (visible by default, hides on hover) */
+  .card-glyph {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.4);
+    color: white;
+    transition: opacity 150ms ease;
+  }
+
+  .glyph-icon {
+    width: 28px;
+    height: 28px;
+    filter: invert(1);
+    opacity: 0.9;
+  }
+
+  .card:hover .card-glyph {
+    opacity: 0;
+  }
+
+  /* Hover overlay with action buttons */
+  .card-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.6);
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .card:hover .card-overlay {
+    opacity: 1;
+  }
+
+  .overlay-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    color: white;
+    transition: transform 100ms ease, background 100ms ease;
+  }
+
+  .overlay-btn:hover {
+    transform: scale(1.1);
+  }
+
+  .overlay-btn:disabled {
+    opacity: 0.5;
+    cursor: wait;
+  }
+
+  .overlay-btn.primary {
+    width: 40px;
+    height: 40px;
+    background: var(--accent-primary, #7c3aed);
+  }
+
+  .overlay-btn.primary:hover {
+    background: var(--accent-hover, #6d28d9);
+  }
+
+  .overlay-btn.secondary {
+    width: 32px;
+    height: 32px;
+    background: var(--alpha-30, rgba(255, 255, 255, 0.3));
+  }
+
+  .overlay-btn.secondary:hover {
+    background: var(--alpha-50, rgba(255, 255, 255, 0.5));
   }
 
   .card-content {
@@ -448,52 +590,12 @@
   .card-subtitle {
     font-size: 11px;
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .card-play {
-    position: absolute;
-    bottom: 12px;
-    right: 12px;
-    width: 28px;
-    height: 28px;
-    background: var(--accent-primary, #7c3aed);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    opacity: 0;
-    transform: scale(0.8);
-    transition: all 150ms ease;
-  }
-
-  .card:hover .card-play {
-    opacity: 1;
-    transform: scale(1);
-  }
-
-  .card-info {
-    position: absolute;
-    top: 8px;
-    left: 8px;
-    color: var(--alpha-50, rgba(255, 255, 255, 0.5));
-    cursor: help;
-    z-index: 2;
-  }
-
-  .card-info:hover {
-    color: var(--alpha-80, rgba(255, 255, 255, 0.8));
   }
 
   /* Radio Collage */
   .radio-collage {
     width: 100%;
-    aspect-ratio: 1;
-    border-radius: 8px;
-    overflow: hidden;
+    height: 100%;
     position: relative;
     background: var(--alpha-10, rgba(255, 255, 255, 0.1));
   }
@@ -511,17 +613,6 @@
     width: 100%;
     height: 100%;
     object-fit: cover;
-    filter: brightness(0.7);
-  }
-
-  .collage-radio-overlay {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    background: rgba(0, 0, 0, 0.3);
   }
 
   /* Diamond collage - rotated squares pattern */

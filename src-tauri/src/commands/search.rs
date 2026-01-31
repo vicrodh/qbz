@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use crate::api::{Album, Artist, ArtistAlbums, LabelDetail, SearchResultsPage, Track};
+use crate::api::{Album, Artist, ArtistAlbums, LabelDetail, SearchResultsPage, Track, TracksContainer};
 use crate::api_cache::ApiCacheState;
 use crate::AppState;
 use serde::{Deserialize, Serialize};
@@ -218,6 +218,28 @@ pub async fn get_artist_detail(
     let client = state.client.lock().await;
     client
         .get_artist_detail(artist_id, Some(1000), Some(0))
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get artist's popular/top tracks
+#[tauri::command]
+pub async fn get_artist_tracks(
+    artist_id: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<TracksContainer, String> {
+    log::info!(
+        "Command: get_artist_tracks {} limit={:?} offset={:?}",
+        artist_id,
+        limit,
+        offset
+    );
+
+    let client = state.client.lock().await;
+    client
+        .get_artist_tracks(artist_id, limit.unwrap_or(50), offset.unwrap_or(0))
         .await
         .map_err(|e| e.to_string())
 }
