@@ -315,19 +315,42 @@ pub struct StreamInfo {
 async fn get_stream_info(url: &str) -> Result<StreamInfo, String> {
     use std::time::{Duration, Instant};
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(30))
-        .connect_timeout(Duration::from_secs(10))
-        .build()
-        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+    lazy_static::lazy_static! {
+        // Reuse a static client to avoid intermittent builder errors from creating too many clients
+        static ref HTTP_CLIENT: reqwest::Client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(30))
+            .connect_timeout(Duration::from_secs(10))
+            .build()
+            .expect("Failed to create HTTP client");
+    }
 
-    // First, do a HEAD request to get content length
-    let head_response = client
-        .head(url)
-        .header("User-Agent", "Mozilla/5.0")
-        .send()
-        .await
-        .map_err(|e| format!("Failed HEAD request: {}", e))?;
+    let client = &*HTTP_CLIENT;
+
+    // Retry HEAD request up to 3 times with small delay to handle transient failures
+    let mut head_response = None;
+    let mut last_error = String::new();
+    for attempt in 0..3 {
+        match client
+            .head(url)
+            .header("User-Agent", "Mozilla/5.0")
+            .send()
+            .await
+        {
+            Ok(resp) => {
+                head_response = Some(resp);
+                break;
+            }
+            Err(e) => {
+                last_error = e.to_string();
+                if attempt < 2 {
+                    log::warn!("HEAD request attempt {} failed: {}, retrying...", attempt + 1, e);
+                    tokio::time::sleep(Duration::from_millis(100)).await;
+                }
+            }
+        }
+    }
+
+    let head_response = head_response.ok_or_else(|| format!("Failed HEAD request after 3 attempts: {}", last_error))?;
 
     if !head_response.status().is_success() {
         return Err(format!("HEAD request failed: {}", head_response.status()));
