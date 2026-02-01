@@ -11,6 +11,7 @@
   import QueuePanel from './panels/QueuePanel.svelte';
   import CoverflowPanel from './panels/CoverflowPanel.svelte';
   import LyricsFocusPanel from './panels/LyricsFocusPanel.svelte';
+  import QualityBadge from '$lib/components/QualityBadge.svelte';
 
   interface LyricsLine {
     text: string;
@@ -119,6 +120,7 @@
   let showUI = $state(true);
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
   let isFullscreen = $state(false);
+  let isMaximized = $state(false);
 
   const hasLyrics = $derived(lyricsLines.length > 0 || lyricsLoading);
   const AUTO_HIDE_DELAY = 4000;
@@ -131,10 +133,11 @@
     isFullscreen = !currentFullscreen;
   }
 
-  // Check fullscreen state on open
-  async function checkFullscreenState() {
+  // Check fullscreen and maximized state on open
+  async function checkWindowState() {
     const window = getCurrentWindow();
     isFullscreen = await window.isFullscreen();
+    isMaximized = await window.isMaximized();
   }
 
   // Exit immersive and fullscreen
@@ -150,12 +153,19 @@
   // Toggle maximize (not fullscreen)
   async function toggleMaximize() {
     const window = getCurrentWindow();
-    const maximized = await window.isMaximized();
-    if (maximized) {
+    if (isMaximized) {
       await window.unmaximize();
+      isMaximized = false;
     } else {
       await window.maximize();
+      isMaximized = true;
     }
+  }
+
+  // Minimize window
+  async function minimizeWindow() {
+    const window = getCurrentWindow();
+    await window.minimize();
   }
 
   // Auto-hide UI after inactivity
@@ -238,7 +248,7 @@
   $effect(() => {
     if (isOpen) {
       resetHideTimer();
-      checkFullscreenState();
+      checkWindowState();
       document.addEventListener('keydown', handleKeydown);
 
       return () => {
@@ -280,8 +290,10 @@
       hasTrackInfo={enableCredits}
       hasSuggestions={enableSuggestions}
       {isFullscreen}
+      {isMaximized}
       onToggleFullscreen={toggleFullscreen}
       onToggleMaximize={toggleMaximize}
+      onMinimize={minimizeWindow}
     />
 
     <!-- Content based on display mode -->
@@ -293,6 +305,9 @@
         {artist}
         {album}
         {isPlaying}
+        {quality}
+        {bitDepth}
+        {samplingRate}
       />
     {:else if displayMode === 'lyrics-focus'}
       <!-- Lyrics Focus: Single line, large, centered -->
@@ -323,6 +338,12 @@
           <div class="split-track-info">
             <h2 class="split-track-title">{trackTitle}</h2>
             <p class="split-track-artist">{artist}</p>
+            {#if album}
+              <p class="split-track-album">{album}</p>
+            {/if}
+            <div class="split-quality-badge">
+              <QualityBadge {quality} {bitDepth} {samplingRate} />
+            </div>
           </div>
         </div>
 
@@ -448,10 +469,25 @@
   .split-track-artist {
     font-size: clamp(14px, 1.8vw, 16px);
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
-    margin: 0;
+    margin: 0 0 4px 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+
+  .split-track-album {
+    font-size: clamp(12px, 1.5vw, 14px);
+    color: var(--alpha-50, rgba(255, 255, 255, 0.5));
+    margin: 0 0 12px 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .split-quality-badge {
+    display: flex;
+    justify-content: center;
+    margin-top: 8px;
   }
 
   .panel-section {
@@ -459,9 +495,10 @@
     min-width: 0;
     min-height: 0;
     max-width: 560px;
-    height: 100%;
+    max-height: 80vh;
     display: flex;
     flex-direction: column;
+    align-self: center;
   }
 
   /* Focus mode panels (queue) */

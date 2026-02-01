@@ -1,10 +1,15 @@
 <script lang="ts">
+  import QualityBadge from '$lib/components/QualityBadge.svelte';
+
   interface Props {
     artwork: string;
     trackTitle: string;
     artist: string;
     album?: string;
     isPlaying?: boolean;
+    quality?: string;
+    bitDepth?: number;
+    samplingRate?: number;
   }
 
   let {
@@ -12,7 +17,10 @@
     trackTitle,
     artist,
     album,
-    isPlaying = false
+    isPlaying = false,
+    quality,
+    bitDepth,
+    samplingRate
   }: Props = $props();
 </script>
 
@@ -40,6 +48,9 @@
     {#if album}
       <p class="track-album">{album}</p>
     {/if}
+    <div class="quality-badge-wrapper">
+      <QualityBadge {quality} {bitDepth} {samplingRate} />
+    </div>
   </div>
 </div>
 
@@ -156,6 +167,10 @@
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
     margin: 0;
     font-style: italic;
+  }
+
+  .quality-badge-wrapper {
+    margin-top: 12px;
   }
 
   /* Responsive */
