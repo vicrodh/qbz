@@ -1,5 +1,6 @@
 <script lang="ts">
   import { startActiveLineUpdates } from '$lib/stores/lyricsStore';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import ImmersiveBackground from './ImmersiveBackground.svelte';
   import ImmersiveArtwork from './ImmersiveArtwork.svelte';
   import ImmersiveHeader, { type ImmersiveTab, type DisplayMode } from './ImmersiveHeader.svelte';
@@ -117,9 +118,24 @@
   let activeTab: ImmersiveTab = $state('lyrics');
   let showUI = $state(true);
   let hideTimeout: ReturnType<typeof setTimeout> | null = null;
+  let isFullscreen = $state(false);
 
   const hasLyrics = $derived(lyricsLines.length > 0 || lyricsLoading);
   const AUTO_HIDE_DELAY = 4000;
+
+  // Fullscreen toggle
+  async function toggleFullscreen() {
+    const window = getCurrentWindow();
+    const currentFullscreen = await window.isFullscreen();
+    await window.setFullscreen(!currentFullscreen);
+    isFullscreen = !currentFullscreen;
+  }
+
+  // Check fullscreen state on open
+  async function checkFullscreenState() {
+    const window = getCurrentWindow();
+    isFullscreen = await window.isFullscreen();
+  }
 
   // Auto-hide UI after inactivity
   function resetHideTimer() {
@@ -140,6 +156,10 @@
     switch (e.key) {
       case 'Escape':
         onClose();
+        break;
+      case 'F11':
+        e.preventDefault();
+        toggleFullscreen();
         break;
       case ' ':
         e.preventDefault();
@@ -197,6 +217,7 @@
   $effect(() => {
     if (isOpen) {
       resetHideTimer();
+      checkFullscreenState();
       document.addEventListener('keydown', handleKeydown);
 
       return () => {
@@ -237,6 +258,8 @@
       hasLyrics={true}
       hasTrackInfo={enableCredits}
       hasSuggestions={enableSuggestions}
+      {isFullscreen}
+      onToggleFullscreen={toggleFullscreen}
     />
 
     <!-- Content based on display mode -->
@@ -324,9 +347,6 @@
       {isShuffle}
       {repeatMode}
       {isFavorite}
-      {quality}
-      {bitDepth}
-      {samplingRate}
       {onTogglePlay}
       {onSkipBack}
       {onSkipForward}

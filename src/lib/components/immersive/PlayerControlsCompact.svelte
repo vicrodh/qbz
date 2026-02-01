@@ -11,7 +11,6 @@
     VolumeX,
     MoreHorizontal
   } from 'lucide-svelte';
-  import QualityBadge from '$lib/components/QualityBadge.svelte';
 
   interface Props {
     visible?: boolean;
@@ -22,9 +21,6 @@
     isShuffle: boolean;
     repeatMode: 'off' | 'all' | 'one';
     isFavorite: boolean;
-    quality?: string;
-    bitDepth?: number;
-    samplingRate?: number;
     onTogglePlay: () => void;
     onSkipBack?: () => void;
     onSkipForward?: () => void;
@@ -45,9 +41,6 @@
     isShuffle,
     repeatMode,
     isFavorite,
-    quality,
-    bitDepth,
-    samplingRate,
     onTogglePlay,
     onSkipBack,
     onSkipForward,
@@ -138,16 +131,19 @@
 </script>
 
 <div class="controls-wrapper" class:visible>
-  <!-- Quality Badge above player -->
-  <div class="quality-row">
-    <QualityBadge {quality} {bitDepth} {samplingRate} />
-  </div>
-
   <div class="player-bar">
     <!-- All Controls in Single Row -->
     <div class="controls-row">
-      <!-- Left: Shuffle + Heart -->
+      <!-- Left: Fav + Shuffle + Repeat -->
       <div class="controls-group left">
+        <button
+          class="control-btn"
+          class:active={isFavorite}
+          onclick={onToggleFavorite}
+          title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+        >
+          <Heart size={12} fill={isFavorite ? 'currentColor' : 'none'} />
+        </button>
         <button
           class="control-btn"
           class:active={isShuffle}
@@ -158,11 +154,14 @@
         </button>
         <button
           class="control-btn"
-          class:active={isFavorite}
-          onclick={onToggleFavorite}
-          title={isFavorite ? 'Remove from Favorites' : 'Add to Favorites'}
+          class:active={repeatMode !== 'off'}
+          onclick={onToggleRepeat}
+          title={repeatMode === 'off' ? 'Repeat' : repeatMode === 'all' ? 'Repeat All' : 'Repeat One'}
         >
-          <Heart size={12} fill={isFavorite ? 'currentColor' : 'none'} />
+          <Repeat size={12} />
+          {#if repeatMode === 'one'}
+            <span class="repeat-one">1</span>
+          {/if}
         </button>
       </div>
 
@@ -203,20 +202,8 @@
         <span class="time-text">{formatTime(duration)}</span>
       </div>
 
-      <!-- Right: Repeat + Volume + Menu + Expand -->
+      <!-- Right: Volume + Menu -->
       <div class="controls-group right">
-        <button
-          class="control-btn"
-          class:active={repeatMode !== 'off'}
-          onclick={onToggleRepeat}
-          title={repeatMode === 'off' ? 'Repeat' : repeatMode === 'all' ? 'Repeat All' : 'Repeat One'}
-        >
-          <Repeat size={12} />
-          {#if repeatMode === 'one'}
-            <span class="repeat-one">1</span>
-          {/if}
-        </button>
-
         <div class="volume-group">
           <button
             class="control-btn"
@@ -283,20 +270,11 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity 300ms ease, transform 300ms ease;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 12px;
   }
 
   .controls-wrapper.visible {
     opacity: 1;
     pointer-events: auto;
-  }
-
-  .quality-row {
-    display: flex;
-    justify-content: center;
   }
 
   .player-bar {

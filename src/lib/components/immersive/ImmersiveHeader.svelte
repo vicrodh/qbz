@@ -1,6 +1,7 @@
 <script lang="ts">
-  import { X, Disc3, LayoutGrid, Mic2, ListMusic, Music2, Info, Radio } from 'lucide-svelte';
+  import { Disc3, LayoutGrid, Mic2, ListMusic, Music2, Info, Radio, Maximize, Minimize, ChevronDown, X } from 'lucide-svelte';
   import { t } from '$lib/i18n';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
 
   export type ImmersiveTab = 'lyrics' | 'trackInfo' | 'suggestions' | 'queue';
   export type DisplayMode = 'coverflow' | 'split' | 'lyrics-focus' | 'queue-focus';
@@ -11,10 +12,13 @@
     onTabChange: (tab: ImmersiveTab) => void;
     onDisplayModeChange: (mode: DisplayMode) => void;
     onClose: () => void;
+    onCloseApp?: () => void;
     visible?: boolean;
     hasLyrics?: boolean;
     hasTrackInfo?: boolean;
     hasSuggestions?: boolean;
+    isFullscreen?: boolean;
+    onToggleFullscreen?: () => void;
   }
 
   let {
@@ -23,11 +27,41 @@
     onTabChange,
     onDisplayModeChange,
     onClose,
+    onCloseApp,
     visible = true,
     hasLyrics = true,
     hasTrackInfo = true,
-    hasSuggestions = true
+    hasSuggestions = true,
+    isFullscreen = false,
+    onToggleFullscreen
   }: Props = $props();
+
+  // Expandable window controls state
+  let isWindowControlsExpanded = $state(false);
+  let collapseTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  function handleWindowControlsEnter() {
+    if (collapseTimeout) {
+      clearTimeout(collapseTimeout);
+      collapseTimeout = null;
+    }
+    isWindowControlsExpanded = true;
+  }
+
+  function handleWindowControlsLeave() {
+    collapseTimeout = setTimeout(() => {
+      isWindowControlsExpanded = false;
+    }, 300);
+  }
+
+  async function handleCloseApp() {
+    if (onCloseApp) {
+      onCloseApp();
+    } else {
+      const window = getCurrentWindow();
+      await window.close();
+    }
+  }
 
   const tabs = $derived([
     { id: 'lyrics' as const, label: $t('player.lyrics'), icon: Music2, enabled: hasLyrics },
@@ -82,11 +116,50 @@
     <div class="tabs-placeholder"></div>
   {/if}
 
-  <!-- Right: Close button -->
+  <!-- Right: Expandable Window Controls -->
   <div class="header-actions">
-    <button class="action-btn" onclick={onClose} title={$t('actions.close') + ' (Esc)'}>
-      <X size={20} />
-    </button>
+    <div
+      class="window-controls"
+      class:expanded={isWindowControlsExpanded}
+      onmouseenter={handleWindowControlsEnter}
+      onmouseleave={handleWindowControlsLeave}
+      role="group"
+      aria-label="Window controls"
+    >
+      <!-- Expanded buttons (appear on hover) -->
+      <div class="expanded-buttons">
+        <button
+          class="window-btn"
+          onclick={onToggleFullscreen}
+          title={isFullscreen ? 'Exit Fullscreen (F11)' : 'Fullscreen (F11)'}
+        >
+          {#if isFullscreen}
+            <Minimize size={16} />
+          {:else}
+            <Maximize size={16} />
+          {/if}
+        </button>
+        <button
+          class="window-btn"
+          onclick={onClose}
+          title="Exit Immersive (Esc)"
+        >
+          <ChevronDown size={16} />
+        </button>
+        <button
+          class="window-btn close"
+          onclick={handleCloseApp}
+          title="Close App"
+        >
+          <X size={16} />
+        </button>
+      </div>
+
+      <!-- Default icon (window) -->
+      <button class="window-trigger" title="Window Controls">
+        <img src="/window.svg" alt="Window" class="window-icon" />
+      </button>
+    </div>
   </div>
 </header>
 
@@ -199,23 +272,87 @@
     gap: 8px;
   }
 
-  .action-btn {
+  /* Expandable Window Controls */
+  .window-controls {
+    position: relative;
+    display: flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.6);
+    border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
+    border-radius: 20px;
+    padding: 4px;
+    overflow: hidden;
+    transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .window-trigger {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 40px;
-    height: 40px;
-    background: rgba(0, 0, 0, 0.6);
-    border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: none;
+    border-radius: 50%;
+    cursor: pointer;
+    transition: all 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .window-trigger:hover {
+    background: var(--alpha-10, rgba(255, 255, 255, 0.1));
+  }
+
+  .window-icon {
+    width: 18px;
+    height: 18px;
+    filter: invert(1) opacity(0.7);
+    transition: filter 150ms ease;
+  }
+
+  .window-trigger:hover .window-icon {
+    filter: invert(1) opacity(1);
+  }
+
+  .expanded-buttons {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    max-width: 0;
+    opacity: 0;
+    overflow: hidden;
+    transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .window-controls.expanded .expanded-buttons {
+    max-width: 120px;
+    opacity: 1;
+    margin-right: 4px;
+  }
+
+  .window-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    background: none;
+    border: none;
     border-radius: 50%;
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
     cursor: pointer;
     transition: all 150ms ease;
+    flex-shrink: 0;
   }
 
-  .action-btn:hover {
+  .window-btn:hover {
     color: var(--text-primary, white);
-    background: rgba(0, 0, 0, 0.5);
+    background: var(--alpha-15, rgba(255, 255, 255, 0.15));
+  }
+
+  .window-btn.close:hover {
+    color: white;
+    background: rgba(239, 68, 68, 0.8);
   }
 
   /* Responsive */
