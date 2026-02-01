@@ -20,6 +20,8 @@ pub struct AudioSettings {
     pub stream_first_track: bool,
     /// Initial buffer size in seconds before starting streaming playback (1-10, default 3)
     pub stream_buffer_seconds: u8,
+    /// When true, skip L1+L2 cache writes (streaming-only mode). Offline cache still works.
+    pub streaming_only: bool,
 }
 
 impl Default for AudioSettings {
@@ -34,6 +36,7 @@ impl Default for AudioSettings {
             alsa_hardware_volume: false,  // Disabled by default (maximum compatibility)
             stream_first_track: true,  // Enabled by default for faster playback start
             stream_buffer_seconds: 3,  // 3 seconds initial buffer
+            streaming_only: false,  // Disabled by default (cache tracks for instant replay)
         }
     }
 }
@@ -78,6 +81,7 @@ impl AudioSettingsStore {
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN alsa_hardware_volume INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN stream_first_track INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN stream_buffer_seconds INTEGER DEFAULT 3", []);
+        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN streaming_only INTEGER DEFAULT 0", []);
 
         Ok(Self { conn })
     }
@@ -85,7 +89,7 @@ impl AudioSettingsStore {
     pub fn get_settings(&self) -> Result<AudioSettings, String> {
         self.conn
             .query_row(
-                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds FROM audio_settings WHERE id = 1",
+                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only FROM audio_settings WHERE id = 1",
                 [],
                 |row| {
                     // Parse backend_type from JSON string
@@ -108,6 +112,7 @@ impl AudioSettingsStore {
                         alsa_hardware_volume: row.get::<_, Option<i64>>(6)?.unwrap_or(0) != 0,
                         stream_first_track: row.get::<_, Option<i64>>(7)?.unwrap_or(0) != 0,
                         stream_buffer_seconds: row.get::<_, Option<i64>>(8)?.unwrap_or(3) as u8,
+                        streaming_only: row.get::<_, Option<i64>>(9)?.unwrap_or(0) != 0,
                     })
                 },
             )
@@ -215,6 +220,16 @@ impl AudioSettingsStore {
             .map_err(|e| format!("Failed to set stream buffer seconds: {}", e))?;
         Ok(())
     }
+
+    pub fn set_streaming_only(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET streaming_only = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set streaming only: {}", e))?;
+        Ok(())
+    }
 }
 
 /// Thread-safe wrapper
@@ -318,4 +333,13 @@ pub fn set_audio_stream_buffer_seconds(
 ) -> Result<(), String> {
     let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
     store.set_stream_buffer_seconds(seconds)
+}
+
+#[tauri::command]
+pub fn set_audio_streaming_only(
+    state: tauri::State<'_, AudioSettingsState>,
+    enabled: bool,
+) -> Result<(), String> {
+    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    store.set_streaming_only(enabled)
 }

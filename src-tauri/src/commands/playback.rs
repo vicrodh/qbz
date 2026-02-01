@@ -114,14 +114,14 @@ pub async fn play_track(
     // Not in any cache - check if streaming is enabled
     log::info!("Track {} not in any cache, checking streaming setting...", track_id);
 
-    // Check if stream_first_track is enabled
-    let (stream_first_enabled, buffer_seconds) = {
+    // Check streaming settings
+    let (stream_first_enabled, buffer_seconds, streaming_only) = {
         let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
         match store.get_settings() {
-            Ok(settings) => (settings.stream_first_track, settings.stream_buffer_seconds),
+            Ok(settings) => (settings.stream_first_track, settings.stream_buffer_seconds, settings.streaming_only),
             Err(e) => {
                 log::warn!("Failed to get audio settings, using defaults: {}", e);
-                (false, 3)
+                (false, 3, false)
             }
         }
     };
@@ -171,10 +171,17 @@ pub async fn play_track(
         let url = stream_url.url.clone();
         let cache_clone = cache.clone();
         let content_len = stream_info.content_length;
+        let skip_cache = streaming_only;
         tokio::spawn(async move {
-            match download_and_stream(&url, buffer_writer, track_id, cache_clone, content_len).await {
-                Ok(()) => log::info!("Track {} ready for instant replay from cache", track_id),
-                Err(e) => log::error!("Streaming cache failed for track {}: {}", track_id, e),
+            match download_and_stream(&url, buffer_writer, track_id, cache_clone, content_len, skip_cache).await {
+                Ok(()) => {
+                    if skip_cache {
+                        log::info!("Track {} streaming complete (cache disabled)", track_id);
+                    } else {
+                        log::info!("Track {} ready for instant replay from cache", track_id);
+                    }
+                },
+                Err(e) => log::error!("Streaming failed for track {}: {}", track_id, e),
             }
         });
 
@@ -196,8 +203,12 @@ pub async fn play_track(
     let audio_data = download_audio(&stream_url.url).await?;
     let data_size = audio_data.len();
 
-    // Cache it
-    cache.insert(track_id, audio_data.clone());
+    // Cache it (unless streaming_only mode)
+    if !streaming_only {
+        cache.insert(track_id, audio_data.clone());
+    } else {
+        log::info!("Streaming-only mode: skipping cache for track {}", track_id);
+    }
 
     // Play it
     state.player.play_data(audio_data, track_id)?;
@@ -491,13 +502,14 @@ fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16, u32), Stri
 }
 
 /// Download audio chunks and stream them to the buffer writer
-/// Also caches the complete data when download finishes
+/// Also caches the complete data when download finishes (unless skip_cache is true)
 async fn download_and_stream(
     url: &str,
     writer: crate::player::BufferWriter,
     track_id: u64,
     cache: Arc<AudioCache>,
     content_length: u64,
+    skip_cache: bool,
 ) -> Result<(), String> {
     use std::time::{Duration, Instant};
     use futures_util::StreamExt;
@@ -594,9 +606,13 @@ async fn download_and_stream(
         avg_speed
     );
 
-    // Cache the complete file for future plays
-    log::info!("Caching track {} for future playback", track_id);
-    cache.insert(track_id, all_data);
+    // Cache the complete file for future plays (unless streaming-only mode)
+    if skip_cache {
+        log::info!("Streaming-only mode: skipping cache for track {}", track_id);
+    } else {
+        log::info!("Caching track {} for future playback", track_id);
+        cache.insert(track_id, all_data);
+    }
 
     Ok(())
 }
