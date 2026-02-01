@@ -176,7 +176,7 @@
     align-items: center;
     gap: 6px;
     padding: 5px 10px;
-    min-width: 120px;
+    min-width: 136px;
     height: 36px;
     border-radius: 4px;
     background: var(--alpha-6);
