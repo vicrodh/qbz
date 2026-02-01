@@ -50,10 +50,10 @@
     mouseY = 0.5;
   }
 
-  // Parallax calculations (aggressive)
-  const coverOffsetX = $derived((mouseX - 0.5) * 80);
-  const coverOffsetY = $derived((mouseY - 0.5) * 50);
-  const revealOffset = $derived(isPlaying ? -12 : 0);
+  // Parallax calculations (extremely aggressive horizontal)
+  const coverOffsetX = $derived((mouseX - 0.5) * 200);
+  const coverOffsetY = $derived((mouseY - 0.5) * 40);
+  const revealOffset = $derived(isPlaying ? -8 : 0);
 
   // Vertex shader
   const vertexShaderSource = `#version 300 es
@@ -93,8 +93,8 @@
       float s = sin(u_rotation);
       uv = vec2(uv.x * c - uv.y * s, uv.x * s + uv.y * c);
 
-      // Apply aggressive parallax offset
-      uv += u_parallax * 0.08;
+      // Apply aggressive parallax offset (horizontal emphasis)
+      uv += vec2(u_parallax.x * 0.15, u_parallax.y * 0.05);
 
       uv += center;
 
@@ -177,8 +177,8 @@
     program = createProgram(gl, vs, fs);
     if (!program) return;
 
-    // Load vinyl texture
-    vinylTexture = await loadTexture(gl, '/qbz-vinyl-v3.svg');
+    // Load vinyl texture (PNG for better WebGL compatibility)
+    vinylTexture = await loadTexture(gl, '/qbz-vinyl-v3.png');
 
     // Setup geometry (full quad)
     const positions = new Float32Array([
@@ -233,9 +233,10 @@
     gl.useProgram(program);
 
     // Calculate vinyl size and position (centered, with padding)
+    // Vinyl moves opposite to cover for depth effect
     const size = Math.min(rect.width, rect.height) * 0.85;
-    const offsetX = (rect.width - size) / 2 + (mouseX - 0.5) * -50;
-    const offsetY = (rect.height - size) / 2 + (mouseY - 0.5) * -35;
+    const offsetX = (rect.width - size) / 2 + (mouseX - 0.5) * -120;
+    const offsetY = (rect.height - size) / 2 + (mouseY - 0.5) * -25;
 
     // Set uniforms
     gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), rect.width, rect.height);
