@@ -3,7 +3,7 @@
    * Immersive Ambient Canvas
    *
    * WebGL2-based canvas for rendering the immersive background.
-   * Phase 2: Pre-blurred artwork with async loading.
+   * Phase 3: Ambient motion shader with UV drift, zoom, and color breathing.
    *
    * Features:
    * - WebGL2 context with graceful fallback
@@ -11,7 +11,9 @@
    * - Automatic resize handling
    * - Performance metrics reporting
    * - Async texture loading with cancellation
-   * - Smooth crossfade between textures
+   * - Ambient motion shader (GPU-only, no CPU per-frame work)
+   * - Visibility-aware animation (pauses when tab hidden)
+   * - Configurable motion intensity
    */
 
   import { onMount, onDestroy } from 'svelte';
@@ -30,17 +32,27 @@
     updateTextureCount,
     handleContextLost,
     handleContextRestored,
+    getConfig,
   } from './ImmersiveRenderer';
 
   // Props
   interface Props {
     /** URL of the artwork to display */
     artworkUrl?: string;
+    /** Enable ambient motion (default: true) */
+    enableMotion?: boolean;
+    /** Motion intensity override (0-1, default: from config) */
+    intensity?: number;
     /** Called when WebGL initialization fails */
     onFallback?: () => void;
   }
 
-  let { artworkUrl, onFallback }: Props = $props();
+  let {
+    artworkUrl,
+    enableMotion = true,
+    intensity,
+    onFallback,
+  }: Props = $props();
 
   // Canvas reference
   let canvasRef: HTMLCanvasElement | undefined = $state();
@@ -51,17 +63,26 @@
   let vao: WebGLVertexArrayObject | null = null;
   let vertexBuffer: WebGLBuffer | null = null;
   let currentTexture: WebGLTexture | null = null;
-  let nextTexture: WebGLTexture | null = null;
   let placeholderTexture: WebGLTexture | null = null;
 
   // Uniform locations
   let u_texture: WebGLUniformLocation | null = null;
+  let u_time: WebGLUniformLocation | null = null;
+  let u_intensity: WebGLUniformLocation | null = null;
 
   // Animation state
   let animationFrameId: number | null = null;
   let isInitialized = false;
+  let isAnimating = false;
   let lastArtworkUrl = '';
-  let textureLoadId = 0; // For cancellation
+  let textureLoadId = 0;
+  let startTime = 0;
+  let lastFrameTime = 0;
+  let isVisible = true;
+
+  // Frame throttling for power efficiency
+  const TARGET_FPS = 30;
+  const FRAME_INTERVAL = 1000 / TARGET_FPS;
 
   /**
    * Initialize WebGL resources.
@@ -77,11 +98,11 @@
       return false;
     }
 
-    // Create shader program
+    // Create shader program (use ambient shader for motion)
     program = createShaderProgram(
       gl,
-      SHADERS.static.vertex,
-      SHADERS.static.fragment
+      SHADERS.ambient.vertex,
+      SHADERS.ambient.fragment
     );
     if (!program) {
       console.error('[ImmersiveCanvas] Failed to create shader program');
@@ -91,6 +112,8 @@
 
     // Get uniform locations
     u_texture = gl.getUniformLocation(program, 'u_texture');
+    u_time = gl.getUniformLocation(program, 'u_time');
+    u_intensity = gl.getUniformLocation(program, 'u_intensity');
 
     // Create fullscreen quad
     const quad = createFullscreenQuad(gl);
@@ -109,8 +132,9 @@
     canvasRef.addEventListener('webglcontextlost', onContextLost);
     canvasRef.addEventListener('webglcontextrestored', onContextRestored);
 
-    console.log('[ImmersiveCanvas] WebGL2 initialized successfully');
+    console.log('[ImmersiveCanvas] WebGL2 initialized with ambient shader');
     isInitialized = true;
+    startTime = performance.now();
     return true;
   }
 
@@ -118,13 +142,8 @@
    * Clean up WebGL resources.
    */
   function destroyWebGL(): void {
-    // Cancel any pending texture loads
     cancelAllLoads();
-
-    if (animationFrameId !== null) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-    }
+    stopAnimation();
 
     if (canvasRef) {
       canvasRef.removeEventListener('webglcontextlost', onContextLost);
@@ -136,7 +155,7 @@
         program,
         vao,
         vertexBuffer,
-        textures: [currentTexture, nextTexture, placeholderTexture],
+        textures: [currentTexture, placeholderTexture],
       });
     }
 
@@ -145,9 +164,10 @@
     vao = null;
     vertexBuffer = null;
     currentTexture = null;
-    nextTexture = null;
     placeholderTexture = null;
     u_texture = null;
+    u_time = null;
+    u_intensity = null;
     isInitialized = false;
   }
 
@@ -157,12 +177,7 @@
   function onContextLost(event: Event): void {
     event.preventDefault();
     console.warn('[ImmersiveCanvas] WebGL context lost');
-
-    if (animationFrameId !== null) {
-      cancelAnimationFrame(animationFrameId);
-      animationFrameId = null;
-    }
-
+    stopAnimation();
     handleContextLost();
   }
 
@@ -171,54 +186,58 @@
    */
   function onContextRestored(): void {
     console.log('[ImmersiveCanvas] WebGL context restored');
-
-    // Reinitialize everything
     if (initWebGL()) {
       handleContextRestored();
-      // Reload current texture
       if (lastArtworkUrl) {
         loadTexture(lastArtworkUrl);
       }
-      render();
+      startAnimation();
+    }
+  }
+
+  /**
+   * Handle visibility change (pause when tab hidden).
+   */
+  function onVisibilityChange(): void {
+    isVisible = document.visibilityState === 'visible';
+    if (isVisible && enableMotion && !isAnimating) {
+      startAnimation();
+    } else if (!isVisible) {
+      stopAnimation();
     }
   }
 
   /**
    * Load a pre-blurred texture from artwork URL.
-   * Handles async loading with cancellation support.
    */
   async function loadTexture(url: string): Promise<void> {
     if (!gl || !isInitialized) return;
 
-    // Increment load ID for cancellation
     const loadId = ++textureLoadId;
     const requestId = `artwork-${loadId}`;
 
     try {
-      // Load pre-blurred texture
       const result = await loadBlurredTexture(gl, url, requestId);
 
-      // Check if this load was cancelled (newer load started)
       if (loadId !== textureLoadId || !result) {
         return;
       }
 
-      // Swap textures
       if (currentTexture) {
         gl.deleteTexture(currentTexture);
       }
       currentTexture = result.texture;
       lastArtworkUrl = url;
 
-      // Update metrics
       updateTextureCount(1, result.width * result.height * 4);
 
-      // Render with new texture
-      render();
+      // If not animating, render single frame
+      if (!isAnimating) {
+        render();
+      }
 
       console.log(`[ImmersiveCanvas] Texture loaded: ${result.width}x${result.height}`);
     } catch (e) {
-      // Ignore abort errors
       if (e instanceof DOMException && e.name === 'AbortError') {
         return;
       }
@@ -227,12 +246,50 @@
   }
 
   /**
+   * Start the animation loop.
+   */
+  function startAnimation(): void {
+    if (isAnimating || !isInitialized) return;
+    isAnimating = true;
+    lastFrameTime = performance.now();
+    animationFrameId = requestAnimationFrame(animationLoop);
+    console.log('[ImmersiveCanvas] Animation started');
+  }
+
+  /**
+   * Stop the animation loop.
+   */
+  function stopAnimation(): void {
+    if (animationFrameId !== null) {
+      cancelAnimationFrame(animationFrameId);
+      animationFrameId = null;
+    }
+    isAnimating = false;
+  }
+
+  /**
+   * Animation loop with frame throttling.
+   */
+  function animationLoop(timestamp: number): void {
+    if (!isAnimating) return;
+
+    // Frame throttling for power efficiency
+    const elapsed = timestamp - lastFrameTime;
+    if (elapsed >= FRAME_INTERVAL) {
+      lastFrameTime = timestamp - (elapsed % FRAME_INTERVAL);
+      render();
+    }
+
+    animationFrameId = requestAnimationFrame(animationLoop);
+  }
+
+  /**
    * Render a single frame.
    */
   function render(): void {
     if (!gl || !program || !vao || !isInitialized) return;
 
-    const startTime = performance.now();
+    const frameStart = performance.now();
 
     // Handle resize
     if (canvasRef) {
@@ -242,11 +299,20 @@
     }
 
     // Clear
-    gl.clearColor(0.039, 0.039, 0.043, 1.0); // #0a0a0b
+    gl.clearColor(0.039, 0.039, 0.043, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
     // Use program
     gl.useProgram(program);
+
+    // Set uniforms
+    const currentTime = (performance.now() - startTime) / 1000; // seconds
+    const motionIntensity = enableMotion
+      ? (intensity ?? getConfig().ambientIntensity)
+      : 0;
+
+    gl.uniform1f(u_time, currentTime);
+    gl.uniform1f(u_intensity, motionIntensity);
 
     // Bind texture
     gl.activeTexture(gl.TEXTURE0);
@@ -259,7 +325,7 @@
     gl.bindVertexArray(null);
 
     // Report metrics
-    const frameTime = performance.now() - startTime;
+    const frameTime = performance.now() - frameStart;
     updateMetrics(frameTime);
   }
 
@@ -270,19 +336,39 @@
     }
   });
 
+  // React to motion enable/disable
+  $effect(() => {
+    if (isInitialized) {
+      if (enableMotion && isVisible && !isAnimating) {
+        startAnimation();
+      } else if (!enableMotion && isAnimating) {
+        stopAnimation();
+        render(); // Render one static frame
+      }
+    }
+  });
+
   onMount(() => {
     if (initWebGL()) {
-      // Initial render
-      render();
+      // Set up visibility listener
+      document.addEventListener('visibilitychange', onVisibilityChange);
 
       // Load initial artwork if provided
       if (artworkUrl) {
         loadTexture(artworkUrl);
       }
+
+      // Start animation if motion enabled
+      if (enableMotion) {
+        startAnimation();
+      } else {
+        render();
+      }
     }
   });
 
   onDestroy(() => {
+    document.removeEventListener('visibilitychange', onVisibilityChange);
     destroyWebGL();
   });
 </script>
@@ -299,7 +385,6 @@
     inset: 0;
     width: 100%;
     height: 100%;
-    /* Ensure canvas fills container */
     display: block;
   }
 </style>

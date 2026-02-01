@@ -13,6 +13,7 @@ import fullscreenVert from './fullscreen.vert?raw';
 
 // Fragment shaders
 import staticFrag from './static.frag?raw';
+import ambientFrag from './ambient.frag?raw';
 
 /**
  * Available shader programs.
@@ -26,6 +27,16 @@ export const SHADERS = {
   static: {
     vertex: fullscreenVert,
     fragment: staticFrag,
+  },
+
+  /**
+   * Ambient shader: adds motion effects.
+   * UV drift, zoom oscillation, color breathing.
+   * Requires u_time and u_intensity uniforms.
+   */
+  ambient: {
+    vertex: fullscreenVert,
+    fragment: ambientFrag,
   },
 } as const;
 
