@@ -175,6 +175,7 @@
   let showSettings = $state(false);
   let showHiddenAlbums = $state(false);
   let albumSearch = $state('');
+  let folderSearch = $state('');
   let albumViewMode = $state<'grid' | 'list'>('grid');
   type AlbumGroupMode = 'alpha' | 'artist';
   let albumGroupMode = $state<AlbumGroupMode>('alpha');
@@ -2746,6 +2747,14 @@
         <div class="settings-header">
           <h3>{$t('library.folders')}</h3>
           <div class="folder-actions">
+            <div class="folder-search">
+              <Search size={14} />
+              <input
+                type="text"
+                placeholder="Filter folders..."
+                bind:value={folderSearch}
+              />
+            </div>
             <button class="icon-btn" onclick={handleAddFolder} title={$t('library.addFolder')}>
               <FolderPlus size={16} />
             </button>
@@ -2774,7 +2783,7 @@
           </div>
         {:else}
           <div class="folder-table">
-            {#each folders as folder (folder.id)}
+            {#each folders.filter(f => !folderSearch || (f.alias ?? f.path).toLowerCase().includes(folderSearch.toLowerCase())) as folder (folder.id)}
               {@const accessible = folderAccessibility.get(folder.id) ?? true}
               <div
                 class="folder-row"
@@ -4014,7 +4023,31 @@
 
   .folder-actions {
     display: flex;
+    align-items: center;
     gap: 8px;
+  }
+
+  .folder-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    color: var(--text-muted);
+  }
+
+  .folder-search input {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 12px;
+    width: 120px;
+  }
+
+  .folder-search input::placeholder {
+    color: var(--text-muted);
   }
 
   .no-folders {
