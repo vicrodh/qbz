@@ -220,6 +220,56 @@
   let hasMoreTracks = $derived(trackResults ? trackResults.offset + trackResults.items.length < trackResults.total : false);
   let hasMoreArtists = $derived(artistResults ? artistResults.offset + artistResults.items.length < artistResults.total : false);
 
+  // Determine the "Most Popular" result based on query matching
+  // Priority: exact match > starts with > contains > default to first artist
+  type MostPopularType = 'artist' | 'album' | 'track';
+  interface MostPopularResult {
+    type: MostPopularType;
+    artist?: Artist;
+    album?: Album;
+    track?: Track;
+  }
+
+  let mostPopularResult = $derived.by((): MostPopularResult | null => {
+    if (!allResults) return null;
+
+    const q = query.toLowerCase().trim();
+    if (!q) return null;
+
+    const firstArtist = allResults.artists.items[0];
+    const firstAlbum = allResults.albums.items[0];
+    const firstTrack = allResults.tracks.items[0];
+
+    // Check for exact matches first
+    if (firstArtist && firstArtist.name.toLowerCase() === q) {
+      return { type: 'artist', artist: firstArtist };
+    }
+    if (firstAlbum && firstAlbum.title.toLowerCase() === q) {
+      return { type: 'album', album: firstAlbum };
+    }
+    if (firstTrack && firstTrack.title.toLowerCase() === q) {
+      return { type: 'track', track: firstTrack };
+    }
+
+    // Check for "starts with" matches
+    if (firstArtist && firstArtist.name.toLowerCase().startsWith(q)) {
+      return { type: 'artist', artist: firstArtist };
+    }
+    if (firstAlbum && firstAlbum.title.toLowerCase().startsWith(q)) {
+      return { type: 'album', album: firstAlbum };
+    }
+    if (firstTrack && firstTrack.title.toLowerCase().startsWith(q)) {
+      return { type: 'track', track: firstTrack };
+    }
+
+    // Default: return artist if available, then album, then track
+    if (firstArtist) return { type: 'artist', artist: firstArtist };
+    if (firstAlbum) return { type: 'album', album: firstAlbum };
+    if (firstTrack) return { type: 'track', track: firstTrack };
+
+    return null;
+  });
+
   function debounceSearch() {
     if (searchTimeout) clearTimeout(searchTimeout);
     // Reset filter when user types a new search
@@ -733,54 +783,78 @@
               <h3><Crown size={18} color="gold" /> Most Popular</h3>
             </div>
             <div class="most-popular-wrapper">
-              {#if allResults.artists.items.length > 0}
-              <button class="artist-card most-popular-card" onclick={() => onArtistClick?.(allResults.artists.items[0].id)}>
-                <div class="artist-image-wrapper">
-                  <!-- Placeholder always visible as background -->
-                  <div class="artist-image-placeholder">
-                    <User size={40} />
+              {#if mostPopularResult?.type === 'artist' && mostPopularResult.artist}
+                {@const artist = mostPopularResult.artist}
+                <button class="artist-card most-popular-card" onclick={() => onArtistClick?.(artist.id)}>
+                  <div class="artist-image-wrapper">
+                    <div class="artist-image-placeholder">
+                      <User size={40} />
+                    </div>
+                    {#if !failedArtistImages.has(artist.id) && getArtistImage(artist)}
+                      <img
+                        src={getArtistImage(artist)}
+                        alt={artist.name}
+                        class="artist-image"
+                        loading="lazy"
+                        decoding="async"
+                        onerror={() => handleArtistImageError(artist.id)}
+                      />
+                    {/if}
                   </div>
-                  <!-- Image overlays placeholder when loaded -->
-                  {#if !failedArtistImages.has(allResults.artists.items[0].id) && getArtistImage(allResults.artists.items[0])}
-                    <img
-                      src={getArtistImage(allResults.artists.items[0])}
-                      alt={allResults.artists.items[0].name}
-                      class="artist-image"
-                      loading="lazy"
-                      decoding="async"
-                      onerror={() => handleArtistImageError(allResults.artists.items[0].id)}
-                    />
+                  <div class="artist-name">{artist.name}</div>
+                  {#if artist.albums_count}
+                    <div class="artist-albums">{$t('library.albumCount', { values: { count: artist.albums_count } })}</div>
                   {/if}
-                </div>
-                <div class="artist-name">{allResults.artists.items[0].name}</div>
-                {#if allResults.artists.items[0].albums_count}
-                  <div class="artist-albums">{$t('library.albumCount', { values: { count: allResults.artists.items[0].albums_count } })}</div>
-                {/if}
-              </button>
-            {:else if allResults.albums.items.length > 0}
-              <AlbumCard
-                albumId={allResults.albums.items[0].id}
-                artwork={getAlbumArtwork(allResults.albums.items[0])}
-                title={allResults.albums.items[0].title}
-                artist={allResults.albums.items[0].artist?.name || 'Unknown Artist'}
-                genre={getGenreLabel(allResults.albums.items[0])}
-                releaseDate={allResults.albums.items[0].release_date_original}
-                size="large"
-                quality={getQualityLabel(allResults.albums.items[0])}
-                onPlay={onAlbumPlay ? () => onAlbumPlay(allResults.albums.items[0].id) : undefined}
-                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(allResults.albums.items[0].id) : undefined}
-                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(allResults.albums.items[0].id) : undefined}
-                onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
-                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(allResults.albums.items[0].id) : undefined}
-                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(allResults.albums.items[0].id) : undefined}
-                onDownload={onAlbumDownload ? () => onAlbumDownload(allResults.albums.items[0].id) : undefined}
-                isAlbumFullyDownloaded={isAlbumDownloaded(allResults.albums.items[0].id)}
-                onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(allResults.albums.items[0].id) : undefined}
-                onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(allResults.albums.items[0].id) : undefined}
-                {downloadStateVersion}
-                onclick={() => { onAlbumClick?.(allResults.albums.items[0].id); loadAlbumDownloadStatus(allResults.albums.items[0].id); }}
-              />
-            {/if}
+                </button>
+              {:else if mostPopularResult?.type === 'album' && mostPopularResult.album}
+                {@const album = mostPopularResult.album}
+                <AlbumCard
+                  albumId={album.id}
+                  artwork={getAlbumArtwork(album)}
+                  title={album.title}
+                  artist={album.artist?.name || 'Unknown Artist'}
+                  genre={getGenreLabel(album)}
+                  releaseDate={album.release_date_original}
+                  size="large"
+                  quality={getQualityLabel(album)}
+                  onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                  onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                  onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                  onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                  onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                  onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                  onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+                  isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                  onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+                  onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+                  {downloadStateVersion}
+                  onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+                />
+              {:else if mostPopularResult?.type === 'track' && mostPopularResult.track}
+                {@const track = mostPopularResult.track}
+                <button class="track-card most-popular-card" onclick={() => handleSearchTrackPlay(track, 0)}>
+                  <div class="track-card-artwork">
+                    {#if track.album?.image?.large || track.album?.image?.small}
+                      <img
+                        src={track.album.image.large || track.album.image.small}
+                        alt={track.album?.title || track.title}
+                        loading="lazy"
+                      />
+                    {:else}
+                      <div class="track-card-placeholder">
+                        <Music size={32} />
+                      </div>
+                    {/if}
+                  </div>
+                  <div class="track-card-info">
+                    <div class="track-card-title">{track.title}</div>
+                    <div class="track-card-artist">{track.performer?.name || 'Unknown Artist'}</div>
+                    {#if track.album?.title}
+                      <div class="track-card-album">{track.album.title}</div>
+                    {/if}
+                  </div>
+                </button>
+              {/if}
             </div>
           </div>
 
@@ -1790,6 +1864,88 @@
     width: 120px;
     height: 120px;
     min-height: 120px;
+  }
+
+  /* Track card for Most Popular */
+  .track-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background 150ms ease;
+    text-align: center;
+  }
+
+  .track-card:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .track-card.most-popular-card {
+    width: 160px;
+    height: 220px;
+    justify-content: flex-start;
+  }
+
+  .track-card-artwork {
+    width: 120px;
+    height: 120px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .track-card-artwork img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .track-card-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-tertiary);
+    color: var(--text-muted);
+  }
+
+  .track-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .track-card-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .track-card-artist {
+    font-size: 12px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .track-card-album {
+    font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .artists-section h3, .section-header h3 {
