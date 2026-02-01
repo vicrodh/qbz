@@ -31,8 +31,8 @@ const float BREATH_SPEED = 0.15;
 const float BREATH_AMOUNT = 0.08;
 
 // Blur simulation parameters
-const float BLUR_RADIUS = 0.015;  // UV space blur radius
-const int BLUR_SAMPLES = 12;      // Number of samples for blur
+const float BLUR_RADIUS = 0.025;  // UV space blur radius (increased for 256px source)
+const int BLUR_SAMPLES = 16;      // More samples for smoother blur
 
 // Simple pseudo-random function
 float random(vec2 st) {

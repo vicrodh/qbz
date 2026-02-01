@@ -227,12 +227,12 @@ export async function loadBlurredTexture(
   activeLoads.set(requestId, controller);
 
   try {
-    // Generate blurred image
-    // Match original: 64x64 canvas with heavy blur (40px equivalent)
+    // Generate pre-processed image
+    // Use 256x256 for good quality - GPU shader will handle the blur
     const blurredDataUrl = await generateBlurredImage(
       artworkUrl,
-      64,   // Same as original CSS approach
-      20,   // Heavy blur - will be applied multiple times
+      256,  // Higher quality source for GPU blur
+      8,    // Light pre-blur, GPU shader does the heavy lifting
       controller.signal
     );
 
