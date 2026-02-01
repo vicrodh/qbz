@@ -587,6 +587,7 @@ impl QobuzClient {
         match response.status() {
             StatusCode::OK => {
                 let json: Value = response.json().await?;
+                log::debug!("Stream URL response JSON keys: {:?}", json.as_object().map(|o| o.keys().collect::<Vec<_>>()));
 
                 // Check for restrictions
                 let restrictions: Vec<StreamRestriction> = json
@@ -594,7 +595,7 @@ impl QobuzClient {
                     .and_then(|v| serde_json::from_value(v.clone()).ok())
                     .unwrap_or_default();
 
-                // Validate that we got an actual URL (track may be unavailable)
+// Validate that we got an actual URL (track may be unavailable)
                 let url = json["url"].as_str().unwrap_or("").to_string();
                 if url.is_empty() {
                     // Log the restriction codes for debugging

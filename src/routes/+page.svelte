@@ -291,8 +291,7 @@
 
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
-  import ExpandedPlayer from '$lib/components/ExpandedPlayer.svelte';
-  import FocusMode from '$lib/components/FocusMode.svelte';
+  import { ImmersivePlayer } from '$lib/components/immersive';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import PlaylistImportModal from '$lib/components/PlaylistImportModal.svelte';
   import TrackInfoModal from '$lib/components/TrackInfoModal.svelte';
@@ -2588,6 +2587,15 @@
     }
   });
 
+  // Sync queue state when immersive player is open and track changes
+  $effect(() => {
+    const trackId = currentTrack?.id;
+    const immersiveOpen = isFullScreenOpen || isFocusModeOpen;
+    if (immersiveOpen && trackId !== undefined) {
+      syncQueueState();
+    }
+  });
+
   // Helper function to fetch and update queue counts and history
   async function updateQueueCounts() {
     const state = await getBackendQueueState();
@@ -3073,17 +3081,21 @@
       {isPlaying}
     />
 
-    <!-- Expanded Player -->
+    <!-- Immersive Player (replaces ExpandedPlayer + FocusMode) -->
     {#if currentTrack}
-      <ExpandedPlayer
-        isOpen={isFullScreenOpen}
-        onClose={closeFullScreen}
+      <ImmersivePlayer
+        isOpen={isFullScreenOpen || isFocusModeOpen}
+        onClose={() => {
+          if (isFullScreenOpen) closeFullScreen();
+          if (isFocusModeOpen) closeFocusMode();
+        }}
         artwork={currentTrack.artwork}
         trackTitle={currentTrack.title}
         artist={currentTrack.artist}
         album={currentTrack.album}
+        trackId={currentTrack.id}
+        artistId={currentTrack.artistId}
         quality={currentTrack.quality}
-        qualityLevel={currentTrack.quality.includes('24') ? 5 : 3}
         bitDepth={currentTrack.bitDepth}
         samplingRate={currentTrack.samplingRate}
         originalBitDepth={currentTrack.originalBitDepth}
@@ -3104,50 +3116,26 @@
         onToggleRepeat={toggleRepeat}
         {isFavorite}
         onToggleFavorite={toggleFavorite}
-        onOpenQueue={() => {
-          closeFullScreen();
-          toggleQueue();
-        }}
-        onOpenFocusMode={() => {
-          closeFullScreen();
-          openFocusMode();
-        }}
-        onCast={openCastPicker}
-        {isCastConnected}
-        onContextClick={handleContextNavigation}
         lyricsLines={lyricsLines.map(l => ({ text: l.text }))}
         lyricsActiveIndex={lyricsActiveIndex}
         lyricsActiveProgress={lyricsActiveProgress}
         lyricsSynced={lyricsIsSynced}
         lyricsLoading={lyricsStatus === 'loading'}
         lyricsError={lyricsStatus === 'error' ? lyricsError : (lyricsStatus === 'not_found' ? 'No lyrics found' : null)}
-      />
-    {/if}
-
-    <!-- Focus Mode -->
-    {#if currentTrack}
-      <FocusMode
-        isOpen={isFocusModeOpen}
-        onClose={closeFocusMode}
-        artwork={currentTrack.artwork}
-        trackTitle={currentTrack.title}
-        artist={currentTrack.artist}
-        {isPlaying}
-        onTogglePlay={togglePlay}
-        onSkipBack={handleSkipBack}
-        onSkipForward={handleSkipForward}
-        {currentTime}
-        {duration}
-        onSeek={handleSeek}
-        {volume}
-        onVolumeChange={handleVolumeChange}
-        lyricsLines={lyricsLines.map(l => ({ text: l.text }))}
-        lyricsActiveIndex={lyricsActiveIndex}
-        lyricsActiveProgress={lyricsActiveProgress}
-        lyricsSynced={lyricsIsSynced}
-        lyricsLoading={lyricsStatus === 'loading'}
-        lyricsError={lyricsStatus === 'error' ? lyricsError : (lyricsStatus === 'not_found' ? 'No lyrics found' : null)}
-        onContextClick={handleContextNavigation}
+        enableCredits={true}
+        enableSuggestions={true}
+        queueTracks={[
+          ...(currentQueueTrack ? [currentQueueTrack] : []),
+          ...queue
+        ]}
+        queueCurrentIndex={0}
+        onQueuePlayTrack={(index) => {
+          // Index 0 is current track, 1+ is upcoming (index - 1 in queue array)
+          if (index > 0) {
+            handleQueueTrackPlay(queue[index - 1]?.id?.toString() ?? '');
+          }
+        }}
+        onQueueClear={handleClearQueue}
       />
     {/if}
 
