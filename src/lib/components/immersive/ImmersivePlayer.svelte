@@ -301,8 +301,10 @@
     aria-label="Now Playing"
     tabindex="-1"
   >
-    <!-- Background (disable ambient animation for visualizer to reduce CPU) -->
-    <ImmersiveBackground {artwork} enableAmbient={activeFocusTab !== 'visualizer'} />
+    <!-- Background (skip entirely for visualizer - black background) -->
+    {#if activeFocusTab !== 'visualizer'}
+      <ImmersiveBackground {artwork} />
+    {/if}
 
     <!-- Header with mode switcher -->
     <ImmersiveHeader
