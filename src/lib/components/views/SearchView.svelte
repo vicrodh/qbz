@@ -882,19 +882,10 @@
                         <Disc3 size={32} />
                       </div>
                     {/if}
-                    {#if album.genre?.name}
-                      <div class="popular-genre-badge">{album.genre.name}</div>
-                    {/if}
-                    {#if album.maximum_bit_depth || album.maximum_sampling_rate}
-                      <div class="popular-quality-badge">
-                        <QualityBadge
-                          compact
-                          bitDepth={album.maximum_bit_depth}
-                          samplingRate={album.maximum_sampling_rate}
-                        />
-                      </div>
-                    {/if}
                     <div class="popular-card-overlay">
+                      {#if album.genre?.name}
+                        <div class="popular-overlay-genre">{album.genre.name}</div>
+                      {/if}
                       <div class="popular-card-buttons">
                         <button
                           class="popular-overlay-btn"
@@ -953,6 +944,15 @@
                     <div class="popular-card-title">{album.title}</div>
                     <div class="popular-card-subtitle">{album.artist?.name || 'Unknown Artist'}</div>
                   </button>
+                  {#if album.maximum_bit_depth || album.maximum_sampling_rate}
+                    <div class="popular-quality-badge">
+                      <QualityBadge
+                        compact
+                        bitDepth={album.maximum_bit_depth}
+                        samplingRate={album.maximum_sampling_rate}
+                      />
+                    </div>
+                  {/if}
                 </div>
               {:else if allResults.most_popular?.type === 'tracks'}
                 {@const track = allResults.most_popular.content}
@@ -967,15 +967,6 @@
                     {:else}
                       <div class="popular-card-placeholder">
                         <Music size={32} />
-                      </div>
-                    {/if}
-                    {#if track.maximum_bit_depth || track.maximum_sampling_rate}
-                      <div class="popular-quality-badge">
-                        <QualityBadge
-                          compact
-                          bitDepth={track.maximum_bit_depth}
-                          samplingRate={track.maximum_sampling_rate}
-                        />
                       </div>
                     {/if}
                     <div class="popular-card-overlay">
@@ -1037,6 +1028,15 @@
                     <div class="popular-card-title">{track.title}</div>
                     <div class="popular-card-subtitle">{track.performer?.name || 'Unknown Artist'}</div>
                   </div>
+                  {#if track.maximum_bit_depth || track.maximum_sampling_rate}
+                    <div class="popular-quality-badge">
+                      <QualityBadge
+                        compact
+                        bitDepth={track.maximum_bit_depth}
+                        samplingRate={track.maximum_sampling_rate}
+                      />
+                    </div>
+                  {/if}
                 </div>
               {/if}
             </div>
@@ -2137,16 +2137,25 @@
     width: 160px;
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    padding: 6px;
+    background-color: var(--bg-secondary);
+    border-radius: 12px;
+    transition: background-color 150ms ease;
+  }
+
+  .popular-card:hover {
+    background-color: var(--bg-tertiary);
   }
 
   .popular-card-artwork {
     position: relative;
-    width: 160px;
-    height: 160px;
-    border-radius: 8px;
+    width: 148px;
+    height: 148px;
+    border-radius: 6px;
     overflow: hidden;
     background: var(--bg-tertiary);
+    flex-shrink: 0;
   }
 
   .popular-card-artwork img {
@@ -2166,47 +2175,23 @@
   }
 
   .popular-quality-badge {
-    position: absolute;
-    bottom: 6px;
-    right: 6px;
-    z-index: 2;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    padding: 2px 6px;
-    border-radius: 4px;
+    margin-top: auto;
+    padding-top: 4px;
   }
 
   .popular-quality-badge :global(.quality-badge-compact) {
     font-size: 10px;
     width: auto;
-    color: rgba(255, 255, 255, 0.9);
-  }
-
-  .popular-genre-badge {
-    position: absolute;
-    top: 6px;
-    left: 6px;
-    z-index: 2;
-    background: rgba(0, 0, 0, 0.55);
-    backdrop-filter: blur(4px);
-    -webkit-backdrop-filter: blur(4px);
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 10px;
-    color: rgba(255, 255, 255, 0.9);
-    max-width: 100px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    color: var(--text-muted);
   }
 
   .popular-card-overlay {
     position: absolute;
     inset: 0;
     display: flex;
-    align-items: center;
-    justify-content: center;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: flex-start;
     background: rgba(10, 10, 10, 0.75);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
@@ -2220,19 +2205,62 @@
     opacity: 1;
   }
 
+  .popular-overlay-genre {
+    padding: 10px 10px 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+    opacity: 0;
+    transform: translateY(8px);
+    max-width: 128px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .popular-card:hover .popular-overlay-genre,
+  .popular-card.menu-open .popular-overlay-genre {
+    animation: popular-slide-in-up 0.3s ease-out forwards;
+  }
+
+  @keyframes popular-slide-in-up {
+    0% {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    100% {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
   .popular-card-buttons {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     opacity: 0;
     transform: translateY(8px);
-    transition: opacity 200ms ease, transform 200ms ease;
+    position: absolute;
+    left: 50%;
+    top: 60%;
+    transform: translate(-50%, -50%);
   }
 
   .popular-card:hover .popular-card-buttons,
   .popular-card.menu-open .popular-card-buttons {
-    opacity: 1;
-    transform: translateY(0);
+    animation: popular-slide-in-down 0.35s ease-out forwards;
+  }
+
+  @keyframes popular-slide-in-down {
+    0% {
+      opacity: 0;
+      transform: translate(-50%, calc(-50% - 10px));
+    }
+    100% {
+      opacity: 1;
+      transform: translate(-50%, -50%);
+    }
   }
 
   .popular-overlay-btn {
@@ -2302,10 +2330,10 @@
   }
 
   .popular-card-info {
-    padding: 0 4px;
+    padding: 6px 2px 0;
     background: none;
     border: none;
-    text-align: left;
+    text-align: center;
     cursor: pointer;
     width: 100%;
   }
@@ -2315,7 +2343,7 @@
   }
 
   .popular-card-title {
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 500;
     color: var(--text-primary);
     overflow: hidden;
@@ -2324,7 +2352,7 @@
   }
 
   .popular-card-subtitle {
-    font-size: 12px;
+    font-size: 11px;
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
