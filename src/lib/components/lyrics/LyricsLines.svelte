@@ -193,6 +193,10 @@
   .lyrics-lines.immersive .lyrics-line {
     font-size: 24px;
     font-weight: 500;
+    /* Text shadow for contrast against any background */
+    text-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.5),
+      0 2px 8px rgba(0, 0, 0, 0.3);
   }
 
   .lyrics-lines.immersive .lyrics-line.active {
@@ -241,8 +245,10 @@
     opacity: 1;
     transform: scale(1.02);
     text-shadow:
-      0 0 40px rgba(99, 102, 241, 0.3),
-      0 0 80px rgba(99, 102, 241, 0.15);
+      0 1px 3px rgba(0, 0, 0, 0.6),
+      0 2px 10px rgba(0, 0, 0, 0.4),
+      0 0 40px rgba(99, 102, 241, 0.4),
+      0 0 80px rgba(99, 102, 241, 0.2);
   }
 
   .lyrics-lines.center .lyrics-line.active {
