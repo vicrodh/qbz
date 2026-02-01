@@ -2206,8 +2206,8 @@
 
   .popular-card-artwork {
     position: relative;
-    width: 148px;
-    height: 148px;
+    width: 142px;
+    height: 142px;
     border-radius: 6px;
     overflow: hidden;
     background: var(--bg-tertiary);
