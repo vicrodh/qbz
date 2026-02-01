@@ -69,16 +69,18 @@ async function generateBlurredImage(
           return;
         }
 
-        // Apply blur and color adjustments
-        ctx.filter = `blur(${blurRadius}px) saturate(1.2) brightness(0.5)`;
+        // First pass: draw scaled down (creates initial blur through interpolation)
+        ctx.drawImage(img, 0, 0, size, size);
 
-        // Draw with offset to avoid edge artifacts
-        const offset = blurRadius;
-        const drawSize = size + offset * 2;
-        ctx.drawImage(img, -offset, -offset, drawSize, drawSize);
+        // Second pass: apply heavy blur filter and redraw on itself
+        ctx.filter = `blur(${blurRadius}px) saturate(1.3) brightness(0.45)`;
+        ctx.drawImage(canvas, 0, 0);
+
+        // Third pass: extra blur for very smooth result
+        ctx.drawImage(canvas, 0, 0);
 
         // Convert to data URL
-        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
 
         // Cache the result
         if (blurCache.size >= MAX_CACHE_SIZE) {
@@ -173,10 +175,11 @@ export async function loadBlurredTexture(
 
   try {
     // Generate blurred image
+    // Small canvas (32x32) + blur = very smooth when scaled to fullscreen
     const blurredDataUrl = await generateBlurredImage(
       artworkUrl,
-      128,  // Size (larger = less blur needed)
-      30,   // Blur radius
+      32,   // Very small canvas - scaling up creates natural blur
+      12,   // Additional blur radius
       controller.signal
     );
 
