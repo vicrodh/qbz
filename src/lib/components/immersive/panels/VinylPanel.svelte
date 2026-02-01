@@ -40,11 +40,14 @@
     mouseY = 0.5;
   }
 
-  // Parallax offset calculations
-  const coverOffsetX = $derived((mouseX - 0.5) * 15);
-  const coverOffsetY = $derived((mouseY - 0.5) * 10);
-  const discOffsetX = $derived((mouseX - 0.5) * -8);
-  const discOffsetY = $derived((mouseY - 0.5) * -5);
+  // Parallax offset calculations (more sensitive)
+  const coverOffsetX = $derived((mouseX - 0.5) * 30);
+  const coverOffsetY = $derived((mouseY - 0.5) * 20);
+  const discOffsetX = $derived((mouseX - 0.5) * -18);
+  const discOffsetY = $derived((mouseY - 0.5) * -12);
+
+  // Reveal offset when playing (percentage of container)
+  const revealOffset = $derived(isPlaying ? -15 : 0);
 
   // Generate groove rings (40 rings)
   const grooveCount = 40;
@@ -87,8 +90,7 @@
     <!-- Album Cover (IN FRONT, slides to reveal disc) -->
     <div
       class="album-cover"
-      class:revealed={isPlaying}
-      style="transform: translate({coverOffsetX}px, {coverOffsetY}px)"
+      style="transform: translate(calc(-50% + {coverOffsetX}px + {revealOffset}%), calc(-50% + {coverOffsetY}px))"
     >
       <img src={artwork} alt={trackTitle} />
     </div>
@@ -249,14 +251,13 @@
     pointer-events: none;
   }
 
-  /* Album Cover - in front of disc */
+  /* Album Cover - in front of disc, centered */
   .album-cover {
     position: absolute;
     top: 50%;
     left: 50%;
-    transform: translate(-50%, -50%);
-    width: 80%;
-    height: 80%;
+    width: 75%;
+    height: 75%;
     border-radius: 8px;
     overflow: hidden;
     box-shadow:
@@ -266,10 +267,7 @@
     transition: transform 600ms cubic-bezier(0.23, 1, 0.32, 1);
   }
 
-  /* When playing, slide cover to reveal disc */
-  .album-cover.revealed {
-    transform: translate(-70%, -50%);
-  }
+  /* revealed class handled by inline style for smooth parallax integration */
 
   .album-cover img {
     width: 100%;
@@ -322,10 +320,6 @@
     .vinyl-container {
       width: min(350px, 50vw);
       height: min(350px, 50vw);
-    }
-
-    .album-cover.revealed {
-      transform: translate(-60%, -50%);
     }
   }
 
