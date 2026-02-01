@@ -9,10 +9,14 @@ import { invoke } from '@tauri-apps/api/core';
 
 /**
  * Get the preferred streaming quality from localStorage
+ * Valid values: 'MP3', 'CD Quality', 'Hi-Res', 'Hi-Res+'
  */
 function getStreamingQuality(): string {
   if (typeof localStorage === 'undefined') return 'Hi-Res+';
-  return localStorage.getItem('qbz-streaming-quality') || 'Hi-Res+';
+  const saved = localStorage.getItem('qbz-streaming-quality');
+  // Log for debugging issue #34
+  console.log('[Quality] getStreamingQuality called, localStorage value:', saved);
+  return saved || 'Hi-Res+';
 }
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import {

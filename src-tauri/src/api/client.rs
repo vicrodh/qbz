@@ -629,7 +629,13 @@ impl QobuzClient {
             log::info!("Trying quality: {:?}", quality);
             match self.get_stream_url(track_id, *quality).await {
                 Ok(url) if !url.has_restrictions() => {
-                    log::info!("Got stream URL successfully: {} (format: {})", url.url, url.mime_type);
+                    log::info!(
+                        "Got stream URL - requested format_id={}, got format_id={}, sample_rate={}Hz, bit_depth={:?}",
+                        quality.id(),
+                        url.format_id,
+                        url.sampling_rate,
+                        url.bit_depth
+                    );
                     return Ok(url);
                 },
                 Ok(_) => {

@@ -35,7 +35,10 @@ pub async fn play_track(
     audio_settings: State<'_, AudioSettingsState>,
 ) -> Result<(), String> {
     let preferred_quality = parse_quality(quality.as_deref());
-    log::info!("Command: play_track {} (duration: {:?}s, quality: {:?})", track_id, duration_secs, preferred_quality);
+    log::info!(
+        "Command: play_track {} (duration: {:?}s, quality_str={:?}, parsed={:?}, format_id={})",
+        track_id, duration_secs, quality, preferred_quality, preferred_quality.id()
+    );
 
     // First check offline cache (persistent disk cache)
     {
@@ -222,7 +225,10 @@ pub async fn prefetch_track(
     offline_cache: State<'_, OfflineCacheState>,
 ) -> Result<(), String> {
     let preferred_quality = parse_quality(quality.as_deref());
-    log::info!("Command: prefetch_track {} (quality: {:?})", track_id, preferred_quality);
+    log::info!(
+        "Command: prefetch_track {} (quality_str={:?}, parsed={:?}, format_id={})",
+        track_id, quality, preferred_quality, preferred_quality.id()
+    );
 
     let cache = state.audio_cache.clone();
 
