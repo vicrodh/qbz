@@ -60,8 +60,8 @@ function extractRandomCrop(
 
   const rand = seededRandom(seed);
 
-  // Zoom factor: 1.5x to 3x (we take 33%-66% of the image)
-  const zoomFactor = 1.5 + rand() * 1.5;
+  // Zoom factor: 1.1x to 1.6x (we take 62%-90% of the image for more relevant colors)
+  const zoomFactor = 1.1 + rand() * 0.5;
 
   // Source region size (what portion of original image to take)
   const sourceSize = Math.min(img.width, img.height) / zoomFactor;

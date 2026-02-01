@@ -99,8 +99,8 @@
       const cropCtx = cropCanvas.getContext('2d');
       if (!cropCtx) { isLoading = false; return; }
 
-      // Zoom factor: 1.5x to 3x
-      const zoomFactor = 1.5 + rand() * 1.5;
+      // Zoom factor: 1.1x to 1.6x (takes 62%-90% of image for more relevant colors)
+      const zoomFactor = 1.1 + rand() * 0.5;
       const sourceSize = Math.min(img.width, img.height) / zoomFactor;
       const maxOffset = Math.min(img.width, img.height) - sourceSize;
 
