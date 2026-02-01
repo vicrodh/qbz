@@ -40,36 +40,37 @@ float radialDist(vec2 uv) {
 
 void main() {
     vec2 uv = v_texCoord;
-    float time = u_time * 0.5; // Slow base time
+    float time = u_time; // Real-time seconds (no slowdown multiplier)
     float intensity = u_intensity;
 
     // ===========================================
-    // 1. MULTI-SCALE TEXTURE SAMPLING
+    // 1. MULTI-SCALE TEXTURE SAMPLING WITH DRIFT
     // ===========================================
-    // Three depth layers: far (background), mid, near (foreground)
-    // Different zoom levels create scale separation
+    // Three depth layers with decorrelated motion
+    // Amplitudes increased for perceptible movement
+    // Speeds kept slow but visible (~15-40 second cycles)
 
-    // Far layer: zoomed OUT (sees more of texture, feels distant)
+    // Far layer: zoomed OUT, slowest drift (background)
     float farScale = 0.7;
     vec2 farOffset = vec2(
-        sin(time * 0.03) * 0.08,
-        cos(time * 0.025) * 0.06
+        sin(time * 0.08) * 0.15,
+        cos(time * 0.06) * 0.12
     ) * intensity;
     vec3 farLayer = sampleLayer(uv, farOffset, farScale);
 
-    // Mid layer: slight zoom, different drift direction
+    // Mid layer: medium zoom, medium drift, different phase
     float midScale = 0.9;
     vec2 midOffset = vec2(
-        cos(time * 0.05) * 0.04,
-        sin(time * 0.04) * 0.05
+        cos(time * 0.12 + 2.0) * 0.10,
+        sin(time * 0.10 + 1.0) * 0.08
     ) * intensity;
     vec3 midLayer = sampleLayer(uv, midOffset, midScale);
 
-    // Near layer: zoomed IN (feels close, foreground)
+    // Near layer: zoomed IN, faster drift (foreground)
     float nearScale = 1.3;
     vec2 nearOffset = vec2(
-        sin(time * 0.07 + 1.5) * 0.03,
-        cos(time * 0.06 + 0.8) * 0.025
+        sin(time * 0.15 + 3.5) * 0.06,
+        cos(time * 0.13 + 2.5) * 0.05
     ) * intensity;
     vec3 nearLayer = sampleLayer(uv, nearOffset, nearScale);
 
@@ -122,8 +123,8 @@ void main() {
     vec3 tintBottom = vec3(1.0, 0.96, 0.92);
     color *= mix(tintBottom, tintTop, v_texCoord.y);
 
-    // Subtle brightness breathing (very slow)
-    float breath = 1.0 + sin(time * 0.15) * 0.04 * intensity;
+    // Brightness breathing (slow pulse, more visible)
+    float breath = 1.0 + sin(time * 0.25) * 0.08 * intensity;
     color *= breath;
 
     fragColor = vec4(color, 1.0);
