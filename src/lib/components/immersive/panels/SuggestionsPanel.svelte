@@ -1,8 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { Loader2, Play, Radio, ListPlus, ListEnd } from 'lucide-svelte';
+  import { Loader2, Play, Radio, ListPlus, ListEnd, Info } from 'lucide-svelte';
   import { t } from '$lib/i18n';
-  import Tooltip from '$lib/components/Tooltip.svelte';
 
   interface Playlist {
     id: number;
@@ -11,13 +10,14 @@
     owner: { id: number; name: string };
     images?: string[];
     tracks_count: number;
+    tracks?: { items: Track[] };
   }
 
   interface Track {
     id: number;
     title: string;
     performer?: { id: number; name: string };
-    album?: { id: string; title: string; image?: { large?: string } };
+    album?: { id: string; title: string; image?: { large?: string; small?: string } };
     duration: number;
   }
 
@@ -54,6 +54,12 @@
   let loadingRadio = $state(false);
   let error = $state<string | null>(null);
   let loadedArtistId = $state<number | null>(null);
+
+  // Playlist cover artworks (fetched from tracks)
+  let playlistCovers = $state<Map<number, string[]>>(new Map());
+
+  // Tooltip state for radio info
+  let showRadioTooltip = $state(false);
 
   // Format duration
   function formatDuration(seconds: number): string {
@@ -98,6 +104,8 @@
       // Extract curated playlists (max 2)
       if (artist.playlists) {
         artistPlaylists = artist.playlists.slice(0, 2);
+        // Fetch playlist tracks for cover artworks (async, don't block)
+        fetchPlaylistCovers(artistPlaylists);
       } else {
         artistPlaylists = [];
       }
@@ -145,6 +153,41 @@
       recommendedTracks = [];
     } finally {
       loading = false;
+    }
+  }
+
+  /**
+   * Fetch playlist tracks to extract 3 unique album covers for collage
+   */
+  async function fetchPlaylistCovers(playlists: Playlist[]) {
+    for (const playlist of playlists) {
+      try {
+        const fullPlaylist = await invoke<Playlist>('get_playlist', { playlistId: playlist.id });
+
+        // Extract unique album artworks from tracks
+        const artworks: string[] = [];
+        const seenAlbums = new Set<string>();
+
+        if (fullPlaylist.tracks?.items) {
+          for (const track of fullPlaylist.tracks.items) {
+            const artwork = track.album?.image?.large || track.album?.image?.small;
+            const albumId = track.album?.id;
+
+            if (artwork && albumId && !seenAlbums.has(albumId)) {
+              seenAlbums.add(albumId);
+              artworks.push(artwork);
+              if (artworks.length >= 3) break;
+            }
+          }
+        }
+
+        // Update state with fetched covers
+        if (artworks.length > 0) {
+          playlistCovers = new Map(playlistCovers).set(playlist.id, artworks);
+        }
+      } catch (e) {
+        console.warn(`[Suggestions] Failed to fetch playlist ${playlist.id} tracks:`, e);
+      }
     }
   }
 
@@ -206,15 +249,26 @@
       <div class="cards-section">
         <!-- Artist Playlists from Qobuz -->
         {#each artistPlaylists as playlist (playlist.id)}
-          {@const playlistImages = playlist.images || []}
-          {@const mediumImage = playlistImages[Math.min(1, playlistImages.length - 1)] || playlistImages[0]}
+          {@const covers = playlistCovers.get(playlist.id) || []}
+          {@const hasCovers = covers.length >= 3}
+          {@const fallbackImage = playlist.images?.[Math.min(1, (playlist.images?.length || 1) - 1)]}
           <div class="card playlist-card">
             <div class="card-badge qobuz">
               <img src="/qobuz-logo-filled.svg" alt="Qobuz" class="badge-icon badge-qobuz" />
             </div>
             <div class="card-image-wrapper">
-              {#if mediumImage}
-                <img src={mediumImage} alt="" class="card-image" />
+              {#if hasCovers}
+                <!-- Book-style collage with 3 album covers -->
+                <div class="book-collage">
+                  <img src={covers[0]} alt="" class="book-cover left" />
+                  <img src={covers[1]} alt="" class="book-cover center" />
+                  <img src={covers[2]} alt="" class="book-cover right" />
+                </div>
+              {:else if covers.length > 0}
+                <!-- Single cover while loading more -->
+                <img src={covers[0]} alt="" class="card-image" />
+              {:else if fallbackImage}
+                <img src={fallbackImage} alt="" class="card-image" />
               {:else}
                 <div class="card-image-placeholder">
                   <img src="/playlist.svg" alt="" class="placeholder-icon" />
@@ -247,8 +301,18 @@
         <!-- Song Radio Card -->
         {#if trackId}
           <div class="card radio-card">
-            <div class="card-info">
-              <Tooltip text={$t('player.radioExperimentalTooltip') || 'Radio is an experimental QBZ feature that generates a playlist based on the current track.'} />
+            <!-- Custom tooltip that opens bottom-right -->
+            <div
+              class="card-info-trigger"
+              onmouseenter={() => showRadioTooltip = true}
+              onmouseleave={() => showRadioTooltip = false}
+            >
+              <Info size={18} strokeWidth={2.5} />
+              {#if showRadioTooltip}
+                <div class="radio-tooltip">
+                  {$t('player.radioExperimentalTooltip') || 'Radio is an experimental QBZ feature that generates a playlist based on the current track.'}
+                </div>
+              {/if}
             </div>
             <div class="card-badge qbz">
               <img src="/qbz-logo.svg" alt="QBZ" class="badge-icon badge-qbz" />
@@ -780,5 +844,109 @@
     color: #ef4444;
     font-size: 13px;
     text-align: center;
+  }
+
+  /* Book-style collage for playlist cards (3 album covers) */
+  .book-collage {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    overflow: hidden;
+    background: var(--alpha-10, rgba(255, 255, 255, 0.1));
+  }
+
+  .book-cover {
+    position: absolute;
+    width: 65%;
+    height: 85%;
+    object-fit: cover;
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    transition: transform 150ms ease;
+  }
+
+  .book-cover.left {
+    left: -8%;
+    top: 50%;
+    transform: translateY(-50%) rotate(-12deg);
+    z-index: 1;
+  }
+
+  .book-cover.center {
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 3;
+    width: 70%;
+    height: 90%;
+  }
+
+  .book-cover.right {
+    right: -8%;
+    top: 50%;
+    transform: translateY(-50%) rotate(12deg);
+    z-index: 2;
+  }
+
+  .card:hover .book-cover.left {
+    transform: translateY(-50%) rotate(-15deg) translateX(-2px);
+  }
+
+  .card:hover .book-cover.right {
+    transform: translateY(-50%) rotate(15deg) translateX(2px);
+  }
+
+  /* Info trigger with custom tooltip */
+  .card-info-trigger {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    z-index: 15;
+    cursor: help;
+    color: rgba(255, 255, 255, 0.7);
+    transition: color 150ms ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.4);
+  }
+
+  .card-info-trigger:hover {
+    color: white;
+    background: rgba(0, 0, 0, 0.6);
+  }
+
+  /* Custom tooltip - opens bottom-right, high z-index */
+  .radio-tooltip {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 0;
+    z-index: 1000;
+    background: rgba(20, 20, 22, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.85);
+    max-width: 220px;
+    min-width: 180px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    pointer-events: none;
+    animation: tooltipFadeIn 150ms ease;
+  }
+
+  @keyframes tooltipFadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(-4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 </style>
