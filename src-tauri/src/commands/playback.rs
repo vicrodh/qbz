@@ -58,12 +58,19 @@ pub async fn play_track(
 
                 state.player.play_data(audio_data, track_id)?;
 
+                // Check if prefetch should be skipped (streaming_only mode)
+                let skip_prefetch = {
+                    let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+                    store.get_settings().map(|s| s.streaming_only).unwrap_or(false)
+                };
+
                 // Prefetch next track in background
                 spawn_prefetch(
                     state.client.clone(),
                     state.audio_cache.clone(),
                     &state.queue,
                     preferred_quality,
+                    skip_prefetch,
                 );
 
                 return Ok(());
@@ -78,12 +85,19 @@ pub async fn play_track(
         log::info!("[CACHE HIT] Track {} from MEMORY cache ({} bytes) - instant playback", track_id, cached.size_bytes);
         state.player.play_data(cached.data, track_id)?;
 
+        // Check if prefetch should be skipped (streaming_only mode)
+        let skip_prefetch = {
+            let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+            store.get_settings().map(|s| s.streaming_only).unwrap_or(false)
+        };
+
         // Prefetch next track in background
         spawn_prefetch(
             state.client.clone(),
             state.audio_cache.clone(),
             &state.queue,
             preferred_quality,
+            skip_prefetch,
         );
 
         return Ok(());
@@ -99,12 +113,19 @@ pub async fn play_track(
 
             state.player.play_data(audio_data, track_id)?;
 
+            // Check if prefetch should be skipped (streaming_only mode)
+            let skip_prefetch = {
+                let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+                store.get_settings().map(|s| s.streaming_only).unwrap_or(false)
+            };
+
             // Prefetch next track in background
             spawn_prefetch(
                 state.client.clone(),
                 state.audio_cache.clone(),
                 &state.queue,
                 preferred_quality,
+                skip_prefetch,
             );
 
             return Ok(());
@@ -196,6 +217,7 @@ pub async fn play_track(
             state.audio_cache.clone(),
             &state.queue,
             preferred_quality,
+            streaming_only,
         );
 
         return Ok(());
@@ -230,6 +252,7 @@ pub async fn play_track(
         state.audio_cache.clone(),
         &state.queue,
         preferred_quality,
+        streaming_only,
     );
 
     Ok(())
@@ -636,7 +659,14 @@ fn spawn_prefetch(
     cache: Arc<AudioCache>,
     queue: &QueueManager,
     quality: Quality,
+    streaming_only: bool,
 ) {
+    // Skip prefetch entirely in streaming_only mode
+    if streaming_only {
+        log::debug!("[PREFETCH] Skipped - streaming_only mode active");
+        return;
+    }
+
     // Look further ahead to find Qobuz tracks in mixed playlists
     let upcoming_tracks = queue.peek_upcoming(PREFETCH_LOOKAHEAD);
 
