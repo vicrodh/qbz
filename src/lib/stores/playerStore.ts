@@ -472,6 +472,17 @@ export async function startPolling(): Promise<void> {
       handlePlaybackEvent(event.payload);
     });
     console.log('Started listening for playback events');
+
+    // Sync persisted volume to backend on startup
+    // This ensures the backend knows the saved volume before any playback starts
+    const persistedVolume = loadPersistedVolume();
+    try {
+      await invoke('set_volume', { volume: persistedVolume / 100 });
+      console.log('[Player] Synced persisted volume to backend:', persistedVolume);
+    } catch {
+      // Backend might not be ready yet, volume will be applied on first interaction
+      console.debug('[Player] Could not sync volume to backend yet');
+    }
   } catch (err) {
     console.error('Failed to start playback event listener:', err);
   }
