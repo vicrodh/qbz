@@ -192,7 +192,7 @@
 
   .lyrics-lines.immersive .lyrics-line {
     font-family: 'Oswald', var(--font-sans), sans-serif;
-    font-size: 26px;
+    font-size: 28px;
     font-weight: 400;
     letter-spacing: 0.02em;
     /* Text shadow for contrast against any background */
@@ -202,10 +202,24 @@
   }
 
   .lyrics-lines.immersive .lyrics-line.active {
-    font-size: 28px;
+    font-size: 30px;
     font-weight: 600;
-    color: #ffffff;
+    color: #ffffff !important;
     opacity: 1;
+  }
+
+  /* Disable karaoke gradient in immersive - keep text bright white */
+  .lyrics-lines.immersive .lyrics-line.active .line-text {
+    background: none !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+    color: #ffffff !important;
+  }
+
+  /* Past lines in immersive should be clearly dimmer than active */
+  .lyrics-lines.immersive .lyrics-line.past {
+    color: rgba(255, 255, 255, 0.35);
+    font-weight: 400;
   }
 
   .lyrics-line {
