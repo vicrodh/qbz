@@ -2594,6 +2594,7 @@
     const immersiveOpen = isFullScreenOpen || isFocusModeOpen;
     if (immersiveOpen && trackId !== undefined) {
       syncQueueState();
+      updateQueueCounts(); // Also sync history for coverflow
     }
   });
 
@@ -3146,6 +3147,8 @@
           // index === historyLen is current track, do nothing
         }}
         onQueueClear={handleClearQueue}
+        {historyTracks}
+        onPlayHistoryTrack={handlePlayHistoryTrack}
       />
     {/if}
 

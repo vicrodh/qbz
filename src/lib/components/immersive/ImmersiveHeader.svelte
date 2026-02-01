@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Disc3, Mic2, ListMusic, Music2, Info, Radio, Maximize, Minimize, ChevronDown, X, Square, Copy, Minus, Image } from 'lucide-svelte';
+  import { Disc3, Mic2, ListMusic, Music2, Info, Radio, Maximize, Minimize, ChevronDown, X, Square, Copy, Minus, Image, History } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
-  export type ImmersiveTab = 'lyrics' | 'trackInfo' | 'suggestions' | 'queue';
-  export type FocusTab = 'coverflow' | 'static' | 'lyrics-focus' | 'queue-focus';
+  export type ImmersiveTab = 'lyrics' | 'trackInfo' | 'suggestions' | 'queue' | 'history';
+  export type FocusTab = 'coverflow' | 'static' | 'lyrics-focus' | 'queue-focus' | 'history-focus';
   export type ViewMode = 'focus' | 'split';
 
   interface Props {
@@ -80,6 +80,7 @@
     { id: 'trackInfo' as const, label: $t('player.trackInfo') || 'Track Info', icon: Info, enabled: hasTrackInfo },
     { id: 'suggestions' as const, label: $t('player.suggestions') || 'Suggestions', icon: Radio, enabled: hasSuggestions },
     { id: 'queue' as const, label: $t('player.queue') || 'Queue', icon: ListMusic, enabled: true },
+    { id: 'history' as const, label: $t('player.history') || 'History', icon: History, enabled: true },
   ].filter(tab => tab.enabled));
 
   // Focus mode tabs
@@ -88,6 +89,7 @@
     { id: 'static', label: 'Static', icon: Image },
     { id: 'lyrics-focus', label: 'Lyrics', icon: Mic2 },
     { id: 'queue-focus', label: 'Queue', icon: ListMusic },
+    { id: 'history-focus', label: 'History', icon: History },
   ];
 
   const isFocusMode = $derived(viewMode === 'focus');

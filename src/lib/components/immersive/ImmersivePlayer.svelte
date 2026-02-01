@@ -12,6 +12,7 @@
   import CoverflowPanel from './panels/CoverflowPanel.svelte';
   import StaticPanel from './panels/StaticPanel.svelte';
   import LyricsFocusPanel from './panels/LyricsFocusPanel.svelte';
+  import HistoryPanel from './panels/HistoryPanel.svelte';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
 
   interface LyricsLine {
@@ -72,6 +73,9 @@
     queueCurrentIndex?: number;
     onQueuePlayTrack?: (index: number) => void;
     onQueueClear?: () => void;
+    // History
+    historyTracks?: QueueTrack[];
+    onPlayHistoryTrack?: (trackId: string) => void;
   }
 
   let {
@@ -112,7 +116,9 @@
     queueTracks = [],
     queueCurrentIndex = 0,
     onQueuePlayTrack,
-    onQueueClear
+    onQueueClear,
+    historyTracks = [],
+    onPlayHistoryTrack
   }: Props = $props();
 
   // UI State
@@ -235,6 +241,11 @@
         if (viewMode === 'split') activeTab = 'queue';
         else if (viewMode === 'focus') activeFocusTab = 'queue-focus';
         break;
+      case 'h':
+      case 'H':
+        if (viewMode === 'split') activeTab = 'history';
+        else if (viewMode === 'focus') activeFocusTab = 'history-focus';
+        break;
       // Focus mode tabs
       case '1':
         if (viewMode === 'focus') activeFocusTab = 'coverflow';
@@ -247,6 +258,9 @@
         break;
       case '4':
         if (viewMode === 'focus') activeFocusTab = 'queue-focus';
+        break;
+      case '5':
+        if (viewMode === 'focus') activeFocusTab = 'history-focus';
         break;
     }
     resetHideTimer();
@@ -356,6 +370,16 @@
             />
           </div>
         </div>
+      {:else if activeFocusTab === 'history-focus'}
+        <!-- History Focus: Full screen history -->
+        <div class="focus-panel">
+          <div class="focus-panel-content queue-content">
+            <HistoryPanel
+              tracks={historyTracks}
+              onPlayTrack={(trackId) => onPlayHistoryTrack?.(trackId)}
+            />
+          </div>
+        </div>
       {/if}
     {:else}
       <!-- Split: Artwork + Panel side by side -->
@@ -402,6 +426,11 @@
               currentIndex={queueCurrentIndex}
               onPlayTrack={(index) => onQueuePlayTrack?.(index)}
               onClear={onQueueClear}
+            />
+          {:else if activeTab === 'history'}
+            <HistoryPanel
+              tracks={historyTracks}
+              onPlayTrack={(trackId) => onPlayHistoryTrack?.(trackId)}
             />
           {/if}
         </div>
