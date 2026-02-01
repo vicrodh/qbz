@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { Search, Disc3, Music, Mic2, User, X, ChevronLeft, ChevronRight, Crown } from 'lucide-svelte';
+  import { Search, Disc3, Music, Mic2, User, X, ChevronLeft, ChevronRight, Crown, Heart, Play, MoreHorizontal, ListPlus, SkipForward } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -90,6 +90,18 @@
   // Track which images have failed to load
   let failedTrackImages = $state<Set<number>>(new Set());
   let failedArtistImages = $state<Set<number>>(new Set());
+
+  // Most Popular card menu state
+  let mostPopularMenuOpen = $state(false);
+
+  function handleClickOutsidePopularMenu(event: MouseEvent) {
+    if (mostPopularMenuOpen) {
+      const target = event.target as HTMLElement;
+      if (!target.closest('.popular-menu-wrapper')) {
+        mostPopularMenuOpen = false;
+      }
+    }
+  }
 
   function handleTrackImageError(trackId: number) {
     failedTrackImages = new Set([...failedTrackImages, trackId]);
@@ -625,6 +637,8 @@
   );
 </script>
 
+<svelte:window onclick={handleClickOutsidePopularMenu} />
+
 <ViewTransition duration={200} distance={12} direction="up">
 <div class="search-view" bind:this={scrollContainer} onscroll={handleScroll}>
   <!-- Search Header - title only when not scrolled -->
@@ -804,32 +818,77 @@
                 </button>
               {:else if allResults.most_popular?.type === 'albums'}
                 {@const album = allResults.most_popular.content}
-                <AlbumCard
-                  albumId={album.id}
-                  artwork={getAlbumArtwork(album)}
-                  title={album.title}
-                  artist={album.artist?.name || 'Unknown Artist'}
-                  genre={getGenreLabel(album)}
-                  releaseDate={album.release_date_original}
-                  size="large"
-                  quality={getQualityLabel(album)}
-                  onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
-                  onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
-                  onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                  onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
-                  onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
-                  onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
-                  onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                  isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-                  onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
-                  onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-                  {downloadStateVersion}
-                  onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
-                />
+                <div class="popular-card most-popular-card" class:menu-open={mostPopularMenuOpen}>
+                  <div class="popular-card-artwork">
+                    {#if getAlbumArtwork(album)}
+                      <img
+                        src={getAlbumArtwork(album)}
+                        alt={album.title}
+                        loading="lazy"
+                      />
+                    {:else}
+                      <div class="popular-card-placeholder">
+                        <Disc3 size={32} />
+                      </div>
+                    {/if}
+                    <div class="popular-card-overlay">
+                      <div class="popular-card-buttons">
+                        <button
+                          class="popular-overlay-btn"
+                          type="button"
+                          onclick={(e) => { e.stopPropagation(); /* TODO: Add favorite */ }}
+                          title="Add to favorites"
+                        >
+                          <Heart size={16} />
+                        </button>
+                        <button
+                          class="popular-overlay-btn popular-overlay-btn--play"
+                          type="button"
+                          onclick={(e) => { e.stopPropagation(); onAlbumPlay?.(album.id); }}
+                          title="Play"
+                        >
+                          <Play size={18} fill="white" />
+                        </button>
+                        <div class="popular-menu-wrapper">
+                          <button
+                            class="popular-overlay-btn"
+                            type="button"
+                            onclick={(e) => { e.stopPropagation(); mostPopularMenuOpen = !mostPopularMenuOpen; }}
+                            title="More options"
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                          {#if mostPopularMenuOpen}
+                            <div class="popular-dropdown" onclick={(e) => e.stopPropagation()}>
+                              <button class="popular-dropdown-item" onclick={() => { onAlbumPlay?.(album.id); mostPopularMenuOpen = false; }}>
+                                <Play size={14} /> Play now
+                              </button>
+                              <button class="popular-dropdown-item" onclick={() => { onAlbumPlayNext?.(album.id); mostPopularMenuOpen = false; }}>
+                                <SkipForward size={14} /> Play next
+                              </button>
+                              <button class="popular-dropdown-item" onclick={() => { onAlbumPlayLater?.(album.id); mostPopularMenuOpen = false; }}>
+                                <ListPlus size={14} /> Add to queue
+                              </button>
+                              {#if album.artist?.id}
+                                <button class="popular-dropdown-item" onclick={() => { onArtistClick?.(album.artist.id); mostPopularMenuOpen = false; }}>
+                                  <User size={14} /> Go to artist
+                                </button>
+                              {/if}
+                            </div>
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <button class="popular-card-info" onclick={() => onAlbumClick?.(album.id)}>
+                    <div class="popular-card-title">{album.title}</div>
+                    <div class="popular-card-subtitle">{album.artist?.name || 'Unknown Artist'}</div>
+                  </button>
+                </div>
               {:else if allResults.most_popular?.type === 'tracks'}
                 {@const track = allResults.most_popular.content}
-                <button class="track-card most-popular-card" onclick={() => handleSearchTrackPlay(track, 0)}>
-                  <div class="track-card-artwork">
+                <div class="popular-card most-popular-card" class:menu-open={mostPopularMenuOpen}>
+                  <div class="popular-card-artwork">
                     {#if track.album?.image?.large || track.album?.image?.small}
                       <img
                         src={track.album.image.large || track.album.image.small}
@@ -837,19 +896,64 @@
                         loading="lazy"
                       />
                     {:else}
-                      <div class="track-card-placeholder">
+                      <div class="popular-card-placeholder">
                         <Music size={32} />
                       </div>
                     {/if}
+                    <div class="popular-card-overlay">
+                      <div class="popular-card-buttons">
+                        <button
+                          class="popular-overlay-btn"
+                          type="button"
+                          onclick={(e) => { e.stopPropagation(); onTrackAddFavorite?.(track.id); }}
+                          title="Add to favorites"
+                        >
+                          <Heart size={16} />
+                        </button>
+                        <button
+                          class="popular-overlay-btn popular-overlay-btn--play"
+                          type="button"
+                          onclick={(e) => { e.stopPropagation(); handleSearchTrackPlay(track, 0); }}
+                          title="Play"
+                        >
+                          <Play size={18} fill="white" />
+                        </button>
+                        <div class="popular-menu-wrapper">
+                          <button
+                            class="popular-overlay-btn"
+                            type="button"
+                            onclick={(e) => { e.stopPropagation(); mostPopularMenuOpen = !mostPopularMenuOpen; }}
+                            title="More options"
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                          {#if mostPopularMenuOpen}
+                            <div class="popular-dropdown" onclick={(e) => e.stopPropagation()}>
+                              <button class="popular-dropdown-item" onclick={() => { handleSearchTrackPlay(track, 0); mostPopularMenuOpen = false; }}>
+                                <Play size={14} /> Play now
+                              </button>
+                              <button class="popular-dropdown-item" onclick={() => { onTrackPlayNext?.(track); mostPopularMenuOpen = false; }}>
+                                <SkipForward size={14} /> Play next
+                              </button>
+                              <button class="popular-dropdown-item" onclick={() => { onTrackPlayLater?.(track); mostPopularMenuOpen = false; }}>
+                                <ListPlus size={14} /> Add to queue
+                              </button>
+                              {#if track.album?.id}
+                                <button class="popular-dropdown-item" onclick={() => { onTrackGoToAlbum?.(track.album!.id!); mostPopularMenuOpen = false; }}>
+                                  <Disc3 size={14} /> Go to album
+                                </button>
+                              {/if}
+                            </div>
+                          {/if}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                  <div class="track-card-info">
-                    <div class="track-card-title">{track.title}</div>
-                    <div class="track-card-artist">{track.performer?.name || 'Unknown Artist'}</div>
-                    {#if track.album?.title}
-                      <div class="track-card-album">{track.album.title}</div>
-                    {/if}
+                  <div class="popular-card-info">
+                    <div class="popular-card-title">{track.title}</div>
+                    <div class="popular-card-subtitle">{track.performer?.name || 'Unknown Artist'}</div>
                   </div>
-                </button>
+                </div>
               {/if}
             </div>
           </div>
@@ -1938,6 +2042,164 @@
 
   .track-card-album {
     font-size: 11px;
+    color: var(--text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Popular Card (for Most Popular tracks/albums) */
+  .popular-card {
+    width: 160px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .popular-card-artwork {
+    position: relative;
+    width: 160px;
+    height: 160px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+  }
+
+  .popular-card-artwork img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .popular-card-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
+    color: var(--text-muted);
+  }
+
+  .popular-card-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10, 10, 10, 0.75);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    opacity: 0;
+    transition: opacity 150ms ease;
+    border-radius: inherit;
+  }
+
+  .popular-card:hover .popular-card-overlay,
+  .popular-card.menu-open .popular-card-overlay {
+    opacity: 1;
+  }
+
+  .popular-card-buttons {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity 200ms ease, transform 200ms ease;
+  }
+
+  .popular-card:hover .popular-card-buttons,
+  .popular-card.menu-open .popular-card-buttons {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  .popular-overlay-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    border: none;
+    background: transparent;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.85);
+    transition: transform 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+  }
+
+  .popular-overlay-btn:hover {
+    background-color: rgba(255, 255, 255, 0.15);
+    box-shadow: inset 0 0 0 1px var(--accent-primary);
+  }
+
+  .popular-overlay-btn--play {
+    width: 42px;
+    height: 42px;
+  }
+
+  .popular-menu-wrapper {
+    position: relative;
+  }
+
+  .popular-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    min-width: 160px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 6px 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+  }
+
+  .popular-dropdown-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 14px;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    text-align: left;
+    transition: background-color 150ms ease;
+  }
+
+  .popular-dropdown-item:hover {
+    background-color: var(--bg-tertiary);
+  }
+
+  .popular-card-info {
+    padding: 0 4px;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .popular-card-info:hover .popular-card-title {
+    color: var(--accent-primary);
+  }
+
+  .popular-card-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .popular-card-subtitle {
+    font-size: 12px;
     color: var(--text-muted);
     overflow: hidden;
     text-overflow: ellipsis;
