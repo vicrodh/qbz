@@ -32,6 +32,7 @@ pub mod session_store;
 pub mod share;
 pub mod tray;
 pub mod updates;
+pub mod visualizer;
 
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -45,6 +46,7 @@ use playback_context::ContextManager;
 use player::Player;
 use queue::QueueManager;
 use share::SongLinkClient;
+use visualizer::Visualizer;
 
 /// Application state shared across commands
 pub struct AppState {
@@ -56,6 +58,7 @@ pub struct AppState {
     pub audio_cache: Arc<AudioCache>,
     pub lastfm: Arc<Mutex<LastFmClient>>,
     pub songlink: SongLinkClient,
+    pub visualizer: Visualizer,
 }
 
 impl AppState {
@@ -96,6 +99,7 @@ impl AppState {
             audio_cache,
             lastfm: Arc::new(Mutex::new(LastFmClient::default())),
             songlink: SongLinkClient::new(),
+            visualizer: Visualizer::new(),
         }
     }
 }
@@ -283,6 +287,11 @@ pub fn run() {
             app.state::<AppState>()
                 .media_controls
                 .init(app.handle().clone());
+
+            // Start visualizer FFT thread (disabled by default, enabled via command)
+            app.state::<AppState>()
+                .visualizer
+                .start(app.handle().clone());
 
             // Purge offline downloads if the subscription has been invalid for > 3 days
             // (compliance requirement for cached content).
@@ -896,6 +905,9 @@ pub fn run() {
             commands::remote_metadata_get_album,
             commands::remote_metadata_cache_stats,
             commands::remote_metadata_clear_cache,
+            // Visualizer commands
+            commands::set_visualizer_enabled,
+            commands::is_visualizer_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
