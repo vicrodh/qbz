@@ -121,7 +121,7 @@
 
   // Get icon path based on tier
   const iconPath = $derived.by(() => {
-    if (tier === 'max' || tier === 'hires') return '/hi-res-gray.svg';
+    if (tier === 'max' || tier === 'hires') return '/hi-res.svg';
     if (tier === 'cd') return '/cd.svg';
     if (tier === 'mp3') return '/mp3.svg';
     return '/cd.svg';
@@ -140,13 +140,15 @@
     class:downgraded={isDowngraded}
     title={isDowngraded ? `Playing at ${displayText} (original: ${originalQualityText})` : `${tierLabel}: ${displayText}`}
   >
-    <!-- Icon -->
-    <img
-      src={iconPath}
-      alt={tierLabel}
-      class="badge-icon"
-      class:hires={isHiRes}
-    />
+    <!-- Icon container with fixed width -->
+    <div class="icon-container">
+      <img
+        src={iconPath}
+        alt={tierLabel}
+        class="badge-icon"
+        class:hires={isHiRes}
+      />
+    </div>
 
     <!-- Text -->
     <div class="badge-text">
@@ -201,6 +203,15 @@
 
   [data-theme="light"] .badge-icon.hires {
     filter: brightness(1.2);
+  }
+
+  .icon-container {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
   .badge-icon {
