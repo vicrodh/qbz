@@ -2781,14 +2781,20 @@
                 class:selected={selectedFolders.has(folder.id)}
                 class:disabled={!folder.enabled}
                 class:inaccessible={!accessible}
+                onclick={() => toggleFolderSelection(folder.id)}
+                role="checkbox"
+                aria-checked={selectedFolders.has(folder.id)}
+                tabindex="0"
+                onkeydown={(e) => e.key === 'Enter' || e.key === ' ' ? toggleFolderSelection(folder.id) : null}
               >
-                <label class="folder-checkbox">
+                <div class="folder-checkbox">
                   <input
                     type="checkbox"
                     checked={selectedFolders.has(folder.id)}
+                    onclick={(e) => e.stopPropagation()}
                     onchange={() => toggleFolderSelection(folder.id)}
                   />
-                </label>
+                </div>
                 <div class="folder-icon">
                   {#if folder.isNetwork}
                     <Network size={14} class={accessible ? 'network-connected' : 'network-disconnected'} />
