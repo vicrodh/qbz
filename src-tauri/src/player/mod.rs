@@ -682,7 +682,11 @@ impl Player {
                         log::info!("Initializing backend system with {}Hz/{}ch", sample_rate, channels);
                         match try_init_stream_with_backend(&settings, sample_rate, channels) {
                             Some(Ok(stream_type)) => {
-                                log::info!("Audio output initialized via backend system at {}Hz", sample_rate);
+                                // Set device name from settings for backend system
+                                let device_name = settings.output_device.clone()
+                                    .unwrap_or_else(|| "Default".to_string());
+                                log::info!("Audio output initialized via backend system at {}Hz (device: {})", sample_rate, device_name);
+                                state.set_current_device(Some(device_name));
                                 return Some(stream_type);
                             }
                             Some(Err(e)) => {
@@ -854,7 +858,13 @@ impl Player {
                             let stream_result = if let Some(settings) = thread_settings.lock().ok() {
                                 match try_init_stream_with_backend(&settings, sample_rate, channels) {
                                     Some(result) => {
-                                        // Backend system handled it - no need for CPAL device search
+                                        // Backend system handled it - set device name from settings
+                                        if result.is_ok() {
+                                            let device_name = settings.output_device.clone()
+                                                .unwrap_or_else(|| "Default".to_string());
+                                            log::info!("Backend system using device: {}", device_name);
+                                            thread_state.set_current_device(Some(device_name));
+                                        }
                                         result
                                     }
                                     None => {
@@ -1151,7 +1161,16 @@ impl Player {
 
                             let stream_result = if let Some(settings) = thread_settings.lock().ok() {
                                 match try_init_stream_with_backend(&settings, sample_rate, channels) {
-                                    Some(result) => result,
+                                    Some(result) => {
+                                        // Set device name from settings for backend system
+                                        if result.is_ok() {
+                                            let device_name = settings.output_device.clone()
+                                                .unwrap_or_else(|| "Default".to_string());
+                                            log::info!("Streaming backend using device: {}", device_name);
+                                            thread_state.set_current_device(Some(device_name));
+                                        }
+                                        result
+                                    }
                                     None => {
                                         log::info!("Backend system not configured, using legacy CPAL path");
                                         let device = if let Some(ref name) = *current_device_name {

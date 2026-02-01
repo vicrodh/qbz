@@ -24,6 +24,14 @@ fn parse_quality(quality_str: Option<&str>) -> Quality {
     }
 }
 
+/// Result from play_track command with format info
+#[derive(serde::Serialize)]
+pub struct PlayTrackResult {
+    /// The actual format_id returned by Qobuz (5=MP3, 6=FLAC 16-bit, 7=24-bit, 27=Hi-Res)
+    /// None when playing from cache (format unknown)
+    pub format_id: Option<u32>,
+}
+
 /// Play a track by ID (with caching support)
 #[tauri::command]
 pub async fn play_track(
@@ -33,7 +41,7 @@ pub async fn play_track(
     state: State<'_, AppState>,
     offline_cache: State<'_, OfflineCacheState>,
     audio_settings: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<PlayTrackResult, String> {
     let preferred_quality = parse_quality(quality.as_deref());
     log::info!(
         "Command: play_track {} (duration: {:?}s, quality_str={:?}, parsed={:?}, format_id={})",
@@ -73,7 +81,7 @@ pub async fn play_track(
                     skip_prefetch,
                 );
 
-                return Ok(());
+                return Ok(PlayTrackResult { format_id: None });
             }
         }
     }
@@ -100,7 +108,7 @@ pub async fn play_track(
             skip_prefetch,
         );
 
-        return Ok(());
+        return Ok(PlayTrackResult { format_id: None });
     }
 
     // Check if track is in playback cache (L2 - disk)
@@ -128,7 +136,7 @@ pub async fn play_track(
                 skip_prefetch,
             );
 
-            return Ok(());
+            return Ok(PlayTrackResult { format_id: None });
         }
     }
 
@@ -211,6 +219,9 @@ pub async fn play_track(
             }
         });
 
+        // Capture format_id before returning
+        let actual_format_id = stream_url.format_id;
+
         // Prefetch next track in background
         spawn_prefetch(
             state.client.clone(),
@@ -220,7 +231,7 @@ pub async fn play_track(
             streaming_only,
         );
 
-        return Ok(());
+        return Ok(PlayTrackResult { format_id: Some(actual_format_id) });
     }
 
     // Standard download path (streaming disabled)
@@ -255,7 +266,7 @@ pub async fn play_track(
         streaming_only,
     );
 
-    Ok(())
+    Ok(PlayTrackResult { format_id: Some(stream_url.format_id) })
 }
 
 /// Prefetch a track into the in-memory cache without starting playback

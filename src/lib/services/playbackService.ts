@@ -49,6 +49,26 @@ import {
 
 // ============ Types ============
 
+/** Result from play_track command */
+interface PlayTrackResult {
+  format_id: number | null;
+}
+
+/**
+ * Convert Qobuz format_id to format string for QualityBadge
+ * 5=MP3, 6=FLAC 16-bit (CD), 7=FLAC 24-bit (Hi-Res), 27=FLAC 24-bit Hi-Res+
+ */
+function formatIdToString(formatId: number | null): string | undefined {
+  if (formatId === null) return undefined;
+  switch (formatId) {
+    case 5: return 'mp3';
+    case 6: return 'flac';
+    case 7: return 'flac24';
+    case 27: return 'flac24';
+    default: return undefined;
+  }
+}
+
 export interface PlayTrackOptions {
   isLocal?: boolean;
   showLoadingToast?: boolean;
@@ -128,11 +148,19 @@ export async function playTrack(
       if (isLocal) {
         await invoke('library_play_track', { trackId: track.id });
       } else {
-        await invoke('play_track', {
+        const result = await invoke<PlayTrackResult>('play_track', {
           trackId: track.id,
           durationSecs: track.duration,
           quality: getStreamingQuality()
         });
+
+        // Update track format based on actual stream format_id from Qobuz
+        const actualFormat = formatIdToString(result.format_id);
+        if (actualFormat) {
+          track.format = actualFormat;
+          // Re-set current track to update the UI with actual format
+          setCurrentTrack(track);
+        }
       }
     }
 
