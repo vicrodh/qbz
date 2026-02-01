@@ -50,9 +50,12 @@
     mouseY = 0.5;
   }
 
-  // Parallax calculations (aggressive horizontal for sleeve effect)
-  const coverOffsetX = $derived((mouseX - 0.5) * 120);
-  const coverOffsetY = $derived((mouseY - 0.5) * 35);
+  // Parallax calculations (hypersensitive - reacts to small mouse movements)
+  // Using power curve for more responsive feel near center
+  const deltaX = $derived(mouseX - 0.5);
+  const deltaY = $derived(mouseY - 0.5);
+  const coverOffsetX = $derived(Math.sign(deltaX) * Math.pow(Math.abs(deltaX) * 2, 0.7) * 240); // ±120px
+  const coverOffsetY = $derived(Math.sign(deltaY) * Math.pow(Math.abs(deltaY) * 2, 0.7) * 70);  // ±35px
   const revealOffset = $derived(isPlaying ? -10 : 0);
 
   // Vertex shader
