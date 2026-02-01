@@ -382,12 +382,16 @@ pub fn run() {
                     let should_update_mpris = should_emit || (track_id == 0 && last_track_id != 0);
 
                     if should_emit {
+                        let sample_rate = player_state.get_sample_rate();
+                        let bit_depth = player_state.get_bit_depth();
                         let event = player::PlaybackEvent {
                             is_playing,
                             position,
                             duration,
                             track_id,
                             volume,
+                            sample_rate: if sample_rate > 0 { Some(sample_rate) } else { None },
+                            bit_depth: if bit_depth > 0 { Some(bit_depth) } else { None },
                         };
                         let _ = app_handle.emit("playback:state", &event);
                         last_position = position;

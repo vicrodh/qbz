@@ -68,6 +68,8 @@ interface PlaybackEvent {
   duration: number;
   track_id: number;
   volume: number;
+  sample_rate: number | null;  // Actual stream sample rate in Hz
+  bit_depth: number | null;    // Actual stream bit depth
 }
 
 // ============ State ============
@@ -413,6 +415,17 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
   if (event.track_id === currentTrack.id) {
     currentTime = event.position;
     isPlaying = event.is_playing;
+
+    // Update track with actual stream quality (issue #34)
+    // The backend now sends the real sample rate and bit depth from the decoded stream
+    if (event.sample_rate && event.sample_rate > 0) {
+      // Convert Hz to kHz for display (44100 -> 44.1)
+      currentTrack.samplingRate = event.sample_rate / 1000;
+    }
+    if (event.bit_depth && event.bit_depth > 0) {
+      currentTrack.bitDepth = event.bit_depth;
+    }
+
     notifyListeners();
 
     // Check if track ended - auto-advance to next

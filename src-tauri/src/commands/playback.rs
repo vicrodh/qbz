@@ -144,10 +144,11 @@ pub async fn play_track(
         let stream_info = get_stream_info(&stream_url.url).await?;
 
         log::info!(
-            "Stream info: {:.2} MB, {}Hz, {} channels, {:.1} MB/s",
+            "Stream info: {:.2} MB, {}Hz, {} channels, {}-bit, {:.1} MB/s",
             stream_info.content_length as f64 / (1024.0 * 1024.0),
             stream_info.sample_rate,
             stream_info.channels,
+            stream_info.bit_depth,
             stream_info.speed_mbps
         );
 
@@ -157,6 +158,7 @@ pub async fn play_track(
             track_id,
             stream_info.sample_rate,
             stream_info.channels,
+            stream_info.bit_depth,
             stream_info.content_length,
             stream_info.speed_mbps,
             duration_secs.unwrap_or(0), // Use 0 if not provided
@@ -314,6 +316,7 @@ pub struct StreamInfo {
     pub content_length: u64,
     pub sample_rate: u32,
     pub channels: u16,
+    pub bit_depth: u32,
     pub speed_mbps: f64,
 }
 
@@ -383,18 +386,19 @@ async fn get_stream_info(url: &str) -> Result<StreamInfo, String> {
     );
 
     // Try to extract audio format from initial bytes
-    let (sample_rate, channels) = extract_audio_format_from_header(&initial_bytes)?;
+    let (sample_rate, channels, bit_depth) = extract_audio_format_from_header(&initial_bytes)?;
 
     Ok(StreamInfo {
         content_length,
         sample_rate,
         channels,
+        bit_depth,
         speed_mbps,
     })
 }
 
-/// Extract sample rate and channels from audio file header
-fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16), String> {
+/// Extract sample rate, channels, and bit depth from audio file header
+fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16, u32), String> {
     use std::io::{BufReader, Cursor};
     use rodio::Decoder;
 
@@ -404,11 +408,14 @@ fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16), String> {
         // FLAC format: "fLaC" + METADATA_BLOCK_HEADER (4 bytes) + STREAMINFO
         if data.len() >= 26 {
             // STREAMINFO starts at byte 8
-            // Bytes 10-12: sample rate (20 bits) + channels (3 bits) + bits per sample (5 bits)
+            // Bytes 18-20: sample rate (20 bits) + channels (3 bits) + bits per sample (5 bits)
             let sr_high = ((data[18] as u32) << 12) | ((data[19] as u32) << 4) | ((data[20] as u32) >> 4);
             let sample_rate = sr_high;
             let channels = ((data[20] >> 1) & 0x07) + 1;
-            return Ok((sample_rate, channels as u16));
+            // Bits per sample: 5 bits starting at bit 4 of byte 20
+            let bits_per_sample = ((data[20] & 0x01) << 4) | ((data[21] >> 4) & 0x0F);
+            let bit_depth = (bits_per_sample + 1) as u32; // FLAC stores (bits - 1)
+            return Ok((sample_rate, channels as u16, bit_depth));
         }
     }
 
@@ -459,24 +466,26 @@ fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16), String> {
             if let Some(track) = probed.format.default_track() {
                 let sample_rate = track.codec_params.sample_rate.unwrap_or(44100);
                 let channels = track.codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
-                return Ok((sample_rate, channels));
+                let bit_depth = track.codec_params.bits_per_sample.unwrap_or(16);
+                return Ok((sample_rate, channels, bit_depth));
             }
         }
 
-        // Default to common values for M4A
-        return Ok((44100, 2));
+        // Default to common values for M4A (typically 16-bit for AAC)
+        return Ok((44100, 2, 16));
     }
 
-    // Try rodio decoder for other formats
+    // Try rodio decoder for other formats (rodio doesn't expose bit depth)
     match Decoder::new(BufReader::new(Cursor::new(data.to_vec()))) {
         Ok(decoder) => {
             use rodio::Source;
-            Ok((decoder.sample_rate(), decoder.channels()))
+            // Assume 16-bit for rodio-decoded formats (MP3, etc.)
+            Ok((decoder.sample_rate(), decoder.channels(), 16))
         }
         Err(_) => {
             // Default fallback
-            log::warn!("Could not determine audio format, using defaults (44100Hz, stereo)");
-            Ok((44100, 2))
+            log::warn!("Could not determine audio format, using defaults (44100Hz, stereo, 16-bit)");
+            Ok((44100, 2, 16))
         }
     }
 }

@@ -17,7 +17,7 @@ pub use streaming_source::{BufferedMediaSource, BufferWriter, StreamingConfig, I
 
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::panic::{self, AssertUnwindSafe};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::mpsc::{self, Sender, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -199,24 +199,30 @@ fn is_isomp4(data: &[u8]) -> bool {
 
 /// Extract audio metadata (sample rate, channels) without full decode.
 /// This is much faster than decode_with_symphonia as it only reads headers.
+/// Audio metadata extracted from file headers
+struct AudioMetadata {
+    sample_rate: u32,
+    channels: u16,
+    bit_depth: Option<u32>,
+}
+
 fn extract_audio_metadata(data: &[u8]) -> Result<(u32, u16), String> {
-    // For non-isomp4 files (FLAC, etc.), try rodio's decoder first - it reads headers quickly
-    if !is_isomp4(data) {
-        let result = panic::catch_unwind(AssertUnwindSafe(|| {
-            Decoder::new(BufReader::new(Cursor::new(data.to_vec())))
-        }));
+    let meta = extract_audio_metadata_full(data)?;
+    Ok((meta.sample_rate, meta.channels))
+}
 
-        if let Ok(Ok(decoder)) = result {
-            return Ok((decoder.sample_rate(), decoder.channels()));
-        }
-    }
+fn extract_audio_metadata_full(data: &[u8]) -> Result<AudioMetadata, String> {
+    // For non-isomp4 files (FLAC, etc.), try symphonia directly to get all metadata
+    // Symphonia gives us bits_per_sample which rodio doesn't expose
 
-    // Fallback to symphonia probe for codec params (no decode needed)
+    // Use symphonia probe for codec params (no decode needed)
     let source = Box::new(CursorMediaSource::new(data.to_vec())) as Box<dyn MediaSource>;
     let mss = MediaSourceStream::new(source, Default::default());
 
     let mut hint = Hint::new();
-    hint.with_extension("m4a");
+    if is_isomp4(data) {
+        hint.with_extension("m4a");
+    }
 
     let format_opts = FormatOptions {
         enable_gapless: true,
@@ -241,7 +247,14 @@ fn extract_audio_metadata(data: &[u8]) -> Result<(u32, u16), String> {
         .map(|c| c.count() as u16)
         .unwrap_or(2);
 
-    Ok((sample_rate, channels))
+    // Get bits per sample for bit depth
+    let bit_depth = track.codec_params.bits_per_sample;
+
+    Ok(AudioMetadata {
+        sample_rate,
+        channels,
+        bit_depth,
+    })
 }
 
 fn decode_with_fallback(
@@ -465,6 +478,10 @@ pub struct PlaybackEvent {
     pub duration: u64,
     pub track_id: u64,
     pub volume: f32,
+    /// Actual sample rate of the current stream (Hz)
+    pub sample_rate: Option<u32>,
+    /// Actual bit depth of the current stream
+    pub bit_depth: Option<u32>,
 }
 
 /// Shared state between main thread and audio thread
@@ -488,6 +505,10 @@ pub struct SharedState {
     current_device: Arc<std::sync::RwLock<Option<String>>>,
     /// Stream error flag (set when ALSA/audio errors are detected)
     stream_error: Arc<AtomicBool>,
+    /// Actual sample rate of the current stream (Hz)
+    sample_rate: Arc<AtomicU32>,
+    /// Actual bit depth of the current stream
+    bit_depth: Arc<AtomicU32>,
 }
 
 impl Default for SharedState {
@@ -508,6 +529,8 @@ impl SharedState {
             position_at_start: Arc::new(AtomicU64::new(0)),
             current_device: Arc::new(std::sync::RwLock::new(None)),
             stream_error: Arc::new(AtomicBool::new(false)),
+            sample_rate: Arc::new(AtomicU32::new(0)),
+            bit_depth: Arc::new(AtomicU32::new(0)),
         }
     }
 
@@ -517,6 +540,19 @@ impl SharedState {
 
     pub fn has_stream_error(&self) -> bool {
         self.stream_error.load(Ordering::SeqCst)
+    }
+
+    pub fn set_stream_quality(&self, sample_rate: u32, bit_depth: u32) {
+        self.sample_rate.store(sample_rate, Ordering::SeqCst);
+        self.bit_depth.store(bit_depth, Ordering::SeqCst);
+    }
+
+    pub fn get_sample_rate(&self) -> u32 {
+        self.sample_rate.load(Ordering::SeqCst)
+    }
+
+    pub fn get_bit_depth(&self) -> u32 {
+        self.bit_depth.load(Ordering::SeqCst)
     }
 
     pub fn set_current_device(&self, device: Option<String>) {
@@ -1669,15 +1705,23 @@ impl Player {
     pub fn play_data(&self, data: Vec<u8>, track_id: u64) -> Result<(), String> {
         log::info!("Player: Playing {} bytes of audio data for track {}", data.len(), track_id);
 
-        // Extract audio metadata (sample rate and channels) - fast header-only read
-        let (sample_rate, channels) = extract_audio_metadata(&data)
+        // Extract audio metadata (sample rate, channels, bit depth) - fast header-only read
+        let meta = extract_audio_metadata_full(&data)
             .map_err(|e| format!("Failed to extract audio metadata: {}", e))?;
 
+        let sample_rate = meta.sample_rate;
+        let channels = meta.channels;
+        let bit_depth = meta.bit_depth.unwrap_or(16);
+
         log::info!(
-            "Player: Detected audio format - {}Hz, {} channels",
+            "Player: Detected audio format - {}Hz, {} channels, {}-bit",
             sample_rate,
-            channels
+            channels,
+            bit_depth
         );
+
+        // Update shared state with actual stream quality
+        self.state.set_stream_quality(sample_rate, bit_depth);
 
         self.tx
             .send(AudioCommand::Play {
@@ -1746,19 +1790,24 @@ impl Player {
         track_id: u64,
         sample_rate: u32,
         channels: u16,
+        bit_depth: u32,
         content_length: u64,
         speed_mbps: f64,
         duration_secs: u64,
     ) -> Result<BufferWriter, String> {
         log::info!(
-            "Player: Starting dynamic streaming for track {} ({}Hz, {}ch, {:.2} MB, {:.1} MB/s, {}s)",
+            "Player: Starting dynamic streaming for track {} ({}Hz, {}ch, {}-bit, {:.2} MB, {:.1} MB/s, {}s)",
             track_id,
             sample_rate,
             channels,
+            bit_depth,
             content_length as f64 / (1024.0 * 1024.0),
             speed_mbps,
             duration_secs
         );
+
+        // Update shared state with actual stream quality
+        self.state.set_stream_quality(sample_rate, bit_depth);
 
         // Use StreamingConfig::from_speed_mbps for dynamic buffer sizing
         let config = StreamingConfig::from_speed_mbps(speed_mbps);
@@ -1893,12 +1942,16 @@ impl Player {
 
     /// Get playback event for emitting to frontend
     pub fn get_playback_event(&self) -> PlaybackEvent {
+        let sample_rate = self.state.get_sample_rate();
+        let bit_depth = self.state.get_bit_depth();
         PlaybackEvent {
             is_playing: self.state.is_playing(),
             position: self.state.current_position(),
             duration: self.state.duration(),
             track_id: self.state.current_track_id(),
             volume: self.state.volume(),
+            sample_rate: if sample_rate > 0 { Some(sample_rate) } else { None },
+            bit_depth: if bit_depth > 0 { Some(bit_depth) } else { None },
         }
     }
 }
