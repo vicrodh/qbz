@@ -58,6 +58,9 @@
     onToggleShuffle: () => void;
     onToggleRepeat: () => void;
     onToggleFavorite: () => void;
+    // Infinite Play
+    isInfinitePlay?: boolean;
+    onToggleInfinitePlay?: () => void;
     // Lyrics
     lyricsLines?: LyricsLine[];
     lyricsActiveIndex?: number;
@@ -105,6 +108,8 @@
     onToggleShuffle,
     onToggleRepeat,
     onToggleFavorite,
+    isInfinitePlay = false,
+    onToggleInfinitePlay,
     lyricsLines = [],
     lyricsActiveIndex = -1,
     lyricsActiveProgress = 0,
@@ -454,6 +459,8 @@
       {onToggleShuffle}
       {onToggleRepeat}
       {onToggleFavorite}
+      {isInfinitePlay}
+      {onToggleInfinitePlay}
       {onVolumeChange}
     />
   </div>

@@ -9,7 +9,8 @@
     Heart,
     Volume2,
     VolumeX,
-    MoreHorizontal
+    MoreHorizontal,
+    Infinity
   } from 'lucide-svelte';
 
   interface Props {
@@ -21,6 +22,7 @@
     isShuffle: boolean;
     repeatMode: 'off' | 'all' | 'one';
     isFavorite: boolean;
+    isInfinitePlay?: boolean;
     onTogglePlay: () => void;
     onSkipBack?: () => void;
     onSkipForward?: () => void;
@@ -28,6 +30,7 @@
     onToggleShuffle: () => void;
     onToggleRepeat: () => void;
     onToggleFavorite: () => void;
+    onToggleInfinitePlay?: () => void;
     onVolumeChange: (volume: number) => void;
     onContextMenu?: () => void;
   }
@@ -41,6 +44,7 @@
     isShuffle,
     repeatMode,
     isFavorite,
+    isInfinitePlay = false,
     onTogglePlay,
     onSkipBack,
     onSkipForward,
@@ -48,6 +52,7 @@
     onToggleShuffle,
     onToggleRepeat,
     onToggleFavorite,
+    onToggleInfinitePlay,
     onVolumeChange,
     onContextMenu
   }: Props = $props();
@@ -162,6 +167,14 @@
           {#if repeatMode === 'one'}
             <span class="repeat-one">1</span>
           {/if}
+        </button>
+        <button
+          class="control-btn"
+          class:active={isInfinitePlay}
+          onclick={onToggleInfinitePlay}
+          title={isInfinitePlay ? 'Disable Infinite Play' : 'Enable Infinite Play'}
+        >
+          <Infinity size={12} />
         </button>
       </div>
 

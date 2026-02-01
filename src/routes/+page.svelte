@@ -3149,6 +3149,8 @@
         onQueueClear={handleClearQueue}
         {historyTracks}
         onPlayHistoryTrack={handlePlayHistoryTrack}
+        isInfinitePlay={infinitePlayEnabled}
+        onToggleInfinitePlay={handleToggleInfinitePlay}
       />
     {/if}
 
