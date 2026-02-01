@@ -20,11 +20,26 @@ uniform sampler2D u_texture;
 uniform float u_time;
 uniform float u_intensity;
 
-// Sample texture with UV offset and scale (zoom)
-vec3 sampleLayer(vec2 uv, vec2 offset, float scale) {
+// Rotate UV around center by angle (radians)
+vec2 rotateUV(vec2 uv, float angle) {
     vec2 center = vec2(0.5);
+    vec2 centered = uv - center;
+    float c = cos(angle);
+    float s = sin(angle);
+    vec2 rotated = vec2(
+        centered.x * c - centered.y * s,
+        centered.x * s + centered.y * c
+    );
+    return rotated + center;
+}
+
+// Sample texture with offset, scale, and rotation
+vec3 sampleLayer(vec2 uv, vec2 offset, float scale, float rotation) {
+    vec2 center = vec2(0.5);
+    // Apply rotation first
+    vec2 rotatedUV = rotateUV(uv, rotation);
     // Apply scale (zoom) around center
-    vec2 scaledUV = center + (uv - center) * scale;
+    vec2 scaledUV = center + (rotatedUV - center) * scale;
     // Apply offset
     scaledUV += offset;
     // Clamp to valid range
@@ -40,39 +55,44 @@ float radialDist(vec2 uv) {
 
 void main() {
     vec2 uv = v_texCoord;
-    float time = u_time; // Real-time seconds (no slowdown multiplier)
+    float time = u_time;
     float intensity = u_intensity;
 
     // ===========================================
-    // 1. MULTI-SCALE TEXTURE SAMPLING WITH DRIFT
+    // 1. MULTI-SCALE SAMPLING WITH FULL ANIMATION
     // ===========================================
-    // Three depth layers with decorrelated motion
-    // Amplitudes increased for perceptible movement
-    // Speeds kept slow but visible (~15-40 second cycles)
+    // Each layer has: drift, scale breathing, rotation
+    // All parameters are decorrelated for organic feel
 
-    // Far layer: zoomed OUT, slowest drift (background)
-    float farScale = 0.7;
+    // FAR LAYER: Background, slowest movement
+    float farScaleBase = 0.7;
+    float farScaleBreath = farScaleBase + sin(time * 0.1) * 0.05 * intensity;
+    float farRotation = sin(time * 0.05) * 0.03 * intensity; // ~1.7° max
     vec2 farOffset = vec2(
-        sin(time * 0.08) * 0.15,
-        cos(time * 0.06) * 0.12
+        sin(time * 0.08) * 0.20,
+        cos(time * 0.06) * 0.15
     ) * intensity;
-    vec3 farLayer = sampleLayer(uv, farOffset, farScale);
+    vec3 farLayer = sampleLayer(uv, farOffset, farScaleBreath, farRotation);
 
-    // Mid layer: medium zoom, medium drift, different phase
-    float midScale = 0.9;
+    // MID LAYER: Middle ground, medium movement
+    float midScaleBase = 0.9;
+    float midScaleBreath = midScaleBase + sin(time * 0.15 + 1.0) * 0.04 * intensity;
+    float midRotation = sin(time * 0.08 + 2.0) * 0.025 * intensity; // ~1.4° max
     vec2 midOffset = vec2(
-        cos(time * 0.12 + 2.0) * 0.10,
-        sin(time * 0.10 + 1.0) * 0.08
+        cos(time * 0.12 + 2.0) * 0.14,
+        sin(time * 0.10 + 1.0) * 0.12
     ) * intensity;
-    vec3 midLayer = sampleLayer(uv, midOffset, midScale);
+    vec3 midLayer = sampleLayer(uv, midOffset, midScaleBreath, midRotation);
 
-    // Near layer: zoomed IN, faster drift (foreground)
-    float nearScale = 1.3;
+    // NEAR LAYER: Foreground, fastest movement
+    float nearScaleBase = 1.3;
+    float nearScaleBreath = nearScaleBase + sin(time * 0.2 + 2.5) * 0.06 * intensity;
+    float nearRotation = sin(time * 0.12 + 4.0) * 0.02 * intensity; // ~1.1° max
     vec2 nearOffset = vec2(
-        sin(time * 0.15 + 3.5) * 0.06,
-        cos(time * 0.13 + 2.5) * 0.05
+        sin(time * 0.18 + 3.5) * 0.08,
+        cos(time * 0.15 + 2.5) * 0.07
     ) * intensity;
-    vec3 nearLayer = sampleLayer(uv, nearOffset, nearScale);
+    vec3 nearLayer = sampleLayer(uv, nearOffset, nearScaleBreath, nearRotation);
 
     // ===========================================
     // 2. SCALE-DEPENDENT UV DRIFT (handled above)
@@ -109,8 +129,9 @@ void main() {
     // ADDITIONAL DEPTH ENHANCEMENT
     // ===========================================
 
-    // Subtle vignette (darken edges for depth)
-    float vignette = 1.0 - radial * 0.35;
+    // Pulsing vignette (darken edges, intensity varies)
+    float vignetteStrength = 0.30 + sin(time * 0.18) * 0.08 * intensity;
+    float vignette = 1.0 - radial * vignetteStrength;
     color *= vignette;
 
     // Gentle luminance preservation (30% blend)
@@ -123,8 +144,8 @@ void main() {
     vec3 tintBottom = vec3(1.0, 0.96, 0.92);
     color *= mix(tintBottom, tintTop, v_texCoord.y);
 
-    // Brightness breathing (slow pulse, more visible)
-    float breath = 1.0 + sin(time * 0.25) * 0.08 * intensity;
+    // Brightness breathing (pronounced pulse)
+    float breath = 1.0 + sin(time * 0.3) * 0.12 * intensity;
     color *= breath;
 
     fragColor = vec4(color, 1.0);

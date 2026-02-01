@@ -57,7 +57,7 @@ export interface ImmersiveConfig {
 /** Default configuration */
 export const DEFAULT_IMMERSIVE_CONFIG: ImmersiveConfig = {
   targetFps: 30,
-  ambientIntensity: 0.8, // Increased for visible ambient motion
+  ambientIntensity: 1.0, // Full intensity for maximum ambient motion
   pauseWhenHidden: true,
   debugOverlay: false,
 };
