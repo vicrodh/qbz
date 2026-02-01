@@ -3120,7 +3120,7 @@
         onToggleRepeat={toggleRepeat}
         {isFavorite}
         onToggleFavorite={toggleFavorite}
-        lyricsLines={lyricsLines.map(l => ({ text: l.text }))}
+        lyricsLines={lyricsLines}
         lyricsActiveIndex={lyricsActiveIndex}
         lyricsActiveProgress={lyricsActiveProgress}
         lyricsSynced={lyricsIsSynced}

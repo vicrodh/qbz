@@ -3,6 +3,7 @@
 
   interface LyricsLine {
     text: string;
+    timeMs?: number; // Optional timing for synced lyrics
   }
 
   interface Props {
@@ -28,6 +29,32 @@
     immersive = false,
     isSynced = false
   }: Props = $props();
+
+  // Calculate line duration for CSS animation (immersive mode only)
+  function getLineDuration(index: number): number {
+    if (!isSynced || index < 0 || index >= lines.length) return 3000;
+
+    const currentLine = lines[index];
+    const nextLine = lines[index + 1];
+
+    if (!currentLine?.timeMs) return 3000; // Default 3 seconds
+    if (!nextLine?.timeMs) return 5000; // Last line, assume 5 seconds
+
+    const duration = nextLine.timeMs - currentLine.timeMs;
+    // Clamp between 1-10 seconds
+    return Math.max(1000, Math.min(10000, duration));
+  }
+
+  // Track active line changes for animation reset
+  let animationKey = $state(0);
+  let lastActiveIndex = $state(-1);
+
+  $effect(() => {
+    if (activeIndex !== lastActiveIndex && activeIndex >= 0) {
+      lastActiveIndex = activeIndex;
+      animationKey++; // Force animation restart
+    }
+  });
 
   let container: HTMLDivElement | null = null;
   let lastScrolledIndex = -1;
@@ -121,15 +148,28 @@
     {/if}
 
     {#each lines as line, index (index)}
-      <div
-        class="lyrics-line {immersive && isSynced ? getDistanceClass(index, activeIndex) : ''}"
-        class:active={isSynced && index === activeIndex}
-        class:past={isSynced && index < activeIndex}
-        style={immersive ? '' : `--line-opacity: ${isSynced ? getLineOpacity(index, activeIndex) : 1}; ${isSynced && index === activeIndex ? `--line-progress: ${Math.max(0, Math.min(1, activeProgress))}` : ''}`}
-        data-line-index={index}
-      >
-        <span class="line-text">{line.text}</span>
-      </div>
+      {#if immersive && isSynced && index === activeIndex}
+        <!-- Active line in immersive mode: CSS animation with duration -->
+        {#key animationKey}
+          <div
+            class="lyrics-line active {getDistanceClass(index, activeIndex)}"
+            style="--line-duration: {getLineDuration(index)}ms"
+            data-line-index={index}
+          >
+            <span class="line-text">{line.text}</span>
+          </div>
+        {/key}
+      {:else}
+        <div
+          class="lyrics-line {immersive && isSynced ? getDistanceClass(index, activeIndex) : ''}"
+          class:active={isSynced && index === activeIndex}
+          class:past={isSynced && index < activeIndex}
+          style={immersive ? '' : `--line-opacity: ${isSynced ? getLineOpacity(index, activeIndex) : 1}; ${isSynced && index === activeIndex ? `--line-progress: ${Math.max(0, Math.min(1, activeProgress))}` : ''}`}
+          data-line-index={index}
+        >
+          <span class="line-text">{line.text}</span>
+        </div>
+      {/if}
     {/each}
 
     <!-- Spacer at bottom to allow last lines to scroll to center (only for synced) -->
@@ -241,12 +281,32 @@
     opacity: 1;
   }
 
-  /* Disable karaoke gradient in immersive - keep text bright white */
+  /* CSS-only karaoke animation in immersive mode */
+  /* Uses CSS animation instead of JS polling - much lighter on CPU */
   .lyrics-lines.immersive .lyrics-line.active .line-text {
-    background: none !important;
-    -webkit-background-clip: unset !important;
-    background-clip: unset !important;
-    color: #ffffff !important;
+    --duration: var(--line-duration, 3000ms);
+    background: linear-gradient(
+      90deg,
+      #c4b5fd 0%,
+      #c4b5fd 50%,
+      #ffffff 50%,
+      #ffffff 100%
+    );
+    background-size: 200% 100%;
+    background-position: 100% 0;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: immersive-karaoke var(--duration) linear forwards;
+  }
+
+  @keyframes immersive-karaoke {
+    0% {
+      background-position: 100% 0;
+    }
+    100% {
+      background-position: 0% 0;
+    }
   }
 
   /* Past lines in immersive should be clearly dimmer than active */

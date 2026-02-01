@@ -4,6 +4,7 @@
 
   interface LyricsLine {
     text: string;
+    timeMs?: number; // Timing for CSS-only karaoke animation
   }
 
   interface Props {
