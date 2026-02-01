@@ -3128,15 +3128,22 @@
         enableCredits={true}
         enableSuggestions={true}
         queueTracks={[
+          ...historyTracks,
           ...(currentQueueTrack ? [currentQueueTrack] : []),
           ...queue
         ]}
-        queueCurrentIndex={0}
+        queueCurrentIndex={historyTracks.length}
         onQueuePlayTrack={(index) => {
-          // Index 0 is current track, 1+ is upcoming (index - 1 in queue array)
-          if (index > 0) {
-            handleQueueTrackPlay(queue[index - 1]?.id?.toString() ?? '');
+          const historyLen = historyTracks.length;
+          if (index < historyLen) {
+            // Playing from history
+            handlePlayHistoryTrack(historyTracks[index]?.id ?? '');
+          } else if (index > historyLen) {
+            // Playing from upcoming queue
+            const queueIndex = index - historyLen - 1;
+            handleQueueTrackPlay(queue[queueIndex]?.id?.toString() ?? '');
           }
+          // index === historyLen is current track, do nothing
         }}
         onQueueClear={handleClearQueue}
       />
