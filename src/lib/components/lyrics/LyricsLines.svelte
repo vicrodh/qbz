@@ -33,7 +33,19 @@
   let lastScrolledIndex = -1;
   let lastLyricsKey = '';
 
-  // Calculate opacity based on distance from active line
+  // In immersive mode, use CSS-only opacity via data attributes (no inline styles)
+  // This avoids per-line style recalculation on every render
+  function getDistanceClass(index: number, active: number): string {
+    if (!dimInactive || active < 0) return '';
+    if (index === active) return '';
+    const distance = Math.abs(index - active);
+    if (distance === 1) return 'distance-1';
+    if (distance === 2) return 'distance-2';
+    if (distance === 3) return 'distance-3';
+    return 'distance-far';
+  }
+
+  // Only calculate inline opacity for non-immersive mode (karaoke needs precise values)
   function getLineOpacity(index: number, active: number): number {
     if (!dimInactive || active < 0) return 1;
     if (index === active) return 1;
@@ -110,10 +122,10 @@
 
     {#each lines as line, index (index)}
       <div
-        class="lyrics-line"
+        class="lyrics-line {immersive && isSynced ? getDistanceClass(index, activeIndex) : ''}"
         class:active={isSynced && index === activeIndex}
         class:past={isSynced && index < activeIndex}
-        style="--line-opacity: {isSynced ? getLineOpacity(index, activeIndex) : 1}; {isSynced && index === activeIndex ? `--line-progress: ${Math.max(0, Math.min(1, activeProgress))}` : ''}"
+        style={immersive ? '' : `--line-opacity: ${isSynced ? getLineOpacity(index, activeIndex) : 1}; ${isSynced && index === activeIndex ? `--line-progress: ${Math.max(0, Math.min(1, activeProgress))}` : ''}`}
         data-line-index={index}
       >
         <span class="line-text">{line.text}</span>
@@ -185,9 +197,12 @@
   }
 
   /* Immersive mode - larger text with Oswald font */
+  /* Performance: uses CSS classes for opacity instead of inline styles */
   .lyrics-lines.immersive {
     gap: 20px;
     padding: 24px;
+    /* Containment: isolate layout/paint to this subtree */
+    contain: layout style;
   }
 
   .lyrics-lines.immersive .lyrics-line {
@@ -199,6 +214,24 @@
     text-shadow:
       0 1px 2px rgba(0, 0, 0, 0.5),
       0 2px 8px rgba(0, 0, 0, 0.3);
+    /* Remove expensive transitions in immersive mode */
+    transition: opacity 200ms ease-out, color 200ms ease-out;
+    /* Containment per line */
+    contain: layout style;
+  }
+
+  /* Distance-based opacity classes (CSS-only, no inline styles) */
+  .lyrics-lines.immersive .lyrics-line.distance-1 {
+    opacity: 0.5;
+  }
+  .lyrics-lines.immersive .lyrics-line.distance-2 {
+    opacity: 0.35;
+  }
+  .lyrics-lines.immersive .lyrics-line.distance-3 {
+    opacity: 0.25;
+  }
+  .lyrics-lines.immersive .lyrics-line.distance-far {
+    opacity: 0.15;
   }
 
   .lyrics-lines.immersive .lyrics-line.active {
@@ -230,22 +263,21 @@
     line-height: 1.5;
     letter-spacing: 0.01em;
     opacity: var(--line-opacity, 1);
+    /* Minimal transitions for non-immersive mode */
+    transition: opacity 200ms ease-out, color 200ms ease-out;
+    transform-origin: left center;
+    /* Prevent horizontal overflow with long lyrics */
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+  }
+
+  /* Only active line gets full transitions */
+  .lyrics-line.active {
     transition:
       opacity 200ms ease-out,
       transform 200ms ease-out,
       font-size 150ms ease-out,
       color 250ms ease-out;
-    transform-origin: left center;
-    /* Prevent horizontal overflow with long lyrics */
-    word-wrap: break-word;
-    overflow-wrap: break-word;
-    /* will-change removed from all lines - only active line gets GPU layer */
-  }
-
-  /* Only promote active and adjacent lines to GPU layers */
-  .lyrics-line.active,
-  .lyrics-line.active + .lyrics-line {
-    will-change: opacity, transform;
   }
 
   .lyrics-lines.center .lyrics-line {
