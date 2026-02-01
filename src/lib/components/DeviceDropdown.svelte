@@ -4,9 +4,11 @@
     openMenu as openGlobalMenu,
     closeMenu as closeGlobalMenu,
     subscribe as subscribeFloatingMenu,
-    getActiveMenuId,
-    MENU_INACTIVITY_TIMEOUT
+    getActiveMenuId
   } from '$lib/stores/floatingMenuStore';
+
+  // Extended timeout for device dropdown (10 seconds) - devices have long names
+  const DEVICE_DROPDOWN_TIMEOUT = 10000;
 
   interface DeviceOption {
     value: string;        // Display name
@@ -62,9 +64,15 @@
           defaults.push(device);
         } else if (device.id === 'default' || device.isDefault) {
           defaults.push(device);
-        } else if (device.id.startsWith('hw:') || device.id.startsWith('iec958:')) {
+        } else if (
+          device.id.startsWith('hw:') ||
+          device.id.startsWith('iec958:') ||
+          device.id.startsWith('front:CARD=') ||
+          device.value.toLowerCase().includes('bit-perfect')
+        ) {
           // hw: = direct hardware access, iec958: = S/PDIF digital output
-          // Both are bit-perfect capable
+          // front:CARD= = front channel device (bit-perfect for some USB DACs)
+          // Also include any device with "bit-perfect" in its display name
           bitPerfect.push(device);
         } else if (device.id.startsWith('plughw:')) {
           pluginHw.push(device);
@@ -258,7 +266,7 @@
         if (idleTimer) clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
           if (isOpen && !isHovering) closeDropdown();
-        }, MENU_INACTIVITY_TIMEOUT);
+        }, DEVICE_DROPDOWN_TIMEOUT);
       };
 
       if (!isHovering) scheduleIdleClose();
@@ -283,7 +291,7 @@
 </script>
 
 <div class="dropdown" class:wide bind:this={dropdownRef}>
-  <button class="trigger" onclick={() => isOpen ? closeDropdown() : openDropdown()}>
+  <button class="trigger" onclick={() => isOpen ? closeDropdown() : openDropdown()} title={value}>
     <span class="value-text">{value}</span>
     <ChevronDown size={16} class="chevron" />
   </button>
@@ -332,6 +340,7 @@
               onclick={() => handleOptionClick(device)}
               title={device.id !== device.value ? `${device.value}\n${device.id}` : device.value}
             >
+              <span class="current-indicator" class:visible={device.value === value}>▸</span>
               <div class="option-content">
                 <span class="option-text">{device.value}</span>
                 {#if sampleRatesText}
@@ -486,10 +495,11 @@
     width: 100%;
     min-height: 36px;
     padding: 6px 12px;
+    padding-left: 8px;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 4px;
     text-align: left;
     font-size: 12px;
     color: var(--text-secondary);
@@ -498,6 +508,18 @@
     cursor: pointer;
     transition: background-color 150ms ease, color 150ms ease;
     flex-shrink: 0;
+  }
+
+  .current-indicator {
+    width: 12px;
+    font-size: 10px;
+    color: var(--accent-color, #3b82f6);
+    opacity: 0;
+    flex-shrink: 0;
+  }
+
+  .current-indicator.visible {
+    opacity: 1;
   }
 
   .option.has-subtitle {

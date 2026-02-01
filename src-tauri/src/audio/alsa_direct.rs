@@ -285,9 +285,12 @@ impl AlsaDirectStream {
         Err(format!("No volume control found for {}. DAC may not support hardware mixer.", self.device_id))
     }
 
-    /// Check if device is hw: device
+    /// Check if device is a bit-perfect hardware device
+    /// Includes: hw:X,Y, plughw:X,Y, and front:CARD=X,DEV=Y
     pub fn is_hw_device(device_id: &str) -> bool {
-        device_id.starts_with("hw:") || device_id.starts_with("plughw:")
+        device_id.starts_with("hw:")
+            || device_id.starts_with("plughw:")
+            || device_id.starts_with("front:CARD=")
     }
 }
 
@@ -317,6 +320,7 @@ impl AlsaDirectStream {
         2
     }
 
+    /// Check if device is a bit-perfect hardware device (always false on non-Linux)
     pub fn is_hw_device(_device_id: &str) -> bool {
         false
     }

@@ -256,6 +256,54 @@ impl AlsaBackend {
             });
         }
 
+        // Fifth: Add front:CARD=X,DEV=Y devices from aplay -L (issue #30)
+        // Some USB DACs (e.g., SMSL AD18) don't expose hw: devices but have working front: devices
+        // DeaDBeef and Audacious use these for bit-perfect playback
+        for (device_id, desc) in &description_map {
+            // Match front:CARD=X,DEV=Y pattern
+            if device_id.starts_with("front:CARD=") {
+                // Check if we already have this device
+                let already_exists = devices.iter().any(|d| d.name == *device_id);
+                if already_exists {
+                    continue;
+                }
+
+                // Extract card name for friendly description
+                // front:CARD=AMP,DEV=0 -> "AMP"
+                let card_name = device_id
+                    .strip_prefix("front:CARD=")
+                    .and_then(|s| s.split(',').next())
+                    .unwrap_or("Unknown");
+
+                // Use card_map description if available, otherwise use aplay -L description
+                let friendly_desc = card_map
+                    .iter()
+                    .find(|(_, card_desc)| {
+                        // Match by card short name in the description
+                        card_desc.to_lowercase().contains(&card_name.to_lowercase())
+                    })
+                    .map(|(_, card_desc)| card_desc.clone())
+                    .unwrap_or_else(|| desc.clone());
+
+                log::info!(
+                    "[ALSA Backend] Adding front: device for bit-perfect: {} ({})",
+                    device_id,
+                    friendly_desc
+                );
+
+                devices.push(AudioDevice {
+                    id: device_id.clone(),
+                    name: device_id.clone(),
+                    description: Some(format!("{} (Direct Hardware - Bit-perfect)", friendly_desc)),
+                    is_default: false,
+                    max_sample_rate: Some(384000), // Assume high sample rate capability
+                    supported_sample_rates: None,
+                    device_bus: None,
+                    is_hardware: true,
+                });
+            }
+        }
+
         log::info!("[ALSA Backend] Enumerated {} ALSA devices", devices.len());
         for (idx, dev) in devices.iter().enumerate() {
             log::info!(
