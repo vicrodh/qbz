@@ -120,8 +120,9 @@
   });
 
   // Get icon path based on tier
+  // NOTE: Using hi-res-gray.svg because hi-res.svg has poor text contrast
   const iconPath = $derived.by(() => {
-    if (tier === 'max' || tier === 'hires') return '/hi-res.svg';
+    if (tier === 'max' || tier === 'hires') return '/hi-res-gray.svg';
     if (tier === 'cd') return '/cd.svg';
     if (tier === 'mp3') return '/mp3.svg';
     return '/cd.svg';
