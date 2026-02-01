@@ -278,10 +278,10 @@
   }
 
   .player-bar {
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(0, 0, 0, 0.5);
     backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);
-    border: 1px solid rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 16px;
     padding: 12px 24px;
     min-width: 700px;
@@ -325,7 +325,7 @@
 
   .time-text {
     font-size: 11px;
-    color: rgba(255, 255, 255, 0.6);
+    color: rgba(255, 255, 255, 0.75);
     font-variant-numeric: tabular-nums;
     min-width: 36px;
   }
@@ -343,14 +343,14 @@
     background: none;
     border: none;
     border-radius: 50%;
-    color: rgba(255, 255, 255, 0.5);
+    color: rgba(255, 255, 255, 0.65);
     cursor: pointer;
     transition: all 150ms ease;
     position: relative;
   }
 
   .control-btn:disabled {
-    opacity: 0.3;
+    opacity: 0.4;
     cursor: default;
   }
 
@@ -359,19 +359,19 @@
   }
 
   .control-btn.active {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.25);
     color: white;
   }
 
   .control-btn.nav {
     width: 28px;
     height: 28px;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.15);
     color: white;
   }
 
   .control-btn.nav:not(:disabled):hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.25);
   }
 
   .control-btn.play-btn {

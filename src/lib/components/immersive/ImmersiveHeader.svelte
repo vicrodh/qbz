@@ -196,8 +196,8 @@
     align-items: center;
     gap: 2px;
     padding: 4px;
-    background: rgba(0, 0, 0, 0.6);
-    border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 10px;
   }
 
@@ -210,19 +210,19 @@
     background: none;
     border: none;
     border-radius: 8px;
-    color: var(--alpha-50, rgba(255, 255, 255, 0.5));
+    color: rgba(255, 255, 255, 0.65);
     cursor: pointer;
     transition: all 150ms ease;
   }
 
   .mode-btn:hover {
-    color: var(--alpha-80, rgba(255, 255, 255, 0.8));
-    background: var(--alpha-10, rgba(255, 255, 255, 0.1));
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.12);
   }
 
   .mode-btn.active {
     color: var(--text-primary, white);
-    background: var(--alpha-15, rgba(255, 255, 255, 0.15));
+    background: rgba(255, 255, 255, 0.2);
   }
 
   .tabs-placeholder {
@@ -234,8 +234,8 @@
     align-items: center;
     gap: 4px;
     padding: 4px;
-    background: rgba(0, 0, 0, 0.6);
-    border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
   }
 
@@ -247,7 +247,7 @@
     background: none;
     border: none;
     border-radius: 8px;
-    color: var(--alpha-60, rgba(255, 255, 255, 0.6));
+    color: rgba(255, 255, 255, 0.7);
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
@@ -255,13 +255,13 @@
   }
 
   .tab:hover {
-    color: var(--alpha-90, rgba(255, 255, 255, 0.9));
-    background: var(--alpha-10, rgba(255, 255, 255, 0.1));
+    color: rgba(255, 255, 255, 0.95);
+    background: rgba(255, 255, 255, 0.12);
   }
 
   .tab.active {
     color: var(--text-primary, white);
-    background: var(--alpha-15, rgba(255, 255, 255, 0.15));
+    background: rgba(255, 255, 255, 0.2);
   }
 
   .header-actions {
@@ -277,8 +277,8 @@
     position: relative;
     display: flex;
     align-items: center;
-    background: rgba(0, 0, 0, 0.6);
-    border: 1px solid var(--alpha-10, rgba(255, 255, 255, 0.1));
+    background: rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 20px;
     padding: 4px;
     overflow: hidden;
@@ -300,13 +300,13 @@
   }
 
   .window-trigger:hover {
-    background: var(--alpha-10, rgba(255, 255, 255, 0.1));
+    background: rgba(255, 255, 255, 0.12);
   }
 
   .window-icon {
     width: 18px;
     height: 18px;
-    filter: invert(1) opacity(0.7);
+    filter: invert(1) opacity(0.85);
     transition: filter 150ms ease;
   }
 
@@ -339,7 +339,7 @@
     background: none;
     border: none;
     border-radius: 50%;
-    color: var(--alpha-70, rgba(255, 255, 255, 0.7));
+    color: rgba(255, 255, 255, 0.85);
     cursor: pointer;
     transition: all 150ms ease;
     flex-shrink: 0;

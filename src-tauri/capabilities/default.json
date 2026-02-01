@@ -22,6 +22,8 @@
     "core:window:allow-set-min-size",
     "core:window:allow-set-decorations",
     "core:window:allow-set-resizable",
+    "core:window:allow-set-fullscreen",
+    "core:window:allow-is-fullscreen",
     "core:window:allow-inner-size",
     "core:window:allow-inner-position",
     "core:window:allow-set-position",
