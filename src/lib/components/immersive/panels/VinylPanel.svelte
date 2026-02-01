@@ -50,9 +50,9 @@
     mouseY = 0.5;
   }
 
-  // Parallax calculations (more sensitive)
-  const coverOffsetX = $derived((mouseX - 0.5) * 40);
-  const coverOffsetY = $derived((mouseY - 0.5) * 25);
+  // Parallax calculations (aggressive)
+  const coverOffsetX = $derived((mouseX - 0.5) * 80);
+  const coverOffsetY = $derived((mouseY - 0.5) * 50);
   const revealOffset = $derived(isPlaying ? -12 : 0);
 
   // Vertex shader
@@ -93,10 +93,19 @@
       float s = sin(u_rotation);
       uv = vec2(uv.x * c - uv.y * s, uv.x * s + uv.y * c);
 
-      // Apply subtle parallax offset
-      uv += u_parallax * 0.02;
+      // Apply aggressive parallax offset
+      uv += u_parallax * 0.08;
 
       uv += center;
+
+      // Add padding - scale down UV to add margin around vinyl
+      uv = (uv - 0.5) * 1.15 + 0.5;
+
+      // Discard pixels outside texture bounds (creates padding)
+      if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        fragColor = vec4(0.0);
+        return;
+      }
 
       // Sample texture
       vec4 color = texture(u_texture, uv);
@@ -223,10 +232,10 @@
 
     gl.useProgram(program);
 
-    // Calculate vinyl size and position (centered)
-    const size = Math.min(rect.width, rect.height) * 0.95;
-    const offsetX = (rect.width - size) / 2 + (mouseX - 0.5) * -25;
-    const offsetY = (rect.height - size) / 2 + (mouseY - 0.5) * -15;
+    // Calculate vinyl size and position (centered, with padding)
+    const size = Math.min(rect.width, rect.height) * 0.85;
+    const offsetX = (rect.width - size) / 2 + (mouseX - 0.5) * -50;
+    const offsetY = (rect.height - size) / 2 + (mouseY - 0.5) * -35;
 
     // Set uniforms
     gl.uniform2f(gl.getUniformLocation(program, 'u_resolution'), rect.width, rect.height);
