@@ -882,6 +882,15 @@
                         <Disc3 size={32} />
                       </div>
                     {/if}
+                    {#if album.maximum_bit_depth || album.maximum_sampling_rate}
+                      <div class="popular-quality-badge">
+                        <QualityBadge
+                          compact
+                          bitDepth={album.maximum_bit_depth}
+                          samplingRate={album.maximum_sampling_rate}
+                        />
+                      </div>
+                    {/if}
                     <div class="popular-card-overlay">
                       <div class="popular-card-buttons">
                         <button
@@ -955,6 +964,15 @@
                     {:else}
                       <div class="popular-card-placeholder">
                         <Music size={32} />
+                      </div>
+                    {/if}
+                    {#if track.maximum_bit_depth || track.maximum_sampling_rate}
+                      <div class="popular-quality-badge">
+                        <QualityBadge
+                          compact
+                          bitDepth={track.maximum_bit_depth}
+                          samplingRate={track.maximum_sampling_rate}
+                        />
                       </div>
                     {/if}
                     <div class="popular-card-overlay">
@@ -2142,6 +2160,24 @@
     justify-content: center;
     background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
     color: var(--text-muted);
+  }
+
+  .popular-quality-badge {
+    position: absolute;
+    top: 6px;
+    right: 6px;
+    z-index: 2;
+    background: rgba(0, 0, 0, 0.75);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .popular-quality-badge :global(.quality-badge-compact) {
+    font-size: 10px;
+    width: auto;
+    color: rgba(255, 255, 255, 0.9);
   }
 
   .popular-card-overlay {
