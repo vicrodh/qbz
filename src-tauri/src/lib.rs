@@ -90,16 +90,20 @@ impl AppState {
             Arc::new(AudioCache::default())
         };
 
+        // Create visualizer first to get the tap for the player
+        let visualizer = Visualizer::new();
+        let viz_tap = visualizer.get_tap();
+
         Self {
             client: Arc::new(Mutex::new(QobuzClient::default())),
-            player: Player::new(device_name, audio_settings),
+            player: Player::new(device_name, audio_settings, Some(viz_tap)),
             queue: QueueManager::new(),
             context: ContextManager::new(),
             media_controls: MediaControlsManager::new(),
             audio_cache,
             lastfm: Arc::new(Mutex::new(LastFmClient::default())),
             songlink: SongLinkClient::new(),
-            visualizer: Visualizer::new(),
+            visualizer,
         }
     }
 }

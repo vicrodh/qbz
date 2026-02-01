@@ -39,6 +39,7 @@ use symphonia::default::{get_codecs, get_probe};
 use crate::api::{client::QobuzClient, models::Quality};
 use crate::audio::{AudioBackendType, BackendConfig, BackendManager};
 use crate::config::audio_settings::AudioSettings;
+use crate::visualizer::{VisualizerTap, TappedSource};
 use playback_engine::PlaybackEngine;
 
 /// Commands sent to the audio thread
@@ -637,18 +638,21 @@ pub struct Player {
     pub state: SharedState,
     /// Audio settings (exclusive mode, DAC passthrough, etc.)
     audio_settings: Arc<Mutex<AudioSettings>>,
+    /// Visualizer tap for audio sample capture (optional)
+    visualizer_tap: Option<VisualizerTap>,
 }
 
 impl Default for Player {
     fn default() -> Self {
-        Self::new(None, AudioSettings::default())
+        Self::new(None, AudioSettings::default(), None)
     }
 }
 
 impl Player {
     /// Create a new player with an optional specific output device and audio settings
     /// If device_name is None, uses the system default device
-    pub fn new(device_name: Option<String>, audio_settings: AudioSettings) -> Self {
+    /// visualizer_tap is optional - if provided, audio samples are captured for visualization
+    pub fn new(device_name: Option<String>, audio_settings: AudioSettings, visualizer_tap: Option<VisualizerTap>) -> Self {
         let (tx, rx) = mpsc::channel::<AudioCommand>();
         let state = SharedState::new();
         let thread_state = state.clone();
@@ -657,9 +661,22 @@ impl Player {
         let settings = Arc::new(Mutex::new(audio_settings.clone()));
         let thread_settings = settings.clone();
 
+        // Clone visualizer tap for audio thread
+        let thread_viz_tap = visualizer_tap.clone();
+
         // Spawn dedicated audio thread
         thread::spawn(move || {
             log::info!("Audio thread starting...");
+
+            // Helper to wrap source with visualizer tap (if enabled)
+            // This captures audio samples for visualization without affecting playback
+            let wrap_source = |source: Box<dyn Source<Item = i16> + Send>| -> Box<dyn Source<Item = i16> + Send> {
+                if let Some(ref tap) = thread_viz_tap {
+                    Box::new(TappedSource::new(source, tap.ring_buffer.clone(), tap.enabled.clone()))
+                } else {
+                    source
+                }
+            };
 
             // Get the audio host
             let host = rodio::cpal::default_host();
@@ -1092,6 +1109,8 @@ impl Player {
                             .unwrap_or(duration_secs);
                         thread_state.duration.store(actual_duration, Ordering::SeqCst);
 
+                        // Wrap source for visualization (if enabled)
+                        let source = wrap_source(source);
                         if let Err(e) = engine.append(source) {
                             log::error!("Failed to append source to engine: {}", e);
                             return;
@@ -1316,6 +1335,8 @@ impl Player {
 
                         // Box the incremental source to match the expected type
                         let source_to_play: Box<dyn Source<Item = i16> + Send> = Box::new(incremental_source);
+                        // Wrap source for visualization (if enabled)
+                        let source_to_play = wrap_source(source_to_play);
                         if let Err(e) = engine.append(source_to_play) {
                             log::error!("Failed to append streaming source to engine: {}", e);
                             return;
@@ -1428,6 +1449,8 @@ impl Player {
                                 source
                             };
 
+                            // Wrap source for visualization (if enabled)
+                            let skipped_source = wrap_source(skipped_source);
                             if let Err(e) = engine.append(skipped_source) {
                                 log::error!("Failed to append source for resume: {}", e);
                                 return;
@@ -1523,8 +1546,10 @@ impl Player {
                         };
 
                         let skip_duration = Duration::from_secs(position_secs);
-                        let skipped_source = source.skip_duration(skip_duration);
+                        let skipped_source: Box<dyn Source<Item = i16> + Send> = Box::new(source.skip_duration(skip_duration));
 
+                        // Wrap source for visualization (if enabled)
+                        let skipped_source = wrap_source(skipped_source);
                         if let Err(e) = engine.append(skipped_source) {
                             log::error!("Failed to append source for seek: {}", e);
                             return;
@@ -1684,7 +1709,7 @@ impl Player {
             }
         });
 
-        Self { tx, state, audio_settings: settings }
+        Self { tx, state, audio_settings: settings, visualizer_tap }
     }
 
     /// Play a track by ID (downloads audio)
