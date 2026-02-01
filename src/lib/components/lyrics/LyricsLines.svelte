@@ -282,30 +282,43 @@
   }
 
   /* CSS-only karaoke animation in immersive mode */
-  /* Uses CSS animation instead of JS polling - much lighter on CPU */
+  /* Uses pseudo-element underline sweep - keeps text bright white */
   .lyrics-lines.immersive .lyrics-line.active .line-text {
     --duration: var(--line-duration, 3000ms);
-    background: linear-gradient(
-      90deg,
-      #c4b5fd 0%,
-      #c4b5fd 50%,
-      #ffffff 50%,
-      #ffffff 100%
-    );
-    background-size: 200% 100%;
-    background-position: 100% 0;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    animation: immersive-karaoke var(--duration) linear forwards;
+    position: relative;
+    display: inline-block;
+    color: #ffffff;
   }
 
-  @keyframes immersive-karaoke {
+  /* Glowing underline that sweeps left to right */
+  .lyrics-lines.immersive .lyrics-line.active .line-text::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    height: 3px;
+    width: 0%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      #a78bfa 20%,
+      #c4b5fd 50%,
+      #a78bfa 80%,
+      transparent 100%
+    );
+    border-radius: 2px;
+    box-shadow:
+      0 0 8px #a78bfa,
+      0 0 16px rgba(167, 139, 250, 0.5);
+    animation: karaoke-underline var(--duration) linear forwards;
+  }
+
+  @keyframes karaoke-underline {
     0% {
-      background-position: 100% 0;
+      width: 0%;
     }
     100% {
-      background-position: 0% 0;
+      width: 100%;
     }
   }
 
