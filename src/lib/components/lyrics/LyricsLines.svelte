@@ -282,37 +282,44 @@
   }
 
   /* CSS-only karaoke animation in immersive mode */
-  /* Metallic shimmer effect - GPU accelerated, single element */
+  /* Glowing underline that sweeps left to right - keeps text bright white */
   .lyrics-lines.immersive .lyrics-line.active .line-text {
     --duration: var(--line-duration, 3000ms);
-    /* Base bright white text */
-    color: #ffffff;
-    /* Metallic shimmer gradient */
-    background: linear-gradient(
-      90deg,
-      #ffffff 0%,
-      #ffffff 40%,
-      #e9d5ff 45%,
-      #c4b5fd 50%,
-      #e9d5ff 55%,
-      #ffffff 60%,
-      #ffffff 100%
-    );
-    background-size: 300% 100%;
-    background-position: 100% 0;
-    -webkit-background-clip: text;
-    background-clip: text;
-    color: transparent;
-    /* Shimmer moves across during line duration */
-    animation: metallic-shimmer var(--duration) ease-in-out forwards;
+    position: relative;
+    display: inline-block;
+    color: #ffffff !important;
   }
 
-  @keyframes metallic-shimmer {
+  /* Glowing underline that sweeps left to right */
+  .lyrics-lines.immersive .lyrics-line.active .line-text::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    height: 3px;
+    width: 0%;
+    /* QBZ blue gradient */
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      #5281ff 20%,
+      #7ba3ff 50%,
+      #5281ff 80%,
+      transparent 100%
+    );
+    border-radius: 2px;
+    box-shadow:
+      0 0 8px #5281ff,
+      0 0 16px rgba(82, 129, 255, 0.5);
+    animation: karaoke-underline var(--duration) linear forwards;
+  }
+
+  @keyframes karaoke-underline {
     0% {
-      background-position: 100% 0;
+      width: 0%;
     }
     100% {
-      background-position: -100% 0;
+      width: 100%;
     }
   }
 
