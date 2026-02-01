@@ -2528,7 +2528,11 @@
           case 'set_volume': {
             if (typeof payload.volume === 'number') {
               const normalized = Math.max(0, Math.min(1, payload.volume));
-              await playerSetVolume(Math.round(normalized * 100));
+              const newVolume = Math.round(normalized * 100);
+              // Only update if volume actually changed (prevents MPRIS feedback loop)
+              if (newVolume !== volume) {
+                await playerSetVolume(newVolume);
+              }
             }
             break;
           }

@@ -11,6 +11,7 @@
   import QueuePanel from './panels/QueuePanel.svelte';
   import CoverflowPanel from './panels/CoverflowPanel.svelte';
   import StaticPanel from './panels/StaticPanel.svelte';
+  import VinylPanel from './panels/VinylPanel.svelte';
   import LyricsFocusPanel from './panels/LyricsFocusPanel.svelte';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
 
@@ -343,6 +344,18 @@
       {:else if activeFocusTab === 'static'}
         <!-- Static: Single centered artwork -->
         <StaticPanel
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {isPlaying}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+        />
+      {:else if activeFocusTab === 'vinyl'}
+        <!-- Vinyl: Spinning record with album cover -->
+        <VinylPanel
           {artwork}
           {trackTitle}
           {artist}
