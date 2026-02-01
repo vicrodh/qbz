@@ -46,7 +46,7 @@ pub async fn play_track(
         if let Ok(Some(file_path)) = db.get_file_path(track_id) {
             let path = std::path::Path::new(&file_path);
             if path.exists() {
-                log::info!("Playing track {} from offline cache: {:?}", track_id, path);
+                log::info!("[CACHE HIT] Track {} from OFFLINE cache: {:?}", track_id, path);
 
                 // Update last accessed time
                 let _ = db.touch(track_id);
@@ -75,7 +75,7 @@ pub async fn play_track(
 
     // Check if track is in memory cache (L1)
     if let Some(cached) = cache.get(track_id) {
-        log::info!("Playing track {} from memory cache ({} bytes)", track_id, cached.size_bytes);
+        log::info!("[CACHE HIT] Track {} from MEMORY cache ({} bytes) - instant playback", track_id, cached.size_bytes);
         state.player.play_data(cached.data, track_id)?;
 
         // Prefetch next track in background
@@ -92,7 +92,7 @@ pub async fn play_track(
     // Check if track is in playback cache (L2 - disk)
     if let Some(playback_cache) = cache.get_playback_cache() {
         if let Some(audio_data) = playback_cache.get(track_id) {
-            log::info!("Playing track {} from playback cache ({} bytes)", track_id, audio_data.len());
+            log::info!("[CACHE HIT] Track {} from DISK cache ({} bytes) - instant playback", track_id, audio_data.len());
 
             // Promote back to memory cache
             cache.insert(track_id, audio_data.clone());
@@ -112,7 +112,7 @@ pub async fn play_track(
     }
 
     // Not in any cache - check if streaming is enabled
-    log::info!("Track {} not in any cache, checking streaming setting...", track_id);
+    log::info!("Track {} not in any cache, fetching from network...", track_id);
 
     // Check streaming settings
     let (stream_first_enabled, buffer_seconds, streaming_only) = {
@@ -126,6 +126,11 @@ pub async fn play_track(
         }
     };
 
+    log::info!(
+        "[Playback Settings] stream_first: {}, streaming_only: {}, buffer: {}s",
+        stream_first_enabled, streaming_only, buffer_seconds
+    );
+
     let client = state.client.lock().await;
 
     // Get the stream URL with preferred quality
@@ -138,7 +143,7 @@ pub async fn play_track(
 
     if stream_first_enabled {
         // Use streaming playback - start playing before full download
-        log::info!("Streaming mode enabled - starting stream-first playback for track {}", track_id);
+        log::info!("[STREAMING] Track {} - streaming from network (cache_after: {})", track_id, !streaming_only);
 
         // Get content length, audio info, and measured speed via HEAD request
         let stream_info = get_stream_info(&stream_url.url).await?;
@@ -176,12 +181,12 @@ pub async fn play_track(
             match download_and_stream(&url, buffer_writer, track_id, cache_clone, content_len, skip_cache).await {
                 Ok(()) => {
                     if skip_cache {
-                        log::info!("Track {} streaming complete (cache disabled)", track_id);
+                        log::info!("[STREAMING COMPLETE] Track {} - NOT cached (streaming_only mode)", track_id);
                     } else {
-                        log::info!("Track {} ready for instant replay from cache", track_id);
+                        log::info!("[STREAMING COMPLETE] Track {} - cached for instant replay", track_id);
                     }
                 },
-                Err(e) => log::error!("Streaming failed for track {}: {}", track_id, e),
+                Err(e) => log::error!("[STREAMING ERROR] Track {}: {}", track_id, e),
             }
         });
 
@@ -197,7 +202,7 @@ pub async fn play_track(
     }
 
     // Standard download path (streaming disabled)
-    log::info!("Standard caching mode for track {}", track_id);
+    log::info!("[DOWNLOAD] Track {} - full download before playback (cache_after: {})", track_id, !streaming_only);
 
     // Download the audio
     let audio_data = download_audio(&stream_url.url).await?;
@@ -206,8 +211,9 @@ pub async fn play_track(
     // Cache it (unless streaming_only mode)
     if !streaming_only {
         cache.insert(track_id, audio_data.clone());
+        log::info!("[CACHED] Track {} stored in memory cache", track_id);
     } else {
-        log::info!("Streaming-only mode: skipping cache for track {}", track_id);
+        log::info!("[NOT CACHED] Track {} - streaming_only mode active", track_id);
     }
 
     // Play it
