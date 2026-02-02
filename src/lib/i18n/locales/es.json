@@ -437,6 +437,12 @@
       "fetchArtistImages": "Obtener imágenes de artistas de Qobuz™",
       "fetchArtistImagesDesc": "Mostrar fotos de artistas de Qobuz™ en la biblioteca local"
     },
+    "contentFiltering": {
+      "title": "Filtrado de Contenido",
+      "artistBlacklist": "Lista negra de artistas",
+      "manage": "Administrar",
+      "disabled": "deshabilitado"
+    },
     "integrations": {
       "title": "Integraciones",
       "lastfm": "Last.fm",

@@ -18,6 +18,7 @@ export type ViewType =
   | 'label'
   | 'playlist'
   | 'playlist-manager'
+  | 'blacklist-manager'
   | 'favorites-tracks'
   | 'favorites-albums'
   | 'favorites-artists'

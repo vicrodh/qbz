@@ -290,6 +290,7 @@
   import FavoritesView from '$lib/components/views/FavoritesView.svelte';
   import LocalLibraryView from '$lib/components/views/LocalLibraryView.svelte';
   import PlaylistManagerView from '$lib/components/views/PlaylistManagerView.svelte';
+  import BlacklistManagerView from '$lib/components/views/BlacklistManagerView.svelte';
 
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
@@ -3166,6 +3167,11 @@
             sidebarRef?.refreshPlaylistSettings();
             sidebarRef?.refreshLocalTrackCounts();
           }}
+        />
+      {:else if activeView === 'blacklist-manager'}
+        <BlacklistManagerView
+          onBack={navGoBack}
+          onArtistSelect={selectArtist}
         />
       {/if}
     </main>

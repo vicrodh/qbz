@@ -437,6 +437,12 @@
       "fetchArtistImages": "Fetch Qobuz™ Artist Images",
       "fetchArtistImagesDesc": "Show artist photos from Qobuz™ in local library"
     },
+    "contentFiltering": {
+      "title": "Content Filtering",
+      "artistBlacklist": "Artist Blacklist",
+      "manage": "Manage",
+      "disabled": "disabled"
+    },
     "integrations": {
       "title": "Integrations",
       "lastfm": "Last.fm",

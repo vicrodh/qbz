@@ -4,7 +4,7 @@
   import ViewTransition from '../ViewTransition.svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
-  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, HelpCircle } from 'lucide-svelte';
+  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, HelpCircle, Ban } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import DeviceDropdown from '../DeviceDropdown.svelte';
@@ -75,6 +75,12 @@
     type UpdatePreferences
   } from '$lib/stores/updatesStore';
   import { openReleasePageAndAcknowledge } from '$lib/services/updatesService';
+  import { navigateTo } from '$lib/stores/navigationStore';
+  import {
+    getCount as getBlacklistCount,
+    isEnabled as isBlacklistEnabled,
+    subscribe as subscribeBlacklist
+  } from '$lib/stores/artistBlacklistStore';
 
   interface Props {
     onBack?: () => void;
@@ -164,6 +170,10 @@
   let isSettingsWhatsNewOpen = $state(false);
   let settingsWhatsNewRelease = $state<ReleaseInfo | null>(null);
 
+  // Blacklist state
+  let blacklistCount = $state(getBlacklistCount());
+  let blacklistEnabled = $state(isBlacklistEnabled());
+
   // Section navigation
   let settingsViewEl: HTMLDivElement;
   let audioSection: HTMLElement;
@@ -172,6 +182,7 @@
   let appearanceSection: HTMLElement;
   let downloadsSection: HTMLElement;
   let librarySection: HTMLElement;
+  let contentFilteringSection: HTMLElement;
   let integrationsSection: HTMLElement;
   let updatesSection: HTMLElement;
   let storageSection: HTMLElement;
@@ -190,6 +201,7 @@
     { id: 'appearance', labelKey: 'settings.appearance.title' },
     { id: 'downloads', labelKey: 'settings.offlineLibrary.title' },
     { id: 'library', labelKey: 'settings.library.title' },
+    { id: 'content-filtering', labelKey: 'settings.contentFiltering.title' },
     { id: 'integrations', labelKey: 'settings.integrations.title' },
     { id: 'updates', labelKey: 'nav.updates' },
     { id: 'storage', labelKey: 'settings.storage.title' },
@@ -212,6 +224,7 @@
       case 'appearance': return appearanceSection;
       case 'downloads': return downloadsSection;
       case 'library': return librarySection;
+      case 'content-filtering': return contentFilteringSection;
       case 'integrations': return integrationsSection;
       case 'updates': return updatesSection;
       case 'storage': return storageSection;
@@ -703,6 +716,12 @@
       hideTitleBar = getHideTitleBar();
     });
 
+    // Subscribe to blacklist state changes
+    const unsubscribeBlacklist = subscribeBlacklist(() => {
+      blacklistCount = getBlacklistCount();
+      blacklistEnabled = isBlacklistEnabled();
+    });
+
     // Scroll tracking for navigation
     const handleScroll = () => {
       if (!settingsViewEl) return;
@@ -732,6 +751,7 @@
       unsubscribeZoom();
       unsubscribeTitleBar();
       unsubscribeUpdates();
+      unsubscribeBlacklist();
       settingsViewEl?.removeEventListener('scroll', handleScroll);
     };
   });
@@ -2384,6 +2404,31 @@
     </div>
   </section>
 
+  <!-- Content Filtering Section -->
+  <section class="section" bind:this={contentFilteringSection}>
+    <h3 class="section-title">{$t('settings.contentFiltering.title')}</h3>
+    <div class="setting-row last">
+      <div class="setting-info">
+        <div class="setting-with-icon">
+          <Ban size={18} class="setting-icon" />
+          <div class="setting-with-description">
+            <span class="setting-label">{$t('settings.contentFiltering.artistBlacklist')}</span>
+            <span class="setting-description">
+              {blacklistCount} {blacklistCount === 1 ? 'artist' : 'artists'} blocked
+              {#if !blacklistEnabled}
+                <span class="status-disabled">({$t('settings.contentFiltering.disabled')})</span>
+              {/if}
+            </span>
+          </div>
+        </div>
+      </div>
+      <button class="link-btn" onclick={() => navigateTo('blacklist-manager')}>
+        {$t('settings.contentFiltering.manage')}
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  </section>
+
   <!-- Integrations Section -->
   <section class="section" bind:this={integrationsSection}>
     <h3 class="section-title">{$t('settings.integrations.title')}</h3>
@@ -3751,6 +3796,43 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .theme-filter-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+  }
+
+  /* Content Filtering Section */
+  .setting-with-icon {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .setting-with-icon :global(.setting-icon) {
+    color: var(--text-muted);
+    margin-top: 2px;
+    flex-shrink: 0;
+  }
+
+  .link-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 6px;
+    color: var(--text-primary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+    flex-shrink: 0;
+  }
+
+  .link-btn:hover {
+    background: var(--bg-hover);
+  }
+
+  .status-disabled {
+    color: #fbbf24;
+    font-size: 12px;
   }
 
 </style>
