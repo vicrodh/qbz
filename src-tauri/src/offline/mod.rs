@@ -514,12 +514,22 @@ impl OfflineState {
     }
 }
 
-/// Check network connectivity by attempting to reach Qobuz API.
-/// Uses a longer timeout (15s) and retries once before declaring offline
-/// to avoid false positives from temporary latency spikes.
+/// Counter for alternating between neutral endpoint and Qobuz checks.
+/// Using atomic for thread safety across async calls.
+static CHECK_COUNTER: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+
+/// Check network connectivity using a hybrid strategy:
+/// - 9 out of 10 checks go to a neutral endpoint (1.1.1.1) to verify basic internet
+/// - 1 out of 10 checks go to Qobuz to verify service availability
+///
+/// This reduces load on Qobuz API and avoids false positives from rate limiting
+/// when the app is making many concurrent API calls.
 pub async fn check_network_connectivity() -> bool {
+    let counter = CHECK_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let check_qobuz = counter % 10 == 0;
+
     let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(15))
+        .timeout(Duration::from_secs(10))
         .build();
 
     let client = match client {
@@ -527,8 +537,35 @@ pub async fn check_network_connectivity() -> bool {
         Err(_) => return false,
     };
 
+    let endpoint = if check_qobuz {
+        "https://www.qobuz.com"
+    } else {
+        // Cloudflare DNS - highly reliable, low latency
+        "https://1.1.1.1"
+    };
+
     // Try up to 2 times before declaring offline
     for attempt in 1..=2 {
+        match client.head(endpoint).send().await {
+            Ok(response) => {
+                if response.status().is_success() || response.status().is_redirection() {
+                    return true;
+                }
+            }
+            Err(e) => {
+                log::warn!("Network check attempt {} to {} failed: {}", attempt, endpoint, e);
+            }
+        }
+
+        // Wait 1 second before retry
+        if attempt < 2 {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
+    }
+
+    // If neutral endpoint failed, try Qobuz as fallback (maybe it's a DNS issue)
+    if !check_qobuz {
+        log::info!("Neutral endpoint failed, trying Qobuz as fallback...");
         match client.head("https://www.qobuz.com").send().await {
             Ok(response) => {
                 if response.status().is_success() || response.status().is_redirection() {
@@ -536,17 +573,12 @@ pub async fn check_network_connectivity() -> bool {
                 }
             }
             Err(e) => {
-                log::warn!("Network check attempt {} failed: {}", attempt, e);
+                log::warn!("Qobuz fallback check also failed: {}", e);
             }
-        }
-
-        // Wait 2 seconds before retry
-        if attempt < 2 {
-            tokio::time::sleep(Duration::from_secs(2)).await;
         }
     }
 
-    log::info!("Network connectivity check failed after 2 attempts");
+    log::info!("Network connectivity check failed after all attempts");
     false
 }
 
