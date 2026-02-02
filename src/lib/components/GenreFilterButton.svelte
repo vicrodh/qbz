@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { SlidersHorizontal } from 'lucide-svelte';
   import GenreFilterPopup from './GenreFilterPopup.svelte';
   import {
@@ -20,24 +21,28 @@
   let buttonEl: HTMLButtonElement | null = null;
   let hasFilter = $state(false);
   let selectedGenreName = $state<string | null>(null);
+  let initialized = false;
 
-  // Subscribe to filter changes
-  $effect(() => {
+  onMount(() => {
+    // Load genres once on mount
+    loadGenres();
+
+    // Initialize state
+    hasFilter = hasActiveFilter();
+    updateSelectedName();
+    initialized = true;
+
+    // Subscribe to filter changes
     const unsubscribe = subscribeGenre(() => {
       hasFilter = hasActiveFilter();
       updateSelectedName();
-      onFilterChange?.();
+      // Only notify parent after initialization to prevent infinite loops
+      if (initialized) {
+        onFilterChange?.();
+      }
     });
 
-    hasFilter = hasActiveFilter();
-    updateSelectedName();
-
     return unsubscribe;
-  });
-
-  // Load genres on mount
-  $effect(() => {
-    loadGenres();
   });
 
   function updateSelectedName() {
