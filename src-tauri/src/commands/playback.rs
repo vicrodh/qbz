@@ -24,6 +24,49 @@ fn parse_quality(quality_str: Option<&str>) -> Quality {
     }
 }
 
+/// Limit quality based on device's max sample rate
+/// This ensures bit-perfect playback by not requesting tracks that exceed device capabilities
+fn limit_quality_for_device(quality: Quality, max_sample_rate: Option<u32>) -> Quality {
+    let Some(max_rate) = max_sample_rate else {
+        return quality; // No limit if device max rate unknown
+    };
+
+    // Quality mapping:
+    // - UltraHiRes (27): up to 192kHz - requires max_rate > 96000
+    // - HiRes (7): up to 96kHz - requires max_rate > 48000
+    // - Lossless (6): 44.1kHz - works with any device
+    // - Mp3 (5): compressed - works with any device
+
+    if max_rate <= 48000 {
+        // Device only supports up to 48kHz, limit to CD quality (44.1kHz)
+        match quality {
+            Quality::UltraHiRes | Quality::HiRes => {
+                log::info!(
+                    "[Quality Limit] Device max {}Hz, limiting {} to Lossless (44.1kHz)",
+                    max_rate, quality.display_name()
+                );
+                Quality::Lossless
+            }
+            _ => quality,
+        }
+    } else if max_rate <= 96000 {
+        // Device supports up to 96kHz, limit to HiRes
+        match quality {
+            Quality::UltraHiRes => {
+                log::info!(
+                    "[Quality Limit] Device max {}Hz, limiting Hi-Res+ to Hi-Res (96kHz)",
+                    max_rate
+                );
+                Quality::HiRes
+            }
+            _ => quality,
+        }
+    } else {
+        // Device supports > 96kHz, allow all qualities
+        quality
+    }
+}
+
 /// Result from play_track command with format info
 #[derive(serde::Serialize)]
 pub struct PlayTrackResult {
@@ -42,7 +85,18 @@ pub async fn play_track(
     offline_cache: State<'_, OfflineCacheState>,
     audio_settings: State<'_, AudioSettingsState>,
 ) -> Result<PlayTrackResult, String> {
-    let preferred_quality = parse_quality(quality.as_deref());
+    let mut preferred_quality = parse_quality(quality.as_deref());
+
+    // Apply quality limiting if enabled
+    {
+        let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        if let Ok(settings) = store.get_settings() {
+            if settings.limit_quality_to_device {
+                preferred_quality = limit_quality_for_device(preferred_quality, settings.device_max_sample_rate);
+            }
+        }
+    }
+
     log::info!(
         "Command: play_track {} (duration: {:?}s, quality_str={:?}, parsed={:?}, format_id={})",
         track_id, duration_secs, quality, preferred_quality, preferred_quality.id()
@@ -276,8 +330,20 @@ pub async fn prefetch_track(
     quality: Option<String>,
     state: State<'_, AppState>,
     offline_cache: State<'_, OfflineCacheState>,
+    audio_settings: State<'_, AudioSettingsState>,
 ) -> Result<(), String> {
-    let preferred_quality = parse_quality(quality.as_deref());
+    let mut preferred_quality = parse_quality(quality.as_deref());
+
+    // Apply quality limiting if enabled
+    {
+        let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        if let Ok(settings) = store.get_settings() {
+            if settings.limit_quality_to_device {
+                preferred_quality = limit_quality_for_device(preferred_quality, settings.device_max_sample_rate);
+            }
+        }
+    }
+
     log::info!(
         "Command: prefetch_track {} (quality_str={:?}, parsed={:?}, format_id={})",
         track_id, quality, preferred_quality, preferred_quality.id()

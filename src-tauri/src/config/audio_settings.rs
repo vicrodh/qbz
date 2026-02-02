@@ -26,6 +26,9 @@ pub struct AudioSettings {
     /// This ensures bit-perfect playback by avoiding tracks that exceed device capabilities.
     /// Default: true (recommended for bit-perfect setups)
     pub limit_quality_to_device: bool,
+    /// Cached max sample rate of the selected device (set when device is selected)
+    /// Used when limit_quality_to_device is true
+    pub device_max_sample_rate: Option<u32>,
 }
 
 impl Default for AudioSettings {
@@ -42,6 +45,7 @@ impl Default for AudioSettings {
             stream_buffer_seconds: 3,  // 3 seconds initial buffer
             streaming_only: false,  // Disabled by default (cache tracks for instant replay)
             limit_quality_to_device: true,  // Enabled by default for bit-perfect guarantee
+            device_max_sample_rate: None,   // Set when device is selected
         }
     }
 }
@@ -88,6 +92,7 @@ impl AudioSettingsStore {
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN stream_buffer_seconds INTEGER DEFAULT 3", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN streaming_only INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN limit_quality_to_device INTEGER DEFAULT 1", []);
+        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN device_max_sample_rate INTEGER", []);
 
         Ok(Self { conn })
     }
@@ -95,7 +100,7 @@ impl AudioSettingsStore {
     pub fn get_settings(&self) -> Result<AudioSettings, String> {
         self.conn
             .query_row(
-                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device FROM audio_settings WHERE id = 1",
+                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate FROM audio_settings WHERE id = 1",
                 [],
                 |row| {
                     // Parse backend_type from JSON string
@@ -120,6 +125,7 @@ impl AudioSettingsStore {
                         stream_buffer_seconds: row.get::<_, Option<i64>>(8)?.unwrap_or(3) as u8,
                         streaming_only: row.get::<_, Option<i64>>(9)?.unwrap_or(0) != 0,
                         limit_quality_to_device: row.get::<_, Option<i64>>(10)?.unwrap_or(1) != 0,
+                        device_max_sample_rate: row.get::<_, Option<i64>>(11)?.map(|r| r as u32),
                     })
                 },
             )
@@ -247,6 +253,16 @@ impl AudioSettingsStore {
             .map_err(|e| format!("Failed to set limit quality to device: {}", e))?;
         Ok(())
     }
+
+    pub fn set_device_max_sample_rate(&self, rate: Option<u32>) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET device_max_sample_rate = ?1 WHERE id = 1",
+                params![rate.map(|r| r as i64)],
+            )
+            .map_err(|e| format!("Failed to set device max sample rate: {}", e))?;
+        Ok(())
+    }
 }
 
 /// Thread-safe wrapper
@@ -368,4 +384,13 @@ pub fn set_audio_limit_quality_to_device(
 ) -> Result<(), String> {
     let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
     store.set_limit_quality_to_device(enabled)
+}
+
+#[tauri::command]
+pub fn set_audio_device_max_sample_rate(
+    state: tauri::State<'_, AudioSettingsState>,
+    rate: Option<u32>,
+) -> Result<(), String> {
+    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    store.set_device_max_sample_rate(rate)
 }
