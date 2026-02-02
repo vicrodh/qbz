@@ -47,8 +47,8 @@
   let accessible = $state(true);
   let checkingAccessibility = $state(false);
 
-  // Network filesystem options
-  const networkFsOptions = [
+  // Network filesystem options (derived to support i18n reactivity)
+  const networkFsOptions = $derived([
     { value: '', label: $t('library.networkFs.auto') },
     { value: 'cifs', label: 'SMB/CIFS (Samba)' },
     { value: 'nfs', label: 'NFS' },
@@ -58,7 +58,7 @@
     { value: 'glusterfs', label: 'GlusterFS' },
     { value: 'ceph', label: 'CephFS' },
     { value: 'other', label: $t('library.networkFs.other') }
-  ];
+  ]);
 
   // Reset form when modal opens
   $effect(() => {

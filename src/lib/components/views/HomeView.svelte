@@ -13,7 +13,7 @@
   import {
     subscribe as subscribeHomeSettings,
     getSettings,
-    getGreetingText,
+    getGreetingInfo,
     type HomeSettings,
     type HomeSectionId
   } from '$lib/stores/homeSettingsStore';
@@ -128,8 +128,14 @@
   let homeSettings = $state<HomeSettings>(getSettings());
   let isSettingsModalOpen = $state(false);
 
-  // Computed greeting
-  const greetingText = $derived(getGreetingText(userName));
+  // Computed greeting with i18n support
+  const greetingText = $derived.by(() => {
+    const info = getGreetingInfo(userName);
+    if (info.type === 'custom') {
+      return info.text;
+    }
+    return $t(info.key, { values: { name: info.name } });
+  });
 
 
   // Check if a section is visible

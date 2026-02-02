@@ -280,7 +280,7 @@ export function setCustomGreeting(text: string | null): void {
 }
 
 /**
- * Get greeting text for display
+ * Get greeting text for display (legacy - use getGreetingInfo for i18n support)
  */
 export function getGreetingText(userName: string): string {
   if (settings.greeting.customText) {
@@ -290,7 +290,45 @@ export function getGreetingText(userName: string): string {
 }
 
 /**
- * Get time-based greeting
+ * Get greeting info for i18n-aware display
+ * Returns either custom text or a translation key with params
+ */
+export function getGreetingInfo(userName: string): { type: 'custom'; text: string } | { type: 'key'; key: string; name: string } {
+  const firstName = getFirstName(userName);
+
+  if (settings.greeting.customText) {
+    return {
+      type: 'custom',
+      text: settings.greeting.customText.replace('{name}', firstName)
+    };
+  }
+
+  return {
+    type: 'key',
+    key: getTimeBasedGreetingKey(),
+    name: firstName
+  };
+}
+
+/**
+ * Get time-based greeting translation key
+ */
+export function getTimeBasedGreetingKey(): string {
+  const hour = new Date().getHours();
+
+  if (hour >= 5 && hour < 12) {
+    return 'homeSettings.goodMorning';
+  } else if (hour >= 12 && hour < 17) {
+    return 'homeSettings.goodAfternoon';
+  } else if (hour >= 17 && hour < 21) {
+    return 'homeSettings.goodEvening';
+  } else {
+    return 'homeSettings.goodNight';
+  }
+}
+
+/**
+ * Get time-based greeting (legacy)
  */
 function getTimeBasedGreeting(userName: string): string {
   const hour = new Date().getHours();

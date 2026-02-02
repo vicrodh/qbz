@@ -155,12 +155,12 @@
 
       onSuccess?.(result);
       if (result.matched_tracks > 0) {
-        showToast('Playlist imported', 'success');
+        showToast($t('toast.playlistImported'), 'success');
       }
     } catch (err) {
       error = String(err);
       pushLog(`Import failed: ${error}`, 'error');
-      showToast('Playlist import failed', 'error');
+      showToast($t('toast.playlistImportFailed'), 'error');
     } finally {
       loading = false;
     }

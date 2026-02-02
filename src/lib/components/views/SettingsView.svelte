@@ -1616,7 +1616,7 @@
       showToast($t('settings.appearance.tray.enableTrayDesc'), 'info');
     } catch (err) {
       console.error('Failed to set enable tray:', err);
-      showToast('Failed to save tray setting', 'error');
+      showToast($t('toast.failedSaveTray'), 'error');
     }
   }
 
@@ -1626,7 +1626,7 @@
       minimizeToTray = value;
     } catch (err) {
       console.error('Failed to set minimize to tray:', err);
-      showToast('Failed to save tray setting', 'error');
+      showToast($t('toast.failedSaveTray'), 'error');
     }
   }
 
@@ -1636,7 +1636,7 @@
       closeToTray = value;
     } catch (err) {
       console.error('Failed to set close to tray:', err);
-      showToast('Failed to save tray setting', 'error');
+      showToast($t('toast.failedSaveTray'), 'error');
     }
   }
 
@@ -1648,7 +1648,7 @@
       console.log('[Settings] Autoplay mode saved successfully');
     } catch (err) {
       console.error('[Settings] Failed to set autoplay mode:', err);
-      showToast('Failed to save autoplay preference', 'error');
+      showToast($t('toast.failedSaveAutoplay'), 'error');
     }
   }
 
@@ -1660,7 +1660,7 @@
       console.log('[Settings] Show context icon saved successfully');
     } catch (err) {
       console.error('[Settings] Failed to set show context icon:', err);
-      showToast('Failed to save icon visibility preference', 'error');
+      showToast($t('toast.failedSaveIconVisibility'), 'error');
     }
   }
 
@@ -1702,7 +1702,7 @@
       notifyDownloadSettingsChanged();
     } catch (err) {
       console.error('Failed to repair downloads:', err);
-      showToast('Failed to repair offline library: ' + String(err), 'error');
+      showToast($t('toast.failedRepairOffline', { values: { error: String(err) } }), 'error');
     } finally {
       isRepairingDownloads = false;
     }
@@ -1726,7 +1726,7 @@
       await invoke('open_offline_cache_folder');
     } catch (err) {
       console.error('Failed to open cache folder:', err);
-      showToast('Failed to open cache folder', 'error');
+      showToast($t('toast.failedOpenCacheFolder'), 'error');
     }
   }
 
@@ -1915,8 +1915,8 @@
     <div class="loading-overlay">
       <div class="loading-content">
         <Loader2 size={48} class="spinner" />
-        <p>Loading audio devices...</p>
-        <p class="loading-subtitle">Parsing hardware information</p>
+        <p>{$t('settings.audio.loadingAudioDevices')}</p>
+        <p class="loading-subtitle">{$t('settings.audio.parsingHardware')}</p>
       </div>
     </div>
   {/if}
@@ -1974,15 +1974,15 @@
     </div>
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">Limit Quality to Device</span>
-        <span class="setting-desc">When enabled, overrides the quality setting above if your audio device doesn't support the selected sample rate. Prevents resampling to guarantee bit-perfect playback.</span>
+        <span class="setting-label">{$t('settings.audio.limitQualityToDevice')}</span>
+        <span class="setting-desc">{$t('settings.audio.limitQualityToDeviceDesc')}</span>
       </div>
       <Toggle enabled={limitQualityToDevice} onchange={handleLimitQualityToDeviceChange} />
     </div>
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">Audio Backend</span>
-        <span class="setting-desc">Choose audio system: Auto (recommended), PipeWire (modern), ALSA Direct (bit-perfect, exclusive), or PulseAudio (legacy).</span>
+        <span class="setting-label">{$t('settings.audio.audioBackend')}</span>
+        <span class="setting-desc">{$t('settings.audio.audioBackendDesc')}</span>
       </div>
       <Dropdown
         value={selectedBackend}
@@ -1996,10 +1996,10 @@
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.outputDevice')}</span>
-        <span class="setting-desc">Select your preferred audio output device. Devices shown are from the selected backend.</span>
+        <span class="setting-desc">{$t('settings.audio.outputDeviceDesc')}</span>
       </div>
       {#if isLoadingDevices}
-        <span class="loading-text">Loading devices...</span>
+        <span class="loading-text">{$t('settings.audio.loadingDevices')}</span>
       {:else if selectedBackend === 'ALSA Direct'}
         <div class="dropdown-with-help">
           <DeviceDropdown
@@ -2013,7 +2013,7 @@
           <button
             class="help-icon-btn"
             onclick={() => showAlsaUtilsHelpModal = true}
-            title="Help with bit-perfect device detection"
+            title={$t('settings.audio.helpBitPerfect')}
           >
             <HelpCircle size={16} />
           </button>
@@ -2041,8 +2041,8 @@
     {#if showAlsaPluginSelector}
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">ALSA Plugin</span>
-        <span class="setting-desc">hw: Bit-perfect, exclusive. plughw: Auto-convert. pcm: Most compatible.</span>
+        <span class="setting-label">{$t('settings.audio.alsaPlugin')}</span>
+        <span class="setting-desc">{$t('settings.audio.alsaPluginDesc')}</span>
       </div>
       <Dropdown
         value={selectedAlsaPlugin}
@@ -2057,8 +2057,8 @@
     {#if showAlsaHardwareVolume}
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">Enable Hardware Volume Control</span>
-        <span class="setting-desc">Experimental: Controls DAC volume via ALSA mixer. Some DACs don't support this - disable for maximum compatibility. If it fails, playback continues normally.</span>
+        <span class="setting-label">{$t('settings.audio.hardwareVolume')}</span>
+        <span class="setting-desc">{$t('settings.audio.hardwareVolumeDesc')}</span>
       </div>
       <Toggle enabled={alsaHardwareVolume} onchange={handleAlsaHardwareVolumeChange} />
     </div>
@@ -2081,24 +2081,24 @@
     <div class="flatpak-warning">
       <div class="warning-icon">⚠️</div>
       <div class="warning-content">
-        <strong>Flatpak Limitation:</strong> PipeWire cannot guarantee bit-perfect playback in sandboxed environments due to daemon access restrictions.
+        <strong>{$t('settings.audio.flatpakWarningTitle')}</strong> {$t('settings.audio.flatpakWarningDesc')}
         <br />
-        <strong>Recommended:</strong> Switch to ALSA Direct backend for true bit-perfect audio.
+        <strong>{$t('settings.audio.flatpakRecommended')}</strong> {$t('settings.audio.flatpakRecommendedDesc')}
       </div>
     </div>
     {/if}
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">Stream Uncached Tracks</span>
-        <span class="setting-desc">Start playback faster when track is not in cache. Seeking may be limited during initial buffering.</span>
+        <span class="setting-label">{$t('settings.audio.streamUncached')}</span>
+        <span class="setting-desc">{$t('settings.audio.streamUncachedDesc')}</span>
       </div>
       <Toggle enabled={streamFirstTrack} onchange={handleStreamFirstTrackChange} />
     </div>
     {#if streamFirstTrack}
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">Initial Buffer Size</span>
-        <span class="setting-desc">Seconds to buffer before starting playback ({streamBufferSeconds}s)</span>
+        <span class="setting-label">{$t('settings.audio.initialBuffer')}</span>
+        <span class="setting-desc">{$t('settings.audio.initialBufferDesc', { values: { seconds: streamBufferSeconds } })}</span>
       </div>
       <input
         type="range"
@@ -2113,8 +2113,8 @@
     {/if}
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">Streaming Only</span>
-        <span class="setting-desc">Disables temporary cache. Not recommended without a fast connection. Offline library tracks always play first.</span>
+        <span class="setting-label">{$t('settings.audio.streamingOnly')}</span>
+        <span class="setting-desc">{$t('settings.audio.streamingOnlyDesc')}</span>
       </div>
       <Toggle enabled={streamingOnly} onchange={handleStreamingOnlyChange} />
     </div>
@@ -2333,7 +2333,7 @@
   <section class="section collapsible-section" bind:this={downloadsSection}>
     <button class="section-title-btn" onclick={() => offlineLibraryCollapsed = !offlineLibraryCollapsed}>
       <h3 class="section-title">{$t('settings.offlineLibrary.title')}</h3>
-      <span class="section-summary">Cached tracks for offline playback</span>
+      <span class="section-summary">{$t('settings.offlineLibrary.sectionSummary')}</span>
       {#if offlineLibraryCollapsed}
         <ChevronDown size={16} />
       {:else}
@@ -2354,37 +2354,37 @@
       </div>
       <div class="setting-row">
         <div class="setting-with-description">
-          <span class="setting-label">Repair Offline Library</span>
-          <span class="setting-description">Fix offline markers lost during library scans</span>
+          <span class="setting-label">{$t('settings.offlineLibrary.repair')}</span>
+          <span class="setting-description">{$t('settings.offlineLibrary.repairDesc')}</span>
         </div>
         <button
           class="clear-btn"
           onclick={handleRepairDownloads}
           disabled={isRepairingDownloads || !downloadStats || downloadStats.readyTracks === 0}
         >
-          {isRepairingDownloads ? 'Repairing...' : 'Repair'}
+          {isRepairingDownloads ? $t('settings.offlineLibrary.repairing') : $t('actions.repair')}
         </button>
       </div>
       <div class="setting-row">
-        <span class="setting-label">Clear Offline Library</span>
+        <span class="setting-label">{$t('settings.offlineLibrary.clearCache')}</span>
         <button
           class="clear-btn"
           onclick={handleClearDownloads}
           disabled={isClearingDownloads || !downloadStats || downloadStats.readyTracks === 0}
         >
-          {isClearingDownloads ? 'Clearing...' : 'Clear All'}
+          {isClearingDownloads ? $t('settings.storage.clearing') : $t('settings.offlineLibrary.clearCache')}
         </button>
       </div>
       <div class="setting-row last">
         <div class="setting-with-description">
-          <span class="setting-label">Manage Offline Cache</span>
-          <span class="setting-description">Open the cache folder in your file manager</span>
+          <span class="setting-label">{$t('settings.offlineLibrary.manageCache')}</span>
+          <span class="setting-description">{$t('settings.offlineLibrary.manageCacheDesc')}</span>
         </div>
         <button
           class="clear-btn"
           onclick={handleOpenCacheFolder}
         >
-          Open Folder
+          {$t('settings.offlineLibrary.openFolder')}
         </button>
       </div>
     {/if}
@@ -2582,9 +2582,9 @@
     <!-- MusicBrainz Integration -->
     <div class="setting-row last">
       <div class="setting-info">
-        <span class="setting-label">MusicBrainz</span>
+        <span class="setting-label">{$t('settings.integrations.musicbrainz')}</span>
         <small class="setting-note">
-          Enable artist relationships and enhanced metadata from MusicBrainz.
+          {$t('settings.integrations.musicbrainzDesc')}
         </small>
       </div>
       <Toggle enabled={musicbrainzEnabled} onchange={handleMusicBrainzChange} />
@@ -2593,11 +2593,11 @@
 
   <!-- Updates Section -->
   <section class="section" bind:this={updatesSection}>
-    <h3 class="section-title">Updates</h3>
+    <h3 class="section-title">{$t('settings.updates.title')}</h3>
 
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">Check for new releases on launch</span>
+        <span class="setting-label">{$t('settings.updates.checkOnLaunch')}</span>
       </div>
       <Toggle
         enabled={updatePreferences.checkOnLaunch}
@@ -2607,7 +2607,7 @@
 
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">Check for updates now</span>
+        <span class="setting-label">{$t('settings.updates.checkNow')}</span>
       </div>
       <button
         class="connect-btn updates-check-btn"
@@ -2617,16 +2617,16 @@
       >
         {#if isCheckingUpdates}
           <Loader2 size={14} class="spin" />
-          <span>Checking...</span>
+          <span>{$t('settings.updates.checking')}</span>
         {:else}
-          <span>Check</span>
+          <span>{$t('settings.updates.check')}</span>
         {/if}
       </button>
     </div>
 
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">Show what's new on new version launch</span>
+        <span class="setting-label">{$t('settings.updates.showWhatsNew')}</span>
       </div>
       <Toggle
         enabled={updatePreferences.showWhatsNewOnLaunch}
@@ -2636,9 +2636,9 @@
 
     <div class="setting-row last">
       <div class="setting-info">
-        <span class="setting-label">Show changelog for current version</span>
+        <span class="setting-label">{$t('settings.updates.showChangelog')}</span>
         {#if updatesCurrentVersion}
-          <small class="setting-note">Current version: v{updatesCurrentVersion}</small>
+          <small class="setting-note">{$t('settings.updates.currentVersion', { values: { version: updatesCurrentVersion } })}</small>
         {/if}
       </div>
       <button
@@ -2646,7 +2646,7 @@
         onclick={handleShowCurrentChangelog}
         type="button"
       >
-        Show
+        {$t('actions.show')}
       </button>
     </div>
   </section>
@@ -2674,7 +2674,7 @@
   <section class="section collapsible-section" bind:this={storageSection}>
     <button class="section-title-btn" onclick={() => storageCollapsed = !storageCollapsed}>
       <h3 class="section-title">{$t('settings.storage.title')}</h3>
-      <span class="section-summary">Queue, lyrics, artwork, and metadata caches</span>
+      <span class="section-summary">{$t('settings.storage.sectionSummary')}</span>
       {#if storageCollapsed}
         <ChevronDown size={16} />
       {:else}
@@ -2734,7 +2734,7 @@
     </div>
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">MusicBrainz Cache</span>
+        <span class="setting-label">{$t('settings.integrations.musicbrainzCache')}</span>
         <small class="setting-note">
           {#if musicBrainzCacheStats}
             {musicBrainzCacheStats.artists} artists, {musicBrainzCacheStats.relations} relations, {musicBrainzCacheStats.recordings} recordings
@@ -2809,7 +2809,7 @@
         onclick={handleClearAllCaches}
         disabled={isClearingAllCaches}
       >
-        {isClearingAllCaches ? $t('settings.storage.clearing') : 'Clear All'}
+        {isClearingAllCaches ? $t('settings.storage.clearing') : $t('actions.clearAll')}
       </button>
     </div>
     {/if}
