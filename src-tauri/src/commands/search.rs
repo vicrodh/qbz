@@ -200,11 +200,19 @@ pub async fn get_featured_albums(
     featured_type: String,
     limit: Option<u32>,
     offset: Option<u32>,
+    genre_id: Option<u64>,
     state: State<'_, AppState>,
 ) -> Result<SearchResultsPage<Album>, String> {
+    log::info!(
+        "Command: get_featured_albums type={} limit={:?} offset={:?} genre_id={:?}",
+        featured_type,
+        limit,
+        offset,
+        genre_id
+    );
     let client = state.client.lock().await;
     client
-        .get_featured_albums(&featured_type, limit.unwrap_or(12), offset.unwrap_or(0))
+        .get_featured_albums(&featured_type, limit.unwrap_or(12), offset.unwrap_or(0), genre_id)
         .await
         .map_err(|e| e.to_string())
 }

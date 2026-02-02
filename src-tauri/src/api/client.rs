@@ -390,17 +390,29 @@ impl QobuzClient {
     }
 
     /// Get featured albums by type (new-releases, press-awards, most-streamed)
-    pub async fn get_featured_albums(&self, featured_type: &str, limit: u32, offset: u32) -> Result<SearchResultsPage<Album>> {
+    pub async fn get_featured_albums(
+        &self,
+        featured_type: &str,
+        limit: u32,
+        offset: u32,
+        genre_id: Option<u64>,
+    ) -> Result<SearchResultsPage<Album>> {
         let url = endpoints::build_url(paths::ALBUM_GET_FEATURED);
+        let mut query = vec![
+            ("type".to_string(), featured_type.to_string()),
+            ("limit".to_string(), limit.to_string()),
+            ("offset".to_string(), offset.to_string()),
+        ];
+
+        if let Some(gid) = genre_id {
+            query.push(("genre_id".to_string(), gid.to_string()));
+        }
+
         let response: Value = self
             .http
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
-            .query(&[
-                ("type", featured_type),
-                ("limit", &limit.to_string()),
-                ("offset", &offset.to_string()),
-            ])
+            .query(&query)
             .send()
             .await?
             .json()
