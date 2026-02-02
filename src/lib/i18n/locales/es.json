@@ -480,16 +480,40 @@
       "connect": "Conectar",
       "disconnect": "Desconectar",
       "scrobbling": "Scrobbling",
-      "configureApi": "Configurar API"
+      "configureApi": "Configurar API",
+      "musicbrainz": "MusicBrainz",
+      "musicbrainzDesc": "Habilita relaciones de artistas y metadatos mejorados de MusicBrainz.",
+      "musicbrainzCache": "Caché de MusicBrainz",
+      "listenbrainz": "ListenBrainz"
     },
     "storage": {
       "title": "Almacenamiento",
+      "sectionSummary": "Cachés de cola, letras, carátulas y metadatos",
       "queueCacheNote": "Almacenamiento de la cola. Límpialo si tienes problemas de reproducción. (No es la Biblioteca Offline.)",
       "queueCacheStats": "{tracks} pistas usando {used} / {max}",
       "cachedTracks": "Pistas de la cola en caché",
       "cacheSize": "Tamaño de caché de la cola",
       "clearCache": "Limpiar caché de la cola",
       "clearing": "Limpiando..."
+    },
+    "blacklist": {
+      "title": "Lista Negra de Artistas",
+      "description": "Los artistas en la lista negra están ocultos en resultados de búsqueda, radio, sugerencias y artistas similares.",
+      "enabled": "Activado",
+      "disabled": "Desactivado",
+      "clearAll": "Limpiar Todo",
+      "noArtists": "No hay artistas en la lista negra",
+      "noArtistsHint": "Para añadir un artista a la lista negra, ve a su página y haz clic en el ícono de prohibición.",
+      "artistCount": "{count} artistas",
+      "loadingBlacklist": "Cargando lista negra...",
+      "confirmClear": "¿Eliminar todos los artistas de la lista negra?",
+      "disabledWarning": "La lista negra está desactivada. Los artistas de abajo aparecerán en los resultados.",
+      "searchPlaceholder": "Buscar artistas en la lista negra...",
+      "noResults": "Sin resultados para \"{query}\"",
+      "addedOn": "Añadido {date}",
+      "remove": "Eliminar de la lista negra",
+      "confirmClearTitle": "¿Limpiar Lista Negra?",
+      "confirmClearText": "Esto eliminará los {count} artistas de tu lista negra. Esta acción no se puede deshacer."
     },
     "offlineLibrary": {
       "title": "Biblioteca Offline",

@@ -2582,9 +2582,9 @@
     <!-- MusicBrainz Integration -->
     <div class="setting-row last">
       <div class="setting-info">
-        <span class="setting-label">MusicBrainz</span>
+        <span class="setting-label">{$t('settings.integrations.musicbrainz')}</span>
         <small class="setting-note">
-          Enable artist relationships and enhanced metadata from MusicBrainz.
+          {$t('settings.integrations.musicbrainzDesc')}
         </small>
       </div>
       <Toggle enabled={musicbrainzEnabled} onchange={handleMusicBrainzChange} />
@@ -2674,7 +2674,7 @@
   <section class="section collapsible-section" bind:this={storageSection}>
     <button class="section-title-btn" onclick={() => storageCollapsed = !storageCollapsed}>
       <h3 class="section-title">{$t('settings.storage.title')}</h3>
-      <span class="section-summary">Queue, lyrics, artwork, and metadata caches</span>
+      <span class="section-summary">{$t('settings.storage.sectionSummary')}</span>
       {#if storageCollapsed}
         <ChevronDown size={16} />
       {:else}
@@ -2734,7 +2734,7 @@
     </div>
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">MusicBrainz Cache</span>
+        <span class="setting-label">{$t('settings.integrations.musicbrainzCache')}</span>
         <small class="setting-note">
           {#if musicBrainzCacheStats}
             {musicBrainzCacheStats.artists} artists, {musicBrainzCacheStats.relations} relations, {musicBrainzCacheStats.recordings} recordings

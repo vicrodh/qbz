@@ -480,16 +480,40 @@
       "connect": "Connect",
       "disconnect": "Disconnect",
       "scrobbling": "Scrobbling",
-      "configureApi": "Configure API"
+      "configureApi": "Configure API",
+      "musicbrainz": "MusicBrainz",
+      "musicbrainzDesc": "Enable artist relationships and enhanced metadata from MusicBrainz.",
+      "musicbrainzCache": "MusicBrainz Cache",
+      "listenbrainz": "ListenBrainz"
     },
     "storage": {
       "title": "Storage",
+      "sectionSummary": "Queue, lyrics, artwork, and metadata caches",
       "queueCacheNote": "Queue list storage. Clear if you have playback issues. (This is not the Offline Library cache.)",
       "queueCacheStats": "{tracks} tracks using {used} / {max}",
       "cachedTracks": "Cached Queue Tracks",
       "cacheSize": "Queue Cache Size",
       "clearCache": "Clear queue cache",
       "clearing": "Clearing..."
+    },
+    "blacklist": {
+      "title": "Artist Blacklist",
+      "description": "Blacklisted artists are hidden from search results, radio, suggestions, and similar artists.",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "clearAll": "Clear All",
+      "noArtists": "No blacklisted artists",
+      "noArtistsHint": "To blacklist an artist, go to their page and click the ban icon.",
+      "artistCount": "{count} artists",
+      "loadingBlacklist": "Loading blacklist...",
+      "confirmClear": "Remove all artists from blacklist?",
+      "disabledWarning": "Blacklist is currently disabled. Artists below will appear in results.",
+      "searchPlaceholder": "Search blacklisted artists...",
+      "noResults": "No results for \"{query}\"",
+      "addedOn": "Added {date}",
+      "remove": "Remove from blacklist",
+      "confirmClearTitle": "Clear Blacklist?",
+      "confirmClearText": "This will remove all {count} artists from your blacklist. This action cannot be undone."
     },
     "offlineLibrary": {
       "title": "Offline Library",

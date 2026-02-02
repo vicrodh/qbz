@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { ArrowLeft, Search, X, Trash2, Ban, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-svelte';
   import ViewTransition from '../ViewTransition.svelte';
+  import { t } from '$lib/i18n';
   import { showToast } from '$lib/stores/toastStore';
   import {
     subscribe,
@@ -108,17 +109,17 @@
   <div class="header">
     <button class="back-btn" onclick={onBack}>
       <ArrowLeft size={16} />
-      <span>Back</span>
+      <span>{$t('actions.back')}</span>
     </button>
     <div class="title-section">
       <Ban size={24} class="title-icon" />
-      <h1>Artist Blacklist</h1>
+      <h1>{$t('settings.blacklist.title')}</h1>
     </div>
   </div>
 
   <!-- Description -->
   <p class="description">
-    Blacklisted artists are hidden from search results, radio, suggestions, and similar artists.
+    {$t('settings.blacklist.description')}
   </p>
 
   <!-- Controls -->
@@ -131,10 +132,10 @@
     >
       {#if enabled}
         <ToggleRight size={20} />
-        <span>Enabled</span>
+        <span>{$t('settings.blacklist.enabled')}</span>
       {:else}
         <ToggleLeft size={20} />
-        <span>Disabled</span>
+        <span>{$t('settings.blacklist.disabled')}</span>
       {/if}
     </button>
 
@@ -143,7 +144,7 @@
       <Search size={16} class="search-icon" />
       <input
         type="text"
-        placeholder="Search blacklisted artists..."
+        placeholder={$t('settings.blacklist.searchPlaceholder')}
         bind:value={searchQuery}
         class="search-input"
       />
@@ -161,18 +162,18 @@
         onclick={() => confirmClearOpen = true}
       >
         <Trash2 size={16} />
-        <span>Clear All</span>
+        <span>{$t('settings.blacklist.clearAll')}</span>
       </button>
     {/if}
 
-    <span class="count">{getCount()} artists</span>
+    <span class="count">{$t('settings.blacklist.artistCount', { values: { count: getCount() } })}</span>
   </div>
 
   <!-- Disabled Warning -->
   {#if !enabled}
     <div class="warning-banner">
       <AlertCircle size={16} />
-      <span>Blacklist is currently disabled. Artists below will appear in results.</span>
+      <span>{$t('settings.blacklist.disabledWarning')}</span>
     </div>
   {/if}
 
@@ -180,18 +181,18 @@
   {#if loading}
     <div class="loading">
       <div class="spinner"></div>
-      <p>Loading blacklist...</p>
+      <p>{$t('settings.blacklist.loadingBlacklist')}</p>
     </div>
   {:else if artists.length === 0}
     <div class="empty">
       <Ban size={48} class="empty-icon" />
-      <p>No blacklisted artists</p>
-      <span class="empty-hint">To blacklist an artist, go to their page and click the ban icon.</span>
+      <p>{$t('settings.blacklist.noArtists')}</p>
+      <span class="empty-hint">{$t('settings.blacklist.noArtistsHint')}</span>
     </div>
   {:else if filteredArtists.length === 0}
     <div class="empty">
       <Search size={48} class="empty-icon" />
-      <p>No results for "{searchQuery}"</p>
+      <p>{$t('settings.blacklist.noResults', { values: { query: searchQuery } })}</p>
     </div>
   {:else}
     <div class="list">
@@ -209,7 +210,7 @@
             </div>
             <div class="artist-details">
               <span class="artist-name">{artist.artist_name}</span>
-              <span class="artist-meta">Added {formatDate(artist.added_at)}</span>
+              <span class="artist-meta">{$t('settings.blacklist.addedOn', { values: { date: formatDate(artist.added_at) } })}</span>
               {#if artist.notes}
                 <span class="artist-notes">{artist.notes}</span>
               {/if}
@@ -218,7 +219,7 @@
           <button
             class="remove-btn"
             onclick={() => handleRemove(artist.artist_id)}
-            title="Remove from blacklist"
+            title={$t('settings.blacklist.remove')}
           >
             <X size={18} />
           </button>
@@ -244,16 +245,16 @@
       aria-modal="true"
       onclick={(e) => e.stopPropagation()}
     >
-      <h2 class="modal-title">Clear Blacklist?</h2>
+      <h2 class="modal-title">{$t('settings.blacklist.confirmClearTitle')}</h2>
       <p class="modal-text">
-        This will remove all {artists.length} artists from your blacklist. This action cannot be undone.
+        {$t('settings.blacklist.confirmClearText', { values: { count: artists.length } })}
       </p>
       <div class="modal-actions">
         <button class="modal-btn cancel" onclick={() => confirmClearOpen = false}>
-          Cancel
+          {$t('actions.cancel')}
         </button>
         <button class="modal-btn danger" onclick={handleClearAll}>
-          Clear All
+          {$t('settings.blacklist.clearAll')}
         </button>
       </div>
     </div>
