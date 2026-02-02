@@ -2,12 +2,30 @@
 
 use tauri::State;
 
+use crate::artist_blacklist::BlacklistState;
 use crate::queue::{QueueState, QueueTrack, RepeatMode};
 use crate::AppState;
 
+/// Check if a track's artist is blacklisted
+fn is_track_blacklisted(track: &QueueTrack, blacklist: &BlacklistState) -> bool {
+    if let Some(artist_id) = track.artist_id {
+        blacklist.is_blacklisted(artist_id)
+    } else {
+        false
+    }
+}
+
 /// Add a track to the queue
 #[tauri::command]
-pub fn add_to_queue(track: QueueTrack, state: State<'_, AppState>) -> Result<(), String> {
+pub fn add_to_queue(
+    track: QueueTrack,
+    state: State<'_, AppState>,
+    blacklist: State<'_, BlacklistState>,
+) -> Result<(), String> {
+    if is_track_blacklisted(&track, &blacklist) {
+        log::debug!("Skipping blacklisted track: {} by {}", track.title, track.artist);
+        return Ok(());
+    }
     log::info!("Command: add_to_queue - {} by {}", track.title, track.artist);
     state.queue.add_track(track);
     Ok(())
@@ -15,7 +33,15 @@ pub fn add_to_queue(track: QueueTrack, state: State<'_, AppState>) -> Result<(),
 
 /// Add a track to play next
 #[tauri::command]
-pub fn add_to_queue_next(track: QueueTrack, state: State<'_, AppState>) -> Result<(), String> {
+pub fn add_to_queue_next(
+    track: QueueTrack,
+    state: State<'_, AppState>,
+    blacklist: State<'_, BlacklistState>,
+) -> Result<(), String> {
+    if is_track_blacklisted(&track, &blacklist) {
+        log::debug!("Skipping blacklisted track (next): {} by {}", track.title, track.artist);
+        return Ok(());
+    }
     log::info!("Command: add_to_queue_next - {} by {}", track.title, track.artist);
     state.queue.add_track_next(track);
     Ok(())
@@ -23,17 +49,34 @@ pub fn add_to_queue_next(track: QueueTrack, state: State<'_, AppState>) -> Resul
 
 /// Add multiple tracks to the queue
 #[tauri::command]
-pub fn add_tracks_to_queue(tracks: Vec<QueueTrack>, state: State<'_, AppState>) -> Result<(), String> {
-    log::info!("Command: add_tracks_to_queue - {} tracks", tracks.len());
-    state.queue.add_tracks(tracks);
+pub fn add_tracks_to_queue(
+    tracks: Vec<QueueTrack>,
+    state: State<'_, AppState>,
+    blacklist: State<'_, BlacklistState>,
+) -> Result<(), String> {
+    let filtered: Vec<QueueTrack> = tracks
+        .into_iter()
+        .filter(|t| !is_track_blacklisted(t, &blacklist))
+        .collect();
+    log::info!("Command: add_tracks_to_queue - {} tracks (after blacklist filter)", filtered.len());
+    state.queue.add_tracks(filtered);
     Ok(())
 }
 
 /// Set the entire queue (replaces existing)
 #[tauri::command]
-pub fn set_queue(tracks: Vec<QueueTrack>, start_index: Option<usize>, state: State<'_, AppState>) -> Result<(), String> {
-    log::info!("Command: set_queue - {} tracks, start at {:?}", tracks.len(), start_index);
-    state.queue.set_queue(tracks, start_index);
+pub fn set_queue(
+    tracks: Vec<QueueTrack>,
+    start_index: Option<usize>,
+    state: State<'_, AppState>,
+    blacklist: State<'_, BlacklistState>,
+) -> Result<(), String> {
+    let filtered: Vec<QueueTrack> = tracks
+        .into_iter()
+        .filter(|t| !is_track_blacklisted(t, &blacklist))
+        .collect();
+    log::info!("Command: set_queue - {} tracks (after blacklist filter), start at {:?}", filtered.len(), start_index);
+    state.queue.set_queue(filtered, start_index);
     Ok(())
 }
 
