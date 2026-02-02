@@ -158,13 +158,16 @@
       {/each}
     </div>
 
-    {#if hasActiveFilter()}
-      <div class="popup-footer">
-        <button class="clear-btn" onclick={handleClearAll} type="button">
-          Clear filter
-        </button>
-      </div>
-    {/if}
+    <div class="popup-footer">
+      <button
+        class="clear-btn"
+        onclick={handleClearAll}
+        type="button"
+        disabled={!hasActiveFilter()}
+      >
+        Clear filter
+      </button>
+    </div>
   </div>
 {/if}
 
@@ -172,7 +175,7 @@
   .genre-popup {
     position: fixed;
     z-index: 10000;
-    width: 480px;
+    width: 530px;
     max-height: 500px;
     background: var(--bg-primary);
     border: 1px solid var(--border-subtle);
@@ -357,8 +360,13 @@
     transition: background 150ms ease, color 150ms ease;
   }
 
-  .clear-btn:hover {
+  .clear-btn:hover:not(:disabled) {
     background: var(--bg-hover);
     color: var(--text-primary);
+  }
+
+  .clear-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 </style>
