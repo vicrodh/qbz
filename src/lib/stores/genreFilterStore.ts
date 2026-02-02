@@ -1,6 +1,6 @@
 /**
- * Genre filter store for Home page filtering
- * Persists selected genres to localStorage
+ * Genre filter store with context support
+ * Each context (home, favorites) has independent persistence
  */
 
 import { invoke } from '@tauri-apps/api/core';
@@ -12,162 +12,220 @@ export interface GenreInfo {
   slug?: string;
 }
 
+export type GenreFilterContext = 'home' | 'favorites';
+
+interface ContextState {
+  selectedGenreIds: Set<number>;
+  rememberSelection: boolean;
+  listeners: Set<() => void>;
+}
+
 interface GenreFilterState {
   availableGenres: GenreInfo[];
-  selectedGenreIds: Set<number>;
   isLoading: boolean;
-  rememberSelection: boolean;
+  contexts: Record<GenreFilterContext, ContextState>;
 }
 
-const STORAGE_KEY = 'qbz_genre_filter';
-
-let state: GenreFilterState = {
-  availableGenres: [],
-  selectedGenreIds: new Set(),
-  isLoading: false,
-  rememberSelection: true,
+const STORAGE_KEYS: Record<GenreFilterContext, string> = {
+  home: 'qbz_genre_filter_home',
+  favorites: 'qbz_genre_filter_favorites',
 };
 
-const listeners: Set<() => void> = new Set();
+// Default context for backwards compatibility
+let currentContext: GenreFilterContext = 'home';
 
-function notify() {
-  listeners.forEach((fn) => fn());
+const state: GenreFilterState = {
+  availableGenres: [],
+  isLoading: false,
+  contexts: {
+    home: {
+      selectedGenreIds: new Set(),
+      rememberSelection: true,
+      listeners: new Set(),
+    },
+    favorites: {
+      selectedGenreIds: new Set(),
+      rememberSelection: true,
+      listeners: new Set(),
+    },
+  },
+};
+
+function getContextState(context?: GenreFilterContext): ContextState {
+  return state.contexts[context ?? currentContext];
 }
 
-function saveToStorage() {
-  if (!state.rememberSelection) return;
+function notify(context?: GenreFilterContext) {
+  const ctx = getContextState(context);
+  ctx.listeners.forEach((fn) => fn());
+}
+
+function saveToStorage(context?: GenreFilterContext) {
+  const ctx = context ?? currentContext;
+  const ctxState = getContextState(ctx);
+  if (!ctxState.rememberSelection) return;
   try {
     const data = {
-      selectedGenreIds: Array.from(state.selectedGenreIds),
-      rememberSelection: state.rememberSelection,
+      selectedGenreIds: Array.from(ctxState.selectedGenreIds),
+      rememberSelection: ctxState.rememberSelection,
     };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    localStorage.setItem(STORAGE_KEYS[ctx], JSON.stringify(data));
   } catch (e) {
-    console.error('Failed to save genre filter state:', e);
+    console.error(`Failed to save genre filter state for ${ctx}:`, e);
   }
 }
 
-function loadFromStorage() {
+function loadFromStorage(context: GenreFilterContext) {
   try {
-    const stored = localStorage.getItem(STORAGE_KEY);
+    const stored = localStorage.getItem(STORAGE_KEYS[context]);
     if (stored) {
       const data = JSON.parse(stored);
-      state.selectedGenreIds = new Set(data.selectedGenreIds || []);
-      state.rememberSelection = data.rememberSelection ?? true;
+      state.contexts[context].selectedGenreIds = new Set(data.selectedGenreIds || []);
+      state.contexts[context].rememberSelection = data.rememberSelection ?? true;
     }
   } catch (e) {
-    console.error('Failed to load genre filter state:', e);
+    console.error(`Failed to load genre filter state for ${context}:`, e);
   }
+}
+
+export function setContext(context: GenreFilterContext): void {
+  currentContext = context;
+}
+
+export function getContext(): GenreFilterContext {
+  return currentContext;
 }
 
 export async function loadGenres(): Promise<void> {
   if (state.availableGenres.length > 0) return; // Already loaded
 
   state.isLoading = true;
-  notify();
+  // Notify all contexts
+  notify('home');
+  notify('favorites');
 
   try {
     const genres = await invoke<GenreInfo[]>('get_genres', {});
     state.availableGenres = genres;
 
-    // Load saved selection after genres are available
-    loadFromStorage();
+    // Load saved selections for all contexts
+    loadFromStorage('home');
+    loadFromStorage('favorites');
 
-    // Validate saved selection against available genres
+    // Validate saved selections against available genres
     const validIds = new Set(genres.map((g) => g.id));
-    const validSelection = new Set<number>();
-    state.selectedGenreIds.forEach((id) => {
-      if (validIds.has(id)) {
-        validSelection.add(id);
-      }
-    });
-    state.selectedGenreIds = validSelection;
+    for (const ctx of ['home', 'favorites'] as GenreFilterContext[]) {
+      const ctxState = state.contexts[ctx];
+      const validSelection = new Set<number>();
+      ctxState.selectedGenreIds.forEach((id) => {
+        if (validIds.has(id)) {
+          validSelection.add(id);
+        }
+      });
+      ctxState.selectedGenreIds = validSelection;
+    }
   } catch (e) {
     console.error('Failed to load genres:', e);
     state.availableGenres = [];
   } finally {
     state.isLoading = false;
-    notify();
+    notify('home');
+    notify('favorites');
   }
 }
 
-export function getGenreFilterState(): GenreFilterState {
-  return { ...state, selectedGenreIds: new Set(state.selectedGenreIds) };
+export function getGenreFilterState(context?: GenreFilterContext) {
+  const ctx = getContextState(context);
+  return {
+    availableGenres: state.availableGenres,
+    selectedGenreIds: new Set(ctx.selectedGenreIds),
+    isLoading: state.isLoading,
+    rememberSelection: ctx.rememberSelection,
+  };
 }
 
 export function getAvailableGenres(): GenreInfo[] {
   return state.availableGenres;
 }
 
-export function getSelectedGenreIds(): Set<number> {
-  return new Set(state.selectedGenreIds);
+export function getSelectedGenreIds(context?: GenreFilterContext): Set<number> {
+  return new Set(getContextState(context).selectedGenreIds);
 }
 
-export function getSelectedGenreId(): number | undefined {
-  // For API calls that only support single genre_id
-  const ids = Array.from(state.selectedGenreIds);
+export function getSelectedGenreId(context?: GenreFilterContext): number | undefined {
+  const ids = Array.from(getContextState(context).selectedGenreIds);
   return ids.length === 1 ? ids[0] : undefined;
 }
 
-export function getSelectedGenreName(): string | undefined {
-  const id = getSelectedGenreId();
+export function getSelectedGenreName(context?: GenreFilterContext): string | undefined {
+  const id = getSelectedGenreId(context);
   if (!id) return undefined;
   const genre = state.availableGenres.find(g => g.id === id);
   return genre?.name;
 }
 
-export function getSelectedGenreNames(): string[] {
-  const ids = Array.from(state.selectedGenreIds);
+export function getSelectedGenreNames(context?: GenreFilterContext): string[] {
+  const ids = Array.from(getContextState(context).selectedGenreIds);
   return ids
     .map(id => state.availableGenres.find(g => g.id === id)?.name)
     .filter((name): name is string => !!name);
 }
 
-export function isGenreSelected(genreId: number): boolean {
-  return state.selectedGenreIds.has(genreId);
+export function isGenreSelected(genreId: number, context?: GenreFilterContext): boolean {
+  return getContextState(context).selectedGenreIds.has(genreId);
 }
 
-export function hasActiveFilter(): boolean {
-  return state.selectedGenreIds.size > 0;
+export function hasActiveFilter(context?: GenreFilterContext): boolean {
+  return getContextState(context).selectedGenreIds.size > 0;
 }
 
-export function toggleGenre(genreId: number): void {
-  if (state.selectedGenreIds.has(genreId)) {
-    state.selectedGenreIds.delete(genreId);
+export function toggleGenre(genreId: number, context?: GenreFilterContext): void {
+  const ctx = context ?? currentContext;
+  const ctxState = getContextState(ctx);
+  if (ctxState.selectedGenreIds.has(genreId)) {
+    ctxState.selectedGenreIds.delete(genreId);
   } else {
-    state.selectedGenreIds.add(genreId);
+    ctxState.selectedGenreIds.add(genreId);
   }
-  saveToStorage();
-  notify();
+  saveToStorage(ctx);
+  notify(ctx);
 }
 
-export function selectGenre(genreId: number): void {
-  state.selectedGenreIds.clear();
-  state.selectedGenreIds.add(genreId);
-  saveToStorage();
-  notify();
+export function selectGenre(genreId: number, context?: GenreFilterContext): void {
+  const ctx = context ?? currentContext;
+  const ctxState = getContextState(ctx);
+  ctxState.selectedGenreIds.clear();
+  ctxState.selectedGenreIds.add(genreId);
+  saveToStorage(ctx);
+  notify(ctx);
 }
 
-export function clearSelection(): void {
-  state.selectedGenreIds.clear();
-  saveToStorage();
-  notify();
+export function clearSelection(context?: GenreFilterContext): void {
+  const ctx = context ?? currentContext;
+  const ctxState = getContextState(ctx);
+  ctxState.selectedGenreIds.clear();
+  saveToStorage(ctx);
+  notify(ctx);
 }
 
-export function setRememberSelection(remember: boolean): void {
-  state.rememberSelection = remember;
+export function setRememberSelection(remember: boolean, context?: GenreFilterContext): void {
+  const ctx = context ?? currentContext;
+  const ctxState = getContextState(ctx);
+  ctxState.rememberSelection = remember;
   if (remember) {
-    saveToStorage();
+    saveToStorage(ctx);
   } else {
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEYS[ctx]);
   }
-  notify();
+  notify(ctx);
 }
 
-export function subscribe(callback: () => void): () => void {
-  listeners.add(callback);
-  return () => listeners.delete(callback);
+export function subscribe(callback: () => void, context?: GenreFilterContext): () => void {
+  const ctxState = getContextState(context);
+  ctxState.listeners.add(callback);
+  return () => ctxState.listeners.delete(callback);
 }
 
-// Initialize by loading from storage
-loadFromStorage();
+// Initialize by loading from storage for all contexts
+loadFromStorage('home');
+loadFromStorage('favorites');

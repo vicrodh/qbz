@@ -19,9 +19,12 @@
   import GenreFilterButton from '../GenreFilterButton.svelte';
   import {
     hasActiveFilter as hasGenreFilter,
-    getSelectedGenreNames
+    getSelectedGenreNames,
+    type GenreFilterContext
   } from '$lib/stores/genreFilterStore';
   import type { FavoritesPreferences, QobuzAlbum } from '$lib/types';
+
+  const GENRE_CONTEXT: GenreFilterContext = 'favorites';
 
   interface FavoriteAlbum {
     id: string;
@@ -415,8 +418,8 @@
 
     let albums = favoriteAlbums;
 
-    // Filter by genre
-    const selectedGenreNames = getSelectedGenreNames();
+    // Filter by genre (using favorites context)
+    const selectedGenreNames = getSelectedGenreNames(GENRE_CONTEXT);
     if (selectedGenreNames.length > 0) {
       albums = albums.filter(a =>
         a.genre && selectedGenreNames.some(genreName =>
@@ -1252,7 +1255,7 @@
   <div class="toolbar">
     {#if activeTab === 'albums'}
       <div class="toolbar-controls">
-        <GenreFilterButton onFilterChange={handleGenreFilterChange} />
+        <GenreFilterButton context={GENRE_CONTEXT} onFilterChange={handleGenreFilterChange} />
         <div class="dropdown-container">
           <button class="control-btn" onclick={() => (showAlbumGroupMenu = !showAlbumGroupMenu)}>
             <span>

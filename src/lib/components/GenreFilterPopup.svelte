@@ -11,16 +11,18 @@
     setRememberSelection,
     getGenreFilterState,
     subscribe as subscribeGenre,
-    type GenreInfo
+    type GenreInfo,
+    type GenreFilterContext
   } from '$lib/stores/genreFilterStore';
 
   interface Props {
     isOpen: boolean;
     onClose: () => void;
     anchorEl?: HTMLElement | null;
+    context?: GenreFilterContext;
   }
 
-  let { isOpen, onClose, anchorEl = null }: Props = $props();
+  let { isOpen, onClose, anchorEl = null, context = 'home' }: Props = $props();
 
   let genres = $state<GenreInfo[]>([]);
   let selectedIds = $state<Set<number>>(new Set());
@@ -28,17 +30,17 @@
   let popupEl: HTMLDivElement | null = null;
   let popupStyle = $state('');
 
-  // Subscribe to store changes
+  // Subscribe to store changes for this context
   $effect(() => {
     const unsubscribe = subscribeGenre(() => {
-      const state = getGenreFilterState();
+      const state = getGenreFilterState(context);
       genres = state.availableGenres;
       selectedIds = state.selectedGenreIds;
       rememberSelection = state.rememberSelection;
-    });
+    }, context);
 
     // Initial load
-    const state = getGenreFilterState();
+    const state = getGenreFilterState(context);
     genres = state.availableGenres;
     selectedIds = state.selectedGenreIds;
     rememberSelection = state.rememberSelection;
@@ -76,16 +78,16 @@
   }
 
   function handleGenreClick(genreId: number) {
-    toggleGenre(genreId);
+    toggleGenre(genreId, context);
   }
 
   function handleClearAll() {
-    clearSelection();
+    clearSelection(context);
     onClose();
   }
 
   function handleRememberToggle() {
-    setRememberSelection(!rememberSelection);
+    setRememberSelection(!rememberSelection, context);
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -163,7 +165,7 @@
         class="clear-btn"
         onclick={handleClearAll}
         type="button"
-        disabled={!hasActiveFilter()}
+        disabled={!hasActiveFilter(context)}
       >
         Clear filter
       </button>

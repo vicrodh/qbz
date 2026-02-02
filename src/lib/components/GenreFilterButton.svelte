@@ -9,14 +9,16 @@
     getSelectedGenreNames,
     loadGenres,
     subscribe as subscribeGenre,
-    type GenreInfo
+    type GenreInfo,
+    type GenreFilterContext
   } from '$lib/stores/genreFilterStore';
 
   interface Props {
     onFilterChange?: () => void;
+    context?: GenreFilterContext;
   }
 
-  let { onFilterChange }: Props = $props();
+  let { onFilterChange, context = 'home' }: Props = $props();
 
   let isOpen = $state(false);
   let buttonEl: HTMLButtonElement | null = null;
@@ -29,25 +31,25 @@
     loadGenres();
 
     // Initialize state
-    hasFilter = hasActiveFilter();
+    hasFilter = hasActiveFilter(context);
     updateSelectedName();
     initialized = true;
 
-    // Subscribe to filter changes
+    // Subscribe to filter changes for this context
     const unsubscribe = subscribeGenre(() => {
-      hasFilter = hasActiveFilter();
+      hasFilter = hasActiveFilter(context);
       updateSelectedName();
       // Only notify parent after initialization to prevent infinite loops
       if (initialized) {
         onFilterChange?.();
       }
-    });
+    }, context);
 
     return unsubscribe;
   });
 
   function updateSelectedName() {
-    const selectedNames = getSelectedGenreNames();
+    const selectedNames = getSelectedGenreNames(context);
     if (selectedNames.length === 1) {
       selectedGenreName = selectedNames[0];
     } else if (selectedNames.length > 1) {
@@ -84,6 +86,7 @@
 
   <GenreFilterPopup
     {isOpen}
+    {context}
     onClose={closePopup}
     anchorEl={buttonEl}
   />
