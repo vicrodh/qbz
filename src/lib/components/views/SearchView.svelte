@@ -1009,18 +1009,18 @@
                             onclick={(e) => e.stopPropagation()}
                           >
                             <button class="menu-item" onclick={() => { onAlbumPlay?.(album.id); mostPopularMenuOpen = false; }}>
-                              <Play size={14} /> <span>Play now</span>
+                              <Play size={14} /> <span>{$t('actions.playNow')}</span>
                             </button>
                             <button class="menu-item" onclick={() => { onAlbumPlayNext?.(album.id); mostPopularMenuOpen = false; }}>
-                              <ListPlus size={14} /> <span>Play next</span>
+                              <ListPlus size={14} /> <span>{$t('actions.playNext')}</span>
                             </button>
                             <button class="menu-item" onclick={() => { onAlbumPlayLater?.(album.id); mostPopularMenuOpen = false; }}>
-                              <ListPlus size={14} /> <span>Add to queue</span>
+                              <ListPlus size={14} /> <span>{$t('actions.addToQueue')}</span>
                             </button>
                             {#if album.artist?.id}
                               <div class="separator"></div>
                               <button class="menu-item" onclick={() => { onArtistClick?.(album.artist.id); mostPopularMenuOpen = false; }}>
-                                <User size={14} /> <span>Go to artist</span>
+                                <User size={14} /> <span>{$t('actions.goToArtist')}</span>
                               </button>
                             {/if}
                           </div>
@@ -1107,18 +1107,18 @@
                             onclick={(e) => e.stopPropagation()}
                           >
                             <button class="menu-item" onclick={() => { handleSearchTrackPlay(track, 0); mostPopularMenuOpen = false; }}>
-                              <Play size={14} /> <span>Play now</span>
+                              <Play size={14} /> <span>{$t('actions.playNow')}</span>
                             </button>
                             <button class="menu-item" onclick={() => { onTrackPlayNext?.(track); mostPopularMenuOpen = false; }}>
-                              <ListPlus size={14} /> <span>Play next</span>
+                              <ListPlus size={14} /> <span>{$t('actions.playNext')}</span>
                             </button>
                             <button class="menu-item" onclick={() => { onTrackPlayLater?.(track); mostPopularMenuOpen = false; }}>
-                              <ListPlus size={14} /> <span>Add to queue</span>
+                              <ListPlus size={14} /> <span>{$t('actions.addToQueue')}</span>
                             </button>
                             {#if track.album?.id}
                               <div class="separator"></div>
                               <button class="menu-item" onclick={() => { onTrackGoToAlbum?.(track.album!.id!); mostPopularMenuOpen = false; }}>
-                                <Disc3 size={14} /> <span>Go to album</span>
+                                <Disc3 size={14} /> <span>{$t('actions.goToAlbum')}</span>
                               </button>
                             {/if}
                           </div>
@@ -1190,7 +1190,7 @@
                     <div class="view-more-card">
                       <button class="view-more-cover" onclick={() => handleTabChange('artists')}>
                         <div class="view-more-label">
-                          <span>View more</span>
+                          <span>{$t('search.viewMore')}</span>
                           <ChevronRight size={20} />
                         </div>
                       </button>
@@ -1259,7 +1259,7 @@
                         <div class="view-more-card">
                           <button class="view-more-cover" onclick={() => handleTabChange('albums')}>
                             <div class="view-more-label">
-                              <span>View more</span>
+                              <span>{$t('search.viewMore')}</span>
                               <ChevronRight size={20} />
                             </div>
                           </button>
@@ -1619,7 +1619,7 @@
 
     {:else if activeTab === 'playlists' && playlistResults}
       {#if playlistResults.items.length === 0}
-        <div class="no-results">No playlists found for "{query}"</div>
+        <div class="no-results">{$t('search.noPlaylistsFor', { values: { query } })}</div>
       {:else}
         <div class="playlists-grid">
           {#each playlistResults.items as playlist}

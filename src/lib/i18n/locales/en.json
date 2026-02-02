@@ -59,7 +59,9 @@
     "startTyping": "Start typing to search Qobuz™",
     "noAlbumsFor": "No albums found for \"{query}\"",
     "noTracksFor": "No tracks found for \"{query}\"",
-    "noArtistsFor": "No artists found for \"{query}\""
+    "noArtistsFor": "No artists found for \"{query}\"",
+    "noPlaylistsFor": "No playlists found for \"{query}\"",
+    "viewMore": "View more"
   },
   "library": {
     "title": "Local Library",
