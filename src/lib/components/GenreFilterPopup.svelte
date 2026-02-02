@@ -109,35 +109,9 @@
     }
   }
 
-  // Default genre colors if not provided by API
-  const defaultColors: Record<string, string> = {
-    'Pop/Rock': '#e74c3c',
-    'Jazz': '#f39c12',
-    'Classical': '#9b59b6',
-    'Electronic': '#3498db',
-    'Soul/Funk/R&B': '#e91e63',
-    'Hip-Hop/Rap': '#607d8b',
-    'Metal': '#455a64',
-    'Blues': '#1976d2',
-    'Latin': '#ff9800',
-    'Country': '#8d6e63',
-    'World': '#00897b',
-    'Soundtracks': '#5c6bc0',
-    'Folk': '#689f38',
-    'Reggae': '#4caf50',
-    'R&B': '#ad1457',
-    'Flamenco': '#d84315',
-  };
-
-  function getGenreColor(genre: GenreInfo): string {
-    if (genre.color) return genre.color;
-    // Try to find a matching default color
-    for (const [key, color] of Object.entries(defaultColors)) {
-      if (genre.name.toLowerCase().includes(key.toLowerCase())) {
-        return color;
-      }
-    }
-    return '#6b7280'; // Default gray
+  // Use neutral dark colors for all genres
+  function getGenreColor(_genre: GenreInfo): string {
+    return 'var(--bg-tertiary)';
   }
 </script>
 
@@ -197,12 +171,12 @@
   .genre-popup {
     position: fixed;
     z-index: 10000;
-    width: 320px;
-    max-height: 480px;
+    width: 340px;
+    max-height: 420px;
     background: var(--bg-primary);
     border: 1px solid var(--border-subtle);
-    border-radius: 12px;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
     overflow: hidden;
     display: flex;
     flex-direction: column;
@@ -286,7 +260,7 @@
   .genres-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+    gap: 6px;
     padding: 12px;
     overflow-y: auto;
     max-height: 320px;
@@ -294,44 +268,55 @@
 
   .genre-card {
     position: relative;
-    aspect-ratio: 1.2;
-    border-radius: 8px;
-    border: none;
+    height: 36px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
     cursor: pointer;
     overflow: hidden;
-    background: linear-gradient(135deg, var(--genre-color) 0%, color-mix(in srgb, var(--genre-color) 60%, black) 100%);
+    background: var(--genre-color);
     display: flex;
-    align-items: flex-end;
-    padding: 8px;
-    transition: transform 150ms ease, box-shadow 150ms ease;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 10px;
+    transition: all 150ms ease;
   }
 
   .genre-card:hover {
-    transform: scale(1.03);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    background: var(--bg-hover);
+    border-color: var(--text-muted);
   }
 
   .genre-card.selected {
-    box-shadow: 0 0 0 2px var(--accent-primary), 0 4px 12px rgba(0, 0, 0, 0.3);
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+
+  .genre-card.selected:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
   }
 
   .genre-name {
     font-size: 11px;
-    font-weight: 600;
-    color: white;
-    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    font-weight: 500;
+    color: var(--text-primary);
     line-height: 1.2;
     text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .genre-card.selected .genre-name {
+    color: white;
   }
 
   .check-circle {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    width: 16px;
-    height: 16px;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
     border-radius: 50%;
-    border: 2px solid rgba(255, 255, 255, 0.6);
+    border: 1.5px solid var(--text-muted);
     background: transparent;
     transition: all 150ms ease;
   }
@@ -344,13 +329,13 @@
   .check-circle.checked::after {
     content: '';
     position: absolute;
-    top: 2px;
-    left: 5px;
+    top: 50%;
+    right: 10px;
     width: 4px;
-    height: 8px;
+    height: 7px;
     border: solid var(--accent-primary);
-    border-width: 0 2px 2px 0;
-    transform: rotate(45deg);
+    border-width: 0 1.5px 1.5px 0;
+    transform: translateY(-60%) rotate(45deg);
   }
 
   .popup-footer {
