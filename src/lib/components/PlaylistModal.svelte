@@ -4,6 +4,7 @@
   import { logPlaylistAdd } from '$lib/services/recoService';
   import { subscribe as subscribeOffline, getStatus, createPendingPlaylist } from '$lib/stores/offlineStore';
   import { showToast } from '$lib/stores/toastStore';
+  import { t } from '$lib/i18n';
   import {
     subscribe as subscribeFolders,
     getVisibleFolders,
@@ -241,7 +242,7 @@
           [], // No Qobuz tracks for empty playlist
           []  // No local tracks for empty playlist
         );
-        showToast('Playlist created offline - will sync when back online', 'info');
+        showToast($t('toast.playlistCreatedOffline'), 'info');
         // Create a temporary playlist object for UI
         const tempPlaylist: Playlist = {
           id: -pendingId, // Negative ID to distinguish from real playlists
@@ -429,7 +430,7 @@
           qobuzTrackIds,
           localTrackPaths
         );
-        showToast(`Playlist "${name.trim()}" created offline - will sync when back online`, 'info');
+        showToast($t('toast.playlistCreatedOffline'), 'info');
 
         // Create a temporary playlist object for UI
         const tempPlaylist: Playlist = {

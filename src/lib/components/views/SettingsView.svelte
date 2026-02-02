@@ -1595,7 +1595,7 @@
       showToast($t('settings.appearance.tray.enableTrayDesc'), 'info');
     } catch (err) {
       console.error('Failed to set enable tray:', err);
-      showToast('Failed to save tray setting', 'error');
+      showToast($t('toast.failedSaveTray'), 'error');
     }
   }
 
@@ -1605,7 +1605,7 @@
       minimizeToTray = value;
     } catch (err) {
       console.error('Failed to set minimize to tray:', err);
-      showToast('Failed to save tray setting', 'error');
+      showToast($t('toast.failedSaveTray'), 'error');
     }
   }
 
@@ -1615,7 +1615,7 @@
       closeToTray = value;
     } catch (err) {
       console.error('Failed to set close to tray:', err);
-      showToast('Failed to save tray setting', 'error');
+      showToast($t('toast.failedSaveTray'), 'error');
     }
   }
 
@@ -1627,7 +1627,7 @@
       console.log('[Settings] Autoplay mode saved successfully');
     } catch (err) {
       console.error('[Settings] Failed to set autoplay mode:', err);
-      showToast('Failed to save autoplay preference', 'error');
+      showToast($t('toast.failedSaveAutoplay'), 'error');
     }
   }
 
@@ -1639,7 +1639,7 @@
       console.log('[Settings] Show context icon saved successfully');
     } catch (err) {
       console.error('[Settings] Failed to set show context icon:', err);
-      showToast('Failed to save icon visibility preference', 'error');
+      showToast($t('toast.failedSaveIconVisibility'), 'error');
     }
   }
 
@@ -1681,7 +1681,7 @@
       notifyDownloadSettingsChanged();
     } catch (err) {
       console.error('Failed to repair downloads:', err);
-      showToast('Failed to repair offline library: ' + String(err), 'error');
+      showToast($t('toast.failedRepairOffline', { error: String(err) }), 'error');
     } finally {
       isRepairingDownloads = false;
     }
@@ -1705,7 +1705,7 @@
       await invoke('open_offline_cache_folder');
     } catch (err) {
       console.error('Failed to open cache folder:', err);
-      showToast('Failed to open cache folder', 'error');
+      showToast($t('toast.failedOpenCacheFolder'), 'error');
     }
   }
 

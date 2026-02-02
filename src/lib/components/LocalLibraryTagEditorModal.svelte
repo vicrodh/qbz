@@ -5,6 +5,7 @@
   import { ask } from '@tauri-apps/plugin-dialog';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { showToast } from '$lib/stores/toastStore';
+  import { t } from '$lib/i18n';
 
   interface LocalTrack {
     id: number;
@@ -153,7 +154,7 @@
   // Remote metadata functions
   async function searchRemoteMetadata() {
     if (!albumTitle.trim() && !albumArtist.trim()) {
-      showToast('Enter album title or artist to search', 'error');
+      showToast($t('toast.enterSearchTerms'), 'error');
       return;
     }
 
@@ -173,7 +174,7 @@
       showRemotePanel = results.length > 0;
     } catch (err) {
       console.error('Remote search failed:', err);
-      showToast(`Search failed: ${err}`, 'error');
+      showToast($t('toast.searchFailed', { error: String(err) }), 'error');
       hasSearched = true;
     } finally {
       remoteSearching = false;
@@ -224,7 +225,7 @@
           'warning'
         );
       } else {
-        showToast(`Applied metadata from ${providerName}`, 'success');
+        showToast($t('toast.appliedMetadata', { provider: providerName }), 'success');
       }
       showRemotePanel = false;
     } catch (err) {
@@ -232,9 +233,9 @@
       // Check for rate limiting
       const errStr = String(err);
       if (errStr.includes('429') || errStr.toLowerCase().includes('rate')) {
-        showToast('Rate limited. Please wait a moment and try again.', 'warning');
+        showToast($t('toast.rateLimited'), 'warning');
       } else {
-        showToast(`Failed to fetch metadata: ${err}`, 'error');
+        showToast($t('toast.failedFetchMetadata', { error: String(err) }), 'error');
       }
     } finally {
       remoteLoading = false;
@@ -256,7 +257,7 @@
       await openUrl(url);
     } catch (err) {
       console.error('Failed to open URL:', err);
-      showToast('Failed to open browser', 'error');
+      showToast($t('toast.failedOpenBrowser'), 'error');
     }
   }
 
@@ -360,7 +361,7 @@
         });
         await invoke('library_write_album_metadata_to_files', { request: payload });
       }
-      showToast('Album metadata saved', 'success');
+      showToast($t('toast.albumMetadataSaved'), 'success');
       await onSaved();
       onClose();
     } catch (err) {

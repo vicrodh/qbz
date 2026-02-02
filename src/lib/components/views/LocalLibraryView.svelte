@@ -1357,19 +1357,19 @@
 
       if (result.removed > 0) {
         cleanupStatus = `Removed ${result.removed} of ${result.checked} tracks`;
-        showToast(`Removed ${result.removed} tracks with missing files`, 'success');
+        showToast($t('toast.removedMissingFiles', { count: result.removed }), 'success');
         // Reload library data
         cleanupStatus = 'Refreshing library...';
         await loadAlbums();
         await loadArtists();
       } else {
         cleanupStatus = `Checked ${result.checked} tracks - all OK`;
-        showToast('No missing files found', 'info');
+        showToast($t('toast.noMissingFilesFound'), 'info');
       }
     } catch (err) {
       console.error('Failed to cleanup missing files:', err);
       cleanupStatus = 'Error during cleanup';
-      showToast('Failed to cleanup missing files', 'error');
+      showToast($t('toast.failedCleanupMissing'), 'error');
     } finally {
       cleaningUpMissingFiles = false;
       // Clear status after a delay
@@ -1761,7 +1761,7 @@
       refreshingAlbumMetadata = true;
       albumMetadataRefreshed = false;
       await invoke('library_refresh_album_metadata_from_files', { albumGroupKey: selectedAlbum.id });
-      showToast('Metadata refreshed from files', 'success');
+      showToast($t('toast.metadataRefreshed'), 'success');
       albumMetadataRefreshed = true;
       await handleTagEditorSaved();
     } catch (err) {
