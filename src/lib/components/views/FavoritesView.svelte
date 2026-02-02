@@ -1,6 +1,8 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { onMount, tick } from 'svelte';
+  import { get } from 'svelte/store';
+  import { t } from '$lib/i18n';
   import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library, CloudDownload, Shuffle, MoreHorizontal, PanelLeftClose, Loader2 } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
@@ -166,12 +168,9 @@
   let activeTab = $state<TabType>('tracks');
   let preferencesLoaded = $state(false);
 
-  const tabLabels: Record<TabType, string> = {
-    tracks: 'Tracks',
-    albums: 'Albums',
-    artists: 'Artists',
-    playlists: 'Playlists',
-  };
+  function getTabTranslationKey(tab: TabType): string {
+    return `favorites.tabLabels.${tab}`;
+  }
 
   let favoriteAlbums = $state<FavoriteAlbum[]>([]);
   let favoriteTracks = $state<FavoriteTrack[]>([]);
@@ -346,12 +345,13 @@
   const sortedLiveAlbums = $derived(sortQobuzAlbums(groupedArtistAlbumsByCategory.liveAlbums, liveAlbumsSortMode));
 
   function getSortLabel(mode: AlbumSortMode): string {
+    const translate = get(t);
     switch (mode) {
-      case 'default': return 'Default';
-      case 'newest': return 'Newest';
-      case 'oldest': return 'Oldest';
-      case 'title-asc': return 'A-Z';
-      case 'title-desc': return 'Z-A';
+      case 'default': return translate('sort.default');
+      case 'newest': return translate('sort.newest');
+      case 'oldest': return translate('sort.oldest');
+      case 'title-asc': return translate('sort.titleAsc');
+      case 'title-desc': return translate('sort.titleDesc');
     }
   }
 
@@ -546,7 +546,7 @@
   }
 
   function getTabLabel(tab: TabType): string {
-    return tabLabels[tab] || tab.charAt(0).toUpperCase() + tab.slice(1);
+    return get(t)(getTabTranslationKey(tab));
   }
 
   onMount(() => {
@@ -1185,20 +1185,20 @@
       {/if}
     </div>
     <div class="header-content">
-      <h1>Favorites</h1>
+      <h1>{$t('favorites.title')}</h1>
       {#if activeTab === 'tracks' && !loading && filteredTracks.length > 0}
         <div class="header-actions">
-          <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
+          <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title={$t('actions.playAll')}>
             <Play size={20} fill="currentColor" color="currentColor" />
           </button>
-          <button class="action-btn-circle" onclick={handleShuffleAllTracks} title="Shuffle">
+          <button class="action-btn-circle" onclick={handleShuffleAllTracks} title={$t('actions.shuffle')}>
             <Shuffle size={18} />
           </button>
           <div class="context-menu-wrapper">
             <button
               class="action-btn-circle"
               onclick={() => showTracksContextMenu = !showTracksContextMenu}
-              title="More options"
+              title={$t('actions.more')}
             >
               <MoreHorizontal size={18} />
             </button>
@@ -1206,10 +1206,10 @@
               <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
               <div class="context-menu">
                 <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
-                  Play Next
+                  {$t('actions.playNext')}
                 </button>
                 <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
-                  Add to Queue
+                  {$t('actions.addToQueue')}
                 </button>
               </div>
             {/if}
@@ -1217,7 +1217,7 @@
         </div>
       {/if}
     </div>
-    <button class="edit-btn" onclick={() => editModalOpen = true} title="Edit Favorites settings">
+    <button class="edit-btn" onclick={() => editModalOpen = true} title={$t('favorites.editSettings')}>
       <Edit3 size={16} />
     </button>
   </div>
@@ -1238,7 +1238,7 @@
     </div>
     <div class="nav-right">
       {#if !searchExpanded}
-        <button class="search-icon-btn" onclick={() => searchExpanded = true} title="Search">
+        <button class="search-icon-btn" onclick={() => searchExpanded = true} title={$t('nav.search')}>
           <Search size={16} />
         </button>
       {:else}
@@ -1246,14 +1246,14 @@
           <Search size={16} class="search-icon-inline" />
           <input
             type="text"
-            placeholder={`Search ${getTabLabel(activeTab).toLowerCase()}...`}
+            placeholder={$t('placeholders.search')}
             value={getCurrentSearchValue()}
             oninput={(e) => setCurrentSearchValue(e.currentTarget.value)}
             class="search-input-inline"
             autofocus
           />
           {#if getCurrentSearchValue()}
-            <button class="search-clear-btn" onclick={clearCurrentSearch} title="Clear">
+            <button class="search-clear-btn" onclick={clearCurrentSearch} title={$t('actions.clear')}>
               <X size={14} />
             </button>
           {/if}
@@ -1506,28 +1506,28 @@
       <ViewTransition duration={200} distance={12} direction="down">
       <div class="loading" class:fading={spinnerFading}>
         <div class="spinner"></div>
-        <p>Loading favorites...</p>
+        <p>{$t('favorites.loadingFavorites')}</p>
       </div>
       </ViewTransition>
       {/key}
     {:else if error}
       <div class="error">
-        <p>Failed to load favorites</p>
+        <p>{$t('favorites.failedLoadFavorites')}</p>
         <p class="error-detail">{error}</p>
-        <button class="retry-btn" onclick={() => loadTabIfNeeded(activeTab)}>Retry</button>
+        <button class="retry-btn" onclick={() => loadTabIfNeeded(activeTab)}>{$t('actions.retry')}</button>
       </div>
     {:else if activeTab === 'tracks'}
       <ViewTransition duration={200} distance={12} direction="up">
       {#if favoriteTracks.length === 0}
         <div class="empty">
           <Music size={48} />
-          <p>No favorite tracks yet</p>
-          <p class="empty-hint">Like tracks to see them here</p>
+          <p>{$t('favorites.noFavoriteTracks')}</p>
+          <p class="empty-hint">{$t('favorites.likeTracksHint')}</p>
         </div>
       {:else if filteredTracks.length === 0}
         <div class="empty">
           <Search size={48} />
-          <p>No tracks match "{trackSearch}"</p>
+          <p>{$t('favorites.noTracksMatch', { values: { query: trackSearch } })}</p>
         </div>
       {:else}
         {@const groupedTracks = trackGroupingEnabled
@@ -1584,13 +1584,13 @@
       {#if favoriteAlbums.length === 0}
         <div class="empty">
           <Disc3 size={48} />
-          <p>No favorite albums yet</p>
-          <p class="empty-hint">Like albums to see them here</p>
+          <p>{$t('favorites.noFavoriteAlbums')}</p>
+          <p class="empty-hint">{$t('favorites.likeAlbumsHint')}</p>
         </div>
       {:else if filteredAlbums.length === 0}
         <div class="empty">
           <Search size={48} />
-          <p>No albums match "{albumSearch}"</p>
+          <p>{$t('favorites.noAlbumsMatch', { values: { query: albumSearch } })}</p>
         </div>
       {:else if albumGroupingEnabled}
         {@const groupedAlbums = groupAlbums(filteredAlbums, albumGroupMode)}
@@ -1746,13 +1746,13 @@
       {#if favoriteArtists.length === 0}
         <div class="empty">
           <Mic2 size={48} />
-          <p>No favorite artists yet</p>
-          <p class="empty-hint">Like artists to see them here</p>
+          <p>{$t('favorites.noFavoriteArtists')}</p>
+          <p class="empty-hint">{$t('favorites.likeArtistsHint')}</p>
         </div>
       {:else if filteredArtists.length === 0}
         <div class="empty">
           <Search size={48} />
-          <p>No artists match "{artistSearch}"</p>
+          <p>{$t('favorites.noArtistsMatch', { values: { query: artistSearch } })}</p>
         </div>
       {:else if artistViewMode === 'sidepanel'}
         <!-- Two-column sidepanel view -->
@@ -1795,7 +1795,7 @@
                         <span class="artist-name-text" class:animating={isHovered && hasOverflow}>{artist.name}</span>
                       </div>
                       {#if artist.albums_count}
-                        <div class="artist-list-meta">{artist.albums_count} albums</div>
+                        <div class="artist-list-meta">{$t('library.albumCount', { values: { count: artist.albums_count } })}</div>
                       {/if}
                     </div>
                   </button>
@@ -1809,22 +1809,22 @@
             {#if !selectedFavoriteArtist}
               <div class="artist-albums-empty">
                 <Mic2 size={48} />
-                <p>Select an artist to see their albums</p>
+                <p>{$t('favorites.selectArtistHint')}</p>
               </div>
             {:else if loadingArtistAlbums}
               <div class="artist-albums-loading">
                 <Loader2 size={32} class="spinner-icon" />
-                <p>Loading albums...</p>
+                <p>{$t('favorites.loadingAlbums')}</p>
               </div>
             {:else if artistAlbumsError}
               <div class="artist-albums-error">
-                <p>Failed to load albums</p>
+                <p>{$t('favorites.failedLoadAlbums')}</p>
                 <p class="error-detail">{artistAlbumsError}</p>
               </div>
             {:else if totalDisplayedAlbums === 0}
               <div class="artist-albums-empty">
                 <Disc3 size={48} />
-                <p>No albums found</p>
+                <p>{$t('favorites.noAlbumsFound')}</p>
               </div>
             {:else}
               <div class="artist-albums-scroll">
@@ -1832,8 +1832,8 @@
                 {#if sortedDiscography.length > 0}
                   <div class="artist-albums-section">
                     <div class="artist-albums-section-header">
-                      <span class="section-title">Discography</span>
-                      <span class="section-count">{sortedDiscography.length} albums</span>
+                      <span class="section-title">{$t('artist.discography')}</span>
+                      <span class="section-count">{$t('library.albumCount', { values: { count: sortedDiscography.length } })}</span>
                       <div class="section-sort-wrapper">
                         <button
                           class="section-sort-btn"
@@ -1884,7 +1884,7 @@
                 {#if sortedEpsSingles.length > 0}
                   <div class="artist-albums-section">
                     <div class="artist-albums-section-header">
-                      <span class="section-title">EPs & Singles</span>
+                      <span class="section-title">{$t('artist.epsSingles')}</span>
                       <span class="section-count">{sortedEpsSingles.length}</span>
                       <div class="section-sort-wrapper">
                         <button
@@ -1936,7 +1936,7 @@
                 {#if sortedLiveAlbums.length > 0}
                   <div class="artist-albums-section">
                     <div class="artist-albums-section-header">
-                      <span class="section-title">Live Albums</span>
+                      <span class="section-title">{$t('artist.liveAlbums')}</span>
                       <span class="section-count">{sortedLiveAlbums.length}</span>
                       <div class="section-sort-wrapper">
                         <button
@@ -2074,7 +2074,7 @@
         <ViewTransition duration={200} distance={12} direction="down">
         <div class="loading" class:fading={spinnerFading}>
           <div class="spinner"></div>
-          <p>Loading playlists...</p>
+          <p>{$t('favorites.loadingPlaylists')}</p>
         </div>
         </ViewTransition>
         {/key}
@@ -2083,13 +2083,13 @@
         {#if favoritePlaylists.length === 0}
           <div class="empty">
             <ListMusic size={48} />
-            <p>No favorite playlists yet</p>
-            <p class="empty-hint">Click the heart icon on playlists to add them here</p>
+            <p>{$t('favorites.noFavoritePlaylists')}</p>
+            <p class="empty-hint">{$t('favorites.likePlaylistsHint')}</p>
           </div>
         {:else if filteredPlaylists.length === 0}
           <div class="empty">
             <Search size={48} />
-            <p>No playlists match "{playlistSearch}"</p>
+            <p>{$t('favorites.noPlaylistsMatch', { values: { query: playlistSearch } })}</p>
           </div>
         {:else}
           <div class="playlist-grid">
