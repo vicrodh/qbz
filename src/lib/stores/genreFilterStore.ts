@@ -116,6 +116,13 @@ export function getSelectedGenreName(): string | undefined {
   return genre?.name;
 }
 
+export function getSelectedGenreNames(): string[] {
+  const ids = Array.from(state.selectedGenreIds);
+  return ids
+    .map(id => state.availableGenres.find(g => g.id === id)?.name)
+    .filter((name): name is string => !!name);
+}
+
 export function isGenreSelected(genreId: number): boolean {
   return state.selectedGenreIds.has(genreId);
 }
@@ -128,8 +135,6 @@ export function toggleGenre(genreId: number): void {
   if (state.selectedGenreIds.has(genreId)) {
     state.selectedGenreIds.delete(genreId);
   } else {
-    // For now, only allow single selection (API limitation)
-    state.selectedGenreIds.clear();
     state.selectedGenreIds.add(genreId);
   }
   saveToStorage();

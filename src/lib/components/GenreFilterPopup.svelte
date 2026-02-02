@@ -81,6 +81,7 @@
 
   function handleClearAll() {
     clearSelection();
+    onClose();
   }
 
   function handleRememberToggle() {

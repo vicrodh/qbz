@@ -18,7 +18,8 @@
   } from '$lib/stores/homeSettingsStore';
   import {
     getSelectedGenreId,
-    getSelectedGenreName,
+    getSelectedGenreIds,
+    getSelectedGenreNames,
     hasActiveFilter as hasGenreFilter
   } from '$lib/stores/genreFilterStore';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
@@ -323,7 +324,7 @@
     total: number;
   }
 
-  async function fetchFeaturedAlbums(featuredType: string, limit: number, genreId?: number): Promise<AlbumCardData[]> {
+  async function fetchFeaturedAlbumsSingle(featuredType: string, limit: number, genreId?: number): Promise<AlbumCardData[]> {
     try {
       const response = await invoke<FeaturedAlbumsResponse>('get_featured_albums', {
         featuredType,
@@ -335,6 +336,33 @@
       console.error(`Failed to fetch ${featuredType}:`, err);
       return [];
     }
+  }
+
+  async function fetchFeaturedAlbums(featuredType: string, limit: number, genreIds: number[]): Promise<AlbumCardData[]> {
+    if (genreIds.length === 0) {
+      // No filter, fetch without genre
+      return fetchFeaturedAlbumsSingle(featuredType, limit);
+    }
+    if (genreIds.length === 1) {
+      // Single genre, use API filter
+      return fetchFeaturedAlbumsSingle(featuredType, limit, genreIds[0]);
+    }
+    // Multiple genres: fetch each and merge (dedupe by album id)
+    const perGenreLimit = Math.ceil(limit / genreIds.length) + 2;
+    const results = await Promise.all(
+      genreIds.map(gid => fetchFeaturedAlbumsSingle(featuredType, perGenreLimit, gid))
+    );
+    const seen = new Set<string>();
+    const merged: AlbumCardData[] = [];
+    for (const albums of results) {
+      for (const album of albums) {
+        if (!seen.has(album.id)) {
+          seen.add(album.id);
+          merged.push(album);
+        }
+      }
+    }
+    return merged.slice(0, limit);
   }
 
   function toAlbumCard(album: QobuzAlbum): AlbumCardData {
@@ -447,11 +475,13 @@
   }
 
   function filterAlbumsByGenre(albums: AlbumCardData[]): AlbumCardData[] {
-    const selectedGenreName = getSelectedGenreName();
-    if (!selectedGenreName) return albums;
-    // Filter albums whose genre contains the selected genre name (case-insensitive)
+    const selectedGenreNames = getSelectedGenreNames();
+    if (selectedGenreNames.length === 0) return albums;
+    // Filter albums whose genre matches any of the selected genres (case-insensitive)
     return albums.filter(album =>
-      album.genre.toLowerCase().includes(selectedGenreName.toLowerCase())
+      selectedGenreNames.some(genreName =>
+        album.genre.toLowerCase().includes(genreName.toLowerCase())
+      )
     );
   }
 
@@ -490,12 +520,12 @@
       limitFavorites: Math.max(homeLimits.favoriteAlbums, homeLimits.favoriteTracks)
     });
 
-    // Get current genre filter
-    const genreId = getSelectedGenreId();
+    // Get current genre filter (array of IDs for multi-select)
+    const genreIds = Array.from(getSelectedGenreIds());
 
     // Start Qobuz API calls in parallel (don't await)
     if (isSectionVisible('newReleases')) {
-      fetchFeaturedAlbums('new-releases', homeLimits.featuredAlbums, genreId).then(async albums => {
+      fetchFeaturedAlbums('new-releases', homeLimits.featuredAlbums, genreIds).then(async albums => {
         newReleases = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingNewReleases = false;
@@ -506,7 +536,7 @@
     }
 
     if (isSectionVisible('pressAwards')) {
-      fetchFeaturedAlbums('press-awards', homeLimits.featuredAlbums, genreId).then(async albums => {
+      fetchFeaturedAlbums('press-awards', homeLimits.featuredAlbums, genreIds).then(async albums => {
         pressAwards = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingPressAwards = false;
@@ -517,7 +547,7 @@
     }
 
     if (isSectionVisible('mostStreamed')) {
-      fetchFeaturedAlbums('most-streamed', homeLimits.featuredAlbums, genreId).then(async albums => {
+      fetchFeaturedAlbums('most-streamed', homeLimits.featuredAlbums, genreIds).then(async albums => {
         mostStreamed = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingMostStreamed = false;
@@ -528,7 +558,7 @@
     }
 
     if (isSectionVisible('qobuzissimes')) {
-      fetchFeaturedAlbums('qobuzissimes', homeLimits.featuredAlbums, genreId).then(async albums => {
+      fetchFeaturedAlbums('qobuzissimes', homeLimits.featuredAlbums, genreIds).then(async albums => {
         qobuzissimes = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingQobuzissimes = false;
@@ -539,7 +569,7 @@
     }
 
     if (isSectionVisible('editorPicks')) {
-      fetchFeaturedAlbums('editor-picks', homeLimits.featuredAlbums, genreId).then(async albums => {
+      fetchFeaturedAlbums('editor-picks', homeLimits.featuredAlbums, genreIds).then(async albums => {
         editorPicks = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingEditorPicks = false;

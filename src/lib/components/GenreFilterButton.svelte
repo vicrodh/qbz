@@ -6,6 +6,7 @@
     hasActiveFilter,
     getAvailableGenres,
     getSelectedGenreIds,
+    getSelectedGenreNames,
     loadGenres,
     subscribe as subscribeGenre,
     type GenreInfo
@@ -46,12 +47,11 @@
   });
 
   function updateSelectedName() {
-    const selectedIds = getSelectedGenreIds();
-    if (selectedIds.size === 1) {
-      const genres = getAvailableGenres();
-      const selectedId = Array.from(selectedIds)[0];
-      const genre = genres.find(g => g.id === selectedId);
-      selectedGenreName = genre?.name ?? null;
+    const selectedNames = getSelectedGenreNames();
+    if (selectedNames.length === 1) {
+      selectedGenreName = selectedNames[0];
+    } else if (selectedNames.length > 1) {
+      selectedGenreName = `${selectedNames.length} genres`;
     } else {
       selectedGenreName = null;
     }
