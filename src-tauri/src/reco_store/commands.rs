@@ -7,6 +7,7 @@ use tauri::State;
 
 use crate::reco_store::db::{RecoEventRecord, RecoScoreEntry};
 use crate::reco_store::{HomeSeeds, RecoEventInput, RecoState, TopArtistSeed};
+use crate::AppState;
 
 const DEFAULT_LOOKBACK_DAYS: i64 = 90;
 const DEFAULT_HALF_LIFE_DAYS: f64 = 21.0;
@@ -461,4 +462,125 @@ pub async fn get_playlist_suggestions(
         .collect();
 
     Ok(suggestions)
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackfillStats {
+    pub albums_processed: u32,
+    pub events_updated: u64,
+    pub albums_failed: u32,
+    pub albums_remaining: u32,
+}
+
+/// Backfill genre_id for existing events by fetching album details from Qobuz
+/// This runs in batches to avoid overwhelming the API
+#[tauri::command]
+pub async fn reco_backfill_genres(
+    batch_size: Option<u32>,
+    reco_state: State<'_, RecoState>,
+    app_state: State<'_, AppState>,
+) -> Result<BackfillStats, String> {
+    let batch_size = batch_size.unwrap_or(50);
+    log::info!("Command: reco_backfill_genres batch_size={}", batch_size);
+
+    let db = reco_state.db.lock().await;
+    let album_ids = db.get_album_ids_without_genre(batch_size)?;
+
+    if album_ids.is_empty() {
+        log::info!("No albums need genre backfill");
+        return Ok(BackfillStats {
+            albums_processed: 0,
+            events_updated: 0,
+            albums_failed: 0,
+            albums_remaining: 0,
+        });
+    }
+
+    log::info!("Backfilling genres for {} albums", album_ids.len());
+
+    let client = app_state.client.lock().await;
+    let mut albums_processed = 0u32;
+    let mut events_updated = 0u64;
+    let mut albums_failed = 0u32;
+
+    for album_id in &album_ids {
+        // Fetch album from Qobuz API
+        match client.get_album(album_id).await {
+            Ok(album) => {
+                if let Some(genre) = album.genre {
+                    // Update all events with this album_id
+                    match db.update_genre_for_album(album_id, genre.id) {
+                        Ok(updated) => {
+                            events_updated += updated;
+                            albums_processed += 1;
+                            log::debug!(
+                                "Updated {} events for album {} with genre {} ({})",
+                                updated,
+                                album_id,
+                                genre.id,
+                                genre.name
+                            );
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to update genre for album {}: {}", album_id, e);
+                            albums_failed += 1;
+                        }
+                    }
+                } else {
+                    // Album has no genre, mark as processed by setting genre_id to 0
+                    match db.update_genre_for_album(album_id, 0) {
+                        Ok(updated) => {
+                            events_updated += updated;
+                            albums_processed += 1;
+                            log::debug!("Album {} has no genre, set to 0", album_id);
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to update genre for album {}: {}", album_id, e);
+                            albums_failed += 1;
+                        }
+                    }
+                }
+            }
+            Err(e) => {
+                log::warn!("Failed to fetch album {}: {}", album_id, e);
+                albums_failed += 1;
+            }
+        }
+
+        // Small delay to avoid rate limiting
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    }
+
+    // Check how many albums still need backfill
+    let remaining = db.get_album_ids_without_genre(1)?;
+    let albums_remaining = if remaining.is_empty() { 0 } else {
+        // Get actual count
+        db.get_album_ids_without_genre(10000)?.len() as u32
+    };
+
+    log::info!(
+        "Backfill complete: processed={}, updated={}, failed={}, remaining={}",
+        albums_processed,
+        events_updated,
+        albums_failed,
+        albums_remaining
+    );
+
+    Ok(BackfillStats {
+        albums_processed,
+        events_updated,
+        albums_failed,
+        albums_remaining,
+    })
+}
+
+/// Check if genre backfill is needed
+#[tauri::command]
+pub async fn reco_needs_genre_backfill(
+    reco_state: State<'_, RecoState>,
+) -> Result<bool, String> {
+    let db = reco_state.db.lock().await;
+    let albums = db.get_album_ids_without_genre(1)?;
+    Ok(!albums.is_empty())
 }

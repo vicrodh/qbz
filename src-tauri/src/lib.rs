@@ -767,6 +767,8 @@ pub fn run() {
             reco_store::commands::reco_train_scores,
             reco_store::commands::reco_get_home_ml,
             reco_store::commands::get_playlist_suggestions,
+            reco_store::commands::reco_backfill_genres,
+            reco_store::commands::reco_needs_genre_backfill,
             // Session persistence commands
             session_store::save_session_state,
             session_store::load_session_state,
