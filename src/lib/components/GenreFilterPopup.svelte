@@ -1,10 +1,9 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { SlidersHorizontal, X, ChevronRight } from 'lucide-svelte';
+  import { SlidersHorizontal, X, Minus, Check } from 'lucide-svelte';
   import {
     getAvailableGenres,
-    getSelectedGenreIds,
-    isGenreSelected,
+    getChildGenres,
     toggleGenre,
     clearSelection,
     hasActiveFilter,
@@ -34,9 +33,6 @@
   let showAllGenres = $state(false);
   let popupEl: HTMLDivElement | null = null;
   let popupStyle = $state('');
-
-  // Derived: which genres to display based on mode
-  let displayGenres = $derived(showAllGenres ? allGenres : parentGenres);
 
   // Subscribe to store changes for this context
   $effect(() => {
@@ -76,20 +72,15 @@
     let top = anchorRect.bottom + 8;
 
     if (align === 'right') {
-      // Align left edge of popup with left edge of anchor (extends to the right)
       left = anchorRect.left;
-      // Adjust if it goes off the RIGHT edge
       if (left + popupRect.width > window.innerWidth - 8) {
         left = window.innerWidth - popupRect.width - 8;
       }
     } else {
-      // Align right edge of popup with right edge of anchor (extends to the left)
       left = anchorRect.right - popupRect.width;
-      // Only adjust left if it goes off the LEFT edge of the screen
       if (left < 8) left = 8;
     }
 
-    // Handle vertical overflow
     if (top + popupRect.height > window.innerHeight - 8) {
       top = anchorRect.top - popupRect.height - 8;
     }
@@ -99,6 +90,48 @@
 
   function handleGenreClick(genreId: number) {
     toggleGenre(genreId, context);
+  }
+
+  // Get parent selection state: 'all' | 'none' | 'partial'
+  function getParentState(parentId: number): 'all' | 'none' | 'partial' {
+    const children = getChildGenres(parentId);
+    if (children.length === 0) {
+      // No children, just check parent itself
+      return selectedIds.has(parentId) ? 'all' : 'none';
+    }
+
+    const selectedCount = children.filter(c => selectedIds.has(c.id)).length;
+    if (selectedCount === 0) return 'none';
+    if (selectedCount === children.length) return 'all';
+    return 'partial';
+  }
+
+  // Toggle parent: if all selected, deselect all; otherwise select all
+  function handleParentClick(parentId: number) {
+    const children = getChildGenres(parentId);
+    const currentState = getParentState(parentId);
+
+    if (children.length === 0) {
+      // No children, just toggle parent
+      toggleGenre(parentId, context);
+      return;
+    }
+
+    if (currentState === 'all') {
+      // Deselect all children
+      for (const child of children) {
+        if (selectedIds.has(child.id)) {
+          toggleGenre(child.id, context);
+        }
+      }
+    } else {
+      // Select all children
+      for (const child of children) {
+        if (!selectedIds.has(child.id)) {
+          toggleGenre(child.id, context);
+        }
+      }
+    }
   }
 
   function handleClearAll() {
@@ -117,7 +150,6 @@
     }
   }
 
-  // Close on click outside
   $effect(() => {
     if (isOpen) {
       document.addEventListener('click', handleClickOutside);
@@ -125,23 +157,22 @@
     }
   });
 
-  // Close on escape
   function handleKeydown(event: KeyboardEvent) {
     if (event.key === 'Escape') {
       onClose();
     }
-  }
-
-  // Use neutral dark colors for all genres
-  function getGenreColor(_genre: GenreInfo): string {
-    return 'var(--bg-tertiary)';
   }
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
 
 {#if isOpen}
-  <div class="genre-popup" bind:this={popupEl} style={popupStyle}>
+  <div
+    class="genre-popup"
+    class:expanded={showAllGenres}
+    bind:this={popupEl}
+    style={popupStyle}
+  >
     <div class="popup-header">
       <div class="header-title">
         <SlidersHorizontal size={16} />
@@ -179,19 +210,65 @@
       </div>
     </div>
 
-    <div class="genres-grid">
-      {#each displayGenres as genre (genre.id)}
-        <button
-          class="genre-card"
-          class:selected={selectedIds.has(genre.id)}
-          style="--genre-color: {getGenreColor(genre)}"
-          onclick={() => handleGenreClick(genre.id)}
-          type="button"
-        >
-          <span class="genre-name">{genre.name}</span>
-          <span class="check-circle" class:checked={selectedIds.has(genre.id)}></span>
-        </button>
-      {/each}
+    <div class="genres-container">
+      {#if showAllGenres}
+        <!-- Hierarchical view -->
+        {#each parentGenres as parent (parent.id)}
+          {@const children = getChildGenres(parent.id)}
+          {@const parentState = getParentState(parent.id)}
+          <div class="genre-group">
+            <button
+              class="parent-row"
+              class:selected={parentState === 'all'}
+              class:partial={parentState === 'partial'}
+              onclick={() => handleParentClick(parent.id)}
+              type="button"
+            >
+              <span class="check-box" class:checked={parentState === 'all'} class:partial={parentState === 'partial'}>
+                {#if parentState === 'all'}
+                  <Check size={10} strokeWidth={3} />
+                {:else if parentState === 'partial'}
+                  <Minus size={10} strokeWidth={3} />
+                {/if}
+              </span>
+              <span class="parent-name">{parent.name}</span>
+              {#if children.length > 0}
+                <span class="child-count">{children.length}</span>
+              {/if}
+            </button>
+            {#if children.length > 0}
+              <div class="children-grid">
+                {#each children as child (child.id)}
+                  <button
+                    class="child-card"
+                    class:selected={selectedIds.has(child.id)}
+                    onclick={() => handleGenreClick(child.id)}
+                    type="button"
+                  >
+                    <span class="genre-name">{child.name}</span>
+                    <span class="check-circle" class:checked={selectedIds.has(child.id)}></span>
+                  </button>
+                {/each}
+              </div>
+            {/if}
+          </div>
+        {/each}
+      {:else}
+        <!-- Simple grid view (parents only) -->
+        <div class="genres-grid">
+          {#each parentGenres as genre (genre.id)}
+            <button
+              class="genre-card"
+              class:selected={selectedIds.has(genre.id)}
+              onclick={() => handleGenreClick(genre.id)}
+              type="button"
+            >
+              <span class="genre-name">{genre.name}</span>
+              <span class="check-circle" class:checked={selectedIds.has(genre.id)}></span>
+            </button>
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <div class="popup-footer">
@@ -220,6 +297,10 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+  }
+
+  .genre-popup.expanded {
+    max-height: 650px;
   }
 
   .popup-header {
@@ -304,13 +385,17 @@
     transform: translateX(16px);
   }
 
+  .genres-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px;
+  }
+
+  /* Simple grid view */
   .genres-grid {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     gap: 6px;
-    padding: 12px;
-    overflow-y: auto;
-    max-height: 400px;
   }
 
   .genre-card {
@@ -320,7 +405,7 @@
     border: 1px solid var(--border-subtle);
     cursor: pointer;
     overflow: hidden;
-    background: var(--genre-color);
+    background: var(--bg-tertiary);
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -354,7 +439,8 @@
     white-space: nowrap;
   }
 
-  .genre-card.selected .genre-name {
+  .genre-card.selected .genre-name,
+  .child-card.selected .genre-name {
     color: white;
   }
 
@@ -366,6 +452,7 @@
     border: 1.5px solid var(--text-muted);
     background: transparent;
     transition: all 150ms ease;
+    position: relative;
   }
 
   .check-circle.checked {
@@ -377,12 +464,155 @@
     content: '';
     position: absolute;
     top: 50%;
-    right: 10px;
+    left: 50%;
     width: 4px;
     height: 7px;
     border: solid var(--accent-primary);
     border-width: 0 1.5px 1.5px 0;
-    transform: translateY(-60%) rotate(45deg);
+    transform: translate(-50%, -60%) rotate(45deg);
+  }
+
+  /* Hierarchical view */
+  .genre-group {
+    margin-bottom: 12px;
+  }
+
+  .genre-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .parent-row {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .parent-row:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-muted);
+  }
+
+  .parent-row.selected {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+
+  .parent-row.partial {
+    border-color: var(--accent-primary);
+  }
+
+  .parent-row.selected:hover {
+    background: var(--accent-hover);
+  }
+
+  .check-box {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    border: 1.5px solid var(--text-muted);
+    background: transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: transparent;
+    transition: all 150ms ease;
+  }
+
+  .check-box.checked {
+    border-color: white;
+    background: white;
+    color: var(--accent-primary);
+  }
+
+  .check-box.partial {
+    border-color: var(--accent-primary);
+    background: var(--accent-primary);
+    color: white;
+  }
+
+  .parent-name {
+    flex: 1;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: left;
+  }
+
+  .parent-row.selected .parent-name {
+    color: white;
+  }
+
+  .child-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 10px;
+  }
+
+  .parent-row.selected .child-count {
+    background: rgba(255, 255, 255, 0.2);
+    color: rgba(255, 255, 255, 0.8);
+  }
+
+  .children-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin-top: 8px;
+    padding-left: 26px;
+  }
+
+  .child-card {
+    position: relative;
+    height: 32px;
+    border-radius: 6px;
+    border: 1px solid var(--border-subtle);
+    cursor: pointer;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 8px;
+    transition: all 150ms ease;
+  }
+
+  .child-card:hover {
+    background: var(--bg-hover);
+    border-color: var(--text-muted);
+  }
+
+  .child-card.selected {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+
+  .child-card.selected:hover {
+    background: var(--accent-hover);
+    border-color: var(--accent-hover);
+  }
+
+  .child-card .genre-name {
+    font-size: 10px;
+  }
+
+  .child-card .check-circle {
+    width: 12px;
+    height: 12px;
+  }
+
+  .child-card .check-circle.checked::after {
+    width: 3px;
+    height: 6px;
   }
 
   .popup-footer {
