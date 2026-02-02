@@ -42,6 +42,48 @@ const STORAGE_KEYS: Record<GenreFilterContext, string> = {
   favorites: 'qbz_genre_filter_favorites',
 };
 
+const GENRE_CACHE_KEY = 'qbz_genre_cache';
+const GENRE_CACHE_TTL_DAYS = 30;
+
+interface GenreCache {
+  timestamp: number;
+  parentGenres: GenreInfo[];
+  childrenByParent: Record<number, GenreInfo[]>;
+}
+
+function saveGenreCache() {
+  try {
+    const cache: GenreCache = {
+      timestamp: Date.now(),
+      parentGenres: state.parentGenres,
+      childrenByParent: Object.fromEntries(state.childrenByParent),
+    };
+    localStorage.setItem(GENRE_CACHE_KEY, JSON.stringify(cache));
+  } catch (e) {
+    console.error('Failed to save genre cache:', e);
+  }
+}
+
+function loadGenreCache(): GenreCache | null {
+  try {
+    const stored = localStorage.getItem(GENRE_CACHE_KEY);
+    if (!stored) return null;
+
+    const cache: GenreCache = JSON.parse(stored);
+    const ageInDays = (Date.now() - cache.timestamp) / (1000 * 60 * 60 * 24);
+
+    if (ageInDays > GENRE_CACHE_TTL_DAYS) {
+      localStorage.removeItem(GENRE_CACHE_KEY);
+      return null;
+    }
+
+    return cache;
+  } catch (e) {
+    console.error('Failed to load genre cache:', e);
+    return null;
+  }
+}
+
 let currentContext: GenreFilterContext = 'home';
 
 const state: GenreFilterState = {
@@ -114,10 +156,24 @@ export function getContext(): GenreFilterContext {
   return currentContext;
 }
 
-/** Initial load: only fetch top-level genres (fast) */
+/** Initial load: use cache if valid, otherwise fetch from API */
 export async function loadGenres(): Promise<void> {
   if (state.parentGenres.length > 0) return;
 
+  // Try loading from cache first
+  const cache = loadGenreCache();
+  if (cache) {
+    state.parentGenres = cache.parentGenres;
+    state.childrenByParent = new Map(Object.entries(cache.childrenByParent).map(([k, v]) => [Number(k), v]));
+    state.allGenres = [...cache.parentGenres, ...Object.values(cache.childrenByParent).flat()];
+    state.genreTree = buildTreeFromCache(cache);
+    loadFromStorage('home');
+    loadFromStorage('favorites');
+    notifyAll();
+    return;
+  }
+
+  // Fetch from API
   state.isLoading = true;
   notifyAll();
 
@@ -125,7 +181,6 @@ export async function loadGenres(): Promise<void> {
     const parentGenres = await invoke<GenreInfo[]>('get_genres', {});
     parentGenres.sort((a, b) => a.name.localeCompare(b.name));
 
-    // Create tree nodes without children (lazy loaded)
     const genreTree: GenreTreeNode[] = parentGenres.map(genre => ({
       genre: { ...genre, childrenLoaded: false },
       children: [],
@@ -135,6 +190,7 @@ export async function loadGenres(): Promise<void> {
     state.allGenres = [...parentGenres];
     state.genreTree = genreTree;
 
+    saveGenreCache();
     loadFromStorage('home');
     loadFromStorage('favorites');
   } catch (e) {
@@ -146,6 +202,32 @@ export async function loadGenres(): Promise<void> {
     state.isLoading = false;
     notifyAll();
   }
+}
+
+function buildTreeFromCache(cache: GenreCache): GenreTreeNode[] {
+  return cache.parentGenres.map(parent => {
+    const children = cache.childrenByParent[parent.id] || [];
+    return {
+      genre: { ...parent, childrenLoaded: children.length > 0 },
+      children: children.map(child => {
+        const grandchildren = cache.childrenByParent[child.id] || [];
+        return {
+          genre: { ...child, childrenLoaded: grandchildren.length > 0 },
+          children: grandchildren.map(gc => ({ genre: gc, children: [] })),
+        };
+      }),
+    };
+  });
+}
+
+/** Force refresh genres from API (clears cache) */
+export async function forceRefreshGenres(): Promise<void> {
+  localStorage.removeItem(GENRE_CACHE_KEY);
+  state.parentGenres = [];
+  state.allGenres = [];
+  state.genreTree = [];
+  state.childrenByParent = new Map();
+  await loadGenres();
 }
 
 /** Lazy load children for a specific genre (silent = don't notify) */
@@ -170,6 +252,9 @@ export async function loadChildren(genreId: number, silent = false): Promise<Gen
 
     // Update tree node
     updateTreeNode(genreId, taggedChildren);
+
+    // Update cache
+    saveGenreCache();
 
     if (!silent) {
       notifyAll();
