@@ -19,7 +19,7 @@
   import GenreFilterButton from '../GenreFilterButton.svelte';
   import {
     hasActiveFilter as hasGenreFilter,
-    getSelectedGenreNames,
+    getFilterGenreNames,
     type GenreFilterContext
   } from '$lib/stores/genreFilterStore';
   import type { FavoritesPreferences, QobuzAlbum } from '$lib/types';
@@ -429,10 +429,11 @@
     let albums = favoriteAlbums;
 
     // Filter by genre (using favorites context)
-    const selectedGenreNames = getSelectedGenreNames(GENRE_CONTEXT);
-    if (selectedGenreNames.length > 0) {
+    // getFilterGenreNames returns selected genres + all children of selected parent genres
+    const filterGenreNames = getFilterGenreNames(GENRE_CONTEXT);
+    if (filterGenreNames.length > 0) {
       albums = albums.filter(a =>
-        a.genre && selectedGenreNames.some(genreName =>
+        a.genre && filterGenreNames.some(genreName =>
           a.genre!.name.toLowerCase().includes(genreName.toLowerCase())
         )
       );

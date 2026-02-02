@@ -10,6 +10,7 @@ export interface GenreInfo {
   name: string;
   color?: string;
   slug?: string;
+  parentId?: number;
 }
 
 export type GenreFilterContext = 'home' | 'favorites';
@@ -21,7 +22,9 @@ interface ContextState {
 }
 
 interface GenreFilterState {
-  availableGenres: GenreInfo[];
+  parentGenres: GenreInfo[];
+  allGenres: GenreInfo[];
+  childrenByParent: Map<number, GenreInfo[]>;
   isLoading: boolean;
   contexts: Record<GenreFilterContext, ContextState>;
 }
@@ -35,7 +38,9 @@ const STORAGE_KEYS: Record<GenreFilterContext, string> = {
 let currentContext: GenreFilterContext = 'home';
 
 const state: GenreFilterState = {
-  availableGenres: [],
+  parentGenres: [],
+  allGenres: [],
+  childrenByParent: new Map(),
   isLoading: false,
   contexts: {
     home: {
@@ -97,7 +102,7 @@ export function getContext(): GenreFilterContext {
 }
 
 export async function loadGenres(): Promise<void> {
-  if (state.availableGenres.length > 0) return; // Already loaded
+  if (state.parentGenres.length > 0) return; // Already loaded
 
   state.isLoading = true;
   // Notify all contexts
@@ -109,11 +114,16 @@ export async function loadGenres(): Promise<void> {
     const parentGenres = await invoke<GenreInfo[]>('get_genres', {});
 
     // Fetch sub-genres for each parent in parallel
+    const childrenByParent = new Map<number, GenreInfo[]>();
     const subGenrePromises = parentGenres.map(async (parent) => {
       try {
         const children = await invoke<GenreInfo[]>('get_genres', { parentId: parent.id });
-        return children;
+        // Tag children with their parent ID
+        const taggedChildren = children.map(c => ({ ...c, parentId: parent.id }));
+        childrenByParent.set(parent.id, taggedChildren);
+        return taggedChildren;
       } catch {
+        childrenByParent.set(parent.id, []);
         return [];
       }
     });
@@ -122,22 +132,25 @@ export async function loadGenres(): Promise<void> {
     const allSubGenres = subGenreResults.flat();
 
     // Combine all genres and remove duplicates by ID
-    const allGenres = [...parentGenres, ...allSubGenres];
-    const uniqueGenres = Array.from(
-      new Map(allGenres.map(g => [g.id, g])).values()
+    const allGenresRaw = [...parentGenres, ...allSubGenres];
+    const allGenres = Array.from(
+      new Map(allGenresRaw.map(g => [g.id, g])).values()
     );
 
     // Sort alphabetically by name
-    uniqueGenres.sort((a, b) => a.name.localeCompare(b.name));
+    allGenres.sort((a, b) => a.name.localeCompare(b.name));
+    parentGenres.sort((a, b) => a.name.localeCompare(b.name));
 
-    state.availableGenres = uniqueGenres;
+    state.parentGenres = parentGenres;
+    state.allGenres = allGenres;
+    state.childrenByParent = childrenByParent;
 
     // Load saved selections for all contexts
     loadFromStorage('home');
     loadFromStorage('favorites');
 
     // Validate saved selections against available genres
-    const validIds = new Set(uniqueGenres.map((g) => g.id));
+    const validIds = new Set(allGenres.map((g) => g.id));
     for (const ctx of ['home', 'favorites'] as GenreFilterContext[]) {
       const ctxState = state.contexts[ctx];
       const validSelection = new Set<number>();
@@ -150,7 +163,9 @@ export async function loadGenres(): Promise<void> {
     }
   } catch (e) {
     console.error('Failed to load genres:', e);
-    state.availableGenres = [];
+    state.parentGenres = [];
+    state.allGenres = [];
+    state.childrenByParent = new Map();
   } finally {
     state.isLoading = false;
     notify('home');
@@ -161,7 +176,8 @@ export async function loadGenres(): Promise<void> {
 export function getGenreFilterState(context?: GenreFilterContext) {
   const ctx = getContextState(context);
   return {
-    availableGenres: state.availableGenres,
+    availableGenres: state.parentGenres,
+    allGenres: state.allGenres,
     selectedGenreIds: new Set(ctx.selectedGenreIds),
     isLoading: state.isLoading,
     rememberSelection: ctx.rememberSelection,
@@ -169,7 +185,15 @@ export function getGenreFilterState(context?: GenreFilterContext) {
 }
 
 export function getAvailableGenres(): GenreInfo[] {
-  return state.availableGenres;
+  return state.parentGenres;
+}
+
+export function getAllGenres(): GenreInfo[] {
+  return state.allGenres;
+}
+
+export function getChildGenres(parentId: number): GenreInfo[] {
+  return state.childrenByParent.get(parentId) || [];
 }
 
 export function getSelectedGenreIds(context?: GenreFilterContext): Set<number> {
@@ -184,15 +208,44 @@ export function getSelectedGenreId(context?: GenreFilterContext): number | undef
 export function getSelectedGenreName(context?: GenreFilterContext): string | undefined {
   const id = getSelectedGenreId(context);
   if (!id) return undefined;
-  const genre = state.availableGenres.find(g => g.id === id);
+  const genre = state.allGenres.find((g: GenreInfo) => g.id === id);
   return genre?.name;
 }
 
 export function getSelectedGenreNames(context?: GenreFilterContext): string[] {
   const ids = Array.from(getContextState(context).selectedGenreIds);
   return ids
-    .map(id => state.availableGenres.find(g => g.id === id)?.name)
+    .map(id => state.allGenres.find((g: GenreInfo) => g.id === id)?.name)
     .filter((name): name is string => !!name);
+}
+
+/**
+ * Get all genre names to filter by, including children of selected parent genres.
+ * Use this for client-side filtering to ensure albums with sub-genres are included.
+ */
+export function getFilterGenreNames(context?: GenreFilterContext): string[] {
+  const selectedIds = Array.from(getContextState(context).selectedGenreIds);
+  const names = new Set<string>();
+
+  for (const id of selectedIds) {
+    // Add the selected genre's name
+    const genre = state.allGenres.find((g: GenreInfo) => g.id === id);
+    if (genre?.name) {
+      names.add(genre.name);
+    }
+
+    // If it's a parent genre, also add all its children's names
+    const children = state.childrenByParent.get(id);
+    if (children) {
+      for (const child of children) {
+        if (child.name) {
+          names.add(child.name);
+        }
+      }
+    }
+  }
+
+  return Array.from(names);
 }
 
 export function isGenreSelected(genreId: number, context?: GenreFilterContext): boolean {

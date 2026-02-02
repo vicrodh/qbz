@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { SlidersHorizontal, X } from 'lucide-svelte';
+  import { SlidersHorizontal, X, ChevronRight } from 'lucide-svelte';
   import {
     getAvailableGenres,
     getSelectedGenreIds,
@@ -27,24 +27,31 @@
 
   let { isOpen, onClose, anchorEl = null, context = 'home', align = 'left' }: Props = $props();
 
-  let genres = $state<GenreInfo[]>([]);
+  let parentGenres = $state<GenreInfo[]>([]);
+  let allGenres = $state<GenreInfo[]>([]);
   let selectedIds = $state<Set<number>>(new Set());
   let rememberSelection = $state(true);
+  let showAllGenres = $state(false);
   let popupEl: HTMLDivElement | null = null;
   let popupStyle = $state('');
+
+  // Derived: which genres to display based on mode
+  let displayGenres = $derived(showAllGenres ? allGenres : parentGenres);
 
   // Subscribe to store changes for this context
   $effect(() => {
     const unsubscribe = subscribeGenre(() => {
       const state = getGenreFilterState(context);
-      genres = state.availableGenres;
+      parentGenres = state.availableGenres;
+      allGenres = state.allGenres;
       selectedIds = state.selectedGenreIds;
       rememberSelection = state.rememberSelection;
     }, context);
 
     // Initial load
     const state = getGenreFilterState(context);
-    genres = state.availableGenres;
+    parentGenres = state.availableGenres;
+    allGenres = state.allGenres;
     selectedIds = state.selectedGenreIds;
     rememberSelection = state.rememberSelection;
 
@@ -145,21 +152,35 @@
       </button>
     </div>
 
-    <div class="remember-row">
-      <span>Remember my selection</span>
-      <button
-        class="toggle-switch"
-        class:active={rememberSelection}
-        onclick={handleRememberToggle}
-        type="button"
-        aria-pressed={rememberSelection}
-      >
-        <span class="toggle-thumb"></span>
-      </button>
+    <div class="options-row">
+      <div class="option-item">
+        <span>Remember selection</span>
+        <button
+          class="toggle-switch"
+          class:active={rememberSelection}
+          onclick={handleRememberToggle}
+          type="button"
+          aria-pressed={rememberSelection}
+        >
+          <span class="toggle-thumb"></span>
+        </button>
+      </div>
+      <div class="option-item">
+        <span>Show all sub-genres</span>
+        <button
+          class="toggle-switch"
+          class:active={showAllGenres}
+          onclick={() => showAllGenres = !showAllGenres}
+          type="button"
+          aria-pressed={showAllGenres}
+        >
+          <span class="toggle-thumb"></span>
+        </button>
+      </div>
     </div>
 
     <div class="genres-grid">
-      {#each genres as genre (genre.id)}
+      {#each displayGenres as genre (genre.id)}
         <button
           class="genre-card"
           class:selected={selectedIds.has(genre.id)}
@@ -236,14 +257,21 @@
     color: var(--text-primary);
   }
 
-  .remember-row {
+  .options-row {
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 10px 16px;
+    gap: 24px;
     font-size: 12px;
     color: var(--text-secondary);
     border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .option-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .toggle-switch {

@@ -19,7 +19,7 @@
   import {
     getSelectedGenreId,
     getSelectedGenreIds,
-    getSelectedGenreNames,
+    getFilterGenreNames,
     hasActiveFilter as hasGenreFilter
   } from '$lib/stores/genreFilterStore';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
@@ -475,11 +475,12 @@
   }
 
   function filterAlbumsByGenre(albums: AlbumCardData[]): AlbumCardData[] {
-    const selectedGenreNames = getSelectedGenreNames();
-    if (selectedGenreNames.length === 0) return albums;
-    // Filter albums whose genre matches any of the selected genres (case-insensitive)
+    // getFilterGenreNames returns selected genres + all children of selected parent genres
+    const filterGenreNames = getFilterGenreNames();
+    if (filterGenreNames.length === 0) return albums;
+    // Filter albums whose genre matches any of the filter genres (case-insensitive)
     return albums.filter(album =>
-      selectedGenreNames.some(genreName =>
+      filterGenreNames.some(genreName =>
         album.genre.toLowerCase().includes(genreName.toLowerCase())
       )
     );
