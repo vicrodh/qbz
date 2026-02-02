@@ -173,7 +173,7 @@ export async function loadGenres(): Promise<void> {
     return;
   }
 
-  // Fetch from API
+  // Fetch ALL 3 levels from API (first load or refresh)
   state.isLoading = true;
   notifyAll();
 
@@ -181,14 +181,58 @@ export async function loadGenres(): Promise<void> {
     const parentGenres = await invoke<GenreInfo[]>('get_genres', {});
     parentGenres.sort((a, b) => a.name.localeCompare(b.name));
 
-    const genreTree: GenreTreeNode[] = parentGenres.map(genre => ({
-      genre: { ...genre, childrenLoaded: false },
-      children: [],
-    }));
+    // Load all children and grandchildren in parallel
+    const childrenByParent = new Map<number, GenreInfo[]>();
+    const allGenresList: GenreInfo[] = [...parentGenres];
+
+    // Fetch level 2 (children) for all parents in parallel
+    const level2Results = await Promise.all(
+      parentGenres.map(async (parent) => {
+        const children = await invoke<GenreInfo[]>('get_genres', { parentId: parent.id });
+        return { parentId: parent.id, children: children.map(c => ({ ...c, parentId: parent.id })) };
+      })
+    );
+
+    for (const { parentId, children } of level2Results) {
+      childrenByParent.set(parentId, children);
+      allGenresList.push(...children);
+    }
+
+    // Fetch level 3 (grandchildren) for all children in parallel
+    const allChildren = level2Results.flatMap(r => r.children);
+    const level3Results = await Promise.all(
+      allChildren.map(async (child) => {
+        const grandchildren = await invoke<GenreInfo[]>('get_genres', { parentId: child.id });
+        return { parentId: child.id, grandchildren: grandchildren.map(gc => ({ ...gc, parentId: child.id })) };
+      })
+    );
+
+    for (const { parentId, grandchildren } of level3Results) {
+      if (grandchildren.length > 0) {
+        childrenByParent.set(parentId, grandchildren);
+        allGenresList.push(...grandchildren);
+      }
+    }
+
+    // Build tree
+    const genreTree: GenreTreeNode[] = parentGenres.map(parent => {
+      const children = childrenByParent.get(parent.id) || [];
+      return {
+        genre: { ...parent, childrenLoaded: true },
+        children: children.map(child => {
+          const grandchildren = childrenByParent.get(child.id) || [];
+          return {
+            genre: { ...child, childrenLoaded: true },
+            children: grandchildren.map(gc => ({ genre: gc, children: [] })),
+          };
+        }),
+      };
+    });
 
     state.parentGenres = parentGenres;
-    state.allGenres = [...parentGenres];
+    state.allGenres = allGenresList;
     state.genreTree = genreTree;
+    state.childrenByParent = childrenByParent;
 
     saveGenreCache();
     loadFromStorage('home');
