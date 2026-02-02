@@ -18,6 +18,7 @@
   } from '$lib/stores/homeSettingsStore';
   import {
     getSelectedGenreId,
+    getSelectedGenreName,
     hasActiveFilter as hasGenreFilter
   } from '$lib/stores/genreFilterStore';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
@@ -445,6 +446,15 @@
     loadHome();
   }
 
+  function filterAlbumsByGenre(albums: AlbumCardData[]): AlbumCardData[] {
+    const selectedGenreName = getSelectedGenreName();
+    if (!selectedGenreName) return albums;
+    // Filter albums whose genre contains the selected genre name (case-insensitive)
+    return albums.filter(album =>
+      album.genre.toLowerCase().includes(selectedGenreName.toLowerCase())
+    );
+  }
+
   async function loadHome() {
     isInitializing = true;
     isOverlayVisible = true;
@@ -558,9 +568,12 @@
       // Recently Played (albums) - start immediately with seeds
       if (isSectionVisible('recentAlbums')) {
         const recentAlbumIds = normalizeAlbumIds(seeds.recentlyPlayedAlbumIds);
-        fetchAlbums(recentAlbumIds.slice(0, homeLimits.recentAlbums)).then(async albums => {
-          recentAlbums = albums;
-          await loadAllAlbumDownloadStatuses(albums);
+        // Fetch more if filtering, to have enough after filter
+        const fetchLimit = hasGenreFilter() ? homeLimits.recentAlbums * 3 : homeLimits.recentAlbums;
+        fetchAlbums(recentAlbumIds.slice(0, fetchLimit)).then(async albums => {
+          const filtered = filterAlbumsByGenre(albums).slice(0, homeLimits.recentAlbums);
+          recentAlbums = filtered;
+          await loadAllAlbumDownloadStatuses(filtered);
           loadingRecentAlbums = false;
           markSectionFinished();
         });
@@ -587,9 +600,12 @@
             ...seeds.favoriteAlbumIds,
             ...favoriteTrackDetails.map(track => track.albumId)
           ]);
-          const albums = await fetchAlbums(favoriteAlbumIds.slice(0, homeLimits.favoriteAlbums));
-          favoriteAlbums = albums;
-          await loadAllAlbumDownloadStatuses(albums);
+          // Fetch more if filtering, to have enough after filter
+          const fetchLimit = hasGenreFilter() ? homeLimits.favoriteAlbums * 3 : homeLimits.favoriteAlbums;
+          const albums = await fetchAlbums(favoriteAlbumIds.slice(0, fetchLimit));
+          const filtered = filterAlbumsByGenre(albums).slice(0, homeLimits.favoriteAlbums);
+          favoriteAlbums = filtered;
+          await loadAllAlbumDownloadStatuses(filtered);
           loadingFavoriteAlbums = false;
           markSectionFinished();
         });

@@ -109,6 +109,13 @@ export function getSelectedGenreId(): number | undefined {
   return ids.length === 1 ? ids[0] : undefined;
 }
 
+export function getSelectedGenreName(): string | undefined {
+  const id = getSelectedGenreId();
+  if (!id) return undefined;
+  const genre = state.availableGenres.find(g => g.id === id);
+  return genre?.name;
+}
+
 export function isGenreSelected(genreId: number): boolean {
   return state.selectedGenreIds.has(genreId);
 }
