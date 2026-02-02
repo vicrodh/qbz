@@ -1317,6 +1317,17 @@
     </div>
   </div>
 
+  <!-- Blacklist Warning Banner -->
+  {#if artistIsBlacklisted}
+    <div class="blacklist-banner">
+      <Ban size={18} />
+      <span>This artist is blacklisted. Their music is hidden from search, radio, and suggestions.</span>
+      <button class="unblock-btn" onclick={toggleBlacklist} disabled={isBlacklistLoading}>
+        Unblock
+      </button>
+    </div>
+  {/if}
+
   {#if showJumpNav}
     <div class="jump-nav">
       <div class="jump-nav-left">
@@ -2610,6 +2621,44 @@
   }
 
   .blacklist-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .blacklist-banner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 20px;
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid rgba(239, 68, 68, 0.3);
+    border-radius: 8px;
+    margin: 0 24px 16px 24px;
+    color: #ef4444;
+    font-size: 13px;
+  }
+
+  .blacklist-banner span {
+    flex: 1;
+  }
+
+  .unblock-btn {
+    padding: 6px 14px;
+    background: rgba(239, 68, 68, 0.2);
+    border: 1px solid rgba(239, 68, 68, 0.4);
+    border-radius: 6px;
+    color: #ef4444;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .unblock-btn:hover:not(:disabled) {
+    background: rgba(239, 68, 68, 0.3);
+  }
+
+  .unblock-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
   }

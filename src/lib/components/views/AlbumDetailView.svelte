@@ -13,6 +13,7 @@
     loadAlbumFavorites,
     toggleAlbumFavorite
   } from '$lib/stores/albumFavoritesStore';
+  import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
 
   interface Track {
     id: number;
@@ -413,6 +414,7 @@
 
     <!-- Track Rows -->
     <div class="tracks">
+      {@const albumArtistBlacklisted = album.artistId ? isArtistBlacklisted(album.artistId) : false}
       {#each album.tracks as track, trackIndex (`${track.id}-${downloadStateVersion}`)}
         {@const downloadInfo = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
         {@const isTrackDownloaded = downloadInfo.status === 'ready'}
@@ -424,14 +426,21 @@
           duration={track.duration}
           quality={track.quality}
           isPlaying={activeTrackId === track.id}
+          isBlacklisted={albumArtistBlacklisted}
           downloadStatus={downloadInfo.status}
           downloadProgress={downloadInfo.progress}
-          onPlay={() => {
+          hideFavorite={albumArtistBlacklisted}
+          hideDownload={albumArtistBlacklisted}
+          onPlay={albumArtistBlacklisted ? undefined : () => {
             onTrackPlay?.(track);
           }}
-          onDownload={onTrackDownload ? () => onTrackDownload(track) : undefined}
-          onRemoveDownload={onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
-          menuActions={{
+          onDownload={!albumArtistBlacklisted && onTrackDownload ? () => onTrackDownload(track) : undefined}
+          onRemoveDownload={!albumArtistBlacklisted && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
+          menuActions={albumArtistBlacklisted ? {
+            // Blacklisted: only navigation and info
+            onGoToArtist: album.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(album.artistId!) : undefined,
+            onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined
+          } : {
             onPlayNow: () => {
               onTrackPlay?.(track);
             },

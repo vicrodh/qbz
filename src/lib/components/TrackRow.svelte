@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Play, Pause, Heart, HardDrive, AlertCircle } from 'lucide-svelte';
+  import { Play, Pause, Heart, HardDrive, AlertCircle, Ban } from 'lucide-svelte';
   import TrackMenu from './TrackMenu.svelte';
   import DownloadButton from './DownloadButton.svelte';
   import {
@@ -26,6 +26,7 @@
     isLocal?: boolean; // Whether this is a local library track
     isUnavailable?: boolean; // Track removed from Qobuz or otherwise unavailable
     unavailableTooltip?: string; // Tooltip for unavailable indicator
+    isBlacklisted?: boolean; // Artist is blacklisted
     isFavoriteOverride?: boolean; // Optional override for favorite state
     downloadStatus?: OfflineCacheStatus;
     downloadProgress?: number;
@@ -73,6 +74,7 @@
     isUnavailable = false,
     unavailableTooltip,
     isFavoriteOverride,
+    isBlacklisted = false,
     downloadStatus = 'none',
     downloadProgress = 0,
     hideDownload = false,
@@ -136,19 +138,24 @@
 <div
   class="track-row"
   class:playing={isPlaying}
-  class:hovered={isHovered && !isPlaying}
+  class:hovered={isHovered && !isPlaying && !isBlacklisted}
   class:compact
+  class:blacklisted={isBlacklisted}
   data-track-id={trackId ?? undefined}
   onmouseenter={() => (isHovered = true)}
   onmouseleave={() => (isHovered = false)}
-  onclick={onPlay}
+  onclick={isBlacklisted ? undefined : onPlay}
   role="button"
-  tabindex="0"
-  onkeydown={(e) => e.key === 'Enter' && onPlay?.()}
+  tabindex={isBlacklisted ? -1 : 0}
+  onkeydown={(e) => e.key === 'Enter' && !isBlacklisted && onPlay?.()}
 >
   <!-- Track Number / Play Button / Unavailable Indicator -->
-  <div class="track-number" class:unavailable={isUnavailable}>
-    {#if isUnavailable}
+  <div class="track-number" class:unavailable={isUnavailable} class:blacklisted={isBlacklisted}>
+    {#if isBlacklisted}
+      <span class="blacklisted-icon" title="Artist is blacklisted">
+        <Ban size={14} />
+      </span>
+    {:else if isUnavailable}
       <span class="unavailable-icon" title={unavailableTooltip}>
         <AlertCircle size={16} />
       </span>
@@ -332,6 +339,27 @@
     justify-content: center;
     color: var(--error-color, #ef4444);
     cursor: help;
+  }
+
+  /* Blacklisted track styles */
+  .track-row.blacklisted {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .track-row.blacklisted:hover {
+    background: transparent;
+  }
+
+  .track-number.blacklisted {
+    color: var(--text-muted);
+  }
+
+  .blacklisted-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
   }
 
   .track-number :global(.play-icon) {

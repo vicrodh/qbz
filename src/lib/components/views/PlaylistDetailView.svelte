@@ -19,6 +19,7 @@
   } from '$lib/stores/offlineStore';
   import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { isTrackUnavailable, clearTrackUnavailable, subscribe as subscribeUnavailable } from '$lib/stores/unavailableTracksStore';
+  import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { showToast } from '$lib/stores/toastStore';
   import { t } from '$lib/i18n';
   import { onMount, tick } from 'svelte';
@@ -1809,6 +1810,7 @@
               </button>
             </div>
           {/if}
+          {@const trackBlacklisted = !track.isLocal && track.artistId ? isArtistBlacklisted(track.artistId) : false}
           <TrackRow
             trackId={track.isLocal ? undefined : track.id}
             number={idx + 1}
@@ -1825,18 +1827,24 @@
             isLocal={track.isLocal}
             isUnavailable={removedFromQobuz && isOwnPlaylist}
             unavailableTooltip={removedFromQobuz ? $t('player.trackUnavailable') : undefined}
-            hideFavorite={track.isLocal || removedFromQobuz}
-            hideDownload={track.isLocal || removedFromQobuz}
+            isBlacklisted={trackBlacklisted}
+            hideFavorite={track.isLocal || removedFromQobuz || trackBlacklisted}
+            hideDownload={track.isLocal || removedFromQobuz || trackBlacklisted}
             downloadStatus={downloadInfo.status}
             downloadProgress={downloadInfo.progress}
-            onPlay={available ? () => handleTrackClick(track, idx) : undefined}
-            onDownload={available && !track.isLocal && onTrackDownload ? () => onTrackDownload(track) : undefined}
-            onRemoveDownload={available && !track.isLocal && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
+            onPlay={available && !trackBlacklisted ? () => handleTrackClick(track, idx) : undefined}
+            onDownload={available && !track.isLocal && !trackBlacklisted && onTrackDownload ? () => onTrackDownload(track) : undefined}
+            onRemoveDownload={available && !track.isLocal && !trackBlacklisted && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
             menuActions={removedFromQobuz ? (isOwnPlaylist ? {
               // Only allow remove from playlist and find replacement for tracks removed from Qobuz (owned playlists only)
               onRemoveFromPlaylist: () => removeTrackFromPlaylist(track),
               onFindReplacement: () => openReplacementModal(track)
-            } : {}) : available ? {
+            } : {}) : trackBlacklisted ? {
+              // Blacklisted: only allow navigation and info, no playback
+              onGoToAlbum: !track.isLocal && track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId!) : undefined,
+              onGoToArtist: !track.isLocal && track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
+              onShowInfo: !track.isLocal && onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined
+            } : available ? {
               onPlayNow: () => handleTrackClick(track, idx),
               onPlayNext: track.isLocal ? () => handleTrackPlayNext(track) : (onTrackPlayNext ? () => onTrackPlayNext(track) : undefined),
               onPlayLater: track.isLocal ? () => handleTrackPlayLater(track) : (onTrackPlayLater ? () => onTrackPlayLater(track) : undefined),

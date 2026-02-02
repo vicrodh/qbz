@@ -9,6 +9,7 @@
   import HomeSettingsModal from '../HomeSettingsModal.svelte';
   import GenreFilterButton from '../GenreFilterButton.svelte';
   import { formatDuration, formatQuality, getQobuzImage } from '$lib/adapters/qobuzAdapters';
+  import { isArtistBlacklisted } from '$lib/stores/blacklistStore';
   import {
     subscribe as subscribeHomeSettings,
     getSettings,
@@ -907,6 +908,7 @@
               {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
               {@const cacheStatus = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none', progress: 0 }}
               {@const isTrackDownloaded = cacheStatus.status === 'ready'}
+              {@const trackBlacklisted = track.artistId ? isArtistBlacklisted(track.artistId) : false}
               <TrackRow
                 trackId={track.id}
                 number={index + 1}
@@ -916,13 +918,21 @@
                 duration={track.duration}
                 quality={getTrackQuality(track)}
                 isPlaying={isActiveTrack}
+                isBlacklisted={trackBlacklisted}
                 compact={true}
+                hideDownload={trackBlacklisted}
+                hideFavorite={trackBlacklisted}
                 downloadStatus={cacheStatus.status}
                 downloadProgress={cacheStatus.progress}
                 onArtistClick={track.artistId && onArtistClick ? () => onArtistClick(track.artistId!) : undefined}
                 onAlbumClick={track.albumId && onAlbumClick ? () => onAlbumClick(track.albumId!) : undefined}
-                onPlay={() => handleContinueTrackPlay(track, index)}
-                menuActions={{
+                onPlay={trackBlacklisted ? undefined : () => handleContinueTrackPlay(track, index)}
+                menuActions={trackBlacklisted ? {
+                  // Only navigation actions for blacklisted tracks
+                  onGoToAlbum: track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId!) : undefined,
+                  onGoToArtist: track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
+                  onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined
+                } : {
                   onPlayNow: () => handleContinueTrackPlay(track, index),
                   onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(track) : undefined,
                   onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(track) : undefined,

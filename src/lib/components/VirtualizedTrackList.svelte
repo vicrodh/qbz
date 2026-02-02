@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import TrackRow from './TrackRow.svelte';
   import type { OfflineCacheStatus } from '$lib/stores/offlineCacheState';
+  import { isArtistBlacklisted } from '$lib/stores/blacklistStore';
 
   // Use generic types to match whatever caller passes
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -315,6 +316,7 @@
           {@const albumId = getAlbumId?.(item.track)}
           {@const downloadInfo = getOfflineCacheStatus?.(trackId) ?? { status: 'none' as const, progress: 0 }}
           {@const isTrackDownloaded = downloadInfo.status === 'ready'}
+          {@const trackBlacklisted = !isLocal && artistId ? isArtistBlacklisted(artistId) : false}
           <TrackRow
             trackId={trackId}
             number={getTrackNumber(item.track, item.index)}
@@ -324,18 +326,24 @@
             duration={formatDuration(getTrackDuration(item.track))}
             quality={getQualityBadge(item.track)}
             isPlaying={isPlaybackActive && activeTrackId === trackId}
+            isBlacklisted={trackBlacklisted}
             {isLocal}
-            {hideDownload}
-            {hideFavorite}
+            hideDownload={hideDownload || trackBlacklisted}
+            hideFavorite={hideFavorite || trackBlacklisted}
             isFavoriteOverride={isFavoriteOverride}
             downloadStatus={downloadInfo.status}
             downloadProgress={downloadInfo.progress}
             onArtistClick={trackArtist && onArtistClick ? () => onArtistClick(trackArtist) : undefined}
             onAlbumClick={albumKey && onAlbumClick ? () => onAlbumClick(item.track) : undefined}
-            onPlay={() => onTrackPlay(item.track)}
-            onDownload={onDownload ? () => onDownload(item.track) : undefined}
+            onPlay={trackBlacklisted ? undefined : () => onTrackPlay(item.track)}
+            onDownload={onDownload && !trackBlacklisted ? () => onDownload(item.track) : undefined}
             onRemoveDownload={onRemoveDownload ? () => onRemoveDownload(trackId) : undefined}
-            menuActions={{
+            menuActions={trackBlacklisted ? {
+              // Only navigation actions for blacklisted tracks
+              onGoToAlbum: albumId && onGoToAlbum ? () => onGoToAlbum(albumId) : undefined,
+              onGoToArtist: artistId && onGoToArtist ? () => onGoToArtist(artistId) : undefined,
+              onShowInfo: !isLocal && onShowInfo ? () => onShowInfo(trackId) : undefined,
+            } : {
               onPlayNow: () => onTrackPlay(item.track),
               onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(item.track) : undefined,
               onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(item.track) : undefined,
