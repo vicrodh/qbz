@@ -1953,6 +1953,13 @@
     </div>
     <div class="setting-row">
       <div class="setting-info">
+        <span class="setting-label">Limit Quality to Device</span>
+        <span class="setting-desc">When enabled, overrides the quality setting above if your audio device doesn't support the selected sample rate. Prevents resampling to guarantee bit-perfect playback.</span>
+      </div>
+      <Toggle enabled={limitQualityToDevice} onchange={handleLimitQualityToDeviceChange} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
         <span class="setting-label">Audio Backend</span>
         <span class="setting-desc">Choose audio system: Auto (recommended), PipeWire (modern), ALSA Direct (bit-perfect, exclusive), or PulseAudio (legacy).</span>
       </div>
@@ -2089,13 +2096,6 @@
         <span class="setting-desc">Disables temporary cache. Not recommended without a fast connection. Offline library tracks always play first.</span>
       </div>
       <Toggle enabled={streamingOnly} onchange={handleStreamingOnlyChange} />
-    </div>
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">Limit Quality to Device</span>
-        <span class="setting-desc">Prevents requesting tracks that exceed your device's max sample rate. Ensures bit-perfect playback by avoiding software resampling.</span>
-      </div>
-      <Toggle enabled={limitQualityToDevice} onchange={handleLimitQualityToDeviceChange} />
     </div>
     <div class="setting-row last">
       <span class="setting-label">{$t('settings.audio.currentSampleRate')}</span>
