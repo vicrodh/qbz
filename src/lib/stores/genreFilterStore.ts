@@ -105,15 +105,39 @@ export async function loadGenres(): Promise<void> {
   notify('favorites');
 
   try {
-    const genres = await invoke<GenreInfo[]>('get_genres', {});
-    state.availableGenres = genres;
+    // Fetch top-level genres first
+    const parentGenres = await invoke<GenreInfo[]>('get_genres', {});
+
+    // Fetch sub-genres for each parent in parallel
+    const subGenrePromises = parentGenres.map(async (parent) => {
+      try {
+        const children = await invoke<GenreInfo[]>('get_genres', { parentId: parent.id });
+        return children;
+      } catch {
+        return [];
+      }
+    });
+
+    const subGenreResults = await Promise.all(subGenrePromises);
+    const allSubGenres = subGenreResults.flat();
+
+    // Combine all genres and remove duplicates by ID
+    const allGenres = [...parentGenres, ...allSubGenres];
+    const uniqueGenres = Array.from(
+      new Map(allGenres.map(g => [g.id, g])).values()
+    );
+
+    // Sort alphabetically by name
+    uniqueGenres.sort((a, b) => a.name.localeCompare(b.name));
+
+    state.availableGenres = uniqueGenres;
 
     // Load saved selections for all contexts
     loadFromStorage('home');
     loadFromStorage('favorites');
 
     // Validate saved selections against available genres
-    const validIds = new Set(genres.map((g) => g.id));
+    const validIds = new Set(uniqueGenres.map((g) => g.id));
     for (const ctx of ['home', 'favorites'] as GenreFilterContext[]) {
       const ctxState = state.contexts[ctx];
       const validSelection = new Set<number>();
