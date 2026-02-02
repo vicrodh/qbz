@@ -45,12 +45,15 @@ impl AlsaDirectStream {
             hwp.set_access(Access::RWInterleaved)
                 .map_err(|e| format!("Failed to set access: {}", e))?;
 
-            // Try formats in order of preference: FloatLE > S32LE > S24LE > S16LE
+            // Try formats in order of preference for bit-perfect playback
+            // S24_3LE first: required by SMSL-class USB DACs (TAS1020B chip)
+            // Then descending bit-depth for quality
             let format_priority = [
-                (Format::FloatLE, "Float32LE"),
-                (Format::S32LE, "S32LE"),
-                (Format::S24LE, "S24LE"),
-                (Format::S16LE, "S16LE"),
+                (Format::S243LE, "S24_3LE"),  // 24-bit packed (SMSL, Topping, Fosi DACs)
+                (Format::S32LE, "S32LE"),      // 32-bit
+                (Format::S24LE, "S24LE"),      // 24-bit in 32-bit container
+                (Format::S16LE, "S16LE"),      // 16-bit
+                (Format::FloatLE, "Float32LE"), // Float (compatibility)
             ];
 
             let mut selected_format = None;
@@ -63,7 +66,7 @@ impl AlsaDirectStream {
             }
 
             let format = selected_format
-                .ok_or_else(|| "No supported audio format found (tried FloatLE, S32LE, S24LE, S16LE)".to_string())?;
+                .ok_or_else(|| "No supported audio format found (tried S24_3LE, S32LE, S24LE, S16LE, FloatLE)".to_string())?;
 
             // Set channels
             hwp.set_channels(channels as u32)
@@ -183,6 +186,69 @@ impl AlsaDirectStream {
                     .map_err(|e| format!("Failed to get PCM I/O: {}", e))?;
 
                 match io.writei(samples_i16) {
+                    Ok(written) => {
+                        if written != frames {
+                            log::warn!("[ALSA Direct] Partial write: {} / {} frames", written, frames);
+                        }
+                        Ok(())
+                    }
+                    Err(e) => {
+                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                            Err(format!("Failed to recover from error: {}", recover_err))
+                        } else {
+                            log::warn!("[ALSA Direct] Recovered from PCM error");
+                            Ok(())
+                        }
+                    }
+                }
+            }
+            Format::S243LE => {
+                // S24_3LE: 24-bit packed in 3 bytes, little-endian
+                // Required by SMSL-class USB DACs (TAS1020B chip)
+                // Convert i16 → i24: shift left 8 bits, then pack into 3 bytes
+                let mut bytes: Vec<u8> = Vec::with_capacity(samples_i16.len() * 3);
+
+                for &sample in samples_i16 {
+                    // Convert i16 to i24 (lossless: zeros in lower 8 bits)
+                    let s24 = (sample as i32) << 8;
+                    // Pack as 3 bytes in little-endian order
+                    bytes.push((s24 & 0xFF) as u8);         // LSB
+                    bytes.push(((s24 >> 8) & 0xFF) as u8);  // Middle
+                    bytes.push(((s24 >> 16) & 0xFF) as u8); // MSB (sign-extended)
+                }
+
+                // Use raw byte I/O for 3-byte packed format
+                let io = unsafe { pcm.io_bytes() };
+
+                match io.writei(&bytes) {
+                    Ok(written) => {
+                        if written != frames {
+                            log::warn!("[ALSA Direct] Partial write: {} / {} frames (S24_3LE)", written, frames);
+                        }
+                        Ok(())
+                    }
+                    Err(e) => {
+                        if let Err(recover_err) = pcm.recover(e.errno() as i32, false) {
+                            Err(format!("Failed to recover from error: {}", recover_err))
+                        } else {
+                            log::warn!("[ALSA Direct] Recovered from PCM error (S24_3LE)");
+                            Ok(())
+                        }
+                    }
+                }
+            }
+            Format::S24LE => {
+                // S24LE: 24-bit in 32-bit container (padded)
+                // Convert i16 → i32, shift left 16 bits (same as S32LE for i16 source)
+                let samples_i32: Vec<i32> = samples_i16
+                    .iter()
+                    .map(|&s| (s as i32) << 16)
+                    .collect();
+
+                let io = pcm.io_i32()
+                    .map_err(|e| format!("Failed to get PCM I/O: {}", e))?;
+
+                match io.writei(&samples_i32) {
                     Ok(written) => {
                         if written != frames {
                             log::warn!("[ALSA Direct] Partial write: {} / {} frames", written, frames);
