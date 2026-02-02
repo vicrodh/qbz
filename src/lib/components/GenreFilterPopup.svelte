@@ -295,15 +295,19 @@
 
             <div class="tree-node">
               <div class="node-row level-0" class:selected={parentState === 'all'} class:partial={parentState === 'partial'}>
-                <button class="expand-btn" onclick={(e) => { e.stopPropagation(); toggleExpanded(parentNode.genre.id); }} type="button" title={isExpanded ? 'Collapse' : 'Expand'}>
-                  {#if isLoading}
-                    <Loader2 size={14} class="animate-spin" />
-                  {:else if isExpanded}
-                    <ChevronDown size={14} />
-                  {:else}
-                    <ChevronRight size={14} />
-                  {/if}
-                </button>
+                {#if hasLoadedChildren || !areChildrenLoaded(parentNode.genre.id)}
+                  <button class="expand-btn" onclick={(e) => { e.stopPropagation(); toggleExpanded(parentNode.genre.id); }} type="button" title={isExpanded ? 'Collapse' : 'Expand'}>
+                    {#if isLoading}
+                      <Loader2 size={14} class="animate-spin" />
+                    {:else if isExpanded}
+                      <ChevronDown size={14} />
+                    {:else}
+                      <ChevronRight size={14} />
+                    {/if}
+                  </button>
+                {:else}
+                  <span class="expand-placeholder"></span>
+                {/if}
 
                 <button class="node-content" onclick={() => handleNodeToggle(parentNode.genre.id)} type="button">
                   <span class="check-box" class:checked={parentState === 'all'} class:partial={parentState === 'partial'}>
@@ -331,7 +335,7 @@
 
                     <div class="tree-node">
                       <div class="node-row level-1" class:selected={childState === 'all'} class:partial={childState === 'partial'}>
-                        {#if hasGrandchildren || !areChildrenLoaded(childNode.genre.id)}
+                        {#if hasGrandchildren}
                           <button class="expand-btn" onclick={(e) => { e.stopPropagation(); toggleExpanded(childNode.genre.id); }} type="button" title={childExpanded ? 'Collapse' : 'Expand'}>
                             {#if childLoading}
                               <Loader2 size={12} class="animate-spin" />
