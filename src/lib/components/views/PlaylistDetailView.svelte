@@ -1125,7 +1125,14 @@
   }
 
   function buildQueueTracks(tracks: DisplayTrack[]) {
-    const queueTracks = tracks.map(t => ({
+    // Filter out blacklisted artists before building queue
+    const filteredTracks = tracks.filter(t => {
+      if (t.isLocal) return true; // Local tracks are never blacklisted
+      if (!t.artistId) return true; // No artist ID, can't check blacklist
+      return !isArtistBlacklisted(t.artistId);
+    });
+
+    const queueTracks = filteredTracks.map(t => ({
       id: t.isLocal ? Math.abs(t.id) : t.id,
       title: t.title,
       artist: t.artist || 'Unknown Artist',
@@ -1140,7 +1147,7 @@
       artist_id: t.isLocal ? null : (t.artistId ?? null),
     }));
 
-    const localIds = tracks
+    const localIds = filteredTracks
       .filter(t => t.isLocal)
       .map(t => Math.abs(t.id));
 
@@ -1399,9 +1406,18 @@
     const allTracks = displayTracks;
     if (allTracks.length === 0) return;
 
+    // Filter out blacklisted tracks
+    const playableTracks = allTracks.filter(t => {
+      if (t.isLocal) return true;
+      if (!t.artistId) return true;
+      return !isArtistBlacklisted(t.artistId);
+    });
+
+    if (playableTracks.length === 0) return;
+
     // Set playback context for playlist
     if (playlist) {
-      const trackIds = allTracks
+      const trackIds = playableTracks
         .filter(t => !t.isLocal) // Only Qobuz tracks in context
         .map(t => t.id);
 
@@ -1421,8 +1437,8 @@
     try {
       await setPlaylistQueue(0);
 
-      // Play first track (handle local vs Qobuz)
-      const firstTrack = allTracks[0];
+      // Play first playable track (handle local vs Qobuz)
+      const firstTrack = playableTracks[0];
       if (firstTrack.isLocal && onLocalTrackPlay) {
         const localTrack = localTracks.find(t => t.id === Math.abs(firstTrack.id));
         if (localTrack) onLocalTrackPlay(localTrack);
@@ -1467,14 +1483,23 @@
     const allTracks = displayTracks;
     if (allTracks.length === 0) return;
 
+    // Filter out blacklisted tracks
+    const playableTracks = allTracks.filter(t => {
+      if (t.isLocal) return true;
+      if (!t.artistId) return true;
+      return !isArtistBlacklisted(t.artistId);
+    });
+
+    if (playableTracks.length === 0) return;
+
     // Collect local track IDs to add to set
-    const localIds = allTracks
+    const localIds = playableTracks
       .filter(t => t.isLocal)
       .map(t => Math.abs(t.id));
 
     // Add in reverse order so first track ends up right after current
-    for (let i = allTracks.length - 1; i >= 0; i--) {
-      const t = allTracks[i];
+    for (let i = playableTracks.length - 1; i >= 0; i--) {
+      const t = playableTracks[i];
       try {
         await invoke('add_to_queue_next', {
           track: {
@@ -1507,7 +1532,16 @@
     const allTracks = displayTracks;
     if (allTracks.length === 0) return;
 
-    const queueTracks = allTracks.map(t => ({
+    // Filter out blacklisted tracks
+    const playableTracks = allTracks.filter(t => {
+      if (t.isLocal) return true;
+      if (!t.artistId) return true;
+      return !isArtistBlacklisted(t.artistId);
+    });
+
+    if (playableTracks.length === 0) return;
+
+    const queueTracks = playableTracks.map(t => ({
       id: t.isLocal ? Math.abs(t.id) : t.id,
       title: t.title,
       artist: t.artist || 'Unknown Artist',
@@ -1523,7 +1557,7 @@
     }));
 
     // Collect local track IDs
-    const localIds = allTracks
+    const localIds = playableTracks
       .filter(t => t.isLocal)
       .map(t => Math.abs(t.id));
 
