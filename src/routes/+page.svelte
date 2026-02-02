@@ -224,6 +224,9 @@
     shareSonglinkTrack
   } from '$lib/services/trackActions';
 
+  // Internationalization
+  import { t } from '$lib/i18n';
+
   // App bootstrap
   import { bootstrapApp } from '$lib/app/bootstrap';
 
@@ -556,7 +559,7 @@
 
   async function handleAlbumClick(albumId: string) {
     try {
-      showToast('Loading album...', 'info');
+      showToast($t('toast.loadingAlbum'), 'info');
       const album = await invoke<QobuzAlbum>('get_album', { albumId });
       console.log('Album details:', album);
 
@@ -572,7 +575,7 @@
       }
     } catch (err) {
       console.error('Failed to load album:', err);
-      showToast('Failed to load album', 'error');
+      showToast($t('toast.failedLoadAlbum'), 'error');
     }
   }
 
@@ -634,7 +637,7 @@
 
   async function handleArtistClick(artistId: number) {
     try {
-      showToast('Loading artist...', 'info');
+      showToast($t('toast.loadingArtist'), 'info');
       const artist = await invoke<QobuzArtist>('get_artist_detail', { artistId });
       console.log('Artist details:', artist);
 
@@ -643,7 +646,7 @@
       hideToast();
     } catch (err) {
       console.error('Failed to load artist:', err);
-      showToast('Failed to load artist', 'error');
+      showToast($t('toast.failedLoadArtist'), 'error');
     }
   }
 
@@ -660,7 +663,7 @@
    * - Weak (1), None (0): Show Informational Modal
    */
   async function handleMusicianClick(name: string, role: string) {
-    showToast(`Looking up ${name}...`, 'info');
+    showToast($t('toast.lookingUp', { name }), 'info');
     try {
       const musician = await invoke<ResolvedMusician>('resolve_musician', { name, role });
       console.log('Resolved musician:', musician);
@@ -691,7 +694,7 @@
       }
     } catch (err) {
       console.error('Failed to resolve musician:', err);
-      showToast('Could not look up musician info', 'error');
+      showToast($t('toast.failedLookupMusician'), 'error');
       // Fallback: open modal with basic info
       musicianModalData = {
         name,
@@ -796,7 +799,7 @@
       }
     } catch (err) {
       console.error('[ContextNav] Navigation failed:', err);
-      showToast('Failed to navigate to source', 'error');
+      showToast($t('toast.failedNavigateSource'), 'error');
     }
   }
 
@@ -831,7 +834,7 @@
       );
     } catch (err) {
       console.error('Failed to load more artist albums:', err);
-      showToast('Failed to load more albums', 'error');
+      showToast($t('toast.failedLoadMoreAlbums'), 'error');
     } finally {
       isArtistAlbumsLoading = false;
     }
@@ -856,7 +859,7 @@
       return convertQobuzAlbum(album);
     } catch (err) {
       console.error('Failed to load album:', err);
-      showToast('Failed to load album', 'error');
+      showToast($t('toast.failedLoadAlbum'), 'error');
       return null;
     }
   }
@@ -926,7 +929,7 @@
         artist_id: t.artistId ?? album.artistId
       });
     }
-    showToast(`Playing ${album.tracks.length} tracks next`, 'success');
+    showToast($t('toast.playingTracksNext', { count: album.tracks.length }), 'success');
   }
 
   async function queueAlbumLaterById(albumId: string) {
@@ -951,24 +954,24 @@
 
     const success = await addTracksToQueue(queueTracks);
     if (success) {
-      showToast(`Added ${queueTracks.length} tracks to queue`, 'success');
+      showToast($t('toast.addedTracksToQueue', { count: queueTracks.length }), 'success');
     } else {
-      showToast('Failed to add to queue', 'error');
+      showToast($t('toast.failedAddToQueue'), 'error');
     }
   }
 
   function shareAlbumQobuzLinkById(albumId: string) {
     const url = `https://play.qobuz.com/album/${albumId}`;
     writeText(url);
-    showToast('Album link copied to clipboard', 'success');
+    showToast($t('toast.albumLinkCopied'), 'success');
   }
 
   async function shareAlbumSonglinkById(albumId: string) {
     try {
-      showToast('Fetching Album.link...', 'info');
+      showToast($t('toast.fetchingAlbumLink'), 'info');
       const album = await fetchAlbumDetail(albumId);
       if (!album) {
-        showToast('Could not fetch album details', 'error');
+        showToast($t('toast.couldNotFetchDetails'), 'error');
         return;
       }
       const response = await invoke<{ pageUrl: string }>('share_album_songlink', {
@@ -978,10 +981,10 @@
         artist: album.artist
       });
       writeText(response.pageUrl);
-      showToast('Album.link copied to clipboard', 'success');
+      showToast($t('toast.albumLinkCopiedSonglink'), 'success');
     } catch (err) {
       console.error('Failed to get Album.link:', err);
-      showToast(`Album.link error: ${err}`, 'error');
+      showToast($t('toast.albumLinkError', { error: String(err) }), 'error');
     }
   }
 
@@ -995,11 +998,11 @@
     });
 
     if (tracksToDownload.length === 0) {
-      showToast('All tracks already available offline', 'info');
+      showToast($t('toast.allTracksOffline'), 'info');
       return;
     }
 
-    showToast(`Preparing ${tracksToDownload.length} tracks from "${album.title}" for offline`, 'info');
+    showToast($t('toast.preparingTracksOffline', { count: tracksToDownload.length, album: album.title }), 'info');
 
     for (const track of tracksToDownload) {
       try {
@@ -1053,7 +1056,7 @@
       return playlist;
     } catch (err) {
       console.error('Failed to load playlist:', err);
-      showToast('Failed to load playlist', 'error');
+      showToast($t('toast.failedLoadPlaylist'), 'error');
       return null;
     }
   }
@@ -1061,7 +1064,7 @@
   async function playPlaylistById(playlistId: number) {
     const playlist = await fetchPlaylistData(playlistId);
     if (!playlist?.tracks?.items?.length) {
-      showToast('Playlist has no tracks', 'info');
+      showToast($t('toast.playlistNoTracks'), 'info');
       return;
     }
 
@@ -1109,7 +1112,7 @@
   async function queuePlaylistNextById(playlistId: number) {
     const playlist = await fetchPlaylistData(playlistId);
     if (!playlist?.tracks?.items?.length) {
-      showToast('Playlist has no tracks', 'info');
+      showToast($t('toast.playlistNoTracks'), 'info');
       return;
     }
 
@@ -1132,13 +1135,13 @@
         artist_id: t.performer?.id
       });
     }
-    showToast(`Playing ${tracks.length} tracks next`, 'success');
+    showToast($t('toast.playingTracksNext', { count: tracks.length }), 'success');
   }
 
   async function queuePlaylistLaterById(playlistId: number) {
     const playlist = await fetchPlaylistData(playlistId);
     if (!playlist?.tracks?.items?.length) {
-      showToast('Playlist has no tracks', 'info');
+      showToast($t('toast.playlistNoTracks'), 'info');
       return;
     }
 
@@ -1160,39 +1163,39 @@
 
     const success = await addTracksToQueue(queueTracks);
     if (success) {
-      showToast(`Added ${queueTracks.length} tracks to queue`, 'success');
+      showToast($t('toast.addedTracksToQueue', { count: queueTracks.length }), 'success');
     } else {
-      showToast('Failed to add to queue', 'error');
+      showToast($t('toast.failedAddToQueue'), 'error');
     }
   }
 
   async function copyPlaylistToLibraryById(playlistId: number) {
     try {
-      showToast('Copying playlist to library...', 'info');
+      showToast($t('toast.copyingToLibrary'), 'info');
       await invoke('subscribe_playlist', { playlistId });
       sidebarRef?.refreshPlaylists();
-      showToast('Playlist copied to library', 'success');
+      showToast($t('toast.playlistCopied'), 'success');
     } catch (err) {
       console.error('Failed to copy playlist:', err);
-      showToast(`Failed to copy playlist: ${err}`, 'error');
+      showToast($t('toast.failedCopyPlaylist', { error: String(err) }), 'error');
     }
   }
 
   function sharePlaylistQobuzLinkById(playlistId: number) {
     const url = `https://play.qobuz.com/playlist/${playlistId}`;
     writeText(url);
-    showToast('Playlist link copied to clipboard', 'success');
+    showToast($t('toast.playlistLinkCopied'), 'success');
   }
 
   async function removePlaylistFavoriteById(playlistId: number) {
     try {
       await invoke('playlist_set_favorite', { playlistId, favorite: false });
-      showToast('Playlist removed from favorites', 'success');
+      showToast($t('toast.playlistRemovedFavorites'), 'success');
       sidebarRef?.refreshPlaylists();
       sidebarRef?.refreshPlaylistSettings();
     } catch (err) {
       console.error('Failed to remove playlist favorite:', err);
-      showToast(`Failed to remove from favorites: ${err}`, 'error');
+      showToast($t('toast.failedRemoveFavorites', { error: String(err) }), 'error');
     }
   }
 
@@ -1312,7 +1315,7 @@
   async function toggleShuffle() {
     const result = await queueToggleShuffle();
     if (result.success) {
-      showToast(result.enabled ? 'Shuffle enabled' : 'Shuffle disabled', 'info');
+      showToast(result.enabled ? $t('toast.shuffleEnabled') : $t('toast.shuffleDisabled'), 'info');
       // Persist playback mode to session
       saveSessionPlaybackMode(result.enabled, repeatMode);
     }
@@ -1321,7 +1324,11 @@
   async function toggleRepeat() {
     const result = await queueToggleRepeat();
     if (result.success) {
-      const messages: Record<RepeatMode, string> = { off: 'Repeat off', all: 'Repeat all', one: 'Repeat one' };
+      const messages: Record<RepeatMode, string> = {
+        off: $t('toast.repeatOff'),
+        all: $t('toast.repeatAll'),
+        one: $t('toast.repeatOne')
+      };
       showToast(messages[result.mode], 'info');
       // Persist playback mode to session
       saveSessionPlaybackMode(isShuffle, result.mode);
@@ -1334,9 +1341,9 @@
     const result = await toggleTrackFavorite(currentTrack.id, isFavorite);
     if (result.success) {
       setIsFavorite(result.isFavorite);
-      showToast(result.isFavorite ? 'Added to favorites' : 'Removed from favorites', 'success');
+      showToast(result.isFavorite ? $t('toast.addedToFavorites') : $t('toast.removedFromFavorites'), 'success');
     } else {
-      showToast('Failed to update favorites', 'error');
+      showToast($t('toast.failedUpdateFavorites'), 'error');
     }
   }
 
@@ -1368,7 +1375,7 @@
       }
     } catch (err) {
       console.error('Failed to go to previous track:', err);
-      showToast('Failed to go to previous track', 'error');
+      showToast($t('toast.failedPreviousTrack'), 'error');
     } finally {
       setIsSkipping(false);
     }
@@ -1387,11 +1394,11 @@
         // No next track - stop playback
         await stopPlayback();
         setIsPlaying(false);
-        showToast('Queue ended', 'info');
+        showToast($t('toast.queueEnded'), 'info');
       }
     } catch (err) {
       console.error('Failed to go to next track:', err);
-      showToast('Failed to go to next track', 'error');
+      showToast($t('toast.failedNextTrack'), 'error');
     } finally {
       setIsSkipping(false);
     }
@@ -1428,7 +1435,7 @@
         if (skippedIds.has(track.id)) {
           // Already tried this track, stop to prevent infinite loop
           setQueueEnded(true);
-          showToast('No available tracks in queue (offline mode)', 'info');
+          showToast($t('toast.noAvailableTracks'), 'info');
           return;
         }
         skippedIds.add(track.id);
@@ -1480,7 +1487,7 @@
       // Find the index in the queue
       const queueState = await getBackendQueueState();
       if (!queueState) {
-        showToast('Failed to play track', 'error');
+        showToast($t('toast.failedPlayTrack'), 'error');
         return;
       }
 
@@ -1506,7 +1513,7 @@
       }
     } catch (err) {
       console.error('Failed to play queue track:', err);
-      showToast('Failed to play track', 'error');
+      showToast($t('toast.failedPlayTrack'), 'error');
     }
   }
 
@@ -1514,9 +1521,9 @@
   async function handleClearQueue() {
     const success = await clearQueue();
     if (success) {
-      showToast('Queue cleared', 'info');
+      showToast($t('toast.queueCleared'), 'info');
     } else {
-      showToast('Failed to clear queue', 'error');
+      showToast($t('toast.failedClearQueue'), 'error');
     }
   }
 
@@ -1524,7 +1531,7 @@
   async function handleQueueReorder(fromIndex: number, toIndex: number) {
     const success = await moveQueueTrack(fromIndex, toIndex);
     if (!success) {
-      showToast('Failed to reorder queue', 'error');
+      showToast($t('toast.failedReorderQueue'), 'error');
     }
   }
 
@@ -1547,7 +1554,7 @@
     }
 
     if (trackIds.length === 0) {
-      showToast('Queue is empty', 'info');
+      showToast($t('toast.queueEmpty'), 'info');
       return;
     }
 
@@ -1566,7 +1573,7 @@
     } catch {
       // Ignore storage errors
     }
-    showToast(infinitePlayEnabled ? 'Infinite play enabled' : 'Infinite play disabled', 'info');
+    showToast(infinitePlayEnabled ? $t('toast.infinitePlayEnabled') : $t('toast.infinitePlayDisabled'), 'info');
   }
 
   // Play a track from history
@@ -1575,7 +1582,7 @@
       // Get the full queue state to find the track in history
       const queueState = await getBackendQueueState();
       if (!queueState) {
-        showToast('Failed to play track', 'error');
+        showToast($t('toast.failedPlayTrack'), 'error');
         return;
       }
 
@@ -1583,7 +1590,7 @@
       const numericId = parseInt(trackId, 10);
       const historyTrack = queueState.history.find(t => t.id === numericId);
       if (!historyTrack) {
-        showToast('Track not found in history', 'error');
+        showToast($t('toast.trackNotInHistory'), 'error');
         return;
       }
 
@@ -1601,7 +1608,7 @@
       });
     } catch (err) {
       console.error('Failed to play history track:', err);
-      showToast('Failed to play track', 'error');
+      showToast($t('toast.failedPlayTrack'), 'error');
     }
   }
 
@@ -1634,7 +1641,7 @@
 
     // Play from random track (queue will be shuffled by backend)
     await handleAlbumTrackPlay(randomTrack);
-    showToast('Shuffle play enabled', 'info');
+    showToast($t('toast.shuffleEnabled'), 'info');
   }
 
   // Add all album tracks next in queue (after current track)
@@ -1660,7 +1667,7 @@
         artist_id: t.artistId ?? selectedAlbum?.artistId
       });
     }
-    showToast(`Playing ${selectedAlbum.tracks.length} tracks next`, 'success');
+    showToast($t('toast.playingTracksNext', { count: selectedAlbum.tracks.length }), 'success');
   }
 
   // Add all album tracks to end of queue
@@ -1685,9 +1692,9 @@
 
     const success = await addTracksToQueue(queueTracks);
     if (success) {
-      showToast(`Added ${queueTracks.length} tracks to queue`, 'success');
+      showToast($t('toast.addedTracksToQueue', { count: queueTracks.length }), 'success');
     } else {
-      showToast('Failed to add to queue', 'error');
+      showToast($t('toast.failedAddToQueue'), 'error');
     }
   }
 
@@ -1695,7 +1702,7 @@
     const album = await fetchAlbumDetail(albumId);
     addAlbumToPlaylist(album);
   }
-  
+
   function addAlbumToPlaylist(album: AlbumDetail | null) {
     if (!album?.tracks?.length) return;
     const trackIds = album.tracks.map(t => t.id);
@@ -1707,14 +1714,14 @@
     if (!selectedAlbum?.id) return;
     const url = `https://play.qobuz.com/album/${selectedAlbum.id}`;
     writeText(url);
-    showToast('Album link copied to clipboard', 'success');
+    showToast($t('toast.albumLinkCopied'), 'success');
   }
 
   // Share album via album.link
   async function shareAlbumSonglink() {
     if (!selectedAlbum?.id) return;
     try {
-      showToast('Fetching Album.link...', 'info');
+      showToast($t('toast.fetchingAlbumLink'), 'info');
       const response = await invoke<{ pageUrl: string }>('share_album_songlink', {
         upc: selectedAlbum.upc || null,
         albumId: selectedAlbum.id,
@@ -1722,10 +1729,10 @@
         artist: selectedAlbum.artist
       });
       writeText(response.pageUrl);
-      showToast('Album.link copied to clipboard', 'success');
+      showToast($t('toast.albumLinkCopiedSonglink'), 'success');
     } catch (err) {
       console.error('Failed to get Album.link:', err);
-      showToast(`Album.link error: ${err}`, 'error');
+      showToast($t('toast.albumLinkError', { error: String(err) }), 'error');
     }
   }
 
@@ -1751,20 +1758,20 @@
         bitDepth: track.bitDepth,
         sampleRate: track.samplingRate,
       });
-      showToast(`Preparing "${track.title}" for offline`, 'info');
+      showToast($t('toast.preparingTrackOffline', { title: track.title }), 'info');
     } catch (err) {
       console.error('Failed to cache for offline:', err);
-      showToast('Failed to prepare for offline', 'error');
+      showToast($t('toast.failedPrepareOffline'), 'error');
     }
   }
 
   async function handleTrackRemoveDownload(trackId: number) {
     try {
       await removeCachedTrack(trackId);
-      showToast('Removed from offline library', 'info');
+      showToast($t('toast.removedFromOffline'), 'info');
     } catch (err) {
       console.error('Failed to remove from offline:', err);
-      showToast('Failed to remove from offline library', 'error');
+      showToast($t('toast.failedRemoveOffline'), 'error');
     }
   }
 
@@ -1773,7 +1780,7 @@
       await openTrackFolder(trackId);
     } catch (err) {
       console.error('Failed to open folder:', err);
-      showToast('Failed to open folder', 'error');
+      showToast($t('toast.failedOpenFolder'), 'error');
     }
   }
 
@@ -1791,10 +1798,10 @@
         bitDepth: 'bitDepth' in track ? track.bitDepth : undefined,
         sampleRate: 'samplingRate' in track ? track.samplingRate : undefined,
       });
-      showToast(`Refreshing "${track.title}" for offline`, 'info');
+      showToast($t('toast.refreshingTrackOffline', { title: track.title }), 'info');
     } catch (err) {
       console.error('Failed to refresh offline copy:', err);
-      showToast('Failed to refresh offline copy', 'error');
+      showToast($t('toast.failedRefreshOffline'), 'error');
     }
   }
 
@@ -1811,11 +1818,11 @@
     });
 
     if (tracksToDownload.length === 0) {
-      showToast('All tracks already available offline', 'info');
+      showToast($t('toast.allTracksOffline'), 'info');
       return;
     }
 
-    showToast(`Preparing ${tracksToDownload.length} tracks from "${selectedAlbum.title}" for offline`, 'info');
+    showToast($t('toast.preparingTracksOffline', { count: tracksToDownload.length, album: selectedAlbum.title }), 'info');
 
     for (const track of tracksToDownload) {
       try {
@@ -1838,19 +1845,19 @@
 
   async function handleOpenAlbumFolder() {
     if (!selectedAlbum) return;
-    
+
     try {
       await openAlbumFolder(selectedAlbum.id);
     } catch (err) {
       console.error('Failed to open album folder:', err);
-      showToast('Failed to open album folder', 'error');
+      showToast($t('toast.failedOpenAlbumFolder'), 'error');
     }
   }
 
   async function handleReDownloadAlbum() {
     if (!selectedAlbum) return;
 
-    showToast(`Refreshing all tracks from "${selectedAlbum.title}" for offline`, 'info');
+    showToast($t('toast.refreshingAlbumOffline', { album: selectedAlbum.title }), 'info');
 
     for (const track of selectedAlbum.tracks) {
       try {
@@ -1876,7 +1883,7 @@
       await openAlbumFolder(albumId);
     } catch (err) {
       console.error('Failed to open album folder:', err);
-      showToast('Failed to open album folder', 'error');
+      showToast($t('toast.failedOpenAlbumFolder'), 'error');
     }
   }
 
@@ -1884,11 +1891,11 @@
     try {
       const album = await invoke<QobuzAlbum>('get_album', { albumId });
       if (!album || !album.tracks || album.tracks.data.length === 0) {
-        showToast('Failed to load album for offline refresh', 'error');
+        showToast($t('toast.failedLoadAlbumRefresh'), 'error');
         return;
       }
 
-      showToast(`Refreshing all tracks from "${album.title}" for offline`, 'info');
+      showToast($t('toast.refreshingAlbumOffline', { album: album.title }), 'info');
 
       for (const track of album.tracks.data) {
         try {
@@ -1909,7 +1916,7 @@
       }
     } catch (err) {
       console.error('Failed to load album:', err);
-      showToast('Failed to load album for offline refresh', 'error');
+      showToast($t('toast.failedLoadAlbumRefresh'), 'error');
     }
   }
 
@@ -1937,10 +1944,10 @@
         bitDepth: track.bitDepth,
         sampleRate: track.samplingRate,
       });
-      showToast(`Preparing "${track.title}" for offline`, 'info');
+      showToast($t('toast.preparingTrackOffline', { title: track.title }), 'info');
     } catch (err) {
       console.error('Failed to prepare for offline:', err);
-      showToast('Failed to prepare for offline', 'error');
+      showToast($t('toast.failedPrepareOffline'), 'error');
     }
   }
 
@@ -2053,9 +2060,9 @@
     const isLocal = playlistModalTracksAreLocal;
 
     if (playlistModalMode === 'addTrack') {
-      showToast('Track(s) added to playlist', 'success');
+      showToast($t('toast.tracksAddedToPlaylist'), 'success');
     } else {
-      showToast('Playlist created', 'success');
+      showToast($t('toast.playlistCreated'), 'success');
     }
     sidebarRef?.refreshPlaylists();
     sidebarRef?.refreshPlaylistSettings();
@@ -2106,12 +2113,12 @@
       subscription: 'Local Library Only'
     });
     navigateTo('library');
-    showToast('Started in offline mode', 'info');
+    showToast($t('toast.offlineModeStarted'), 'info');
   }
 
   async function handleLoginSuccess(info: UserInfo) {
     setLoggedIn(info);
-    showToast(`Welcome, ${info.userName}!`, 'success');
+    showToast($t('toast.welcomeUser', { name: info.userName }), 'success');
 
     // Load favorites now that login is confirmed (sync with Qobuz)
     loadFavorites();        // Track favorites
@@ -2239,10 +2246,10 @@
       setLoggedOut();
       currentTrack = null;
       isPlaying = false;
-      showToast('Logged out successfully', 'info');
+      showToast($t('toast.logoutSuccess'), 'info');
     } catch (err) {
       console.error('Logout error:', err);
-      showToast('Failed to logout', 'error');
+      showToast($t('toast.failedLogout'), 'error');
     }
   }
 
@@ -3222,7 +3229,7 @@
         lyricsActive={lyricsSidebarVisible}
         onArtistClick={() => {
           if (currentTrack?.isLocal) {
-            showToast('Local track - search for artist in Search', 'info');
+            showToast($t('toast.localTrackSearch'), 'info');
           } else if (currentTrack?.artistId) {
             handleArtistClick(currentTrack.artistId);
           }
