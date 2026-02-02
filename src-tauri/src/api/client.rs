@@ -413,6 +413,33 @@ impl QobuzClient {
         Ok(serde_json::from_value(albums.clone())?)
     }
 
+    /// Get list of genres
+    pub async fn get_genres(&self, parent_id: Option<u64>) -> Result<Vec<GenreInfo>> {
+        let url = endpoints::build_url(paths::GENRE_LIST);
+        let mut query: Vec<(&str, String)> = vec![];
+
+        if let Some(pid) = parent_id {
+            query.push(("parent_id", pid.to_string()));
+        }
+
+        let response: Value = self
+            .http
+            .get(&url)
+            .header("X-App-Id", self.app_id().await?)
+            .query(&query)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        let genres = response
+            .get("genres")
+            .and_then(|g| g.get("items"))
+            .ok_or_else(|| ApiError::ApiResponse("No genres in response".to_string()))?;
+
+        Ok(serde_json::from_value(genres.clone())?)
+    }
+
     /// Get track by ID
     pub async fn get_track(&self, track_id: u64) -> Result<Track> {
         let url = endpoints::build_url(paths::TRACK_GET);

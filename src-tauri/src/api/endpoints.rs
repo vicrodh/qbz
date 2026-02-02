@@ -40,6 +40,9 @@ pub mod paths {
     // Label
     pub const LABEL_GET: &str = "/label/get";
 
+    // Genre
+    pub const GENRE_LIST: &str = "/genre/list";
+
     // Catalog (combined search)
     pub const CATALOG_SEARCH: &str = "/catalog/search";
 }

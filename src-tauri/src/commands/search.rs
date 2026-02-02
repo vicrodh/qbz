@@ -393,3 +393,18 @@ pub async fn get_label(
         .await
         .map_err(|e| e.to_string())
 }
+
+/// Get list of genres for filtering
+#[tauri::command]
+pub async fn get_genres(
+    parent_id: Option<u64>,
+    state: State<'_, AppState>,
+) -> Result<Vec<crate::api::models::GenreInfo>, String> {
+    log::info!("Command: get_genres parent_id={:?}", parent_id);
+
+    let client = state.client.lock().await;
+    client
+        .get_genres(parent_id)
+        .await
+        .map_err(|e| e.to_string())
+}

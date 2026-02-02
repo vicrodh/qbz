@@ -289,11 +289,35 @@ pub struct LabelDetail {
     pub albums_count: Option<u32>,
 }
 
-/// Genre model
+/// Genre model (basic, used in album responses)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Genre {
     pub id: u64,
     pub name: String,
+}
+
+/// Genre info with full details (from genre/list endpoint)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenreInfo {
+    pub id: u64,
+    pub name: String,
+    #[serde(default)]
+    pub color: Option<String>,
+    #[serde(default)]
+    pub slug: Option<String>,
+    #[serde(default)]
+    pub path: Option<Vec<u64>>,
+}
+
+/// Genre list response from API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenreListResponse {
+    pub genres: GenreListContainer,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GenreListContainer {
+    pub items: Vec<GenreInfo>,
 }
 
 /// Search results container
