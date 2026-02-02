@@ -6,6 +6,7 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tauri::State;
 
+use crate::artist_blacklist::BlacklistState;
 use crate::artist_vectors::{
     ArtistVectorBuilder, ArtistVectorStoreState, RelationshipWeights, StoreStats,
     SuggestionConfig, SuggestionResult, SuggestionsEngine,
@@ -44,6 +45,7 @@ pub async fn get_playlist_suggestions_v2(
     store_state: State<'_, ArtistVectorStoreState>,
     mb_state: State<'_, MusicBrainzSharedState>,
     app_state: State<'_, AppState>,
+    blacklist_state: State<'_, BlacklistState>,
 ) -> Result<SuggestionResult, String> {
     use std::time::Instant;
     let total_start = Instant::now();
@@ -193,8 +195,8 @@ pub async fn get_playlist_suggestions_v2(
     let engine_elapsed = engine_start.elapsed();
     let total_elapsed = total_start.elapsed();
 
-    match &result {
-        Ok(r) => {
+    match result {
+        Ok(mut r) => {
             log::info!(
                 "[Suggestions] Engine took {:?}, total {:?}. Result: {} tracks from {} similar artists",
                 engine_elapsed,
@@ -202,13 +204,32 @@ pub async fn get_playlist_suggestions_v2(
                 r.tracks.len(),
                 r.similar_artists_count
             );
+
+            // Filter out tracks from blacklisted artists
+            let original_count = r.tracks.len();
+            r.tracks.retain(|track| {
+                if let Some(artist_id) = track.artist_id {
+                    !blacklist_state.is_blacklisted(artist_id)
+                } else {
+                    true // Keep tracks without artist ID
+                }
+            });
+
+            let filtered_count = original_count - r.tracks.len();
+            if filtered_count > 0 {
+                log::info!(
+                    "[Suggestions] Filtered {} tracks from blacklisted artists",
+                    filtered_count
+                );
+            }
+
+            Ok(r)
         }
         Err(e) => {
             log::error!("[Suggestions] Engine failed after {:?}: {}", engine_elapsed, e);
+            Err(e)
         }
     }
-
-    result
 }
 
 /// Get store statistics for debugging
