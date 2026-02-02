@@ -43,7 +43,7 @@ fn limit_quality_for_device(quality: Quality, max_sample_rate: Option<u32>) -> Q
             Quality::UltraHiRes | Quality::HiRes => {
                 log::info!(
                     "[Quality Limit] Device max {}Hz, limiting {} to Lossless (44.1kHz)",
-                    max_rate, quality.display_name()
+                    max_rate, quality.label()
                 );
                 Quality::Lossless
             }

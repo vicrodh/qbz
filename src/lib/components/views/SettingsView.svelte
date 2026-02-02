@@ -389,6 +389,7 @@
   let streamFirstTrack = $state(false);
   let streamBufferSeconds = $state(3);
   let streamingOnly = $state(false);
+  let limitQualityToDevice = $state(true);  // Enabled by default for bit-perfect
 
   // Backend system state
   let availableBackends = $state<BackendInfo[]>([]);
@@ -1085,6 +1086,8 @@
     stream_first_track: boolean;
     stream_buffer_seconds: number;
     streaming_only: boolean;
+    limit_quality_to_device: boolean;
+    device_max_sample_rate: number | null;
   }
 
   interface BackendInfo {
@@ -1236,6 +1239,7 @@
       streamFirstTrack = settings.stream_first_track ?? false;
       streamBufferSeconds = settings.stream_buffer_seconds ?? 3;
       streamingOnly = settings.streaming_only ?? false;
+      limitQualityToDevice = settings.limit_quality_to_device ?? true;
 
       // Validate mutual exclusion: DAC Passthrough disables Gapless + Crossfade
       if (dacPassthrough) {
@@ -1260,16 +1264,25 @@
     const deviceName = sinkDescriptionToName.get(description);
     const deviceToStore = description === 'System Default' ? null : deviceName;
 
+    // Try to find max sample rate from backendDevices if available
+    // This enables quality limiting for PipeWire mode when possible
+    const matchingDevice = backendDevices.find(d =>
+      d.name === deviceName || d.description === description
+    );
+    const maxSampleRate = matchingDevice?.max_sample_rate ?? null;
+
     try {
       // Save the preference
       await invoke('set_audio_output_device', { device: deviceToStore });
+      // Store device's max sample rate for quality limiting
+      await invoke('set_audio_device_max_sample_rate', { rate: maxSampleRate });
 
       // Reinitialize audio with the selected device
       // CRITICAL: Pass the actual CPAL device name, not null
       // CPAL can now find this device because we're using CPAL names
       await invoke('reinit_audio_device', { device: deviceToStore });
 
-      console.log('[Audio] Output device changed:', description, '(device:', deviceName ?? 'default', ')');
+      console.log('[Audio] Output device changed:', description, '(device:', deviceName ?? 'default', ', max_rate:', maxSampleRate ?? 'unknown', ')');
     } catch (err) {
       console.error('[Audio] Failed to change audio output device:', err);
     }
@@ -1434,17 +1447,30 @@
     }
   }
 
+  async function handleLimitQualityToDeviceChange(enabled: boolean) {
+    limitQualityToDevice = enabled;
+    try {
+      await invoke('set_audio_limit_quality_to_device', { enabled });
+      console.log('[Audio] Limit quality to device changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change limit quality to device:', err);
+    }
+  }
+
   async function handleBackendDeviceChange(deviceName: string) {
     outputDevice = deviceName;
 
     // Get device ID from backendDevices using display name mapping
     const device = deviceByDisplayName.get(deviceName);
     const deviceId = deviceName === 'System Default' ? null : device?.id ?? null;
+    const maxSampleRate = device?.max_sample_rate ?? null;
 
     try {
       await invoke('set_audio_output_device', { device: deviceId });
+      // Store device's max sample rate for quality limiting
+      await invoke('set_audio_device_max_sample_rate', { rate: maxSampleRate });
       await invoke('reinit_audio_device', { device: deviceId });
-      console.log('[Audio] Backend device changed:', deviceName, '(id:', deviceId ?? 'default', ')');
+      console.log('[Audio] Backend device changed:', deviceName, '(id:', deviceId ?? 'default', ', max_rate:', maxSampleRate ?? 'unknown', ')');
 
       // Stop current playback to prevent stuck/dead streams
       try {
@@ -2063,6 +2089,13 @@
         <span class="setting-desc">Disables temporary cache. Not recommended without a fast connection. Offline library tracks always play first.</span>
       </div>
       <Toggle enabled={streamingOnly} onchange={handleStreamingOnlyChange} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">Limit Quality to Device</span>
+        <span class="setting-desc">Prevents requesting tracks that exceed your device's max sample rate. Ensures bit-perfect playback by avoiding software resampling.</span>
+      </div>
+      <Toggle enabled={limitQualityToDevice} onchange={handleLimitQualityToDeviceChange} />
     </div>
     <div class="setting-row last">
       <span class="setting-label">{$t('settings.audio.currentSampleRate')}</span>
