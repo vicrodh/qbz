@@ -328,36 +328,37 @@
 
   .playlist-menu {
     position: fixed;
-    z-index: 10000;
-    background: var(--bg-elevated);
-    border: 1px solid var(--border-subtle);
+    z-index: 30000;
+    min-width: 160px;
+    background-color: var(--bg-tertiary);
     border-radius: 8px;
-    padding: 6px 0;
-    min-width: 180px;
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    padding: 2px 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }
 
   .menu-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
     width: 100%;
-    padding: 8px 14px;
+    padding: 8px 12px;
     background: none;
     border: none;
-    color: var(--text-primary);
-    font-size: 13px;
-    cursor: pointer;
+    color: var(--text-secondary);
     text-align: left;
+    font-size: 12px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: background-color 150ms ease, color 150ms ease;
   }
 
   .menu-item:hover {
-    background: var(--bg-hover);
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   .menu-separator {
     height: 1px;
-    background: var(--border-subtle);
+    background-color: var(--bg-hover);
     margin: 4px 0;
   }
 </style>
