@@ -7,6 +7,7 @@
     removeFromBlacklist,
     subscribe as subscribeBlacklist
   } from '$lib/stores/artistBlacklistStore';
+  import { showToast } from '$lib/stores/toastStore';
   import type { ArtistDetail, QobuzArtist } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
@@ -417,13 +418,16 @@
       if (wasBlacklisted) {
         await removeFromBlacklist(artist.id);
         artistIsBlacklisted = false;
+        showToast(`${artist.name} removed from blacklist`, 'success');
       } else {
         await addToBlacklist(artist.id, artist.name);
         artistIsBlacklisted = true;
+        showToast(`${artist.name} added to blacklist`, 'success');
       }
     } catch (err) {
       console.error('Failed to toggle artist blacklist:', err);
       artistIsBlacklisted = wasBlacklisted; // Rollback on error
+      showToast('Failed to update blacklist', 'error');
     } finally {
       isBlacklistLoading = false;
     }

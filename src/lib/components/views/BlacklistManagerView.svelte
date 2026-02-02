@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { ArrowLeft, Search, X, Trash2, Ban, ToggleLeft, ToggleRight, AlertCircle } from 'lucide-svelte';
   import ViewTransition from '../ViewTransition.svelte';
+  import { showToast } from '$lib/stores/toastStore';
   import {
     subscribe,
     loadBlacklist,
@@ -59,27 +60,36 @@
   }
 
   async function handleRemove(artistId: number) {
+    const artist = artists.find(a => a.artist_id === artistId);
     try {
       await removeFromBlacklist(artistId);
+      showToast(`${artist?.artist_name || 'Artist'} removed from blacklist`, 'success');
     } catch (err) {
       console.error('Failed to remove artist from blacklist:', err);
+      showToast('Failed to remove artist', 'error');
     }
   }
 
   async function handleToggleEnabled() {
     try {
-      await setEnabled(!enabled);
+      const newState = !enabled;
+      await setEnabled(newState);
+      showToast(`Blacklist ${newState ? 'enabled' : 'disabled'}`, 'info');
     } catch (err) {
       console.error('Failed to toggle blacklist:', err);
+      showToast('Failed to toggle blacklist', 'error');
     }
   }
 
   async function handleClearAll() {
+    const count = artists.length;
     try {
       await clearBlacklist();
       confirmClearOpen = false;
+      showToast(`Removed ${count} artists from blacklist`, 'success');
     } catch (err) {
       console.error('Failed to clear blacklist:', err);
+      showToast('Failed to clear blacklist', 'error');
     }
   }
 
