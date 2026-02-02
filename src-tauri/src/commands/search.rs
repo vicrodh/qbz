@@ -34,12 +34,25 @@ pub async fn search_albums(
     offset: Option<u32>,
     search_type: Option<String>,
     state: State<'_, AppState>,
+    blacklist_state: State<'_, BlacklistState>,
 ) -> Result<SearchResultsPage<Album>, String> {
     let client = state.client.lock().await;
-    client
+    let mut results = client
         .search_albums(&query, limit.unwrap_or(20), offset.unwrap_or(0), search_type.as_deref())
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Filter out albums from blacklisted artists
+    let original_count = results.items.len();
+    results.items.retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+
+    let filtered_count = original_count - results.items.len();
+    if filtered_count > 0 {
+        log::debug!("[Blacklist] Filtered {} albums from search results", filtered_count);
+        results.total = results.total.saturating_sub(filtered_count as u32);
+    }
+
+    Ok(results)
 }
 
 #[tauri::command]
@@ -158,38 +171,80 @@ pub async fn search_all(
         .and_then(|v| serde_json::from_value(v.clone()).ok())
         .unwrap_or_else(|| SearchResultsPage { items: vec![], total: 0, offset: 0, limit: 30 });
 
-    // Parse most_popular - get the first item
+    // Parse most_popular - find the first non-blacklisted item
     let most_popular: Option<MostPopularItem> = response
         .get("most_popular")
         .and_then(|mp| mp.get("items"))
         .and_then(|items| items.as_array())
-        .and_then(|arr| arr.first())
-        .and_then(|item| {
-            let item_type = item.get("type")?.as_str()?;
-            let content = item.get("content")?;
+        .and_then(|arr| {
+            // Iterate through all items to find the first non-blacklisted one
+            for item in arr {
+                let item_type = match item.get("type").and_then(|t| t.as_str()) {
+                    Some(t) => t,
+                    None => continue,
+                };
+                let content = match item.get("content") {
+                    Some(c) => c,
+                    None => continue,
+                };
 
-            log::debug!("most_popular type: {}, content keys: {:?}",
-                item_type,
-                content.as_object().map(|o| o.keys().collect::<Vec<_>>())
-            );
+                log::debug!("most_popular type: {}, content keys: {:?}",
+                    item_type,
+                    content.as_object().map(|o| o.keys().collect::<Vec<_>>())
+                );
 
-            match item_type {
-                "tracks" => serde_json::from_value::<Track>(content.clone())
-                    .ok()
-                    .map(MostPopularItem::Tracks),
-                "albums" => serde_json::from_value::<Album>(content.clone())
-                    .ok()
-                    .map(MostPopularItem::Albums),
-                "artists" => serde_json::from_value::<Artist>(content.clone())
-                    .ok()
-                    .map(MostPopularItem::Artists),
-                _ => None,
+                match item_type {
+                    "tracks" => {
+                        if let Ok(track) = serde_json::from_value::<Track>(content.clone()) {
+                            // Check if track's performer is blacklisted
+                            if let Some(ref performer) = track.performer {
+                                if blacklist_state.is_blacklisted(performer.id) {
+                                    log::debug!("[Blacklist] Skipping most_popular track from blacklisted artist: {}", performer.name);
+                                    continue;
+                                }
+                            }
+                            return Some(MostPopularItem::Tracks(track));
+                        }
+                    }
+                    "albums" => {
+                        if let Ok(album) = serde_json::from_value::<Album>(content.clone()) {
+                            // Check if album's artist is blacklisted
+                            if blacklist_state.is_blacklisted(album.artist.id) {
+                                log::debug!("[Blacklist] Skipping most_popular album from blacklisted artist: {}", album.artist.name);
+                                continue;
+                            }
+                            return Some(MostPopularItem::Albums(album));
+                        }
+                    }
+                    "artists" => {
+                        if let Ok(artist) = serde_json::from_value::<Artist>(content.clone()) {
+                            // Check if artist is blacklisted
+                            if blacklist_state.is_blacklisted(artist.id) {
+                                log::debug!("[Blacklist] Skipping most_popular blacklisted artist: {}", artist.name);
+                                continue;
+                            }
+                            return Some(MostPopularItem::Artists(artist));
+                        }
+                    }
+                    _ => continue,
+                }
             }
+            None
         });
 
     // Apply blacklist filtering
     let mut filtered_tracks = 0;
     let mut filtered_artists = 0;
+    let mut filtered_albums = 0;
+
+    // Filter albums from blacklisted artists
+    let original_album_count = albums.items.len();
+    let mut albums = albums;
+    albums.items.retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+    filtered_albums = original_album_count - albums.items.len();
+    if filtered_albums > 0 {
+        albums.total = albums.total.saturating_sub(filtered_albums as u32);
+    }
 
     // Filter tracks from blacklisted artists
     let original_track_count = tracks.items.len();
@@ -213,35 +268,14 @@ pub async fn search_all(
         artists.total = artists.total.saturating_sub(filtered_artists as u32);
     }
 
-    // Filter most_popular if it's a blacklisted item
-    let most_popular = most_popular.and_then(|mp| {
-        match &mp {
-            MostPopularItem::Artists(artist) => {
-                if blacklist_state.is_blacklisted(artist.id) {
-                    log::debug!("[Blacklist] Filtered most_popular artist: {}", artist.name);
-                    None
-                } else {
-                    Some(mp)
-                }
-            }
-            MostPopularItem::Tracks(track) => {
-                if let Some(ref performer) = track.performer {
-                    if blacklist_state.is_blacklisted(performer.id) {
-                        log::debug!("[Blacklist] Filtered most_popular track: {}", track.title);
-                        return None;
-                    }
-                }
-                Some(mp)
-            }
-            MostPopularItem::Albums(_) => Some(mp), // Albums not filtered by artist blacklist
-        }
-    });
+    // Note: most_popular is already filtered during parsing (iteration finds first non-blacklisted)
 
-    if filtered_tracks > 0 || filtered_artists > 0 {
+    if filtered_tracks > 0 || filtered_artists > 0 || filtered_albums > 0 {
         log::debug!(
-            "[Blacklist] search_all filtered: {} tracks, {} artists",
+            "[Blacklist] search_all filtered: {} tracks, {} artists, {} albums",
             filtered_tracks,
-            filtered_artists
+            filtered_artists,
+            filtered_albums
         );
     }
 
