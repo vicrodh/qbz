@@ -462,7 +462,10 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
         // Update playback state from event
         currentTime = event.position;
         isPlaying = event.is_playing;
-        console.log('[Player] Updated to external track:', queueTrack.title, 'isPlaying:', isPlaying);
+        // Sync volume from backend
+        volume = Math.round(event.volume * 100);
+        persistVolume(volume);
+        console.log('[Player] Updated to external track:', queueTrack.title, 'isPlaying:', isPlaying, 'volume:', volume);
         notifyListeners();
       } else {
         console.warn('[Player] Queue track mismatch or null:', queueTrack?.id, 'vs event:', event.track_id);
@@ -481,6 +484,13 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
   if (event.track_id === currentTrack.id) {
     currentTime = event.position;
     isPlaying = event.is_playing;
+
+    // Update volume from backend (e.g., changed via remote control or system)
+    const eventVolume = Math.round(event.volume * 100);
+    if (eventVolume !== volume) {
+      volume = eventVolume;
+      persistVolume(volume);
+    }
 
     // Update track with actual stream quality (issue #34)
     // The backend now sends the real sample rate and bit depth from the decoded stream
