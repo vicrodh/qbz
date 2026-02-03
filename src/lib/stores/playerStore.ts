@@ -31,6 +31,7 @@ import {
   setOnCastTrackEnded,
   setOnCastDisconnected
 } from '$lib/stores/castStore';
+import { syncQueueState } from '$lib/stores/queueStore';
 
 // ============ Types ============
 
@@ -438,6 +439,8 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
   // Track changed externally (e.g., from remote control)
   if (event.track_id !== 0 && (!currentTrack || event.track_id !== currentTrack.id)) {
     console.log('[Player] Track changed externally, fetching new track info...');
+    // Sync queue state when track changes externally (e.g., from remote control)
+    syncQueueState().catch(err => console.error('[Player] Failed to sync queue:', err));
     try {
       const queueTrack = await invoke<QueueTrack | null>('get_current_queue_track');
       if (queueTrack && queueTrack.id === event.track_id) {
