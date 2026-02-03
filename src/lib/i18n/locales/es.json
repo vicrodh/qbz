@@ -1022,6 +1022,10 @@
   },
   "dacWizard": {
     "triggerTooltip": "Guía de Configuración de DAC",
+    "tooltip": {
+      "title": "Asistente Bit-Perfect",
+      "desc": "Configura tu DAC para reproducción sin pérdidas"
+    },
     "welcome": {
       "title": "Configuración Guiada de DAC",
       "subtitle": "Este asistente te ayuda a configurar tu DAC para una reproducción bit-perfect en Linux.",

@@ -963,6 +963,10 @@
   "dacWizard": {
     "title": "Assistant Configuration DAC",
     "triggerTooltip": "Guide de configuration DAC",
+    "tooltip": {
+      "title": "Assistant Bit-Perfect",
+      "desc": "Configurez votre DAC pour une lecture audio sans perte"
+    },
     "welcome": {
       "title": "Configuration Guidée du DAC",
       "subtitle": "Cet assistant vous aide à configurer votre DAC pour une lecture bit-perfect sous Linux.",

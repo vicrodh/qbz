@@ -2017,13 +2017,21 @@
           compact
         />
         {#if selectedBackend === 'PipeWire'}
-          <button
-            class="dac-setup-btn"
-            onclick={() => showDACWizardModal = true}
-            title={$t('dacWizard.title')}
-          >
-            <img src="/gandalf.svg" alt="DAC Setup" class="gandalf-icon" />
-          </button>
+          <div class="dac-setup-wrapper">
+            <button
+              class="dac-setup-btn"
+              onclick={() => showDACWizardModal = true}
+            >
+              <img src="/gandalf.svg" alt="DAC Setup" class="gandalf-icon" />
+            </button>
+            <div class="dac-tooltip">
+              <img src="/gandalf.svg" alt="" class="tooltip-gandalf" />
+              <div class="tooltip-content">
+                <span class="tooltip-title">{$t('dacWizard.tooltip.title')}</span>
+                <span class="tooltip-desc">{$t('dacWizard.tooltip.desc')}</span>
+              </div>
+            </div>
+          </div>
         {/if}
       </div>
     </div>
@@ -2983,12 +2991,16 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     gap: 8px;
   }
 
+  .dac-setup-wrapper {
+    position: relative;
+  }
+
   .dac-setup-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     background: var(--accent-primary);
     border: none;
     border-radius: 6px;
@@ -3004,9 +3016,59 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   }
 
   .dac-setup-btn .gandalf-icon {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 24px;
     filter: invert(1);
+  }
+
+  .dac-tooltip {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-4px);
+    transition: all 150ms ease;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .dac-setup-wrapper:hover .dac-tooltip {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+  }
+
+  .tooltip-gandalf {
+    width: 36px;
+    height: 36px;
+    opacity: 0.9;
+  }
+
+  .tooltip-content {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .tooltip-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .tooltip-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
   }
 
   .loading-overlay {

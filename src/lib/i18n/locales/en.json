@@ -1022,6 +1022,10 @@
   },
   "dacWizard": {
     "triggerTooltip": "DAC Setup Guide",
+    "tooltip": {
+      "title": "Bit-Perfect Setup Wizard",
+      "desc": "Configure your DAC for lossless audio playback"
+    },
     "welcome": {
       "title": "Guided DAC Setup",
       "subtitle": "This wizard helps you configure your DAC for bit-perfect playback on Linux.",
