@@ -292,6 +292,7 @@ pub fn set_audio_output_device(
     state: tauri::State<'_, AudioSettingsState>,
     device: Option<String>,
 ) -> Result<(), String> {
+    log::info!("Command: set_audio_output_device {:?}", device);
     let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
     store.set_output_device(device.as_deref())
 }

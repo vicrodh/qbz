@@ -1234,6 +1234,8 @@
         await loadBackendDevices(settings.backend_type);
 
         // Set selected device from backend devices
+        // IMPORTANT: Validate that saved device still exists in current enumeration
+        // Device IDs like hw:X,0 can change between boots when USB devices are connected/disconnected
         if (settings.output_device) {
           const device = backendDevices.find(d => d.id === settings.output_device);
           if (device) {
@@ -1242,7 +1244,15 @@
               ? device.description
               : (needsTranslation(device.name) ? getDevicePrettyName(device.name) : device.name);
           } else {
+            // Saved device no longer exists - clear it from DB to prevent sync issues
+            console.warn(`[Audio] Saved device '${settings.output_device}' not found in current enumeration. Resetting to System Default.`);
             outputDevice = 'System Default';
+            try {
+              await invoke('set_audio_output_device', { device: null });
+              console.log('[Audio] Cleared stale device from database');
+            } catch (err) {
+              console.error('[Audio] Failed to clear stale device:', err);
+            }
           }
         }
       } else {
@@ -1489,6 +1499,11 @@
     const device = deviceByDisplayName.get(deviceName);
     const deviceId = deviceName === 'System Default' ? null : device?.id ?? null;
     const maxSampleRate = device?.max_sample_rate ?? null;
+
+    // Warn if device lookup failed (possible sync issue between UI and deviceByDisplayName)
+    if (deviceName !== 'System Default' && !device) {
+      console.warn(`[Audio] Device lookup failed for '${deviceName}'. Available keys:`, Array.from(deviceByDisplayName.keys()));
+    }
 
     try {
       await invoke('set_audio_output_device', { device: deviceId });
