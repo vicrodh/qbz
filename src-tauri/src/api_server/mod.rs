@@ -3,10 +3,13 @@ use axum::{
     extract::{ws::{Message, WebSocket, WebSocketUpgrade}, ConnectInfo, Path, Query, State},
     http::{header, Method, StatusCode},
     middleware,
-    response::IntoResponse,
+    response::{sse::{Event, Sse}, IntoResponse},
     routing::{get, post},
     Json, Router,
 };
+use futures_util::stream::Stream;
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 use axum_server::{tls_rustls::RustlsConfig, Handle as AxumHandle};
 use base64::Engine;
 use rcgen::{CertificateParams, DistinguishedName, DnType, SanType};
@@ -436,6 +439,7 @@ fn build_router(ctx: ApiContext) -> Router {
         .route("/api/playback/preferences", get(get_playback_preferences))
         .route("/api/playback/autoplay", post(set_autoplay))
         .route("/api/ws", get(ws_handler))
+        .route("/api/events", get(sse_handler))
         .with_state(ctx.clone())
         .layer(middleware::from_fn(lan_only))
         .layer(middleware::from_fn_with_state(ctx, require_token))
@@ -946,6 +950,28 @@ async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver<PlaybackEv
             Err(broadcast::error::RecvError::Lagged(_)) => continue,
         }
     }
+}
+
+async fn sse_handler(
+    State(ctx): State<ApiContext>,
+) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
+    let rx = ctx.playback_tx.subscribe();
+    let stream = BroadcastStream::new(rx)
+        .filter_map(|result| {
+            match result {
+                Ok(event) => {
+                    let json = serde_json::to_string(&event).ok()?;
+                    Some(Ok(Event::default().data(json)))
+                }
+                Err(_) => None, // Skip lagged messages
+            }
+        });
+
+    Sse::new(stream).keep_alive(
+        axum::response::sse::KeepAlive::new()
+            .interval(Duration::from_secs(15))
+            .text("ping")
+    )
 }
 
 async fn require_token(
