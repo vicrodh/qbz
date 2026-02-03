@@ -459,14 +459,23 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
           artistId: queueTrack.artist_id
         };
         duration = queueTrack.duration_secs;
-        console.log('[Player] Updated to external track:', queueTrack.title);
+        // Update playback state from event
+        currentTime = event.position;
+        isPlaying = event.is_playing;
+        console.log('[Player] Updated to external track:', queueTrack.title, 'isPlaying:', isPlaying);
+        notifyListeners();
+      } else {
+        console.warn('[Player] Queue track mismatch or null:', queueTrack?.id, 'vs event:', event.track_id);
       }
     } catch (err) {
       console.error('[Player] Failed to fetch external track:', err);
     }
   }
 
-  if (!currentTrack) return;
+  if (!currentTrack) {
+    console.log('[Player] No current track, ignoring event');
+    return;
+  }
 
   // Update playback state if track matches
   if (event.track_id === currentTrack.id) {
