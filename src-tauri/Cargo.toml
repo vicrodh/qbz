@@ -30,6 +30,7 @@ tokio = { version = "1", features = ["full"] }
 # Local API server
 axum = { version = "0.7", features = ["ws"] }
 axum-server = { version = "0.8", features = ["tls-rustls"] }
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs"] }
 tower-http = { version = "0.5", features = ["cors"] }
 qrcode-generator = "4.1"
 rcgen = "0.12"

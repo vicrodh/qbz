@@ -13,6 +13,7 @@ use rcgen::{CertificateParams, DistinguishedName, DnType, SanType};
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::path::PathBuf;
+use std::sync::Once;
 use std::time::Duration;
 use tauri::{AppHandle, Manager};
 use tokio::sync::{broadcast, Mutex};
@@ -90,6 +91,18 @@ struct ApiServerHandle {
     handle: AxumHandle<SocketAddr>,
 }
 
+static TLS_PROVIDER_INIT: Once = Once::new();
+
+fn ensure_tls_provider() -> Result<(), String> {
+    let mut result = Ok(());
+    TLS_PROVIDER_INIT.call_once(|| {
+        result = rustls::crypto::aws_lc_rs::default_provider()
+            .install_default()
+            .map_err(|e| format!("Failed to install TLS provider: {:?}", e));
+    });
+    result
+}
+
 struct ApiServerInner {
     current: Option<RemoteControlSettings>,
     server: Option<ApiServerHandle>,
@@ -148,6 +161,11 @@ impl ApiServerState {
         let make_service = router.into_make_service_with_connect_info::<SocketAddr>();
 
         if settings.secure {
+            ensure_tls_provider().map_err(|err| {
+                let msg = format!("Remote control TLS provider error: {}", err);
+                inner.last_error = Some(msg.clone());
+                msg
+            })?;
             let (cert_path, key_path) = ensure_certificate().map_err(|err| {
                 let msg = format!("Remote control certificate error: {}", err);
                 inner.last_error = Some(msg.clone());
