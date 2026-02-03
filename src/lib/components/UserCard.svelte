@@ -246,12 +246,12 @@
     animation: slideUp 150ms ease-out;
   }
 
-  /* Collapsed mode: open to the right */
+  /* Collapsed mode: open to the right, expand upward */
   .dropdown-menu.collapsed {
-    bottom: auto;
+    top: auto;
     right: auto;
     left: 100%;
-    top: 0;
+    bottom: 0;
     margin-bottom: 0;
     margin-left: 8px;
     animation: slideRight 150ms ease-out;

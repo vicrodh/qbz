@@ -1019,5 +1019,156 @@
       "focusSeekForwardLong": "Avanzar 10 segundos",
       "focusSeekBackLong": "Retroceder 10 segundos"
     }
+  },
+  "dacWizard": {
+    "triggerTooltip": "Guía de Configuración de DAC",
+    "tooltip": {
+      "title": "El Mago del Hi-Fi",
+      "desc": "Si aún no lo has hecho, puede ayudarte a configurar bit-perfect en tu DAC"
+    },
+    "welcome": {
+      "title": "Configuración Guiada de DAC",
+      "subtitle": "Este asistente te ayuda a configurar tu DAC para una reproducción bit-perfect en Linux.",
+      "intro": "QBZ no realiza cambios automáticos en tu sistema.\nCada paso muestra los comandos exactos que debes ejecutar, explica qué hacen y te permite decidir cuándo continuar.",
+      "disclaimerTitle": "Antes de seguir, ten en cuenta lo siguiente:",
+      "bulletResponsibility": "Tú eres responsable de crear, conservar y restaurar tus propios respaldos",
+      "bulletNoGuarantee": "QBZ se basa en documentación oficial y prácticas recomendadas, pero no puede garantizar resultados en sistemas con:",
+      "bulletHelper": "Esta guía es solo una ayuda, no una herramienta de recuperación del sistema",
+      "systemIssue1": "Configuraciones de audio personalizadas previas",
+      "systemIssue2": "Modificaciones manuales en PipeWire, Pulse o WirePlumber",
+      "systemIssue3": "Comandos omitidos o ejecutados fuera de orden",
+      "recovery": "Si algo sale mal, siempre puedes restaurar tu configuración anterior usando el respaldo creado durante este proceso.",
+      "readyText": "Cuando estés listo, avanza paso a paso.\nNada se ejecuta si tú no lo ejecutas.",
+      "checkbox": "Entiendo y acepto estos términos",
+      "start": "Comenzar"
+    },
+    "precheck": {
+      "title": "Verificar Stack de Audio",
+      "subtitle": "Confirma que PipeWire y WirePlumber están activos.",
+      "hint": "Busca 'active (running)' en todos los servicios",
+      "inactiveWarning": "Si algún servicio está inactivo, detente aquí y corrígelo antes de continuar.",
+      "checkbox": "Ejecuté el comando y los servicios están activos",
+      "installTitle": "Instalar Paquetes Requeridos",
+      "installSubtitle": "Selecciona tu distribución para ver el comando de instalación.",
+      "distros": {
+        "debian": "Ubuntu / Debian / Mint / Pop!_OS",
+        "fedora": "Fedora / RHEL",
+        "arch": "Arch / Manjaro / EndeavourOS",
+        "opensuse": "openSUSE",
+        "other": "Otra"
+      },
+      "otherHint": "Asegúrate de tener instalados (o equivalentes): pipewire, pipewire-pulse, wireplumber, alsa-utils"
+    },
+    "detectDac": {
+      "title": "Identificar DAC por Defecto",
+      "subtitle": "Necesitamos el node.name exacto de PipeWire.",
+      "step1": "Busca tu DAC en 'Audio > Sinks'. Anota el número (ej. 46).",
+      "step2": "Luego ejecuta con ese número:",
+      "inputLabel": "Ingresa node.name",
+      "inputWarning": "Debe coincidir exactamente. Un solo carácter diferente romperá la regla.",
+      "inputPlaceholder": "alsa_output.usb-...",
+      "validation": {
+        "validFormat": "Formato válido",
+        "invalidFormat": "Formato inválido - debe empezar con alsa_output. o alsa_input.",
+        "usbDac": "DAC USB - bit-perfect soportado",
+        "pciDac": "Audio interno - bit-perfect depende del hardware",
+        "bluetoothDac": "Dispositivo Bluetooth - bit-perfect no es posible",
+        "virtualDac": "Dispositivo virtual - bit-perfect no aplica"
+      },
+      "query": {
+        "button": "Consultar Capacidades del DAC",
+        "querying": "Consultando...",
+        "device": "Dispositivo",
+        "sampleRates": "Sample Rates",
+        "formats": "Formatos",
+        "channels": "Canales",
+        "disclaimer": "Si estos valores no coinciden con las especificaciones de tu DAC, consulta la documentación del fabricante."
+      }
+    },
+    "backup": {
+      "title": "Crear Backup",
+      "subtitle": "Requerido antes de cualquier cambio.",
+      "hint": "Eres responsable de conservar este backup hasta verificar que todo funciona.",
+      "checkbox": "Creé el backup"
+    },
+    "pipewireConfig": {
+      "title": "Permitir Múltiples Sample Rates",
+      "subtitle": "Habilita cambio automático sin forzar 48kHz.",
+      "explanation": "Por defecto, PipeWire fija 48kHz. Esta config permite que tu DAC cambie al sample rate nativo de cada pista.",
+      "selectRates": "Selecciona los sample rates que soporta tu DAC:",
+      "noRatesHint": "Sin rates seleccionados. Se usarán valores por defecto."
+    },
+    "pulseConfig": {
+      "title": "Elegir Apps para Bit-Perfect",
+      "subtitle": "Agrega QBZ y players que quieras sin resampling.",
+      "apps": {
+        "qbz": "QBZ",
+        "qobuzPlayer": "qobuz-player (TUI)",
+        "vlc": "VLC",
+        "deadbeef": "DeaDBeeF",
+        "strawberry": "Strawberry",
+        "clementine": "Clementine",
+        "custom": "Personalizado..."
+      },
+      "customPlaceholder": "Nombre del binario (ej. mi-player)",
+      "warning": "Mejor resultado: usa bit-perfect por app. El bit-perfect global en Pulse puede romper navegadores y apps que usan 48kHz fijo."
+    },
+    "wireplumberConfig": {
+      "title": "Apuntar Solo a tu DAC",
+      "subtitle": "Aplica reglas solo al sink detectado.",
+      "targeting": "Esto apunta a:",
+      "rulesNote": "Estas reglas aplican únicamente al DAC detectado."
+    },
+    "restart": {
+      "title": "Reiniciar Servicios de Audio",
+      "subtitle": "Necesario para aplicar cambios.",
+      "hint": "El audio puede detenerse brevemente. Es normal.",
+      "checkbox": "Ya reinicié servicios"
+    },
+    "verify": {
+      "title": "Verificar Cambio de Sample Rate",
+      "subtitle": "Reproduce diferentes sample rates y confirma que RATE cambia.",
+      "instructions": "1. Abre una terminal y ejecuta: pw-top\n2. En QBZ, reproduce una pista de 44.1kHz\n3. Verifica que RATE muestre 44100\n4. Reproduce una pista de 96kHz\n5. Verifica que RATE muestre 96000",
+      "success": "RATE debe cambiar para coincidir con el sample rate de cada pista.",
+      "passed": "Exitoso",
+      "failed": "Falló",
+      "skip": "Omitir",
+      "rollbackTitle": "Restaurar Backup",
+      "rollbackHint": "Ejecuta estos comandos para restaurar tu configuración anterior:"
+    },
+    "done": {
+      "title": "Configuración Completa",
+      "subtitle": "Tu DAC está configurado para reproducción bit-perfect.",
+      "configuredFor": "Configurado para:",
+      "summary": "Configs creados:",
+      "close": "Cerrar"
+    },
+    "error": {
+      "title": "¿Necesitas Ayuda?",
+      "body": "Si algo salió mal, consulta estos recursos:",
+      "pipewireDocs": "Documentación Oficial de PipeWire",
+      "archWiki": "Arch Wiki - PipeWire",
+      "pipewireUrl": "https://docs.pipewire.org/",
+      "archWikiUrl": "https://wiki.archlinux.org/title/PipeWire"
+    },
+    "buttons": {
+      "next": "Siguiente",
+      "back": "Atrás",
+      "close": "Cerrar",
+      "copy": "Copiar",
+      "copied": "¡Copiado!"
+    },
+    "steps": {
+      "welcome": "Bienvenida",
+      "precheck": "Pre-check",
+      "detectDac": "Detectar DAC",
+      "backup": "Backup",
+      "pipewireConfig": "PipeWire",
+      "pulseConfig": "Pulse",
+      "wireplumberConfig": "WirePlumber",
+      "restart": "Reiniciar",
+      "verify": "Verificar",
+      "done": "Completado"
+    }
   }
 }
