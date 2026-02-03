@@ -52,6 +52,9 @@ impl ApiCache {
     }
 
     fn init(&self) -> Result<(), String> {
+        // Run migrations first
+        self.migrate_artists_table()?;
+
         self.conn
             .execute_batch(
                 r#"
@@ -80,6 +83,46 @@ impl ApiCache {
                 "#,
             )
             .map_err(|e| format!("Failed to initialize API cache: {}", e))?;
+        Ok(())
+    }
+
+    /// Migrate old cached_artists table (without locale) to new schema
+    fn migrate_artists_table(&self) -> Result<(), String> {
+        // Check if cached_artists table exists
+        let table_exists: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='cached_artists'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !table_exists {
+            return Ok(()); // Table doesn't exist, will be created fresh
+        }
+
+        // Check if locale column exists
+        let has_locale: bool = self
+            .conn
+            .prepare("PRAGMA table_info(cached_artists)")
+            .map_err(|e| format!("Failed to query table info: {}", e))?
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(|e| format!("Failed to read table info: {}", e))?
+            .filter_map(Result::ok)
+            .any(|col| col == "locale");
+
+        if has_locale {
+            return Ok(()); // Already migrated
+        }
+
+        // Old table without locale column - drop it (cache can be regenerated)
+        log::info!("Migrating cached_artists table: dropping old schema without locale column");
+        self.conn
+            .execute("DROP TABLE cached_artists", [])
+            .map_err(|e| format!("Failed to drop old cached_artists table: {}", e))?;
+
         Ok(())
     }
 
