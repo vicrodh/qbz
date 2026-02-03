@@ -15,6 +15,7 @@ use std::sync::{Arc, Mutex};
 pub struct RemoteControlSettings {
     pub enabled: bool,
     pub port: u16,
+    pub secure: bool,
     pub token: String,
 }
 
@@ -23,6 +24,7 @@ impl Default for RemoteControlSettings {
         Self {
             enabled: false,
             port: 8182,
+            secure: false,
             token: String::new(),
         }
     }
@@ -50,14 +52,17 @@ impl RemoteControlSettingsStore {
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 enabled INTEGER NOT NULL DEFAULT 1,
                 port INTEGER NOT NULL DEFAULT 8182,
+                secure INTEGER NOT NULL DEFAULT 0,
                 token TEXT NOT NULL DEFAULT ''
             );"
         ).map_err(|e| format!("Failed to create remote control settings table: {}", e))?;
 
+        ensure_secure_column(&conn)?;
+
         let token = generate_token();
         conn.execute(
-            "INSERT OR IGNORE INTO remote_control_settings (id, enabled, port, token)
-            VALUES (1, 0, 8182, ?1)",
+            "INSERT OR IGNORE INTO remote_control_settings (id, enabled, port, secure, token)
+            VALUES (1, 0, 8182, 0, ?1)",
             params![token],
         ).map_err(|e| format!("Failed to insert default remote control settings: {}", e))?;
 
@@ -67,15 +72,17 @@ impl RemoteControlSettingsStore {
     pub fn get_settings(&self) -> Result<RemoteControlSettings, String> {
         let mut settings = self.conn
             .query_row(
-                "SELECT enabled, port, token FROM remote_control_settings WHERE id = 1",
+                "SELECT enabled, port, secure, token FROM remote_control_settings WHERE id = 1",
                 [],
                 |row| {
                     let enabled: i32 = row.get(0)?;
                     let port: i64 = row.get(1)?;
-                    let token: String = row.get(2)?;
+                    let secure: i32 = row.get(2)?;
+                    let token: String = row.get(3)?;
                     Ok(RemoteControlSettings {
                         enabled: enabled != 0,
                         port: port as u16,
+                        secure: secure != 0,
                         token,
                     })
                 },
@@ -107,6 +114,16 @@ impl RemoteControlSettingsStore {
                 params![port as i64],
             )
             .map_err(|e| format!("Failed to set remote control port: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_secure(&self, secure: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE remote_control_settings SET secure = ?1 WHERE id = 1",
+                params![if secure { 1 } else { 0 }],
+            )
+            .map_err(|e| format!("Failed to set remote control secure: {}", e))?;
         Ok(())
     }
 
@@ -160,6 +177,13 @@ impl RemoteControlSettingsState {
             .set_port(port)
     }
 
+    pub fn set_secure(&self, secure: bool) -> Result<(), String> {
+        self.store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?
+            .set_secure(secure)
+    }
+
     pub fn regenerate_token(&self) -> Result<String, String> {
         self.store
             .lock()
@@ -172,4 +196,31 @@ fn generate_token() -> String {
     let mut bytes = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut bytes);
     base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}
+
+fn ensure_secure_column(conn: &Connection) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(remote_control_settings)")
+        .map_err(|e| format!("Failed to read settings schema: {}", e))?;
+    let mut rows = stmt
+        .query([])
+        .map_err(|e| format!("Failed to read settings schema: {}", e))?;
+
+    while let Some(row) = rows
+        .next()
+        .map_err(|e| format!("Schema read error: {}", e))?
+    {
+        let name: String = row.get(1).map_err(|e| format!("Schema read error: {}", e))?;
+        if name == "secure" {
+            return Ok(());
+        }
+    }
+
+    conn.execute(
+        "ALTER TABLE remote_control_settings ADD COLUMN secure INTEGER NOT NULL DEFAULT 0",
+        [],
+    )
+    .map_err(|e| format!("Failed to migrate remote control settings: {}", e))?;
+
+    Ok(())
 }

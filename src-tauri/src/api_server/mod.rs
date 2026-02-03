@@ -7,12 +7,15 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use axum_server::{tls_rustls::RustlsConfig, Handle as AxumHandle};
 use base64::Engine;
-use futures_util::SinkExt;
+use rcgen::{CertificateParams, DistinguishedName, DnType, SanType};
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use std::path::PathBuf;
+use std::time::Duration;
 use tauri::{AppHandle, Manager};
-use tokio::sync::{broadcast, oneshot, Mutex};
+use tokio::sync::{broadcast, Mutex};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::{
@@ -42,6 +45,8 @@ pub struct RemoteControlStatus {
     pub running: bool,
     pub port: u16,
     pub local_url: String,
+    pub secure: bool,
+    pub cert_url: Option<String>,
     pub token: String,
     pub last_error: Option<String>,
 }
@@ -82,7 +87,7 @@ struct VolumeRequest {
 
 #[derive(Debug)]
 struct ApiServerHandle {
-    shutdown_tx: oneshot::Sender<()>,
+    handle: AxumHandle<SocketAddr>,
 }
 
 struct ApiServerInner {
@@ -121,7 +126,7 @@ impl ApiServerState {
         }
 
         if let Some(handle) = inner.server.take() {
-            let _ = handle.shutdown_tx.send(());
+            handle.handle.graceful_shutdown(Some(Duration::from_secs(2)));
         }
 
         inner.current = Some(settings.clone());
@@ -139,30 +144,48 @@ impl ApiServerState {
 
         let router = build_router(ctx);
         let bind_addr = SocketAddr::from(([0, 0, 0, 0], settings.port));
-        let listener = tokio::net::TcpListener::bind(bind_addr)
-            .await
-            .map_err(|err| {
-                let msg = format!("Remote control API bind failed: {}", err);
+        let handle = AxumHandle::<SocketAddr>::new();
+        let make_service = router.into_make_service_with_connect_info::<SocketAddr>();
+
+        if settings.secure {
+            let (cert_path, key_path) = ensure_certificate().map_err(|err| {
+                let msg = format!("Remote control certificate error: {}", err);
                 inner.last_error = Some(msg.clone());
                 msg
             })?;
 
-        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-        tauri::async_runtime::spawn(async move {
-            let server = axum::serve(
-                listener,
-                router.into_make_service_with_connect_info::<SocketAddr>(),
-            )
-            .with_graceful_shutdown(async {
-                let _ = shutdown_rx.await;
+            let tls_config = RustlsConfig::from_pem_file(cert_path, key_path)
+                .await
+                .map_err(|err| {
+                    let msg = format!("Remote control TLS config failed: {}", err);
+                    inner.last_error = Some(msg.clone());
+                    msg
+                })?;
+
+            let handle_clone = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let server = axum_server::bind_rustls(bind_addr, tls_config)
+                    .handle(handle_clone)
+                    .serve(make_service);
+
+                if let Err(err) = server.await {
+                    log::error!("Remote control HTTPS server error: {}", err);
+                }
             });
+        } else {
+            let handle_clone = handle.clone();
+            tauri::async_runtime::spawn(async move {
+                let server = axum_server::bind(bind_addr)
+                    .handle(handle_clone)
+                    .serve(make_service);
 
-            if let Err(err) = server.await {
-                log::error!("Remote control API server error: {}", err);
-            }
-        });
+                if let Err(err) = server.await {
+                    log::error!("Remote control HTTP server error: {}", err);
+                }
+            });
+        }
 
-        inner.server = Some(ApiServerHandle { shutdown_tx });
+        inner.server = Some(ApiServerHandle { handle });
         Ok(())
     }
 
@@ -172,11 +195,18 @@ impl ApiServerState {
         local_url: String,
     ) -> RemoteControlStatus {
         let inner = self.inner.lock().await;
+        let cert_url = if settings.secure {
+            Some(format!("{}/api/cert", local_url))
+        } else {
+            None
+        };
         RemoteControlStatus {
             enabled: settings.enabled,
             running: inner.server.is_some(),
             port: settings.port,
             local_url,
+            secure: settings.secure,
+            cert_url,
             token: settings.token.clone(),
             last_error: inner.last_error.clone(),
         }
@@ -197,7 +227,7 @@ pub fn broadcast_playback_event(app_handle: &AppHandle, event: &PlaybackEvent) {
 pub async fn remote_control_get_status(app: AppHandle) -> Result<RemoteControlStatus, String> {
     let settings_state = app.state::<RemoteControlSettingsState>();
     let settings = settings_state.get_settings()?;
-    let local_url = get_local_url(settings.port);
+    let local_url = get_local_url(settings.port, settings.secure);
     let api_state = app.state::<ApiServerState>();
     Ok(api_state.status(&settings, local_url).await)
 }
@@ -218,11 +248,22 @@ pub async fn remote_control_set_port(
     port: u16,
     app: AppHandle,
 ) -> Result<RemoteControlStatus, String> {
-    if port < 1024 || port > 65535 {
+    if port < 1024 {
         return Err("Port must be between 1024 and 65535".to_string());
     }
     let settings_state = app.state::<RemoteControlSettingsState>();
     settings_state.set_port(port)?;
+    sync_server(&app).await?;
+    remote_control_get_status(app).await
+}
+
+#[tauri::command]
+pub async fn remote_control_set_secure(
+    secure: bool,
+    app: AppHandle,
+) -> Result<RemoteControlStatus, String> {
+    let settings_state = app.state::<RemoteControlSettingsState>();
+    settings_state.set_secure(secure)?;
     sync_server(&app).await?;
     remote_control_get_status(app).await
 }
@@ -243,7 +284,7 @@ pub async fn remote_control_get_pairing_qr(
 ) -> Result<RemoteControlQr, String> {
     let settings_state = app.state::<RemoteControlSettingsState>();
     let settings = settings_state.get_settings()?;
-    let url = get_local_url(settings.port);
+    let url = get_local_url(settings.port, settings.secure);
     let payload = serde_json::json!({
         "url": url,
         "token": settings.token,
@@ -286,6 +327,7 @@ fn build_router(ctx: ApiContext) -> Router {
 
     Router::new()
         .route("/api/ping", get(ping))
+        .route("/api/cert", get(get_certificate))
         .route("/api/status", get(now_playing))
         .route("/api/now-playing", get(now_playing))
         .route("/api/playback/play", post(play))
@@ -309,6 +351,23 @@ async fn ping(State(_ctx): State<ApiContext>) -> impl IntoResponse {
         version: env!("CARGO_PKG_VERSION").to_string(),
         name,
     })
+}
+
+async fn get_certificate() -> Result<impl IntoResponse, StatusCode> {
+    let (cert_path, _) = ensure_certificate().map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let pem = std::fs::read_to_string(cert_path).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let mut headers = header::HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static("application/x-pem-file"),
+    );
+    headers.insert(
+        header::CONTENT_DISPOSITION,
+        header::HeaderValue::from_static("attachment; filename=\"qbz-remote-control.pem\""),
+    );
+
+    Ok((headers, pem))
 }
 
 async fn now_playing(State(ctx): State<ApiContext>) -> Result<Json<NowPlayingResponse>, StatusCode> {
@@ -471,6 +530,10 @@ async fn require_token(
         return StatusCode::NO_CONTENT.into_response();
     }
 
+    if req.uri().path() == "/api/cert" {
+        return next.run(req).await;
+    }
+
     if ctx.token.is_empty() {
         return StatusCode::FORBIDDEN.into_response();
     }
@@ -568,11 +631,12 @@ fn is_ipv6_link_local(addr: std::net::Ipv6Addr) -> bool {
     (addr.segments()[0] & 0xffc0) == 0xfe80
 }
 
-fn get_local_url(port: u16) -> String {
+fn get_local_url(port: u16, secure: bool) -> String {
     let ip = local_ip().unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
+    let scheme = if secure { "https" } else { "http" };
     match ip {
-        IpAddr::V4(addr) => format!("http://{}:{}", addr, port),
-        IpAddr::V6(addr) => format!("http://[{}]:{}", addr, port),
+        IpAddr::V4(addr) => format!("{}://{}:{}", scheme, addr, port),
+        IpAddr::V6(addr) => format!("{}://[{}]:{}", scheme, addr, port),
     }
 }
 
@@ -581,6 +645,61 @@ fn local_ip() -> Option<IpAddr> {
     socket.connect("8.8.8.8:80").ok()?;
     let local_addr = socket.local_addr().ok()?;
     Some(local_addr.ip())
+}
+
+fn remote_control_data_dir() -> Result<PathBuf, String> {
+    let data_dir = dirs::data_dir()
+        .ok_or("Could not determine data directory")?
+        .join("qbz");
+    std::fs::create_dir_all(&data_dir)
+        .map_err(|e| format!("Failed to create data directory: {}", e))?;
+    Ok(data_dir)
+}
+
+fn certificate_paths() -> Result<(PathBuf, PathBuf), String> {
+    let dir = remote_control_data_dir()?;
+    Ok((
+        dir.join("remote_control_cert.pem"),
+        dir.join("remote_control_key.pem"),
+    ))
+}
+
+fn ensure_certificate() -> Result<(PathBuf, PathBuf), String> {
+    let (cert_path, key_path) = certificate_paths()?;
+    if cert_path.exists() && key_path.exists() {
+        return Ok((cert_path, key_path));
+    }
+
+    let mut params = CertificateParams::new(Vec::new());
+    let mut dn = DistinguishedName::new();
+    dn.push(DnType::CommonName, "QBZ Remote Control");
+    params.distinguished_name = dn;
+
+    let mut sans = Vec::new();
+    sans.push(SanType::DnsName("localhost".into()));
+    sans.push(SanType::IpAddress(IpAddr::V4(Ipv4Addr::LOCALHOST)));
+    if let Some(ip) = local_ip() {
+        sans.push(SanType::IpAddress(ip));
+    }
+    if let Ok(hostname) = std::env::var("HOSTNAME") {
+        if !hostname.is_empty() {
+            sans.push(SanType::DnsName(hostname));
+        }
+    }
+    params.subject_alt_names = sans;
+
+    let cert = rcgen::Certificate::from_params(params)
+        .map_err(|e| format!("Failed to generate certificate: {}", e))?;
+    let cert_pem = cert.serialize_pem()
+        .map_err(|e| format!("Failed to serialize certificate: {}", e))?;
+    let key_pem = cert.serialize_private_key_pem();
+
+    std::fs::write(&cert_path, cert_pem)
+        .map_err(|e| format!("Failed to write certificate: {}", e))?;
+    std::fs::write(&key_path, key_pem)
+        .map_err(|e| format!("Failed to write certificate key: {}", e))?;
+
+    Ok((cert_path, key_path))
 }
 
 fn get_device_name() -> String {

@@ -900,6 +900,7 @@ pub fn run() {
             api_server::remote_control_get_status,
             api_server::remote_control_set_enabled,
             api_server::remote_control_set_port,
+            api_server::remote_control_set_secure,
             api_server::remote_control_get_pairing_qr,
             api_server::remote_control_regenerate_token,
             // Legal settings commands

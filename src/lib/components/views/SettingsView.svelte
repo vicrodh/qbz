@@ -119,6 +119,8 @@
     running: boolean;
     port: number;
     localUrl: string;
+    secure: boolean;
+    certUrl?: string | null;
     token: string;
     lastError?: string | null;
   }
@@ -636,7 +638,9 @@
   let remoteControlStatus = $state<RemoteControlStatus | null>(null);
   let remoteControlEnabled = $state(false);
   let remoteControlPort = $state(8182);
+  let remoteControlSecure = $state(false);
   let remoteControlToken = $state('');
+  let remoteControlCertUrl = $state('');
   let remoteControlLoading = $state(false);
   let remoteControlQrOpen = $state(false);
   let remoteControlQrData = $state('');
@@ -1004,8 +1008,10 @@
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
+      remoteControlSecure = status.secure;
       remoteControlUrl = status.localUrl;
       remoteControlToken = status.token;
+      remoteControlCertUrl = status.certUrl ?? '';
     } catch (err) {
       console.error('Failed to load remote control status:', err);
     }
@@ -1018,8 +1024,10 @@
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
+      remoteControlSecure = status.secure;
       remoteControlUrl = status.localUrl;
       remoteControlToken = status.token;
+      remoteControlCertUrl = status.certUrl ?? '';
       if (!enabled) {
         remoteControlQrOpen = false;
       }
@@ -1038,8 +1046,10 @@
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
+      remoteControlSecure = status.secure;
       remoteControlUrl = status.localUrl;
       remoteControlToken = status.token;
+      remoteControlCertUrl = status.certUrl ?? '';
       if (remoteControlQrOpen) {
         await handleRemoteControlQrToggle(true);
       }
@@ -1091,7 +1101,9 @@
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
+      remoteControlSecure = status.secure;
       remoteControlToken = status.token;
+      remoteControlCertUrl = status.certUrl ?? '';
     } catch (err) {
       console.error('Failed to regenerate remote control token:', err);
     } finally {
@@ -1106,6 +1118,37 @@
       showToast(get(t)('toast.copied'), 'success');
     } catch (err) {
       console.error('Failed to copy token:', err);
+    }
+  }
+
+  async function handleRemoteControlCopyCert() {
+    if (!remoteControlCertUrl) return;
+    try {
+      await copyToClipboard(remoteControlCertUrl);
+      showToast(get(t)('toast.copied'), 'success');
+    } catch (err) {
+      console.error('Failed to copy certificate URL:', err);
+    }
+  }
+
+  async function handleRemoteControlSecureChange(secure: boolean) {
+    remoteControlLoading = true;
+    try {
+      const status = await invoke<RemoteControlStatus>('remote_control_set_secure', { secure });
+      remoteControlStatus = status;
+      remoteControlEnabled = status.enabled;
+      remoteControlPort = status.port;
+      remoteControlSecure = status.secure;
+      remoteControlUrl = status.localUrl;
+      remoteControlToken = status.token;
+      remoteControlCertUrl = status.certUrl ?? '';
+      if (remoteControlQrOpen) {
+        await handleRemoteControlQrToggle(true);
+      }
+    } catch (err) {
+      console.error('Failed to update remote control secure mode:', err);
+    } finally {
+      remoteControlLoading = false;
     }
   }
 
@@ -2811,6 +2854,20 @@
       />
     </div>
 
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.remoteControlSecure')}</span>
+        <small class="setting-note">
+          {$t('settings.integrations.remoteControlSecureDesc')}
+        </small>
+      </div>
+      <Toggle
+        enabled={remoteControlSecure}
+        onchange={handleRemoteControlSecureChange}
+        disabled={!remoteControlEnabled || remoteControlLoading}
+      />
+    </div>
+
     {#if remoteControlEnabled}
       <div class="setting-row">
         <div class="setting-info">
@@ -2831,6 +2888,33 @@
             class="connect-btn connected"
             onclick={handleRemoteControlCopyToken}
             disabled={!remoteControlEnabled || remoteControlLoading || !remoteControlToken}
+          >
+            {$t('actions.copy')}
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if remoteControlEnabled && remoteControlSecure}
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.integrations.remoteControlCert')}</span>
+          <small class="setting-note">
+            {$t('settings.integrations.remoteControlCertDesc')}
+          </small>
+        </div>
+        <div class="remote-control-actions">
+          <input
+            class="remote-control-input"
+            type="text"
+            readonly
+            value={remoteControlCertUrl}
+            disabled={!remoteControlEnabled || remoteControlLoading}
+          />
+          <button
+            class="connect-btn connected"
+            onclick={handleRemoteControlCopyCert}
+            disabled={!remoteControlEnabled || remoteControlLoading || !remoteControlCertUrl}
           >
             {$t('actions.copy')}
           </button>
