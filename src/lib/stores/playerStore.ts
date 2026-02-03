@@ -75,6 +75,22 @@ interface PlaybackEvent {
   bit_depth: number | null;    // Actual stream bit depth
 }
 
+// Queue track from backend (for external track sync)
+interface QueueTrack {
+  id: number;
+  title: string;
+  artist: string;
+  album: string;
+  duration_secs: number;
+  artwork_url: string | null;
+  hires: boolean;
+  bit_depth: number | null;
+  sample_rate: number | null;
+  is_local?: boolean;
+  album_id?: string | null;
+  artist_id?: number | null;
+}
+
 // ============ State ============
 
 /**
@@ -419,9 +435,37 @@ export function setOnTrackEnded(callback: () => Promise<void>): void {
  * Handle playback event from backend
  */
 async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
+  // Track changed externally (e.g., from remote control)
+  if (event.track_id !== 0 && (!currentTrack || event.track_id !== currentTrack.id)) {
+    console.log('[Player] Track changed externally, fetching new track info...');
+    try {
+      const queueTrack = await invoke<QueueTrack | null>('get_current_queue_track');
+      if (queueTrack && queueTrack.id === event.track_id) {
+        currentTrack = {
+          id: queueTrack.id,
+          title: queueTrack.title,
+          artist: queueTrack.artist,
+          album: queueTrack.album,
+          artwork: queueTrack.artwork_url || '',
+          duration: queueTrack.duration_secs,
+          quality: queueTrack.hires ? 'Hi-Res' : 'CD Quality',
+          bitDepth: queueTrack.bit_depth,
+          samplingRate: queueTrack.sample_rate,
+          isLocal: queueTrack.is_local,
+          albumId: queueTrack.album_id,
+          artistId: queueTrack.artist_id
+        };
+        duration = queueTrack.duration_secs;
+        console.log('[Player] Updated to external track:', queueTrack.title);
+      }
+    } catch (err) {
+      console.error('[Player] Failed to fetch external track:', err);
+    }
+  }
+
   if (!currentTrack) return;
 
-  // Only update if we have a matching track
+  // Update playback state if track matches
   if (event.track_id === currentTrack.id) {
     currentTime = event.position;
     isPlaying = event.is_playing;
