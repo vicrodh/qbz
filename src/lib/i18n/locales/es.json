@@ -957,5 +957,18 @@
   },
   "filter": {
     "all": "Todos"
+  },
+  "genreFilter": {
+    "title": "Filtrar por género",
+    "genreAll": "Género: Todos",
+    "genrePrefix": "Género:",
+    "genresCount": "{count} géneros",
+    "rememberSelection": "Recordar selección",
+    "advancedView": "Vista avanzada",
+    "toggleAdvancedView": "Alternar vista avanzada",
+    "clearSearch": "Limpiar búsqueda",
+    "collapse": "Contraer",
+    "expand": "Expandir",
+    "clearFilter": "Limpiar filtro"
   }
 }

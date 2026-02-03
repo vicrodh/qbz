@@ -230,36 +230,36 @@
     <div class="popup-header">
       <div class="header-title">
         <SlidersHorizontal size={16} />
-        <span>Filter by genre</span>
+        <span>{$t('genreFilter.title')}</span>
       </div>
-      <button class="close-btn" onclick={onClose} type="button" title="Close">
+      <button class="close-btn" onclick={onClose} type="button" title={$t('actions.close')}>
         <X size={16} />
       </button>
     </div>
 
     <div class="options-row">
       <div class="option-item">
-        <span>Remember selection</span>
+        <span>{$t('genreFilter.rememberSelection')}</span>
         <button
           class="toggle-switch"
           class:active={rememberSelection}
           onclick={handleRememberToggle}
           type="button"
           aria-pressed={rememberSelection}
-          title="Remember selection"
+          title={$t('genreFilter.rememberSelection')}
         >
           <span class="toggle-thumb"></span>
         </button>
       </div>
       <div class="option-item">
-        <span>Advanced view</span>
+        <span>{$t('genreFilter.advancedView')}</span>
         <button
           class="toggle-switch"
           class:active={showAllGenres}
           onclick={() => showAllGenres = !showAllGenres}
           type="button"
           aria-pressed={showAllGenres}
-          title="Toggle advanced view"
+          title={$t('genreFilter.toggleAdvancedView')}
         >
           <span class="toggle-thumb"></span>
         </button>
@@ -276,7 +276,7 @@
           class="search-input"
         />
         {#if searchQuery}
-          <button class="clear-search" onclick={() => searchQuery = ''} type="button" title="Clear search">
+          <button class="clear-search" onclick={() => searchQuery = ''} type="button" title={$t('genreFilter.clearSearch')}>
             <X size={12} />
           </button>
         {/if}
@@ -297,7 +297,7 @@
             <div class="tree-node">
               <div class="node-row level-0" class:selected={parentState === 'all'} class:partial={parentState === 'partial'}>
                 {#if hasLoadedChildren || !areChildrenLoaded(parentNode.genre.id)}
-                  <button class="expand-btn" onclick={(e) => { e.stopPropagation(); toggleExpanded(parentNode.genre.id); }} type="button" title={isExpanded ? 'Collapse' : 'Expand'}>
+                  <button class="expand-btn" onclick={(e) => { e.stopPropagation(); toggleExpanded(parentNode.genre.id); }} type="button" title={isExpanded ? $t('genreFilter.collapse') : $t('genreFilter.expand')}>
                     {#if isLoading}
                       <Loader2 size={14} class="animate-spin" />
                     {:else if isExpanded}
@@ -337,7 +337,7 @@
                     <div class="tree-node">
                       <div class="node-row level-1" class:selected={childState === 'all'} class:partial={childState === 'partial'}>
                         {#if hasGrandchildren}
-                          <button class="expand-btn" onclick={(e) => { e.stopPropagation(); toggleExpanded(childNode.genre.id); }} type="button" title={childExpanded ? 'Collapse' : 'Expand'}>
+                          <button class="expand-btn" onclick={(e) => { e.stopPropagation(); toggleExpanded(childNode.genre.id); }} type="button" title={childExpanded ? $t('genreFilter.collapse') : $t('genreFilter.expand')}>
                             {#if childLoading}
                               <Loader2 size={12} class="animate-spin" />
                             {:else if childExpanded}
@@ -414,7 +414,7 @@
         type="button"
         disabled={!hasActiveFilter(context)}
       >
-        Clear filter
+        {$t('genreFilter.clearFilter')}
       </button>
     </div>
   </div>

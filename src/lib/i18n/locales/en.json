@@ -957,5 +957,18 @@
   },
   "filter": {
     "all": "All"
+  },
+  "genreFilter": {
+    "title": "Filter by genre",
+    "genreAll": "Genre: All",
+    "genrePrefix": "Genre:",
+    "genresCount": "{count} genres",
+    "rememberSelection": "Remember selection",
+    "advancedView": "Advanced view",
+    "toggleAdvancedView": "Toggle advanced view",
+    "clearSearch": "Clear search",
+    "collapse": "Collapse",
+    "expand": "Expand",
+    "clearFilter": "Clear filter"
   }
 }

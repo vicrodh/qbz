@@ -1,6 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { SlidersHorizontal, ChevronDown } from 'lucide-svelte';
+  import { t } from '$lib/i18n';
+  import { get } from 'svelte/store';
   import GenreFilterPopup from './GenreFilterPopup.svelte';
   import {
     hasActiveFilter,
@@ -58,7 +60,8 @@
     if (selectedNames.length === 1) {
       selectedGenreName = selectedNames[0];
     } else if (selectedNames.length > 1) {
-      selectedGenreName = `${selectedNames.length} genres`;
+      const translate = get(t);
+      selectedGenreName = translate('genreFilter.genresCount', { values: { count: selectedNames.length } });
     } else {
       selectedGenreName = null;
     }
@@ -84,9 +87,9 @@
     >
       <span>
         {#if selectedGenreName}
-          Genre: {selectedGenreName}
+          {$t('genreFilter.genrePrefix')} {selectedGenreName}
         {:else}
-          Genre: All
+          {$t('genreFilter.genreAll')}
         {/if}
       </span>
       <ChevronDown size={14} />
@@ -103,7 +106,7 @@
       {#if selectedGenreName}
         <span class="filter-label">{selectedGenreName}</span>
       {:else}
-        <span class="filter-label">Filter by genre</span>
+        <span class="filter-label">{$t('genreFilter.title')}</span>
       {/if}
     </button>
   {/if}
