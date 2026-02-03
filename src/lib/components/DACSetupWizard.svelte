@@ -136,9 +136,14 @@
   const dacValidation = $derived(validateNodeName(dacNodeName));
   const dacType = $derived(detectDacType(dacNodeName));
 
+  // Convert kebab-case to camelCase for translation keys
+  function toCamelCase(str: string): string {
+    return str.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+  }
+
   const steps = $derived<Step[]>(STEPS.map((step, index) => ({
     id: step,
-    label: $t(`dacWizard.steps.${step === 'detect-dac' ? 'detectDac' : step.replace(/-/g, '')}`) || step,
+    label: $t(`dacWizard.steps.${toCamelCase(step)}`) || step,
     status: completedSteps.has(step) ? 'complete' : index === currentIndex ? 'active' : 'upcoming'
   })));
 
