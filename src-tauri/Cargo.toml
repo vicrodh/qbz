@@ -36,9 +36,11 @@ tower-http = { version = "0.5", features = ["cors"] }
 qrcode-generator = "4.1"
 rcgen = "0.12"
 
-# Crypto (for API signatures)
+# Crypto (for API signatures and credential encryption)
 md-5 = "0.10"
 base64 = "0.22"
+aes-gcm = "0.10"
+sha2 = "0.10"
 
 # Regex (for bundle parsing)
 regex = "1"

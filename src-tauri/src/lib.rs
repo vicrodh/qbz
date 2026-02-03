@@ -209,6 +209,9 @@ pub fn run() {
     // Initialize remote control settings state
     let remote_control_settings_state = config::remote_control_settings::RemoteControlSettingsState::new()
         .expect("Failed to initialize remote control settings");
+    // Initialize allowed origins state for CORS
+    let allowed_origins_state = config::remote_control_settings::AllowedOriginsState::new()
+        .expect("Failed to initialize allowed origins");
     // Initialize API server state for remote control
     let api_server_state = api_server::ApiServerState::new();
     // Initialize legal settings state (ToS acceptance persistence)
@@ -496,6 +499,7 @@ pub fn run() {
         .manage(favorites_cache_state)
         .manage(tray_settings_state)
         .manage(remote_control_settings_state)
+        .manage(allowed_origins_state)
         .manage(api_server_state)
         .manage(legal_settings_state)
         .manage(updates_state)
@@ -913,6 +917,10 @@ pub fn run() {
             api_server::remote_control_set_secure,
             api_server::remote_control_get_pairing_qr,
             api_server::remote_control_regenerate_token,
+            api_server::remote_control_get_allowed_origins,
+            api_server::remote_control_add_allowed_origin,
+            api_server::remote_control_remove_allowed_origin,
+            api_server::remote_control_restore_default_origins,
             // Legal settings commands
             config::legal_settings::get_legal_settings,
             config::legal_settings::get_qobuz_tos_accepted,

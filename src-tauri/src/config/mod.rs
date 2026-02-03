@@ -98,4 +98,6 @@ pub use legal_settings::{
 pub use remote_control_settings::{
     RemoteControlSettings,
     RemoteControlSettingsState,
+    AllowedOrigin,
+    AllowedOriginsState,
 };

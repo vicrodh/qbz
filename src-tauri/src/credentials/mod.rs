@@ -1,23 +1,32 @@
 //! Secure credential storage with fallback
 //!
-//! Tries system keyring first, falls back to file-based storage:
+//! Tries system keyring first, falls back to encrypted file storage:
 //! - Linux: Secret Service (GNOME Keyring, KWallet via D-Bus)
 //! - macOS: Keychain
 //! - Windows: Credential Manager
-//! - Fallback: Obfuscated file in config directory
+//! - Fallback: AES-256-GCM encrypted file in config directory
 
+use aes_gcm::{
+    aead::{Aead, KeyInit},
+    Aes256Gcm, Nonce,
+};
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use keyring::Entry;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::fs;
 use std::path::PathBuf;
 
 const SERVICE_NAME: &str = "qbz";
 const QOBUZ_CREDENTIALS_KEY: &str = "qobuz-credentials";
 const FALLBACK_FILE_NAME: &str = ".qbz-auth";
+const LEGACY_FALLBACK_FILE_NAME: &str = ".qbz-auth.legacy";
 
-// Simple XOR key for obfuscation (not encryption, just to avoid plain text)
-const OBFUSCATION_KEY: &[u8] = b"QbzNixAudiophile2024";
+// Salt for key derivation (app-specific, not secret but adds uniqueness)
+const KEY_DERIVATION_SALT: &[u8] = b"QbzNixCredentialEncryption2024";
+
+// Legacy XOR key for migration (only used for reading old format)
+const LEGACY_OBFUSCATION_KEY: &[u8] = b"QbzNixAudiophile2024";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QobuzCredentials {
@@ -25,20 +34,151 @@ pub struct QobuzCredentials {
     pub password: String,
 }
 
+/// Encrypted data format stored in file
+#[derive(Serialize, Deserialize)]
+struct EncryptedCredentials {
+    /// Version for future format changes
+    version: u8,
+    /// Base64-encoded nonce (12 bytes for AES-GCM)
+    nonce: String,
+    /// Base64-encoded ciphertext
+    ciphertext: String,
+}
+
 /// Get the fallback credentials file path
 fn get_fallback_path() -> Option<PathBuf> {
     dirs::config_dir().map(|p| p.join("qbz").join(FALLBACK_FILE_NAME))
 }
 
-/// Simple XOR obfuscation (not secure, but avoids plain text)
-fn obfuscate(data: &[u8]) -> Vec<u8> {
+/// Get the legacy fallback file path (for migration)
+fn get_legacy_fallback_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|p| p.join("qbz").join(LEGACY_FALLBACK_FILE_NAME))
+}
+
+/// Get machine-specific identifier for key derivation
+fn get_machine_id() -> Vec<u8> {
+    // Try /etc/machine-id first (Linux)
+    if let Ok(id) = fs::read_to_string("/etc/machine-id") {
+        return id.trim().as_bytes().to_vec();
+    }
+
+    // Fallback to hostname
+    if let Ok(hostname) = std::env::var("HOSTNAME") {
+        return hostname.as_bytes().to_vec();
+    }
+
+    // Last resort: use username
+    if let Ok(user) = std::env::var("USER") {
+        return user.as_bytes().to_vec();
+    }
+
+    // Ultimate fallback (not great but better than nothing)
+    b"qbz-default-machine".to_vec()
+}
+
+/// Derive encryption key from machine ID
+fn derive_key() -> [u8; 32] {
+    let machine_id = get_machine_id();
+
+    let mut hasher = Sha256::new();
+    hasher.update(KEY_DERIVATION_SALT);
+    hasher.update(&machine_id);
+    hasher.update(KEY_DERIVATION_SALT); // Double salt for extra mixing
+
+    let result = hasher.finalize();
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&result);
+    key
+}
+
+/// Encrypt credentials using AES-256-GCM
+fn encrypt_credentials(credentials: &QobuzCredentials) -> Result<String, String> {
+    let key = derive_key();
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|e| format!("Failed to create cipher: {}", e))?;
+
+    // Generate random nonce
+    let nonce_bytes: [u8; 12] = aes_gcm::aead::generic_array::GenericArray::from(
+        rand::random::<[u8; 12]>()
+    ).into();
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let json = serde_json::to_string(credentials)
+        .map_err(|e| format!("Failed to serialize credentials: {}", e))?;
+
+    let ciphertext = cipher.encrypt(nonce, json.as_bytes())
+        .map_err(|e| format!("Encryption failed: {}", e))?;
+
+    let encrypted = EncryptedCredentials {
+        version: 1,
+        nonce: BASE64.encode(nonce_bytes),
+        ciphertext: BASE64.encode(ciphertext),
+    };
+
+    serde_json::to_string(&encrypted)
+        .map_err(|e| format!("Failed to serialize encrypted data: {}", e))
+}
+
+/// Decrypt credentials using AES-256-GCM
+fn decrypt_credentials(encrypted_json: &str) -> Result<QobuzCredentials, String> {
+    let encrypted: EncryptedCredentials = serde_json::from_str(encrypted_json)
+        .map_err(|e| format!("Failed to parse encrypted data: {}", e))?;
+
+    if encrypted.version != 1 {
+        return Err(format!("Unsupported encryption version: {}", encrypted.version));
+    }
+
+    let key = derive_key();
+    let cipher = Aes256Gcm::new_from_slice(&key)
+        .map_err(|e| format!("Failed to create cipher: {}", e))?;
+
+    let nonce_bytes = BASE64.decode(&encrypted.nonce)
+        .map_err(|e| format!("Failed to decode nonce: {}", e))?;
+    let nonce = Nonce::from_slice(&nonce_bytes);
+
+    let ciphertext = BASE64.decode(&encrypted.ciphertext)
+        .map_err(|e| format!("Failed to decode ciphertext: {}", e))?;
+
+    let plaintext = cipher.decrypt(nonce, ciphertext.as_ref())
+        .map_err(|_| "Decryption failed (wrong key or corrupted data)".to_string())?;
+
+    let json = String::from_utf8(plaintext)
+        .map_err(|e| format!("Failed to decode decrypted data: {}", e))?;
+
+    serde_json::from_str(&json)
+        .map_err(|e| format!("Failed to parse credentials: {}", e))
+}
+
+/// Legacy XOR deobfuscation (for migration only)
+fn legacy_deobfuscate(data: &[u8]) -> Vec<u8> {
     data.iter()
         .enumerate()
-        .map(|(i, b)| b ^ OBFUSCATION_KEY[i % OBFUSCATION_KEY.len()])
+        .map(|(i, b)| b ^ LEGACY_OBFUSCATION_KEY[i % LEGACY_OBFUSCATION_KEY.len()])
         .collect()
 }
 
-/// Save credentials to fallback file
+/// Try to load credentials from legacy XOR format
+fn load_legacy_credentials(path: &PathBuf) -> Result<Option<QobuzCredentials>, String> {
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let encoded = fs::read_to_string(path)
+        .map_err(|e| format!("Failed to read legacy file: {}", e))?;
+
+    let obfuscated = BASE64.decode(encoded.trim())
+        .map_err(|e| format!("Failed to decode legacy data: {}", e))?;
+
+    let json_bytes = legacy_deobfuscate(&obfuscated);
+    let json = String::from_utf8(json_bytes)
+        .map_err(|e| format!("Failed to decode legacy credentials: {}", e))?;
+
+    serde_json::from_str(&json)
+        .map_err(|e| format!("Failed to parse legacy credentials: {}", e))
+        .map(Some)
+}
+
+/// Save credentials to fallback file (AES-256-GCM encrypted)
 fn save_to_fallback(credentials: &QobuzCredentials) -> Result<(), String> {
     let path = get_fallback_path().ok_or("Could not determine config directory")?;
 
@@ -48,16 +188,12 @@ fn save_to_fallback(credentials: &QobuzCredentials) -> Result<(), String> {
             .map_err(|e| format!("Failed to create config directory: {}", e))?;
     }
 
-    let json = serde_json::to_string(credentials)
-        .map_err(|e| format!("Failed to serialize credentials: {}", e))?;
+    let encrypted = encrypt_credentials(credentials)?;
 
-    let obfuscated = obfuscate(json.as_bytes());
-    let encoded = BASE64.encode(&obfuscated);
-
-    fs::write(&path, encoded)
+    fs::write(&path, encrypted)
         .map_err(|e| format!("Failed to write credentials file: {}", e))?;
 
-    log::info!("Credentials saved to fallback file");
+    log::info!("Credentials saved to encrypted fallback file");
     Ok(())
 }
 
@@ -69,24 +205,81 @@ fn load_from_fallback() -> Result<Option<QobuzCredentials>, String> {
     };
 
     if !path.exists() {
+        // Check for legacy file and migrate if found
+        if let Some(legacy_path) = get_legacy_fallback_path() {
+            if legacy_path.exists() {
+                log::info!("Found legacy credentials file, attempting migration...");
+                if let Ok(Some(creds)) = load_legacy_credentials(&legacy_path) {
+                    // Save in new format
+                    if save_to_fallback(&creds).is_ok() {
+                        // Remove legacy file
+                        let _ = fs::remove_file(&legacy_path);
+                        log::info!("Successfully migrated credentials to new encrypted format");
+                        return Ok(Some(creds));
+                    }
+                }
+            }
+        }
+
+        // Also check if the current file is in legacy format (migration from old .qbz-auth)
+        let current_path = get_fallback_path();
+        if let Some(ref p) = current_path {
+            if p.exists() {
+                // Try reading as JSON first (new format)
+                if let Ok(content) = fs::read_to_string(p) {
+                    if content.trim().starts_with('{') && content.contains("\"version\"") {
+                        // It's the new format, will be handled below
+                    } else {
+                        // Might be legacy format
+                        log::info!("Attempting to read legacy format from current file...");
+                        if let Ok(Some(creds)) = load_legacy_credentials(p) {
+                            // Save in new format
+                            if save_to_fallback(&creds).is_ok() {
+                                log::info!("Successfully migrated credentials to new encrypted format");
+                                return Ok(Some(creds));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         return Ok(None);
     }
 
-    let encoded = fs::read_to_string(&path)
+    let content = fs::read_to_string(&path)
         .map_err(|e| format!("Failed to read credentials file: {}", e))?;
 
-    let obfuscated = BASE64.decode(encoded.trim())
-        .map_err(|e| format!("Failed to decode credentials: {}", e))?;
-
-    let json_bytes = obfuscate(&obfuscated);
-    let json = String::from_utf8(json_bytes)
-        .map_err(|e| format!("Failed to decode credentials: {}", e))?;
-
-    let credentials: QobuzCredentials = serde_json::from_str(&json)
-        .map_err(|e| format!("Failed to parse credentials: {}", e))?;
-
-    log::info!("Credentials loaded from fallback file");
-    Ok(Some(credentials))
+    // Check if it's the new format or legacy
+    if content.trim().starts_with('{') && content.contains("\"version\"") {
+        // New encrypted format
+        match decrypt_credentials(&content) {
+            Ok(creds) => {
+                log::info!("Credentials loaded from encrypted fallback file");
+                Ok(Some(creds))
+            }
+            Err(e) => {
+                log::warn!("Failed to decrypt credentials: {}", e);
+                // Try legacy format as fallback
+                if let Ok(Some(creds)) = load_legacy_credentials(&path) {
+                    log::info!("Loaded from legacy format, will re-encrypt on next save");
+                    return Ok(Some(creds));
+                }
+                Err(e)
+            }
+        }
+    } else {
+        // Legacy format - try to load and migrate
+        log::info!("Found legacy format, migrating...");
+        if let Ok(Some(creds)) = load_legacy_credentials(&path) {
+            // Save in new format
+            if save_to_fallback(&creds).is_ok() {
+                log::info!("Successfully migrated credentials to new encrypted format");
+            }
+            return Ok(Some(creds));
+        }
+        Ok(None)
+    }
 }
 
 /// Clear fallback credentials file
@@ -96,6 +289,12 @@ fn clear_fallback() -> Result<(), String> {
             fs::remove_file(&path)
                 .map_err(|e| format!("Failed to remove credentials file: {}", e))?;
             log::info!("Fallback credentials file removed");
+        }
+    }
+    // Also clear legacy file if exists
+    if let Some(legacy_path) = get_legacy_fallback_path() {
+        if legacy_path.exists() {
+            let _ = fs::remove_file(&legacy_path);
         }
     }
     Ok(())
@@ -115,7 +314,7 @@ pub fn save_qobuz_credentials(email: &str, password: &str) -> Result<(), String>
         password: password.to_string(),
     };
 
-    // Always save to file first (more reliable, especially in dev)
+    // Always save to encrypted file first (more reliable, especially in dev)
     save_to_fallback(&credentials)?;
 
     // Also try keyring as secondary (nice to have for desktop integration)
@@ -216,6 +415,20 @@ pub fn clear_qobuz_credentials() -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_encryption_roundtrip() {
+        let credentials = QobuzCredentials {
+            email: "test@example.com".to_string(),
+            password: "testpass123".to_string(),
+        };
+
+        let encrypted = encrypt_credentials(&credentials).expect("Encryption failed");
+        let decrypted = decrypt_credentials(&encrypted).expect("Decryption failed");
+
+        assert_eq!(decrypted.email, credentials.email);
+        assert_eq!(decrypted.password, credentials.password);
+    }
 
     #[test]
     fn test_credentials_roundtrip() {

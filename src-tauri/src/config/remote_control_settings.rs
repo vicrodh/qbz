@@ -24,7 +24,7 @@ impl Default for RemoteControlSettings {
         Self {
             enabled: false,
             port: 8182,
-            secure: false,
+            secure: true,  // HTTPS by default for security
             token: String::new(),
         }
     }
@@ -50,9 +50,9 @@ impl RemoteControlSettingsStore {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS remote_control_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                enabled INTEGER NOT NULL DEFAULT 1,
+                enabled INTEGER NOT NULL DEFAULT 0,
                 port INTEGER NOT NULL DEFAULT 8182,
-                secure INTEGER NOT NULL DEFAULT 0,
+                secure INTEGER NOT NULL DEFAULT 1,
                 token TEXT NOT NULL DEFAULT ''
             );"
         ).map_err(|e| format!("Failed to create remote control settings table: {}", e))?;
@@ -223,4 +223,197 @@ fn ensure_secure_column(conn: &Connection) -> Result<(), String> {
     .map_err(|e| format!("Failed to migrate remote control settings: {}", e))?;
 
     Ok(())
+}
+
+// ============================================================================
+// Allowed Origins for CORS
+// ============================================================================
+
+/// Default allowed origins for the PWA
+const DEFAULT_ALLOWED_ORIGINS: &[&str] = &[
+    "vicrodh.github.io",
+    "control.qbz.lol",
+    "www.control.qbz.lol",
+];
+
+/// Allowed origin entry
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AllowedOrigin {
+    pub id: i64,
+    pub origin: String,
+    pub is_default: bool,
+}
+
+/// Store for allowed CORS origins
+pub struct AllowedOriginsStore {
+    conn: Connection,
+}
+
+impl AllowedOriginsStore {
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+
+        std::fs::create_dir_all(&data_dir)
+            .map_err(|e| format!("Failed to create data directory: {}", e))?;
+
+        let db_path = data_dir.join("remote_control_settings.db");
+        let conn = Connection::open(&db_path)
+            .map_err(|e| format!("Failed to open allowed origins database: {}", e))?;
+
+        // Create allowed_origins table
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS allowed_origins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                origin TEXT NOT NULL UNIQUE,
+                is_default INTEGER NOT NULL DEFAULT 0
+            );"
+        ).map_err(|e| format!("Failed to create allowed_origins table: {}", e))?;
+
+        // Insert default origins if table is empty
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM allowed_origins",
+            [],
+            |row| row.get(0)
+        ).unwrap_or(0);
+
+        if count == 0 {
+            for origin in DEFAULT_ALLOWED_ORIGINS {
+                conn.execute(
+                    "INSERT OR IGNORE INTO allowed_origins (origin, is_default) VALUES (?1, 1)",
+                    params![origin],
+                ).ok();
+            }
+        }
+
+        Ok(Self { conn })
+    }
+
+    /// Get all allowed origins
+    pub fn get_origins(&self) -> Result<Vec<AllowedOrigin>, String> {
+        let mut stmt = self.conn
+            .prepare("SELECT id, origin, is_default FROM allowed_origins ORDER BY is_default DESC, origin ASC")
+            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+
+        let origins = stmt.query_map([], |row| {
+            Ok(AllowedOrigin {
+                id: row.get(0)?,
+                origin: row.get(1)?,
+                is_default: row.get::<_, i32>(2)? != 0,
+            })
+        }).map_err(|e| format!("Failed to query origins: {}", e))?;
+
+        origins.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| format!("Failed to collect origins: {}", e))
+    }
+
+    /// Check if an origin is allowed
+    pub fn is_origin_allowed(&self, origin: &str) -> bool {
+        self.conn.query_row(
+            "SELECT 1 FROM allowed_origins WHERE origin = ?1",
+            params![origin],
+            |_| Ok(())
+        ).is_ok()
+    }
+
+    /// Add a new allowed origin
+    pub fn add_origin(&self, origin: &str) -> Result<AllowedOrigin, String> {
+        // Normalize origin (lowercase, trim)
+        let normalized = origin.trim().to_lowercase();
+
+        if normalized.is_empty() {
+            return Err("Origin cannot be empty".to_string());
+        }
+
+        self.conn.execute(
+            "INSERT INTO allowed_origins (origin, is_default) VALUES (?1, 0)",
+            params![normalized],
+        ).map_err(|e| {
+            if e.to_string().contains("UNIQUE constraint") {
+                "Origin already exists".to_string()
+            } else {
+                format!("Failed to add origin: {}", e)
+            }
+        })?;
+
+        let id = self.conn.last_insert_rowid();
+        Ok(AllowedOrigin {
+            id,
+            origin: normalized,
+            is_default: false,
+        })
+    }
+
+    /// Remove an allowed origin by ID
+    pub fn remove_origin(&self, id: i64) -> Result<(), String> {
+        let affected = self.conn.execute(
+            "DELETE FROM allowed_origins WHERE id = ?1",
+            params![id],
+        ).map_err(|e| format!("Failed to remove origin: {}", e))?;
+
+        if affected == 0 {
+            return Err("Origin not found".to_string());
+        }
+        Ok(())
+    }
+
+    /// Restore default origins (adds missing defaults back)
+    pub fn restore_defaults(&self) -> Result<(), String> {
+        for origin in DEFAULT_ALLOWED_ORIGINS {
+            self.conn.execute(
+                "INSERT OR IGNORE INTO allowed_origins (origin, is_default) VALUES (?1, 1)",
+                params![origin],
+            ).ok();
+        }
+        Ok(())
+    }
+}
+
+/// Global state wrapper for thread-safe access to allowed origins
+pub struct AllowedOriginsState {
+    store: Arc<Mutex<AllowedOriginsStore>>,
+}
+
+impl AllowedOriginsState {
+    pub fn new() -> Result<Self, String> {
+        Ok(Self {
+            store: Arc::new(Mutex::new(AllowedOriginsStore::new()?)),
+        })
+    }
+
+    pub fn get_origins(&self) -> Result<Vec<AllowedOrigin>, String> {
+        self.store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?
+            .get_origins()
+    }
+
+    pub fn is_origin_allowed(&self, origin: &str) -> bool {
+        self.store
+            .lock()
+            .map(|s| s.is_origin_allowed(origin))
+            .unwrap_or(false)
+    }
+
+    pub fn add_origin(&self, origin: &str) -> Result<AllowedOrigin, String> {
+        self.store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?
+            .add_origin(origin)
+    }
+
+    pub fn remove_origin(&self, id: i64) -> Result<(), String> {
+        self.store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?
+            .remove_origin(id)
+    }
+
+    pub fn restore_defaults(&self) -> Result<(), String> {
+        self.store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?
+            .restore_defaults()
+    }
 }

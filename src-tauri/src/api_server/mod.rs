@@ -191,7 +191,19 @@ impl ApiServerState {
             playback_tx: self.playback_tx.clone(),
         };
 
-        let router = build_router(ctx);
+        // Load allowed origins for CORS
+        let allowed_origins = app_handle
+            .try_state::<crate::config::AllowedOriginsState>()
+            .map(|state| {
+                state.get_origins()
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|o| o.origin)
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+
+        let router = build_router(ctx, allowed_origins);
         let bind_addr = SocketAddr::from(([0, 0, 0, 0], settings.port));
         let handle = AxumHandle::<SocketAddr>::new();
         let make_service = router.into_make_service_with_connect_info::<SocketAddr>();
@@ -401,9 +413,61 @@ pub async fn sync_server(app: &AppHandle) -> Result<(), String> {
     api_state.apply_settings(app.clone(), settings).await
 }
 
-fn build_router(ctx: ApiContext) -> Router {
+// ============================================================================
+// Allowed Origins Commands
+// ============================================================================
+
+#[tauri::command]
+pub async fn remote_control_get_allowed_origins(
+    app: AppHandle,
+) -> Result<Vec<crate::config::AllowedOrigin>, String> {
+    let state = app.state::<crate::config::AllowedOriginsState>();
+    state.get_origins()
+}
+
+#[tauri::command]
+pub async fn remote_control_add_allowed_origin(
+    origin: String,
+    app: AppHandle,
+) -> Result<crate::config::AllowedOrigin, String> {
+    let state = app.state::<crate::config::AllowedOriginsState>();
+    let result = state.add_origin(&origin)?;
+    // Restart server to apply new CORS settings
+    sync_server(&app).await?;
+    Ok(result)
+}
+
+#[tauri::command]
+pub async fn remote_control_remove_allowed_origin(
+    id: i64,
+    app: AppHandle,
+) -> Result<(), String> {
+    let state = app.state::<crate::config::AllowedOriginsState>();
+    state.remove_origin(id)?;
+    // Restart server to apply new CORS settings
+    sync_server(&app).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn remote_control_restore_default_origins(
+    app: AppHandle,
+) -> Result<Vec<crate::config::AllowedOrigin>, String> {
+    let state = app.state::<crate::config::AllowedOriginsState>();
+    state.restore_defaults()?;
+    // Restart server to apply new CORS settings
+    sync_server(&app).await?;
+    state.get_origins()
+}
+
+fn build_router(ctx: ApiContext, allowed_origins: Vec<String>) -> Router {
+    let allowed_origins = std::sync::Arc::new(allowed_origins);
+    let origins_clone = allowed_origins.clone();
+
     let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::predicate(|origin, _| is_local_origin(origin)))
+        .allow_origin(AllowOrigin::predicate(move |origin, _| {
+            is_local_origin(origin, &origins_clone)
+        }))
         .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
         .allow_headers([
             header::CONTENT_TYPE,
@@ -1059,7 +1123,7 @@ fn is_local_addr(ip: IpAddr) -> bool {
     }
 }
 
-fn is_local_origin(origin: &header::HeaderValue) -> bool {
+fn is_local_origin(origin: &header::HeaderValue, allowed_origins: &[String]) -> bool {
     let origin_str = match origin.to_str() {
         Ok(value) => value,
         Err(_) => return false,
@@ -1079,14 +1143,17 @@ fn is_local_origin(origin: &header::HeaderValue) -> bool {
         None => return false,
     };
 
+    // Always allow localhost
     if host == "localhost" {
         return true;
     }
 
-    if host == "vicrodh.github.io" || host == "control.qbz.lol" || host == "www.control.qbz.lol" {
+    // Check against configured allowed origins
+    if allowed_origins.iter().any(|o| o == host) {
         return true;
     }
 
+    // Allow local network IPs
     match host.parse::<IpAddr>() {
         Ok(ip) => is_local_addr(ip),
         Err(_) => false,
