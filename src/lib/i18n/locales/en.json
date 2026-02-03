@@ -1050,7 +1050,15 @@
       "step1": "Find your DAC under 'Audio > Sinks'. Note the number (e.g., 46).",
       "step2": "Then run with that number:",
       "inputLabel": "Enter node.name",
-      "inputPlaceholder": "alsa_output.usb-..."
+      "inputPlaceholder": "alsa_output.usb-...",
+      "validation": {
+        "validFormat": "Valid format",
+        "invalidFormat": "Invalid format - should start with alsa_output. or alsa_input.",
+        "usbDac": "USB DAC - bit-perfect supported",
+        "pciDac": "Internal audio - bit-perfect depends on hardware",
+        "bluetoothDac": "Bluetooth device - bit-perfect not possible",
+        "virtualDac": "Virtual device - bit-perfect not applicable"
+      }
     },
     "backup": {
       "title": "Create Backup",

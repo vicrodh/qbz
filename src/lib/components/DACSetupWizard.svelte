@@ -1,11 +1,33 @@
 <script lang="ts">
-  import { X, CheckCircle } from 'lucide-svelte';
+  import { X, CheckCircle, Check, AlertTriangle, XCircle } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import WizardStepper, { type Step } from './wizard/WizardStepper.svelte';
   import CommandBlock from './wizard/CommandBlock.svelte';
   import WarningBanner from './wizard/WarningBanner.svelte';
   import DistroSelector from './wizard/DistroSelector.svelte';
   import BitPerfectAppSelector from './wizard/BitPerfectAppSelector.svelte';
+
+  // DAC node name validation
+  type DacType = 'usb' | 'pci' | 'bluetooth' | 'virtual' | 'unknown';
+  type ValidationStatus = 'empty' | 'valid' | 'invalid';
+
+  function validateNodeName(name: string): ValidationStatus {
+    if (!name.trim()) return 'empty';
+    // Valid patterns: alsa_output.* or alsa_input.*
+    if (/^alsa_(output|input)\.[a-zA-Z0-9_.-]+$/.test(name)) return 'valid';
+    // Might be valid but unusual format
+    if (name.includes('alsa_output') || name.includes('alsa_input')) return 'valid';
+    return 'invalid';
+  }
+
+  function detectDacType(name: string): DacType {
+    const lower = name.toLowerCase();
+    if (lower.includes('usb-') || lower.includes('.usb')) return 'usb';
+    if (lower.includes('pci-') || lower.includes('.pci')) return 'pci';
+    if (lower.includes('bluez') || lower.includes('bluetooth')) return 'bluetooth';
+    if (lower.includes('virtual') || lower.includes('null') || lower.includes('dummy')) return 'virtual';
+    return 'unknown';
+  }
 
   interface Props {
     isOpen: boolean;
@@ -64,6 +86,8 @@
 
   // Derived values
   const currentIndex = $derived(STEPS.indexOf(currentStep));
+  const dacValidation = $derived(validateNodeName(dacNodeName));
+  const dacType = $derived(detectDacType(dacNodeName));
 
   const steps = $derived<Step[]>(STEPS.map((step, index) => ({
     id: step,
@@ -259,9 +283,49 @@
                 <input
                   type="text"
                   class="text-input mono"
+                  class:valid={dacValidation === 'valid'}
+                  class:invalid={dacValidation === 'invalid'}
                   bind:value={dacNodeName}
                   placeholder={$t('dacWizard.detectDac.inputPlaceholder')}
                 />
+
+                {#if dacValidation === 'valid'}
+                  <div class="validation-feedback">
+                    <span class="validation-status valid">
+                      <Check size={14} />
+                      {$t('dacWizard.detectDac.validation.validFormat')}
+                    </span>
+
+                    {#if dacType === 'usb'}
+                      <span class="dac-type usb">
+                        <CheckCircle size={14} />
+                        {$t('dacWizard.detectDac.validation.usbDac')}
+                      </span>
+                    {:else if dacType === 'pci'}
+                      <span class="dac-type pci">
+                        <AlertTriangle size={14} />
+                        {$t('dacWizard.detectDac.validation.pciDac')}
+                      </span>
+                    {:else if dacType === 'bluetooth'}
+                      <span class="dac-type bluetooth">
+                        <XCircle size={14} />
+                        {$t('dacWizard.detectDac.validation.bluetoothDac')}
+                      </span>
+                    {:else if dacType === 'virtual'}
+                      <span class="dac-type virtual">
+                        <XCircle size={14} />
+                        {$t('dacWizard.detectDac.validation.virtualDac')}
+                      </span>
+                    {/if}
+                  </div>
+                {:else if dacValidation === 'invalid'}
+                  <div class="validation-feedback">
+                    <span class="validation-status invalid">
+                      <XCircle size={14} />
+                      {$t('dacWizard.detectDac.validation.invalidFormat')}
+                    </span>
+                  </div>
+                {/if}
               </div>
             </div>
 
@@ -611,6 +675,61 @@
 
   .text-input::placeholder {
     color: var(--text-muted);
+  }
+
+  .text-input.valid {
+    border-color: var(--color-success, #22c55e);
+  }
+
+  .text-input.invalid {
+    border-color: var(--color-error, #ef4444);
+  }
+
+  .validation-feedback {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 4px;
+  }
+
+  .validation-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .validation-status.valid {
+    color: var(--color-success, #22c55e);
+  }
+
+  .validation-status.invalid {
+    color: var(--color-error, #ef4444);
+  }
+
+  .dac-type {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    padding: 6px 10px;
+    border-radius: 6px;
+  }
+
+  .dac-type.usb {
+    color: var(--color-success, #22c55e);
+    background: rgba(34, 197, 94, 0.1);
+  }
+
+  .dac-type.pci {
+    color: var(--warning, #fbbf24);
+    background: rgba(251, 191, 36, 0.1);
+  }
+
+  .dac-type.bluetooth,
+  .dac-type.virtual {
+    color: var(--color-error, #ef4444);
+    background: rgba(239, 68, 68, 0.1);
   }
 
   .targeting-info {
