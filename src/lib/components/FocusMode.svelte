@@ -4,6 +4,11 @@
   import LyricsLines from './lyrics/LyricsLines.svelte';
   import { startActiveLineUpdates, stopActiveLineUpdates } from '$lib/stores/lyricsStore';
   import { t } from '$lib/i18n';
+  import {
+    registerAction,
+    unregisterAction,
+    handleKeydown as keybindingHandler
+  } from '$lib/stores/keybindingsStore';
 
   interface LyricsLine {
     text: string;
@@ -66,6 +71,23 @@
     return () => {
       // Cleanup is handled by the main page effect
     };
+  });
+
+  // Register focus mode seek actions when open
+  $effect(() => {
+    if (isOpen) {
+      registerAction('focus.seekForward', () => onSeek(Math.min(duration, currentTime + 5)));
+      registerAction('focus.seekBack', () => onSeek(Math.max(0, currentTime - 5)));
+      registerAction('focus.seekForwardLong', () => onSeek(Math.min(duration, currentTime + 10)));
+      registerAction('focus.seekBackLong', () => onSeek(Math.max(0, currentTime - 10)));
+
+      return () => {
+        unregisterAction('focus.seekForward');
+        unregisterAction('focus.seekBack');
+        unregisterAction('focus.seekForwardLong');
+        unregisterAction('focus.seekBackLong');
+      };
+    }
   });
 
   let showControls = $state(true);
@@ -135,12 +157,8 @@
 
   function handleKeyPress(e: KeyboardEvent) {
     if (!isOpen) return;
-    if (e.key === 'Escape') {
-      onClose();
-    } else if (e.key === ' ') {
-      e.preventDefault();
-      onTogglePlay();
-    }
+    // Delegate to keybinding manager with focus mode context
+    keybindingHandler(e, { focusMode: true });
   }
 
   function handleMouseMove() {

@@ -970,5 +970,44 @@
     "collapse": "Collapse",
     "expand": "Expand",
     "clearFilter": "Clear filter"
+  },
+  "keybindings": {
+    "title": "Keyboard Shortcuts",
+    "categories": {
+      "playback": "Playback",
+      "navigation": "Navigation",
+      "ui": "Interface",
+      "focus": "Focus Mode"
+    },
+    "actions": {
+      "playbackToggle": "Play / Pause",
+      "playbackNext": "Next Track",
+      "playbackPrev": "Previous Track",
+      "navBack": "Go Back",
+      "navForward": "Go Forward",
+      "uiFocusMode": "Focus Mode",
+      "uiQueue": "Queue",
+      "uiEscape": "Close / Dismiss",
+      "uiShowShortcuts": "Show Shortcuts",
+      "focusSeekForward": "Seek Forward (5s)",
+      "focusSeekBack": "Seek Back (5s)",
+      "focusSeekForwardLong": "Seek Forward (10s)",
+      "focusSeekBackLong": "Seek Back (10s)"
+    },
+    "descriptions": {
+      "playbackToggle": "Toggle playback",
+      "playbackNext": "Skip to next track",
+      "playbackPrev": "Go to previous track",
+      "navBack": "Navigate to previous page",
+      "navForward": "Navigate to next page",
+      "uiFocusMode": "Toggle focus mode",
+      "uiQueue": "Toggle queue panel",
+      "uiEscape": "Close active panel or modal",
+      "uiShowShortcuts": "Show keyboard shortcuts modal",
+      "focusSeekForward": "Seek forward 5 seconds",
+      "focusSeekBack": "Seek back 5 seconds",
+      "focusSeekForwardLong": "Seek forward 10 seconds",
+      "focusSeekBackLong": "Seek back 10 seconds"
+    }
   }
 }

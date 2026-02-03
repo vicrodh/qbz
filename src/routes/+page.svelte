@@ -82,6 +82,13 @@
     shouldShowTitleBar
   } from '$lib/stores/titleBarStore';
 
+  // Keybindings system
+  import {
+    registerAction,
+    unregisterAll,
+    handleKeydown as keybindingHandler
+  } from '$lib/stores/keybindingsStore';
+
   // Auth state management
   import {
     subscribe as subscribeAuth,
@@ -2337,48 +2344,12 @@
     }
   }
 
-  // Keyboard Shortcuts
+  // Keyboard Shortcuts - delegated to keybindings system
   function handleKeydown(e: KeyboardEvent) {
     if (!isLoggedIn) return;
-    if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
-      return;
-    }
 
-    switch (e.key) {
-      case ' ':
-        e.preventDefault();
-        togglePlay();
-        break;
-      case 'ArrowLeft':
-        if (e.altKey) {
-          e.preventDefault();
-          navGoBack();
-        } else if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          handleSkipBack();
-        }
-        break;
-      case 'ArrowRight':
-        if (e.altKey) {
-          e.preventDefault();
-          navGoForward();
-        } else if (e.ctrlKey || e.metaKey) {
-          e.preventDefault();
-          handleSkipForward();
-        }
-        break;
-      case 'f':
-        if (!e.ctrlKey && !e.metaKey) {
-          toggleFocusMode();
-        }
-        break;
-      case 'q':
-        toggleQueue();
-        break;
-      case 'Escape':
-        handleUIEscape();
-        break;
-    }
+    // Delegate to keybinding manager (handles input target filtering internally)
+    keybindingHandler(e);
   }
 
   // Playback state polling - managed by playerStore
@@ -2452,6 +2423,16 @@
 
     // Keyboard navigation
     document.addEventListener('keydown', handleKeydown);
+
+    // Register keybinding actions
+    registerAction('playback.toggle', togglePlay);
+    registerAction('playback.next', handleSkipForward);
+    registerAction('playback.prev', handleSkipBack);
+    registerAction('nav.back', navGoBack);
+    registerAction('nav.forward', navGoForward);
+    registerAction('ui.focusMode', toggleFocusMode);
+    registerAction('ui.queue', toggleQueue);
+    registerAction('ui.escape', handleUIEscape);
 
     // Session save on window close/hide
     const handleBeforeUnload = () => {
@@ -2773,6 +2754,7 @@
       saveSessionBeforeClose();
       cleanupBootstrap();
       document.removeEventListener('keydown', handleKeydown);
+      unregisterAll(); // Cleanup keybinding actions
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       stopOfflineCacheEventListeners();

@@ -5,6 +5,7 @@
   import StackIcon from './StackIcon.svelte';
   import LyricsLines from './lyrics/LyricsLines.svelte';
   import { startActiveLineUpdates } from '$lib/stores/lyricsStore';
+  import { handleKeydown as keybindingHandler } from '$lib/stores/keybindingsStore';
 
   interface HardwareAudioStatus {
     hardware_sample_rate: number | null;
@@ -202,12 +203,8 @@
 
   function handleKeydown(e: KeyboardEvent) {
     if (!isOpen) return;
-    if (e.key === 'Escape') {
-      onClose();
-    } else if (e.key === ' ') {
-      e.preventDefault();
-      onTogglePlay();
-    }
+    // Delegate to keybinding manager (global shortcuts handle Escape and Space)
+    keybindingHandler(e);
   }
 
   $effect(() => {

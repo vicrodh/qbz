@@ -970,5 +970,44 @@
     "collapse": "Contraer",
     "expand": "Expandir",
     "clearFilter": "Limpiar filtro"
+  },
+  "keybindings": {
+    "title": "Atajos de Teclado",
+    "categories": {
+      "playback": "Reproducción",
+      "navigation": "Navegación",
+      "ui": "Interfaz",
+      "focus": "Modo Focus"
+    },
+    "actions": {
+      "playbackToggle": "Reproducir / Pausar",
+      "playbackNext": "Siguiente Pista",
+      "playbackPrev": "Pista Anterior",
+      "navBack": "Ir Atrás",
+      "navForward": "Ir Adelante",
+      "uiFocusMode": "Modo Focus",
+      "uiQueue": "Cola",
+      "uiEscape": "Cerrar / Descartar",
+      "uiShowShortcuts": "Mostrar Atajos",
+      "focusSeekForward": "Avanzar (5s)",
+      "focusSeekBack": "Retroceder (5s)",
+      "focusSeekForwardLong": "Avanzar (10s)",
+      "focusSeekBackLong": "Retroceder (10s)"
+    },
+    "descriptions": {
+      "playbackToggle": "Alternar reproducción",
+      "playbackNext": "Saltar a la siguiente pista",
+      "playbackPrev": "Ir a la pista anterior",
+      "navBack": "Navegar a la página anterior",
+      "navForward": "Navegar a la siguiente página",
+      "uiFocusMode": "Alternar modo focus",
+      "uiQueue": "Alternar panel de cola",
+      "uiEscape": "Cerrar panel activo o modal",
+      "uiShowShortcuts": "Mostrar modal de atajos de teclado",
+      "focusSeekForward": "Avanzar 5 segundos",
+      "focusSeekBack": "Retroceder 5 segundos",
+      "focusSeekForwardLong": "Avanzar 10 segundos",
+      "focusSeekBackLong": "Retroceder 10 segundos"
+    }
   }
 }
