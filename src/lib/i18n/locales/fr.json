@@ -1020,7 +1020,9 @@
     "pipewireConfig": {
       "title": "Autoriser plusieurs taux d'échantillonnage",
       "subtitle": "Permet le changement automatique sans forcer 48kHz.",
-      "explanation": "Par défaut, PipeWire verrouille à 48kHz. Cette configuration permet à votre DAC de basculer vers le taux d'échantillonnage natif de la piste."
+      "explanation": "Par défaut, PipeWire verrouille à 48kHz. Cette configuration permet à votre DAC de basculer vers le taux d'échantillonnage natif de la piste.",
+      "selectRates": "Sélectionnez les taux d'échantillonnage pris en charge par votre DAC :",
+      "noRatesHint": "Aucun taux sélectionné. Les valeurs par défaut seront utilisées."
     },
     "pulseConfig": {
       "title": "Choisir les applications bit-perfect",

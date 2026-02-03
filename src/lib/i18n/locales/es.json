@@ -1079,7 +1079,9 @@
     "pipewireConfig": {
       "title": "Permitir Múltiples Sample Rates",
       "subtitle": "Habilita cambio automático sin forzar 48kHz.",
-      "explanation": "Por defecto, PipeWire fija 48kHz. Esta config permite que tu DAC cambie al sample rate nativo de cada pista."
+      "explanation": "Por defecto, PipeWire fija 48kHz. Esta config permite que tu DAC cambie al sample rate nativo de cada pista.",
+      "selectRates": "Selecciona los sample rates que soporta tu DAC:",
+      "noRatesHint": "Sin rates seleccionados. Se usarán valores por defecto."
     },
     "pulseConfig": {
       "title": "Elegir Apps para Bit-Perfect",

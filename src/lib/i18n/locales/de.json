@@ -1020,7 +1020,9 @@
     "pipewireConfig": {
       "title": "Mehrere Abtastraten erlauben",
       "subtitle": "Ermöglicht automatisches Umschalten ohne 48kHz-Zwang.",
-      "explanation": "Standardmäßig sperrt PipeWire auf 48kHz. Diese Konfiguration ermöglicht es Ihrem DAC, zur nativen Abtastrate des Tracks zu wechseln."
+      "explanation": "Standardmäßig sperrt PipeWire auf 48kHz. Diese Konfiguration ermöglicht es Ihrem DAC, zur nativen Abtastrate des Tracks zu wechseln.",
+      "selectRates": "Wählen Sie die von Ihrem DAC unterstützten Abtastraten:",
+      "noRatesHint": "Keine Raten ausgewählt. Standardwerte werden verwendet."
     },
     "pulseConfig": {
       "title": "Apps für Bit-Perfect wählen",

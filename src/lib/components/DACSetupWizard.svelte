@@ -88,6 +88,27 @@
   let dacCapabilities = $state<DacCapabilities | null>(null);
   let isQueryingDac = $state(false);
 
+  // Sample rate selection for PipeWire config (step 5)
+  const COMMON_SAMPLE_RATES = [44100, 48000, 88200, 96000, 176400, 192000];
+  let selectedSampleRates = $state<Set<number>>(new Set());
+
+  // Derive DAC short name for config filenames
+  const dacShortName = $derived(() => {
+    if (!dacNodeName) return 'dac';
+    // Extract meaningful part from node name
+    // alsa_output.usb-Cambridge_Audio_DacMagic_Plus-00.analog-stereo -> dacmagic-plus
+    // alsa_output.usb-Generic_Macaron-00.analog-stereo -> macaron
+    const match = dacNodeName.match(/usb-([^-]+)_([^-]+)/i);
+    if (match) {
+      return match[2].toLowerCase().replace(/_/g, '-');
+    }
+    // Fallback: try to get something from description
+    if (dacCapabilities?.description) {
+      return dacCapabilities.description.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').slice(0, 20);
+    }
+    return 'dac';
+  });
+
   async function queryDacCapabilities() {
     if (!dacNodeName.trim() || dacValidation !== 'valid') return;
 
@@ -99,6 +120,11 @@
         nodeName: dacNodeName
       });
       dacCapabilities = caps;
+
+      // Pre-fill selected sample rates from detected capabilities
+      if (caps.sample_rates.length > 0) {
+        selectedSampleRates = new Set(caps.sample_rates.filter(r => COMMON_SAMPLE_RATES.includes(r)));
+      }
     } catch (err) {
       console.error('Failed to query DAC capabilities:', err);
       dacCapabilities = {
@@ -112,6 +138,31 @@
     } finally {
       isQueryingDac = false;
     }
+  }
+
+  function toggleSampleRate(rate: number) {
+    const newSet = new Set(selectedSampleRates);
+    if (newSet.has(rate)) {
+      newSet.delete(rate);
+    } else {
+      newSet.add(rate);
+    }
+    selectedSampleRates = newSet;
+  }
+
+  function generatePipewireConfig(): string[] {
+    const rates = Array.from(selectedSampleRates).sort((a, b) => a - b);
+    const ratesStr = rates.length > 0 ? rates.join(' ') : '44100 48000 88200 96000 176400 192000';
+
+    return [
+      'mkdir -p ~/.config/pipewire/pipewire.conf.d',
+      `cat > ~/.config/pipewire/pipewire.conf.d/99-qbz-dac.conf << 'EOF'`,
+      '# QBZ DAC Setup - Sample Rate Switching',
+      'context.properties = {',
+      `  default.clock.allowed-rates = [ ${ratesStr} ]`,
+      '}',
+      'EOF'
+    ];
   }
 
   // Reset state when modal opens
@@ -128,6 +179,7 @@
       showRollback = false;
       dacCapabilities = null;
       isQueryingDac = false;
+      selectedSampleRates = new Set();
     }
   });
 
@@ -212,18 +264,23 @@
 
   // Generate WirePlumber config with user's DAC node name
   function generateWireplumberConfig(): string[] {
+    const rates = Array.from(selectedSampleRates).sort((a, b) => a - b);
+    const ratesStr = rates.length > 0 ? rates.join(' ') : '44100 48000 88200 96000 176400 192000';
+    const fileName = `99-qbz-dac-${dacShortName()}.conf`;
+    const nodeName = dacNodeName || 'alsa_output.usb-YOUR_DAC-00.analog-stereo';
+
     return [
       'mkdir -p ~/.config/wireplumber/wireplumber.conf.d',
-      `cat > ~/.config/wireplumber/wireplumber.conf.d/99-qbz-dac.conf << 'EOF'`,
-      '# QBZ DAC Setup - Device-Specific Rules',
+      `cat > ~/.config/wireplumber/wireplumber.conf.d/${fileName} << 'EOF'`,
+      `# QBZ DAC Setup - ${dacCapabilities?.description || dacShortName()}`,
       'monitor.alsa.rules = [',
       '  {',
       '    matches = [',
-      `      { node.name = "${dacNodeName}", media.class = "Audio/Sink" }`,
+      `      { node.name = "${nodeName}", media.class = "Audio/Sink" }`,
       '    ]',
       '    actions = {',
       '      update-props = {',
-      '        audio.allowed-rates = [ 44100 48000 88200 96000 176400 192000 ]',
+      `        audio.allowed-rates = [ ${ratesStr} ]`,
       '        resample.disable = true',
       '        channelmix.disable = true',
       '      }',
@@ -475,17 +532,29 @@
             <div class="step-content">
               <p class="body-text">{$t('dacWizard.pipewireConfig.explanation')}</p>
 
-              <CommandBlock
-                command={[
-                  'mkdir -p ~/.config/pipewire/pipewire.conf.d',
-                  `cat > ~/.config/pipewire/pipewire.conf.d/99-qbz-dac.conf << 'EOF'`,
-                  '# QBZ DAC Setup - Sample Rate Switching',
-                  'context.properties = {',
-                  '  default.clock.allowed-rates = [ 44100 48000 88200 96000 176400 192000 ]',
-                  '}',
-                  'EOF'
-                ]}
-              />
+              <div class="sample-rate-selector">
+                <label class="selector-label">{$t('dacWizard.pipewireConfig.selectRates')}</label>
+                <div class="rate-checkboxes">
+                  {#each COMMON_SAMPLE_RATES as rate}
+                    <label class="rate-checkbox" class:detected={dacCapabilities?.sample_rates.includes(rate)}>
+                      <input
+                        type="checkbox"
+                        checked={selectedSampleRates.has(rate)}
+                        onchange={() => toggleSampleRate(rate)}
+                      />
+                      <span>{(rate / 1000).toFixed(1)}kHz</span>
+                      {#if dacCapabilities?.sample_rates.includes(rate)}
+                        <span class="detected-badge">detected</span>
+                      {/if}
+                    </label>
+                  {/each}
+                </div>
+                {#if selectedSampleRates.size === 0}
+                  <p class="rate-hint">{$t('dacWizard.pipewireConfig.noRatesHint')}</p>
+                {/if}
+              </div>
+
+              <CommandBlock command={generatePipewireConfig()} />
             </div>
 
           {:else if currentStep === 'pulse-config'}
@@ -934,6 +1003,81 @@
   .cap-value.rates {
     font-family: var(--font-mono, monospace);
     color: var(--color-success, #22c55e);
+  }
+
+  .sample-rate-selector {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  .selector-label {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+
+  .rate-checkboxes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .rate-checkbox {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 150ms ease;
+    font-size: 13px;
+    color: var(--text-primary);
+  }
+
+  .rate-checkbox:hover {
+    background: var(--bg-hover);
+  }
+
+  .rate-checkbox:has(input:checked) {
+    border-color: var(--accent-primary);
+    background: rgba(66, 133, 244, 0.1);
+  }
+
+  .rate-checkbox.detected {
+    border-color: var(--color-success, #22c55e);
+  }
+
+  .rate-checkbox.detected:has(input:checked) {
+    border-color: var(--color-success, #22c55e);
+    background: rgba(34, 197, 94, 0.1);
+  }
+
+  .rate-checkbox input {
+    accent-color: var(--accent-primary);
+  }
+
+  .rate-checkbox.detected input {
+    accent-color: var(--color-success, #22c55e);
+  }
+
+  .detected-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+    background: var(--color-success, #22c55e);
+    color: white;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .rate-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
   }
 
   .targeting-info {

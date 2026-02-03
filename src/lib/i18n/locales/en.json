@@ -1079,7 +1079,9 @@
     "pipewireConfig": {
       "title": "Allow Multiple Sample Rates",
       "subtitle": "Enables automatic switching without forcing 48kHz.",
-      "explanation": "By default, PipeWire locks to 48kHz. This config allows your DAC to switch to the track's native sample rate."
+      "explanation": "By default, PipeWire locks to 48kHz. This config allows your DAC to switch to the track's native sample rate.",
+      "selectRates": "Select sample rates your DAC supports:",
+      "noRatesHint": "No rates selected. Default values will be used."
     },
     "pulseConfig": {
       "title": "Choose Apps for Bit-Perfect",
