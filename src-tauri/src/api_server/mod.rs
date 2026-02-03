@@ -414,6 +414,7 @@ fn build_router(ctx: ApiContext) -> Router {
     Router::new()
         .route("/api/ping", get(ping))
         .route("/api/cert", get(get_certificate))
+        .route("/api/docs", get(get_openapi_spec))
         .route("/api/status", get(now_playing))
         .route("/api/now-playing", get(now_playing))
         .route("/api/playback/play", post(play))
@@ -470,6 +471,16 @@ async fn get_certificate() -> Result<impl IntoResponse, StatusCode> {
     );
 
     Ok((headers, pem))
+}
+
+async fn get_openapi_spec() -> impl IntoResponse {
+    let spec = include_str!("../../../docs/openapi.yaml");
+    let mut headers = header::HeaderMap::new();
+    headers.insert(
+        header::CONTENT_TYPE,
+        header::HeaderValue::from_static("text/yaml; charset=utf-8"),
+    );
+    (headers, spec)
 }
 
 async fn now_playing(State(ctx): State<ApiContext>) -> Result<Json<NowPlayingResponse>, StatusCode> {
@@ -983,7 +994,9 @@ async fn require_token(
         return StatusCode::NO_CONTENT.into_response();
     }
 
-    if req.uri().path() == "/api/cert" {
+    // Public endpoints (no auth required)
+    let path = req.uri().path();
+    if path == "/api/cert" || path == "/api/docs" {
         return next.run(req).await;
     }
 
