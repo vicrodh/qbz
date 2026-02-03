@@ -227,8 +227,8 @@
     { id: 'library', labelKey: 'settings.library.title' },
     { id: 'content-filtering', labelKey: 'settings.contentFiltering.title' },
     { id: 'integrations', labelKey: 'settings.integrations.title' },
-    { id: 'remote-control', labelKey: 'settings.integrations.remoteControl' },
     { id: 'updates', labelKey: 'nav.updates' },
+    { id: 'remote-control', labelKey: 'settings.integrations.remoteControl' },
     { id: 'storage', labelKey: 'settings.storage.title' },
   ];
 
@@ -647,6 +647,7 @@
   let remoteControlQrData = $state('');
   let remoteControlUrl = $state('');
   let showRemoteControlGuide = $state(false);
+  let remoteControlCollapsed = $state(true);
 
   // Load saved settings on mount
   onMount(() => {
@@ -2820,11 +2821,79 @@
     </div>
   </section>
 
-  <!-- Remote Control Section -->
-  <section class="section" id="remote-control" bind:this={remoteControlSection}>
-    <div class="section-title-row">
+  <!-- Updates Section -->
+  <section class="section" bind:this={updatesSection}>
+    <h3 class="section-title">{$t('settings.updates.title')}</h3>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.updates.checkOnLaunch')}</span>
+      </div>
+      <Toggle
+        enabled={updatePreferences.checkOnLaunch}
+        onchange={handleUpdateCheckOnLaunchToggle}
+      />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.updates.checkNow')}</span>
+      </div>
+      <button
+        class="connect-btn updates-check-btn"
+        onclick={handleManualUpdateCheck}
+        disabled={isCheckingUpdates}
+        type="button"
+      >
+        {#if isCheckingUpdates}
+          <Loader2 size={14} class="spin" />
+          <span>{$t('settings.updates.checking')}</span>
+        {:else}
+          <span>{$t('settings.updates.check')}</span>
+        {/if}
+      </button>
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.updates.showWhatsNew')}</span>
+      </div>
+      <Toggle
+        enabled={updatePreferences.showWhatsNewOnLaunch}
+        onchange={handleShowWhatsNewToggle}
+      />
+    </div>
+
+    <div class="setting-row last">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.updates.showChangelog')}</span>
+        {#if updatesCurrentVersion}
+          <small class="setting-note">{$t('settings.updates.currentVersion', { values: { version: updatesCurrentVersion } })}</small>
+        {/if}
+      </div>
+      <button
+        class="connect-btn"
+        onclick={handleShowCurrentChangelog}
+        type="button"
+      >
+        {$t('actions.show')}
+      </button>
+    </div>
+  </section>
+
+  <!-- Remote Control Section (collapsible) -->
+  <section class="section collapsible-section" id="remote-control" bind:this={remoteControlSection}>
+    <button class="section-title-btn" onclick={() => remoteControlCollapsed = !remoteControlCollapsed}>
       <h3 class="section-title">{$t('settings.integrations.remoteControl')}</h3>
       <span class="experimental-badge">{$t('settings.integrations.remoteControlExperimental')}</span>
+      {#if remoteControlCollapsed}
+        <ChevronDown size={16} />
+      {:else}
+        <ChevronUp size={16} />
+      {/if}
+    </button>
+    {#if !remoteControlCollapsed}
+    <div class="section-header-actions">
       <button class="setup-guide-btn" onclick={() => showRemoteControlGuide = true}>
         {$t('settings.integrations.remoteControlSetupGuide')}
       </button>
@@ -2972,66 +3041,7 @@
         </div>
       </div>
     {/if}
-  </section>
-
-  <!-- Updates Section -->
-  <section class="section" bind:this={updatesSection}>
-    <h3 class="section-title">{$t('settings.updates.title')}</h3>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.updates.checkOnLaunch')}</span>
-      </div>
-      <Toggle
-        enabled={updatePreferences.checkOnLaunch}
-        onchange={handleUpdateCheckOnLaunchToggle}
-      />
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.updates.checkNow')}</span>
-      </div>
-      <button
-        class="connect-btn updates-check-btn"
-        onclick={handleManualUpdateCheck}
-        disabled={isCheckingUpdates}
-        type="button"
-      >
-        {#if isCheckingUpdates}
-          <Loader2 size={14} class="spin" />
-          <span>{$t('settings.updates.checking')}</span>
-        {:else}
-          <span>{$t('settings.updates.check')}</span>
-        {/if}
-      </button>
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.updates.showWhatsNew')}</span>
-      </div>
-      <Toggle
-        enabled={updatePreferences.showWhatsNewOnLaunch}
-        onchange={handleShowWhatsNewToggle}
-      />
-    </div>
-
-    <div class="setting-row last">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.updates.showChangelog')}</span>
-        {#if updatesCurrentVersion}
-          <small class="setting-note">{$t('settings.updates.currentVersion', { values: { version: updatesCurrentVersion } })}</small>
-        {/if}
-      </div>
-      <button
-        class="connect-btn"
-        onclick={handleShowCurrentChangelog}
-        type="button"
-      >
-        {$t('actions.show')}
-      </button>
-    </div>
+    {/if}
   </section>
 
   {#if isUpdateResultOpen}
@@ -3539,17 +3549,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     margin-bottom: 16px;
   }
 
-  .section-title-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-  }
-
-  .section-title-row .section-title {
-    margin-bottom: 0;
-  }
-
   .experimental-badge {
     font-size: 10px;
     font-weight: 600;
@@ -3708,6 +3707,17 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
 
   .collapsible-section .section-title-btn:hover :global(svg) {
     color: var(--text-primary);
+  }
+
+  .collapsible-section .section-title-btn .experimental-badge {
+    flex-shrink: 0;
+    margin-left: -4px;
+  }
+
+  .section-header-actions {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
   }
 
   .setting-row {
