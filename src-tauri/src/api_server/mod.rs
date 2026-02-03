@@ -21,7 +21,8 @@ use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::{
     api::{SearchResultsPage, Track},
-    commands,
+    artist_blacklist::BlacklistState,
+    commands::{self, search::SearchAllResults},
     config::{
         audio_settings::AudioSettingsState,
         remote_control_settings::{RemoteControlSettings, RemoteControlSettingsState},
@@ -386,6 +387,7 @@ fn build_router(ctx: ApiContext) -> Router {
         .route("/api/playback/seek", post(seek))
         .route("/api/playback/volume", post(set_volume))
         .route("/api/search", get(search_tracks))
+        .route("/api/search/all", get(search_all))
         .route("/api/queue", get(get_queue))
         .route("/api/queue/add", post(add_to_queue))
         .route("/api/queue/play", post(play_queue_index))
@@ -548,6 +550,47 @@ async fn search_tracks(
         .await
         .map_err(|_| StatusCode::BAD_GATEWAY)?;
     Ok(Json(results))
+}
+
+async fn search_all(
+    State(ctx): State<ApiContext>,
+    Query(query): Query<SearchQuery>,
+) -> Result<Json<SearchAllResults>, StatusCode> {
+    let app_state = ctx.app_handle.state::<AppState>();
+    let blacklist_state = ctx.app_handle.state::<BlacklistState>();
+
+    // Call the existing search_all command logic inline
+    let client = app_state.client.lock().await;
+
+    // Parallel search for each type
+    let (albums_result, tracks_result, artists_result) = tokio::join!(
+        client.search_albums(&query.q, query.limit.unwrap_or(10), query.offset.unwrap_or(0), None),
+        client.search_tracks(&query.q, query.limit.unwrap_or(10), query.offset.unwrap_or(0), None),
+        client.search_artists(&query.q, query.limit.unwrap_or(10), query.offset.unwrap_or(0), None),
+    );
+
+    let mut albums = albums_result.map_err(|_| StatusCode::BAD_GATEWAY)?;
+    let mut tracks = tracks_result.map_err(|_| StatusCode::BAD_GATEWAY)?;
+    let mut artists = artists_result.map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+    // Filter blacklisted artists
+    albums.items.retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+    tracks.items.retain(|track| {
+        if let Some(ref performer) = track.performer {
+            !blacklist_state.is_blacklisted(performer.id)
+        } else {
+            true
+        }
+    });
+    artists.items.retain(|artist| !blacklist_state.is_blacklisted(artist.id));
+
+    Ok(Json(SearchAllResults {
+        albums,
+        tracks,
+        artists,
+        playlists: SearchResultsPage { items: vec![], total: 0, offset: 0, limit: 10 },
+        most_popular: None,
+    }))
 }
 
 async fn get_queue(State(ctx): State<ApiContext>) -> Result<Json<QueueStateData>, StatusCode> {
