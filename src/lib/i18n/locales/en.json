@@ -973,6 +973,14 @@
   },
   "keybindings": {
     "title": "Keyboard Shortcuts",
+    "customize": "Customize Shortcuts",
+    "pressKeys": "Press keys...",
+    "modified": "modified",
+    "resetToDefault": "Reset to default",
+    "resetAll": "Reset All to Defaults",
+    "resetAllConfirmTitle": "Reset All Shortcuts?",
+    "resetAllConfirmText": "This will reset all {count} modified shortcuts to their default values.",
+    "conflict": "\"{shortcut}\" is already used by \"{action}\"",
     "categories": {
       "playback": "Playback",
       "navigation": "Navigation",

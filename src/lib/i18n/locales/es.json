@@ -973,6 +973,14 @@
   },
   "keybindings": {
     "title": "Atajos de Teclado",
+    "customize": "Personalizar Atajos",
+    "pressKeys": "Presiona teclas...",
+    "modified": "modificados",
+    "resetToDefault": "Restablecer a predeterminado",
+    "resetAll": "Restablecer Todos",
+    "resetAllConfirmTitle": "¿Restablecer Todos los Atajos?",
+    "resetAllConfirmText": "Esto restablecerá los {count} atajos modificados a sus valores predeterminados.",
+    "conflict": "\"{shortcut}\" ya está siendo usado por \"{action}\"",
     "categories": {
       "playback": "Reproducción",
       "navigation": "Navegación",

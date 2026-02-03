@@ -318,6 +318,7 @@
   import WhatsNewModal from '$lib/components/updates/WhatsNewModal.svelte';
   import FlatpakWelcomeModal from '$lib/components/updates/FlatpakWelcomeModal.svelte';
   import KeyboardShortcutsModal from '$lib/components/KeyboardShortcutsModal.svelte';
+  import KeybindingsSettings from '$lib/components/KeybindingsSettings.svelte';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
   import {
     decideLaunchModals,
@@ -498,6 +499,7 @@
   let isPlaylistImportOpen = $state(false);
   let isAboutModalOpen = $state(false);
   let isShortcutsModalOpen = $state(false);
+  let isKeybindingsSettingsOpen = $state(false);
 
   // Track Info Modal State
   let isTrackInfoOpen = $state(false);
@@ -3421,8 +3423,14 @@
       onClose={() => isShortcutsModalOpen = false}
       onOpenSettings={() => {
         isShortcutsModalOpen = false;
-        navigateTo('settings');
+        isKeybindingsSettingsOpen = true;
       }}
+    />
+
+    <!-- Keybindings Settings Modal -->
+    <KeybindingsSettings
+      isOpen={isKeybindingsSettingsOpen}
+      onClose={() => isKeybindingsSettingsOpen = false}
     />
 
     {#if updateRelease}
