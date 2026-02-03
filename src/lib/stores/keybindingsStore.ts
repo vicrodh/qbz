@@ -237,28 +237,49 @@ function validateBindings(bindings: unknown): Record<string, string> {
 }
 
 // ============================================================================
-// State
+// State (using regular variables - no runes at module level)
 // ============================================================================
 
 /** User overrides (persisted) */
-let userBindings = $state<Record<string, string>>(loadUserBindings());
+let userBindings: Record<string, string> = {};
 
 /** Callbacks registered by components */
 const actionCallbacks = new Map<string, () => void>();
 
-/** Active bindings (defaults + overrides) */
-export const activeBindings = $derived.by(() => {
-  return { ...DEFAULT_BINDINGS, ...userBindings };
-});
+/** Cached active bindings */
+let cachedActiveBindings: Record<string, string> | null = null;
 
-/** Reverse map: shortcut -> actionId (for quick lookup) */
-export const shortcutToAction = $derived.by(() => {
-  const map = new Map<string, string>();
-  for (const [actionId, shortcut] of Object.entries(activeBindings)) {
-    map.set(shortcut, actionId);
+/** Cached reverse map */
+let cachedShortcutToAction: Map<string, string> | null = null;
+
+/** Initialize user bindings (call after module load) */
+function ensureInitialized(): void {
+  if (cachedActiveBindings === null) {
+    userBindings = loadUserBindings();
+    invalidateCache();
   }
-  return map;
-});
+}
+
+/** Invalidate caches when bindings change */
+function invalidateCache(): void {
+  cachedActiveBindings = { ...DEFAULT_BINDINGS, ...userBindings };
+  cachedShortcutToAction = new Map<string, string>();
+  for (const [actionId, shortcut] of Object.entries(cachedActiveBindings)) {
+    cachedShortcutToAction.set(shortcut, actionId);
+  }
+}
+
+/** Get active bindings (defaults + user overrides) */
+export function getActiveBindings(): Record<string, string> {
+  ensureInitialized();
+  return cachedActiveBindings!;
+}
+
+/** Get shortcut-to-action map */
+export function getShortcutToAction(): Map<string, string> {
+  ensureInitialized();
+  return cachedShortcutToAction!;
+}
 
 // ============================================================================
 // Manager Functions
@@ -289,7 +310,7 @@ export function unregisterAll(): void {
  * Gets the current shortcut for an action
  */
 export function getBinding(actionId: string): string {
-  return activeBindings[actionId] || '';
+  return getActiveBindings()[actionId] || '';
 }
 
 /**
@@ -298,12 +319,13 @@ export function getBinding(actionId: string): string {
  */
 export function setBinding(actionId: string, shortcut: string): boolean {
   // Check for conflict
-  const existingAction = shortcutToAction.get(shortcut);
+  const existingAction = getShortcutToAction().get(shortcut);
   if (existingAction && existingAction !== actionId) {
     return false; // Conflict
   }
 
   userBindings = { ...userBindings, [actionId]: shortcut };
+  invalidateCache();
   saveUserBindings(userBindings);
   return true;
 }
@@ -314,6 +336,7 @@ export function setBinding(actionId: string, shortcut: string): boolean {
 export function resetBinding(actionId: string): void {
   const { [actionId]: _, ...rest } = userBindings;
   userBindings = rest;
+  invalidateCache();
 
   // If no overrides remain, clear localStorage
   if (Object.keys(userBindings).length === 0) {
@@ -328,6 +351,7 @@ export function resetBinding(actionId: string): void {
  */
 export function resetAllBindings(): void {
   userBindings = {};
+  invalidateCache();
   if (typeof window !== 'undefined') {
     localStorage.removeItem(STORAGE_KEY);
   }
@@ -342,7 +366,7 @@ export function hasConflict(
   shortcut: string,
   excludeActionId?: string
 ): boolean {
-  const existingAction = shortcutToAction.get(shortcut);
+  const existingAction = getShortcutToAction().get(shortcut);
   return existingAction !== undefined && existingAction !== excludeActionId;
 }
 
@@ -353,7 +377,7 @@ export function getConflictingAction(
   shortcut: string,
   excludeActionId?: string
 ): KeybindingAction | null {
-  const existingActionId = shortcutToAction.get(shortcut);
+  const existingActionId = getShortcutToAction().get(shortcut);
   if (!existingActionId || existingActionId === excludeActionId) {
     return null;
   }
@@ -377,7 +401,7 @@ export function handleKeydown(
   const shortcut = eventToShortcut(event);
   if (!shortcut) return false;
 
-  const actionId = shortcutToAction.get(shortcut);
+  const actionId = getShortcutToAction().get(shortcut);
   if (!actionId) return false;
 
   // Check if contextual and if context applies
