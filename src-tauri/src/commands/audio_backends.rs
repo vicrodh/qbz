@@ -276,6 +276,14 @@ pub fn query_dac_capabilities(node_name: String) -> DacCapabilities {
         }
     }
 
+    // Query ALSA hardware capabilities for actual supported rates
+    // This is more reliable than PipeWire/PulseAudio which only show current config
+    query_alsa_hw_capabilities(&node_name, &mut caps);
+
+    // Sort sample rates
+    caps.sample_rates.sort();
+    caps.sample_rates.dedup();
+
     // If we still don't have sample rates, add common defaults with a note
     if caps.sample_rates.is_empty() && caps.error.is_none() {
         caps.error = Some("Could not detect sample rates. Check device manually.".to_string());
@@ -283,6 +291,190 @@ pub fn query_dac_capabilities(node_name: String) -> DacCapabilities {
 
     log::info!("DAC capabilities: {:?}", caps);
     caps
+}
+
+/// Query ALSA hardware capabilities from /proc/asound or aplay
+fn query_alsa_hw_capabilities(node_name: &str, caps: &mut DacCapabilities) {
+    use std::fs;
+    use std::process::Command;
+
+    // Try to extract card info from node name
+    // Format: alsa_output.usb-Manufacturer_Product-00.analog-stereo
+    // or: alsa_output.pci-0000_00_1f.3.analog-stereo
+
+    // First, try to find the card by listing /proc/asound/cards
+    let cards_output = fs::read_to_string("/proc/asound/cards").unwrap_or_default();
+
+    // Try to match card by description from pactl or by USB identifier in node name
+    let mut card_num: Option<u32> = None;
+
+    // Extract USB identifier from node name if present
+    let usb_id = if node_name.contains("usb-") {
+        node_name
+            .split("usb-")
+            .nth(1)
+            .and_then(|s| s.split('-').next())
+            .map(|s| s.to_lowercase())
+    } else {
+        None
+    };
+
+    // Search for matching card
+    for line in cards_output.lines() {
+        // Format: " 0 [Generic        ]: USB-Audio - USB Audio"
+        if let Some(num_str) = line.trim().split_whitespace().next() {
+            if let Ok(num) = num_str.parse::<u32>() {
+                let line_lower = line.to_lowercase();
+
+                // Match by USB identifier or description
+                if let Some(ref usb) = usb_id {
+                    if line_lower.contains(usb) || line_lower.contains("usb") {
+                        card_num = Some(num);
+                        break;
+                    }
+                }
+
+                // Match by description if we have one
+                if let Some(ref desc) = caps.description {
+                    if line_lower.contains(&desc.to_lowercase()) {
+                        card_num = Some(num);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // If we found a card, try to read its stream info
+    if let Some(card) = card_num {
+        log::info!("Found ALSA card {} for {}", card, node_name);
+
+        // Try /proc/asound/cardX/stream0 for USB devices
+        let stream_path = format!("/proc/asound/card{}/stream0", card);
+        if let Ok(stream_info) = fs::read_to_string(&stream_path) {
+            parse_alsa_stream_info(&stream_info, caps);
+        }
+
+        // Also try aplay --dump-hw-params for more detailed info
+        // This requires a valid device, try common subdevices
+        for subdev in 0..2 {
+            let device = format!("hw:{},{}", card, subdev);
+            let output = Command::new("aplay")
+                .args(["-D", &device, "--dump-hw-params", "/dev/null"])
+                .output();
+
+            if let Ok(out) = output {
+                // aplay outputs to stderr for --dump-hw-params
+                let stderr = String::from_utf8_lossy(&out.stderr);
+                if stderr.contains("RATE") {
+                    parse_aplay_hw_params(&stderr, caps);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+/// Parse /proc/asound/cardX/stream0 output
+fn parse_alsa_stream_info(output: &str, caps: &mut DacCapabilities) {
+    let mut in_playback = false;
+
+    for line in output.lines() {
+        let line = line.trim();
+
+        // Look for Playback section
+        if line.starts_with("Playback:") {
+            in_playback = true;
+            continue;
+        }
+        if line.starts_with("Capture:") {
+            in_playback = false;
+            continue;
+        }
+
+        if in_playback {
+            // Format line contains info like: "Format: S32_LE"
+            if line.starts_with("Format:") {
+                if let Some(format) = line.strip_prefix("Format:") {
+                    let format = format.trim().to_string();
+                    if !format.is_empty() && !caps.formats.contains(&format) {
+                        caps.formats.push(format);
+                    }
+                }
+            }
+
+            // Rates line: "Rates: 44100, 48000, 88200, 96000, 176400, 192000"
+            if line.starts_with("Rates:") {
+                if let Some(rates_str) = line.strip_prefix("Rates:") {
+                    for rate_str in rates_str.split(',') {
+                        if let Ok(rate) = rate_str.trim().parse::<u32>() {
+                            if !caps.sample_rates.contains(&rate) {
+                                caps.sample_rates.push(rate);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Parse aplay --dump-hw-params output
+fn parse_aplay_hw_params(output: &str, caps: &mut DacCapabilities) {
+    for line in output.lines() {
+        let line = line.trim();
+
+        // RATE: [44100 192000]  or  RATE: 44100 48000 88200 96000 176400 192000
+        if line.starts_with("RATE:") {
+            if let Some(rates_part) = line.strip_prefix("RATE:") {
+                let rates_str = rates_part.trim();
+
+                // Check if it's a range [min max]
+                if rates_str.starts_with('[') {
+                    // Range format: [44100 192000]
+                    // We'll add common rates within this range
+                    let common_rates = [44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000];
+
+                    let nums: Vec<u32> = rates_str
+                        .trim_matches(|c| c == '[' || c == ']')
+                        .split_whitespace()
+                        .filter_map(|s| s.parse().ok())
+                        .collect();
+
+                    if nums.len() >= 2 {
+                        let min = nums[0];
+                        let max = nums[1];
+                        for rate in common_rates {
+                            if rate >= min && rate <= max && !caps.sample_rates.contains(&rate) {
+                                caps.sample_rates.push(rate);
+                            }
+                        }
+                    }
+                } else {
+                    // List format: 44100 48000 88200 96000
+                    for rate_str in rates_str.split_whitespace() {
+                        if let Ok(rate) = rate_str.parse::<u32>() {
+                            if !caps.sample_rates.contains(&rate) {
+                                caps.sample_rates.push(rate);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // FORMAT: S16_LE S24_LE S32_LE
+        if line.starts_with("FORMAT:") {
+            if let Some(formats_str) = line.strip_prefix("FORMAT:") {
+                for format in formats_str.split_whitespace() {
+                    let format = format.trim().to_string();
+                    if !format.is_empty() && !format.starts_with('[') && !caps.formats.contains(&format) {
+                        caps.formats.push(format);
+                    }
+                }
+            }
+        }
+    }
 }
 
 fn parse_pw_info(output: &str, caps: &mut DacCapabilities) {

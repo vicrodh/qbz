@@ -75,7 +75,7 @@
   // Wizard state
   let currentStep = $state<WizardStep>('welcome');
   let completedSteps = $state(new Set<WizardStep>());
-  let dacNodeName = $state('alsa_output.usb-Generic_USB_Audio-00.analog-stereo');
+  let dacNodeName = $state('');
   let selectedApps = $state(['QBZ']);
   let precheckDone = $state(false);
   let restartDone = $state(false);
@@ -117,7 +117,7 @@
     if (isOpen) {
       currentStep = 'welcome';
       completedSteps = new Set();
-      dacNodeName = 'alsa_output.usb-Generic_USB_Audio-00.analog-stereo';
+      dacNodeName = '';
       selectedApps = ['QBZ'];
       precheckDone = false;
       restartDone = false;
