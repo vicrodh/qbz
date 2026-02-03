@@ -153,10 +153,11 @@
   function generatePipewireConfig(): string[] {
     const rates = Array.from(selectedSampleRates).sort((a, b) => a - b);
     const ratesStr = rates.length > 0 ? rates.join(' ') : '44100 48000 88200 96000 176400 192000';
+    const fileName = dacNodeName ? `99-qbz-dac-${dacShortName()}.conf` : '99-qbz-dac.conf';
 
     return [
       'mkdir -p ~/.config/pipewire/pipewire.conf.d',
-      `cat > ~/.config/pipewire/pipewire.conf.d/99-qbz-dac.conf << 'EOF'`,
+      `cat > ~/.config/pipewire/pipewire.conf.d/${fileName} << 'EOF'`,
       '# QBZ DAC Setup - Sample Rate Switching',
       'context.properties = {',
       `  default.clock.allowed-rates = [ ${ratesStr} ]`,
