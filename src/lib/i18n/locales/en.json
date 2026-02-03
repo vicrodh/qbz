@@ -1046,6 +1046,7 @@
       "title": "Check Audio Stack",
       "subtitle": "Confirm PipeWire and WirePlumber are running.",
       "hint": "Look for 'active (running)' for all services",
+      "inactiveWarning": "If any service is inactive, stop here and fix it before continuing.",
       "checkbox": "I ran this command and services are active",
       "installTitle": "Install Required Packages",
       "installSubtitle": "Select your distribution to see the install command.",
@@ -1056,7 +1057,7 @@
         "opensuse": "openSUSE",
         "other": "Other"
       },
-      "otherHint": "Please install: pipewire, pipewire-pulse, wireplumber, alsa-utils"
+      "otherHint": "Ensure these packages (or equivalents) are installed: pipewire, pipewire-pulse, wireplumber, alsa-utils"
     },
     "detectDac": {
       "title": "Identify Default DAC",
@@ -1064,6 +1065,7 @@
       "step1": "Find your DAC under 'Audio > Sinks'. Note the number (e.g., 46).",
       "step2": "Then run with that number:",
       "inputLabel": "Enter node.name",
+      "inputWarning": "This must match exactly. One character off will break the rule.",
       "inputPlaceholder": "alsa_output.usb-...",
       "validation": {
         "validFormat": "Valid format",
@@ -1086,7 +1088,7 @@
     "backup": {
       "title": "Create Backup",
       "subtitle": "Required before any changes.",
-      "hint": "You can restore this backup later if needed.",
+      "hint": "You are responsible for keeping this backup until you verify everything works.",
       "checkbox": "I created the backup"
     },
     "pipewireConfig": {
@@ -1109,12 +1111,13 @@
         "custom": "Custom..."
       },
       "customPlaceholder": "Binary name (e.g., my-player)",
-      "warning": "Best results: use app-scoped bit-perfect only. Global Pulse bit-perfect can break browsers that output fixed 48kHz."
+      "warning": "Best results: use app-scoped bit-perfect only. Global Pulse bit-perfect can break browsers and apps that output fixed 48kHz."
     },
     "wireplumberConfig": {
       "title": "Target Your DAC Only",
       "subtitle": "Apply rules only to the detected sink.",
-      "targeting": "This targets:"
+      "targeting": "This targets:",
+      "rulesNote": "These rules apply only to the detected DAC."
     },
     "restart": {
       "title": "Restart Audio Services",

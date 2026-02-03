@@ -987,6 +987,7 @@
       "title": "Vérifier la pile audio",
       "subtitle": "Confirmez que PipeWire et WirePlumber fonctionnent.",
       "hint": "Recherchez 'active (running)' pour tous les services",
+      "inactiveWarning": "Si un service est inactif, arrêtez-vous ici et corrigez-le avant de continuer.",
       "checkbox": "J'ai exécuté cette commande et les services sont actifs",
       "installTitle": "Installer les paquets requis",
       "installSubtitle": "Sélectionnez votre distribution pour voir la commande d'installation.",
@@ -997,7 +998,7 @@
         "opensuse": "openSUSE",
         "other": "Autre"
       },
-      "otherHint": "Veuillez installer : pipewire, pipewire-pulse, wireplumber, alsa-utils"
+      "otherHint": "Assurez-vous que ces paquets (ou équivalents) sont installés : pipewire, pipewire-pulse, wireplumber, alsa-utils"
     },
     "detectDac": {
       "title": "Identifier le DAC par défaut",
@@ -1005,6 +1006,7 @@
       "step1": "Trouvez votre DAC sous 'Audio > Sinks'. Notez le numéro (ex. 46).",
       "step2": "Puis exécutez avec ce numéro :",
       "inputLabel": "Entrez node.name",
+      "inputWarning": "Doit correspondre exactement. Un seul caractère erroné cassera la règle.",
       "inputPlaceholder": "alsa_output.usb-...",
       "validation": {
         "validFormat": "Format valide",
@@ -1027,7 +1029,7 @@
     "backup": {
       "title": "Créer une sauvegarde",
       "subtitle": "Requis avant toute modification.",
-      "hint": "Vous pourrez restaurer cette sauvegarde ultérieurement si nécessaire.",
+      "hint": "Vous êtes responsable de conserver cette sauvegarde jusqu'à ce que tout fonctionne.",
       "checkbox": "J'ai créé la sauvegarde"
     },
     "pipewireConfig": {
@@ -1050,12 +1052,13 @@
         "custom": "Personnalisé..."
       },
       "customPlaceholder": "Nom du binaire (ex. mon-lecteur)",
-      "warning": "Meilleurs résultats : utilisez le bit-perfect par application uniquement. Le bit-perfect Pulse global peut casser les navigateurs qui émettent en 48kHz fixe."
+      "warning": "Meilleurs résultats : utilisez le bit-perfect par application uniquement. Le bit-perfect Pulse global peut casser les navigateurs et applications qui émettent en 48kHz fixe."
     },
     "wireplumberConfig": {
       "title": "Cibler uniquement votre DAC",
       "subtitle": "Appliquer les règles uniquement au sink détecté.",
-      "targeting": "Ceci cible :"
+      "targeting": "Ceci cible :",
+      "rulesNote": "Ces règles s'appliquent uniquement au DAC détecté."
     },
     "restart": {
       "title": "Redémarrer les services audio",

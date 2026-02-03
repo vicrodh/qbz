@@ -987,6 +987,7 @@
       "title": "Audio-Stack prüfen",
       "subtitle": "Bestätigen Sie, dass PipeWire und WirePlumber laufen.",
       "hint": "Suchen Sie nach 'active (running)' für alle Dienste",
+      "inactiveWarning": "Wenn ein Dienst inaktiv ist, stoppen Sie hier und beheben Sie das Problem, bevor Sie fortfahren.",
       "checkbox": "Ich habe diesen Befehl ausgeführt und die Dienste sind aktiv",
       "installTitle": "Erforderliche Pakete installieren",
       "installSubtitle": "Wählen Sie Ihre Distribution, um den Installationsbefehl zu sehen.",
@@ -997,7 +998,7 @@
         "opensuse": "openSUSE",
         "other": "Andere"
       },
-      "otherHint": "Bitte installieren Sie: pipewire, pipewire-pulse, wireplumber, alsa-utils"
+      "otherHint": "Stellen Sie sicher, dass diese Pakete (oder Äquivalente) installiert sind: pipewire, pipewire-pulse, wireplumber, alsa-utils"
     },
     "detectDac": {
       "title": "Standard-DAC identifizieren",
@@ -1005,6 +1006,7 @@
       "step1": "Finden Sie Ihren DAC unter 'Audio > Sinks'. Notieren Sie die Nummer (z.B. 46).",
       "step2": "Dann mit dieser Nummer ausführen:",
       "inputLabel": "node.name eingeben",
+      "inputWarning": "Muss exakt übereinstimmen. Ein einziges falsches Zeichen bricht die Regel.",
       "inputPlaceholder": "alsa_output.usb-...",
       "validation": {
         "validFormat": "Gültiges Format",
@@ -1027,7 +1029,7 @@
     "backup": {
       "title": "Sicherung erstellen",
       "subtitle": "Erforderlich vor jeder Änderung.",
-      "hint": "Sie können diese Sicherung später bei Bedarf wiederherstellen.",
+      "hint": "Sie sind verantwortlich für die Aufbewahrung dieser Sicherung, bis alles funktioniert.",
       "checkbox": "Ich habe die Sicherung erstellt"
     },
     "pipewireConfig": {
@@ -1050,12 +1052,13 @@
         "custom": "Benutzerdefiniert..."
       },
       "customPlaceholder": "Binärname (z.B. mein-player)",
-      "warning": "Beste Ergebnisse: Verwenden Sie Bit-Perfect nur pro App. Globales Pulse-Bit-Perfect kann Browser beschädigen, die festes 48kHz ausgeben."
+      "warning": "Beste Ergebnisse: Verwenden Sie Bit-Perfect nur pro App. Globales Pulse-Bit-Perfect kann Browser und Apps beschädigen, die festes 48kHz ausgeben."
     },
     "wireplumberConfig": {
       "title": "Nur Ihren DAC ansteuern",
       "subtitle": "Regeln nur auf den erkannten Sink anwenden.",
-      "targeting": "Dies zielt auf:"
+      "targeting": "Dies zielt auf:",
+      "rulesNote": "Diese Regeln gelten nur für den erkannten DAC."
     },
     "restart": {
       "title": "Audio-Dienste neu starten",

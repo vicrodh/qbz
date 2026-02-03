@@ -1046,6 +1046,7 @@
       "title": "Verificar Stack de Audio",
       "subtitle": "Confirma que PipeWire y WirePlumber están activos.",
       "hint": "Busca 'active (running)' en todos los servicios",
+      "inactiveWarning": "Si algún servicio está inactivo, detente aquí y corrígelo antes de continuar.",
       "checkbox": "Ejecuté el comando y los servicios están activos",
       "installTitle": "Instalar Paquetes Requeridos",
       "installSubtitle": "Selecciona tu distribución para ver el comando de instalación.",
@@ -1056,7 +1057,7 @@
         "opensuse": "openSUSE",
         "other": "Otra"
       },
-      "otherHint": "Instala: pipewire, pipewire-pulse, wireplumber, alsa-utils"
+      "otherHint": "Asegúrate de tener instalados (o equivalentes): pipewire, pipewire-pulse, wireplumber, alsa-utils"
     },
     "detectDac": {
       "title": "Identificar DAC por Defecto",
@@ -1064,6 +1065,7 @@
       "step1": "Busca tu DAC en 'Audio > Sinks'. Anota el número (ej. 46).",
       "step2": "Luego ejecuta con ese número:",
       "inputLabel": "Ingresa node.name",
+      "inputWarning": "Debe coincidir exactamente. Un solo carácter diferente romperá la regla.",
       "inputPlaceholder": "alsa_output.usb-...",
       "validation": {
         "validFormat": "Formato válido",
@@ -1086,7 +1088,7 @@
     "backup": {
       "title": "Crear Backup",
       "subtitle": "Requerido antes de cualquier cambio.",
-      "hint": "Puedes restaurar este backup después si es necesario.",
+      "hint": "Eres responsable de conservar este backup hasta verificar que todo funciona.",
       "checkbox": "Creé el backup"
     },
     "pipewireConfig": {
@@ -1109,12 +1111,13 @@
         "custom": "Personalizado..."
       },
       "customPlaceholder": "Nombre del binario (ej. mi-player)",
-      "warning": "Mejor resultado: usa bit-perfect por app. El bit-perfect global en Pulse puede romper navegadores que usan 48kHz fijo."
+      "warning": "Mejor resultado: usa bit-perfect por app. El bit-perfect global en Pulse puede romper navegadores y apps que usan 48kHz fijo."
     },
     "wireplumberConfig": {
       "title": "Apuntar Solo a tu DAC",
       "subtitle": "Aplica reglas solo al sink detectado.",
-      "targeting": "Esto apunta a:"
+      "targeting": "Esto apunta a:",
+      "rulesNote": "Estas reglas aplican únicamente al DAC detectado."
     },
     "restart": {
       "title": "Reiniciar Servicios de Audio",

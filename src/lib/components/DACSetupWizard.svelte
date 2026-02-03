@@ -398,6 +398,8 @@
                 command="systemctl --user status pipewire pipewire-pulse wireplumber"
               />
 
+              <p class="inactive-warning">{$t('dacWizard.precheck.inactiveWarning')}</p>
+
               <label class="checkbox-row">
                 <input type="checkbox" bind:checked={precheckDone} />
                 <span>{$t('dacWizard.precheck.checkbox')}</span>
@@ -426,6 +428,7 @@
 
               <div class="input-group">
                 <label class="input-label">{$t('dacWizard.detectDac.inputLabel')}</label>
+                <p class="input-warning">{$t('dacWizard.detectDac.inputWarning')}</p>
                 <input
                   type="text"
                   class="text-input mono"
@@ -604,6 +607,8 @@
                 <span class="targeting-label">{$t('dacWizard.wireplumberConfig.targeting')}</span>
                 <code class="targeting-value">{dacNodeName}</code>
               </div>
+
+              <p class="rules-note">{$t('dacWizard.wireplumberConfig.rulesNote')}</p>
 
               <CommandBlock command={generateWireplumberConfig()} />
             </div>
@@ -897,6 +902,33 @@
   .ready-text {
     font-style: italic;
     color: var(--text-muted);
+  }
+
+  /* Micro-adjustment warning texts */
+  .inactive-warning {
+    font-size: 13px;
+    color: var(--warning, #fbbf24);
+    margin: 0;
+    padding: 8px 12px;
+    background: rgba(251, 191, 36, 0.1);
+    border-radius: 6px;
+    border-left: 3px solid var(--warning, #fbbf24);
+  }
+
+  .input-warning {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin: 0;
+    font-style: italic;
+  }
+
+  .rules-note {
+    font-size: 13px;
+    color: var(--color-success, #22c55e);
+    margin: 0;
+    padding: 8px 12px;
+    background: rgba(34, 197, 94, 0.1);
+    border-radius: 6px;
   }
 
   .checkbox-row {
