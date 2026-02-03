@@ -141,8 +141,11 @@ impl AlsaBackend {
             }
         }
 
-        // Build card number -> card name map from aplay -l
+        // Build card number -> (short_name, description) map from aplay -l
+        // Short name is used for stable device IDs (front:CARD=name,DEV=0)
+        // Description is the human-readable full name
         let mut card_map = std::collections::HashMap::new();
+        let mut card_num_to_short_name = std::collections::HashMap::new();
         let aplay_l_output = Command::new("aplay")
             .arg("-l")
             .output()
@@ -159,11 +162,15 @@ impl AlsaBackend {
                         let card_num = parts[0].trim();
                         let rest = parts[1].trim();
 
-                        // Extract description from brackets [...]
+                        // Extract short name (before bracket) and description (inside bracket)
+                        // "C20 [Cambridge Audio USB Audio 2.0], device 0: ..."
+                        let short_name = rest.split_whitespace().next().unwrap_or("Unknown");
+
                         if let Some(start) = rest.find('[') {
                             if let Some(end) = rest.find(']') {
                                 let card_desc = &rest[start + 1..end];
                                 card_map.insert(card_num.to_string(), card_desc.to_string());
+                                card_num_to_short_name.insert(card_num.to_string(), short_name.to_string());
                             }
                         }
                     }
@@ -507,6 +514,121 @@ impl AlsaBackend {
             }
         }
     }
+}
+
+/// Convert an unstable hw:X,0 device ID to a stable front:CARD=name,DEV=0 format.
+/// This survives reboots and USB reconnections since it uses the card name, not the number.
+///
+/// Examples:
+/// - `hw:0,0` with card "C20" -> `front:CARD=C20,DEV=0`
+/// - `hw:2,0` with card "NVidia" -> `front:CARD=NVidia,DEV=0`
+/// - `front:CARD=C20,DEV=0` -> unchanged (already stable)
+/// - `plughw:0,0` -> unchanged (plugin devices don't benefit from this)
+/// - `default` -> unchanged (not a hardware device)
+pub fn normalize_device_id_to_stable(device_id: &str) -> String {
+    // Already stable formats - return as-is
+    if device_id.starts_with("front:CARD=")
+        || device_id.starts_with("plughw:")
+        || !device_id.starts_with("hw:")
+    {
+        return device_id.to_string();
+    }
+
+    // Parse hw:X,Y format
+    let stripped = device_id.strip_prefix("hw:").unwrap_or(device_id);
+    let parts: Vec<&str> = stripped.split(',').collect();
+    if parts.len() < 2 {
+        log::warn!("[ALSA] Could not parse hw device format: {}", device_id);
+        return device_id.to_string();
+    }
+
+    let card_num = parts[0];
+    let device_num = parts[1];
+
+    // Get card short name from aplay -l
+    let output = match Command::new("aplay").arg("-l").output() {
+        Ok(o) if o.status.success() => o,
+        _ => {
+            log::warn!("[ALSA] aplay -l failed, cannot normalize device ID");
+            return device_id.to_string();
+        }
+    };
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    // Parse: "card 0: C20 [Cambridge Audio USB Audio 2.0], device 0: ..."
+    for line in stdout.lines() {
+        if let Some(card_info) = line.strip_prefix("card ") {
+            let line_parts: Vec<&str> = card_info.splitn(2, ':').collect();
+            if line_parts.len() == 2 {
+                let this_card_num = line_parts[0].trim();
+                if this_card_num == card_num {
+                    let rest = line_parts[1].trim();
+                    // Extract short name (first word before the bracket)
+                    if let Some(short_name) = rest.split_whitespace().next() {
+                        let stable_id = format!("front:CARD={},DEV={}", short_name, device_num);
+                        log::info!(
+                            "[ALSA] Normalized device ID: {} -> {} (stable)",
+                            device_id,
+                            stable_id
+                        );
+                        return stable_id;
+                    }
+                }
+            }
+        }
+    }
+
+    log::warn!(
+        "[ALSA] Could not find card {} in aplay -l output, keeping original ID",
+        card_num
+    );
+    device_id.to_string()
+}
+
+/// Get the current card number for a stable device ID.
+/// Used when we need to resolve front:CARD=X to hw:N,0 for certain operations.
+///
+/// Returns None if the card is not currently present.
+pub fn resolve_stable_to_current_hw(device_id: &str) -> Option<String> {
+    // Only resolve front:CARD= format
+    if !device_id.starts_with("front:CARD=") {
+        return Some(device_id.to_string());
+    }
+
+    // Extract card name: front:CARD=C20,DEV=0 -> C20
+    let stripped = device_id.strip_prefix("front:CARD=")?;
+    let parts: Vec<&str> = stripped.split(',').collect();
+    let card_name = parts.first()?;
+    let dev_part = parts.get(1).and_then(|s| s.strip_prefix("DEV=")).unwrap_or("0");
+
+    // Find current card number for this name
+    let output = Command::new("aplay").arg("-l").output().ok()?;
+    if !output.status.success() {
+        return None;
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    for line in stdout.lines() {
+        if let Some(card_info) = line.strip_prefix("card ") {
+            let line_parts: Vec<&str> = card_info.splitn(2, ':').collect();
+            if line_parts.len() == 2 {
+                let card_num = line_parts[0].trim();
+                let rest = line_parts[1].trim();
+                if let Some(short_name) = rest.split_whitespace().next() {
+                    if short_name == *card_name {
+                        let hw_id = format!("hw:{},{}", card_num, dev_part);
+                        log::debug!("[ALSA] Resolved {} -> {}", device_id, hw_id);
+                        return Some(hw_id);
+                    }
+                }
+            }
+        }
+    }
+
+    log::warn!("[ALSA] Card '{}' not found in current enumeration", card_name);
+    None
 }
 
 impl AudioBackend for AlsaBackend {

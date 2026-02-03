@@ -20,3 +20,4 @@ pub use backend::{
     BackendResult,
 };
 pub use alsa_direct::AlsaDirectStream;
+pub use alsa_backend::{normalize_device_id_to_stable, resolve_stable_to_current_hw};

@@ -292,9 +292,20 @@ pub fn set_audio_output_device(
     state: tauri::State<'_, AudioSettingsState>,
     device: Option<String>,
 ) -> Result<(), String> {
-    log::info!("Command: set_audio_output_device {:?}", device);
+    // Normalize hw:X,0 to stable front:CARD=name,DEV=0 format
+    // This ensures the saved device ID survives reboots and USB reconnections
+    let normalized_device = device.as_ref().map(|d| {
+        crate::audio::normalize_device_id_to_stable(d)
+    });
+
+    log::info!(
+        "Command: set_audio_output_device {:?} -> {:?} (normalized)",
+        device,
+        normalized_device
+    );
+
     let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-    store.set_output_device(device.as_deref())
+    store.set_output_device(normalized_device.as_deref())
 }
 
 #[tauri::command]
