@@ -69,6 +69,7 @@
     onImportPlaylist?: () => void;
     onPlaylistManagerClick?: () => void;
     onSettingsClick?: () => void;
+    onKeybindingsClick?: () => void;
     onAboutClick?: () => void;
     onLogout?: () => void;
     userName?: string;
@@ -87,6 +88,7 @@
     onImportPlaylist,
     onPlaylistManagerClick,
     onSettingsClick,
+    onKeybindingsClick,
     onAboutClick,
     onLogout,
     userName = 'User',
@@ -1341,22 +1343,14 @@
 
   <!-- Fixed User Profile at Bottom -->
   <div class="user-section" class:collapsed={!isExpanded}>
-    {#if isExpanded}
-      <UserCard
-        username={userName}
-        {subscription}
-        onSettingsClick={onSettingsClick ?? (() => handleViewChange('settings'))}
-        {onAboutClick}
-      />
-    {:else}
-      <button
-        class="collapsed-settings-btn"
-        onclick={onSettingsClick ?? (() => handleViewChange('settings'))}
-        title={$t('nav.settings')}
-      >
-        <Settings size={16} />
-      </button>
-    {/if}
+    <UserCard
+      username={userName}
+      {subscription}
+      onSettingsClick={onSettingsClick ?? (() => handleViewChange('settings'))}
+      {onKeybindingsClick}
+      {onAboutClick}
+      collapsed={!isExpanded}
+    />
   </div>
 </aside>
 

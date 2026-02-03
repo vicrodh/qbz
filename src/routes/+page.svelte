@@ -2880,6 +2880,7 @@
       onImportPlaylist={openImportPlaylist}
       onPlaylistManagerClick={() => navigateTo('playlist-manager')}
       onSettingsClick={() => navigateTo('settings')}
+      onKeybindingsClick={() => isKeybindingsSettingsOpen = true}
       onAboutClick={() => isAboutModalOpen = true}
       onLogout={handleLogout}
       userName={userInfo?.userName || 'User'}
