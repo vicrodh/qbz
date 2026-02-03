@@ -3,7 +3,7 @@
 //! Similar to PipeWire backend but for systems running PulseAudio only.
 //! Uses same approach: pactl + PULSE_SINK + CPAL "pulse" device.
 
-use super::backend::{AlsaPlugin, AudioBackend, AudioBackendType, AudioDevice, BackendConfig, BackendResult};
+use super::backend::{AudioBackend, AudioBackendType, AudioDevice, BackendConfig, BackendResult};
 use super::pipewire_backend::PipeWireBackend;
 use rodio::{OutputStream, OutputStreamHandle};
 

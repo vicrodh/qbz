@@ -443,7 +443,7 @@ pub fn run() {
                     // Disconnect Chromecast if connected (sends message through channel)
                     if let Some(cast_state) = window.app_handle().try_state::<cast::CastState>() {
                         log::info!("Disconnecting Chromecast on app exit");
-                        cast_state.chromecast.disconnect();
+                        let _ = cast_state.chromecast.disconnect();
                     }
                     
                     // Note: DLNA connection will be dropped when the app exits,

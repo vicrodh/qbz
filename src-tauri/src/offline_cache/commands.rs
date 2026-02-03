@@ -6,8 +6,7 @@ use tauri::{AppHandle, Emitter, State};
 use crate::api::models::Quality;
 use crate::AppState;
 
-use crate::offline_cache::path_validator::{self, PathValidationResult};
-use crate::offline_cache::{OfflineCacheDb, OfflineCacheState};
+use crate::offline_cache::OfflineCacheState;
 use crate::offline_cache::metadata::{fetch_complete_metadata, write_flac_tags, embed_artwork, organize_cached_file, save_album_artwork};
 use super::{
     CachedTrackInfo, OfflineCacheStats, OfflineCacheStatus,

@@ -8,7 +8,6 @@ use tokio::time::sleep;
 
 use crate::playlist_import::errors::PlaylistImportError;
 use crate::playlist_import::models::{ImportPlaylist, ImportProvider, ImportTrack};
-use crate::playlist_import::providers::ProviderCredentials;
 
 const RATE_LIMIT_DELAY_MS: u64 = 200; // Delay between API calls to avoid 429
 

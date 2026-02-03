@@ -7,13 +7,13 @@
 use alsa::pcm::{Access, Format, HwParams, PCM};
 #[cfg(target_os = "linux")]
 use alsa::{Direction, ValueOr};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
-use std::thread;
 
 /// Direct ALSA PCM stream for hw: devices
 pub struct AlsaDirectStream {
     pcm: Arc<Mutex<PCM>>,
+    #[allow(dead_code)]
     is_playing: Arc<AtomicBool>,
     sample_rate: u32,
     channels: u16,
@@ -122,7 +122,7 @@ impl AlsaDirectStream {
     /// Write audio samples to ALSA (auto-converts from i16 based on detected format)
     #[cfg(target_os = "linux")]
     pub fn write(&self, samples_i16: &[i16]) -> Result<(), String> {
-        let mut pcm = self.pcm.lock().unwrap();
+        let pcm = self.pcm.lock().unwrap();
         let frames = samples_i16.len() / self.channels as usize;
 
         match self.format {
@@ -218,7 +218,7 @@ impl AlsaDirectStream {
                 }
 
                 // Use raw byte I/O for 3-byte packed format
-                let io = unsafe { pcm.io_bytes() };
+                let io = pcm.io_bytes();
 
                 match io.writei(&bytes) {
                     Ok(written) => {

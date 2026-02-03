@@ -22,7 +22,7 @@ use std::sync::mpsc::{self, Sender, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use rodio::{Decoder, OutputStream, Sink, Source};
+use rodio::{Decoder, OutputStream, Source};
 use rodio::buffer::SamplesBuffer;
 use rodio::decoder::Mp4Type;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
@@ -110,6 +110,7 @@ impl Seek for CursorMediaSource {
 }
 
 /// Audio specifications extracted from decoded audio
+#[allow(dead_code)]
 struct AudioSpecs {
     samples: SamplesBuffer<i16>,
     sample_rate: u32,
@@ -201,12 +202,14 @@ fn is_isomp4(data: &[u8]) -> bool {
 /// Extract audio metadata (sample rate, channels) without full decode.
 /// This is much faster than decode_with_symphonia as it only reads headers.
 /// Audio metadata extracted from file headers
+#[allow(dead_code)]
 struct AudioMetadata {
     sample_rate: u32,
     channels: u16,
     bit_depth: Option<u32>,
 }
 
+#[allow(dead_code)]
 fn extract_audio_metadata(data: &[u8]) -> Result<(u32, u16), String> {
     let meta = extract_audio_metadata_full(data)?;
     Ok((meta.sample_rate, meta.channels))
@@ -642,6 +645,7 @@ pub struct Player {
     /// Audio settings (exclusive mode, DAC passthrough, etc.)
     audio_settings: Arc<Mutex<AudioSettings>>,
     /// Visualizer tap for audio sample capture (optional)
+    #[allow(dead_code)]
     visualizer_tap: Option<VisualizerTap>,
 }
 
@@ -790,7 +794,9 @@ impl Player {
             let mut current_sample_rate: Option<u32> = None;
             let mut current_channels: Option<u16> = None;
 
+            #[allow(dead_code)]
             const MAX_INIT_RETRIES: u32 = 5;
+            #[allow(dead_code)]
             const RETRY_DELAY_MS: u64 = 500;
 
             let mut current_engine: Option<PlaybackEngine> = None;
@@ -808,7 +814,7 @@ impl Player {
 
             log::info!("Audio thread ready and waiting for commands");
 
-            let mut handle_command = |command: AudioCommand,
+            let handle_command = |command: AudioCommand,
                                       current_engine: &mut Option<PlaybackEngine>,
                                       current_audio_data: &mut Option<Vec<u8>>,
                                       current_streaming_source: &mut Option<Arc<BufferedMediaSource>>,

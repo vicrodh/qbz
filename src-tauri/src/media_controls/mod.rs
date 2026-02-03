@@ -11,7 +11,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::thread;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use serde::Serialize;
 
 /// Track metadata for media controls

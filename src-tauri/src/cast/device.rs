@@ -47,6 +47,7 @@ pub struct CastApplication {
 }
 
 struct CastSession {
+    #[allow(dead_code)]
     app_id: String,
     session_id: String,
     transport_id: String,

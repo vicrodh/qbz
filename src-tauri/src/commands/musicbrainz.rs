@@ -384,7 +384,7 @@ fn release_to_resolved(release: &ReleaseResult) -> ResolvedRelease {
 
 fn extract_relationships(artist: &ArtistFullResponse) -> ArtistRelationships {
     let mut members = Vec::new();
-    let mut past_members = Vec::new();
+    let past_members = Vec::new();
     let mut groups = Vec::new();
     let mut collaborators = Vec::new();
 

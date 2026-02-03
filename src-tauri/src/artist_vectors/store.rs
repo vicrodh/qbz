@@ -12,6 +12,7 @@ use tokio::sync::Mutex;
 use super::sparse_vector::SparseVector;
 
 /// TTL for vector entries (7 days)
+#[allow(dead_code)]
 const VECTOR_TTL_SECS: i64 = 7 * 24 * 60 * 60;
 
 /// Shared state wrapper for Tauri

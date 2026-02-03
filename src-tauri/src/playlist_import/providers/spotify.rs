@@ -4,7 +4,6 @@ use serde_json::Value;
 
 use crate::playlist_import::errors::PlaylistImportError;
 use crate::playlist_import::models::{ImportPlaylist, ImportProvider, ImportTrack};
-use crate::playlist_import::providers::ProviderCredentials;
 
 // Cloudflare Workers proxy URL - handles credentials
 const SPOTIFY_PROXY_URL: &str = "https://qbz-api-proxy.blitzkriegfc.workers.dev/spotify";

@@ -233,15 +233,11 @@ pub async fn search_all(
         });
 
     // Apply blacklist filtering
-    let mut filtered_tracks = 0;
-    let mut filtered_artists = 0;
-    let mut filtered_albums = 0;
-
     // Filter albums from blacklisted artists
     let original_album_count = albums.items.len();
     let mut albums = albums;
     albums.items.retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
-    filtered_albums = original_album_count - albums.items.len();
+    let filtered_albums = original_album_count - albums.items.len();
     if filtered_albums > 0 {
         albums.total = albums.total.saturating_sub(filtered_albums as u32);
     }
@@ -255,7 +251,7 @@ pub async fn search_all(
             true
         }
     });
-    filtered_tracks = original_track_count - tracks.items.len();
+    let filtered_tracks = original_track_count - tracks.items.len();
     if filtered_tracks > 0 {
         tracks.total = tracks.total.saturating_sub(filtered_tracks as u32);
     }
@@ -263,7 +259,7 @@ pub async fn search_all(
     // Filter blacklisted artists
     let original_artist_count = artists.items.len();
     artists.items.retain(|artist| !blacklist_state.is_blacklisted(artist.id));
-    filtered_artists = original_artist_count - artists.items.len();
+    let filtered_artists = original_artist_count - artists.items.len();
     if filtered_artists > 0 {
         artists.total = artists.total.saturating_sub(filtered_artists as u32);
     }

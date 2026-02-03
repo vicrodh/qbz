@@ -2,7 +2,7 @@
 //!
 //! SQLite-based queue for offline listens and token persistence
 
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};

@@ -5,7 +5,7 @@
 use tauri::State;
 
 use crate::listenbrainz::{
-    AdditionalInfo, ListenBrainzSharedState, ListenBrainzStatus, QueueStats, QueuedListen, UserInfo,
+    AdditionalInfo, ListenBrainzSharedState, ListenBrainzStatus, QueuedListen, UserInfo,
 };
 
 /// Get ListenBrainz connection status

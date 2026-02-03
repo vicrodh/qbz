@@ -568,7 +568,7 @@ fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16, u32), Stri
         use symphonia::core::probe::Hint;
         use symphonia::default::get_probe;
 
-        let cursor = Box::new(Cursor::new(data.to_vec())) as Box<dyn std::io::Read + Send + Sync>;
+        let _cursor = Box::new(Cursor::new(data.to_vec())) as Box<dyn std::io::Read + Send + Sync>;
         // For probing, we need to create a MediaSource
         // Use a simple wrapper
         struct ProbeSource {

@@ -444,7 +444,7 @@ pub async fn get_playlist_suggestions(
             // Find tracks by this artist in our candidates and boost them
             // Note: We don't have track->artist mapping here, so this is implicit
             // through the scoring system (tracks played when artist was played)
-            for (track_id, score) in candidates.iter_mut() {
+            for (_track_id, score) in candidates.iter_mut() {
                 // Boost slightly based on artist affinity (implicit)
                 *score += artist_score * 0.1;
             }

@@ -16,6 +16,7 @@ pub struct LyricsData {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct LrclibItem {
     #[serde(default)]
     pub track_name: String,

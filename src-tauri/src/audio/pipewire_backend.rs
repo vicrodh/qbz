@@ -6,7 +6,7 @@
 //! - Creates stream using CPAL "pulse" or "pipewire" device
 //! - Does NOT change system default (only affects QBZ)
 
-use super::backend::{AlsaPlugin, AudioBackend, AudioBackendType, AudioDevice, BackendConfig, BackendResult};
+use super::backend::{AudioBackend, AudioBackendType, AudioDevice, BackendConfig, BackendResult};
 use rodio::{
     cpal::{
         traits::{DeviceTrait, HostTrait},
@@ -17,6 +17,7 @@ use rodio::{
 use std::process::Command;
 
 pub struct PipeWireBackend {
+    #[allow(dead_code)]
     host: rodio::cpal::Host,
 }
 

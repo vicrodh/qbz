@@ -46,6 +46,7 @@ pub struct DiscogsImageOption {
 
 /// Release details from Discogs API (internal, for artwork)
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct ReleaseDetails {
     id: u64,
     title: String,

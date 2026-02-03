@@ -13,6 +13,7 @@ use std::time::SystemTime;
 /// Entry metadata for tracking cache usage
 #[derive(Debug, Clone)]
 struct CacheEntry {
+    #[allow(dead_code)]
     track_id: u64,
     size_bytes: u64,
     last_accessed: SystemTime,

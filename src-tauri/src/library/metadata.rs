@@ -1,6 +1,6 @@
 //! Metadata extraction for audio files
 
-use lofty::{Accessor, AudioFile, ItemKey, MimeType, Probe, TaggedFileExt};
+use lofty::{Accessor, AudioFile, ItemKey, Probe, TaggedFileExt};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -467,6 +467,7 @@ impl MetadataExtractor {
     }
 
     /// Simple hash function for generating filenames
+    #[allow(dead_code)]
     fn simple_hash(s: &str) -> u64 {
         let mut hash: u64 = 5381;
         for byte in s.bytes() {

@@ -7,7 +7,7 @@
 //! This abstraction allows the player to work with both approaches transparently.
 
 use crate::audio::AlsaDirectStream;
-use rodio::{OutputStream, OutputStreamHandle, Sink, Source};
+use rodio::{OutputStreamHandle, Sink, Source};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -270,6 +270,7 @@ impl PlaybackEngine {
     }
 
     /// Get current position in seconds (for ALSA Direct only)
+    #[allow(dead_code)]
     pub fn position_secs(&self) -> Option<u64> {
         match self {
             Self::Rodio { .. } => None, // Rodio doesn't expose position directly
@@ -286,6 +287,7 @@ impl PlaybackEngine {
     }
 
     /// Get duration in seconds (for ALSA Direct only)
+    #[allow(dead_code)]
     pub fn duration_secs(&self) -> Option<u64> {
         match self {
             Self::Rodio { .. } => None,
@@ -302,6 +304,7 @@ impl PlaybackEngine {
     }
 
     /// Check if using ALSA Direct engine
+    #[allow(dead_code)]
     pub fn is_alsa_direct(&self) -> bool {
         matches!(self, Self::AlsaDirect { .. })
     }

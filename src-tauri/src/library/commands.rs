@@ -71,7 +71,7 @@ pub async fn library_add_folder(
 
     log::info!("Folder network info: is_network={}, fs_type={:?}", is_network, fs_type);
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     let id = db.add_folder_with_network_info(&path, is_network, fs_type.as_deref())
         .map_err(|e| e.to_string())?;
 
@@ -88,7 +88,7 @@ pub async fn library_remove_folder(
 ) -> Result<(), String> {
     log::info!("Command: library_remove_folder {}", path);
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     db.remove_folder(&path).map_err(|e| e.to_string())?;
     db.delete_tracks_in_folder(&path).map_err(|e| e.to_string())?;
     Ok(())
@@ -109,7 +109,7 @@ pub async fn library_cleanup_missing_files(
 ) -> Result<CleanupResult, String> {
     log::info!("Command: library_cleanup_missing_files");
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
 
     // Get all track paths
     let tracks = db.get_all_track_paths().map_err(|e| e.to_string())?;
@@ -249,7 +249,7 @@ pub async fn library_clear_thumbnails_cache() -> Result<u64, String> {
 pub async fn library_get_folders(state: State<'_, LibraryState>) -> Result<Vec<String>, String> {
     log::info!("Command: library_get_folders");
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     db.get_folders().map_err(|e| e.to_string())
 }
 
@@ -261,7 +261,7 @@ pub async fn library_get_folders_with_metadata(
 ) -> Result<Vec<LibraryFolder>, String> {
     log::info!("Command: library_get_folders_with_metadata");
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     let mut folders = db.get_folders_with_metadata().map_err(|e| e.to_string())?;
 
     // Refresh network detection for folders without user override
@@ -316,7 +316,7 @@ pub async fn library_get_folder(
 ) -> Result<Option<LibraryFolder>, String> {
     log::info!("Command: library_get_folder {}", id);
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     db.get_folder_by_id(id).map_err(|e| e.to_string())
 }
 
@@ -333,7 +333,7 @@ pub async fn library_update_folder_settings(
 ) -> Result<LibraryFolder, String> {
     log::info!("Command: library_update_folder_settings {} alias={:?} enabled={}", id, alias, enabled);
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     db.update_folder_settings(
         id,
         alias.as_deref(),
@@ -357,7 +357,7 @@ pub async fn library_set_folder_enabled(
 ) -> Result<(), String> {
     log::info!("Command: library_set_folder_enabled {} enabled={}", id, enabled);
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     db.set_folder_enabled(id, enabled).map_err(|e| e.to_string())
 }
 
@@ -379,7 +379,7 @@ pub async fn library_update_folder_path(
         return Err("The selected path is not a folder".to_string());
     }
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     db.update_folder_path(id, &new_path).map_err(|e| e.to_string())?;
 
     // Check if it's a network folder and update network info
@@ -691,7 +691,7 @@ async fn process_cue_file(cue_path: &Path, state: &State<'_, LibraryState>) -> R
     }
 
     // Insert tracks
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     let group_key = tracks
         .first()
         .map(|track| track.album_group_key.clone())
@@ -1022,7 +1022,7 @@ pub async fn library_get_albums(
         .map(|s| s.show_in_library)
         .unwrap_or(false);
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
 
     // Use optimized SQL-based filtering instead of N+1 query pattern
     let albums = db.get_albums_with_full_filter(
@@ -1042,7 +1042,7 @@ pub async fn library_get_album_tracks(
 ) -> Result<Vec<LocalTrack>, String> {
     log::info!("Command: library_get_album_tracks {}", album_group_key);
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     db.get_album_tracks(&album_group_key)
         .map_err(|e| e.to_string())
 }
@@ -1063,7 +1063,7 @@ pub async fn library_get_artists(
         .map(|s| s.show_in_library)
         .unwrap_or(false);
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
 
     // Use optimized SQL-based filtering instead of N+1 query pattern
     let artists = db.get_artists_with_filter(
@@ -1093,7 +1093,7 @@ pub async fn library_search(
         .map(|s| s.show_in_library)
         .unwrap_or(false);
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
 
     // Use optimized SQL-based filtering
     // limit = 0 means no limit (fetch all tracks)
@@ -1112,7 +1112,7 @@ pub async fn library_search(
 pub async fn library_get_stats(state: State<'_, LibraryState>) -> Result<LibraryStats, String> {
     log::info!("Command: library_get_stats");
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     db.get_stats().map_err(|e| e.to_string())
 }
 
@@ -1120,7 +1120,7 @@ pub async fn library_get_stats(state: State<'_, LibraryState>) -> Result<Library
 pub async fn library_clear(state: State<'_, LibraryState>) -> Result<(), String> {
     log::info!("Command: library_clear");
 
-    let mut db = state.db.lock().await;
+    let db = state.db.lock().await;
     db.clear_all_tracks().map_err(|e| e.to_string())
 }
 
@@ -1893,7 +1893,7 @@ pub async fn library_write_album_metadata_to_files(
     let write_result = tokio::task::spawn_blocking({
         let request = request.clone();
         move || -> Result<(), String> {
-            use lofty::{Accessor, AudioFile, ItemKey, Tag, TagExt, TaggedFileExt, TagType};
+            use lofty::{Accessor, AudioFile, ItemKey, Tag, TaggedFileExt};
 
             // Ensure we only write each file once.
             let mut by_file: HashMap<String, &LibraryAlbumTrackMetadataUpdate> = HashMap::new();

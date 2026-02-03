@@ -228,7 +228,7 @@ impl AlsaBackend {
                     device
                         .supported_output_configs()
                         .ok()
-                        .and_then(|mut configs| {
+                        .and_then(|configs| {
                             configs
                                 .max_by_key(|c| c.max_sample_rate().0)
                                 .map(|c| c.max_sample_rate().0)
@@ -371,7 +371,7 @@ impl AlsaBackend {
             let max_sample_rate = device
                 .supported_output_configs()
                 .ok()
-                .and_then(|mut configs| {
+                .and_then(|configs| {
                     configs
                         .max_by_key(|c| c.max_sample_rate().0)
                         .map(|c| c.max_sample_rate().0)

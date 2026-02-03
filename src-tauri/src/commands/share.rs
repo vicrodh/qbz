@@ -183,6 +183,7 @@ async fn search_itunes_by_term(title: &str, artist: &str) -> Option<String> {
 /// iTunes album lookup response
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(dead_code)]
 struct ItunesAlbumResult {
     collection_id: Option<u64>,
     collection_view_url: Option<String>,
@@ -200,7 +201,7 @@ struct ItunesAlbumLookupResponse {
 #[tauri::command]
 pub async fn share_album_songlink(
     upc: Option<String>,
-    album_id: Option<String>,
+    _album_id: Option<String>,
     title: Option<String>,
     artist: Option<String>,
     state: State<'_, AppState>,
