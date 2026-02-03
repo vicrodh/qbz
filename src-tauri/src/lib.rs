@@ -4,6 +4,7 @@
 
 pub mod api;
 pub mod api_cache;
+pub mod api_server;
 pub mod artist_blacklist;
 pub mod artist_vectors;
 pub mod audio;
@@ -205,6 +206,11 @@ pub fn run() {
     // Initialize tray settings state
     let tray_settings_state = config::tray_settings::TraySettingsState::new()
         .expect("Failed to initialize tray settings");
+    // Initialize remote control settings state
+    let remote_control_settings_state = config::remote_control_settings::RemoteControlSettingsState::new()
+        .expect("Failed to initialize remote control settings");
+    // Initialize API server state for remote control
+    let api_server_state = api_server::ApiServerState::new();
     // Initialize legal settings state (ToS acceptance persistence)
     let legal_settings_state = config::legal_settings::LegalSettingsState::new(
         std::sync::Mutex::new(
@@ -300,6 +306,14 @@ pub fn run() {
             app.state::<AppState>()
                 .visualizer
                 .start(app.handle().clone());
+
+            // Start remote control API server if enabled
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) = api_server::sync_server(&app_handle).await {
+                    log::error!("Remote control API init failed: {}", e);
+                }
+            });
 
             // Purge offline downloads if the subscription has been invalid for > 3 days
             // (compliance requirement for cached content).
@@ -411,6 +425,7 @@ pub fn run() {
                             bit_depth: if bit_depth > 0 { Some(bit_depth) } else { None },
                         };
                         let _ = app_handle.emit("playback:state", &event);
+                        api_server::broadcast_playback_event(&app_handle, &event);
                         last_position = position;
                         last_is_playing = is_playing;
                         last_track_id = track_id;
@@ -470,6 +485,8 @@ pub fn run() {
         .manage(favorites_prefs_state)
         .manage(favorites_cache_state)
         .manage(tray_settings_state)
+        .manage(remote_control_settings_state)
+        .manage(api_server_state)
         .manage(legal_settings_state)
         .manage(updates_state)
         .manage(musicbrainz_state)
@@ -879,6 +896,12 @@ pub fn run() {
             config::tray_settings::set_enable_tray,
             config::tray_settings::set_minimize_to_tray,
             config::tray_settings::set_close_to_tray,
+            // Remote control commands
+            api_server::remote_control_get_status,
+            api_server::remote_control_set_enabled,
+            api_server::remote_control_set_port,
+            api_server::remote_control_get_pairing_qr,
+            api_server::remote_control_regenerate_token,
             // Legal settings commands
             config::legal_settings::get_legal_settings,
             config::legal_settings::get_qobuz_tos_accepted,

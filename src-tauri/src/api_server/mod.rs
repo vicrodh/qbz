@@ -1,0 +1,588 @@
+use axum::{
+    body::Body,
+    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, ConnectInfo, Query, State},
+    http::{header, Method, StatusCode},
+    middleware,
+    response::IntoResponse,
+    routing::{get, post},
+    Json, Router,
+};
+use base64::Engine;
+use futures_util::SinkExt;
+use serde::{Deserialize, Serialize};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
+use tauri::{AppHandle, Manager};
+use tokio::sync::{broadcast, oneshot, Mutex};
+use tower_http::cors::{AllowOrigin, CorsLayer};
+
+use crate::{
+    api::{SearchResultsPage, Track},
+    commands,
+    config::{
+        audio_settings::AudioSettingsState,
+        remote_control_settings::{RemoteControlSettings, RemoteControlSettingsState},
+    },
+    offline_cache::OfflineCacheState,
+    player::PlaybackEvent,
+    queue::QueueTrack,
+    AppState,
+};
+
+#[derive(Clone)]
+struct ApiContext {
+    app_handle: AppHandle,
+    token: String,
+    playback_tx: broadcast::Sender<PlaybackEvent>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteControlStatus {
+    pub enabled: bool,
+    pub running: bool,
+    pub port: u16,
+    pub local_url: String,
+    pub token: String,
+    pub last_error: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteControlQr {
+    pub qr_data_url: String,
+    pub url: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NowPlayingResponse {
+    playback: crate::player::PlaybackState,
+    track: Option<QueueTrack>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct PingResponse {
+    ok: bool,
+    version: String,
+    name: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SeekRequest {
+    position: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct VolumeRequest {
+    volume: f32,
+}
+
+#[derive(Debug)]
+struct ApiServerHandle {
+    shutdown_tx: oneshot::Sender<()>,
+}
+
+struct ApiServerInner {
+    current: Option<RemoteControlSettings>,
+    server: Option<ApiServerHandle>,
+    last_error: Option<String>,
+}
+
+pub struct ApiServerState {
+    inner: Mutex<ApiServerInner>,
+    playback_tx: broadcast::Sender<PlaybackEvent>,
+}
+
+impl ApiServerState {
+    pub fn new() -> Self {
+        let (tx, _) = broadcast::channel(64);
+        Self {
+            inner: Mutex::new(ApiServerInner {
+                current: None,
+                server: None,
+                last_error: None,
+            }),
+            playback_tx: tx,
+        }
+    }
+
+    pub async fn apply_settings(
+        &self,
+        app_handle: AppHandle,
+        settings: RemoteControlSettings,
+    ) -> Result<(), String> {
+        let mut inner = self.inner.lock().await;
+
+        if inner.current.as_ref() == Some(&settings) {
+            return Ok(());
+        }
+
+        if let Some(handle) = inner.server.take() {
+            let _ = handle.shutdown_tx.send(());
+        }
+
+        inner.current = Some(settings.clone());
+        inner.last_error = None;
+
+        if !settings.enabled {
+            return Ok(());
+        }
+
+        let ctx = ApiContext {
+            app_handle: app_handle.clone(),
+            token: settings.token.clone(),
+            playback_tx: self.playback_tx.clone(),
+        };
+
+        let router = build_router(ctx);
+        let bind_addr = SocketAddr::from(([0, 0, 0, 0], settings.port));
+        let listener = tokio::net::TcpListener::bind(bind_addr)
+            .await
+            .map_err(|err| {
+                let msg = format!("Remote control API bind failed: {}", err);
+                inner.last_error = Some(msg.clone());
+                msg
+            })?;
+
+        let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+        tauri::async_runtime::spawn(async move {
+            let server = axum::serve(
+                listener,
+                router.into_make_service_with_connect_info::<SocketAddr>(),
+            )
+            .with_graceful_shutdown(async {
+                let _ = shutdown_rx.await;
+            });
+
+            if let Err(err) = server.await {
+                log::error!("Remote control API server error: {}", err);
+            }
+        });
+
+        inner.server = Some(ApiServerHandle { shutdown_tx });
+        Ok(())
+    }
+
+    pub async fn status(
+        &self,
+        settings: &RemoteControlSettings,
+        local_url: String,
+    ) -> RemoteControlStatus {
+        let inner = self.inner.lock().await;
+        RemoteControlStatus {
+            enabled: settings.enabled,
+            running: inner.server.is_some(),
+            port: settings.port,
+            local_url,
+            token: settings.token.clone(),
+            last_error: inner.last_error.clone(),
+        }
+    }
+
+    pub fn broadcast(&self, event: PlaybackEvent) {
+        let _ = self.playback_tx.send(event);
+    }
+}
+
+pub fn broadcast_playback_event(app_handle: &AppHandle, event: &PlaybackEvent) {
+    if let Some(state) = app_handle.try_state::<ApiServerState>() {
+        state.broadcast(event.clone());
+    }
+}
+
+#[tauri::command]
+pub async fn remote_control_get_status(app: AppHandle) -> Result<RemoteControlStatus, String> {
+    let settings_state = app.state::<RemoteControlSettingsState>();
+    let settings = settings_state.get_settings()?;
+    let local_url = get_local_url(settings.port);
+    let api_state = app.state::<ApiServerState>();
+    Ok(api_state.status(&settings, local_url).await)
+}
+
+#[tauri::command]
+pub async fn remote_control_set_enabled(
+    enabled: bool,
+    app: AppHandle,
+) -> Result<RemoteControlStatus, String> {
+    let settings_state = app.state::<RemoteControlSettingsState>();
+    settings_state.set_enabled(enabled)?;
+    sync_server(&app).await?;
+    remote_control_get_status(app).await
+}
+
+#[tauri::command]
+pub async fn remote_control_set_port(
+    port: u16,
+    app: AppHandle,
+) -> Result<RemoteControlStatus, String> {
+    if port < 1024 || port > 65535 {
+        return Err("Port must be between 1024 and 65535".to_string());
+    }
+    let settings_state = app.state::<RemoteControlSettingsState>();
+    settings_state.set_port(port)?;
+    sync_server(&app).await?;
+    remote_control_get_status(app).await
+}
+
+#[tauri::command]
+pub async fn remote_control_regenerate_token(
+    app: AppHandle,
+) -> Result<RemoteControlQr, String> {
+    let settings_state = app.state::<RemoteControlSettingsState>();
+    let _ = settings_state.regenerate_token()?;
+    sync_server(&app).await?;
+    remote_control_get_pairing_qr(app).await
+}
+
+#[tauri::command]
+pub async fn remote_control_get_pairing_qr(
+    app: AppHandle,
+) -> Result<RemoteControlQr, String> {
+    let settings_state = app.state::<RemoteControlSettingsState>();
+    let settings = settings_state.get_settings()?;
+    let url = get_local_url(settings.port);
+    let payload = serde_json::json!({
+        "url": url,
+        "token": settings.token,
+        "name": get_device_name(),
+        "version": env!("CARGO_PKG_VERSION"),
+    });
+
+    let svg = qrcode_generator::to_svg_to_string(
+        payload.to_string(),
+        qrcode_generator::QrCodeEcc::Low,
+        512,
+        None::<&str>,
+    ).map_err(|e| format!("QR generation failed: {}", e))?;
+
+    let svg_base64 = base64::engine::general_purpose::STANDARD.encode(svg.as_bytes());
+    let data_url = format!("data:image/svg+xml;base64,{}", svg_base64);
+
+    Ok(RemoteControlQr {
+        qr_data_url: data_url,
+        url,
+    })
+}
+
+pub async fn sync_server(app: &AppHandle) -> Result<(), String> {
+    let settings_state = app.state::<RemoteControlSettingsState>();
+    let settings = settings_state.get_settings()?;
+    let api_state = app.state::<ApiServerState>();
+    api_state.apply_settings(app.clone(), settings).await
+}
+
+fn build_router(ctx: ApiContext) -> Router {
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::predicate(|origin, _| is_local_origin(origin)))
+        .allow_methods([Method::GET, Method::POST, Method::OPTIONS])
+        .allow_headers([
+            header::CONTENT_TYPE,
+            header::AUTHORIZATION,
+            header::HeaderName::from_static("x-api-key"),
+        ]);
+
+    Router::new()
+        .route("/api/ping", get(ping))
+        .route("/api/status", get(now_playing))
+        .route("/api/now-playing", get(now_playing))
+        .route("/api/playback/play", post(play))
+        .route("/api/playback/pause", post(pause))
+        .route("/api/playback/next", post(next_track))
+        .route("/api/playback/previous", post(previous_track))
+        .route("/api/playback/seek", post(seek))
+        .route("/api/playback/volume", post(set_volume))
+        .route("/api/search", get(search_tracks))
+        .route("/api/ws", get(ws_handler))
+        .with_state(ctx.clone())
+        .layer(middleware::from_fn(lan_only))
+        .layer(middleware::from_fn_with_state(ctx, require_token))
+        .layer(cors)
+}
+
+async fn ping(State(_ctx): State<ApiContext>) -> impl IntoResponse {
+    let name = get_device_name();
+    Json(PingResponse {
+        ok: true,
+        version: env!("CARGO_PKG_VERSION").to_string(),
+        name,
+    })
+}
+
+async fn now_playing(State(ctx): State<ApiContext>) -> Result<Json<NowPlayingResponse>, StatusCode> {
+    let app_state = ctx.app_handle.state::<AppState>();
+    let playback = app_state
+        .player
+        .get_state()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let track = app_state.queue.current_track();
+    Ok(Json(NowPlayingResponse { playback, track }))
+}
+
+async fn play(State(ctx): State<ApiContext>) -> Result<StatusCode, StatusCode> {
+    let app_state = ctx.app_handle.state::<AppState>();
+    app_state.media_controls.set_playback(true);
+    app_state
+        .player
+        .resume()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn pause(State(ctx): State<ApiContext>) -> Result<StatusCode, StatusCode> {
+    let app_state = ctx.app_handle.state::<AppState>();
+    app_state.media_controls.set_playback(false);
+    app_state
+        .player
+        .pause()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn next_track(
+    State(ctx): State<ApiContext>,
+) -> Result<Json<Option<QueueTrack>>, StatusCode> {
+    let app_state = ctx.app_handle.state::<AppState>();
+    let next = app_state.queue.next();
+    if let Some(track) = next {
+        let played = play_queue_track(&ctx, track).await?;
+        return Ok(Json(Some(played)));
+    }
+    Ok(Json(None))
+}
+
+async fn previous_track(
+    State(ctx): State<ApiContext>,
+) -> Result<Json<Option<QueueTrack>>, StatusCode> {
+    let app_state = ctx.app_handle.state::<AppState>();
+    let prev = app_state.queue.previous();
+    if let Some(track) = prev {
+        let played = play_queue_track(&ctx, track).await?;
+        return Ok(Json(Some(played)));
+    }
+    Ok(Json(None))
+}
+
+async fn play_queue_track(
+    ctx: &ApiContext,
+    track: QueueTrack,
+) -> Result<QueueTrack, StatusCode> {
+    if track.is_local {
+        return Err(StatusCode::NOT_IMPLEMENTED);
+    }
+
+    let app_state = ctx.app_handle.state::<AppState>();
+    let offline_cache = ctx.app_handle.state::<OfflineCacheState>();
+    let audio_settings = ctx.app_handle.state::<AudioSettingsState>();
+
+    if let Err(err) = commands::playback::play_track(
+        track.id,
+        Some(track.duration_secs),
+        None,
+        app_state,
+        offline_cache,
+        audio_settings,
+    ).await {
+        log::error!("Remote control play_track failed: {}", err);
+        return Err(StatusCode::BAD_GATEWAY);
+    }
+
+    Ok(track)
+}
+
+async fn seek(
+    State(ctx): State<ApiContext>,
+    Json(payload): Json<SeekRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let app_state = ctx.app_handle.state::<AppState>();
+    commands::playback::seek(payload.position, app_state)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn set_volume(
+    State(ctx): State<ApiContext>,
+    Json(payload): Json<VolumeRequest>,
+) -> Result<StatusCode, StatusCode> {
+    let app_state = ctx.app_handle.state::<AppState>();
+    commands::playback::set_volume(payload.volume, app_state)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+struct SearchQuery {
+    q: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
+}
+
+async fn search_tracks(
+    State(ctx): State<ApiContext>,
+    Query(query): Query<SearchQuery>,
+) -> Result<Json<SearchResultsPage<Track>>, StatusCode> {
+    let app_state = ctx.app_handle.state::<AppState>();
+    let client = app_state.client.lock().await;
+    let results = client
+        .search_tracks(
+            &query.q,
+            query.limit.unwrap_or(20),
+            query.offset.unwrap_or(0),
+            None,
+        )
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+    Ok(Json(results))
+}
+
+async fn ws_handler(
+    State(ctx): State<ApiContext>,
+    ws: WebSocketUpgrade,
+) -> impl IntoResponse {
+    ws.on_upgrade(move |socket| handle_ws(socket, ctx.playback_tx.subscribe()))
+}
+
+async fn handle_ws(mut socket: WebSocket, mut rx: broadcast::Receiver<PlaybackEvent>) {
+    loop {
+        match rx.recv().await {
+            Ok(event) => {
+                let payload = match serde_json::to_string(&event) {
+                    Ok(p) => p,
+                    Err(_) => continue,
+                };
+                if socket.send(Message::Text(payload)).await.is_err() {
+                    break;
+                }
+            }
+            Err(broadcast::error::RecvError::Closed) => break,
+            Err(broadcast::error::RecvError::Lagged(_)) => continue,
+        }
+    }
+}
+
+async fn require_token(
+    State(ctx): State<ApiContext>,
+    req: axum::http::Request<Body>,
+    next: middleware::Next,
+) -> impl IntoResponse {
+    if req.method() == Method::OPTIONS {
+        return StatusCode::NO_CONTENT.into_response();
+    }
+
+    if ctx.token.is_empty() {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+
+    if let Some(value) = req.headers().get("x-api-key") {
+        if value.as_bytes() == ctx.token.as_bytes() {
+            return next.run(req).await;
+        }
+    }
+
+    if let Some(value) = req.headers().get(header::AUTHORIZATION) {
+        if let Ok(auth) = value.to_str() {
+            if let Some(token) = auth.strip_prefix("Bearer ") {
+                if token.as_bytes() == ctx.token.as_bytes() {
+                    return next.run(req).await;
+                }
+            }
+        }
+    }
+
+    if let Some(query) = req.uri().query() {
+        for pair in query.split('&') {
+            let mut parts = pair.splitn(2, '=');
+            if let (Some("token"), Some(value)) = (parts.next(), parts.next()) {
+                if value.as_bytes() == ctx.token.as_bytes() {
+                    return next.run(req).await;
+                }
+            }
+        }
+    }
+
+    StatusCode::UNAUTHORIZED.into_response()
+}
+
+async fn lan_only(
+    req: axum::http::Request<Body>,
+    next: middleware::Next,
+) -> impl IntoResponse {
+    let addr = req
+        .extensions()
+        .get::<ConnectInfo<SocketAddr>>()
+        .map(|info| info.0);
+
+    if let Some(addr) = addr {
+        if is_local_addr(addr.ip()) {
+            return next.run(req).await;
+        }
+    }
+
+    StatusCode::FORBIDDEN.into_response()
+}
+
+fn is_local_addr(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(addr) => addr.is_private() || addr.is_loopback(),
+        IpAddr::V6(addr) => addr.is_loopback() || addr.is_unique_local() || is_ipv6_link_local(addr),
+    }
+}
+
+fn is_local_origin(origin: &header::HeaderValue) -> bool {
+    let origin_str = match origin.to_str() {
+        Ok(value) => value,
+        Err(_) => return false,
+    };
+
+    if origin_str == "null" {
+        return false;
+    }
+
+    let uri: axum::http::Uri = match origin_str.parse() {
+        Ok(value) => value,
+        Err(_) => return false,
+    };
+
+    let host = match uri.host() {
+        Some(value) => value,
+        None => return false,
+    };
+
+    if host == "localhost" {
+        return true;
+    }
+
+    if host == "vicrodh.github.io" || host == "control.qbz.lol" || host == "www.control.qbz.lol" {
+        return true;
+    }
+
+    match host.parse::<IpAddr>() {
+        Ok(ip) => is_local_addr(ip),
+        Err(_) => false,
+    }
+}
+
+fn is_ipv6_link_local(addr: std::net::Ipv6Addr) -> bool {
+    (addr.segments()[0] & 0xffc0) == 0xfe80
+}
+
+fn get_local_url(port: u16) -> String {
+    let ip = local_ip().unwrap_or_else(|| IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)));
+    match ip {
+        IpAddr::V4(addr) => format!("http://{}:{}", addr, port),
+        IpAddr::V6(addr) => format!("http://[{}]:{}", addr, port),
+    }
+}
+
+fn local_ip() -> Option<IpAddr> {
+    let socket = UdpSocket::bind("0.0.0.0:0").ok()?;
+    socket.connect("8.8.8.8:80").ok()?;
+    let local_addr = socket.local_addr().ok()?;
+    Some(local_addr.ip())
+}
+
+fn get_device_name() -> String {
+    std::env::var("HOSTNAME").unwrap_or_else(|_| "QBZ".to_string())
+}

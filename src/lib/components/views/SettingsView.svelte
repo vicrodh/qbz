@@ -4,6 +4,7 @@
   import ViewTransition from '../ViewTransition.svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
+  import { ask } from '@tauri-apps/plugin-dialog';
   import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, HelpCircle, Ban } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
@@ -113,6 +114,20 @@
     is_active: boolean;
   }
 
+  interface RemoteControlStatus {
+    enabled: boolean;
+    running: boolean;
+    port: number;
+    localUrl: string;
+    token: string;
+    lastError?: string | null;
+  }
+
+  interface RemoteControlQr {
+    qrDataUrl: string;
+    url: string;
+  }
+
   let {
     onBack,
     onLogout,
@@ -189,6 +204,7 @@
   let librarySection: HTMLElement;
   let contentFilteringSection: HTMLElement;
   let integrationsSection: HTMLElement;
+  let remoteControlSection: HTMLElement;
   let updatesSection: HTMLElement;
   let storageSection: HTMLElement;
   let flatpakSection: HTMLElement;
@@ -208,6 +224,7 @@
     { id: 'library', labelKey: 'settings.library.title' },
     { id: 'content-filtering', labelKey: 'settings.contentFiltering.title' },
     { id: 'integrations', labelKey: 'settings.integrations.title' },
+    { id: 'remote-control', labelKey: 'settings.integrations.remoteControl' },
     { id: 'updates', labelKey: 'nav.updates' },
     { id: 'storage', labelKey: 'settings.storage.title' },
   ];
@@ -231,6 +248,7 @@
       case 'library': return librarySection;
       case 'content-filtering': return contentFilteringSection;
       case 'integrations': return integrationsSection;
+      case 'remote-control': return remoteControlSection;
       case 'updates': return updatesSection;
       case 'storage': return storageSection;
       case 'flatpak': return flatpakSection;
@@ -614,6 +632,16 @@
   let listenbrainzConnecting = $state(false);
   let showListenBrainzConfig = $state(false);
 
+  // Remote control state
+  let remoteControlStatus = $state<RemoteControlStatus | null>(null);
+  let remoteControlEnabled = $state(false);
+  let remoteControlPort = $state(8182);
+  let remoteControlToken = $state('');
+  let remoteControlLoading = $state(false);
+  let remoteControlQrOpen = $state(false);
+  let remoteControlQrData = $state('');
+  let remoteControlUrl = $state('');
+
   // Load saved settings on mount
   onMount(() => {
     // Load theme
@@ -688,6 +716,9 @@
 
     // Load ListenBrainz state
     loadListenBrainzState();
+
+    // Load remote control status
+    loadRemoteControlStatus();
 
     // Load notification preferences
     loadToastsPreference();
@@ -964,6 +995,117 @@
       listenbrainzEnabled = enabled;
     } catch (err) {
       console.error('Failed to update ListenBrainz setting:', err);
+    }
+  }
+
+  async function loadRemoteControlStatus() {
+    try {
+      const status = await invoke<RemoteControlStatus>('remote_control_get_status');
+      remoteControlStatus = status;
+      remoteControlEnabled = status.enabled;
+      remoteControlPort = status.port;
+      remoteControlUrl = status.localUrl;
+      remoteControlToken = status.token;
+    } catch (err) {
+      console.error('Failed to load remote control status:', err);
+    }
+  }
+
+  async function handleRemoteControlToggle(enabled: boolean) {
+    remoteControlLoading = true;
+    try {
+      const status = await invoke<RemoteControlStatus>('remote_control_set_enabled', { enabled });
+      remoteControlStatus = status;
+      remoteControlEnabled = status.enabled;
+      remoteControlPort = status.port;
+      remoteControlUrl = status.localUrl;
+      remoteControlToken = status.token;
+      if (!enabled) {
+        remoteControlQrOpen = false;
+      }
+    } catch (err) {
+      console.error('Failed to update remote control enabled state:', err);
+    } finally {
+      remoteControlLoading = false;
+    }
+  }
+
+  async function handleRemoteControlPortChange(value: number) {
+    if (!Number.isFinite(value)) return;
+    remoteControlLoading = true;
+    try {
+      const status = await invoke<RemoteControlStatus>('remote_control_set_port', { port: value });
+      remoteControlStatus = status;
+      remoteControlEnabled = status.enabled;
+      remoteControlPort = status.port;
+      remoteControlUrl = status.localUrl;
+      remoteControlToken = status.token;
+      if (remoteControlQrOpen) {
+        await handleRemoteControlQrToggle(true);
+      }
+    } catch (err) {
+      console.error('Failed to update remote control port:', err);
+    } finally {
+      remoteControlLoading = false;
+    }
+  }
+
+  async function handleRemoteControlQrToggle(forceOpen = false) {
+    if (remoteControlQrOpen && !forceOpen) {
+      remoteControlQrOpen = false;
+      return;
+    }
+    remoteControlLoading = true;
+    try {
+      const qr = await invoke<RemoteControlQr>('remote_control_get_pairing_qr');
+      remoteControlQrData = qr.qrDataUrl;
+      remoteControlUrl = qr.url;
+      remoteControlQrOpen = true;
+    } catch (err) {
+      console.error('Failed to load remote control QR:', err);
+    } finally {
+      remoteControlLoading = false;
+    }
+  }
+
+  async function handleRemoteControlRegenerateToken() {
+    const confirmed = await ask(
+      get(t)('settings.integrations.remoteControlRegenerateDesc'),
+      {
+        title: get(t)('settings.integrations.remoteControlRegenerateTitle'),
+        kind: 'warning',
+        okLabel: get(t)('settings.integrations.remoteControlRegenerateConfirm'),
+        cancelLabel: get(t)('actions.cancel')
+      }
+    );
+
+    if (!confirmed) return;
+
+    remoteControlLoading = true;
+    try {
+      const qr = await invoke<RemoteControlQr>('remote_control_regenerate_token');
+      remoteControlQrData = qr.qrDataUrl;
+      remoteControlUrl = qr.url;
+      remoteControlQrOpen = true;
+      const status = await invoke<RemoteControlStatus>('remote_control_get_status');
+      remoteControlStatus = status;
+      remoteControlEnabled = status.enabled;
+      remoteControlPort = status.port;
+      remoteControlToken = status.token;
+    } catch (err) {
+      console.error('Failed to regenerate remote control token:', err);
+    } finally {
+      remoteControlLoading = false;
+    }
+  }
+
+  async function handleRemoteControlCopyToken() {
+    if (!remoteControlToken) return;
+    try {
+      await copyToClipboard(remoteControlToken);
+      showToast(get(t)('toast.copied'), 'success');
+    } catch (err) {
+      console.error('Failed to copy token:', err);
     }
   }
 
@@ -2633,6 +2775,113 @@
     </div>
   </section>
 
+  <!-- Remote Control Section -->
+  <section class="section" id="remote-control" bind:this={remoteControlSection}>
+    <h3 class="section-title">{$t('settings.integrations.remoteControl')}</h3>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.remoteControlEnable')}</span>
+        <small class="setting-note">
+          {$t('settings.integrations.remoteControlDesc')}
+        </small>
+      </div>
+      <Toggle
+        enabled={remoteControlEnabled}
+        onchange={handleRemoteControlToggle}
+        disabled={remoteControlLoading}
+      />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.remoteControlPort')}</span>
+        <small class="setting-note">
+          {$t('settings.integrations.remoteControlPortDesc')}
+        </small>
+      </div>
+      <input
+        class="remote-control-input"
+        type="number"
+        min="1024"
+        max="65535"
+        bind:value={remoteControlPort}
+        disabled={!remoteControlEnabled || remoteControlLoading}
+        onchange={(e) => handleRemoteControlPortChange(Number((e.target as HTMLInputElement).value))}
+      />
+    </div>
+
+    {#if remoteControlEnabled}
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.integrations.remoteControlToken')}</span>
+          <small class="setting-note">
+            {$t('settings.integrations.remoteControlTokenDesc')}
+          </small>
+        </div>
+        <div class="remote-control-actions">
+          <input
+            class="remote-control-input"
+            type="text"
+            readonly
+            value={remoteControlToken}
+            disabled={!remoteControlEnabled || remoteControlLoading}
+          />
+          <button
+            class="connect-btn connected"
+            onclick={handleRemoteControlCopyToken}
+            disabled={!remoteControlEnabled || remoteControlLoading || !remoteControlToken}
+          >
+            {$t('actions.copy')}
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    <div class="setting-row" class:last={!remoteControlQrOpen}>
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.remoteControlStatus')}</span>
+        <small class="setting-note">
+          {#if remoteControlStatus?.running}
+            {$t('settings.integrations.remoteControlStatusRunning')}
+          {:else}
+            {$t('settings.integrations.remoteControlStatusStopped')}
+          {/if}
+          {#if remoteControlUrl}
+            <span class="remote-control-url">{$t('settings.integrations.remoteControlUrlLabel')}: {remoteControlUrl}</span>
+          {/if}
+        </small>
+      </div>
+      <div class="remote-control-actions">
+        <button
+          class="connect-btn connected"
+          onclick={handleRemoteControlRegenerateToken}
+          disabled={!remoteControlEnabled || remoteControlLoading}
+        >
+          {$t('settings.integrations.remoteControlRegenerate')}
+        </button>
+        <button
+          class="connect-btn"
+          onclick={() => handleRemoteControlQrToggle()}
+          disabled={!remoteControlEnabled || remoteControlLoading}
+        >
+          {remoteControlQrOpen
+            ? $t('settings.integrations.remoteControlHideQr')
+            : $t('settings.integrations.remoteControlShowQr')}
+        </button>
+      </div>
+    </div>
+
+    {#if remoteControlQrOpen}
+      <div class="remote-control-qr">
+        <img src={remoteControlQrData} alt={$t('settings.integrations.remoteControlQrAlt')} />
+        <div class="remote-control-qr-meta">
+          <p class="remote-control-qr-help">{$t('settings.integrations.remoteControlQrHelp')}</p>
+        </div>
+      </div>
+    {/if}
+  </section>
+
   <!-- Updates Section -->
   <section class="section" bind:this={updatesSection}>
     <h3 class="section-title">{$t('settings.updates.title')}</h3>
@@ -3891,6 +4140,57 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .status-disabled {
     color: #fbbf24;
     font-size: 12px;
+  }
+
+  .remote-control-input {
+    width: 120px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--bg-tertiary);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 12px;
+  }
+
+  .remote-control-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .remote-control-qr {
+    display: flex;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--bg-tertiary);
+  }
+
+  .remote-control-qr img {
+    width: 160px;
+    height: 160px;
+    background: white;
+    border-radius: 10px;
+    padding: 8px;
+  }
+
+  .remote-control-qr-meta {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .remote-control-qr-help {
+    margin: 0;
+    font-size: 12px;
+    color: var(--text-muted);
+  }
+
+  .remote-control-url {
+    display: block;
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    word-break: break-all;
   }
 
 </style>

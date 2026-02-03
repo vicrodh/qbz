@@ -27,6 +27,11 @@ reqwest = { version = "0.12", features = ["json", "cookies", "rustls-tls", "stre
 # Async Runtime
 tokio = { version = "1", features = ["full"] }
 
+# Local API server
+axum = { version = "0.7", features = ["ws"] }
+tower-http = { version = "0.5", features = ["cors"] }
+qrcode-generator = "4.1"
+
 # Crypto (for API signatures)
 md-5 = "0.10"
 base64 = "0.22"

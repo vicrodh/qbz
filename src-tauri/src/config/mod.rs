@@ -17,6 +17,7 @@ pub mod favorites_cache;
 pub mod subscription_state;
 pub mod tray_settings;
 pub mod legal_settings;
+pub mod remote_control_settings;
 
 pub use audio_settings::{
     AudioSettings,
@@ -92,4 +93,9 @@ pub use legal_settings::{
     get_legal_settings,
     get_qobuz_tos_accepted,
     set_qobuz_tos_accepted,
+};
+
+pub use remote_control_settings::{
+    RemoteControlSettings,
+    RemoteControlSettingsState,
 };
