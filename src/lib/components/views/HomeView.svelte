@@ -584,7 +584,6 @@
         trackIds,
         trackIndex
       );
-      console.log(`[Home] Context created: Continue Listening, ${trackIds.length} tracks, starting at ${trackIndex}`);
     }
 
     if (continueTracks.length > 0) {
@@ -638,20 +637,14 @@
     loadingQobuzPlaylists = true;
     
     try {
-      console.log('[Home] Fetching playlists with tag:', slug);
       const response = await invoke<DiscoverPlaylistsResponse>('get_discover_playlists', {
         tag: slug,
         limit: LIMITS.qobuzPlaylists,
         offset: 0
       });
       
-      console.log('[Home] Response:', response);
-      console.log('[Home] Playlists count:', response.items?.length);
-      
       if (response.items) {
         qobuzPlaylists = response.items;
-      } else {
-        console.warn('[Home] No playlists in response:', response);
       }
     } catch (err) {
       console.error('Failed to fetch playlists by tag:', err);
