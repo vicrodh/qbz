@@ -452,6 +452,100 @@ impl QobuzClient {
         Ok(serde_json::from_value(genres.clone())?)
     }
 
+    /// Get discover index (home page content: playlists, ideal discography, etc.)
+    pub async fn get_discover_index(
+        &self,
+        genre_ids: Option<Vec<u64>>,
+    ) -> Result<DiscoverResponse> {
+        let url = endpoints::build_url(paths::DISCOVER_INDEX);
+        let mut query: Vec<(&str, String)> = vec![];
+
+        // Add genre_ids as comma-separated list if provided
+        if let Some(gids) = genre_ids {
+            if !gids.is_empty() {
+                let ids_str = gids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
+                query.push(("genre_ids", ids_str));
+            }
+        }
+
+        let response: Value = self
+            .http
+            .get(&url)
+            .header("X-App-Id", self.app_id().await?)
+            .header("X-User-Auth-Token", self.auth_token().await?)
+            .query(&query)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        // Debug: log the response structure
+        if let Some(obj) = response.as_object() {
+            log::info!("Discover API response keys: {:?}", obj.keys().collect::<Vec<_>>());
+            if let Some(err) = obj.get("message") {
+                log::error!("Discover API error: {:?}", err);
+            }
+            if let Some(code) = obj.get("code") {
+                log::error!("Discover API error code: {:?}", code);
+            }
+        }
+
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get discover playlists with optional tag filter
+    /// Example: tags=label, tags=partner
+    pub async fn get_discover_playlists(
+        &self,
+        tag: Option<String>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<DiscoverPlaylistsResponse> {
+        let url = endpoints::build_url(paths::DISCOVER_PLAYLISTS);
+        let mut query: Vec<(&str, String)> = vec![];
+
+        // Add tag filter if provided (e.g., "label", "partner")
+        if let Some(ref t) = tag {
+            query.push(("tags", t.clone()));
+        }
+
+        // Add limit (default 20)
+        let lim = limit.unwrap_or(20);
+        query.push(("limit", lim.to_string()));
+
+        // Add offset (default 0)
+        let off = offset.unwrap_or(0);
+        query.push(("offset", off.to_string()));
+
+        log::debug!("[API] get_discover_playlists URL: {} query: {:?}", url, query);
+
+        // First get raw JSON to debug structure
+        let raw_response: serde_json::Value = self
+            .http
+            .get(&url)
+            .header("X-App-Id", self.app_id().await?)
+            .header("X-User-Auth-Token", self.auth_token().await?)
+            .query(&query)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        log::debug!("[API] get_discover_playlists raw response keys: {:?}", raw_response.as_object().map(|o| o.keys().collect::<Vec<_>>()));
+
+        // Try to parse as expected structure
+        let response: DiscoverPlaylistsResponse = serde_json::from_value(raw_response.clone())
+            .map_err(|e| {
+                log::error!("[API] Failed to parse discover playlists response: {}", e);
+                log::error!("[API] Raw response: {}", serde_json::to_string_pretty(&raw_response).unwrap_or_default());
+                e
+            })?;
+
+        log::debug!("[API] get_discover_playlists response: {} playlists", response.items.len());
+
+        Ok(response)
+    }
+
     /// Get track by ID
     pub async fn get_track(&self, track_id: u64) -> Result<Track> {
         let url = endpoints::build_url(paths::TRACK_GET);
@@ -460,6 +554,29 @@ impl QobuzClient {
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
             .query(&[("track_id", track_id.to_string())])
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get artist by ID (basic info only - no albums, faster response)
+    pub async fn get_artist_basic(&self, artist_id: u64) -> Result<Artist> {
+        let url = endpoints::build_url(paths::ARTIST_GET);
+        let locale = self.locale().await;
+        let query = vec![
+            ("artist_id", artist_id.to_string()),
+            ("lang", locale),
+            // No "extra" parameter = only basic info (id, name, image)
+        ];
+
+        let response: Value = self
+            .http
+            .get(&url)
+            .header("X-App-Id", self.app_id().await?)
+            .query(&query)
             .send()
             .await?
             .json()

@@ -389,3 +389,95 @@ export interface FavoritesPreferences {
   icon_background: string | null;
   tab_order: string[];
 }
+
+// ============ Discover API Types ============
+
+export interface DiscoverResponse {
+  containers: DiscoverContainers;
+}
+
+export interface DiscoverContainers {
+  playlists?: DiscoverContainer<DiscoverPlaylist>;
+  ideal_discography?: DiscoverContainer<DiscoverAlbum>;
+  playlists_tags?: DiscoverContainer<PlaylistTag>;
+  new_releases?: DiscoverContainer<DiscoverAlbum>;
+}
+
+export interface DiscoverContainer<T> {
+  id: string;
+  data: DiscoverData<T>;
+}
+
+export interface DiscoverData<T> {
+  has_more: boolean;
+  items: T[];
+}
+
+export interface DiscoverPlaylist {
+  id: number;
+  name: string;
+  owner: { id: number; name: string };
+  image: DiscoverPlaylistImage;
+  description?: string;
+  duration: number;
+  tracks_count: number;
+  genres?: { id: number; name: string; path: number[] }[];
+  tags?: PlaylistTag[];
+}
+
+export interface DiscoverPlaylistImage {
+  rectangle?: string;
+  covers?: string[];
+}
+
+export interface PlaylistTag {
+  id: number;
+  slug: string;
+  name: string;
+}
+
+// Response from discover/playlists endpoint
+// Note: This endpoint returns items directly at root level (not wrapped in "playlists")
+export interface DiscoverPlaylistsResponse {
+  has_more: boolean;
+  items: DiscoverPlaylist[];
+}
+
+export interface DiscoverAlbum {
+  id: string;
+  title: string;
+  version?: string;
+  track_count?: number;
+  duration?: number;
+  parental_warning?: boolean;
+  image: DiscoverAlbumImage;
+  artists: DiscoverArtist[];
+  label?: { id: number; name: string };
+  genre?: { name: string };
+  dates?: DiscoverAlbumDates;
+  audio_info?: DiscoverAudioInfo;
+}
+
+export interface DiscoverAlbumImage {
+  small?: string;
+  thumbnail?: string;
+  large?: string;
+}
+
+export interface DiscoverArtist {
+  id: number;
+  name: string;
+  roles?: string[];
+}
+
+export interface DiscoverAlbumDates {
+  download?: string;
+  original?: string;
+  stream?: string;
+}
+
+export interface DiscoverAudioInfo {
+  maximum_sampling_rate?: number;
+  maximum_bit_depth?: number;
+  maximum_channel_count?: number;
+}

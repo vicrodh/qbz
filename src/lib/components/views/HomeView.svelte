@@ -5,9 +5,11 @@
   import { t } from '$lib/i18n';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
   import AlbumCard from '../AlbumCard.svelte';
+  import QobuzPlaylistCard from '../QobuzPlaylistCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import HomeSettingsModal from '../HomeSettingsModal.svelte';
   import GenreFilterButton from '../GenreFilterButton.svelte';
+  import PlaylistTagFilter from '../PlaylistTagFilter.svelte';
   import { formatDuration, formatQuality, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import {
@@ -24,7 +26,25 @@
     hasActiveFilter as hasGenreFilter
   } from '$lib/stores/genreFilterStore';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
-  import type { QobuzAlbum, QobuzArtist, QobuzTrack, DisplayTrack } from '$lib/types';
+  import {
+    getCachedArtist,
+    setCachedArtist,
+    getCachedAlbum,
+    setCachedAlbum,
+    getCachedTrack,
+    setCachedTrack
+  } from '$lib/stores/sessionCacheStore';
+  import type {
+    QobuzAlbum,
+    QobuzArtist,
+    QobuzTrack,
+    DisplayTrack,
+    DiscoverResponse,
+    DiscoverPlaylist,
+    DiscoverPlaylistsResponse,
+    DiscoverAlbum,
+    PlaylistTag
+  } from '$lib/types';
 
   interface TopArtistSeed {
     artistId: number;
@@ -85,6 +105,12 @@
     onTrackReDownload?: (track: DisplayTrack) => void;
     checkTrackDownloaded?: (trackId: number) => boolean;
     getTrackOfflineCacheStatus?: (trackId: number) => { status: string; progress: number };
+    onPlaylistClick?: (playlistId: number) => void;
+    onPlaylistPlay?: (playlistId: number) => void;
+    onPlaylistPlayNext?: (playlistId: number) => void;
+    onPlaylistPlayLater?: (playlistId: number) => void;
+    onPlaylistCopyToLibrary?: (playlistId: number) => void;
+    onPlaylistShareQobuz?: (playlistId: number) => void;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
     sidebarExpanded?: boolean;
@@ -119,6 +145,12 @@
     onTrackReDownload,
     checkTrackDownloaded,
     getTrackOfflineCacheStatus,
+    onPlaylistClick,
+    onPlaylistPlay,
+    onPlaylistPlayNext,
+    onPlaylistPlayLater,
+    onPlaylistCopyToLibrary,
+    onPlaylistShareQobuz,
     activeTrackId = null,
     isPlaybackActive = false,
     sidebarExpanded = true
@@ -149,13 +181,28 @@
     homeSettings.sections.filter(s => s.visible).map(s => s.id)
   );
 
+  // Deferred rendering: only render first N sections immediately, defer the rest
+  const IMMEDIATE_SECTIONS = 3;
+  let deferredSectionsReady = $state(false);
+
+  // Sections to render immediately vs deferred
+  const immediateSections = $derived(visibleSections.slice(0, IMMEDIATE_SECTIONS));
+  const deferredSections = $derived(visibleSections.slice(IMMEDIATE_SECTIONS));
+  
+  // All sections ready to render
+  const renderableSections = $derived(
+    deferredSectionsReady ? visibleSections : immediateSections
+  );
+
   const LIMITS = {
     recentAlbums: 20,
     continueTracks: 10,
-    topArtists: 20,
+    topArtists: 8,
     favoriteAlbums: 12,
     favoriteTracks: 10,
-    featuredAlbums: 12
+    featuredAlbums: 12,
+    qobuzPlaylists: 15,
+    essentialDiscography: 15
   };
 
   let homeLimits = $state(getSettings().limits);
@@ -173,6 +220,8 @@
   let loadingContinueTracks = $state(true);
   let loadingTopArtists = $state(true);
   let loadingFavoriteAlbums = $state(true);
+  let loadingQobuzPlaylists = $state(true);
+  let loadingEssentialDiscography = $state(true);
 
   // Track loading completion for overlay
   let totalVisibleSections = $state(0);
@@ -190,6 +239,12 @@
   let continueTracks = $state<DisplayTrack[]>([]);
   let topArtists = $state<ArtistCardData[]>([]);
   let favoriteAlbums = $state<AlbumCardData[]>([]);
+
+  // Discover sections
+  let qobuzPlaylists = $state<DiscoverPlaylist[]>([]);
+  let essentialDiscography = $state<DiscoverAlbum[]>([]);
+  let playlistTags = $state<PlaylistTag[]>([]);
+  let selectedTagSlug = $state<string | null>(null);
 
   let failedArtistImages = $state<Set<number>>(new Set());
 
@@ -211,7 +266,12 @@
 
   async function loadAllAlbumDownloadStatuses(albums: AlbumCardData[]) {
     if (!checkAlbumFullyDownloaded || albums.length === 0) return;
-    await Promise.all(albums.map(album => loadAlbumDownloadStatus(album.id)));
+    
+    const BATCH_SIZE = 6;
+    for (let i = 0; i < albums.length; i += BATCH_SIZE) {
+      const batch = albums.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(album => loadAlbumDownloadStatus(album.id)));
+    }
   }
 
   function isAlbumDownloaded(albumId: string): boolean {
@@ -245,6 +305,8 @@
     || continueTracks.length > 0
     || topArtists.length > 0
     || favoriteAlbums.length > 0
+    || qobuzPlaylists.length > 0
+    || essentialDiscography.length > 0
   );
 
   // Mark a section as finished loading and check if we can hide overlay
@@ -261,6 +323,17 @@
         isOverlayVisible = false;
         isInitializing = false;
       }, 150);
+      
+      // Enable deferred sections after a short delay using requestIdleCallback
+      if ('requestIdleCallback' in window) {
+        requestIdleCallback(() => {
+          deferredSectionsReady = true;
+        }, { timeout: 500 });
+      } else {
+        setTimeout(() => {
+          deferredSectionsReady = true;
+        }, 300);
+      }
     }
   }
 
@@ -288,40 +361,106 @@
 
   async function fetchAlbums(ids: string[]): Promise<AlbumCardData[]> {
     if (ids.length === 0) return [];
-    const results = await Promise.allSettled(
-      ids.map(albumId => invoke<QobuzAlbum>('get_album', { albumId }))
-    );
+    
+    const BATCH_SIZE = 6;
+    const albums: AlbumCardData[] = [];
+    
+    // Separate cached vs uncached
+    const uncachedIds: string[] = [];
+    for (const id of ids) {
+      const cached = getCachedAlbum(id);
+      if (cached) {
+        albums.push(toAlbumCard(cached));
+      } else {
+        uncachedIds.push(id);
+      }
+    }
+    
+    // Fetch uncached in batches
+    for (let i = 0; i < uncachedIds.length; i += BATCH_SIZE) {
+      const batch = uncachedIds.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(albumId => invoke<QobuzAlbum>('get_album', { albumId }))
+      );
+      
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          setCachedAlbum(result.value);
+          albums.push(toAlbumCard(result.value));
+        }
+      }
+    }
 
-    return results.flatMap(result => {
-      if (result.status !== 'fulfilled') return [];
-      return [toAlbumCard(result.value)];
-    });
+    return albums;
   }
 
   async function fetchTracks(ids: number[]): Promise<DisplayTrack[]> {
     if (ids.length === 0) return [];
-    const results = await Promise.allSettled(
-      ids.map(trackId => invoke<QobuzTrack>('get_track', { trackId }))
-    );
+    
+    const BATCH_SIZE = 6;
+    const tracks: DisplayTrack[] = [];
+    
+    // Separate cached vs uncached
+    const uncachedIds: number[] = [];
+    for (const id of ids) {
+      const cached = getCachedTrack(id);
+      if (cached) {
+        tracks.push(toDisplayTrack(cached));
+      } else {
+        uncachedIds.push(id);
+      }
+    }
+    
+    // Fetch uncached in batches
+    for (let i = 0; i < uncachedIds.length; i += BATCH_SIZE) {
+      const batch = uncachedIds.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(trackId => invoke<QobuzTrack>('get_track', { trackId }))
+      );
+      
+      for (const result of results) {
+        if (result.status === 'fulfilled') {
+          setCachedTrack(result.value);
+          tracks.push(toDisplayTrack(result.value));
+        }
+      }
+    }
 
-    return results.flatMap(result => {
-      if (result.status !== 'fulfilled') return [];
-      return [toDisplayTrack(result.value)];
-    });
+    return tracks;
   }
 
+  // Fetch artists with limited concurrency and session cache
   async function fetchArtists(seeds: TopArtistSeed[]): Promise<ArtistCardData[]> {
     if (seeds.length === 0) return [];
-    const results = await Promise.allSettled(
-      seeds.map(seed => invoke<QobuzArtist>('get_artist', { artistId: seed.artistId }))
-    );
-
+    
+    const BATCH_SIZE = 6; // Fetch 6 artists at a time (min visible at HD resolution)
     const artists: ArtistCardData[] = [];
-    results.forEach((result, index) => {
-      if (result.status !== 'fulfilled') return;
-      const seed = seeds[index];
-      artists.push(toArtistCard(result.value, seed.playCount));
-    });
+    
+    // Separate cached vs uncached
+    const uncachedSeeds: TopArtistSeed[] = [];
+    for (const seed of seeds) {
+      const cached = getCachedArtist(seed.artistId);
+      if (cached) {
+        artists.push(toArtistCard(cached, seed.playCount));
+      } else {
+        uncachedSeeds.push(seed);
+      }
+    }
+    
+    // Fetch uncached in batches (using basic endpoint - no albums, much faster)
+    for (let i = 0; i < uncachedSeeds.length; i += BATCH_SIZE) {
+      const batch = uncachedSeeds.slice(i, i + BATCH_SIZE);
+      const results = await Promise.allSettled(
+        batch.map(seed => invoke<QobuzArtist>('get_artist_basic', { artistId: seed.artistId }))
+      );
+      
+      results.forEach((result, index) => {
+        if (result.status !== 'fulfilled') return;
+        const seed = batch[index];
+        setCachedArtist(result.value);
+        artists.push(toArtistCard(result.value, seed.playCount));
+      });
+    }
 
     return artists;
   }
@@ -493,6 +632,76 @@
     );
   }
 
+  // Handle tag selection - fetch playlists with the new tag filter
+  async function handleTagChange(slug: string | null) {
+    selectedTagSlug = slug;
+    loadingQobuzPlaylists = true;
+    
+    try {
+      console.log('[Home] Fetching playlists with tag:', slug);
+      const response = await invoke<DiscoverPlaylistsResponse>('get_discover_playlists', {
+        tag: slug,
+        limit: LIMITS.qobuzPlaylists,
+        offset: 0
+      });
+      
+      console.log('[Home] Response:', response);
+      console.log('[Home] Playlists count:', response.items?.length);
+      
+      if (response.items) {
+        qobuzPlaylists = response.items;
+      } else {
+        console.warn('[Home] No playlists in response:', response);
+      }
+    } catch (err) {
+      console.error('Failed to fetch playlists by tag:', err);
+    } finally {
+      loadingQobuzPlaylists = false;
+    }
+  }
+
+  async function fetchDiscoverData() {
+    try {
+      const response = await invoke<DiscoverResponse>('get_discover_index', { genreIds: null });
+
+      // Extract playlists (limited) - initial load without tag filter
+      if (response.containers.playlists?.data?.items) {
+        qobuzPlaylists = response.containers.playlists.data.items.slice(0, LIMITS.qobuzPlaylists);
+      }
+
+      // Extract playlist tags
+      if (response.containers.playlists_tags?.data?.items) {
+        playlistTags = response.containers.playlists_tags.data.items;
+      }
+
+      // Extract essential discography (limited)
+      if (response.containers.ideal_discography?.data?.items) {
+        essentialDiscography = response.containers.ideal_discography.data.items.slice(0, LIMITS.essentialDiscography);
+      }
+
+      loadingQobuzPlaylists = false;
+      loadingEssentialDiscography = false;
+
+      if (isSectionVisible('qobuzPlaylists')) {
+        markSectionFinished();
+      }
+      if (isSectionVisible('essentialDiscography')) {
+        markSectionFinished();
+      }
+    } catch (err) {
+      console.error('Failed to fetch discover data:', err);
+      loadingQobuzPlaylists = false;
+      loadingEssentialDiscography = false;
+      // Still mark sections as finished even on error
+      if (isSectionVisible('qobuzPlaylists')) {
+        markSectionFinished();
+      }
+      if (isSectionVisible('essentialDiscography')) {
+        markSectionFinished();
+      }
+    }
+  }
+
   async function loadHome() {
     isInitializing = true;
     isOverlayVisible = true;
@@ -507,6 +716,8 @@
     loadingContinueTracks = true;
     loadingTopArtists = true;
     loadingFavoriteAlbums = true;
+    loadingQobuzPlaylists = true;
+    loadingEssentialDiscography = true;
 
     // Count total visible sections to know when we're done
     totalVisibleSections = 0;
@@ -519,6 +730,8 @@
     if (isSectionVisible('continueTracks')) totalVisibleSections++;
     if (isSectionVisible('topArtists')) totalVisibleSections++;
     if (isSectionVisible('favoriteAlbums')) totalVisibleSections++;
+    if (isSectionVisible('qobuzPlaylists')) totalVisibleSections++;
+    if (isSectionVisible('essentialDiscography')) totalVisibleSections++;
 
     // Start ML data loading FIRST (local SQLite) - this gets the seeds
     const mlPromise = invoke<HomeSeeds>('reco_get_home_ml', {
@@ -585,6 +798,15 @@
       });
     } else {
       loadingEditorPicks = false;
+    }
+
+    // Fetch Discover data (Qobuz Playlists + Essential Discography)
+    const needsDiscoverData = isSectionVisible('qobuzPlaylists') || isSectionVisible('essentialDiscography');
+    if (needsDiscoverData) {
+      fetchDiscoverData();
+    } else {
+      loadingQobuzPlaylists = false;
+      loadingEssentialDiscography = false;
     }
 
     try {
@@ -660,6 +882,8 @@
       loadingContinueTracks = false;
       loadingTopArtists = false;
       loadingFavoriteAlbums = false;
+      loadingQobuzPlaylists = false;
+      loadingEssentialDiscography = false;
     }
   }
 </script>
@@ -711,7 +935,7 @@
     </div>
   {:else if hasContent}
     <!-- Render sections in user-defined order -->
-    {#each visibleSections as sectionId (sectionId)}
+    {#each renderableSections as sectionId (sectionId)}
       {#if sectionId === 'newReleases' && newReleases.length > 0}
         <HorizontalScrollRow title={$t('home.newReleases')}>
           {#snippet children()}
@@ -872,6 +1096,83 @@
         </HorizontalScrollRow>
       {/if}
 
+      {#if sectionId === 'qobuzPlaylists' && qobuzPlaylists.length > 0}
+        <HorizontalScrollRow>
+          {#snippet header()}
+            <h2 class="section-title">{$t('home.qobuzPlaylists')}</h2>
+            {#if playlistTags.length > 0}
+              <PlaylistTagFilter
+                tags={playlistTags}
+                selectedTag={selectedTagSlug}
+                onTagChange={handleTagChange}
+              />
+            {/if}
+          {/snippet}
+          {#snippet children()}
+            {#if loadingQobuzPlaylists}
+              <div class="loading-playlists">
+                <Loader2 size={24} class="spinner" />
+              </div>
+            {:else}
+              {#each qobuzPlaylists as playlist (playlist.id)}
+                <QobuzPlaylistCard
+                  playlistId={playlist.id}
+                  name={playlist.name}
+                  owner={playlist.owner?.name || 'Qobuz'}
+                  image={playlist.image?.rectangle || playlist.image?.covers?.[0]}
+                  trackCount={playlist.tracks_count}
+                  duration={playlist.duration}
+                  genre={playlist.genres?.[0]?.name}
+                  onclick={onPlaylistClick ? () => onPlaylistClick(playlist.id) : undefined}
+                  onPlay={onPlaylistPlay ? () => onPlaylistPlay(playlist.id) : undefined}
+                  onPlayNext={onPlaylistPlayNext ? () => onPlaylistPlayNext(playlist.id) : undefined}
+                  onPlayLater={onPlaylistPlayLater ? () => onPlaylistPlayLater(playlist.id) : undefined}
+                  onCopyToLibrary={onPlaylistCopyToLibrary ? () => onPlaylistCopyToLibrary(playlist.id) : undefined}
+                  onShareQobuz={onPlaylistShareQobuz ? () => onPlaylistShareQobuz(playlist.id) : undefined}
+                />
+              {/each}
+            {/if}
+            <div class="spacer"></div>
+          {/snippet}
+        </HorizontalScrollRow>
+      {/if}
+
+      {#if sectionId === 'essentialDiscography' && essentialDiscography.length > 0}
+        <HorizontalScrollRow title={$t('home.essentialDiscography')}>
+          {#snippet children()}
+            {#each essentialDiscography as album (album.id)}
+              <AlbumCard
+                albumId={album.id}
+                artwork={album.image?.large || album.image?.small || ''}
+                title={album.title}
+                artist={album.artists?.[0]?.name || 'Unknown Artist'}
+                genre={album.genre?.name || ''}
+                releaseDate={album.dates?.original}
+                size="large"
+                quality={formatQuality(
+                  (album.audio_info?.maximum_bit_depth ?? 16) > 16,
+                  album.audio_info?.maximum_bit_depth,
+                  album.audio_info?.maximum_sampling_rate
+                )}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+                isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+                onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+                {downloadStateVersion}
+                onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+              />
+            {/each}
+            <div class="spacer"></div>
+          {/snippet}
+        </HorizontalScrollRow>
+      {/if}
+
       {#if sectionId === 'recentAlbums' && recentAlbums.length > 0}
         <HorizontalScrollRow title={$t('home.recentlyPlayed')}>
           {#snippet children()}
@@ -964,18 +1265,21 @@
           {#snippet children()}
             {#each topArtists as artist}
               <button class="artist-card" onclick={() => onArtistClick?.(artist.id)}>
-                {#if failedArtistImages.has(artist.id) || !artist.image}
+                <div class="artist-image-wrapper">
                   <div class="artist-image-placeholder">
-                    <User size={32} />
+                    <User size={48} />
                   </div>
-                {:else}
-                  <img
-                    src={artist.image}
-                    alt={artist.name}
-                    class="artist-image"
-                    onerror={() => handleArtistImageError(artist.id)}
-                  />
-                {/if}
+                  {#if !failedArtistImages.has(artist.id) && artist.image}
+                    <img
+                      src={artist.image}
+                      alt={artist.name}
+                      class="artist-image"
+                      loading="lazy"
+                      decoding="async"
+                      onerror={() => handleArtistImageError(artist.id)}
+                    />
+                  {/if}
+                </div>
                 <div class="artist-name">{artist.name}</div>
                 {#if artist.playCount}
                   <div class="artist-meta">{$t('home.artistPlays', { values: { count: artist.playCount } })}</div>
@@ -1046,6 +1350,16 @@
     padding-bottom: 100px;
     overflow-y: auto;
     position: relative;
+  }
+
+  /* Add spacing between sections - using :global to affect child components */
+  .home-view > :global(*:not(:first-child)) {
+    margin-top: 60px !important;
+  }
+
+  /* Second child (first section after header) gets less spacing */
+  .home-view > :global(*:nth-child(2)) {
+    margin-top: 30px !important;
   }
 
   /* Custom scrollbar */
@@ -1190,6 +1504,26 @@
     color: var(--text-primary);
   }
 
+  .section-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .loading-playlists {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 180px;
+    min-height: 180px;
+    color: var(--text-muted);
+  }
+
+  .loading-playlists :global(.spinner) {
+    animation: spin 1s linear infinite;
+  }
+
   .track-list {
     display: flex;
     flex-direction: column;
@@ -1206,11 +1540,11 @@
   }
 
   .artist-card {
-    width: 160px;
+    width: 180px;
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
+    gap: 10px;
     background: var(--bg-secondary);
     border: 1px solid var(--bg-tertiary);
     border-radius: 12px;
@@ -1225,15 +1559,26 @@
     background-color: var(--bg-hover);
   }
 
+  .artist-image-wrapper {
+    position: relative;
+    width: 140px;
+    height: 140px;
+    border-radius: 50%;
+    overflow: hidden;
+  }
+
   .artist-image,
   .artist-image-placeholder {
-    width: 96px;
-    height: 96px;
+    width: 140px;
+    height: 140px;
     border-radius: 50%;
   }
 
   .artist-image {
+    position: absolute;
+    inset: 0;
     object-fit: cover;
+    z-index: 1;
   }
 
   .artist-image-placeholder {

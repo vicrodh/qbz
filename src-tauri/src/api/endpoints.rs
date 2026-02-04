@@ -45,6 +45,10 @@ pub mod paths {
 
     // Catalog (combined search)
     pub const CATALOG_SEARCH: &str = "/catalog/search";
+
+    // Discover (home page content)
+    pub const DISCOVER_INDEX: &str = "/discover/index";
+    pub const DISCOVER_PLAYLISTS: &str = "/discover/playlists";
 }
 
 /// Build full URL for an endpoint

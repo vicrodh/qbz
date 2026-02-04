@@ -3,11 +3,12 @@
   import type { Snippet } from 'svelte';
 
   interface Props {
-    title: string;
+    title?: string;
+    header?: Snippet;
     children: Snippet;
   }
 
-  let { title, children }: Props = $props();
+  let { title, header, children }: Props = $props();
 
   let scrollContainer: HTMLDivElement;
 
@@ -25,21 +26,31 @@
       });
     }
   }
+
+  const hasHeader = $derived(!!title || !!header);
 </script>
 
 <div class="scroll-row">
   <!-- Section Header -->
-  <div class="header">
-    <h2 class="title">{title}</h2>
-    <div class="nav-buttons">
-      <button onclick={() => scroll('left')} class="nav-btn">
-        <ChevronLeft size={24} />
-      </button>
-      <button onclick={() => scroll('right')} class="nav-btn">
-        <ChevronRight size={24} />
-      </button>
+  {#if hasHeader}
+    <div class="header">
+      {#if header}
+        <div class="header-content">
+          {@render header()}
+        </div>
+      {:else if title}
+        <h2 class="title">{title}</h2>
+      {/if}
+      <div class="nav-buttons">
+        <button onclick={() => scroll('left')} class="nav-btn">
+          <ChevronLeft size={24} />
+        </button>
+        <button onclick={() => scroll('right')} class="nav-btn">
+          <ChevronRight size={24} />
+        </button>
+      </div>
     </div>
-  </div>
+  {/if}
 
   <!-- Horizontal Scroll Container -->
   <div class="scroll-container hide-scrollbar" bind:this={scrollContainer}>
@@ -61,6 +72,14 @@
     margin-bottom: 16px;
   }
 
+  .header-content {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex: 1;
+    min-width: 0;
+  }
+
   .title {
     font-size: 22px;
     font-weight: 600;
@@ -71,6 +90,7 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
   }
 
   .nav-btn {

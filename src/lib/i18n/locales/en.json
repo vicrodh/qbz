@@ -38,6 +38,9 @@
     "popularAlbums": "Popular Albums",
     "qobuzissimes": "Qobuzissimes",
     "editorPicks": "Editor's Picks",
+    "qobuzPlaylists": "Qobuz Playlists",
+    "essentialDiscography": "Essential Discography",
+    "allTags": "All",
     "continueListening": "Continue Listening",
     "yourTopArtists": "Your Top Artists",
     "artistPlays": "{count} plays",
@@ -265,7 +268,8 @@
     "makePublic": "Make playlist public",
     "hideFromSidebar": "Hide from sidebar",
     "createAndAdd": "Create & Add",
-    "playlistWithTracks": "{name} ({count} tracks)"
+    "playlistWithTracks": "{name} ({count} tracks)",
+    "copyToLibrary": "Copy to library"
   },
   "sort": {
     "nameAZ": "Name (A-Z)",
@@ -458,7 +462,9 @@
     "loading": "Loading...",
     "loadMore": "Load More",
     "collapse": "Collapse sidebar",
-    "expand": "Expand sidebar"
+    "expand": "Expand sidebar",
+    "moreOptions": "More options",
+    "shareQobuz": "Share (Qobuz)"
   },
   "settings": {
     "title": "Settings",

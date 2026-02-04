@@ -2935,6 +2935,12 @@
             onTrackRemoveDownload={handleTrackRemoveDownload}
             checkTrackDownloaded={checkTrackDownloaded}
             getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
+            onPlaylistClick={selectPlaylist}
+            onPlaylistPlay={playPlaylistById}
+            onPlaylistPlayNext={queuePlaylistNextById}
+            onPlaylistPlayLater={queuePlaylistLaterById}
+            onPlaylistCopyToLibrary={copyPlaylistToLibraryById}
+            onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
             activeTrackId={currentTrack?.id ?? null}
             isPlaybackActive={isPlaying}
             sidebarExpanded={sidebarExpanded}

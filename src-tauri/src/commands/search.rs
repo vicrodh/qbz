@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use crate::api::{endpoints, endpoints::paths, Album, Artist, ArtistAlbums, LabelDetail, Playlist, SearchResultsPage, Track, TracksContainer};
+use crate::api::{endpoints, endpoints::paths, Album, Artist, ArtistAlbums, DiscoverResponse, DiscoverPlaylistsResponse, LabelDetail, Playlist, SearchResultsPage, Track, TracksContainer};
 use crate::api_cache::ApiCacheState;
 use crate::artist_blacklist::BlacklistState;
 use crate::AppState;
@@ -416,6 +416,50 @@ pub async fn get_artist(
     Ok(artist)
 }
 
+/// Get artist basic info only (no albums - faster for lists/cards)
+#[tauri::command]
+pub async fn get_artist_basic(
+    artist_id: u64,
+    state: State<'_, AppState>,
+    cache_state: State<'_, ApiCacheState>,
+) -> Result<Artist, String> {
+    log::debug!("Command: get_artist_basic {}", artist_id);
+
+    // Get current locale
+    let locale = {
+        let client = state.client.lock().await;
+        client.get_locale().await
+    };
+
+    // Check cache first (reuse same cache - basic response works for both)
+    {
+        let cache = cache_state.cache.lock().await;
+        if let Some(cached_data) = cache.get_artist(artist_id, &locale, None)? {
+            log::debug!("Cache hit for artist_basic {} (locale: {})", artist_id, locale);
+            return serde_json::from_str(&cached_data)
+                .map_err(|e| format!("Failed to parse cached artist: {}", e));
+        }
+    }
+
+    // Cache miss - fetch from API (without albums - much faster)
+    log::debug!("Cache miss for artist_basic {} (locale: {}), fetching from API", artist_id, locale);
+    let client = state.client.lock().await;
+    let artist = client
+        .get_artist_basic(artist_id)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Cache the result
+    {
+        let cache = cache_state.cache.lock().await;
+        let json = serde_json::to_string(&artist)
+            .map_err(|e| format!("Failed to serialize artist: {}", e))?;
+        cache.set_artist(artist_id, &locale, &json)?;
+    }
+
+    Ok(artist)
+}
+
 /// Get artist detail with albums, playlists, and appears-on tracks
 /// Fetches 1000 albums initially to ensure each album type section
 /// (Discography, EPs, Live, etc.) has enough albums loaded
@@ -549,6 +593,38 @@ pub async fn get_genres(
     let client = state.client.lock().await;
     client
         .get_genres(parent_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get discover index (home page content: playlists, ideal discography, etc.)
+#[tauri::command]
+pub async fn get_discover_index(
+    genre_ids: Option<Vec<u64>>,
+    state: State<'_, AppState>,
+) -> Result<DiscoverResponse, String> {
+    log::debug!("Command: get_discover_index genre_ids={:?}", genre_ids);
+
+    let client = state.client.lock().await;
+    client
+        .get_discover_index(genre_ids)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get discover playlists with optional tag filter
+#[tauri::command]
+pub async fn get_discover_playlists(
+    tag: Option<String>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<DiscoverPlaylistsResponse, String> {
+    log::debug!("Command: get_discover_playlists tag={:?} limit={:?} offset={:?}", tag, limit, offset);
+
+    let client = state.client.lock().await;
+    client
+        .get_discover_playlists(tag, limit, offset)
         .await
         .map_err(|e| e.to_string())
 }

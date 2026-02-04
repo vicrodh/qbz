@@ -7,9 +7,9 @@ use serde::{Deserialize, Serialize};
 #[repr(u32)]
 pub enum Quality {
     Mp3 = 5,
-    Lossless = 6,      // 16-bit/44.1kHz (CD Quality)
-    HiRes = 7,         // 24-bit/≤96kHz
-    UltraHiRes = 27,   // 24-bit/>96kHz
+    Lossless = 6,    // 16-bit/44.1kHz (CD Quality)
+    HiRes = 7,       // 24-bit/≤96kHz
+    UltraHiRes = 27, // 24-bit/>96kHz
 }
 
 impl Quality {
@@ -38,7 +38,12 @@ impl Quality {
 
     /// Quality levels in descending order for fallback
     pub fn fallback_order() -> &'static [Quality] {
-        &[Quality::UltraHiRes, Quality::HiRes, Quality::Lossless, Quality::Mp3]
+        &[
+            Quality::UltraHiRes,
+            Quality::HiRes,
+            Quality::Lossless,
+            Quality::Mp3,
+        ]
     }
 }
 
@@ -343,4 +348,121 @@ pub struct Favorites {
     pub albums: Option<SearchResultsPage<Album>>,
     pub tracks: Option<SearchResultsPage<Track>>,
     pub artists: Option<SearchResultsPage<Artist>>,
+}
+
+// ============ Discover API Models ============
+
+/// Discover index response
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverResponse {
+    pub containers: DiscoverContainers,
+}
+
+/// All discover containers
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverContainers {
+    pub playlists: Option<DiscoverContainer<DiscoverPlaylist>>,
+    pub ideal_discography: Option<DiscoverContainer<DiscoverAlbum>>,
+    pub playlists_tags: Option<DiscoverContainer<PlaylistTag>>,
+    pub new_releases: Option<DiscoverContainer<DiscoverAlbum>>,
+}
+
+/// Generic discover container
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverContainer<T> {
+    pub id: String,
+    pub data: DiscoverData<T>,
+}
+
+/// Generic discover data with items
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverData<T> {
+    pub has_more: bool,
+    pub items: Vec<T>,
+}
+
+/// Playlist from discover endpoint (different structure than regular Playlist)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverPlaylist {
+    pub id: u64,
+    pub name: String,
+    pub owner: PlaylistOwner,
+    pub image: DiscoverPlaylistImage,
+    pub description: Option<String>,
+    pub duration: u32,
+    pub tracks_count: u32,
+    pub genres: Option<Vec<PlaylistGenre>>,
+    pub tags: Option<Vec<PlaylistTag>>,
+}
+
+/// Playlist image structure from discover (has rectangle and covers)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverPlaylistImage {
+    pub rectangle: Option<String>,
+    pub covers: Option<Vec<String>>,
+}
+
+/// Playlist tag (for filtering)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlaylistTag {
+    pub id: u64,
+    pub slug: String,
+    pub name: String,
+}
+
+/// Response from discover/playlists endpoint
+/// Note: This endpoint returns items directly at root level (not wrapped in "playlists")
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverPlaylistsResponse {
+    pub has_more: bool,
+    pub items: Vec<DiscoverPlaylist>,
+}
+
+/// Album from discover endpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverAlbum {
+    pub id: String,
+    pub title: String,
+    pub version: Option<String>,
+    pub track_count: Option<u32>,
+    pub duration: Option<u32>,
+    pub parental_warning: Option<bool>,
+    pub image: DiscoverAlbumImage,
+    pub artists: Vec<DiscoverArtist>,
+    pub label: Option<Label>,
+    pub genre: Option<Genre>,
+    pub dates: Option<DiscoverAlbumDates>,
+    pub audio_info: Option<DiscoverAudioInfo>,
+}
+
+/// Album image from discover endpoint
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverAlbumImage {
+    pub small: Option<String>,
+    pub thumbnail: Option<String>,
+    pub large: Option<String>,
+}
+
+/// Artist in discover album
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverArtist {
+    pub id: u64,
+    pub name: String,
+    pub roles: Option<Vec<String>>,
+}
+
+/// Album dates from discover
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverAlbumDates {
+    pub download: Option<String>,
+    pub original: Option<String>,
+    pub stream: Option<String>,
+}
+
+/// Audio info from discover album
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DiscoverAudioInfo {
+    pub maximum_sampling_rate: Option<f64>,
+    pub maximum_bit_depth: Option<u32>,
+    pub maximum_channel_count: Option<u32>,
 }
