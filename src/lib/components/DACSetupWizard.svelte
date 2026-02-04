@@ -194,9 +194,11 @@
     return str.replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
   }
 
-  const steps = $derived<Step[]>(STEPS.map((step, index) => ({
+  // Store labelKey instead of calling $t() in $derived - resolve in template
+  const steps = $derived<(Step & { labelKey: string })[]>(STEPS.map((step, index) => ({
     id: step,
-    label: $t(`dacWizard.steps.${toCamelCase(step)}`) || step,
+    label: step, // fallback
+    labelKey: `dacWizard.steps.${toCamelCase(step)}`,
     status: index === currentIndex ? 'active' : completedSteps.has(step) ? 'complete' : 'upcoming'
   })));
 

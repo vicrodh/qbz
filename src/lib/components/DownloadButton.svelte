@@ -50,20 +50,30 @@
     }
   }
 
-  const title = $derived.by(() => {
+  // Return translation key for title - call $t() in template
+  const titleKey = $derived.by(() => {
     // Show offline message when trying to download while offline
     if (isOffline && (status === 'none' || status === 'failed')) {
-      return $t('offline.featureDisabled');
+      return 'offline.featureDisabled';
     }
     switch (status) {
-      case 'none': return 'Make available offline';
-      case 'queued': return 'Queued for offline';
-      case 'downloading': return `Preparing for offline ${progress}%`;
-      case 'ready': return 'Available offline (click to remove)';
-      case 'failed': return 'Failed to cache for offline (click to retry)';
-      default: return '';
+      case 'none': return 'download.makeAvailable';
+      case 'queued': return 'download.queued';
+      case 'downloading': return 'download.preparing';
+      case 'ready': return 'download.ready';
+      case 'failed': return 'download.failed';
+      default: return null;
     }
   });
+
+  // Resolve title - must be a function called from template (not $derived)
+  function getTitle(): string {
+    if (!titleKey) return '';
+    if (status === 'downloading') {
+      return `${$t(titleKey)} ${progress}%`;
+    }
+    return $t(titleKey);
+  }
 
   // Disable button when offline and not already downloaded
   const isDisabled = $derived(
@@ -78,8 +88,8 @@
   class:failed={status === 'failed'}
   class:offline={isOffline && status !== 'ready'}
   onclick={handleClick}
-  title={title}
-  aria-label={title}
+  title={getTitle()}
+  aria-label={getTitle()}
   disabled={isDisabled}
 >
   {#if status === 'ready'}

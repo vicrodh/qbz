@@ -987,6 +987,13 @@
     "showNetworkFolders": "Show Network Folder Content",
     "showNetworkFoldersDesc": "Display content from network-mounted folders (NAS, Samba, etc.) while in manual offline mode"
   },
+  "download": {
+    "makeAvailable": "Make available offline",
+    "queued": "Queued for offline",
+    "preparing": "Preparing for offline",
+    "ready": "Available offline (click to remove)",
+    "failed": "Failed to cache for offline (click to retry)"
+  },
   "filter": {
     "all": "All"
   },

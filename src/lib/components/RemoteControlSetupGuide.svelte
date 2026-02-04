@@ -31,9 +31,11 @@
   // Derived values
   const currentIndex = $derived(STEPS.indexOf(currentStep));
 
-  const steps = $derived<Step[]>(STEPS.map((step, index) => ({
+  // Store labelKey instead of calling $t() in $derived - resolve in WizardStepper template
+  const steps = $derived<(Step & { labelKey: string })[]>(STEPS.map((step, index) => ({
     id: step,
-    label: $t(`remoteControlWizard.steps.${step}`) || step,
+    label: step, // fallback
+    labelKey: `remoteControlWizard.steps.${step}`,
     status: index === currentIndex ? 'active' : completedSteps.has(step) ? 'complete' : 'upcoming'
   })));
 

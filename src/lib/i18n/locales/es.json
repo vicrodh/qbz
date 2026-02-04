@@ -987,6 +987,13 @@
     "showNetworkFolders": "Mostrar Contenido de Carpetas de Red",
     "showNetworkFoldersDesc": "Mostrar contenido de carpetas montadas en red (NAS, Samba, etc.) mientras estas en modo offline manual"
   },
+  "download": {
+    "makeAvailable": "Hacer disponible offline",
+    "queued": "En cola para offline",
+    "preparing": "Preparando para offline",
+    "ready": "Disponible offline (clic para eliminar)",
+    "failed": "Error al cachear para offline (clic para reintentar)"
+  },
   "filter": {
     "all": "Todos"
   },

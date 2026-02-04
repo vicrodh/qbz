@@ -1,9 +1,11 @@
 <script lang="ts">
   import { Check } from 'lucide-svelte';
+  import { t } from '$lib/i18n';
 
   export interface Step {
     id: string;
     label: string;
+    labelKey?: string; // Optional translation key - resolved in template
     status: 'complete' | 'active' | 'upcoming';
   }
 
@@ -41,7 +43,7 @@
               <span class="step-number">{index + 1}</span>
             {/if}
           </span>
-          <span class="step-label">{step.label}</span>
+          <span class="step-label">{step.labelKey ? $t(step.labelKey) || step.label : step.label}</span>
         </button>
         {#if index < steps.length - 1}
           <div class="step-connector" class:complete={step.status === 'complete'}></div>
