@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Ban } from 'lucide-svelte';
+  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Ban, EyeOff, Settings } from 'lucide-svelte';
   import {
     isBlacklisted,
     addToBlacklist,
@@ -130,6 +130,7 @@
   let isRadioLoading = $state(false);
   let artistIsBlacklisted = $state(false);
   let isBlacklistLoading = $state(false);
+  let showHideDropdown = $state(false);
   let radioLoadingMessage = $state('');
   let radioJustCreated = $state(false);
   let showNetworkSidebar = $state(false);
@@ -412,22 +413,22 @@
     if (isBlacklistLoading) return;
 
     isBlacklistLoading = true;
-    const wasBlacklisted = artistIsBlacklisted;
+    const wasHidden = artistIsBlacklisted;
 
     try {
-      if (wasBlacklisted) {
+      if (wasHidden) {
         await removeFromBlacklist(artist.id);
         artistIsBlacklisted = false;
-        showToast(`${artist.name} removed from blacklist`, 'success');
+        showToast(`${artist.name} is now visible`, 'success');
       } else {
         await addToBlacklist(artist.id, artist.name);
         artistIsBlacklisted = true;
-        showToast(`${artist.name} added to blacklist`, 'success');
+        showToast(`${artist.name} is now hidden`, 'success');
       }
     } catch (err) {
-      console.error('Failed to toggle artist blacklist:', err);
-      artistIsBlacklisted = wasBlacklisted; // Rollback on error
-      showToast('Failed to update blacklist', 'error');
+      console.error('Failed to toggle artist visibility:', err);
+      artistIsBlacklisted = wasHidden; // Rollback on error
+      showToast('Failed to update artist visibility', 'error');
     } finally {
       isBlacklistLoading = false;
     }
@@ -1304,26 +1305,63 @@
         >
           <img src="/element-connect.svg" alt="Network" class="network-icon" />
         </button>
-        <button
-          class="blacklist-btn"
-          class:is-blacklisted={artistIsBlacklisted}
-          onclick={toggleBlacklist}
-          disabled={isBlacklistLoading}
-          title={artistIsBlacklisted ? 'Remove from blacklist' : 'Add to blacklist'}
-        >
-          <Ban size={24} />
-        </button>
+
+        <!-- Spacer to push hide button to the right -->
+        <div class="actions-spacer"></div>
+
+        <!-- Hide Artist Dropdown -->
+        <div class="hide-artist-wrapper">
+          <button
+            class="hide-artist-btn"
+            class:active={showHideDropdown}
+            class:is-hidden={artistIsBlacklisted}
+            onclick={() => showHideDropdown = !showHideDropdown}
+            title={artistIsBlacklisted ? 'Artist is hidden' : 'Hide artist options'}
+          >
+            <EyeOff size={18} />
+          </button>
+          {#if showHideDropdown}
+            <div class="hide-dropdown" role="menu">
+              <button
+                class="hide-option"
+                onclick={() => { toggleBlacklist(); showHideDropdown = false; }}
+                disabled={isBlacklistLoading}
+              >
+                <div class="hide-option-header">
+                  {#if artistIsBlacklisted}
+                    <span>Show this artist</span>
+                  {:else}
+                    <span>Hide this artist</span>
+                  {/if}
+                </div>
+                <p class="hide-option-desc">
+                  {#if artistIsBlacklisted}
+                    Show this artist in searches, playlists, discover, etc.
+                  {:else}
+                    Don't show this artist in searches, playlists, discover, etc.
+                  {/if}
+                </p>
+                <p class="hide-option-hint">
+                  <Settings size={12} />
+                  Blacklist can be managed from settings.
+                </p>
+              </button>
+            </div>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="hide-dropdown-backdrop" onclick={() => showHideDropdown = false}></div>
+          {/if}
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Blacklist Warning Banner -->
+  <!-- Hidden Artist Warning Banner -->
   {#if artistIsBlacklisted}
     <div class="blacklist-banner">
-      <Ban size={18} />
-      <span>This artist is blacklisted. Their music is hidden from search, radio, and suggestions.</span>
+      <EyeOff size={18} />
+      <span>This artist is hidden. Their music won't appear in search, radio, or suggestions.</span>
       <button class="unblock-btn" onclick={toggleBlacklist} disabled={isBlacklistLoading}>
-        Unblock
+        Show Artist
       </button>
     </div>
   {/if}
@@ -2595,34 +2633,110 @@
     filter: brightness(0) saturate(100%) invert(56%) sepia(63%) saturate(4848%) hue-rotate(230deg) brightness(102%) contrast(101%);
   }
 
-  .blacklist-btn {
+  /* Spacer to push hide button to the right */
+  .actions-spacer {
+    flex: 1;
+  }
+
+  /* Hide Artist Dropdown Wrapper */
+  .hide-artist-wrapper {
+    position: relative;
+  }
+
+  .hide-artist-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    background: var(--bg-tertiary);
-    border: none;
-    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
     cursor: pointer;
     color: var(--text-muted);
     transition: all 150ms ease;
     flex-shrink: 0;
   }
 
-  .blacklist-btn:hover:not(:disabled) {
+  .hide-artist-btn:hover {
     background: var(--bg-hover);
+    border-color: var(--border-default);
+    color: var(--text-secondary);
+  }
+
+  .hide-artist-btn.active {
+    background: var(--bg-hover);
+    border-color: var(--border-default);
+    color: var(--text-primary);
+  }
+
+  .hide-artist-btn.is-hidden {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
     color: var(--error);
   }
 
-  .blacklist-btn.is-blacklisted {
-    background: rgba(239, 68, 68, 0.15);
-    color: var(--error);
+  .hide-dropdown {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 280px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-default);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    z-index: 100;
+    overflow: hidden;
   }
 
-  .blacklist-btn:disabled {
-    opacity: 0.5;
+  .hide-dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+  }
+
+  .hide-option {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    width: 100%;
+    padding: 14px 16px;
+    background: none;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background 150ms ease;
+  }
+
+  .hide-option:hover:not(:disabled) {
+    background: var(--bg-hover);
+  }
+
+  .hide-option:disabled {
+    opacity: 0.6;
     cursor: not-allowed;
+  }
+
+  .hide-option-header {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+
+  .hide-option-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin: 0;
+  }
+
+  .hide-option-hint {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    color: var(--text-muted);
+    margin: 4px 0 0 0;
   }
 
   .blacklist-banner {
