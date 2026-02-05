@@ -475,7 +475,7 @@ pub struct IncrementalStreamingSource {
     /// Number of channels
     channels: u16,
     /// Queue of decoded samples ready to play
-    sample_queue: VecDeque<i16>,
+    sample_queue: VecDeque<f32>,
     /// The format reader (demuxer)
     format: Box<dyn FormatReader>,
     /// The audio decoder
@@ -614,7 +614,7 @@ impl IncrementalStreamingSource {
             match self.decoder.decode(&packet) {
                 Ok(audio_buf) => {
                     let spec = *audio_buf.spec();
-                    let mut sample_buf = SampleBuffer::<i16>::new(audio_buf.frames() as u64, spec);
+                    let mut sample_buf = SampleBuffer::<f32>::new(audio_buf.frames() as u64, spec);
                     sample_buf.copy_interleaved_ref(audio_buf);
 
                     // Add samples to queue
@@ -661,7 +661,7 @@ impl Source for IncrementalStreamingSource {
 }
 
 impl Iterator for IncrementalStreamingSource {
-    type Item = i16;
+    type Item = f32;
 
     fn next(&mut self) -> Option<Self::Item> {
         // If queue is running low, decode more
