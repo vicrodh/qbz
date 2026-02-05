@@ -32,10 +32,12 @@ fn main() {
         // This is set before any GTK initialization
     }
 
-    // Use xdg-desktop-portal for file dialogs on Linux
-    // This makes GTK apps use native file pickers (e.g., KDE's on Plasma)
+    // Use xdg-desktop-portal for file dialogs on Linux.
+    // Honor explicit overrides (e.g., sandboxed environments).
     #[cfg(target_os = "linux")]
-    std::env::set_var("GTK_USE_PORTAL", "1");
+    if std::env::var_os("GTK_USE_PORTAL").is_none() {
+        std::env::set_var("GTK_USE_PORTAL", "1");
+    }
 
     // Prefer a writable TMPDIR to avoid GTK pixbuf cache crashes on some systems.
     #[cfg(target_os = "linux")]
