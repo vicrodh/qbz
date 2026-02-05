@@ -41,6 +41,8 @@ passthrough:
   layout:
     /usr/lib/x86_64-linux-gnu/webkit2gtk-4.1:
       bind: $SNAP/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1
+    /usr/share/alsa:
+      bind: $SNAP/usr/share/alsa
 
 architectures:
   - build-on: amd64
