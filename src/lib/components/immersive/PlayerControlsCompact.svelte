@@ -156,14 +156,25 @@
   let menuOpen = $state(false);
   let menuBtnRef: HTMLButtonElement | undefined = $state(undefined);
   let menuRef: HTMLDivElement | undefined = $state(undefined);
+  let menuCloseTimer: ReturnType<typeof setTimeout> | null = null;
 
   function toggleMenu() {
     menuOpen = !menuOpen;
+    if (menuCloseTimer) { clearTimeout(menuCloseTimer); menuCloseTimer = null; }
   }
 
   function handleMenuAction(action: () => void) {
     action();
     menuOpen = false;
+    if (menuCloseTimer) { clearTimeout(menuCloseTimer); menuCloseTimer = null; }
+  }
+
+  function handleMenuMouseEnter() {
+    if (menuCloseTimer) { clearTimeout(menuCloseTimer); menuCloseTimer = null; }
+  }
+
+  function handleMenuMouseLeave() {
+    menuCloseTimer = setTimeout(() => { menuOpen = false; }, 2000);
   }
 
   $effect(() => {
@@ -177,7 +188,10 @@
         }
       };
       document.addEventListener('mousedown', handleClickOutside);
-      return () => document.removeEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+        if (menuCloseTimer) { clearTimeout(menuCloseTimer); menuCloseTimer = null; }
+      };
     }
   });
 </script>
@@ -292,7 +306,12 @@
           </div>
         </div>
 
-        <div class="menu-anchor">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div
+          class="menu-anchor"
+          onmouseenter={handleMenuMouseEnter}
+          onmouseleave={handleMenuMouseLeave}
+        >
           <button
             class="control-btn"
             bind:this={menuBtnRef}
@@ -562,7 +581,7 @@
     position: absolute;
     bottom: calc(100% + 8px);
     left: 0;
-    background: rgba(0, 0, 0, 0.7);
+    background: rgba(0, 0, 0, 0.8);
     backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);
     border: 1px solid rgba(255, 255, 255, 0.18);
