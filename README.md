@@ -405,19 +405,6 @@ qbz/
 
 Contributions are welcome. Please read `CONTRIBUTING.md` before submitting issues or pull requests.
 
-## macOS (Experimental)
-
-QBZ is built for Linux first, but the codebase can compile on macOS in many cases. Expect missing integrations and bugs, especially around audio devices, exclusive mode, MPRIS, and platform-specific packaging.
-
-If you want to try it:
-
-```bash
-npm install
-npm run tauri dev
-```
-
-Please treat macOS support as best-effort and report issues with clear logs.
-
 ## License
 
 MIT
