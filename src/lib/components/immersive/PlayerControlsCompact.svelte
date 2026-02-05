@@ -561,8 +561,8 @@
   .window-menu {
     position: absolute;
     bottom: calc(100% + 8px);
-    right: 0;
-    background: rgba(0, 0, 0, 0.5);
+    left: 0;
+    background: rgba(0, 0, 0, 0.7);
     backdrop-filter: blur(40px);
     -webkit-backdrop-filter: blur(40px);
     border: 1px solid rgba(255, 255, 255, 0.18);
