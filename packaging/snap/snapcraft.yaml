@@ -49,6 +49,7 @@ apps:
     environment:
       # Prefer GNOME platform GL libs to avoid Mesa/driver mismatches on NVIDIA.
       LD_LIBRARY_PATH: $SNAP/gnome-platform/usr/lib/x86_64-linux-gnu:$SNAP/gnome-platform/lib/x86_64-linux-gnu:$SNAP/gnome-platform/usr/lib:$SNAP/gnome-platform/lib:$LD_LIBRARY_PATH
+      WEBKIT_EXEC_PATH: $SNAP/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1
     plugs:
       - network
       - audio-playback
