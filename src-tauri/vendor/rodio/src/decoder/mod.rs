@@ -62,7 +62,7 @@ where
 
 impl<R: Read + Seek> DecoderImpl<R> {
     #[inline]
-    fn next(&mut self) -> Option<i16> {
+    fn next(&mut self) -> Option<f32> {
         match self {
             #[cfg(all(feature = "wav", not(feature = "symphonia-wav")))]
             DecoderImpl::Wav(source) => source.next(),
@@ -385,10 +385,10 @@ impl<R> Iterator for Decoder<R>
 where
     R: Read + Seek,
 {
-    type Item = i16;
+    type Item = f32;
 
     #[inline]
-    fn next(&mut self) -> Option<i16> {
+    fn next(&mut self) -> Option<f32> {
         self.0.next()
     }
 
@@ -431,10 +431,10 @@ impl<R> Iterator for LoopedDecoder<R>
 where
     R: Read + Seek,
 {
-    type Item = i16;
+    type Item = f32;
 
     #[inline]
-    fn next(&mut self) -> Option<i16> {
+    fn next(&mut self) -> Option<f32> {
         if let Some(sample) = self.0.next() {
             Some(sample)
         } else {
