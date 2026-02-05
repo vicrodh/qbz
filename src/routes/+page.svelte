@@ -247,7 +247,6 @@
   import {
     loadSessionState,
     saveSessionState,
-    saveSessionVolume,
     saveSessionPlaybackMode,
     debouncedSavePosition,
     flushPositionSave,
@@ -1333,8 +1332,6 @@
 
   function handleVolumeChange(newVolume: number) {
     playerSetVolume(newVolume);
-    // Persist volume change to session
-    saveSessionVolume(newVolume / 100);
   }
 
   async function toggleShuffle() {

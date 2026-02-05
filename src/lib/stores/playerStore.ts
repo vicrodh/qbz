@@ -6,6 +6,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { saveSessionVolume } from '$lib/services/sessionService';
 
 /**
  * Get the preferred streaming quality from localStorage
@@ -122,6 +123,7 @@ let isPlaying = false;
 let currentTime = 0;
 let duration = 0;
 let volume = loadPersistedVolume();
+let preMuteVolume: number | null = null; // Volume before mute, null when not muted
 let isFavorite = false;
 // Event listener state (replaces polling)
 let eventUnlisten: UnlistenFn | null = null;
@@ -385,6 +387,7 @@ export async function setVolume(newVolume: number): Promise<void> {
   const clampedVolume = Math.max(0, Math.min(100, newVolume));
   volume = clampedVolume;
   persistVolume(clampedVolume);
+  saveSessionVolume(clampedVolume / 100);
   notifyListeners();
 
   try {
@@ -398,6 +401,33 @@ export async function setVolume(newVolume: number): Promise<void> {
   } catch (err) {
     // Ignore errors when nothing is playing - volume is saved and will apply on next play
     console.debug('Volume set locally (no active playback):', clampedVolume);
+  }
+}
+
+/**
+ * Toggle mute: saves current volume before muting, restores it on unmute.
+ * Persists pre-mute volume in localStorage so it survives across sessions.
+ */
+export async function toggleMute(): Promise<void> {
+  if (volume > 0) {
+    // Mute: save current volume and set to 0
+    preMuteVolume = volume;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('qbz-pre-mute-volume', String(volume));
+    }
+    await setVolume(0);
+  } else {
+    // Unmute: restore saved volume
+    let restoreVolume = preMuteVolume;
+    if (restoreVolume === null && typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem('qbz-pre-mute-volume');
+      if (stored) restoreVolume = parseFloat(stored);
+    }
+    preMuteVolume = null;
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('qbz-pre-mute-volume');
+    }
+    await setVolume(restoreVolume && restoreVolume > 0 ? restoreVolume : 75);
   }
 }
 

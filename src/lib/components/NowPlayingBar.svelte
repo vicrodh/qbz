@@ -27,6 +27,7 @@
     getOfflineReason,
     type OfflineReason
   } from '$lib/stores/offlineStore';
+  import { toggleMute } from '$lib/stores/playerStore';
 
   interface Props {
     artwork?: string;
@@ -386,7 +387,7 @@
         <div class="volume-value" class:visible={isDraggingVolume}>{volume}</div>
         <button
           class="control-btn volume-btn"
-          onclick={() => onVolumeChange?.(volume === 0 ? 70 : 0)}
+          onclick={() => toggleMute()}
           title={volume === 0 ? $t('player.unmute') : $t('player.mute')}
         >
           {#if volume === 0}

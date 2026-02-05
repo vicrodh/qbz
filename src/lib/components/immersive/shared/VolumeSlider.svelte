@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Volume2, VolumeX } from 'lucide-svelte';
+  import { toggleMute as playerToggleMute } from '$lib/stores/playerStore';
 
   interface Props {
     volume: number;
@@ -42,7 +43,7 @@
   }
 
   function toggleMute() {
-    onVolumeChange(volume > 0 ? 0 : 50);
+    playerToggleMute();
   }
 </script>
 
