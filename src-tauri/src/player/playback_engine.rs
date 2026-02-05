@@ -56,7 +56,7 @@ impl PlaybackEngine {
     /// Append audio source
     pub fn append<S>(&mut self, source: S) -> Result<(), String>
     where
-        S: Source<Item = i16> + Send + 'static,
+        S: Source<Item = f32> + Send + 'static,
     {
         match self {
             Self::Rodio { sink } => {
@@ -73,11 +73,10 @@ impl PlaybackEngine {
                 hardware_volume: _,
             } => {
                 // For ALSA Direct, we need to spawn a thread that:
-                // 1. Streams samples from source (no buffering entire file)
-                // 2. Converts i16 samples to f32
-                // 3. Writes to ALSA PCM
-                // 4. Tracks position
-                // 5. Supports pause/resume without terminating
+                // 1. Streams f32 samples from source (no buffering entire file)
+                // 2. Writes to ALSA PCM (converts f32 to hardware format)
+                // 3. Tracks position
+                // 4. Supports pause/resume without terminating
 
                 let stream_clone = stream.clone();
                 let is_playing_clone = is_playing.clone();
@@ -98,7 +97,7 @@ impl PlaybackEngine {
                     const CHUNK_SIZE: usize = 8192; // frames per chunk
                     let chunk_samples = CHUNK_SIZE * channels as usize;
 
-                    let mut buffer_i16 = Vec::with_capacity(chunk_samples);
+                    let mut buffer_f32 = Vec::with_capacity(chunk_samples);
 
                     let mut total_frames: u64 = 0;
                     let mut source_iter = source.into_iter();
@@ -123,15 +122,15 @@ impl PlaybackEngine {
                         }
 
                         // Fill buffer from source
-                        buffer_i16.clear();
+                        buffer_f32.clear();
                         for _ in 0..chunk_samples {
                             match source_iter.next() {
-                                Some(sample) => buffer_i16.push(sample),
+                                Some(sample) => buffer_f32.push(sample),
                                 None => break, // End of stream
                             }
                         }
 
-                        if buffer_i16.is_empty() {
+                        if buffer_f32.is_empty() {
                             // End of stream
                             log::info!("[ALSA Direct Engine] Stream ended (total frames: {})", total_frames);
                             natural_end = true;
@@ -140,13 +139,13 @@ impl PlaybackEngine {
 
                         // Write to ALSA (auto-converts based on detected format)
                         // This is bit-perfect: no resampling, no mixing, direct to hardware
-                        if let Err(e) = stream_clone.write(&buffer_i16) {
+                        if let Err(e) = stream_clone.write_f32(&buffer_f32) {
                             log::error!("[ALSA Direct Engine] Write failed: {}", e);
                             break 'playback;
                         }
 
                         // Update position
-                        let frames_written = buffer_i16.len() / channels as usize;
+                        let frames_written = buffer_f32.len() / channels as usize;
                         total_frames += frames_written as u64;
                         position_clone.store(total_frames, Ordering::SeqCst);
                         duration_clone.store(total_frames, Ordering::SeqCst);
