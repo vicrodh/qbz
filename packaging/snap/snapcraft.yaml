@@ -43,6 +43,8 @@ passthrough:
       bind: $SNAP/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1
     /usr/share/alsa:
       bind: $SNAP/usr/share/alsa
+    /etc/alsa:
+      bind: $SNAP/etc/alsa
 
 architectures:
   - build-on: amd64
@@ -74,6 +76,12 @@ apps:
       - alsa
 
 parts:
+  alsa-config:
+    plugin: dump
+    source: alsa
+    organize:
+      conf.d/10-rate-lav.conf: etc/alsa/conf.d/10-rate-lav.conf
+
   qbz:
     plugin: rust
     source: https://github.com/vicrodh/qbz.git
