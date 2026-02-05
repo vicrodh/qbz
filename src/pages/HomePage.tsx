@@ -3,14 +3,14 @@ import { Suspense, lazy } from 'react'
 import { useApp } from '../lib/appContext'
 import { buildPath } from '../lib/routes'
 import { CAPABILITY_KEYS, type CapabilityKey } from '../lib/capabilities'
+import { CapabilitiesCarousel } from '../components/CapabilitiesCarousel'
 
-// Lazy load non-critical sections
-const CapabilitiesCarousel = lazy(() => import('../components/CapabilitiesCarousel').then(m => ({ default: m.CapabilitiesCarousel })))
+// Lazy load heavy sections below fold
 const DownloadSection = lazy(() => import('../components/DownloadSection').then(m => ({ default: m.DownloadSection })))
 const ComingSoonSection = lazy(() => import('../components/ComingSoonSection').then(m => ({ default: m.ComingSoonSection })))
 
-const SectionLoader = () => (
-  <div className="section section--muted" style={{ minHeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+const SectionLoader = ({ muted = false }: { muted?: boolean }) => (
+  <div className={`section ${muted ? 'section--muted' : ''}`} style={{ minHeight: 400, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
     <div className="container" style={{ textAlign: 'center', color: 'var(--text-tertiary)' }}>
       Loading...
     </div>
@@ -141,9 +141,7 @@ export function HomePage() {
         </div>
       </section>
 
-      <Suspense fallback={<SectionLoader />}>
-        <CapabilitiesCarousel capabilityCards={capabilityCards} capabilityIcons={capabilityIcons} />
-      </Suspense>
+      <CapabilitiesCarousel capabilityCards={capabilityCards} capabilityIcons={capabilityIcons} />
 
       <section className="section">
         <div className="container">
@@ -193,7 +191,7 @@ export function HomePage() {
         <DownloadSection />
       </Suspense>
 
-      <Suspense fallback={<SectionLoader />}>
+      <Suspense fallback={<SectionLoader muted />}>
         <ComingSoonSection />
       </Suspense>
 
