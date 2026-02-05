@@ -129,7 +129,7 @@
   }: Props = $props();
 
   // UI State
-  let viewMode: ViewMode = $state('focus');  // Default to focus mode (coverflow)
+  let viewMode: ViewMode = $state('focus');
   let activeTab: ImmersiveTab = $state('lyrics');
   let activeFocusTab: FocusTab = $state('coverflow');
   let showUI = $state(true);
@@ -139,6 +139,45 @@
 
   const hasLyrics = $derived(lyricsLines.length > 0 || lyricsLoading);
   const AUTO_HIDE_DELAY = 4000;
+
+  // Immersive view persistence
+  type ImmersiveViewKey = 'coverflow' | 'static' | 'vinyl' | 'visualizer' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
+
+  function applyStoredView(key: ImmersiveViewKey) {
+    if (key.startsWith('split-')) {
+      viewMode = 'split';
+      activeTab = key.replace('split-', '') as ImmersiveTab;
+    } else {
+      viewMode = 'focus';
+      activeFocusTab = key as FocusTab;
+    }
+  }
+
+  function getCurrentViewKey(): ImmersiveViewKey {
+    if (viewMode === 'split') {
+      return `split-${activeTab}` as ImmersiveViewKey;
+    }
+    return activeFocusTab as ImmersiveViewKey;
+  }
+
+  function saveLastUsedView() {
+    const setting = localStorage.getItem('qbz-immersive-default-view') || 'remember';
+    if (setting === 'remember') {
+      localStorage.setItem('qbz-immersive-last-view', getCurrentViewKey());
+    }
+  }
+
+  function restoreView() {
+    const setting = localStorage.getItem('qbz-immersive-default-view') || 'remember';
+    if (setting === 'remember') {
+      const lastView = localStorage.getItem('qbz-immersive-last-view');
+      if (lastView) {
+        applyStoredView(lastView as ImmersiveViewKey);
+      }
+    } else {
+      applyStoredView(setting as ImmersiveViewKey);
+    }
+  }
 
   // Fullscreen toggle
   async function toggleFullscreen() {
@@ -262,12 +301,14 @@
         if (viewMode === 'focus') activeFocusTab = 'queue-focus';
         break;
     }
+    saveLastUsedView();
     resetHideTimer();
   }
 
   // Setup event listeners when open
   $effect(() => {
     if (isOpen) {
+      restoreView();
       resetHideTimer();
       checkWindowState();
       document.addEventListener('keydown', handleKeydown);
@@ -311,9 +352,9 @@
       {viewMode}
       {activeTab}
       {activeFocusTab}
-      onViewModeChange={(mode) => viewMode = mode}
-      onTabChange={(tab) => activeTab = tab}
-      onFocusTabChange={(tab) => activeFocusTab = tab}
+      onViewModeChange={(mode) => { viewMode = mode; saveLastUsedView(); }}
+      onTabChange={(tab) => { activeTab = tab; saveLastUsedView(); }}
+      onFocusTabChange={(tab) => { activeFocusTab = tab; saveLastUsedView(); }}
       onClose={handleExitImmersive}
       visible={showUI}
       hasLyrics={true}
