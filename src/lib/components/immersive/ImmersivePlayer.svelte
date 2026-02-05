@@ -517,6 +517,12 @@
       {isInfinitePlay}
       {onToggleInfinitePlay}
       {onVolumeChange}
+      {isFullscreen}
+      {isMaximized}
+      onClose={handleExitImmersive}
+      onMinimize={minimizeWindow}
+      onToggleFullscreen={toggleFullscreen}
+      onToggleMaximize={toggleMaximize}
     />
   </div>
 {/if}

@@ -10,8 +10,15 @@
     Volume2,
     VolumeX,
     MoreHorizontal,
-    Infinity
+    Infinity,
+    Maximize,
+    Minimize2,
+    Minus,
+    X,
+    MonitorUp,
+    Copy
   } from 'lucide-svelte';
+  import { t } from '$lib/i18n';
 
   interface Props {
     visible?: boolean;
@@ -32,7 +39,13 @@
     onToggleFavorite: () => void;
     onToggleInfinitePlay?: () => void;
     onVolumeChange: (volume: number) => void;
-    onContextMenu?: () => void;
+    // Window controls
+    isFullscreen?: boolean;
+    isMaximized?: boolean;
+    onClose?: () => void;
+    onMinimize?: () => void;
+    onToggleFullscreen?: () => void;
+    onToggleMaximize?: () => void;
   }
 
   let {
@@ -54,7 +67,12 @@
     onToggleFavorite,
     onToggleInfinitePlay,
     onVolumeChange,
-    onContextMenu
+    isFullscreen = false,
+    isMaximized = false,
+    onClose,
+    onMinimize,
+    onToggleFullscreen,
+    onToggleMaximize
   }: Props = $props();
 
   let progressRef: HTMLDivElement | null = $state(null);
@@ -131,6 +149,35 @@
         document.removeEventListener('mousemove', handleMouseMove);
         document.removeEventListener('mouseup', handleMouseUp);
       };
+    }
+  });
+
+  // Window controls dropdown
+  let menuOpen = $state(false);
+  let menuBtnRef: HTMLButtonElement | undefined = $state(undefined);
+  let menuRef: HTMLDivElement | undefined = $state(undefined);
+
+  function toggleMenu() {
+    menuOpen = !menuOpen;
+  }
+
+  function handleMenuAction(action: () => void) {
+    action();
+    menuOpen = false;
+  }
+
+  $effect(() => {
+    if (menuOpen) {
+      const handleClickOutside = (e: MouseEvent) => {
+        if (
+          menuBtnRef && !menuBtnRef.contains(e.target as Node) &&
+          menuRef && !menuRef.contains(e.target as Node)
+        ) {
+          menuOpen = false;
+        }
+      };
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
     }
   });
 </script>
@@ -245,13 +292,55 @@
           </div>
         </div>
 
-        <button
-          class="control-btn"
-          onclick={onContextMenu}
-          title="More options"
-        >
-          <MoreHorizontal size={12} />
-        </button>
+        <div class="menu-anchor">
+          <button
+            class="control-btn"
+            bind:this={menuBtnRef}
+            onclick={toggleMenu}
+            title={$t('actions.moreOptions')}
+          >
+            <MoreHorizontal size={12} />
+          </button>
+          {#if menuOpen}
+            <div class="window-menu" bind:this={menuRef}>
+              {#if onToggleFullscreen}
+                <button class="menu-item" onclick={() => handleMenuAction(onToggleFullscreen!)}>
+                  {#if isFullscreen}
+                    <Minimize2 size={14} />
+                    <span>{$t('player.exitFullScreen')}</span>
+                  {:else}
+                    <Maximize size={14} />
+                    <span>{$t('player.fullScreen')}</span>
+                  {/if}
+                </button>
+              {/if}
+              {#if onToggleMaximize}
+                <button class="menu-item" onclick={() => handleMenuAction(onToggleMaximize!)}>
+                  {#if isMaximized}
+                    <Copy size={14} />
+                    <span>{$t('player.restore')}</span>
+                  {:else}
+                    <MonitorUp size={14} />
+                    <span>{$t('player.maximize')}</span>
+                  {/if}
+                </button>
+              {/if}
+              {#if onMinimize}
+                <button class="menu-item" onclick={() => handleMenuAction(onMinimize!)}>
+                  <Minus size={14} />
+                  <span>{$t('player.minimize')}</span>
+                </button>
+              {/if}
+              <div class="menu-divider"></div>
+              {#if onClose}
+                <button class="menu-item" onclick={() => handleMenuAction(onClose!)}>
+                  <X size={14} />
+                  <span>{$t('player.exitImmersive')}</span>
+                </button>
+              {/if}
+            </div>
+          {/if}
+        </div>
       </div>
     </div>
 
@@ -462,6 +551,59 @@
     background: white;
     border-radius: 1px;
     transition: width 100ms linear;
+  }
+
+  /* Window Controls Menu */
+  .menu-anchor {
+    position: relative;
+  }
+
+  .window-menu {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    right: 0;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(40px);
+    -webkit-backdrop-filter: blur(40px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    padding: 6px;
+    min-width: 200px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    z-index: 50;
+    animation: menuFadeIn 150ms ease-out;
+  }
+
+  @keyframes menuFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    border-radius: 8px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 13px;
+    cursor: pointer;
+    transition: background 150ms ease, color 150ms ease;
+    white-space: nowrap;
+  }
+
+  .menu-item:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+  }
+
+  .menu-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.1);
+    margin: 4px 8px;
   }
 
   /* Responsive */
