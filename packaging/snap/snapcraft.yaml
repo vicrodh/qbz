@@ -46,6 +46,9 @@ apps:
     command: bin/qbz
     desktop: snap/gui/qbz.desktop
     extensions: [gnome]
+    environment:
+      # Prefer GNOME platform GL libs to avoid Mesa/driver mismatches on NVIDIA.
+      LD_LIBRARY_PATH: $SNAP/gnome-platform/usr/lib/x86_64-linux-gnu:$SNAP/gnome-platform/lib/x86_64-linux-gnu:$SNAP/gnome-platform/usr/lib:$SNAP/gnome-platform/lib:$LD_LIBRARY_PATH
     plugs:
       - network
       - audio-playback
