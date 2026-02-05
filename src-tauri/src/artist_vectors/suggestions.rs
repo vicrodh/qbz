@@ -321,6 +321,10 @@ impl SuggestionsEngine {
     }
 
     /// Search Qobuz for tracks by an artist with custom limit
+    ///
+    /// First validates that the artist EXISTS in Qobuz (has a dedicated artist page).
+    /// This prevents false matches for session musicians who don't have their own catalog
+    /// (e.g., "Martin Lopez" drummer returning tracks from unrelated "Martin Lopez" artists).
     async fn search_artist_tracks_with_limit(
         &self,
         artist_mbid: &str,
@@ -341,7 +345,25 @@ impl SuggestionsEngine {
 
         let client = self.qobuz_client.lock().await;
 
-        // Search for tracks by artist name (fetch 3x limit to have room for filtering)
+        // Step 1: Validate artist exists in Qobuz with their own catalog
+        // This prevents searching for session musicians who don't have artist pages
+        let validated_artist = self.validate_qobuz_artist(&client, &search_query).await;
+
+        if validated_artist.is_none() {
+            log::debug!(
+                "[SuggestionsEngine] Skipping '{}' - no Qobuz artist page found",
+                search_query
+            );
+            return Vec::new();
+        }
+
+        let (qobuz_artist_id, qobuz_artist_name) = validated_artist.unwrap();
+        log::debug!(
+            "[SuggestionsEngine] Validated '{}' -> Qobuz artist '{}' (ID: {})",
+            search_query, qobuz_artist_name, qobuz_artist_id
+        );
+
+        // Step 2: Search for tracks by artist name (fetch 3x limit to have room for filtering)
         match client
             .search_tracks(&search_query, (limit * 3) as u32, 0, None)
             .await
@@ -350,16 +372,18 @@ impl SuggestionsEngine {
                 let mut tracks = Vec::new();
 
                 for item in results.items {
-                    // Verify the track's performer matches the artist we searched for
+                    // Verify the track's performer matches the validated Qobuz artist
+                    // Use both ID matching (best) and name matching (fallback)
+                    let performer_id = item.performer.as_ref().map(|p| p.id);
                     let performer_name = item
                         .performer
                         .as_ref()
                         .map(|p| p.name.clone())
                         .unwrap_or_default();
 
-                    // STRICT matching - only accept if names are genuinely similar
-                    // This prevents "Martín Méndez" from matching "Tomas Martin Lopez"
-                    let is_match = names_similar(&performer_name, &search_query);
+                    // Prefer ID match (exact), fall back to name comparison
+                    let is_match = performer_id == Some(qobuz_artist_id)
+                        || names_similar(&performer_name, &qobuz_artist_name);
 
                     if is_match {
                         tracks.push(self.track_to_suggested(&item, artist_mbid, similarity));
@@ -376,6 +400,53 @@ impl SuggestionsEngine {
                 Vec::new()
             }
         }
+    }
+
+    /// Validate that an artist exists in Qobuz with their own catalog
+    ///
+    /// Returns Some((artist_id, artist_name)) if found, None otherwise.
+    /// This prevents false matches for:
+    /// - Session musicians without their own page (e.g., "Martin Lopez" drummer)
+    /// - Names that match different artists (e.g., Latin "Martin Mendez" vs bassist)
+    async fn validate_qobuz_artist(
+        &self,
+        client: &QobuzClient,
+        name: &str,
+    ) -> Option<(u64, String)> {
+        let name_lower = name.to_lowercase();
+
+        // Search Qobuz for artist
+        let results = match client.search_artists(name, 10, 0, None).await {
+            Ok(r) => r,
+            Err(e) => {
+                log::warn!("[SuggestionsEngine] Artist search failed for '{}': {}", name, e);
+                return None;
+            }
+        };
+
+        // Look for exact name match
+        for artist in &results.items {
+            let artist_lower = artist.name.to_lowercase();
+
+            // Exact match
+            if artist_lower == name_lower {
+                // Must have albums to be considered valid
+                if artist.albums_count.unwrap_or(0) > 0 {
+                    return Some((artist.id, artist.name.clone()));
+                }
+            }
+        }
+
+        // Also try "The X" variant (e.g., "Beatles" -> "The Beatles")
+        let the_name_lower = format!("the {}", name_lower);
+        for artist in &results.items {
+            let artist_lower = artist.name.to_lowercase();
+            if artist_lower == the_name_lower && artist.albums_count.unwrap_or(0) > 0 {
+                return Some((artist.id, artist.name.clone()));
+            }
+        }
+
+        None
     }
 
     /// Convert a Track to a SuggestedTrack
@@ -534,9 +605,9 @@ mod tests {
     fn test_suggestion_config_default() {
         let config = SuggestionConfig::default();
 
-        assert_eq!(config.max_artists, 20);
-        assert_eq!(config.tracks_per_artist, 5);
-        assert_eq!(config.max_pool_size, 100);
+        assert_eq!(config.max_artists, 30);
+        assert_eq!(config.tracks_per_artist, 6);
+        assert_eq!(config.max_pool_size, 150);
         assert_eq!(config.vector_max_age_days, 7);
         assert!(config.min_similarity > 0.0);
     }
