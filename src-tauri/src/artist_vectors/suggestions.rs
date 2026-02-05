@@ -313,6 +313,7 @@ impl SuggestionsEngine {
 
                                 // Search tracks for this similar artist (use empty MBID since we have Qobuz ID)
                                 let tracks = self.search_artist_tracks_by_qobuz_id(
+                                    &client,
                                     similar_artist.id,
                                     &similar_artist.name,
                                     0.8, // High similarity since Qobuz says they're similar
@@ -410,13 +411,14 @@ impl SuggestionsEngine {
     }
 
     /// Search Qobuz for tracks by Qobuz artist ID (more reliable when we already validated the artist)
+    /// Takes client reference to avoid deadlock when caller already holds the lock
     async fn search_artist_tracks_by_qobuz_id(
         &self,
+        client: &QobuzClient,
         qobuz_artist_id: u64,
         artist_name: &str,
         similarity: f32,
     ) -> Vec<SuggestedTrack> {
-        let client = self.qobuz_client.lock().await;
         let limit = self.config.tracks_per_artist;
 
         // Search by artist name but verify tracks belong to this specific Qobuz artist ID
