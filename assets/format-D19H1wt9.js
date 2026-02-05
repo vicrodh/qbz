@@ -1,0 +1,1 @@
+const o=t=>{if(Number.isNaN(t)||t<=0)return"—";const a=["B","KB","MB","GB"],e=Math.min(Math.floor(Math.log(t)/Math.log(1024)),a.length-1),n=t/Math.pow(1024,e);return`${n.toFixed(n>=10||e===0?0:1)} ${a[e]}`},r=(t,a)=>{const e=new Date(t);return Number.isNaN(e.getTime())?t:new Intl.DateTimeFormat(a,{dateStyle:"medium"}).format(e)};export{o as a,r as f};
