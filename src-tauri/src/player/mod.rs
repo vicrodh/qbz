@@ -112,7 +112,7 @@ impl Seek for CursorMediaSource {
 /// Audio specifications extracted from decoded audio
 #[allow(dead_code)]
 struct AudioSpecs {
-    samples: SamplesBuffer<i16>,
+    samples: SamplesBuffer<f32>,
     sample_rate: u32,
     channels: u16,
 }
@@ -146,7 +146,7 @@ fn decode_with_symphonia(data: &[u8]) -> Result<AudioSpecs, String> {
 
     let mut sample_rate = 0;
     let mut channels = 0u16;
-    let mut samples: Vec<i16> = Vec::new();
+    let mut samples: Vec<f32> = Vec::new();
 
     loop {
         let packet = match probed.format.next_packet() {
@@ -167,7 +167,7 @@ fn decode_with_symphonia(data: &[u8]) -> Result<AudioSpecs, String> {
                     channels = spec.channels.count() as u16;
                 }
 
-                let mut sample_buf = SampleBuffer::<i16>::new(audio_buf.frames() as u64, spec);
+                let mut sample_buf = SampleBuffer::<f32>::new(audio_buf.frames() as u64, spec);
                 sample_buf.copy_interleaved_ref(audio_buf);
                 samples.extend_from_slice(sample_buf.samples());
             }
@@ -263,12 +263,12 @@ fn extract_audio_metadata_full(data: &[u8]) -> Result<AudioMetadata, String> {
 
 fn decode_with_fallback(
     data: &[u8],
-) -> Result<Box<dyn Source<Item = i16> + Send>, String> {
+) -> Result<Box<dyn Source<Item = f32> + Send>, String> {
     if is_isomp4(data) {
         return decode_with_symphonia(data)
             .map(|specs| {
                 log::info!("Decoded audio using symphonia fallback (isomp4)");
-                Box::new(specs.samples) as Box<dyn Source<Item = i16> + Send>
+                Box::new(specs.samples) as Box<dyn Source<Item = f32> + Send>
             });
     }
 
@@ -681,7 +681,7 @@ impl Player {
 
             // Helper to wrap source with visualizer tap (if enabled)
             // This captures audio samples for visualization without affecting playback
-            let wrap_source = |source: Box<dyn Source<Item = i16> + Send>| -> Box<dyn Source<Item = i16> + Send> {
+            let wrap_source = |source: Box<dyn Source<Item = f32> + Send>| -> Box<dyn Source<Item = f32> + Send> {
                 if let Some(ref tap) = thread_viz_tap {
                     Box::new(TappedSource::new(source, tap.ring_buffer.clone(), tap.enabled.clone()))
                 } else {
@@ -1347,7 +1347,7 @@ impl Player {
                         thread_state.duration.store(duration_secs, Ordering::SeqCst);
 
                         // Box the incremental source to match the expected type
-                        let source_to_play: Box<dyn Source<Item = i16> + Send> = Box::new(incremental_source);
+                        let source_to_play: Box<dyn Source<Item = f32> + Send> = Box::new(incremental_source);
                         // Wrap source for visualization (if enabled)
                         let source_to_play = wrap_source(source_to_play);
                         if let Err(e) = engine.append(source_to_play) {
@@ -1456,7 +1456,7 @@ impl Player {
                             };
 
                             let resume_pos = thread_state.position.load(Ordering::SeqCst);
-                            let skipped_source: Box<dyn Source<Item = i16> + Send> = if resume_pos > 0 {
+                            let skipped_source: Box<dyn Source<Item = f32> + Send> = if resume_pos > 0 {
                                 Box::new(source.skip_duration(Duration::from_secs(resume_pos)))
                             } else {
                                 source
@@ -1559,7 +1559,7 @@ impl Player {
                         };
 
                         let skip_duration = Duration::from_secs(position_secs);
-                        let skipped_source: Box<dyn Source<Item = i16> + Send> = Box::new(source.skip_duration(skip_duration));
+                        let skipped_source: Box<dyn Source<Item = f32> + Send> = Box::new(source.skip_duration(skip_duration));
 
                         // Wrap source for visualization (if enabled)
                         let skipped_source = wrap_source(skipped_source);
