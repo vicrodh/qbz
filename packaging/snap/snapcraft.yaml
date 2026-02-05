@@ -95,17 +95,7 @@ parts:
       - alsa-utils
     override-build: |
       # Allow sandboxed builds to override GTK_USE_PORTAL.
-      python - <<'PY'
-      from pathlib import Path
-      path = Path("src-tauri/src/main.rs")
-      text = path.read_text(encoding="utf-8")
-      if 'std::env::set_var("GTK_USE_PORTAL", "1");' in text and "var_os(\"GTK_USE_PORTAL\")" not in text:
-          text = text.replace(
-              'std::env::set_var("GTK_USE_PORTAL", "1");',
-              'if std::env::var_os("GTK_USE_PORTAL").is_none() {\n        std::env::set_var("GTK_USE_PORTAL", "1");\n    }'
-          )
-          path.write_text(text, encoding="utf-8")
-      PY
+      perl -0pi -e 'if ($_.!~/var_os\\(\"GTK_USE_PORTAL\"\\)/) { s/std::env::set_var\\(\"GTK_USE_PORTAL\", \"1\"\\);/if std::env::var_os\\(\"GTK_USE_PORTAL\"\\).is_none() {\\n        std::env::set_var(\"GTK_USE_PORTAL\", \"1\");\\n    }/ }' src-tauri/src/main.rs
 
       # Install Node.js for frontend build
       curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
