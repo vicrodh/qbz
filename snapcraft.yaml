@@ -51,6 +51,7 @@ passthrough:
 
 architectures:
   - build-on: amd64
+  - build-on: arm64
 
 apps:
   qbz:
@@ -59,7 +60,7 @@ apps:
     extensions: [gnome]
     environment:
       # Prefer GNOME platform GL libs to avoid Mesa/driver mismatches on NVIDIA.
-      LD_LIBRARY_PATH: $SNAP/gnome-platform/usr/lib/x86_64-linux-gnu:$SNAP/gnome-platform/lib/x86_64-linux-gnu:$SNAP/gnome-platform/usr/lib:$SNAP/gnome-platform/lib:$LD_LIBRARY_PATH
+      LD_LIBRARY_PATH: $SNAP/gnome-platform/usr/lib/x86_64-linux-gnu:$SNAP/gnome-platform/lib/x86_64-linux-gnu:$SNAP/gnome-platform/usr/lib/aarch64-linux-gnu:$SNAP/gnome-platform/lib/aarch64-linux-gnu:$SNAP/gnome-platform/usr/lib:$SNAP/gnome-platform/lib:$LD_LIBRARY_PATH
       WEBKIT_EXEC_PATH: $SNAP/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1
       GTK_USE_PORTAL: "0"
       GIO_USE_PORTAL: "0"
@@ -123,3 +124,8 @@ parts:
       # Install binary
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin
       cp src-tauri/target/release/qbz-nix $SNAPCRAFT_PART_INSTALL/bin/qbz
+    override-prime: |
+      snapcraftctl prime
+      if [ -d "$SNAPCRAFT_PRIME/usr/lib/aarch64-linux-gnu" ] && [ ! -e "$SNAPCRAFT_PRIME/usr/lib/x86_64-linux-gnu" ]; then
+        ln -s aarch64-linux-gnu "$SNAPCRAFT_PRIME/usr/lib/x86_64-linux-gnu"
+      fi
