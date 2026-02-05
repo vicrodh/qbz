@@ -28,6 +28,7 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+snapcraft-*.txt
 
 # Tauri
 src-tauri/target/
