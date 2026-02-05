@@ -53,6 +53,9 @@ packaging/flatpak/.flatpak-builder/
 *.rpm
 *.flatpak
 *.snap
+/packaging/snap/parts/
+/packaging/snap/prime/
+/packaging/snap/stage/
 *.tar.gz
 *.tar.xz
 
