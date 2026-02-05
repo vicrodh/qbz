@@ -33,6 +33,53 @@ const extractHighlights = (body: string | null | undefined): string[] => {
   return sentences.slice(0, 3)
 }
 
+// Simple inline markdown renderer for bold and code
+const renderInlineMarkdown = (text: string): React.ReactNode => {
+  // Process **bold** and `code` patterns
+  const parts: React.ReactNode[] = []
+  let remaining = text
+  let key = 0
+
+  while (remaining.length > 0) {
+    // Check for **bold**
+    const boldMatch = remaining.match(/\*\*(.+?)\*\*/)
+    // Check for `code`
+    const codeMatch = remaining.match(/`([^`]+)`/)
+
+    // Find which comes first
+    const boldIndex = boldMatch ? remaining.indexOf(boldMatch[0]) : -1
+    const codeIndex = codeMatch ? remaining.indexOf(codeMatch[0]) : -1
+
+    if (boldIndex === -1 && codeIndex === -1) {
+      // No more patterns, add remaining text
+      parts.push(remaining)
+      break
+    }
+
+    // Determine which pattern comes first
+    const useCode = codeIndex !== -1 && (boldIndex === -1 || codeIndex < boldIndex)
+    const match = useCode ? codeMatch! : boldMatch!
+    const matchIndex = useCode ? codeIndex : boldIndex
+
+    // Add text before the match
+    if (matchIndex > 0) {
+      parts.push(remaining.substring(0, matchIndex))
+    }
+
+    // Add the formatted element
+    if (useCode) {
+      parts.push(<code key={key++} className="inline-code">{match[1]}</code>)
+    } else {
+      parts.push(<strong key={key++}>{match[1]}</strong>)
+    }
+
+    // Continue with remaining text
+    remaining = remaining.substring(matchIndex + match[0].length)
+  }
+
+  return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : <>{parts}</>
+}
+
 export function ChangelogPage() {
   const { t } = useTranslation()
   const { language } = useApp()
@@ -90,11 +137,11 @@ export function ChangelogPage() {
                 </div>
               </div>
               <ul className="list">
-                {release.highlights.map((item) => (
-                  <li key={item}>{item}</li>
+                {release.highlights.map((item, idx) => (
+                  <li key={idx}>{renderInlineMarkdown(item)}</li>
                 ))}
               </ul>
-              <a className="btn btn-ghost" href={release.html_url} target="_blank" rel="noreferrer">
+              <a className="btn btn-ghost" href={release.html_url} target="_blank" rel="noreferrer" style={{ marginTop: 24 }}>
                 {t('changelog.viewOnGitHub')}
               </a>
             </div>

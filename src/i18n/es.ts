@@ -20,7 +20,7 @@ export const es = {
     stats: {
       audio: 'Pipeline bit-perfect',
       dac: 'Passthrough al DAC',
-      casting: 'Chromecast + DLNA',
+      native: 'Linux nativo + Rust',
     },
   },
   why: {
@@ -64,8 +64,8 @@ export const es = {
         text: 'Navegación rápida con contexto directo de reproducción.',
       },
       {
-        title: 'Modo focus',
-        text: 'Escucha en pantalla completa con letras y contexto del dispositivo.',
+        title: 'Modo inmersivo',
+        text: 'Coverflow a pantalla completa, letras y fondos ambientales.',
       },
       {
         title: 'Gestión de biblioteca local',
@@ -133,12 +133,61 @@ export const es = {
           'Escucha ahora, sincroniza después.',
         ],
       },
+      immersive: {
+        title: 'Reproductor Inmersivo',
+        bullets: [
+          'Fondos ambientales impulsados por WebGL.',
+          'Letras, coverflow y paneles enfocados.',
+          'Experiencia visual libre de distracciones.',
+        ],
+      },
+      dacWizard: {
+        title: 'Asistente DAC',
+        bullets: [
+          'Configuración guiada para PipeWire bit-perfect.',
+          'Genera comandos específicos por distro.',
+          'Simplifica la configuración de audio compleja.',
+        ],
+      },
+
+      discovery: {
+        title: 'Descubrimiento Inteligente',
+        bullets: [
+          'Sugerencias basadas en vectores.',
+          'Motor de similitud local para joyas ocultas.',
+          'Encuentra tracks manteniendo el vibe.',
+        ],
+      },
+      genres: {
+        title: 'Filtrado Avanzado',
+        bullets: [
+          'Jerarquía de géneros de tres niveles.',
+          'Precisión de subgéneros por contexto.',
+          'Explora más allá de las categorías básicas.',
+        ],
+      },
       metadata: {
         title: 'Metadatos y créditos',
         bullets: [
           'Integración con MusicBrainz para enriquecer artistas y álbumes.',
           'Páginas de músicos con roles, créditos y discografía.',
           'Editor de tags para biblioteca local con almacenamiento sidecar no destructivo.',
+        ],
+      },
+      hideArtists: {
+        title: 'Ocultar Artistas',
+        bullets: [
+          'Bloquea artistas de tu biblioteca y recomendaciones.',
+          'Limpia los feeds de descubrimiento automáticamente.',
+          'Persistente entre sesiones.',
+        ],
+      },
+      songRecommendations: {
+        title: 'Recomendaciones de Canciones',
+        bullets: [
+          'Sugerencias algorítmicas basadas en tu historial local de reproducción.',
+          'Powered by combinación única de metadatos de Qobuz y MusicBrainz.',
+          'Expande playlists con un clic.',
         ],
       },
     },
@@ -263,6 +312,21 @@ export const es = {
     },
     acknowledgments: 'Gracias a los proyectos open source y proveedores de APIs que hacen posible QBZ.',
     qobuzDisclaimer: 'Qobuz es una marca registrada de su respectivo propietario. QBZ no está afiliado a Qobuz.',
+  },
+  comingSoon: {
+    title: 'Próximamente / Experimental',
+    lead: 'Funciones actualmente en desarrollo o pruebas.',
+    badge: 'Experimental',
+    items: [
+      {
+        title: 'API de Control Remoto',
+        text: 'Operación headless y soporte para control externo.',
+      },
+      {
+        title: 'Visualizador de Audio Avanzado',
+        text: 'Analizador de espectro y visualización de forma de onda.',
+      },
+    ],
   },
   about: {
     title: '¿Por qué QBZ?',

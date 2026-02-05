@@ -43,7 +43,7 @@ type ReleaseData = {
 }
 
 type DownloadItem = {
-  type: 'appimage' | 'flatpak' | 'deb' | 'rpm' | 'tarball' | 'aur' | 'unknown'
+  type: 'appimage' | 'flatpak' | 'deb' | 'rpm' | 'tarball' | 'aur' | 'snap' | 'unknown'
   label: string
   fileName: string
   url: string
@@ -59,6 +59,7 @@ const RELEASES_URL = 'https://api.github.com/repos/vicrodh/qbz/releases'
 
 const TYPE_LABELS: Record<DownloadItem['type'], string> = {
   aur: 'AUR (Arch)',
+  snap: 'Snap Store',
   appimage: 'AppImage',
   flatpak: 'Flatpak',
   deb: 'Debian/Ubuntu',
@@ -69,15 +70,17 @@ const TYPE_LABELS: Record<DownloadItem['type'], string> = {
 
 const TYPE_PRIORITY: Record<DownloadItem['type'], number> = {
   aur: 0,
-  appimage: 1,
-  flatpak: 2,
-  deb: 3,
-  rpm: 4,
-  tarball: 5,
-  unknown: 6,
+  snap: 1,
+  appimage: 2,
+  flatpak: 3,
+  deb: 4,
+  rpm: 5,
+  tarball: 6,
+  unknown: 7,
 }
 
 const AUR_PACKAGE_URL = 'https://aur.archlinux.org/packages/qbz-bin'
+const SNAP_STORE_URL = 'https://snapcraft.io/qbz-player'
 
 const getType = (name: string): DownloadItem['type'] => {
   const lower = name.toLowerCase()
@@ -103,6 +106,8 @@ const getInstallCmd = (type: DownloadItem['type'], fileName: string): string | u
   switch (type) {
     case 'aur':
       return 'git clone https://aur.archlinux.org/qbz-bin.git && cd qbz-bin && makepkg -si'
+    case 'snap':
+      return 'sudo snap install qbz-player'
     case 'appimage':
       return `chmod +x ${fileName} && ./${fileName}`
     case 'deb':
@@ -193,12 +198,26 @@ const aurItem: DownloadItem = {
   helperCmds: getHelperCmds('aur'),
 }
 
+// Snap Store download item
+const snapItem: DownloadItem = {
+  type: 'snap',
+  label: TYPE_LABELS.snap,
+  fileName: 'qbz-player',
+  url: SNAP_STORE_URL,
+  size: 0,
+  arch: null,
+  installCmd: getInstallCmd('snap', 'qbz-player'),
+  helperNote: {
+    label: 'Or install from Snap Store GUI',
+    note: 'Search for "QBZ" in your Snap Store application, or click the link below to open the store page.'
+  },
+}
 
-// Get all downloads including AUR for Linux users
-const getDownloadsWithAur = (items: DownloadItem[]) => {
+// Get all downloads including AUR and Snap for Linux users
+const getDownloadsWithExtras = (items: DownloadItem[]) => {
   const platform = detectPlatform()
   if (platform.isLinux) {
-    return [aurItem, ...items]
+    return [aurItem, snapItem, ...items]
   }
   return items
 }
@@ -233,7 +252,7 @@ export function DownloadSection() {
   }, [])
 
   const baseDownloads = useMemo(() => (release ? mapAssets(release.assets) : []), [release])
-  const downloads = useMemo(() => getDownloadsWithAur(baseDownloads), [baseDownloads])
+  const downloads = useMemo(() => getDownloadsWithExtras(baseDownloads), [baseDownloads])
   const releaseDate = release ? formatDate(release.published_at, language) : null
 
   return (
@@ -277,7 +296,7 @@ export function DownloadSection() {
                         {item.arch && <span className="download-item__arch">{item.arch}</span>}
                       </div>
                       <span className="download-item__file">
-                        {item.type === 'aur' ? 'Arch User Repository' : `${item.fileName} · ${formatBytes(item.size)}`}
+                        {item.type === 'aur' ? 'Arch User Repository' : item.type === 'snap' ? 'Snap Store' : `${item.fileName} · ${formatBytes(item.size)}`}
                       </span>
                     </div>
                     {item.installCmd && (
@@ -323,8 +342,8 @@ export function DownloadSection() {
                         </p>
                       </details>
                     )}
-                    <a className="btn btn-ghost btn-sm" href={item.url} target={item.type === 'aur' ? '_blank' : undefined} rel={item.type === 'aur' ? 'noreferrer' : undefined}>
-                      {item.type === 'aur' ? 'View on AUR' : 'Download'}
+                    <a className="btn btn-ghost btn-sm" href={item.url} target={item.type === 'aur' || item.type === 'snap' ? '_blank' : undefined} rel={item.type === 'aur' || item.type === 'snap' ? 'noreferrer' : undefined}>
+                      {item.type === 'aur' ? 'View on AUR' : item.type === 'snap' ? 'View on Snap Store' : 'Download'}
                     </a>
                   </div>
                 ))}

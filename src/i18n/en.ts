@@ -20,7 +20,7 @@ export const en = {
     stats: {
       audio: 'Bit-perfect pipeline',
       dac: 'DAC passthrough',
-      casting: 'Chromecast + DLNA',
+      native: 'Native Linux + Rust',
     },
   },
   why: {
@@ -64,8 +64,8 @@ export const en = {
         text: 'Fast navigation with direct queue and playback context.',
       },
       {
-        title: 'Focus playback mode',
-        text: 'Full-screen listening with lyrics and device awareness.',
+        title: 'Immersive mode',
+        text: 'Full-screen coverflow, lyrics, and ambient backgrounds.',
       },
       {
         title: 'Local library management',
@@ -133,12 +133,61 @@ export const en = {
           'Listen now, scroll and sync later.',
         ],
       },
+      immersive: {
+        title: 'Immersive Player',
+        bullets: [
+          'WebGL-powered ambient backgrounds.',
+          'Lyrics, coverflow, and focused listening panels.',
+          'Distraction-free visual experience.',
+        ],
+      },
+      dacWizard: {
+        title: 'DAC Setup Wizard',
+        bullets: [
+          'Guided configuration for bit-perfect PipeWire.',
+          'Generates distro-specific commands automatically.',
+          'Simplifies complex audio setup.',
+        ],
+      },
+
+      discovery: {
+        title: 'Smart Discovery',
+        bullets: [
+          'Vector-based playlist suggestions.',
+          'Local similarity engine for deeper cuts.',
+          'Find tracks ensuring consistent vibe.',
+        ],
+      },
+      genres: {
+        title: 'Advanced Filtering',
+        bullets: [
+          'Deep three-level genre hierarchy.',
+          'Context-aware subgenre precision.',
+          'Drill down beyond basic categories.',
+        ],
+      },
       metadata: {
         title: 'Metadata & credits',
         bullets: [
           'MusicBrainz integration for artist and album enrichment.',
           'Musician pages with roles, credits, and discography.',
           'Tag editor for local library with non-destructive sidecar storage.',
+        ],
+      },
+      hideArtists: {
+        title: 'Hide Artists',
+        bullets: [
+          'Block artists from your library and recommendations.',
+          'Clean up discovery feeds automatically.',
+          'Persistent across sessions.',
+        ],
+      },
+      songRecommendations: {
+        title: 'Song Recommendations',
+        bullets: [
+          'Algorithmic suggestions based on your local playback history.',
+          'Powered by unique Qobuz and MusicBrainz metadata combination.',
+          'Expand playlists with one click.',
         ],
       },
     },
@@ -263,6 +312,21 @@ export const en = {
     },
     acknowledgments: 'Thanks to the open-source projects and API providers that make QBZ possible.',
     qobuzDisclaimer: 'Qobuz is a trademark of its respective owner. QBZ is not affiliated with Qobuz.',
+  },
+  comingSoon: {
+    title: 'Coming Soon / Experimental',
+    lead: 'Features currently in active development or testing.',
+    badge: 'Experimental',
+    items: [
+      {
+        title: 'Remote Control API',
+        text: 'Headless operation and external control support.',
+      },
+      {
+        title: 'Advanced Audio Visualizer',
+        text: 'Spectrum analyzer and waveform visualization.',
+      },
+    ],
   },
   about: {
     title: 'Why QBZ?',

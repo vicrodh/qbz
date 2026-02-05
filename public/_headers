@@ -1,5 +1,8 @@
-# Cache static assets for 1 year (immutable with hashed names)
-/assets/*
+# Cache hashed JS/CSS bundles for 1 year (immutable with hashed names)
+/assets/*.js
+  Cache-Control: public, max-age=31536000, immutable
+
+/assets/*.css
   Cache-Control: public, max-age=31536000, immutable
 
 # Cache images for 1 year
@@ -9,19 +12,18 @@
 /assets/icons/*
   Cache-Control: public, max-age=31536000, immutable
 
-# Cache fonts
-/*.woff2
+/assets/brand/*
   Cache-Control: public, max-age=31536000, immutable
 
-/*.woff
-  Cache-Control: public, max-age=31536000, immutable
-
-# HTML pages - cache for 1 hour, revalidate
+# HTML pages - cache for 10 minutes with stale-while-revalidate
 /*.html
-  Cache-Control: public, max-age=3600, must-revalidate
+  Cache-Control: public, max-age=600, stale-while-revalidate=3600
 
 /
-  Cache-Control: public, max-age=3600, must-revalidate
+  Cache-Control: public, max-age=600, stale-while-revalidate=3600
+
+/**/
+  Cache-Control: public, max-age=600, stale-while-revalidate=3600
 
 # Sitemap and robots - cache for 1 day
 /sitemap.xml

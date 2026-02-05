@@ -55,7 +55,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text-primary);
-  font-family: "Source Sans 3", system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
   line-height: 1.6;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
@@ -80,8 +80,10 @@ button {
   font-family: inherit;
 }
 
-h1, h2, h3 {
-  font-family: "Sora", system-ui, sans-serif;
+h1,
+h2,
+h3 {
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Helvetica, Arial, sans-serif;
   margin: 0;
   letter-spacing: -0.02em;
 }
@@ -520,6 +522,22 @@ p {
 .feature-card__text {
   color: var(--text-secondary);
   font-size: 0.95rem;
+}
+
+.feature-card--glass {
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.feature-card__header {
+  margin-bottom: 2px;
+}
+
+.badge--warning {
+  border-color: rgba(245, 158, 11, 0.3);
+  color: var(--warn);
+  background: rgba(245, 158, 11, 0.1);
 }
 
 .download-grid {

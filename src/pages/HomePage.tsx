@@ -1,10 +1,11 @@
 import { useTranslation } from 'react-i18next'
 import { useEffect, useState, useRef } from 'react'
 import { DownloadSection } from '../components/DownloadSection'
+import { ComingSoonSection } from '../components/ComingSoonSection'
 import { useApp } from '../lib/appContext'
 import { buildPath } from '../lib/routes'
 
-const CAPABILITY_KEYS = ['audio', 'library', 'playlists', 'desktop', 'casting', 'radio', 'offline', 'metadata'] as const
+const CAPABILITY_KEYS = ['audio', 'library', 'playlists', 'desktop', 'casting', 'radio', 'offline', 'metadata', 'hideArtists', 'songRecommendations'] as const
 
 type CapabilityKey = (typeof CAPABILITY_KEYS)[number]
 
@@ -131,7 +132,7 @@ export function HomePage() {
   const stats = [
     { icon: '/assets/icons/hi-res.svg', label: t('hero.stats.audio'), colored: true, large: false },
     { icon: '/assets/icons/dac.svg', label: t('hero.stats.dac'), colored: false, large: true },
-    { icon: '/assets/icons/cast-audio.svg', label: t('hero.stats.casting'), colored: false, large: false },
+    { icon: '/assets/icons/Rust_for_Linux_logo.svg', label: t('hero.stats.native'), colored: true, large: false, size: 30 },
   ]
 
   const capabilityIcons: Record<CapabilityKey, string> = {
@@ -143,6 +144,8 @@ export function HomePage() {
     radio: '/assets/icons/radio-signal.svg',
     offline: '/assets/icons/offline-small.svg',
     metadata: '/assets/icons/cd-music.svg',
+    hideArtists: '/assets/icons/blind-eye.svg',
+    songRecommendations: '/assets/icons/sparkles.svg',
   }
 
   const goals = t('goals.items', { returnObjects: true }) as Array<{ title: string; text: string }>
@@ -174,6 +177,9 @@ export function HomePage() {
                 {t('hero.secondaryCta')}
               </a>
             </div>
+            <p style={{ marginTop: 16, fontSize: '0.9rem', color: 'var(--text-tertiary)' }}>
+              <a href="/qobuz-linux/" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>Qobuz for Linux</a> — Learn why QBZ is not a web wrapper.
+            </p>
             <div className="hero__stats">
               {stats.map((stat) => (
                 <div key={stat.label} className="stat">
@@ -181,6 +187,7 @@ export function HomePage() {
                     className={`stat__icon ${stat.colored ? '' : 'icon-mono'} ${stat.large ? 'stat__icon--large' : ''}`}
                     src={stat.icon}
                     alt={stat.label}
+                    style={stat.size ? { width: stat.size, height: stat.size } : undefined}
                   />
                   <div className="stat__label">{stat.label}</div>
                 </div>
@@ -253,7 +260,7 @@ export function HomePage() {
               const imgBase = index === 0
                 ? 'qbz-playlist-view'
                 : index === 1
-                  ? 'qbz-fullpage'
+                  ? 'qbz-immersivecoverflow'
                   : 'qbz-locallibrary'
               return (
                 <div key={shot.title} className="screenshot">
@@ -289,6 +296,8 @@ export function HomePage() {
       </section>
 
       <DownloadSection />
+
+      <ComingSoonSection />
 
       <section className="section section--muted">
         <div className="container">
