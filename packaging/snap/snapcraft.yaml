@@ -77,8 +77,8 @@ parts:
       npm run build
 
       # Build Tauri backend
-      cargo build --release
+      cargo build --release --manifest-path src-tauri/Cargo.toml
 
       # Install binary
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin
-      cp target/release/qbz-nix $SNAPCRAFT_PART_INSTALL/bin/qbz
+      cp src-tauri/target/release/qbz-nix $SNAPCRAFT_PART_INSTALL/bin/qbz
