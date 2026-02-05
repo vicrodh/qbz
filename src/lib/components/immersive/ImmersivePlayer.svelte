@@ -484,7 +484,7 @@
   .immersive-player {
     position: fixed;
     inset: 0;
-    z-index: 100;
+    z-index: 10001; /* Above all dropdowns/popups (z-index: 10000) */
     display: flex;
     flex-direction: column;
     background-color: var(--bg-primary, #0a0a0b);

@@ -4,6 +4,8 @@
  * Manages overlay and modal visibility states across the app.
  */
 
+import { closeAll as closeAllMenus } from './floatingMenuStore';
+
 // Overlay states
 let isQueueOpen = false;
 let isFullScreenOpen = false;
@@ -63,6 +65,7 @@ export function getFullScreenOpen(): boolean {
 }
 
 export function openFullScreen(): void {
+  closeAllMenus();
   isFullScreenOpen = true;
   notifyListeners();
 }
@@ -84,6 +87,7 @@ export function getFocusModeOpen(): boolean {
 }
 
 export function openFocusMode(): void {
+  closeAllMenus();
   isFocusModeOpen = true;
   notifyListeners();
 }
