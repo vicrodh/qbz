@@ -52,6 +52,7 @@ packaging/flatpak/.flatpak-builder/
 *.deb
 *.rpm
 *.flatpak
+*.snap
 *.tar.gz
 *.tar.xz
 
