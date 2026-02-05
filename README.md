@@ -16,6 +16,18 @@
 
 QBZ is a free and open source (FOSS) high-fidelity streaming client for Linux with native playback. It is a real desktop application, not a web wrapper, so it can use DAC passthrough, switch sample rates per track, and deliver bit-perfect audio.
 
+## 1.1.8 Highlights
+
+- DAC Setup Wizard for guided PipeWire bit-perfect configuration
+- Immersive Player overhaul with tabbed panels and visualizer
+- Genre filtering with 3-level hierarchy
+- Playlist suggestions based on artist similarity
+- Remote control API (LAN + PWA)
+- Configurable key bindings
+- New languages: German and French, plus expanded Spanish coverage
+
+See `docs/release-1.1.8/CHANGELOG_HIGHLIGHTS.md` for details.
+
 ## Legal / Branding
 
 - This application uses the Qobuz API but is not certified by Qobuz.
