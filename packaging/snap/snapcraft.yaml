@@ -55,8 +55,10 @@ apps:
       LD_LIBRARY_PATH: $SNAP/gnome-platform/usr/lib/x86_64-linux-gnu:$SNAP/gnome-platform/lib/x86_64-linux-gnu:$SNAP/gnome-platform/usr/lib:$SNAP/gnome-platform/lib:$LD_LIBRARY_PATH
       WEBKIT_EXEC_PATH: $SNAP/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1
       GTK_USE_PORTAL: "0"
+      GIO_USE_PORTAL: "0"
     plugs:
       - network
+      - network-status
       - audio-playback
       - home
       - removable-media
@@ -91,6 +93,7 @@ parts:
       - libayatana-appindicator3-1
       - libasound2
       - libssl3
+      - pulseaudio-utils
       # Include alsa-utils in the snap for aplay -L command
       - alsa-utils
     override-build: |
