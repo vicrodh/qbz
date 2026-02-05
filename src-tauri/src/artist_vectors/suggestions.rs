@@ -468,16 +468,18 @@ fn names_similar(name1: &str, name2: &str) -> bool {
     let max_words = words1.len().max(words2.len());
     let min_words = words1.len().min(words2.len());
 
-    // STRICT: For person names (2-3 words), require ALL words of the shorter name to match
-    // AND the match ratio must be high (no extra unrelated words)
-    if min_words <= 3 {
-        // All words of shorter name must be in longer name
-        let all_short_match = matches == min_words;
-        // And the longer name shouldn't have too many extra words
-        // e.g., "Martin Mendez" (2) vs "Tomas Martin Lopez" (3) -> 1 match out of 2 = reject
-        // e.g., "George Harrison" (2) vs "Harrison, George" (2) -> 2 match out of 2 = accept
-        let ratio = matches as f32 / max_words as f32;
-        all_short_match && ratio >= 0.66
+    // VERY STRICT for person names:
+    // - For 2-word names: require EXACT same words (handles "George Harrison" vs "Harrison, George")
+    // - For 3-word names: allow at most 1 extra word
+    // - This rejects "Martin Lopez" vs "Tomas Martin Lopez" (different people)
+    if min_words == 2 {
+        // For 2-word names, require EXACTLY the same words (just different order allowed)
+        // "Martin Lopez" vs "Tomas Martin Lopez" -> max_words=3, min_words=2 -> REJECT
+        // "George Harrison" vs "Harrison, George" -> max_words=2, min_words=2 -> ACCEPT
+        matches == min_words && max_words == min_words
+    } else if min_words == 3 {
+        // For 3-word names, allow at most 1 extra word
+        matches >= min_words && (max_words - min_words) <= 1
     } else {
         // For longer names (bands, etc.), allow some flexibility
         matches as f32 / max_words as f32 >= 0.75
