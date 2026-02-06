@@ -112,6 +112,7 @@ parts:
       # Include alsa-utils in the snap for aplay -L command
       - alsa-utils
     override-build: |
+      export PATH="$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin"
       export PKG_CONFIG_PATH="/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/pkgconfig:/usr/share/pkgconfig:/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/pkgconfig:/snap/gnome-42-2204-sdk/current/usr/share/pkgconfig"
       export LIBRARY_PATH="/usr/lib/$SNAPCRAFT_ARCH_TRIPLET:/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET"
       export LD_LIBRARY_PATH="/usr/lib/$SNAPCRAFT_ARCH_TRIPLET:/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET"
