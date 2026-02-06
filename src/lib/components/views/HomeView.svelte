@@ -312,6 +312,7 @@
   // Mark a section as finished loading and check if we can hide overlay
   function markSectionFinished() {
     sectionsFinished++;
+    console.warn(`[DEBUG-43] markSectionFinished: ${sectionsFinished}/${totalVisibleSections}`);
     checkAllSectionsReady();
   }
 
@@ -745,6 +746,11 @@
         newReleases = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingNewReleases = false;
+        console.warn('[DEBUG-43] section finished: newReleases', albums.length, 'albums');
+        markSectionFinished();
+      }).catch(err => {
+        console.error('[DEBUG-43] section FAILED: newReleases', err);
+        loadingNewReleases = false;
         markSectionFinished();
       });
     } else {
@@ -755,6 +761,11 @@
       fetchFeaturedAlbums('press-awards', homeLimits.featuredAlbums, genreIds).then(async albums => {
         pressAwards = albums;
         await loadAllAlbumDownloadStatuses(albums);
+        loadingPressAwards = false;
+        console.warn('[DEBUG-43] section finished: pressAwards', albums.length, 'albums');
+        markSectionFinished();
+      }).catch(err => {
+        console.error('[DEBUG-43] section FAILED: pressAwards', err);
         loadingPressAwards = false;
         markSectionFinished();
       });
@@ -767,6 +778,11 @@
         mostStreamed = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingMostStreamed = false;
+        console.warn('[DEBUG-43] section finished: mostStreamed', albums.length, 'albums');
+        markSectionFinished();
+      }).catch(err => {
+        console.error('[DEBUG-43] section FAILED: mostStreamed', err);
+        loadingMostStreamed = false;
         markSectionFinished();
       });
     } else {
@@ -778,6 +794,11 @@
         qobuzissimes = albums;
         await loadAllAlbumDownloadStatuses(albums);
         loadingQobuzissimes = false;
+        console.warn('[DEBUG-43] section finished: qobuzissimes', albums.length, 'albums');
+        markSectionFinished();
+      }).catch(err => {
+        console.error('[DEBUG-43] section FAILED: qobuzissimes', err);
+        loadingQobuzissimes = false;
         markSectionFinished();
       });
     } else {
@@ -788,6 +809,11 @@
       fetchFeaturedAlbums('editor-picks', homeLimits.featuredAlbums, genreIds).then(async albums => {
         editorPicks = albums;
         await loadAllAlbumDownloadStatuses(albums);
+        loadingEditorPicks = false;
+        console.warn('[DEBUG-43] section finished: editorPicks', albums.length, 'albums');
+        markSectionFinished();
+      }).catch(err => {
+        console.error('[DEBUG-43] section FAILED: editorPicks', err);
         loadingEditorPicks = false;
         markSectionFinished();
       });
@@ -814,6 +840,11 @@
         fetchTracks(seeds.continueListeningTrackIds).then(tracks => {
           continueTracks = tracks;
           loadingContinueTracks = false;
+          console.warn('[DEBUG-43] section finished: continueTracks', tracks.length, 'tracks');
+          markSectionFinished();
+        }).catch(err => {
+          console.error('[DEBUG-43] section FAILED: continueTracks', err);
+          loadingContinueTracks = false;
           markSectionFinished();
         });
       } else {
@@ -830,6 +861,11 @@
           recentAlbums = filtered;
           await loadAllAlbumDownloadStatuses(filtered);
           loadingRecentAlbums = false;
+          console.warn('[DEBUG-43] section finished: recentAlbums', filtered.length, 'albums');
+          markSectionFinished();
+        }).catch(err => {
+          console.error('[DEBUG-43] section FAILED: recentAlbums', err);
+          loadingRecentAlbums = false;
           markSectionFinished();
         });
       } else {
@@ -840,6 +876,11 @@
       if (isSectionVisible('topArtists')) {
         fetchArtists(seeds.topArtistIds.slice(0, homeLimits.topArtists)).then(artists => {
           topArtists = artists;
+          loadingTopArtists = false;
+          console.warn('[DEBUG-43] section finished: topArtists', artists.length, 'artists');
+          markSectionFinished();
+        }).catch(err => {
+          console.error('[DEBUG-43] section FAILED: topArtists', err);
           loadingTopArtists = false;
           markSectionFinished();
         });
@@ -861,6 +902,11 @@
           const filtered = filterAlbumsByGenre(albums).slice(0, homeLimits.favoriteAlbums);
           favoriteAlbums = filtered;
           await loadAllAlbumDownloadStatuses(filtered);
+          loadingFavoriteAlbums = false;
+          console.warn('[DEBUG-43] section finished: favoriteAlbums', filtered.length, 'albums');
+          markSectionFinished();
+        }).catch(err => {
+          console.error('[DEBUG-43] section FAILED: favoriteAlbums', err);
           loadingFavoriteAlbums = false;
           markSectionFinished();
         });
