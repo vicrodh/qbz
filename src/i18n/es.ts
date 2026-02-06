@@ -341,4 +341,122 @@ Como mucha gente en 2025, integré el uso de agentes de código en mi flujo de t
       arch: 'Arch Linux',
     },
   },
+
+  qobuzLinux: {
+    hero: {
+      kicker: 'Cliente nativo de Qobuz para Linux',
+      title: 'Qobuz para Linux — Reproductor Hi-Fi Nativo (No es un Web Wrapper)',
+      lead1: 'QBZ es un cliente de escritorio nativo para Qobuz™, construido para usuarios que buscan reproducción bit-perfect, control directo del DAC y audio de alta resolución real.',
+      lead2: 'A diferencia de los reproductores web o web wrappers, QBZ no depende de Chromium ni WebAudio. Utiliza una tubería de audio nativa diseñada específicamente para Linux.',
+      ctaDownload: 'Descargar QBZ',
+      ctaGithub: 'Ver en GitHub',
+    },
+    whyNative: {
+      title: 'Por qué Qobuz necesita un cliente nativo',
+      lead: 'Qobuz transmite audio sin pérdidas hasta 24-bit/192 kHz. Pero sin una aplicación nativa en Linux, los usuarios están forzados a usar el reproductor web o wrappers de terceros—ambos comprometen la calidad del audio.',
+      bullets: [
+        'El reproductor web oficial usa el stack de audio del navegador que remuestrea a 48 kHz.',
+        'Los wrappers web (basados en Electron) heredan las mismas limitaciones de WebAudio.',
+        'Los audiófilos en Linux no tienen forma de lograr reproducción bit-perfect a través de un navegador.',
+        'El passthrough al DAC y el modo exclusivo son imposibles vía WebAudio.',
+      ],
+    },
+    different: {
+      title: 'Qué hace diferente a QBZ',
+      lead: 'QBZ no es un web wrapper. Es una aplicación nativa construida con Rust y Tauri, usando un motor de audio dedicado que evita totalmente las limitaciones del navegador.',
+      features: [
+        { title: 'Tubería de audio nativa', text: 'Decodificadores integrados para FLAC, ALAC, AAC y MP3. Sin stack de audio del navegador. Sin remuestreo oculto.' },
+        { title: 'Acceso directo al DAC', text: 'Soporta modo exclusivo ALSA (hw: devices) y passthrough de PipeWire para salida bit-perfect.' },
+        { title: 'Cambio de frecuencia por pista', text: 'Ajusta automáticamente la frecuencia de salida para coincidir con la fuente (44.1, 48, 88.2, 96, 176.4, 192 kHz).' },
+        { title: 'Sin Chromium', text: 'QBZ usa Tauri (UI basada en WebView) con un backend en Rust. No empaqueta Chromium ni Electron.' },
+      ],
+    },
+    bitPerfect: {
+      title: 'Reproducción Bit-perfect en Linux',
+      lead: 'QBZ soporta dos configuraciones principales de backend de audio para lograr reproducción bit-perfect.',
+      alsa: {
+        title: 'ALSA Directo (hw: devices)',
+        text: 'Para máximo control, QBZ puede enviar audio directamente a dispositivos de hardware ALSA, saltándose PulseAudio y PipeWire por completo. Esto habilita el modo exclusivo, donde QBZ toma control total del DAC.',
+        bullets: [
+          'Acceso exclusivo al dispositivo de audio (sin mezcla con sonidos del sistema).',
+          'Salida bit-perfect real—sin remuestreo, sin conversión de formato.',
+          'Cambio de frecuencia de muestreo por pista a nivel de hardware.',
+        ],
+      },
+      pipewire: {
+        title: 'PipeWire (configuración avanzada)',
+        text: 'Para usuarios de PipeWire, QBZ puede configurarse en modo passthrough con reglas de WirePlumber, logrando una salida casi bit-perfect manteniendo la integración del sistema.',
+        bullets: [
+          'Compatible con escritorios modernos de Linux (Fedora, Arch, etc.).',
+          'Soporta delegación de control de volumen por hardware al DAC.',
+          'QBZ incluye un asistente de configuración de DAC para generar la configuración necesaria.',
+        ],
+      },
+    },
+    wrappers: {
+      title: 'Por qué los web wrappers se quedan cortos',
+      lead: 'Los web wrappers empaquetan el reproductor web de Qobuz en una carcasa de navegador. Parecen apps nativas, pero heredan todas las limitaciones de audio de los navegadores.',
+      bullets: [
+        'La API WebAudio remuestrea todo el audio a 48 kHz, sin importar la calidad de la fuente.',
+        'Sin acceso a ALSA o PipeWire—el audio pasa por el stack del navegador.',
+        'No pueden solicitar modo exclusivo o passthrough al DAC.',
+        'El contenido Hi-Res (88.2, 96, 176.4, 192 kHz) es submuestreado antes de reproducirse.',
+        'Sin cambio de frecuencia de muestreo por pista.',
+      ],
+      note: 'Si usas un web wrapper y esperas audio Hi-Res, probablemente estés escuchando una salida remuestreada a 48 kHz.',
+    },
+    comparison: {
+      title: 'QBZ vs reproductores web',
+      lead: 'Comparación técnica de capacidades de audio.',
+      headers: ['Característica', 'QBZ', 'Web Player / Wrappers'],
+      rows: [
+        { feature: 'Tubería de audio nativa', qbz: true, web: false, webText: '✗' },
+        { feature: 'Reproducción Bit-perfect', qbz: true, web: false, webText: '✗' },
+        { feature: 'Modo exclusivo ALSA', qbz: true, web: false, webText: '✗' },
+        { feature: 'Passthrough al DAC', qbz: true, web: false, webText: '✗' },
+        { feature: 'Cambio de frecuencia por pista', qbz: true, web: false, webText: '✗' },
+        { feature: 'Salida Hi-Res (88.2–192 kHz)', qbz: true, web: false, webText: 'Remuestreado a 48 kHz' },
+        { feature: 'Sin Chromium/Electron', qbz: true, web: false, webText: '✗' },
+      ],
+    },
+    features: {
+      title: 'Características de un vistazo',
+      items: [
+        { title: 'Streaming de Qobuz', text: 'Acceso total a tu librería, favoritos y playlists de Qobuz.' },
+        { title: 'Librería local', text: 'Indexa y reproduce archivos locales FLAC/ALAC/MP3 junto al contenido de Qobuz.' },
+        { title: 'Chromecast y DLNA', text: 'Envía audio a dispositivos de red con manejo estable de reproducción.' },
+        { title: 'Integración MPRIS', text: 'Las teclas multimedia y controles de escritorio funcionan de inmediato.' },
+        { title: 'Letras y metadatos', text: 'Enriquecimiento con MusicBrainz, créditos y letras sincronizadas.' },
+        { title: 'Importación de Playlists', text: 'Importa playlists de Spotify, Apple Music, Tidal y Deezer.' },
+      ],
+    },
+    forWho: {
+      title: 'Para quién es QBZ',
+      bullets: [
+        'Usuarios de Linux que quieren un cliente de escritorio nativo de Qobuz.',
+        'Audiófilos que se preocupan por la frecuencia de muestreo, profundidad de bits y control del DAC.',
+        'Usuarios frustrados por las limitaciones de audio de los navegadores.',
+        'Cualquiera que quiera streaming y librería local en una sola aplicación.',
+      ],
+      note: 'QBZ no es un reemplazo de Qobuz. Es una interfaz nativa para usuarios que quieren más control sobre su reproducción de audio en Linux.',
+    },
+    openSource: {
+      title: 'Open source y transparente',
+      bullets: [
+        'Licencia MIT—gratis para usar, modificar y distribuir.',
+        'Sin telemetría, sin analíticas, sin rastreo.',
+        'Código fuente disponible en GitHub.',
+        'Desarrollado en abierto con seguimiento público de problemas.',
+      ],
+    },
+    install: {
+      title: 'Instalación',
+      lead: 'QBZ está disponible como AppImage, .deb, .rpm, Flatpak y paquetes AUR.',
+      cta: 'Ver todas las descargas',
+    },
+    legal: {
+      title: 'Aviso legal',
+      text: 'Qobuz es una marca registrada de Xandrie SA. QBZ es un proyecto independiente y no oficial. No está certificado, afiliado ni respaldado por Qobuz. QBZ utiliza la API de Qobuz de acuerdo con sus términos de servicio. Se requiere una suscripción válida a Qobuz para usar QBZ.',
+    },
+  },
 }

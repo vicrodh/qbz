@@ -1,25 +1,42 @@
+import { useTranslation } from 'react-i18next'
+
 export function QobuzLinuxPage() {
+    const { t } = useTranslation()
+
+    const whyNativeBullets = t('qobuzLinux.whyNative.bullets', { returnObjects: true }) as string[]
+    const differentFeatures = t('qobuzLinux.different.features', { returnObjects: true }) as Array<{ title: string; text: string }>
+    const alsaBullets = t('qobuzLinux.bitPerfect.alsa.bullets', { returnObjects: true }) as string[]
+    const pipewireBullets = t('qobuzLinux.bitPerfect.pipewire.bullets', { returnObjects: true }) as string[]
+    const wrappersBullets = t('qobuzLinux.wrappers.bullets', { returnObjects: true }) as string[]
+
+    const comparisonHeaders = t('qobuzLinux.comparison.headers', { returnObjects: true }) as string[]
+    const comparisonRows = t('qobuzLinux.comparison.rows', { returnObjects: true }) as Array<{ feature: string; qbz: boolean; web: boolean; webText: string }>
+
+    const featuresItems = t('qobuzLinux.features.items', { returnObjects: true }) as Array<{ title: string; text: string }>
+    const forWhoBullets = t('qobuzLinux.forWho.bullets', { returnObjects: true }) as string[]
+    const openSourceBullets = t('qobuzLinux.openSource.bullets', { returnObjects: true }) as string[]
+
     return (
         <>
             {/* Hero Section */}
             <section className="hero" style={{ paddingBottom: 80 }}>
                 <div className="container">
-                    <span className="kicker">Native Linux Qobuz client</span>
+                    <span className="kicker">{t('qobuzLinux.hero.kicker')}</span>
                     <h1 className="hero__title" style={{ fontSize: 'clamp(2.2rem, 5vw, 3.4rem)' }}>
-                        Qobuz for Linux — Native Hi-Fi Player (Not a Web Wrapper)
+                        {t('qobuzLinux.hero.title')}
                     </h1>
                     <p className="hero__lead" style={{ marginTop: 24, maxWidth: 800 }}>
-                        QBZ is a native Linux desktop client for Qobuz™, built for users who care about bit-perfect playback, direct DAC control, and real high-resolution audio.
+                        {t('qobuzLinux.hero.lead1')}
                     </p>
                     <p className="hero__lead" style={{ marginTop: 16, maxWidth: 800 }}>
-                        Unlike browser-based players or web wrappers, QBZ does not rely on Chromium or WebAudio. It uses a native audio pipeline designed specifically for Linux.
+                        {t('qobuzLinux.hero.lead2')}
                     </p>
                     <div className="hero__cta" style={{ marginTop: 32 }}>
                         <a className="btn btn-primary" href="/#downloads">
-                            Download QBZ
+                            {t('qobuzLinux.hero.ctaDownload')}
                         </a>
                         <a className="btn btn-ghost" href="https://github.com/vicrodh/qbz" target="_blank" rel="noreferrer">
-                            View on GitHub
+                            {t('qobuzLinux.hero.ctaGithub')}
                         </a>
                     </div>
                 </div>
@@ -28,15 +45,14 @@ export function QobuzLinuxPage() {
             {/* Why Qobuz needs a native Linux client */}
             <section className="section section--muted">
                 <div className="container">
-                    <h2 className="section__title">Why Qobuz needs a native Linux client</h2>
+                    <h2 className="section__title">{t('qobuzLinux.whyNative.title')}</h2>
                     <p className="section__subtitle" style={{ maxWidth: 800 }}>
-                        Qobuz streams lossless audio up to 24-bit/192 kHz. But without a native Linux application, users are forced to rely on the web player or third-party wrappers—both of which compromise audio quality.
+                        {t('qobuzLinux.whyNative.lead')}
                     </p>
                     <ul className="list" style={{ marginTop: 24 }}>
-                        <li>The official Qobuz web player uses browser audio stacks that resample to 48 kHz.</li>
-                        <li>Web wrappers (Electron-based) inherit the same WebAudio limitations.</li>
-                        <li>Linux audiophiles have no way to achieve bit-perfect playback through a browser.</li>
-                        <li>DAC passthrough and exclusive mode are impossible via WebAudio.</li>
+                        {whyNativeBullets.map((item, i) => (
+                            <li key={i}>{item}</li>
+                        ))}
                     </ul>
                 </div>
             </section>
@@ -44,35 +60,17 @@ export function QobuzLinuxPage() {
             {/* What makes QBZ different */}
             <section className="section">
                 <div className="container">
-                    <h2 className="section__title">What makes QBZ different</h2>
+                    <h2 className="section__title">{t('qobuzLinux.different.title')}</h2>
                     <p className="section__subtitle" style={{ maxWidth: 800 }}>
-                        QBZ is not a web wrapper. It is a native Linux application built with Rust and Tauri, using a dedicated audio engine that bypasses browser limitations entirely.
+                        {t('qobuzLinux.different.lead')}
                     </p>
                     <div className="feature-grid" style={{ marginTop: 32 }}>
-                        <div className="feature-card">
-                            <div className="feature-card__title">Native audio pipeline</div>
-                            <div className="feature-card__text">
-                                Built-in decoders for FLAC, ALAC, AAC, and MP3. No browser audio stack. No hidden resampling.
+                        {differentFeatures.map((feat, i) => (
+                            <div key={i} className="feature-card">
+                                <div className="feature-card__title">{feat.title}</div>
+                                <div className="feature-card__text">{feat.text}</div>
                             </div>
-                        </div>
-                        <div className="feature-card">
-                            <div className="feature-card__title">Direct DAC access</div>
-                            <div className="feature-card__text">
-                                Supports ALSA exclusive mode (hw: devices) and PipeWire passthrough for bit-perfect output.
-                            </div>
-                        </div>
-                        <div className="feature-card">
-                            <div className="feature-card__title">Per-track sample-rate switching</div>
-                            <div className="feature-card__text">
-                                Automatically adjusts output sample rate to match source (44.1, 48, 88.2, 96, 176.4, 192 kHz).
-                            </div>
-                        </div>
-                        <div className="feature-card">
-                            <div className="feature-card__title">No Chromium</div>
-                            <div className="feature-card__text">
-                                QBZ uses Tauri (WebView-based UI) with a Rust backend. It does not bundle Chromium or Electron.
-                            </div>
-                        </div>
+                        ))}
                     </div>
                 </div>
             </section>
@@ -80,29 +78,29 @@ export function QobuzLinuxPage() {
             {/* Bit-perfect playback on Linux */}
             <section className="section section--muted">
                 <div className="container">
-                    <h2 className="section__title">Bit-perfect playback on Linux</h2>
+                    <h2 className="section__title">{t('qobuzLinux.bitPerfect.title')}</h2>
                     <p className="section__subtitle" style={{ maxWidth: 800 }}>
-                        QBZ supports two primary audio backend configurations for achieving bit-perfect playback.
+                        {t('qobuzLinux.bitPerfect.lead')}
                     </p>
 
-                    <h3 style={{ marginTop: 32, fontSize: '1.3rem' }}>ALSA Direct (hw: devices)</h3>
+                    <h3 style={{ marginTop: 32, fontSize: '1.3rem' }}>{t('qobuzLinux.bitPerfect.alsa.title')}</h3>
                     <p style={{ color: 'var(--text-secondary)', marginTop: 8, maxWidth: 700 }}>
-                        For maximum control, QBZ can output directly to ALSA hardware devices, bypassing PulseAudio and PipeWire entirely. This enables exclusive mode, where QBZ takes full control of the DAC.
+                        {t('qobuzLinux.bitPerfect.alsa.text')}
                     </p>
                     <ul className="list" style={{ marginTop: 16 }}>
-                        <li>Exclusive access to the audio device (no mixing with system sounds).</li>
-                        <li>True bit-perfect output—no resampling, no format conversion.</li>
-                        <li>Per-track sample rate switching at the hardware level.</li>
+                        {alsaBullets.map((item, i) => (
+                            <li key={i}>{item}</li>
+                        ))}
                     </ul>
 
-                    <h3 style={{ marginTop: 32, fontSize: '1.3rem' }}>PipeWire (advanced setups)</h3>
+                    <h3 style={{ marginTop: 32, fontSize: '1.3rem' }}>{t('qobuzLinux.bitPerfect.pipewire.title')}</h3>
                     <p style={{ color: 'var(--text-secondary)', marginTop: 8, maxWidth: 700 }}>
-                        For users running PipeWire, QBZ can be configured for passthrough mode with proper WirePlumber rules, achieving near-bit-perfect output while maintaining system integration.
+                        {t('qobuzLinux.bitPerfect.pipewire.text')}
                     </p>
                     <ul className="list" style={{ marginTop: 16 }}>
-                        <li>Compatible with modern Linux desktops (Fedora, Arch, etc.).</li>
-                        <li>Supports hardware volume control delegation to the DAC.</li>
-                        <li>QBZ includes a DAC Setup Wizard to generate the necessary configuration.</li>
+                        {pipewireBullets.map((item, i) => (
+                            <li key={i}>{item}</li>
+                        ))}
                     </ul>
                 </div>
             </section>
@@ -110,19 +108,17 @@ export function QobuzLinuxPage() {
             {/* Why web wrappers fall short */}
             <section className="section">
                 <div className="container">
-                    <h2 className="section__title">Why web wrappers fall short</h2>
+                    <h2 className="section__title">{t('qobuzLinux.wrappers.title')}</h2>
                     <p className="section__subtitle" style={{ maxWidth: 800 }}>
-                        Web wrappers package the Qobuz web player inside a browser shell. They look like native apps, but they inherit all the audio limitations of browsers.
+                        {t('qobuzLinux.wrappers.lead')}
                     </p>
                     <ul className="list" style={{ marginTop: 24 }}>
-                        <li>WebAudio API resamples all audio to 48 kHz, regardless of source quality.</li>
-                        <li>No access to ALSA or PipeWire—audio goes through the browser's audio stack.</li>
-                        <li>Cannot request exclusive mode or DAC passthrough.</li>
-                        <li>Hi-Res content (88.2, 96, 176.4, 192 kHz) is downsampled before playback.</li>
-                        <li>No per-track sample rate switching.</li>
+                        {wrappersBullets.map((item, i) => (
+                            <li key={i}>{item}</li>
+                        ))}
                     </ul>
                     <p style={{ color: 'var(--text-tertiary)', marginTop: 24, fontSize: '0.95rem' }}>
-                        If you're using a web wrapper and expecting Hi-Res audio, you're likely hearing 48 kHz resampled output.
+                        {t('qobuzLinux.wrappers.note')}
                     </p>
                 </div>
             </section>
@@ -130,55 +126,33 @@ export function QobuzLinuxPage() {
             {/* Comparison Table */}
             <section className="section section--muted">
                 <div className="container">
-                    <h2 className="section__title">QBZ vs web-based Qobuz players</h2>
+                    <h2 className="section__title">{t('qobuzLinux.comparison.title')}</h2>
                     <p className="section__subtitle" style={{ maxWidth: 800 }}>
-                        A technical comparison of audio capabilities.
+                        {t('qobuzLinux.comparison.lead')}
                     </p>
                     <div style={{ overflowX: 'auto', marginTop: 32 }}>
                         <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 600 }}>
                             <thead>
                                 <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                    <th style={{ textAlign: 'left', padding: '12px 16px', color: 'var(--text-primary)' }}>Feature</th>
-                                    <th style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-primary)' }}>QBZ</th>
-                                    <th style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-primary)' }}>Web Player / Wrappers</th>
+                                    {comparisonHeaders.map((h, i) => (
+                                        <th key={i} style={{ textAlign: i === 0 ? 'left' : 'center', padding: '12px 16px', color: 'var(--text-primary)' }}>
+                                            {h}
+                                        </th>
+                                    ))}
                                 </tr>
                             </thead>
                             <tbody>
-                                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Native audio pipeline</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--success)' }}>✓</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-tertiary)' }}>✗</td>
-                                </tr>
-                                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Bit-perfect playback</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--success)' }}>✓</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-tertiary)' }}>✗</td>
-                                </tr>
-                                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>ALSA exclusive mode</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--success)' }}>✓</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-tertiary)' }}>✗</td>
-                                </tr>
-                                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>DAC passthrough</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--success)' }}>✓</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-tertiary)' }}>✗</td>
-                                </tr>
-                                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Per-track sample rate switching</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--success)' }}>✓</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-tertiary)' }}>✗</td>
-                                </tr>
-                                <tr style={{ borderBottom: '1px solid var(--border)' }}>
-                                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>Hi-Res output (88.2–192 kHz)</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--success)' }}>✓</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-tertiary)' }}>Resampled to 48 kHz</td>
-                                </tr>
-                                <tr>
-                                    <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>No Chromium/Electron</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--success)' }}>✓</td>
-                                    <td style={{ textAlign: 'center', padding: '12px 16px', color: 'var(--text-tertiary)' }}>✗</td>
-                                </tr>
+                                {comparisonRows.map((row, i) => (
+                                    <tr key={i} style={{ borderBottom: i === comparisonRows.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                                        <td style={{ padding: '12px 16px', color: 'var(--text-secondary)' }}>{row.feature}</td>
+                                        <td style={{ textAlign: 'center', padding: '12px 16px', color: row.qbz ? 'var(--success)' : 'var(--text-tertiary)' }}>
+                                            {row.qbz ? '✓' : '✗'}
+                                        </td>
+                                        <td style={{ textAlign: 'center', padding: '12px 16px', color: row.web ? 'var(--success)' : 'var(--text-tertiary)' }}>
+                                            {row.web ? '✓' : row.webText}
+                                        </td>
+                                    </tr>
+                                ))}
                             </tbody>
                         </table>
                     </div>
@@ -188,32 +162,14 @@ export function QobuzLinuxPage() {
             {/* Features at a glance */}
             <section className="section">
                 <div className="container">
-                    <h2 className="section__title">Features at a glance</h2>
+                    <h2 className="section__title">{t('qobuzLinux.features.title')}</h2>
                     <div className="feature-grid" style={{ marginTop: 32 }}>
-                        <div className="feature-card">
-                            <div className="feature-card__title">Qobuz streaming</div>
-                            <div className="feature-card__text">Full access to your Qobuz library, favorites, and playlists.</div>
-                        </div>
-                        <div className="feature-card">
-                            <div className="feature-card__title">Local library</div>
-                            <div className="feature-card__text">Index and play local FLAC/ALAC/MP3 files alongside Qobuz content.</div>
-                        </div>
-                        <div className="feature-card">
-                            <div className="feature-card__title">Chromecast &amp; DLNA</div>
-                            <div className="feature-card__text">Cast to network devices with stable playback handling.</div>
-                        </div>
-                        <div className="feature-card">
-                            <div className="feature-card__title">MPRIS integration</div>
-                            <div className="feature-card__text">Media keys and desktop controls work out of the box.</div>
-                        </div>
-                        <div className="feature-card">
-                            <div className="feature-card__title">Lyrics &amp; metadata</div>
-                            <div className="feature-card__text">MusicBrainz enrichment, credits, and synchronized lyrics.</div>
-                        </div>
-                        <div className="feature-card">
-                            <div className="feature-card__title">Playlist import</div>
-                            <div className="feature-card__text">Import playlists from Spotify, Apple Music, Tidal, and Deezer.</div>
-                        </div>
+                        {featuresItems.map((feat, i) => (
+                            <div key={i} className="feature-card">
+                                <div className="feature-card__title">{feat.title}</div>
+                                <div className="feature-card__text">{feat.text}</div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </section>
@@ -221,15 +177,14 @@ export function QobuzLinuxPage() {
             {/* Who QBZ is for */}
             <section className="section section--muted">
                 <div className="container">
-                    <h2 className="section__title">Who QBZ is for</h2>
+                    <h2 className="section__title">{t('qobuzLinux.forWho.title')}</h2>
                     <ul className="list" style={{ marginTop: 16 }}>
-                        <li>Linux users who want a native Qobuz desktop client.</li>
-                        <li>Audiophiles who care about sample rate, bit depth, and DAC control.</li>
-                        <li>Users frustrated by browser audio limitations.</li>
-                        <li>Anyone who wants streaming and local library in one application.</li>
+                        {forWhoBullets.map((item, i) => (
+                            <li key={i}>{item}</li>
+                        ))}
                     </ul>
                     <p style={{ color: 'var(--text-tertiary)', marginTop: 24, fontSize: '0.95rem' }}>
-                        QBZ is not a replacement for Qobuz. It is a native interface for users who want more control over their audio playback on Linux.
+                        {t('qobuzLinux.forWho.note')}
                     </p>
                 </div>
             </section>
@@ -237,12 +192,11 @@ export function QobuzLinuxPage() {
             {/* Open source and transparent */}
             <section className="section">
                 <div className="container">
-                    <h2 className="section__title">Open source and transparent</h2>
+                    <h2 className="section__title">{t('qobuzLinux.openSource.title')}</h2>
                     <ul className="list" style={{ marginTop: 16 }}>
-                        <li>MIT licensed—free to use, modify, and distribute.</li>
-                        <li>No telemetry, no analytics, no tracking.</li>
-                        <li>Source code available on GitHub.</li>
-                        <li>Developed in the open with public issue tracking.</li>
+                        {openSourceBullets.map((item, i) => (
+                            <li key={i}>{item}</li>
+                        ))}
                     </ul>
                 </div>
             </section>
@@ -250,13 +204,13 @@ export function QobuzLinuxPage() {
             {/* Installation */}
             <section className="section section--muted">
                 <div className="container">
-                    <h2 className="section__title">Installation</h2>
+                    <h2 className="section__title">{t('qobuzLinux.install.title')}</h2>
                     <p className="section__subtitle" style={{ maxWidth: 800 }}>
-                        QBZ is available as AppImage, .deb, .rpm, Flatpak, and AUR packages.
+                        {t('qobuzLinux.install.lead')}
                     </p>
                     <div style={{ marginTop: 24 }}>
                         <a className="btn btn-primary" href="/#downloads">
-                            View all downloads
+                            {t('qobuzLinux.install.cta')}
                         </a>
                     </div>
                 </div>
@@ -265,9 +219,9 @@ export function QobuzLinuxPage() {
             {/* Legal notice */}
             <section className="section">
                 <div className="container">
-                    <h2 className="section__title">Legal notice</h2>
+                    <h2 className="section__title">{t('qobuzLinux.legal.title')}</h2>
                     <p style={{ color: 'var(--text-secondary)', maxWidth: 800 }}>
-                        Qobuz is a trademark of Xandrie SA. QBZ is an independent, unofficial project. It is not certified by, affiliated with, or endorsed by Qobuz. QBZ uses the Qobuz API in accordance with their terms of service. A valid Qobuz subscription is required to use QBZ.
+                        {t('qobuzLinux.legal.text')}
                     </p>
                 </div>
             </section>

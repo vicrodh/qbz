@@ -18,6 +18,7 @@ export default defineConfig({
         es: resolve(__dirname, 'es/index.html'),
         esChangelog: resolve(__dirname, 'es/changelog/index.html'),
         esLicenses: resolve(__dirname, 'es/licenses/index.html'),
+        esQobuzLinux: resolve(__dirname, 'es/qobuz-linux/index.html'),
       },
       output: {
         // Hashed filenames for long-term caching
