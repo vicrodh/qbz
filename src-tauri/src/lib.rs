@@ -428,6 +428,9 @@ pub fn run() {
             commands::save_credentials,
             commands::clear_saved_credentials,
             commands::auto_login,
+            // User session lifecycle
+            commands::activate_user_session,
+            commands::deactivate_user_session,
             // Search commands
             commands::search_albums,
             commands::search_tracks,

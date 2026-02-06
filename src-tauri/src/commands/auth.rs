@@ -13,6 +13,7 @@ use crate::offline_cache::OfflineCacheState;
 pub struct LoginResponse {
     pub success: bool,
     pub user_name: Option<String>,
+    pub user_id: Option<u64>,
     pub subscription: Option<String>,
     pub subscription_valid_until: Option<String>,
     pub error: Option<String>,
@@ -90,6 +91,7 @@ pub async fn login(
             Ok(LoginResponse {
                 success: true,
                 user_name: Some(session.display_name),
+                user_id: Some(session.user_id),
                 subscription: Some(session.subscription_label),
                 subscription_valid_until: session.subscription_valid_until,
                 error: None,
@@ -112,6 +114,7 @@ pub async fn login(
             Ok(LoginResponse {
                 success: false,
                 user_name: None,
+                user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
                 error: Some("No active subscription".to_string()),
@@ -121,6 +124,7 @@ pub async fn login(
         Err(e) => Ok(LoginResponse {
             success: false,
             user_name: None,
+            user_id: None,
             subscription: None,
             subscription_valid_until: None,
             error: Some(e.to_string()),
@@ -204,6 +208,7 @@ pub async fn auto_login(
             return Ok(LoginResponse {
                 success: false,
                 user_name: None,
+                user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
                 error: Some("No saved credentials".to_string()),
@@ -214,6 +219,7 @@ pub async fn auto_login(
             return Ok(LoginResponse {
                 success: false,
                 user_name: None,
+                user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
                 error: Some(e),
@@ -235,6 +241,7 @@ pub async fn auto_login(
             Ok(LoginResponse {
                 success: true,
                 user_name: Some(session.display_name),
+                user_id: Some(session.user_id),
                 subscription: Some(session.subscription_label),
                 subscription_valid_until: session.subscription_valid_until,
                 error: None,
@@ -257,6 +264,7 @@ pub async fn auto_login(
             Ok(LoginResponse {
                 success: false,
                 user_name: None,
+                user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
                 error: Some("No active subscription".to_string()),
@@ -270,6 +278,7 @@ pub async fn auto_login(
             Ok(LoginResponse {
                 success: false,
                 user_name: None,
+                user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
                 error: Some(e.to_string()),
