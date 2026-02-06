@@ -344,6 +344,41 @@ impl ApiCache {
         Ok(())
     }
 
+    // ============ Targeted Invalidation ============
+
+    /// Invalidate a specific cached album
+    pub fn invalidate_album(&self, album_id: &str) -> Result<(), String> {
+        self.conn
+            .execute(
+                "DELETE FROM cached_albums WHERE album_id = ?",
+                params![album_id],
+            )
+            .map_err(|e| format!("Failed to invalidate cached album: {}", e))?;
+        Ok(())
+    }
+
+    /// Invalidate a specific cached track
+    pub fn invalidate_track(&self, track_id: u64) -> Result<(), String> {
+        self.conn
+            .execute(
+                "DELETE FROM cached_tracks WHERE track_id = ?",
+                params![track_id],
+            )
+            .map_err(|e| format!("Failed to invalidate cached track: {}", e))?;
+        Ok(())
+    }
+
+    /// Invalidate a specific cached artist (all locales)
+    pub fn invalidate_artist(&self, artist_id: u64) -> Result<(), String> {
+        self.conn
+            .execute(
+                "DELETE FROM cached_artists WHERE artist_id = ?",
+                params![artist_id],
+            )
+            .map_err(|e| format!("Failed to invalidate cached artist: {}", e))?;
+        Ok(())
+    }
+
     // ============ Maintenance ============
 
     /// Clear all cached artists for a specific locale
