@@ -8,6 +8,7 @@
 
   interface UserInfo {
     userName: string;
+    userId: number;
     subscription: string;
     subscriptionValidUntil?: string | null;
   }
@@ -71,14 +72,16 @@
       if (loggedIn) {
         clearTimeoutTimer();
         const userInfo = await invoke<{ user_name: string; subscription: string; subscription_valid_until?: string | null } | null>('get_user_info');
-        if (userInfo) {
+        const userId = await invoke<number | null>('get_current_user_id');
+        if (userInfo && userId) {
           onLoginSuccess({
             userName: userInfo.user_name,
+            userId,
             subscription: userInfo.subscription,
             subscriptionValidUntil: userInfo.subscription_valid_until ?? null,
           });
         } else {
-          onLoginSuccess({ userName: 'User', subscription: 'Active' });
+          onLoginSuccess({ userName: 'User', userId: userId || 0, subscription: 'Active' });
         }
         return;
       }
@@ -96,6 +99,7 @@
         const response = await invoke<{
           success: boolean;
           user_name?: string;
+          user_id?: number;
           subscription?: string;
           subscription_valid_until?: string | null;
           error?: string;
@@ -107,6 +111,7 @@
           console.log('Auto-login successful');
           onLoginSuccess({
             userName: response.user_name || 'User',
+            userId: response.user_id || 0,
             subscription: response.subscription || 'Active',
             subscriptionValidUntil: response.subscription_valid_until ?? null,
           });
@@ -165,6 +170,7 @@
       const response = await invoke<{
         success: boolean;
         user_name?: string;
+        user_id?: number;
         subscription?: string;
         subscription_valid_until?: string | null;
         error?: string;
@@ -187,6 +193,7 @@
 
         onLoginSuccess({
             userName: response.user_name || 'User',
+            userId: response.user_id || 0,
             subscription: response.subscription || 'Active',
             subscriptionValidUntil: response.subscription_valid_until ?? null,
           });

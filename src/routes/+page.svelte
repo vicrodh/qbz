@@ -97,6 +97,7 @@
     getAuthState,
     type UserInfo
   } from '$lib/stores/authStore';
+  import { setStorageUserId, migrateLocalStorage } from '$lib/utils/userStorage';
 
   // Favorites state management
   import { loadFavorites } from '$lib/stores/favoritesStore';
@@ -2172,6 +2173,7 @@
     await setManualOffline(true);
     setLoggedIn({
       userName: 'Offline User',
+      userId: 0,
       subscription: 'Local Library Only'
     });
     navigateTo('library');
@@ -2179,6 +2181,23 @@
   }
 
   async function handleLoginSuccess(info: UserInfo) {
+    // Activate per-user backend state before anything else
+    if (info.userId) {
+      try {
+        await invoke('activate_user_session', { userId: info.userId });
+        console.log('[Session] Per-user session activated for user', info.userId);
+      } catch (err) {
+        console.error('[Session] Failed to activate user session:', err);
+        // Non-fatal: app works but uses empty stores
+      }
+    }
+
+    // Set up per-user localStorage scoping and migrate old keys
+    setStorageUserId(info.userId || null);
+    if (info.userId) {
+      migrateLocalStorage(info.userId);
+    }
+
     setLoggedIn(info);
     showToast($t('toast.welcomeUser', { values: { name: info.userName } }), 'success');
 
@@ -2303,6 +2322,15 @@
         console.error('Failed to clear credentials:', clearErr);
         // Don't block logout if clearing fails
       }
+      // Deactivate per-user backend state (closes DB connections)
+      try {
+        await invoke('deactivate_user_session');
+        console.log('[Session] Per-user session deactivated');
+      } catch (deactivateErr) {
+        console.error('[Session] Failed to deactivate user session:', deactivateErr);
+      }
+      // Clear per-user localStorage scoping
+      setStorageUserId(null);
       // Clear session state
       await clearSession();
       setLoggedOut();
