@@ -2,6 +2,7 @@
   import { X, Search, Heart, MoreVertical, Trash2 } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { invoke } from '@tauri-apps/api/core';
+  import { getUserItem, setUserItem } from '$lib/utils/userStorage';
 
   interface QueueTrack {
     id: string;
@@ -79,7 +80,7 @@
   // Load banner dismissal state from localStorage
   $effect(() => {
     try {
-      const dismissed = localStorage.getItem('qbz-infinite-banner-dismissed');
+      const dismissed = getUserItem('qbz-infinite-banner-dismissed');
       infiniteBannerDismissed = dismissed === 'true';
     } catch {
       // Ignore
@@ -89,7 +90,7 @@
   function dismissInfiniteBanner() {
     infiniteBannerDismissed = true;
     try {
-      localStorage.setItem('qbz-infinite-banner-dismissed', 'true');
+      setUserItem('qbz-infinite-banner-dismissed', 'true');
     } catch {
       // Ignore
     }

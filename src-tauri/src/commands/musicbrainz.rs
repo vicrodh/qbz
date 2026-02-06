@@ -24,7 +24,8 @@ pub async fn musicbrainz_resolve_track(
     // Check cache first (short lock)
     if let Some(ref isrc_val) = isrc {
         let cached = {
-            let cache = state.cache.lock().await;
+            let cache_opt__ = state.cache.lock().await;
+            let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
             cache.get_recording(isrc_val).ok().flatten()
         };
         if let Some(cached) = cached {
@@ -41,7 +42,8 @@ pub async fn musicbrainz_resolve_track(
                     let resolved = recording_to_resolved(recording);
                     // Cache the result (short lock)
                     {
-                        let cache = state.cache.lock().await;
+                        let cache_opt__ = state.cache.lock().await;
+                        let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
                         let _ = cache.set_recording(isrc_val, &resolved);
                     }
                     return Ok(resolved);
@@ -64,7 +66,8 @@ pub async fn musicbrainz_resolve_track(
                 let resolved = recording_to_resolved(recording);
                 // Cache by ISRC if available
                 if let Some(ref isrc_val) = isrc {
-                    let cache = state.cache.lock().await;
+                    let cache_opt__ = state.cache.lock().await;
+                    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
                     let _ = cache.set_recording(isrc_val, &resolved);
                 }
                 return Ok(resolved);
@@ -78,7 +81,8 @@ pub async fn musicbrainz_resolve_track(
     // Cache negative result
     if let Some(ref isrc_val) = isrc {
         let empty = ResolvedTrack::empty();
-        let cache = state.cache.lock().await;
+        let cache_opt__ = state.cache.lock().await;
+        let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         let _ = cache.set_recording(isrc_val, &empty);
     }
 
@@ -97,7 +101,8 @@ pub async fn musicbrainz_resolve_artist(
 
     // Check cache first
     let cached = {
-        let cache = state.cache.lock().await;
+        let cache_opt__ = state.cache.lock().await;
+        let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         cache.get_artist(&name).ok().flatten()
     };
     if let Some(cached) = cached {
@@ -115,7 +120,8 @@ pub async fn musicbrainz_resolve_artist(
                 let resolved = artist_to_resolved(artist);
                 // Cache the result
                 {
-                    let cache = state.cache.lock().await;
+                    let cache_opt__ = state.cache.lock().await;
+                    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
                     let _ = cache.set_artist(&name, &resolved);
                 }
                 return Ok(resolved);
@@ -129,7 +135,8 @@ pub async fn musicbrainz_resolve_artist(
     // Cache negative result
     let empty = ResolvedArtist::empty();
     {
-        let cache = state.cache.lock().await;
+        let cache_opt__ = state.cache.lock().await;
+        let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         let _ = cache.set_artist(&name, &empty);
     }
 
@@ -151,7 +158,8 @@ pub async fn musicbrainz_resolve_release(
     // Check cache first
     if let Some(ref upc_val) = upc {
         let cached = {
-            let cache = state.cache.lock().await;
+            let cache_opt__ = state.cache.lock().await;
+            let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
             cache.get_release(upc_val).ok().flatten()
         };
         if let Some(cached) = cached {
@@ -168,7 +176,8 @@ pub async fn musicbrainz_resolve_release(
                     let resolved = release_to_resolved(release);
                     // Cache the result
                     {
-                        let cache = state.cache.lock().await;
+                        let cache_opt__ = state.cache.lock().await;
+                        let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
                         let _ = cache.set_release(upc_val, &resolved);
                     }
                     return Ok(resolved);
@@ -191,7 +200,8 @@ pub async fn musicbrainz_resolve_release(
                 let resolved = release_to_resolved(release);
                 // Cache by UPC if available
                 if let Some(ref upc_val) = upc {
-                    let cache = state.cache.lock().await;
+                    let cache_opt__ = state.cache.lock().await;
+                    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
                     let _ = cache.set_release(upc_val, &resolved);
                 }
                 return Ok(resolved);
@@ -205,7 +215,8 @@ pub async fn musicbrainz_resolve_release(
     // Cache negative result
     if let Some(ref upc_val) = upc {
         let empty = ResolvedRelease::empty();
-        let cache = state.cache.lock().await;
+        let cache_opt__ = state.cache.lock().await;
+        let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         let _ = cache.set_release(upc_val, &empty);
     }
 
@@ -224,7 +235,8 @@ pub async fn musicbrainz_get_artist_relationships(
 
     // Check cache first
     let cached = {
-        let cache = state.cache.lock().await;
+        let cache_opt__ = state.cache.lock().await;
+        let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         cache.get_artist_relations(&mbid).ok().flatten()
     };
     if let Some(cached) = cached {
@@ -237,7 +249,8 @@ pub async fn musicbrainz_get_artist_relationships(
             let relations = extract_relationships(&response);
             // Cache the result
             {
-                let cache = state.cache.lock().await;
+                let cache_opt__ = state.cache.lock().await;
+                let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
                 let _ = cache.set_artist_relations(&mbid, &relations);
             }
             Ok(relations)
@@ -247,7 +260,8 @@ pub async fn musicbrainz_get_artist_relationships(
             // Cache negative result
             let empty = ArtistRelationships::empty();
             {
-                let cache = state.cache.lock().await;
+                let cache_opt__ = state.cache.lock().await;
+                let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
                 let _ = cache.set_artist_relations(&mbid, &empty);
             }
             Ok(empty)
@@ -282,7 +296,8 @@ pub async fn musicbrainz_set_enabled(
 pub async fn musicbrainz_get_cache_stats(
     state: State<'_, MusicBrainzSharedState>,
 ) -> Result<CacheStats, String> {
-    let cache = state.cache.lock().await;
+    let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
     cache.get_stats()
 }
 
@@ -291,7 +306,8 @@ pub async fn musicbrainz_get_cache_stats(
 pub async fn musicbrainz_clear_cache(
     state: State<'_, MusicBrainzSharedState>,
 ) -> Result<(), String> {
-    let cache = state.cache.lock().await;
+    let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
     cache.clear_all()
 }
 
@@ -300,7 +316,8 @@ pub async fn musicbrainz_clear_cache(
 pub async fn musicbrainz_cleanup_cache(
     state: State<'_, MusicBrainzSharedState>,
 ) -> Result<usize, String> {
-    let cache = state.cache.lock().await;
+    let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
     cache.cleanup_expired()
 }
 

@@ -13,6 +13,7 @@ use crate::offline_cache::OfflineCacheState;
 pub struct LoginResponse {
     pub success: bool,
     pub user_name: Option<String>,
+    pub user_id: Option<u64>,
     pub subscription: Option<String>,
     pub subscription_valid_until: Option<String>,
     pub error: Option<String>,
@@ -40,10 +41,10 @@ async fn maybe_purge_offline_cache_for_invalid_subscription(
                 return;
             }
         };
-        match store.should_purge_offline_cache(now) {
-            Ok(v) => v,
-            Err(e) => {
-                log::warn!("Failed to evaluate purge condition: {}", e);
+        match store.as_ref().and_then(|s| s.should_purge_offline_cache(now).ok()) {
+            Some(v) => v,
+            None => {
+                log::warn!("Failed to evaluate purge condition");
                 false
             }
         }
@@ -59,9 +60,11 @@ async fn maybe_purge_offline_cache_for_invalid_subscription(
         return;
     }
 
-    if let Ok(store) = subscription_state.lock() {
-        if let Err(e) = store.mark_offline_cache_purged(now) {
-            log::warn!("Failed to persist purge timestamp: {}", e);
+    if let Ok(guard) = subscription_state.lock() {
+        if let Some(store) = guard.as_ref() {
+            if let Err(e) = store.mark_offline_cache_purged(now) {
+                log::warn!("Failed to persist purge timestamp: {}", e);
+            }
         }
     }
 }
@@ -80,12 +83,15 @@ pub async fn login(
 
     match client.login(&email, &password).await {
         Ok(session) => {
-            if let Ok(store) = subscription_state.lock() {
-                let _ = store.mark_valid(now);
+            if let Ok(guard) = subscription_state.lock() {
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.mark_valid(now);
+                }
             }
             Ok(LoginResponse {
                 success: true,
                 user_name: Some(session.display_name),
+                user_id: Some(session.user_id),
                 subscription: Some(session.subscription_label),
                 subscription_valid_until: session.subscription_valid_until,
                 error: None,
@@ -93,8 +99,10 @@ pub async fn login(
             })
         }
         Err(ApiError::IneligibleUser) => {
-            if let Ok(store) = subscription_state.lock() {
-                let _ = store.mark_invalid(now);
+            if let Ok(guard) = subscription_state.lock() {
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.mark_invalid(now);
+                }
             }
             maybe_purge_offline_cache_for_invalid_subscription(
                 now,
@@ -106,6 +114,7 @@ pub async fn login(
             Ok(LoginResponse {
                 success: false,
                 user_name: None,
+                user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
                 error: Some("No active subscription".to_string()),
@@ -115,6 +124,7 @@ pub async fn login(
         Err(e) => Ok(LoginResponse {
             success: false,
             user_name: None,
+            user_id: None,
             subscription: None,
             subscription_valid_until: None,
             error: Some(e.to_string()),
@@ -198,6 +208,7 @@ pub async fn auto_login(
             return Ok(LoginResponse {
                 success: false,
                 user_name: None,
+                user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
                 error: Some("No saved credentials".to_string()),
@@ -208,6 +219,7 @@ pub async fn auto_login(
             return Ok(LoginResponse {
                 success: false,
                 user_name: None,
+                user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
                 error: Some(e),
@@ -221,12 +233,15 @@ pub async fn auto_login(
     let now = now_unix_secs();
     match client.login(&creds.email, &creds.password).await {
         Ok(session) => {
-            if let Ok(store) = subscription_state.lock() {
-                let _ = store.mark_valid(now);
+            if let Ok(guard) = subscription_state.lock() {
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.mark_valid(now);
+                }
             }
             Ok(LoginResponse {
                 success: true,
                 user_name: Some(session.display_name),
+                user_id: Some(session.user_id),
                 subscription: Some(session.subscription_label),
                 subscription_valid_until: session.subscription_valid_until,
                 error: None,
@@ -234,8 +249,10 @@ pub async fn auto_login(
             })
         }
         Err(ApiError::IneligibleUser) => {
-            if let Ok(store) = subscription_state.lock() {
-                let _ = store.mark_invalid(now);
+            if let Ok(guard) = subscription_state.lock() {
+                if let Some(store) = guard.as_ref() {
+                    let _ = store.mark_invalid(now);
+                }
             }
             maybe_purge_offline_cache_for_invalid_subscription(
                 now,
@@ -247,6 +264,7 @@ pub async fn auto_login(
             Ok(LoginResponse {
                 success: false,
                 user_name: None,
+                user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
                 error: Some("No active subscription".to_string()),
@@ -260,6 +278,7 @@ pub async fn auto_login(
             Ok(LoginResponse {
                 success: false,
                 user_name: None,
+                user_id: None,
                 subscription: None,
                 subscription_valid_until: None,
                 error: Some(e.to_string()),

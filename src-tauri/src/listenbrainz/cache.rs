@@ -18,7 +18,7 @@ const QUEUE_MAX_SIZE: i64 = 500;
 
 /// ListenBrainz cache state for Tauri
 pub struct ListenBrainzCacheState {
-    pub cache: Arc<Mutex<ListenBrainzCache>>,
+    pub cache: Arc<Mutex<Option<ListenBrainzCache>>>,
 }
 
 impl ListenBrainzCacheState {
@@ -37,8 +37,31 @@ impl ListenBrainzCacheState {
         log::info!("ListenBrainz cache initialized at {:?}", db_path);
 
         Ok(Self {
-            cache: Arc::new(Mutex::new(cache)),
+            cache: Arc::new(Mutex::new(Some(cache))),
         })
+    }
+
+    pub fn new_empty() -> Self {
+        Self {
+            cache: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let cache_dir = base_dir.join("cache");
+        std::fs::create_dir_all(&cache_dir)
+            .map_err(|e| format!("Failed to create cache directory: {}", e))?;
+        let db_path = cache_dir.join("listenbrainz_cache.db");
+        let new_cache = ListenBrainzCache::new(&db_path)?;
+        log::info!("ListenBrainz cache initialized at {:?}", db_path);
+        let mut guard = self.cache.blocking_lock();
+        *guard = Some(new_cache);
+        Ok(())
+    }
+
+    pub fn teardown(&self) {
+        let mut guard = self.cache.blocking_lock();
+        *guard = None;
     }
 }
 

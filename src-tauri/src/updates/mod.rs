@@ -10,6 +10,7 @@ use log::{info, warn};
 use reqwest::Client;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -97,8 +98,19 @@ impl UpdatesStore {
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
         let db_path = data_dir.join("updates.db");
+        Self::open_at(&db_path)
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        std::fs::create_dir_all(base_dir)
+            .map_err(|e| format!("Failed to create data directory: {}", e))?;
+        let db_path = base_dir.join("updates.db");
+        Self::open_at(&db_path)
+    }
+
+    fn open_at(db_path: &Path) -> Result<Self, String> {
         let conn =
-            Connection::open(&db_path).map_err(|e| format!("Failed to open updates database: {}", e))?;
+            Connection::open(db_path).map_err(|e| format!("Failed to open updates database: {}", e))?;
 
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS update_preferences (
@@ -262,27 +274,52 @@ impl UpdatesStore {
 
 /// Thread-safe state wrapper
 pub struct UpdatesState {
-    store: Arc<Mutex<UpdatesStore>>,
+    store: Arc<Mutex<Option<UpdatesStore>>>,
     client: Client,
 }
 
 impl UpdatesState {
     pub fn new() -> Result<Self, String> {
         let store = UpdatesStore::new()?;
-        let client = Client::builder()
-            .timeout(Duration::from_secs(NETWORK_TIMEOUT_SECONDS))
-            .user_agent("qbz-nix-updates")
-            .build()
-            .map_err(|e| format!("Failed to create updates HTTP client: {}", e))?;
+        let client = Self::build_client()?;
         Ok(Self {
-            store: Arc::new(Mutex::new(store)),
+            store: Arc::new(Mutex::new(Some(store))),
             client,
         })
     }
 
-    fn with_store<T>(&self, f: impl FnOnce(&UpdatesStore) -> T) -> T {
+    pub fn new_empty() -> Result<Self, String> {
+        let client = Self::build_client()?;
+        Ok(Self {
+            store: Arc::new(Mutex::new(None)),
+            client,
+        })
+    }
+
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let new_store = UpdatesStore::new_at(base_dir)?;
+        let mut guard = self.store.lock().expect("UpdatesStore mutex poisoned");
+        *guard = Some(new_store);
+        Ok(())
+    }
+
+    pub fn teardown(&self) {
+        let mut guard = self.store.lock().expect("UpdatesStore mutex poisoned");
+        *guard = None;
+    }
+
+    fn build_client() -> Result<Client, String> {
+        Client::builder()
+            .timeout(Duration::from_secs(NETWORK_TIMEOUT_SECONDS))
+            .user_agent("qbz-nix-updates")
+            .build()
+            .map_err(|e| format!("Failed to create updates HTTP client: {}", e))
+    }
+
+    fn with_store<T>(&self, f: impl FnOnce(&UpdatesStore) -> T) -> Result<T, String> {
         let guard = self.store.lock().expect("UpdatesStore mutex poisoned");
-        f(&guard)
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        Ok(f(store))
     }
 
     fn current_version(&self) -> String {
@@ -411,7 +448,7 @@ fn select_latest_valid_update(
         }
         let is_blocked = state.with_store(|store| {
             store.is_release_acknowledged(&info.version) || store.is_release_ignored(&info.version)
-        });
+        }).unwrap_or(false);
         if is_blocked {
             continue;
         }
@@ -424,7 +461,7 @@ fn select_latest_valid_update(
 
 #[tauri::command]
 pub fn get_update_preferences(state: tauri::State<UpdatesState>) -> Result<UpdatePreferences, String> {
-    state.with_store(|store| store.get_preferences())
+    state.with_store(|store| store.get_preferences())?
 }
 
 #[tauri::command]
@@ -432,7 +469,7 @@ pub fn set_update_check_on_launch(
     enabled: bool,
     state: tauri::State<UpdatesState>,
 ) -> Result<(), String> {
-    state.with_store(|store| store.set_check_on_launch(enabled))
+    state.with_store(|store| store.set_check_on_launch(enabled))?
 }
 
 #[tauri::command]
@@ -440,47 +477,47 @@ pub fn set_show_whats_new_on_launch(
     enabled: bool,
     state: tauri::State<UpdatesState>,
 ) -> Result<(), String> {
-    state.with_store(|store| store.set_show_whats_new_on_launch(enabled))
+    state.with_store(|store| store.set_show_whats_new_on_launch(enabled))?
 }
 
 #[tauri::command]
 pub fn acknowledge_release(version: String, state: tauri::State<UpdatesState>) -> Result<(), String> {
-    state.with_store(|store| store.acknowledge_release(&version))
+    state.with_store(|store| store.acknowledge_release(&version))?
 }
 
 #[tauri::command]
 pub fn ignore_release(version: String, state: tauri::State<UpdatesState>) -> Result<(), String> {
-    state.with_store(|store| store.ignore_release(&version))
+    state.with_store(|store| store.ignore_release(&version))?
 }
 
 #[tauri::command]
-pub fn is_release_acknowledged(version: String, state: tauri::State<UpdatesState>) -> bool {
+pub fn is_release_acknowledged(version: String, state: tauri::State<UpdatesState>) -> Result<bool, String> {
     state.with_store(|store| store.is_release_acknowledged(&version))
 }
 
 #[tauri::command]
-pub fn is_release_ignored(version: String, state: tauri::State<UpdatesState>) -> bool {
+pub fn is_release_ignored(version: String, state: tauri::State<UpdatesState>) -> Result<bool, String> {
     state.with_store(|store| store.is_release_ignored(&version))
 }
 
 #[tauri::command]
-pub fn has_whats_new_been_shown(version: String, state: tauri::State<UpdatesState>) -> bool {
+pub fn has_whats_new_been_shown(version: String, state: tauri::State<UpdatesState>) -> Result<bool, String> {
     state.with_store(|store| store.has_whats_new_been_shown(&version))
 }
 
 #[tauri::command]
 pub fn mark_whats_new_shown(version: String, state: tauri::State<UpdatesState>) -> Result<(), String> {
-    state.with_store(|store| store.mark_whats_new_shown(&version))
+    state.with_store(|store| store.mark_whats_new_shown(&version))?
 }
 
 #[tauri::command]
-pub fn has_flatpak_welcome_been_shown(state: tauri::State<UpdatesState>) -> bool {
+pub fn has_flatpak_welcome_been_shown(state: tauri::State<UpdatesState>) -> Result<bool, String> {
     state.with_store(|store| store.has_flatpak_welcome_been_shown())
 }
 
 #[tauri::command]
 pub fn mark_flatpak_welcome_shown(state: tauri::State<UpdatesState>) -> Result<(), String> {
-    state.with_store(|store| store.mark_flatpak_welcome_shown())
+    state.with_store(|store| store.mark_flatpak_welcome_shown())?
 }
 
 #[tauri::command]
@@ -496,7 +533,7 @@ pub async fn check_for_updates(
     let current_version = state.current_version();
 
     if mode == "launch" {
-        let prefs = match state.with_store(|store| store.get_preferences()) {
+        let prefs = match state.with_store(|store| store.get_preferences()).and_then(|r| r) {
             Ok(p) => p,
             Err(e) => {
                 warn!("[Updates] Failed to read preferences: {}", e);

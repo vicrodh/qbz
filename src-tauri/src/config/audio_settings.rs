@@ -5,6 +5,7 @@
 use crate::audio::{AlsaPlugin, AudioBackendType};
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,15 +56,11 @@ pub struct AudioSettingsStore {
 }
 
 impl AudioSettingsStore {
-    pub fn new() -> Result<Self, String> {
-        let data_dir = dirs::data_dir()
-            .ok_or("Could not determine data directory")?
-            .join("qbz");
-
-        std::fs::create_dir_all(&data_dir)
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("audio_settings.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open audio settings database: {}", e))?;
 
@@ -95,6 +92,17 @@ impl AudioSettingsStore {
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN device_max_sample_rate INTEGER", []);
 
         Ok(Self { conn })
+    }
+
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+        Self::open_at(&data_dir, "audio_settings.db")
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "audio_settings.db")
     }
 
     pub fn get_settings(&self) -> Result<AudioSettings, String> {
@@ -267,14 +275,35 @@ impl AudioSettingsStore {
 
 /// Thread-safe wrapper
 pub struct AudioSettingsState {
-    pub store: Arc<Mutex<AudioSettingsStore>>,
+    pub store: Arc<Mutex<Option<AudioSettingsStore>>>,
 }
 
 impl AudioSettingsState {
     pub fn new() -> Result<Self, String> {
         Ok(Self {
-            store: Arc::new(Mutex::new(AudioSettingsStore::new()?)),
+            store: Arc::new(Mutex::new(Some(AudioSettingsStore::new()?))),
         })
+    }
+
+    pub fn new_empty() -> Self {
+        Self {
+            store: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let new_store = AudioSettingsStore::new_at(base_dir)?;
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock audio settings store".to_string())?;
+        *guard = Some(new_store);
+        Ok(())
+    }
+
+    pub fn teardown(&self) -> Result<(), String> {
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock audio settings store".to_string())?;
+        *guard = None;
+        Ok(())
     }
 }
 
@@ -283,7 +312,8 @@ impl AudioSettingsState {
 pub fn get_audio_settings(
     state: tauri::State<'_, AudioSettingsState>,
 ) -> Result<AudioSettings, String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.get_settings()
 }
 
@@ -304,7 +334,8 @@ pub fn set_audio_output_device(
         normalized_device
     );
 
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_output_device(normalized_device.as_deref())
 }
 
@@ -313,7 +344,8 @@ pub fn set_audio_exclusive_mode(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_exclusive_mode(enabled)
 }
 
@@ -322,7 +354,8 @@ pub fn set_audio_dac_passthrough(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_dac_passthrough(enabled)
 }
 
@@ -331,7 +364,8 @@ pub fn set_audio_sample_rate(
     state: tauri::State<'_, AudioSettingsState>,
     rate: Option<u32>,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_sample_rate(rate)
 }
 
@@ -340,7 +374,8 @@ pub fn set_audio_backend_type(
     state: tauri::State<'_, AudioSettingsState>,
     backend_type: Option<AudioBackendType>,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_backend_type(backend_type)
 }
 
@@ -349,7 +384,8 @@ pub fn set_audio_alsa_plugin(
     state: tauri::State<'_, AudioSettingsState>,
     plugin: Option<AlsaPlugin>,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_alsa_plugin(plugin)
 }
 
@@ -358,7 +394,8 @@ pub fn set_audio_alsa_hardware_volume(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_alsa_hardware_volume(enabled)
 }
 
@@ -367,7 +404,8 @@ pub fn set_audio_stream_first_track(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_stream_first_track(enabled)
 }
 
@@ -376,7 +414,8 @@ pub fn set_audio_stream_buffer_seconds(
     state: tauri::State<'_, AudioSettingsState>,
     seconds: u8,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_stream_buffer_seconds(seconds)
 }
 
@@ -385,7 +424,8 @@ pub fn set_audio_streaming_only(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_streaming_only(enabled)
 }
 
@@ -394,7 +434,8 @@ pub fn set_audio_limit_quality_to_device(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_limit_quality_to_device(enabled)
 }
 
@@ -403,6 +444,7 @@ pub fn set_audio_device_max_sample_rate(
     state: tauri::State<'_, AudioSettingsState>,
     rate: Option<u32>,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_device_max_sample_rate(rate)
 }

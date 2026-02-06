@@ -42,7 +42,8 @@ pub async fn reco_log_event(
         event.item_type.as_str()
     );
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.insert_event(&event)
 }
 
@@ -59,7 +60,8 @@ pub async fn reco_get_home(
     let limit_top_artists = limit_top_artists.unwrap_or(10);
     let limit_favorites = limit_favorites.unwrap_or(12);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
 
     let recently_played_album_ids = db.get_recent_album_ids(limit_recent_albums)?;
     let continue_listening_track_ids = db.get_recent_track_ids(limit_continue_tracks)?;
@@ -92,7 +94,8 @@ pub async fn reco_train_scores(
     let now_ts = current_timestamp();
     let since_ts = now_ts.saturating_sub(lookback_days * 86_400);
 
-    let mut db = state.db.lock().await;
+    let mut guard__ = state.db.lock().await;
+    let db = guard__.as_mut().ok_or("No active session - please log in")?;
     let events = db.get_events_since(since_ts, Some(max_events))?;
     let total_events = events.len();
     let total_favorite_events = events
@@ -148,7 +151,8 @@ pub async fn reco_get_home_ml(
     let limit_top_artists = limit_top_artists.unwrap_or(10);
     let limit_favorites = limit_favorites.unwrap_or(12);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let has_scores = db.has_scores("all")?;
 
     // HYBRID APPROACH: Always get fresh recent plays first, then supplement with scored
@@ -402,7 +406,8 @@ pub async fn get_playlist_suggestions(
     state: State<'_, RecoState>,
 ) -> Result<Vec<u64>, String> {
     let limit = limit.unwrap_or(10);
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
 
     // Get user's top scored tracks (get more than needed for filtering)
     let fetch_limit = (limit * 5).max(50);
@@ -484,8 +489,12 @@ pub async fn reco_backfill_genres(
     let batch_size = batch_size.unwrap_or(50);
     log::info!("Command: reco_backfill_genres batch_size={}", batch_size);
 
-    let db = reco_state.db.lock().await;
-    let album_ids = db.get_album_ids_without_genre(batch_size)?;
+    // Get album IDs first (scoped lock to avoid Send issue)
+    let album_ids = {
+        let guard__ = reco_state.db.lock().await;
+        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        db.get_album_ids_without_genre(batch_size)?
+    };
 
     if album_ids.is_empty() {
         log::info!("No albums need genre backfill");
@@ -499,52 +508,48 @@ pub async fn reco_backfill_genres(
 
     log::info!("Backfilling genres for {} albums", album_ids.len());
 
-    let client = app_state.client.lock().await;
     let mut albums_processed = 0u32;
     let mut events_updated = 0u64;
     let mut albums_failed = 0u32;
 
     for album_id in &album_ids {
-        // Fetch album from Qobuz API
-        match client.get_album(album_id).await {
-            Ok(album) => {
-                if let Some(genre) = album.genre {
-                    // Update all events with this album_id
-                    match db.update_genre_for_album(album_id, genre.id) {
-                        Ok(updated) => {
-                            events_updated += updated;
-                            albums_processed += 1;
-                            log::debug!(
-                                "Updated {} events for album {} with genre {} ({})",
-                                updated,
-                                album_id,
-                                genre.id,
-                                genre.name
-                            );
-                        }
-                        Err(e) => {
-                            log::warn!("Failed to update genre for album {}: {}", album_id, e);
-                            albums_failed += 1;
-                        }
-                    }
-                } else {
-                    // Album has no genre, mark as processed by setting genre_id to 0
-                    match db.update_genre_for_album(album_id, 0) {
-                        Ok(updated) => {
-                            events_updated += updated;
-                            albums_processed += 1;
-                            log::debug!("Album {} has no genre, set to 0", album_id);
-                        }
-                        Err(e) => {
-                            log::warn!("Failed to update genre for album {}: {}", album_id, e);
-                            albums_failed += 1;
-                        }
-                    }
+        // Fetch album from Qobuz API (lock client, then drop before DB)
+        let genre_info = {
+            let client = app_state.client.lock().await;
+            match client.get_album(album_id).await {
+                Ok(album) => Some(album.genre.map(|g| (g.id, g.name))),
+                Err(e) => {
+                    log::warn!("Failed to fetch album {}: {}", album_id, e);
+                    albums_failed += 1;
+                    None
                 }
             }
-            Err(e) => {
-                log::warn!("Failed to fetch album {}: {}", album_id, e);
-                albums_failed += 1;
+        };
+
+        if let Some(genre_opt) = genre_info {
+            let genre_id = genre_opt.as_ref().map(|(id, _)| *id).unwrap_or(0);
+            let genre_name = genre_opt.as_ref().map(|(_, name)| name.as_str()).unwrap_or("none");
+
+            // Re-acquire DB lock for update
+            let guard__ = reco_state.db.lock().await;
+            let db = guard__.as_ref().ok_or("No active session - please log in")?;
+            match db.update_genre_for_album(album_id, genre_id) {
+                Ok(updated) => {
+                    events_updated += updated;
+                    albums_processed += 1;
+                    if genre_id > 0 {
+                        log::debug!(
+                            "Updated {} events for album {} with genre {} ({})",
+                            updated, album_id, genre_id, genre_name
+                        );
+                    } else {
+                        log::debug!("Album {} has no genre, set to 0", album_id);
+                    }
+                }
+                Err(e) => {
+                    log::warn!("Failed to update genre for album {}: {}", album_id, e);
+                    albums_failed += 1;
+                }
             }
         }
 
@@ -553,10 +558,15 @@ pub async fn reco_backfill_genres(
     }
 
     // Check how many albums still need backfill
-    let remaining = db.get_album_ids_without_genre(1)?;
-    let albums_remaining = if remaining.is_empty() { 0 } else {
-        // Get actual count
-        db.get_album_ids_without_genre(10000)?.len() as u32
+    let albums_remaining = {
+        let guard__ = reco_state.db.lock().await;
+        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let remaining = db.get_album_ids_without_genre(1)?;
+        if remaining.is_empty() {
+            0
+        } else {
+            db.get_album_ids_without_genre(10000)?.len() as u32
+        }
     };
 
     log::info!(
@@ -580,7 +590,8 @@ pub async fn reco_backfill_genres(
 pub async fn reco_needs_genre_backfill(
     reco_state: State<'_, RecoState>,
 ) -> Result<bool, String> {
-    let db = reco_state.db.lock().await;
+    let guard__ = reco_state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let albums = db.get_album_ids_without_genre(1)?;
     Ok(!albums.is_empty())
 }

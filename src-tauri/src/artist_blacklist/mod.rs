@@ -24,11 +24,12 @@ pub mod service;
 pub use models::{BlacklistSettings, BlacklistedArtist};
 pub use service::BlacklistService;
 
+use std::path::Path;
 use std::sync::Mutex;
 
 /// Thread-safe state wrapper for the blacklist service
 pub struct BlacklistState {
-    pub service: Mutex<BlacklistService>,
+    pub service: Mutex<Option<BlacklistService>>,
 }
 
 impl BlacklistState {
@@ -45,8 +46,30 @@ impl BlacklistState {
         let service = BlacklistService::new(&db_path)?;
 
         Ok(Self {
-            service: Mutex::new(service),
+            service: Mutex::new(Some(service)),
         })
+    }
+
+    pub fn new_empty() -> Self {
+        Self {
+            service: Mutex::new(None),
+        }
+    }
+
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        std::fs::create_dir_all(base_dir)
+            .map_err(|e| format!("Failed to create data directory: {}", e))?;
+        let db_path = base_dir.join("artist_blacklist.db");
+        let new_service = BlacklistService::new(&db_path)?;
+        let mut guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
+        *guard = Some(new_service);
+        Ok(())
+    }
+
+    pub fn teardown(&self) {
+        if let Ok(mut guard) = self.service.lock() {
+            *guard = None;
+        }
     }
 
     /// Check if an artist is blacklisted - thread-safe O(1) operation
@@ -54,7 +77,8 @@ impl BlacklistState {
     pub fn is_blacklisted(&self, artist_id: u64) -> bool {
         self.service
             .lock()
-            .map(|s| s.is_blacklisted(artist_id))
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|s| s.is_blacklisted(artist_id)))
             .unwrap_or(false)
     }
 
@@ -63,60 +87,59 @@ impl BlacklistState {
     pub fn is_enabled(&self) -> bool {
         self.service
             .lock()
-            .map(|s| s.is_enabled())
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|s| s.is_enabled()))
             .unwrap_or(true)
     }
 
     /// Add an artist to the blacklist
     pub fn add(&self, artist_id: u64, artist_name: &str, notes: Option<&str>) -> Result<(), String> {
-        self.service
-            .lock()
-            .map_err(|_| "Failed to acquire lock")?
+        let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
+        guard.as_ref().ok_or("No active session - please log in")?
             .add(artist_id, artist_name, notes)
     }
 
     /// Remove an artist from the blacklist
     pub fn remove(&self, artist_id: u64) -> Result<(), String> {
-        self.service
-            .lock()
-            .map_err(|_| "Failed to acquire lock")?
+        let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
+        guard.as_ref().ok_or("No active session - please log in")?
             .remove(artist_id)
     }
 
     /// Get all blacklisted artists
     pub fn get_all(&self) -> Result<Vec<BlacklistedArtist>, String> {
-        self.service
-            .lock()
-            .map_err(|_| "Failed to acquire lock")?
+        let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
+        guard.as_ref().ok_or("No active session - please log in")?
             .get_all()
     }
 
     /// Set enabled state
     pub fn set_enabled(&self, enabled: bool) -> Result<(), String> {
-        self.service
-            .lock()
-            .map_err(|_| "Failed to acquire lock")?
+        let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
+        guard.as_ref().ok_or("No active session - please log in")?
             .set_enabled(enabled)
     }
 
     /// Get blacklist settings
     pub fn get_settings(&self) -> Result<BlacklistSettings, String> {
-        self.service
-            .lock()
-            .map(|s| s.get_settings())
-            .map_err(|_| "Failed to acquire lock".to_string())
+        let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
+        Ok(guard.as_ref().ok_or("No active session - please log in")?
+            .get_settings())
     }
 
     /// Get count of blacklisted artists
     pub fn count(&self) -> usize {
-        self.service.lock().map(|s| s.count()).unwrap_or(0)
+        self.service
+            .lock()
+            .ok()
+            .and_then(|guard| guard.as_ref().map(|s| s.count()))
+            .unwrap_or(0)
     }
 
     /// Clear all blacklisted artists
     pub fn clear_all(&self) -> Result<(), String> {
-        self.service
-            .lock()
-            .map_err(|_| "Failed to acquire lock")?
+        let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
+        guard.as_ref().ok_or("No active session - please log in")?
             .clear_all()
     }
 }

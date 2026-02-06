@@ -97,15 +97,23 @@ pub async fn play_track(
 
     // First check offline cache (persistent disk cache)
     {
-        let db = offline_cache.db.lock().await;
-        if let Ok(Some(file_path)) = db.get_file_path(track_id) {
+        let cached_path = {
+            let db_opt__ = offline_cache.db.lock().await;
+            if let Some(db) = db_opt__.as_ref() {
+                if let Ok(Some(file_path)) = db.get_file_path(track_id) {
+                    let _ = db.touch(track_id);
+                    Some(file_path)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+        if let Some(file_path) = cached_path {
             let path = std::path::Path::new(&file_path);
             if path.exists() {
                 log::info!("[CACHE HIT] Track {} from OFFLINE cache: {:?}", track_id, path);
-
-                // Update last accessed time
-                let _ = db.touch(track_id);
-                drop(db);  // Release lock before reading file
 
                 // Read file and play
                 let audio_data = std::fs::read(path)
@@ -115,8 +123,8 @@ pub async fn play_track(
 
                 // Check if prefetch should be skipped (streaming_only mode)
                 let skip_prefetch = {
-                    let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-                    store.get_settings().map(|s| s.streaming_only).unwrap_or(false)
+                    let guard = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+                    guard.as_ref().and_then(|s| s.get_settings().ok()).map(|s| s.streaming_only).unwrap_or(false)
                 };
 
                 // Prefetch next track in background
@@ -142,8 +150,8 @@ pub async fn play_track(
 
         // Check if prefetch should be skipped (streaming_only mode)
         let skip_prefetch = {
-            let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-            store.get_settings().map(|s| s.streaming_only).unwrap_or(false)
+            let guard = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+            guard.as_ref().and_then(|s| s.get_settings().ok()).map(|s| s.streaming_only).unwrap_or(false)
         };
 
         // Prefetch next track in background
@@ -170,8 +178,8 @@ pub async fn play_track(
 
             // Check if prefetch should be skipped (streaming_only mode)
             let skip_prefetch = {
-                let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-                store.get_settings().map(|s| s.streaming_only).unwrap_or(false)
+                let guard = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+                guard.as_ref().and_then(|s| s.get_settings().ok()).map(|s| s.streaming_only).unwrap_or(false)
             };
 
             // Prefetch next track in background
@@ -192,11 +200,11 @@ pub async fn play_track(
 
     // Check streaming settings
     let (stream_first_enabled, buffer_seconds, streaming_only) = {
-        let store = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        match store.get_settings() {
-            Ok(settings) => (settings.stream_first_track, settings.stream_buffer_seconds, settings.streaming_only),
-            Err(e) => {
-                log::warn!("Failed to get audio settings, using defaults: {}", e);
+        let guard = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        match guard.as_ref().and_then(|s| s.get_settings().ok()) {
+            Some(settings) => (settings.stream_first_track, settings.stream_buffer_seconds, settings.streaming_only),
+            None => {
+                log::warn!("Failed to get audio settings, using defaults");
                 (false, 3, false)
             }
         }
@@ -323,7 +331,7 @@ pub async fn prefetch_track(
     quality: Option<String>,
     state: State<'_, AppState>,
     offline_cache: State<'_, OfflineCacheState>,
-    audio_settings: State<'_, AudioSettingsState>,
+    _audio_settings: State<'_, AudioSettingsState>,
 ) -> Result<(), String> {
     let mut preferred_quality = parse_quality(quality.as_deref());
 
@@ -351,12 +359,18 @@ pub async fn prefetch_track(
     let result = async {
         // Check persistent offline cache first
         {
-            let db = offline_cache.db.lock().await;
-            if let Ok(Some(file_path)) = db.get_file_path(track_id) {
+            let cached_path = {
+                let db_opt__ = offline_cache.db.lock().await;
+                if let Some(db) = db_opt__.as_ref() {
+                    db.get_file_path(track_id).ok().flatten()
+                } else {
+                    None
+                }
+            };
+            if let Some(file_path) = cached_path {
                 let path = std::path::Path::new(&file_path);
                 if path.exists() {
                     log::info!("Prefetching track {} from offline cache", track_id);
-                    drop(db);
                     let audio_data = std::fs::read(path)
                         .map_err(|e| format!("Failed to read cached file: {}", e))?;
                     cache.insert(track_id, audio_data);
@@ -1096,10 +1110,12 @@ pub fn reinit_audio_device(
     log::info!("Command: reinit_audio_device {:?}", device);
 
     // Reload settings from database to ensure Player has latest config (including backend_type)
-    if let Ok(store) = audio_settings_state.store.lock() {
-        if let Ok(fresh_settings) = store.get_settings() {
-            log::info!("Reloading audio settings before reinit (backend_type: {:?})", fresh_settings.backend_type);
-            let _ = state.player.reload_settings(fresh_settings);
+    if let Ok(guard) = audio_settings_state.store.lock() {
+        if let Some(store) = guard.as_ref() {
+            if let Ok(fresh_settings) = store.get_settings() {
+                log::info!("Reloading audio settings before reinit (backend_type: {:?})", fresh_settings.backend_type);
+                let _ = state.player.reload_settings(fresh_settings);
+            }
         }
     }
 

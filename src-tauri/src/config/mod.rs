@@ -58,6 +58,7 @@ pub use subscription_state::{
     SubscriptionStateState,
     SubscriptionStateStore,
     create_subscription_state,
+    create_empty_subscription_state,
 };
 
 pub use tray_settings::{

@@ -5,6 +5,7 @@
 
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use log::info;
 
@@ -27,15 +28,11 @@ pub struct LegalSettingsStore {
 }
 
 impl LegalSettingsStore {
-    pub fn new() -> Result<Self, String> {
-        let data_dir = dirs::data_dir()
-            .ok_or("Could not determine data directory")?
-            .join("qbz");
-
-        std::fs::create_dir_all(&data_dir)
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("legal_settings.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open legal settings database: {}", e))?;
 
@@ -56,6 +53,17 @@ impl LegalSettingsStore {
         info!("[LegalSettings] Database initialized");
 
         Ok(Self { conn })
+    }
+
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+        Self::open_at(&data_dir, "legal_settings.db")
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "legal_settings.db")
     }
 
     pub fn get_settings(&self) -> Result<LegalSettings, String> {
@@ -86,7 +94,16 @@ impl LegalSettingsStore {
     }
 }
 
-pub type LegalSettingsState = Arc<Mutex<LegalSettingsStore>>;
+pub type LegalSettingsState = Arc<Mutex<Option<LegalSettingsStore>>>;
+
+pub fn create_legal_settings_state() -> Result<LegalSettingsState, String> {
+    let store = LegalSettingsStore::new()?;
+    Ok(Arc::new(Mutex::new(Some(store))))
+}
+
+pub fn create_empty_legal_settings_state() -> LegalSettingsState {
+    Arc::new(Mutex::new(None))
+}
 
 // Tauri commands
 
@@ -94,7 +111,8 @@ pub type LegalSettingsState = Arc<Mutex<LegalSettingsStore>>;
 pub fn get_legal_settings(
     state: tauri::State<'_, LegalSettingsState>,
 ) -> Result<LegalSettings, String> {
-    let store = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.get_settings()
 }
 
@@ -102,7 +120,8 @@ pub fn get_legal_settings(
 pub fn get_qobuz_tos_accepted(
     state: tauri::State<'_, LegalSettingsState>,
 ) -> Result<bool, String> {
-    let store = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     let settings = store.get_settings()?;
     Ok(settings.qobuz_tos_accepted)
 }
@@ -112,6 +131,7 @@ pub fn set_qobuz_tos_accepted(
     state: tauri::State<'_, LegalSettingsState>,
     accepted: bool,
 ) -> Result<(), String> {
-    let store = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_qobuz_tos_accepted(accepted)
 }

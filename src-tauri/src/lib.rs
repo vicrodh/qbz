@@ -21,6 +21,7 @@ pub mod library;
 pub mod listenbrainz;
 pub mod lyrics;
 pub mod media_controls;
+pub mod migration;
 pub mod musicbrainz;
 pub mod network;
 pub mod offline;
@@ -34,6 +35,7 @@ pub mod session_store;
 pub mod share;
 pub mod tray;
 pub mod updates;
+pub mod user_data;
 pub mod visualizer;
 
 use std::sync::Arc;
@@ -155,102 +157,10 @@ pub fn run() {
         Err(e) => log::error!("App ID migration failed: {}", e),
     }
 
-    // Initialize library state
-    let library_state = library::init_library_state()
-        .expect("Failed to initialize library database");
-
-    // Initialize casting state (Chromecast, DLNA, AirPlay)
-    // CastState creates the media server, DLNA shares it
-    let cast_state = cast::CastState::new()
-        .expect("Failed to initialize Chromecast state");
-    let dlna_state = cast::dlna::commands::DlnaState::new(cast_state.media_server.clone())
-        .expect("Failed to initialize DLNA state");
-    // AirPlay state - DISABLED until RAOP implementation is complete
-    // See qbz-nix-docs/AIRPLAY_IMPLEMENTATION_STATUS.md for details
-    // let airplay_state = cast::airplay::commands::AirPlayState::new()
-    //     .expect("Failed to initialize AirPlay state");
-
-    // Initialize offline cache state
-    let offline_cache_state = offline_cache::OfflineCacheState::new()
-        .expect("Failed to initialize offline cache");
-    // Initialize lyrics cache state
-    let lyrics_state = lyrics::LyricsState::new()
-        .expect("Failed to initialize lyrics cache");
-    // Initialize recommendation store state
-    let reco_state = reco_store::RecoState::new()
-        .expect("Failed to initialize recommendation store");
-    // Initialize API cache state
-    let api_cache_state = api_cache::ApiCacheState::new()
-        .expect("Failed to initialize API cache");
-    // Initialize session store state
-    let session_store_state = session_store::SessionStoreState::new()
-        .expect("Failed to initialize session store");
-    // Initialize audio settings state
-    let audio_settings_state = config::audio_settings::AudioSettingsState::new()
-        .expect("Failed to initialize audio settings");
-    // Initialize download settings state
-    let download_settings_state = config::download_settings::create_download_settings_state()
-        .expect("Failed to initialize download settings");
-    // Initialize offline mode state
-    let offline_state = offline::OfflineState::new()
-        .expect("Failed to initialize offline state");
-    // Initialize playback preferences state
-    let playback_prefs_state = config::playback_preferences::PlaybackPreferencesState::new()
-        .expect("Failed to initialize playback preferences");
-    // Initialize favorites preferences state
-    let favorites_prefs_state = config::favorites_preferences::FavoritesPreferencesState::new()
-        .expect("Failed to initialize favorites preferences");
-    // Initialize favorites cache state (local persistence for favorite IDs)
-    let favorites_cache_state = config::favorites_cache::FavoritesCacheState::new()
-        .expect("Failed to initialize favorites cache");
-    // Initialize tray settings state
-    let tray_settings_state = config::tray_settings::TraySettingsState::new()
-        .expect("Failed to initialize tray settings");
-    // Initialize remote control settings state
-    let remote_control_settings_state = config::remote_control_settings::RemoteControlSettingsState::new()
-        .expect("Failed to initialize remote control settings");
-    // Initialize allowed origins state for CORS
-    let allowed_origins_state = config::remote_control_settings::AllowedOriginsState::new()
-        .expect("Failed to initialize allowed origins");
-    // Initialize API server state for remote control
-    let api_server_state = api_server::ApiServerState::new();
-    // Initialize legal settings state (ToS acceptance persistence)
-    let legal_settings_state = config::legal_settings::LegalSettingsState::new(
-        std::sync::Mutex::new(
-            config::legal_settings::LegalSettingsStore::new()
-                .expect("Failed to initialize legal settings")
-        )
-    );
-    // Initialize updates state
-    let updates_state = updates::UpdatesState::new()
-        .expect("Failed to initialize updates state");
-    // Initialize subscription validity tracking (for offline download compliance)
-    let subscription_state = config::create_subscription_state()
-        .expect("Failed to initialize subscription state");
-    // Initialize MusicBrainz integration state
-    let musicbrainz_state = musicbrainz::MusicBrainzSharedState::new()
-        .expect("Failed to initialize MusicBrainz state");
-    // Initialize artist vector store for playlist suggestions
-    let artist_vectors_state = artist_vectors::ArtistVectorStoreState::new()
-        .expect("Failed to initialize artist vector store");
-    // Initialize artist blacklist state
-    let blacklist_state = artist_blacklist::BlacklistState::new()
-        .expect("Failed to initialize artist blacklist");
-    // Initialize ListenBrainz integration state
-    let listenbrainz_state = listenbrainz::ListenBrainzSharedState::new()
-        .expect("Failed to initialize ListenBrainz state");
-    // Initialize remote metadata state (for Tag Editor service integration)
-    let remote_metadata_state = commands::RemoteMetadataSharedState {
-        inner: Arc::new(Mutex::new(library::remote_metadata::RemoteMetadataState::new(
-            Some(Arc::new(musicbrainz::MusicBrainzSharedState::new()
-                .expect("Failed to initialize MusicBrainz for remote metadata")))
-        ))),
-    };
-
-    // Read saved audio device and settings for player initialization
-    let (saved_device, audio_settings) = audio_settings_state
-        .store
-        .lock()
+    // ── Phase 1: Device-level init (before login) ─────────────────────
+    // Read audio settings from flat path once for player initialization.
+    // The managed state starts empty and is populated after login.
+    let (saved_device, audio_settings) = config::audio_settings::AudioSettingsStore::new()
         .ok()
         .and_then(|store| {
             store.get_settings().ok().map(|settings| {
@@ -272,8 +182,10 @@ pub fn run() {
         audio_settings.preferred_sample_rate
     );
 
-    // Read tray settings for initialization
-    let tray_settings = tray_settings_state.get_settings().unwrap_or_default();
+    // Read tray settings from flat path once for tray initialization.
+    let tray_settings = config::tray_settings::TraySettingsStore::new()
+        .and_then(|store| store.get_settings())
+        .unwrap_or_default();
     log::info!(
         "Tray settings: enable={}, minimize_to_tray={}, close_to_tray={}",
         tray_settings.enable_tray,
@@ -281,15 +193,61 @@ pub fn run() {
         tray_settings.close_to_tray
     );
 
+    // Initialize casting state (Chromecast, DLNA) — device-level, not per-user
+    let cast_state = cast::CastState::new()
+        .expect("Failed to initialize Chromecast state");
+    let dlna_state = cast::dlna::commands::DlnaState::new(cast_state.media_server.clone())
+        .expect("Failed to initialize DLNA state");
+
+    // Initialize API server state for remote control (device-level)
+    let api_server_state = api_server::ApiServerState::new();
+
+    // Initialize remote metadata state (device-level, uses its own MusicBrainz instance)
+    let remote_metadata_state = commands::RemoteMetadataSharedState {
+        inner: Arc::new(Mutex::new(library::remote_metadata::RemoteMetadataState::new(
+            Some(Arc::new(musicbrainz::MusicBrainzSharedState::new()
+                .expect("Failed to initialize MusicBrainz for remote metadata")))
+        ))),
+    };
+
+    // ── Phase 2: Per-user states (empty until activate_user_session) ──
+    let library_state = library::init_library_state_empty();
+    let offline_cache_state = offline_cache::OfflineCacheState::new_empty();
+    let lyrics_state = lyrics::LyricsState::new_empty();
+    let reco_state = reco_store::RecoState::new_empty();
+    let api_cache_state = api_cache::ApiCacheState::new_empty();
+    let session_store_state = session_store::SessionStoreState::new_empty();
+    let audio_settings_state = config::audio_settings::AudioSettingsState::new_empty();
+    let download_settings_state = config::download_settings::create_empty_download_settings_state();
+    let offline_state = offline::OfflineState::new_empty();
+    let playback_prefs_state = config::playback_preferences::PlaybackPreferencesState::new_empty();
+    let favorites_prefs_state = config::favorites_preferences::FavoritesPreferencesState::new_empty();
+    let favorites_cache_state = config::favorites_cache::FavoritesCacheState::new_empty();
+    let tray_settings_state = config::tray_settings::TraySettingsState::new_empty();
+    let remote_control_settings_state = config::remote_control_settings::RemoteControlSettingsState::new_empty();
+    let allowed_origins_state = config::remote_control_settings::AllowedOriginsState::new_empty();
+    let legal_settings_state = config::legal_settings::create_empty_legal_settings_state();
+    let updates_state = updates::UpdatesState::new_empty()
+        .expect("Failed to initialize empty updates state");
+    let subscription_state = config::create_empty_subscription_state();
+    let musicbrainz_state = musicbrainz::MusicBrainzSharedState::new_empty();
+    let artist_vectors_state = artist_vectors::ArtistVectorStoreState::new_empty();
+    let blacklist_state = artist_blacklist::BlacklistState::new_empty();
+    let listenbrainz_state = listenbrainz::ListenBrainzSharedState::new_empty();
+
     // Clone settings for use in closures
     let enable_tray = tray_settings.enable_tray;
     let close_to_tray = tray_settings.close_to_tray;
+
+    // Initialize per-user data paths (no user active yet until login)
+    let user_data_paths = user_data::UserDataPaths::new();
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState::with_device_and_settings(saved_device, audio_settings))
+        .manage(user_data_paths)
         .setup(move |app| {
             // Initialize system tray icon (only if enabled)
             if enable_tray {
@@ -318,59 +276,8 @@ pub fn run() {
                 }
             });
 
-            // Purge offline downloads if the subscription has been invalid for > 3 days
-            // (compliance requirement for cached content).
-            let app_handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let now = std::time::SystemTime::now()
-                    .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_secs() as i64;
-
-                let subscription_state = app_handle
-                    .state::<config::SubscriptionStateState>()
-                    .inner()
-                    .clone();
-                let should_purge = {
-                    let store = match subscription_state.lock() {
-                        Ok(s) => s,
-                        Err(e) => {
-                            log::warn!("Subscription state lock error: {}", e);
-                            return;
-                        }
-                    };
-                    match store.should_purge_offline_cache(now) {
-                        Ok(v) => v,
-                        Err(e) => {
-                            log::warn!("Failed to evaluate purge condition: {}", e);
-                            false
-                        }
-                    }
-                };
-
-                if !should_purge {
-                    return;
-                }
-
-                log::warn!("Subscription invalid for >3 days. Purging offline cache.");
-                let cache_state = app_handle.state::<offline_cache::OfflineCacheState>();
-                let library_state = app_handle.state::<crate::library::commands::LibraryState>();
-                if let Err(e) = offline_cache::commands::purge_all_cached_files(cache_state.inner(), library_state.inner()).await {
-                    log::error!("Failed to purge offline cache: {}", e);
-                    return;
-                }
-
-                let store = match subscription_state.lock() {
-                    Ok(s) => s,
-                    Err(e) => {
-                        log::warn!("Subscription state lock error: {}", e);
-                        return;
-                    }
-                };
-                if let Err(e) = store.mark_offline_cache_purged(now) {
-                    log::warn!("Failed to persist purge timestamp: {}", e);
-                }
-            });
+            // NOTE: Subscription purge check moved to activate_user_session
+            // (runs after login when per-user state is available)
 
             // Start background task to emit playback events
             let app_handle = app.handle().clone();
@@ -521,6 +428,10 @@ pub fn run() {
             commands::save_credentials,
             commands::clear_saved_credentials,
             commands::auto_login,
+            // User session lifecycle
+            commands::get_last_user_id,
+            commands::activate_user_session,
+            commands::deactivate_user_session,
             // Search commands
             commands::search_albums,
             commands::search_tracks,

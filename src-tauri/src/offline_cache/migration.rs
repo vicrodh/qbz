@@ -73,7 +73,7 @@ async fn migrate_single_track(
     legacy_path: PathBuf,
     offline_root: &str,
     qobuz_client: &QobuzClient,
-    library_db: Arc<Mutex<LibraryDatabase>>,
+    library_db: Arc<Mutex<Option<LibraryDatabase>>>,
 ) -> Result<String, String> {
     log::info!("Migrating track {}", track_id);
 
@@ -128,7 +128,8 @@ async fn migrate_single_track(
     };
     
     // 7. Insert into local library DB
-    let lib_guard = library_db.lock().await;
+    let lib_opt__ = library_db.lock().await;
+    let lib_guard = lib_opt__.as_ref().ok_or("No active session - please log in")?;
     
     let album_artist = metadata.album_artist.as_ref().unwrap_or(&metadata.artist);
     let album_group_key = format!("{}|{}", metadata.album, album_artist);
@@ -162,7 +163,7 @@ pub async fn migrate_legacy_cached_files(
     tracks_dir: PathBuf,
     offline_root: String,
     qobuz_client: Arc<Mutex<QobuzClient>>,
-    library_db: Arc<Mutex<LibraryDatabase>>,
+    library_db: Arc<Mutex<Option<LibraryDatabase>>>,
 ) -> MigrationStatus {
     let total = track_ids.len();
     let mut status = MigrationStatus {

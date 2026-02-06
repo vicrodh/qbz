@@ -19,11 +19,11 @@ use super::weights::RelationshipWeights;
 /// Builder for constructing artist vectors from multiple data sources
 pub struct ArtistVectorBuilder {
     /// Vector store for persistence
-    store: Arc<Mutex<ArtistVectorStore>>,
+    store: Arc<Mutex<Option<ArtistVectorStore>>>,
     /// MusicBrainz client for relationship data
     mb_client: Arc<MusicBrainzClient>,
     /// MusicBrainz cache
-    mb_cache: Arc<Mutex<MusicBrainzCache>>,
+    mb_cache: Arc<Mutex<Option<MusicBrainzCache>>>,
     /// Qobuz client for similar artists
     qobuz_client: Arc<Mutex<QobuzClient>>,
     /// Configurable weights
@@ -46,9 +46,9 @@ pub struct BuildResult {
 impl ArtistVectorBuilder {
     /// Create a new builder with the given dependencies
     pub fn new(
-        store: Arc<Mutex<ArtistVectorStore>>,
+        store: Arc<Mutex<Option<ArtistVectorStore>>>,
         mb_client: Arc<MusicBrainzClient>,
-        mb_cache: Arc<Mutex<MusicBrainzCache>>,
+        mb_cache: Arc<Mutex<Option<MusicBrainzCache>>>,
         qobuz_client: Arc<Mutex<QobuzClient>>,
         weights: RelationshipWeights,
     ) -> Self {
@@ -88,7 +88,8 @@ impl ArtistVectorBuilder {
         // 1. Get or create index for this artist
         log::info!("[VectorBuilder] Acquiring store lock...");
         {
-            let mut store = self.store.lock().await;
+            let mut guard__ = self.store.lock().await;
+            let store = guard__.as_mut().ok_or("No active session - please log in")?;
             log::info!("[VectorBuilder] Store lock acquired, creating index");
             store.get_or_create_idx(artist_mbid, artist_name)?;
         }
@@ -130,7 +131,8 @@ impl ArtistVectorBuilder {
         // 4. Persist the vectors (using saved vectors to avoid deadlock)
         log::info!("[VectorBuilder] Persisting vectors...");
         {
-            let mut store = self.store.lock().await;
+            let mut guard__ = self.store.lock().await;
+            let store = guard__.as_mut().ok_or("No active session - please log in")?;
 
             // Store MB relationships
             if let Some(mb_vec) = mb_vec_to_store {
@@ -161,7 +163,8 @@ impl ArtistVectorBuilder {
         // Try cache first
         log::info!("[VectorBuilder] Acquiring mb_cache lock...");
         let cached = {
-            let cache = self.mb_cache.lock().await;
+            let guard__ = self.mb_cache.lock().await;
+            let cache = guard__.as_ref().ok_or("No active session - please log in")?;
             log::info!("[VectorBuilder] mb_cache lock acquired, checking relations");
             cache.get_artist_relations(artist_mbid)?
         };
@@ -181,7 +184,8 @@ impl ArtistVectorBuilder {
 
             // Cache it
             {
-                let cache = self.mb_cache.lock().await;
+                let guard__ = self.mb_cache.lock().await;
+                let cache = guard__.as_ref().ok_or("No active session - please log in")?;
                 cache.set_artist_relations(artist_mbid, &extracted)?;
             }
 
@@ -192,7 +196,8 @@ impl ArtistVectorBuilder {
         let mut count = 0;
 
         // Get store for index lookups
-        let mut store = self.store.lock().await;
+        let mut guard__ = self.store.lock().await;
+        let store = guard__.as_mut().ok_or("No active session - please log in")?;
 
         // Process members (band → person)
         for member in &relations.members {
@@ -241,7 +246,8 @@ impl ArtistVectorBuilder {
 
         let mut vector = SparseVector::new();
         let mut count = 0;
-        let mut store = self.store.lock().await;
+        let mut guard__ = self.store.lock().await;
+        let store = guard__.as_mut().ok_or("No active session - please log in")?;
 
         for artist in similar.items {
             // We need to resolve Qobuz artist to MBID
@@ -271,7 +277,8 @@ impl ArtistVectorBuilder {
 
         // Check if we have a fresh vector
         let has_fresh = {
-            let store = self.store.lock().await;
+            let guard__ = self.store.lock().await;
+            let store = guard__.as_ref().ok_or("No active session - please log in")?;
             store.has_fresh_vector(artist_mbid, max_age_secs)
         };
 

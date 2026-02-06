@@ -18,6 +18,7 @@
   import { syncCache as syncAlbumCache } from '$lib/stores/albumFavoritesStore';
   import { syncCache as syncArtistCache } from '$lib/stores/artistFavoritesStore';
   import { categorizeAlbum, getQobuzImage, formatQuality } from '$lib/adapters/qobuzAdapters';
+  import { getUserItem, setUserItem } from '$lib/utils/userStorage';
   import GenreFilterButton from '../GenreFilterButton.svelte';
   import {
     hasActiveFilter as hasGenreFilter,
@@ -492,7 +493,7 @@
 
   function loadStoredBool(key: string, fallback = false): boolean {
     try {
-      const value = localStorage.getItem(key);
+      const value = getUserItem(key);
       if (value === null) return fallback;
       return value === 'true';
     } catch {
@@ -502,7 +503,7 @@
 
   function loadStoredString<T extends string>(key: string, fallback: T, options: T[]): T {
     try {
-      const value = localStorage.getItem(key);
+      const value = getUserItem(key);
       if (value && (options as string[]).includes(value)) {
         return value as T;
       }
@@ -596,15 +597,15 @@
 
   $effect(() => {
     try {
-      localStorage.setItem('qbz-favorites-album-view', albumViewMode);
-      localStorage.setItem('qbz-favorites-album-group', albumGroupMode);
-      localStorage.setItem('qbz-favorites-album-sort-by', albumSortBy);
-      localStorage.setItem('qbz-favorites-album-sort-dir', albumSortDirection);
-      localStorage.setItem('qbz-favorites-track-group', trackGroupMode);
-      localStorage.setItem('qbz-favorites-album-group-enabled', String(albumGroupingEnabled));
-      localStorage.setItem('qbz-favorites-track-group-enabled', String(trackGroupingEnabled));
-      localStorage.setItem('qbz-favorites-artist-group-enabled', String(artistGroupingEnabled));
-      localStorage.setItem('qbz-favorites-artist-view-mode', artistViewMode);
+      setUserItem('qbz-favorites-album-view', albumViewMode);
+      setUserItem('qbz-favorites-album-group', albumGroupMode);
+      setUserItem('qbz-favorites-album-sort-by', albumSortBy);
+      setUserItem('qbz-favorites-album-sort-dir', albumSortDirection);
+      setUserItem('qbz-favorites-track-group', trackGroupMode);
+      setUserItem('qbz-favorites-album-group-enabled', String(albumGroupingEnabled));
+      setUserItem('qbz-favorites-track-group-enabled', String(trackGroupingEnabled));
+      setUserItem('qbz-favorites-artist-group-enabled', String(artistGroupingEnabled));
+      setUserItem('qbz-favorites-artist-view-mode', artistViewMode);
     } catch {
       // localStorage not available
     }

@@ -19,9 +19,26 @@ use crate::network::{is_network_path, MountKind, NetworkFs};
 
 /// Library state shared across commands
 pub struct LibraryState {
-    pub db: Arc<Mutex<LibraryDatabase>>,
+    pub db: Arc<Mutex<Option<LibraryDatabase>>>,
     pub scan_progress: Arc<Mutex<ScanProgress>>,
     pub scan_cancel: Arc<AtomicBool>,
+}
+
+impl LibraryState {
+    pub async fn init_at(&self, base_dir: &std::path::Path) -> Result<(), String> {
+        std::fs::create_dir_all(base_dir)
+            .map_err(|e| format!("Failed to create directory: {}", e))?;
+        let db_path = base_dir.join("library.db");
+        let db = LibraryDatabase::open(&db_path).map_err(|e| e.to_string())?;
+        let mut guard = self.db.lock().await;
+        *guard = Some(db);
+        Ok(())
+    }
+
+    pub async fn teardown(&self) {
+        let mut guard = self.db.lock().await;
+        *guard = None;
+    }
 }
 
 fn normalize_library_path(path: &Path) -> PathBuf {
@@ -71,7 +88,8 @@ pub async fn library_add_folder(
 
     log::info!("Folder network info: is_network={}, fs_type={:?}", is_network, fs_type);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let id = db.add_folder_with_network_info(&path, is_network, fs_type.as_deref())
         .map_err(|e| e.to_string())?;
 
@@ -88,7 +106,8 @@ pub async fn library_remove_folder(
 ) -> Result<(), String> {
     log::info!("Command: library_remove_folder {}", path);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.remove_folder(&path).map_err(|e| e.to_string())?;
     db.delete_tracks_in_folder(&path).map_err(|e| e.to_string())?;
     Ok(())
@@ -109,7 +128,8 @@ pub async fn library_cleanup_missing_files(
 ) -> Result<CleanupResult, String> {
     log::info!("Command: library_cleanup_missing_files");
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
 
     // Get all track paths
     let tracks = db.get_all_track_paths().map_err(|e| e.to_string())?;
@@ -249,7 +269,8 @@ pub async fn library_clear_thumbnails_cache() -> Result<u64, String> {
 pub async fn library_get_folders(state: State<'_, LibraryState>) -> Result<Vec<String>, String> {
     log::info!("Command: library_get_folders");
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_folders().map_err(|e| e.to_string())
 }
 
@@ -261,7 +282,8 @@ pub async fn library_get_folders_with_metadata(
 ) -> Result<Vec<LibraryFolder>, String> {
     log::info!("Command: library_get_folders_with_metadata");
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let mut folders = db.get_folders_with_metadata().map_err(|e| e.to_string())?;
 
     // Refresh network detection for folders without user override
@@ -316,7 +338,8 @@ pub async fn library_get_folder(
 ) -> Result<Option<LibraryFolder>, String> {
     log::info!("Command: library_get_folder {}", id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_folder_by_id(id).map_err(|e| e.to_string())
 }
 
@@ -333,7 +356,8 @@ pub async fn library_update_folder_settings(
 ) -> Result<LibraryFolder, String> {
     log::info!("Command: library_update_folder_settings {} alias={:?} enabled={}", id, alias, enabled);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.update_folder_settings(
         id,
         alias.as_deref(),
@@ -357,7 +381,8 @@ pub async fn library_set_folder_enabled(
 ) -> Result<(), String> {
     log::info!("Command: library_set_folder_enabled {} enabled={}", id, enabled);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.set_folder_enabled(id, enabled).map_err(|e| e.to_string())
 }
 
@@ -379,7 +404,8 @@ pub async fn library_update_folder_path(
         return Err("The selected path is not a folder".to_string());
     }
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.update_folder_path(id, &new_path).map_err(|e| e.to_string())?;
 
     // Check if it's a network folder and update network info
@@ -453,7 +479,8 @@ pub async fn library_scan(state: State<'_, LibraryState>) -> Result<(), String> 
 
     // Get folders to scan
     let folders = {
-        let db = state.db.lock().await;
+        let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
         db.get_folders().map_err(|e| e.to_string())?
     };
 
@@ -594,7 +621,8 @@ pub async fn library_scan(state: State<'_, LibraryState>) -> Result<(), String> 
                     }
                     track.artwork_path = artwork_path;
 
-                    let db = state.db.lock().await;
+                    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
                     if let Err(e) = db.insert_track(&track) {
                         all_errors.push(ScanError {
                             file_path: path_str,
@@ -691,7 +719,8 @@ async fn process_cue_file(cue_path: &Path, state: &State<'_, LibraryState>) -> R
     }
 
     // Insert tracks
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let group_key = tracks
         .first()
         .map(|track| track.album_group_key.clone())
@@ -786,7 +815,8 @@ pub async fn library_scan_folder(
 
     // Get folder info
     let folder = {
-        let db = state.db.lock().await;
+        let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
         db.get_folder_by_id(folder_id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| format!("Folder with ID {} not found", folder_id))?
@@ -817,7 +847,8 @@ pub async fn library_scan_folder(
                 }
             });
 
-            let db = state.db.lock().await;
+            let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
             let _ = db.update_folder_settings(
                 folder.id,
                 folder.alias.as_deref(),
@@ -954,7 +985,8 @@ pub async fn library_scan_folder(
                 }
                 track.artwork_path = artwork_path.clone();
 
-                let db = state.db.lock().await;
+                let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
                 let group_key = track.album_group_key.clone();
                 if let Err(e) = db.insert_track(&track) {
                     all_errors.push(ScanError {
@@ -987,7 +1019,8 @@ pub async fn library_scan_folder(
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() as i64)
             .unwrap_or(0);
-        let db = state.db.lock().await;
+        let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
         let _ = db.update_folder_scan_time(&folder.path, now);
     }
 
@@ -1018,11 +1051,13 @@ pub async fn library_get_albums(
     let include_qobuz = download_settings_state
         .lock()
         .map_err(|e| format!("Failed to lock download settings: {}", e))?
-        .get_settings()
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
         .map(|s| s.show_in_library)
         .unwrap_or(false);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
 
     // Use optimized SQL-based filtering instead of N+1 query pattern
     let albums = db.get_albums_with_full_filter(
@@ -1042,7 +1077,8 @@ pub async fn library_get_album_tracks(
 ) -> Result<Vec<LocalTrack>, String> {
     log::info!("Command: library_get_album_tracks {}", album_group_key);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_album_tracks(&album_group_key)
         .map_err(|e| e.to_string())
 }
@@ -1059,11 +1095,13 @@ pub async fn library_get_artists(
     let include_qobuz = download_settings_state
         .lock()
         .map_err(|e| format!("Failed to lock download settings: {}", e))?
-        .get_settings()
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
         .map(|s| s.show_in_library)
         .unwrap_or(false);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
 
     // Use optimized SQL-based filtering instead of N+1 query pattern
     let artists = db.get_artists_with_filter(
@@ -1089,11 +1127,13 @@ pub async fn library_search(
     let include_qobuz = download_settings_state
         .lock()
         .map_err(|e| format!("Failed to lock download settings: {}", e))?
-        .get_settings()
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
         .map(|s| s.show_in_library)
         .unwrap_or(false);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
 
     // Use optimized SQL-based filtering
     // limit = 0 means no limit (fetch all tracks)
@@ -1109,18 +1149,31 @@ pub async fn library_search(
 }
 
 #[tauri::command]
-pub async fn library_get_stats(state: State<'_, LibraryState>) -> Result<LibraryStats, String> {
+pub async fn library_get_stats(
+    state: State<'_, LibraryState>,
+    download_settings_state: State<'_, crate::config::DownloadSettingsState>,
+) -> Result<LibraryStats, String> {
     log::info!("Command: library_get_stats");
 
-    let db = state.db.lock().await;
-    db.get_stats().map_err(|e| e.to_string())
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.get_stats(include_qobuz).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn library_clear(state: State<'_, LibraryState>) -> Result<(), String> {
     log::info!("Command: library_clear");
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.clear_all_tracks().map_err(|e| e.to_string())
 }
 
@@ -1133,7 +1186,8 @@ pub async fn library_get_track(
 ) -> Result<LocalTrack, String> {
     log::info!("Command: library_get_track {}", track_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_track(track_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "Track not found".to_string())
@@ -1147,7 +1201,8 @@ pub async fn get_track_by_path(
 ) -> Result<Option<LocalTrack>, String> {
     log::info!("Command: get_track_by_path {}", file_path);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_track_by_path(&file_path)
         .map_err(|e| e.to_string())
 }
@@ -1163,7 +1218,8 @@ pub async fn library_play_track(
 
     // Get track from database
     let track = {
-        let db = library_state.db.lock().await;
+        let guard__ = library_state.db.lock().await;
+        let db = guard__.as_ref().ok_or("No active session - please log in")?;
         db.get_track(track_id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| "Track not found".to_string())?
@@ -1220,7 +1276,8 @@ pub async fn playlist_get_settings(
 ) -> Result<Option<PlaylistSettings>, String> {
     log::debug!("Command: playlist_get_settings {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_playlist_settings(playlist_id)
         .map_err(|e| e.to_string())
 }
@@ -1233,7 +1290,8 @@ pub async fn playlist_save_settings(
 ) -> Result<(), String> {
     log::info!("Command: playlist_save_settings {}", settings.qobuz_playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.save_playlist_settings(&settings)
         .map_err(|e| e.to_string())
 }
@@ -1248,7 +1306,8 @@ pub async fn playlist_set_sort(
 ) -> Result<(), String> {
     log::info!("Command: playlist_set_sort {} {} {}", playlist_id, sort_by, sort_order);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.update_playlist_sort(playlist_id, &sort_by, &sort_order)
         .map_err(|e| e.to_string())
 }
@@ -1287,7 +1346,8 @@ pub async fn playlist_set_artwork(
         None
     };
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.update_playlist_artwork(playlist_id, final_path.as_deref())
         .map_err(|e| e.to_string())
 }
@@ -1302,7 +1362,8 @@ pub async fn playlist_add_local_track(
 ) -> Result<(), String> {
     log::info!("Command: playlist_add_local_track {} track {}", playlist_id, local_track_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.add_local_track_to_playlist(playlist_id, local_track_id, position)
         .map_err(|e| e.to_string())
 }
@@ -1316,7 +1377,8 @@ pub async fn playlist_remove_local_track(
 ) -> Result<(), String> {
     log::info!("Command: playlist_remove_local_track {} track {}", playlist_id, local_track_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.remove_local_track_from_playlist(playlist_id, local_track_id)
         .map_err(|e| e.to_string())
 }
@@ -1329,7 +1391,8 @@ pub async fn playlist_get_local_tracks(
 ) -> Result<Vec<LocalTrack>, String> {
     log::info!("Command: playlist_get_local_tracks {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_playlist_local_tracks(playlist_id)
         .map_err(|e| e.to_string())
 }
@@ -1342,7 +1405,8 @@ pub async fn playlist_get_local_tracks_with_position(
 ) -> Result<Vec<crate::library::PlaylistLocalTrack>, String> {
     log::debug!("Command: playlist_get_local_tracks_with_position {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_playlist_local_tracks_with_position(playlist_id)
         .map_err(|e| e.to_string())
 }
@@ -1354,7 +1418,8 @@ pub async fn playlist_get_all_local_track_counts(
 ) -> Result<std::collections::HashMap<u64, u32>, String> {
     log::debug!("Command: playlist_get_all_local_track_counts");
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_all_playlist_local_track_counts()
         .map_err(|e| e.to_string())
 }
@@ -1367,7 +1432,8 @@ pub async fn playlist_clear_local_tracks(
 ) -> Result<(), String> {
     log::info!("Command: playlist_clear_local_tracks {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.clear_playlist_local_tracks(playlist_id)
         .map_err(|e| e.to_string())
 }
@@ -1379,7 +1445,8 @@ pub async fn playlist_get_all_settings(
 ) -> Result<Vec<PlaylistSettings>, String> {
     log::debug!("Command: playlist_get_all_settings");
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_all_playlist_settings()
         .map_err(|e| e.to_string())
 }
@@ -1393,7 +1460,8 @@ pub async fn playlist_set_hidden(
 ) -> Result<(), String> {
     log::info!("Command: playlist_set_hidden {} {}", playlist_id, hidden);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.set_playlist_hidden(playlist_id, hidden)
         .map_err(|e| e.to_string())
 }
@@ -1407,7 +1475,8 @@ pub async fn playlist_set_favorite(
 ) -> Result<(), String> {
     log::info!("Command: playlist_set_favorite {} {}", playlist_id, favorite);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.set_playlist_favorite(playlist_id, favorite)
         .map_err(|e| e.to_string())
 }
@@ -1419,7 +1488,8 @@ pub async fn playlist_get_favorites(
 ) -> Result<Vec<u64>, String> {
     log::info!("Command: playlist_get_favorites");
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_favorite_playlist_ids()
         .map_err(|e| e.to_string())
 }
@@ -1433,7 +1503,8 @@ pub async fn playlist_set_position(
 ) -> Result<(), String> {
     log::info!("Command: playlist_set_position {} {}", playlist_id, position);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.set_playlist_position(playlist_id, position)
         .map_err(|e| e.to_string())
 }
@@ -1446,7 +1517,8 @@ pub async fn playlist_reorder(
 ) -> Result<(), String> {
     log::info!("Command: playlist_reorder {:?}", playlist_ids);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.reorder_playlists(&playlist_ids)
         .map_err(|e| e.to_string())
 }
@@ -1459,7 +1531,8 @@ pub async fn playlist_get_stats(
 ) -> Result<Option<PlaylistStats>, String> {
     log::debug!("Command: playlist_get_stats {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_playlist_stats(playlist_id)
         .map_err(|e| e.to_string())
 }
@@ -1471,7 +1544,8 @@ pub async fn playlist_get_all_stats(
 ) -> Result<Vec<PlaylistStats>, String> {
     log::debug!("Command: playlist_get_all_stats");
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_all_playlist_stats()
         .map_err(|e| e.to_string())
 }
@@ -1484,7 +1558,8 @@ pub async fn playlist_increment_play_count(
 ) -> Result<PlaylistStats, String> {
     log::info!("Command: playlist_increment_play_count {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.increment_playlist_play_count(playlist_id)
         .map_err(|e| e.to_string())
 }
@@ -1500,7 +1575,8 @@ pub async fn playlist_get_custom_order(
 ) -> Result<Vec<(i64, bool, i32)>, String> {
     log::info!("Command: playlist_get_custom_order {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_playlist_custom_order(playlist_id)
         .map_err(|e| e.to_string())
 }
@@ -1514,7 +1590,8 @@ pub async fn playlist_init_custom_order(
 ) -> Result<(), String> {
     log::info!("Command: playlist_init_custom_order {} ({} tracks)", playlist_id, track_ids.len());
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.init_playlist_custom_order(playlist_id, &track_ids)
         .map_err(|e| e.to_string())
 }
@@ -1528,7 +1605,8 @@ pub async fn playlist_set_custom_order(
 ) -> Result<(), String> {
     log::info!("Command: playlist_set_custom_order {} ({} tracks)", playlist_id, orders.len());
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.set_playlist_custom_order(playlist_id, &orders)
         .map_err(|e| e.to_string())
 }
@@ -1544,7 +1622,8 @@ pub async fn playlist_move_track(
 ) -> Result<(), String> {
     log::info!("Command: playlist_move_track {} track {} -> pos {}", playlist_id, track_id, new_position);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.move_playlist_track(playlist_id, track_id, is_local, new_position)
         .map_err(|e| e.to_string())
 }
@@ -1557,7 +1636,8 @@ pub async fn playlist_has_custom_order(
 ) -> Result<bool, String> {
     log::info!("Command: playlist_has_custom_order {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.has_playlist_custom_order(playlist_id)
         .map_err(|e| e.to_string())
 }
@@ -1570,7 +1650,8 @@ pub async fn playlist_clear_custom_order(
 ) -> Result<(), String> {
     log::info!("Command: playlist_clear_custom_order {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.clear_playlist_custom_order(playlist_id)
         .map_err(|e| e.to_string())
 }
@@ -1600,7 +1681,8 @@ pub async fn library_fetch_missing_artwork(
 
     // Get all albums without artwork
     let albums_without_artwork: Vec<(String, String, String)> = {
-        let db = state.db.lock().await;
+        let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
         db.get_albums_without_artwork()
             .map_err(|e| e.to_string())?
     };
@@ -1611,7 +1693,8 @@ pub async fn library_fetch_missing_artwork(
         // Try to fetch from Discogs
         if let Some(artwork_path) = discogs.fetch_artwork(&artist, &album, &artwork_cache).await {
             // Update all tracks in this album with the artwork
-            let db = state.db.lock().await;
+            let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
             if db.update_album_group_artwork(&group_key, &artwork_path).is_ok() {
                 updated_count += 1;
                 log::info!("Updated artwork for {} - {}", artist, album);
@@ -1641,7 +1724,8 @@ pub async fn library_fetch_album_artwork(
     let artwork_cache = get_artwork_cache_dir();
 
     if let Some(artwork_path) = discogs.fetch_artwork(&artist, &album, &artwork_cache).await {
-        let db = state.db.lock().await;
+        let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
         if let Some(group_key) = db
             .find_album_group_key(&album, &artist)
             .map_err(|e| e.to_string())?
@@ -1683,7 +1767,8 @@ pub async fn library_set_album_artwork(
     let cached_path = MetadataExtractor::cache_artwork_file(source_path, &artwork_cache)
         .ok_or_else(|| "Failed to cache artwork file".to_string())?;
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.update_album_group_artwork(&album_group_key, &cached_path)
         .map_err(|e| e.to_string())?;
 
@@ -1712,7 +1797,8 @@ pub async fn library_get_album_settings(
 ) -> Result<Option<crate::library::AlbumSettings>, String> {
     log::info!("Command: library_get_album_settings {}", album_group_key);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_album_settings(&album_group_key)
         .map_err(|e| e.to_string())
 }
@@ -1725,7 +1811,8 @@ pub async fn library_set_album_hidden(
 ) -> Result<(), String> {
     log::info!("Command: library_set_album_hidden {} = {}", album_group_key, hidden);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.set_album_hidden(&album_group_key, hidden)
         .map_err(|e| e.to_string())
 }
@@ -1819,7 +1906,8 @@ pub async fn library_update_album_metadata(
     .map_err(|e| format!("Failed to write sidecar: {}", e))?;
     sidecar_result?;
 
-    let mut db = state.db.lock().await;
+    let mut guard__ = state.db.lock().await;
+    let db = guard__.as_mut().ok_or("No active session - please log in")?;
     let existing_tracks = db
         .get_album_tracks(&request.album_group_key)
         .map_err(|e| e.to_string())?;
@@ -1872,7 +1960,8 @@ pub async fn library_write_album_metadata_to_files(
         return Err("Album track list is empty.".to_string());
     }
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let existing_tracks = db
         .get_album_tracks(&request.album_group_key)
         .map_err(|e| e.to_string())?;
@@ -1882,7 +1971,7 @@ pub async fn library_write_album_metadata_to_files(
     {
         return Err("Writing tags to files is not supported for CUE-based albums. Use sidecar mode instead.".to_string());
     }
-    drop(db);
+    drop(guard__);
 
     let album_dir = PathBuf::from(request.album_group_key.trim());
     if !album_dir.is_dir() {
@@ -2001,7 +2090,8 @@ pub async fn library_write_album_metadata_to_files(
     .await;
 
     // Update DB from the requested values.
-    let mut db = state.db.lock().await;
+    let mut guard__ = state.db.lock().await;
+    let db = guard__.as_mut().ok_or("No active session - please log in")?;
     let existing_tracks = db
         .get_album_tracks(&request.album_group_key)
         .map_err(|e| e.to_string())?;
@@ -2046,7 +2136,8 @@ pub async fn library_refresh_album_metadata_from_files(
         return Err("Album ID is required.".to_string());
     }
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let existing_tracks = db.get_album_tracks(&album_group_key).map_err(|e| e.to_string())?;
     if existing_tracks.is_empty() {
         return Err("Album not found.".to_string());
@@ -2059,7 +2150,7 @@ pub async fn library_refresh_album_metadata_from_files(
             "Refreshing metadata from files is not supported for CUE-based albums.".to_string(),
         );
     }
-    drop(db);
+    drop(guard__);
 
     let album_dir = PathBuf::from(album_group_key.trim());
     if !album_dir.is_dir() {
@@ -2111,7 +2202,8 @@ pub async fn library_refresh_album_metadata_from_files(
     .map_err(|e| format!("Failed to refresh metadata: {}", e))?;
     let updates = refresh?;
 
-    let mut db = state.db.lock().await;
+    let mut guard__ = state.db.lock().await;
+    let db = guard__.as_mut().ok_or("No active session - please log in")?;
     db.update_tracks_metadata_by_id(&updates)
         .map_err(|e| e.to_string())?;
 
@@ -2124,7 +2216,8 @@ pub async fn library_get_hidden_albums(
 ) -> Result<Vec<String>, String> {
     log::info!("Command: library_get_hidden_albums");
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_hidden_albums()
         .map_err(|e| e.to_string())
 }
@@ -2157,7 +2250,8 @@ pub async fn library_backfill_downloads(
 
     // Get all ready cached tracks directly from offline cache DB
     let cached_tracks = {
-        let cache_db = offline_cache_state.db.lock().await;
+        let cache_db_opt__ = offline_cache_state.db.lock().await;
+        let cache_db = cache_db_opt__.as_ref().ok_or("No active session - please log in")?;
 
         let mut stmt = cache_db
             .conn()
@@ -2185,7 +2279,8 @@ pub async fn library_backfill_downloads(
 
     report.total_downloads = cached_tracks.len();
 
-    let library_db = state.db.lock().await;
+    let library_db_opt__ = state.db.lock().await;
+    let library_db = library_db_opt__.as_ref().ok_or("No active session - please log in")?;
 
     for (track_id, title, artist, album, duration_secs, file_path, bit_depth, sample_rate) in cached_tracks {
         // Strategy: Try to match by qobuz_track_id first, then by file_path
@@ -2280,7 +2375,8 @@ pub async fn library_get_artist_image(
     artist_name: String,
     state: State<'_, LibraryState>,
 ) -> Result<Option<ArtistImageInfo>, String> {
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_artist_image(&artist_name).map_err(|e| e.to_string())
 }
 
@@ -2290,7 +2386,8 @@ pub async fn library_get_artist_images(
     artist_names: Vec<String>,
     state: State<'_, LibraryState>,
 ) -> Result<Vec<ArtistImageInfo>, String> {
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let mut results = Vec::new();
     for name in artist_names {
         if let Ok(Some(info)) = db.get_artist_image(&name) {
@@ -2305,7 +2402,8 @@ pub async fn library_get_artist_images(
 pub async fn library_get_canonical_names(
     state: State<'_, LibraryState>,
 ) -> Result<std::collections::HashMap<String, String>, String> {
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_all_canonical_names().map_err(|e| e.to_string())
 }
 
@@ -2318,7 +2416,8 @@ pub async fn library_cache_artist_image(
     canonical_name: Option<String>,
     state: State<'_, LibraryState>,
 ) -> Result<(), String> {
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.cache_artist_image_with_canonical(
         &artist_name,
         Some(&image_url),
@@ -2363,7 +2462,8 @@ pub async fn library_set_custom_artist_image(
     
     log::info!("Copied artist artwork for '{}' to: {}", artist_name, dest_path.display());
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.cache_artist_image(&artist_name, None, "custom", Some(&dest_path.to_string_lossy()))
         .map_err(|e| e.to_string())
 }
@@ -2399,7 +2499,8 @@ pub async fn playlist_analyze_local_content(
 ) -> Result<PlaylistAnalysisResult, String> {
     log::info!("Command: playlist_analyze_local_content for playlist {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let total_tracks = tracks.len() as u32;
     let mut local_count = 0u32;
 
@@ -2453,7 +2554,8 @@ pub async fn playlist_get_local_content_status(
 ) -> Result<crate::library::database::LocalContentStatus, String> {
     log::info!("Command: playlist_get_local_content_status for playlist {}", playlist_id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let settings = db.get_playlist_settings(playlist_id)
         .map_err(|e| e.to_string())?;
 
@@ -2471,7 +2573,8 @@ pub async fn playlist_track_is_local(
     album: String,
     state: State<'_, LibraryState>,
 ) -> Result<bool, String> {
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
 
     // First try Qobuz track ID
     let has_by_id = db.has_local_track_by_qobuz_id(qobuz_track_id)
@@ -2495,7 +2598,8 @@ pub async fn playlist_get_local_track_id(
     album: String,
     state: State<'_, LibraryState>,
 ) -> Result<Option<i64>, String> {
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
 
     // First try Qobuz track ID
     if let Some(id) = db.get_local_track_id_by_qobuz_id(qobuz_track_id)
@@ -2515,7 +2619,8 @@ pub async fn playlist_get_tracks_with_local_copies(
     track_ids: Vec<u64>,
     state: State<'_, LibraryState>,
 ) -> Result<Vec<u64>, String> {
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
 
     let local_ids = db.get_tracks_with_local_copies(&track_ids)
         .map_err(|e| e.to_string())?;
@@ -2531,7 +2636,8 @@ pub async fn playlist_get_offline_available(
 ) -> Result<Vec<u64>, String> {
     log::info!("Command: playlist_get_offline_available (include_partial: {})", include_partial);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let playlists = db.get_playlists_by_local_content(include_partial)
         .map_err(|e| e.to_string())?;
 
@@ -2583,7 +2689,8 @@ pub async fn library_get_tracks_by_ids(
 ) -> Result<Vec<LocalTrack>, String> {
     log::info!("Command: library_get_tracks_by_ids ({} tracks)", track_ids.len());
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let mut tracks = Vec::new();
 
     for track_id in track_ids {
@@ -2642,7 +2749,8 @@ pub async fn create_playlist_folder(
 ) -> Result<PlaylistFolder, String> {
     log::info!("Command: create_playlist_folder {}", name);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.create_playlist_folder(
         &name,
         icon_type.as_deref(),
@@ -2659,7 +2767,8 @@ pub async fn get_playlist_folders(
 ) -> Result<Vec<PlaylistFolder>, String> {
     log::debug!("Command: get_playlist_folders");
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.get_all_playlist_folders().map_err(|e| e.to_string())
 }
 
@@ -2707,7 +2816,8 @@ pub async fn update_playlist_folder(
         None
     };
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.update_playlist_folder(
         &id,
         name.as_deref(),
@@ -2728,7 +2838,8 @@ pub async fn delete_playlist_folder(
 ) -> Result<(), String> {
     log::info!("Command: delete_playlist_folder {}", id);
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.delete_playlist_folder(&id).map_err(|e| e.to_string())
 }
 
@@ -2740,7 +2851,8 @@ pub async fn reorder_playlist_folders(
 ) -> Result<(), String> {
     log::info!("Command: reorder_playlist_folders ({} folders)", folder_ids.len());
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.reorder_playlist_folders(&folder_ids).map_err(|e| e.to_string())
 }
 
@@ -2757,7 +2869,8 @@ pub async fn move_playlist_to_folder(
         folder_id
     );
 
-    let db = state.db.lock().await;
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.move_playlist_to_folder(playlist_id, folder_id.as_deref())
         .map_err(|e| e.to_string())
 }

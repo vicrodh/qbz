@@ -32,6 +32,7 @@
     getActiveMenuId,
     MENU_INACTIVITY_TIMEOUT
   } from '$lib/stores/floatingMenuStore';
+  import { getUserItem, setUserItem } from '$lib/utils/userStorage';
 
   interface Playlist {
     id: number;
@@ -85,13 +86,13 @@
 
   // Filter and sort state (persisted)
   let filter = $state<PlaylistFilter>(
-    (localStorage.getItem('qbz-pm-filter') as PlaylistFilter) || 'all'
+    (getUserItem('qbz-pm-filter') as PlaylistFilter) || 'all'
   );
   let sort = $state<PlaylistSort>(
-    (localStorage.getItem('qbz-pm-sort') as PlaylistSort) || 'name'
+    (getUserItem('qbz-pm-sort') as PlaylistSort) || 'name'
   );
   let viewMode = $state<ViewMode>(
-    (localStorage.getItem('qbz-pm-view') as ViewMode) || 'grid'
+    (getUserItem('qbz-pm-view') as ViewMode) || 'grid'
   );
 
   // Search state
@@ -128,9 +129,9 @@
   let editingFolder = $state<PlaylistFolder | null>(null);
 
   // Persist preferences
-  $effect(() => { localStorage.setItem('qbz-pm-filter', filter); });
-  $effect(() => { localStorage.setItem('qbz-pm-sort', sort); });
-  $effect(() => { localStorage.setItem('qbz-pm-view', viewMode); });
+  $effect(() => { setUserItem('qbz-pm-filter', filter); });
+  $effect(() => { setUserItem('qbz-pm-sort', sort); });
+  $effect(() => { setUserItem('qbz-pm-view', viewMode); });
 
   // Helper functions for closing menus with global store
   function closeFilterMenu() {

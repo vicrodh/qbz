@@ -6,6 +6,7 @@
 
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 const GRACE_PERIOD_SECS: i64 = 3 * 24 * 60 * 60; // 3 days
@@ -37,15 +38,11 @@ pub struct SubscriptionStateStore {
 }
 
 impl SubscriptionStateStore {
-    pub fn new() -> Result<Self, String> {
-        let data_dir = dirs::data_dir()
-            .ok_or("Could not determine data directory")?
-            .join("qbz");
-
-        std::fs::create_dir_all(&data_dir)
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("subscription_state.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open subscription state database: {}", e))?;
 
@@ -62,6 +59,17 @@ impl SubscriptionStateStore {
         ).map_err(|e| format!("Failed to create subscription state table: {}", e))?;
 
         Ok(Self { conn })
+    }
+
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+        Self::open_at(&data_dir, "subscription_state.db")
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "subscription_state.db")
     }
 
     pub fn get_state(&self) -> Result<SubscriptionState, String> {
@@ -138,10 +146,13 @@ impl SubscriptionStateStore {
     }
 }
 
-pub type SubscriptionStateState = Arc<Mutex<SubscriptionStateStore>>;
+pub type SubscriptionStateState = Arc<Mutex<Option<SubscriptionStateStore>>>;
 
 pub fn create_subscription_state() -> Result<SubscriptionStateState, String> {
     let store = SubscriptionStateStore::new()?;
-    Ok(Arc::new(Mutex::new(store)))
+    Ok(Arc::new(Mutex::new(Some(store))))
 }
 
+pub fn create_empty_subscription_state() -> SubscriptionStateState {
+    Arc::new(Mutex::new(None))
+}

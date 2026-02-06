@@ -25,6 +25,7 @@ pub mod search;
 pub mod share;
 pub mod smart_playlists;
 pub mod remote_metadata;
+pub mod user_session;
 pub mod visualizer;
 
 pub use artist_blacklist::*;
@@ -50,4 +51,5 @@ pub use search::*;
 pub use share::*;
 pub use smart_playlists::*;
 pub use remote_metadata::*;
+pub use user_session::*;
 pub use visualizer::*;

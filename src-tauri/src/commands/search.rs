@@ -292,7 +292,8 @@ pub async fn get_album(
 ) -> Result<Album, String> {
     // Check cache first
     {
-        let cache = cache_state.cache.lock().await;
+        let guard__ = cache_state.cache.lock().await;
+        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         if let Some(cached_data) = cache.get_album(&album_id, None)? {
             log::debug!("Cache hit for album {}", album_id);
             return serde_json::from_str(&cached_data)
@@ -307,7 +308,8 @@ pub async fn get_album(
 
     // Cache the result
     {
-        let cache = cache_state.cache.lock().await;
+        let guard__ = cache_state.cache.lock().await;
+        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&album)
             .map_err(|e| format!("Failed to serialize album: {}", e))?;
         cache.set_album(&album_id, &json)?;
@@ -348,7 +350,8 @@ pub async fn get_track(
 ) -> Result<Track, String> {
     // Check cache first
     {
-        let cache = cache_state.cache.lock().await;
+        let guard__ = cache_state.cache.lock().await;
+        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         if let Some(cached_data) = cache.get_track(track_id, None)? {
             log::debug!("Cache hit for track {}", track_id);
             return serde_json::from_str(&cached_data)
@@ -363,7 +366,8 @@ pub async fn get_track(
 
     // Cache the result
     {
-        let cache = cache_state.cache.lock().await;
+        let guard__ = cache_state.cache.lock().await;
+        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&track)
             .map_err(|e| format!("Failed to serialize track: {}", e))?;
         cache.set_track(track_id, &json)?;
@@ -389,7 +393,8 @@ pub async fn get_artist(
 
     // Check cache first
     {
-        let cache = cache_state.cache.lock().await;
+        let guard__ = cache_state.cache.lock().await;
+        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         if let Some(cached_data) = cache.get_artist(artist_id, &locale, None)? {
             log::debug!("Cache hit for artist {} (locale: {})", artist_id, locale);
             return serde_json::from_str(&cached_data)
@@ -407,7 +412,8 @@ pub async fn get_artist(
 
     // Cache the result
     {
-        let cache = cache_state.cache.lock().await;
+        let guard__ = cache_state.cache.lock().await;
+        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&artist)
             .map_err(|e| format!("Failed to serialize artist: {}", e))?;
         cache.set_artist(artist_id, &locale, &json)?;
@@ -433,7 +439,8 @@ pub async fn get_artist_basic(
 
     // Check cache first (reuse same cache - basic response works for both)
     {
-        let cache = cache_state.cache.lock().await;
+        let guard__ = cache_state.cache.lock().await;
+        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         if let Some(cached_data) = cache.get_artist(artist_id, &locale, None)? {
             log::debug!("Cache hit for artist_basic {} (locale: {})", artist_id, locale);
             return serde_json::from_str(&cached_data)
@@ -451,7 +458,8 @@ pub async fn get_artist_basic(
 
     // Cache the result
     {
-        let cache = cache_state.cache.lock().await;
+        let guard__ = cache_state.cache.lock().await;
+        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&artist)
             .map_err(|e| format!("Failed to serialize artist: {}", e))?;
         cache.set_artist(artist_id, &locale, &json)?;

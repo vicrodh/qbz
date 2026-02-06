@@ -198,7 +198,7 @@
 
   // Total counts including local tracks
   let totalTrackCount = $derived((playlist?.tracks_count ?? 0) + localTracks.length);
-  let localTracksDuration = $derived(localTracks.reduce((sum, t) => sum + t.duration_secs, 0));
+  let localTracksDuration = $derived(localTracks.reduce((sum, track) => sum + track.duration_secs, 0));
   let totalDuration = $derived((playlist?.duration ?? 0) + localTracksDuration);
 
   // Playlist suggestions: adaptive artist selection (quantity scales with playlist size,

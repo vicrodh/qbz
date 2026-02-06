@@ -328,7 +328,8 @@ async fn enrich_from_musicbrainz(
 ) -> Result<(Option<String>, Vec<String>), String> {
     // Resolve artist to get MBID
     let resolved = {
-        let cache = mb_state.cache.lock().await;
+        let cache_opt__ = mb_state.cache.lock().await;
+        let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         cache.get_artist(name).ok().flatten()
     };
 

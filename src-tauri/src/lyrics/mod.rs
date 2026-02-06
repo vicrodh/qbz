@@ -7,6 +7,7 @@ pub mod commands;
 pub mod providers;
 
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -51,7 +52,7 @@ impl LyricsProvider {
 
 /// Lyrics state shared across commands
 pub struct LyricsState {
-    pub db: Arc<Mutex<LyricsCacheDb>>,
+    pub db: Arc<Mutex<Option<LyricsCacheDb>>>,
 }
 
 impl LyricsState {
@@ -68,8 +69,30 @@ impl LyricsState {
         let db = LyricsCacheDb::new(&db_path)?;
 
         Ok(Self {
-            db: Arc::new(Mutex::new(db)),
+            db: Arc::new(Mutex::new(Some(db))),
         })
+    }
+
+    pub fn new_empty() -> Self {
+        Self {
+            db: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub async fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let cache_dir = base_dir.join("lyrics");
+        std::fs::create_dir_all(&cache_dir)
+            .map_err(|e| format!("Failed to create lyrics cache directory: {}", e))?;
+        let db_path = cache_dir.join("lyrics.db");
+        let new_db = LyricsCacheDb::new(&db_path)?;
+        let mut guard = self.db.lock().await;
+        *guard = Some(new_db);
+        Ok(())
+    }
+
+    pub async fn teardown(&self) {
+        let mut guard = self.db.lock().await;
+        *guard = None;
     }
 }
 

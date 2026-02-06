@@ -6,6 +6,7 @@ pub mod commands;
 pub mod db;
 
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -78,7 +79,7 @@ pub struct HomeSeeds {
 
 /// Recommendation store state shared across commands
 pub struct RecoState {
-    pub db: Arc<Mutex<RecoStoreDb>>,
+    pub db: Arc<Mutex<Option<RecoStoreDb>>>,
 }
 
 impl RecoState {
@@ -95,7 +96,29 @@ impl RecoState {
         let db = RecoStoreDb::new(&db_path)?;
 
         Ok(Self {
-            db: Arc::new(Mutex::new(db)),
+            db: Arc::new(Mutex::new(Some(db))),
         })
+    }
+
+    pub fn new_empty() -> Self {
+        Self {
+            db: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub async fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let reco_dir = base_dir.join("reco");
+        std::fs::create_dir_all(&reco_dir)
+            .map_err(|e| format!("Failed to create reco directory: {}", e))?;
+        let db_path = reco_dir.join("events.db");
+        let new_db = RecoStoreDb::new(&db_path)?;
+        let mut guard = self.db.lock().await;
+        *guard = Some(new_db);
+        Ok(())
+    }
+
+    pub async fn teardown(&self) {
+        let mut guard = self.db.lock().await;
+        *guard = None;
     }
 }

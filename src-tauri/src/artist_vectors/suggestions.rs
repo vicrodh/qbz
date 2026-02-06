@@ -94,7 +94,7 @@ pub struct SuggestionResult {
 /// Playlist suggestions engine
 pub struct SuggestionsEngine {
     /// Vector store for similarity lookups
-    store: Arc<Mutex<ArtistVectorStore>>,
+    store: Arc<Mutex<Option<ArtistVectorStore>>>,
     /// Vector builder for lazy construction
     builder: Arc<ArtistVectorBuilder>,
     /// Qobuz client for track search
@@ -106,7 +106,7 @@ pub struct SuggestionsEngine {
 impl SuggestionsEngine {
     /// Create a new suggestions engine
     pub fn new(
-        store: Arc<Mutex<ArtistVectorStore>>,
+        store: Arc<Mutex<Option<ArtistVectorStore>>>,
         builder: Arc<ArtistVectorBuilder>,
         qobuz_client: Arc<Mutex<QobuzClient>>,
         config: SuggestionConfig,
@@ -184,7 +184,8 @@ impl SuggestionsEngine {
         let step3_start = Instant::now();
         let exclude_vec: Vec<String> = playlist_artist_mbids.to_vec();
         let similar_artists = {
-            let store = self.store.lock().await;
+            let guard__ = self.store.lock().await;
+            let store = guard__.as_ref().ok_or("No active session - please log in")?;
             // Use direct relationship lookup instead of vector similarity
             // This finds members, collaborators, etc. from the MusicBrainz data
             store.get_all_related_artists(&playlist_artist_mbids, &exclude_vec, self.config.max_artists)?
@@ -396,7 +397,8 @@ impl SuggestionsEngine {
         artist_mbids: &[String],
     ) -> Result<SparseVector, String> {
         let mut combined = SparseVector::new();
-        let store = self.store.lock().await;
+        let guard__ = self.store.lock().await;
+        let store = guard__.as_ref().ok_or("No active session - please log in")?;
 
         for mbid in artist_mbids {
             if let Some(vector) = store.get_vector(mbid) {
@@ -506,10 +508,14 @@ impl SuggestionsEngine {
             Some(name) => name.to_string(),
             None => {
                 // Try to get name from store
-                let store = self.store.lock().await;
-                store
-                    .get_artist_name(artist_mbid)
-                    .unwrap_or_else(|| artist_mbid.to_string())
+                let guard__ = self.store.lock().await;
+                if let Some(store) = guard__.as_ref() {
+                    store
+                        .get_artist_name(artist_mbid)
+                        .unwrap_or_else(|| artist_mbid.to_string())
+                } else {
+                    artist_mbid.to_string()
+                }
             }
         };
 

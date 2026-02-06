@@ -35,15 +35,11 @@ pub struct FavoritesPreferencesStore {
 }
 
 impl FavoritesPreferencesStore {
-    pub fn new() -> Result<Self, String> {
-        let data_dir = dirs::data_dir()
-            .ok_or("Could not determine data directory")?
-            .join("qbz");
-
-        std::fs::create_dir_all(&data_dir)
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("favorites_preferences.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open favorites preferences database: {}", e))?;
 
@@ -62,7 +58,7 @@ impl FavoritesPreferencesStore {
         let has_icon_background = conn
             .prepare("SELECT icon_background FROM favorites_preferences LIMIT 1")
             .is_ok();
-        
+
         if !has_icon_background {
             conn.execute(
                 "ALTER TABLE favorites_preferences ADD COLUMN icon_background TEXT",
@@ -72,6 +68,17 @@ impl FavoritesPreferencesStore {
         }
 
         Ok(Self { conn })
+    }
+
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+        Self::open_at(&data_dir, "favorites_preferences.db")
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "favorites_preferences.db")
     }
 
     fn favorites_icon_dir() -> Result<PathBuf, String> {
@@ -127,7 +134,7 @@ impl FavoritesPreferencesStore {
     pub fn get_preferences(&self) -> Result<FavoritesPreferences, String> {
         let mut stmt = self.conn.prepare("SELECT custom_icon_path, custom_icon_preset, icon_background, tab_order FROM favorites_preferences WHERE id = 1")
             .map_err(|e| format!("Failed to prepare select: {}", e))?;
-        
+
         let result = stmt.query_row([], |row| {
             let custom_icon_path: Option<String> = row.get(0)?;
             let custom_icon_preset: Option<String> = row.get(1)?;
@@ -136,7 +143,7 @@ impl FavoritesPreferencesStore {
 
             let custom_icon_path = custom_icon_path
                 .and_then(|value| if value.trim().is_empty() { None } else { Some(value) });
-            
+
             let tab_order: Vec<String> = serde_json::from_str(&tab_order_str).unwrap_or_else(|_| {
                 vec![
                     "tracks".to_string(),
@@ -194,7 +201,7 @@ impl FavoritesPreferencesStore {
 
         let tab_order_str = serde_json::to_string(&prefs.tab_order)
             .map_err(|e| format!("Failed to serialize tab_order: {}", e))?;
-        
+
         self.conn.execute(
             "INSERT OR REPLACE INTO favorites_preferences (id, custom_icon_path, custom_icon_preset, icon_background, tab_order)
              VALUES (1, ?1, ?2, ?3, ?4)",
@@ -206,15 +213,36 @@ impl FavoritesPreferencesStore {
 }
 
 pub struct FavoritesPreferencesState {
-    pub store: Arc<Mutex<FavoritesPreferencesStore>>,
+    pub store: Arc<Mutex<Option<FavoritesPreferencesStore>>>,
 }
 
 impl FavoritesPreferencesState {
     pub fn new() -> Result<Self, String> {
         let store = FavoritesPreferencesStore::new()?;
         Ok(Self {
-            store: Arc::new(Mutex::new(store)),
+            store: Arc::new(Mutex::new(Some(store))),
         })
+    }
+
+    pub fn new_empty() -> Self {
+        Self {
+            store: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let new_store = FavoritesPreferencesStore::new_at(base_dir)?;
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock favorites preferences store".to_string())?;
+        *guard = Some(new_store);
+        Ok(())
+    }
+
+    pub fn teardown(&self) -> Result<(), String> {
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock favorites preferences store".to_string())?;
+        *guard = None;
+        Ok(())
     }
 }
 
@@ -222,10 +250,11 @@ impl FavoritesPreferencesState {
 pub fn get_favorites_preferences(
     state: tauri::State<FavoritesPreferencesState>,
 ) -> Result<FavoritesPreferences, String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites preferences store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.get_preferences()
 }
 
@@ -234,10 +263,11 @@ pub fn save_favorites_preferences(
     prefs: FavoritesPreferences,
     state: tauri::State<FavoritesPreferencesState>,
 ) -> Result<FavoritesPreferences, String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites preferences store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.save_preferences(prefs)
 }
 
@@ -251,25 +281,25 @@ pub fn create_table(conn: &Connection) -> Result<()> {
         )",
         [],
     )?;
-    
+
     // Migration: Add icon_background column if it doesn't exist
     let has_icon_background = conn
         .prepare("SELECT icon_background FROM favorites_preferences LIMIT 1")
         .is_ok();
-    
+
     if !has_icon_background {
         conn.execute(
             "ALTER TABLE favorites_preferences ADD COLUMN icon_background TEXT",
             [],
         )?;
     }
-    
+
     Ok(())
 }
 
 pub fn load_preferences(conn: &Connection) -> Result<FavoritesPreferences> {
     let mut stmt = conn.prepare("SELECT custom_icon_path, custom_icon_preset, icon_background, tab_order FROM favorites_preferences WHERE id = 1")?;
-    
+
     let result = stmt.query_row([], |row| {
         let custom_icon_path: Option<String> = row.get(0)?;
         let custom_icon_preset: Option<String> = row.get(1)?;
@@ -278,7 +308,7 @@ pub fn load_preferences(conn: &Connection) -> Result<FavoritesPreferences> {
 
         let custom_icon_path = custom_icon_path
             .and_then(|value| if value.trim().is_empty() { None } else { Some(value) });
-        
+
         let tab_order: Vec<String> = serde_json::from_str(&tab_order_str).unwrap_or_else(|_| {
             vec![
                 "tracks".to_string(),
@@ -305,7 +335,7 @@ pub fn load_preferences(conn: &Connection) -> Result<FavoritesPreferences> {
 
 pub fn save_preferences(conn: &Connection, prefs: &FavoritesPreferences) -> Result<()> {
     let tab_order_str = serde_json::to_string(&prefs.tab_order).unwrap();
-    
+
     conn.execute(
         "INSERT OR REPLACE INTO favorites_preferences (id, custom_icon_path, custom_icon_preset, icon_background, tab_order)
          VALUES (1, ?1, ?2, ?3, ?4)",

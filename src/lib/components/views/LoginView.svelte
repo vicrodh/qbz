@@ -8,6 +8,7 @@
 
   interface UserInfo {
     userName: string;
+    userId: number;
     subscription: string;
     subscriptionValidUntil?: string | null;
   }
@@ -71,31 +72,46 @@
       if (loggedIn) {
         clearTimeoutTimer();
         const userInfo = await invoke<{ user_name: string; subscription: string; subscription_valid_until?: string | null } | null>('get_user_info');
-        if (userInfo) {
+        const userId = await invoke<number | null>('get_current_user_id');
+        if (userInfo && userId) {
           onLoginSuccess({
             userName: userInfo.user_name,
+            userId,
             subscription: userInfo.subscription,
             subscriptionValidUntil: userInfo.subscription_valid_until ?? null,
           });
         } else {
-          onLoginSuccess({ userName: 'User', subscription: 'Active' });
+          onLoginSuccess({ userName: 'User', userId: userId || 0, subscription: 'Active' });
         }
         return;
       }
 
-      // Load ToS acceptance from Rust (persisted, survives app updates)
-      initStatus = 'Loading preferences...';
-      await loadTosAcceptance();
-
-      // Check for saved credentials and auto-login
+      // Check for saved credentials and last user session
       initStatus = 'Checking saved credentials...';
       const hasSavedCreds = await invoke<boolean>('has_saved_credentials');
+      const lastUserId = await invoke<number | null>('get_last_user_id');
+
+      // Restore per-user session before reading ToS or auto-login
+      if (hasSavedCreds && lastUserId) {
+        initStatus = 'Restoring session...';
+        try {
+          await invoke('activate_user_session', { userId: lastUserId });
+          console.log('Restored user session for', lastUserId);
+        } catch (e) {
+          console.warn('Failed to restore user session:', e);
+        }
+      }
+
+      // Load ToS acceptance from Rust (now available after session restore)
+      initStatus = 'Loading preferences...';
+      await loadTosAcceptance();
 
       if (hasSavedCreds && get(qobuzTosAccepted)) {
         initStatus = 'Logging in...';
         const response = await invoke<{
           success: boolean;
           user_name?: string;
+          user_id?: number;
           subscription?: string;
           subscription_valid_until?: string | null;
           error?: string;
@@ -107,6 +123,7 @@
           console.log('Auto-login successful');
           onLoginSuccess({
             userName: response.user_name || 'User',
+            userId: response.user_id || 0,
             subscription: response.subscription || 'Active',
             subscriptionValidUntil: response.subscription_valid_until ?? null,
           });
@@ -165,6 +182,7 @@
       const response = await invoke<{
         success: boolean;
         user_name?: string;
+        user_id?: number;
         subscription?: string;
         subscription_valid_until?: string | null;
         error?: string;
@@ -187,6 +205,7 @@
 
         onLoginSuccess({
             userName: response.user_name || 'User',
+            userId: response.user_id || 0,
             subscription: response.subscription || 'Active',
             subscriptionValidUntil: response.subscription_valid_until ?? null,
           });

@@ -7,6 +7,7 @@
 
 import { invoke } from '@tauri-apps/api/core';
 import { saveSessionVolume } from '$lib/services/sessionService';
+import { getUserItem, setUserItem, removeUserItem } from '$lib/utils/userStorage';
 
 /**
  * Get the preferred streaming quality from localStorage
@@ -14,7 +15,7 @@ import { saveSessionVolume } from '$lib/services/sessionService';
  */
 function getStreamingQuality(): string {
   if (typeof localStorage === 'undefined') return 'Hi-Res+';
-  const saved = localStorage.getItem('qbz-streaming-quality');
+  const saved = getUserItem('qbz-streaming-quality');
   // Log for debugging issue #34
   console.log('[Quality] getStreamingQuality called, localStorage value:', saved);
   return saved || 'Hi-Res+';
@@ -100,7 +101,7 @@ interface QueueTrack {
  */
 function loadPersistedVolume(): number {
   if (typeof localStorage === 'undefined') return 75;
-  const stored = localStorage.getItem('qbz-volume');
+  const stored = getUserItem('qbz-volume');
   if (stored) {
     const parsed = parseFloat(stored);
     if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
@@ -115,7 +116,7 @@ function loadPersistedVolume(): number {
  */
 function persistVolume(vol: number): void {
   if (typeof localStorage === 'undefined') return;
-  localStorage.setItem('qbz-volume', String(vol));
+  setUserItem('qbz-volume', String(vol));
 }
 
 let currentTrack: PlayingTrack | null = null;
@@ -420,19 +421,19 @@ export async function toggleMute(): Promise<void> {
     // Mute: save current volume and set to 0
     preMuteVolume = volume;
     if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('qbz-pre-mute-volume', String(volume));
+      setUserItem('qbz-pre-mute-volume', String(volume));
     }
     await setVolume(0);
   } else {
     // Unmute: restore saved volume
     let restoreVolume = preMuteVolume;
     if (restoreVolume === null && typeof localStorage !== 'undefined') {
-      const stored = localStorage.getItem('qbz-pre-mute-volume');
+      const stored = getUserItem('qbz-pre-mute-volume');
       if (stored) restoreVolume = parseFloat(stored);
     }
     preMuteVolume = null;
     if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('qbz-pre-mute-volume');
+      removeUserItem('qbz-pre-mute-volume');
     }
     await setVolume(restoreVolume && restoreVolume > 0 ? restoreVolume : 75);
   }

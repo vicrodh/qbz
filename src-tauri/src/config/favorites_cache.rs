@@ -12,6 +12,7 @@
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 /// Represents a cached favorite track
@@ -37,15 +38,11 @@ pub struct FavoritesCacheStore {
 }
 
 impl FavoritesCacheStore {
-    pub fn new() -> Result<Self, String> {
-        let data_dir = dirs::data_dir()
-            .ok_or("Could not determine data directory")?
-            .join("qbz");
-
-        std::fs::create_dir_all(&data_dir)
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("favorites_cache.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open favorites cache database: {}", e))?;
 
@@ -78,6 +75,17 @@ impl FavoritesCacheStore {
         .map_err(|e| format!("Failed to create favorite_artists table: {}", e))?;
 
         Ok(Self { conn })
+    }
+
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+        Self::open_at(&data_dir, "favorites_cache.db")
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "favorites_cache.db")
     }
 
     // ============ Track favorites ============
@@ -298,15 +306,36 @@ impl FavoritesCacheStore {
 // ============ Tauri State ============
 
 pub struct FavoritesCacheState {
-    pub store: Arc<Mutex<FavoritesCacheStore>>,
+    pub store: Arc<Mutex<Option<FavoritesCacheStore>>>,
 }
 
 impl FavoritesCacheState {
     pub fn new() -> Result<Self, String> {
         let store = FavoritesCacheStore::new()?;
         Ok(Self {
-            store: Arc::new(Mutex::new(store)),
+            store: Arc::new(Mutex::new(Some(store))),
         })
+    }
+
+    pub fn new_empty() -> Self {
+        Self {
+            store: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let new_store = FavoritesCacheStore::new_at(base_dir)?;
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+        *guard = Some(new_store);
+        Ok(())
+    }
+
+    pub fn teardown(&self) -> Result<(), String> {
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+        *guard = None;
+        Ok(())
     }
 }
 
@@ -317,10 +346,11 @@ impl FavoritesCacheState {
 pub fn get_cached_favorite_tracks(
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<Vec<i64>, String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.get_favorite_track_ids()
 }
 
@@ -329,10 +359,11 @@ pub fn get_cached_favorite_tracks(
 pub fn get_cached_favorite_albums(
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<Vec<String>, String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.get_favorite_album_ids()
 }
 
@@ -341,10 +372,11 @@ pub fn get_cached_favorite_albums(
 pub fn get_cached_favorite_artists(
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<Vec<i64>, String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.get_favorite_artist_ids()
 }
 
@@ -354,10 +386,11 @@ pub fn cache_favorite_track(
     track_id: i64,
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<(), String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.add_favorite_track(track_id)
 }
 
@@ -367,10 +400,11 @@ pub fn uncache_favorite_track(
     track_id: i64,
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<(), String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.remove_favorite_track(track_id)
 }
 
@@ -380,10 +414,11 @@ pub fn cache_favorite_album(
     album_id: String,
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<(), String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.add_favorite_album(&album_id)
 }
 
@@ -393,10 +428,11 @@ pub fn uncache_favorite_album(
     album_id: String,
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<(), String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.remove_favorite_album(&album_id)
 }
 
@@ -406,10 +442,11 @@ pub fn cache_favorite_artist(
     artist_id: i64,
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<(), String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.add_favorite_artist(artist_id)
 }
 
@@ -419,10 +456,11 @@ pub fn uncache_favorite_artist(
     artist_id: i64,
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<(), String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.remove_favorite_artist(artist_id)
 }
 
@@ -432,10 +470,11 @@ pub fn sync_cached_favorite_tracks(
     track_ids: Vec<i64>,
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<(), String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.sync_favorite_tracks(&track_ids)
 }
 
@@ -445,10 +484,11 @@ pub fn sync_cached_favorite_albums(
     album_ids: Vec<String>,
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<(), String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.sync_favorite_albums(&album_ids)
 }
 
@@ -458,10 +498,11 @@ pub fn sync_cached_favorite_artists(
     artist_ids: Vec<i64>,
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<(), String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.sync_favorite_artists(&artist_ids)
 }
 
@@ -470,9 +511,10 @@ pub fn sync_cached_favorite_artists(
 pub fn clear_favorites_cache(
     state: tauri::State<FavoritesCacheState>,
 ) -> Result<(), String> {
-    let store = state
+    let guard = state
         .store
         .lock()
         .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.clear_all()
 }

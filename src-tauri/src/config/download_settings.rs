@@ -4,6 +4,7 @@
 
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,15 +34,11 @@ pub struct DownloadSettingsStore {
 }
 
 impl DownloadSettingsStore {
-    pub fn new() -> Result<Self, String> {
-        let data_dir = dirs::data_dir()
-            .ok_or("Could not determine data directory")?
-            .join("qbz");
-
-        std::fs::create_dir_all(&data_dir)
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("download_settings.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open download settings database: {}", e))?;
 
@@ -62,6 +59,17 @@ impl DownloadSettingsStore {
         ).map_err(|e| format!("Failed to initialize download settings: {}", e))?;
 
         Ok(Self { conn })
+    }
+
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+        Self::open_at(&data_dir, "download_settings.db")
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "download_settings.db")
     }
 
     pub fn get_settings(&self) -> Result<DownloadSettings, String> {
@@ -100,11 +108,15 @@ impl DownloadSettingsStore {
     }
 }
 
-pub type DownloadSettingsState = Arc<Mutex<DownloadSettingsStore>>;
+pub type DownloadSettingsState = Arc<Mutex<Option<DownloadSettingsStore>>>;
 
 pub fn create_download_settings_state() -> Result<DownloadSettingsState, String> {
     let store = DownloadSettingsStore::new()?;
-    Ok(Arc::new(Mutex::new(store)))
+    Ok(Arc::new(Mutex::new(Some(store))))
+}
+
+pub fn create_empty_download_settings_state() -> DownloadSettingsState {
+    Arc::new(Mutex::new(None))
 }
 
 // Tauri commands
@@ -114,7 +126,8 @@ pub fn get_download_settings(
     state: tauri::State<DownloadSettingsState>,
 ) -> Result<DownloadSettings, String> {
     log::info!("Command: get_download_settings");
-    let store = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.get_settings()
 }
 
@@ -124,7 +137,7 @@ pub fn set_download_root(
     state: tauri::State<DownloadSettingsState>,
 ) -> Result<(), String> {
     log::info!("Command: set_download_root to: {}", path);
-    
+
     // Basic validation
     let path_obj = std::path::Path::new(&path);
     if !path_obj.exists() {
@@ -134,7 +147,8 @@ pub fn set_download_root(
         return Err("Path is not a directory".to_string());
     }
 
-    let store = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_download_root(&path)
 }
 
@@ -144,16 +158,17 @@ pub fn set_show_downloads_in_library(
     state: tauri::State<DownloadSettingsState>,
 ) -> Result<(), String> {
     log::info!("Command: set_show_downloads_in_library to: {}", show);
-    let store = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_show_in_library(show)
 }
 
 #[tauri::command]
 pub fn validate_download_root(path: String) -> Result<bool, String> {
     log::info!("Command: validate_download_root: {}", path);
-    
+
     let path_obj = std::path::Path::new(&path);
-    
+
     if !path_obj.exists() {
         return Ok(false);
     }

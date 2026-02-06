@@ -175,7 +175,8 @@ pub async fn cast_play_local_track(
     library_state: State<'_, LibraryState>,
 ) -> Result<(), String> {
     let track = {
-        let db = library_state.db.lock().await;
+        let db_opt__ = library_state.db.lock().await;
+        let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
         db.get_track(track_id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| "Track not found".to_string())?

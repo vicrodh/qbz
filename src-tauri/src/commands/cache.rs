@@ -25,6 +25,7 @@ pub fn clear_cache(state: State<'_, AppState>) -> Result<(), String> {
 #[tauri::command]
 pub async fn clear_artist_cache(cache_state: State<'_, ApiCacheState>) -> Result<usize, String> {
     log::info!("Command: clear_artist_cache");
-    let cache = cache_state.cache.lock().await;
+    let guard = cache_state.cache.lock().await;
+    let cache = guard.as_ref().ok_or("No active session - please log in")?;
     cache.clear_all_artists()
 }

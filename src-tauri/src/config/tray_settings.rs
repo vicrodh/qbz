@@ -7,6 +7,7 @@
 
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use log::info;
 
@@ -35,15 +36,11 @@ pub struct TraySettingsStore {
 }
 
 impl TraySettingsStore {
-    pub fn new() -> Result<Self, String> {
-        let data_dir = dirs::data_dir()
-            .ok_or("Could not determine data directory")?
-            .join("qbz");
-
-        std::fs::create_dir_all(&data_dir)
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("tray_settings.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open tray settings database: {}", e))?;
 
@@ -67,6 +64,17 @@ impl TraySettingsStore {
         info!("[TraySettings] Database initialized");
 
         Ok(Self { conn })
+    }
+
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+        Self::open_at(&data_dir, "tray_settings.db")
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "tray_settings.db")
     }
 
     pub fn get_settings(&self) -> Result<TraySettings, String> {
@@ -121,31 +129,60 @@ impl TraySettingsStore {
 
 /// Global state wrapper for thread-safe access
 pub struct TraySettingsState {
-    store: Arc<Mutex<TraySettingsStore>>,
+    pub store: Arc<Mutex<Option<TraySettingsStore>>>,
 }
 
 impl TraySettingsState {
     pub fn new() -> Result<Self, String> {
         let store = TraySettingsStore::new()?;
         Ok(Self {
-            store: Arc::new(Mutex::new(store)),
+            store: Arc::new(Mutex::new(Some(store))),
         })
     }
 
+    pub fn new_empty() -> Self {
+        Self {
+            store: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let new_store = TraySettingsStore::new_at(base_dir)?;
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock tray settings store".to_string())?;
+        *guard = Some(new_store);
+        Ok(())
+    }
+
+    pub fn teardown(&self) -> Result<(), String> {
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock tray settings store".to_string())?;
+        *guard = None;
+        Ok(())
+    }
+
     pub fn get_settings(&self) -> Result<TraySettings, String> {
-        self.store.lock().unwrap().get_settings()
+        let guard = self.store.lock().map_err(|_| "Failed to lock tray settings store".to_string())?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.get_settings()
     }
 
     pub fn set_enable_tray(&self, value: bool) -> Result<(), String> {
-        self.store.lock().unwrap().set_enable_tray(value)
+        let guard = self.store.lock().map_err(|_| "Failed to lock tray settings store".to_string())?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.set_enable_tray(value)
     }
 
     pub fn set_minimize_to_tray(&self, value: bool) -> Result<(), String> {
-        self.store.lock().unwrap().set_minimize_to_tray(value)
+        let guard = self.store.lock().map_err(|_| "Failed to lock tray settings store".to_string())?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.set_minimize_to_tray(value)
     }
 
     pub fn set_close_to_tray(&self, value: bool) -> Result<(), String> {
-        self.store.lock().unwrap().set_close_to_tray(value)
+        let guard = self.store.lock().map_err(|_| "Failed to lock tray settings store".to_string())?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.set_close_to_tray(value)
     }
 }
 

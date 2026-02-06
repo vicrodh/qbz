@@ -9,6 +9,7 @@ use base64::Engine;
 use rand::RngCore;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -35,15 +36,11 @@ pub struct RemoteControlSettingsStore {
 }
 
 impl RemoteControlSettingsStore {
-    pub fn new() -> Result<Self, String> {
-        let data_dir = dirs::data_dir()
-            .ok_or("Could not determine data directory")?
-            .join("qbz");
-
-        std::fs::create_dir_all(&data_dir)
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("remote_control_settings.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open remote control settings database: {}", e))?;
 
@@ -67,6 +64,17 @@ impl RemoteControlSettingsStore {
         ).map_err(|e| format!("Failed to insert default remote control settings: {}", e))?;
 
         Ok(Self { conn })
+    }
+
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+        Self::open_at(&data_dir, "remote_control_settings.db")
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "remote_control_settings.db")
     }
 
     pub fn get_settings(&self) -> Result<RemoteControlSettings, String> {
@@ -146,49 +154,75 @@ impl RemoteControlSettingsStore {
 
 /// Global state wrapper for thread-safe access
 pub struct RemoteControlSettingsState {
-    store: Arc<Mutex<RemoteControlSettingsStore>>,
+    pub store: Arc<Mutex<Option<RemoteControlSettingsStore>>>,
 }
 
 impl RemoteControlSettingsState {
     pub fn new() -> Result<Self, String> {
         Ok(Self {
-            store: Arc::new(Mutex::new(RemoteControlSettingsStore::new()?)),
+            store: Arc::new(Mutex::new(Some(RemoteControlSettingsStore::new()?))),
         })
     }
 
+    pub fn new_empty() -> Self {
+        Self {
+            store: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let new_store = RemoteControlSettingsStore::new_at(base_dir)?;
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock remote control settings store".to_string())?;
+        *guard = Some(new_store);
+        Ok(())
+    }
+
+    pub fn teardown(&self) -> Result<(), String> {
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock remote control settings store".to_string())?;
+        *guard = None;
+        Ok(())
+    }
+
     pub fn get_settings(&self) -> Result<RemoteControlSettings, String> {
-        self.store
+        let guard = self.store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?
-            .get_settings()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.get_settings()
     }
 
     pub fn set_enabled(&self, enabled: bool) -> Result<(), String> {
-        self.store
+        let guard = self.store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?
-            .set_enabled(enabled)
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.set_enabled(enabled)
     }
 
     pub fn set_port(&self, port: u16) -> Result<(), String> {
-        self.store
+        let guard = self.store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?
-            .set_port(port)
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.set_port(port)
     }
 
     pub fn set_secure(&self, secure: bool) -> Result<(), String> {
-        self.store
+        let guard = self.store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?
-            .set_secure(secure)
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.set_secure(secure)
     }
 
     pub fn regenerate_token(&self) -> Result<String, String> {
-        self.store
+        let guard = self.store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?
-            .regenerate_token()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.regenerate_token()
     }
 }
 
@@ -250,15 +284,11 @@ pub struct AllowedOriginsStore {
 }
 
 impl AllowedOriginsStore {
-    pub fn new() -> Result<Self, String> {
-        let data_dir = dirs::data_dir()
-            .ok_or("Could not determine data directory")?
-            .join("qbz");
-
-        std::fs::create_dir_all(&data_dir)
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("remote_control_settings.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open allowed origins database: {}", e))?;
 
@@ -288,6 +318,17 @@ impl AllowedOriginsStore {
         }
 
         Ok(Self { conn })
+    }
+
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+        Self::open_at(&data_dir, "remote_control_settings.db")
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "remote_control_settings.db")
     }
 
     /// Get all allowed origins
@@ -372,48 +413,77 @@ impl AllowedOriginsStore {
 
 /// Global state wrapper for thread-safe access to allowed origins
 pub struct AllowedOriginsState {
-    store: Arc<Mutex<AllowedOriginsStore>>,
+    pub store: Arc<Mutex<Option<AllowedOriginsStore>>>,
 }
 
 impl AllowedOriginsState {
     pub fn new() -> Result<Self, String> {
         Ok(Self {
-            store: Arc::new(Mutex::new(AllowedOriginsStore::new()?)),
+            store: Arc::new(Mutex::new(Some(AllowedOriginsStore::new()?))),
         })
     }
 
+    pub fn new_empty() -> Self {
+        Self {
+            store: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let new_store = AllowedOriginsStore::new_at(base_dir)?;
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock allowed origins store".to_string())?;
+        *guard = Some(new_store);
+        Ok(())
+    }
+
+    pub fn teardown(&self) -> Result<(), String> {
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock allowed origins store".to_string())?;
+        *guard = None;
+        Ok(())
+    }
+
     pub fn get_origins(&self) -> Result<Vec<AllowedOrigin>, String> {
-        self.store
+        let guard = self.store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?
-            .get_origins()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.get_origins()
     }
 
     pub fn is_origin_allowed(&self, origin: &str) -> bool {
         self.store
             .lock()
-            .map(|s| s.is_origin_allowed(origin))
+            .map(|guard| {
+                guard.as_ref()
+                    .map(|s| s.is_origin_allowed(origin))
+                    .unwrap_or(false)
+            })
             .unwrap_or(false)
     }
 
     pub fn add_origin(&self, origin: &str) -> Result<AllowedOrigin, String> {
-        self.store
+        let guard = self.store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?
-            .add_origin(origin)
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.add_origin(origin)
     }
 
     pub fn remove_origin(&self, id: i64) -> Result<(), String> {
-        self.store
+        let guard = self.store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?
-            .remove_origin(id)
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.remove_origin(id)
     }
 
     pub fn restore_defaults(&self) -> Result<(), String> {
-        self.store
+        let guard = self.store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?
-            .restore_defaults()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.restore_defaults()
     }
 }

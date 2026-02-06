@@ -693,13 +693,15 @@
       "confirmClearText": "This will remove all {count} artists from your blacklist. This action cannot be undone."
     },
     "offlineLibrary": {
-      "title": "Offline Library",
-      "disclaimer": "The offline library is a temporary playback cache for offline listening while you have a valid Qobuz subscription. You do not receive a license to keep or redistribute the content. If your subscription becomes invalid, QBZ will remove all cached content after 3 days.",
+      "title": "Offline Playback",
+      "disclaimer": "The offline cache is a temporary playback cache for offline listening while you have a valid Qobuz subscription. You do not receive a license to keep or redistribute the content. If your subscription becomes invalid, QBZ will remove all cached content after 3 days.",
       "cachedTracks": "Offline Tracks",
       "cachedTracksDesc": "Cached tracks for offline playback",
+      "showInLibrary": "Show in Local Library",
+      "showInLibraryDesc": "Display offline cached tracks in the Local Library view",
       "clearCache": "Clear All",
       "openFolder": "Open Folder",
-      "repair": "Repair Offline Library",
+      "repair": "Repair Offline Cache",
       "repairDesc": "Fix offline markers lost during library scans",
       "manageCache": "Manage Offline Cache",
       "manageCacheDesc": "Open the cache folder in your file manager",

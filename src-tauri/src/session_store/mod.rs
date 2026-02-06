@@ -1,5 +1,6 @@
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -65,11 +66,19 @@ impl SessionStore {
         let data_dir = dirs::data_dir()
             .ok_or("Could not determine data directory")?
             .join("qbz");
+        Self::open_at(&data_dir, "session.db")
+    }
 
-        std::fs::create_dir_all(&data_dir)
+    /// Open the session store at a specific base directory
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "session.db")
+    }
+
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("session.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open session database: {}", e))?;
 
@@ -343,14 +352,35 @@ impl SessionStore {
 
 /// Thread-safe wrapper for SessionStore
 pub struct SessionStoreState {
-    pub store: Arc<Mutex<SessionStore>>,
+    pub store: Arc<Mutex<Option<SessionStore>>>,
 }
 
 impl SessionStoreState {
     pub fn new() -> Result<Self, String> {
         Ok(Self {
-            store: Arc::new(Mutex::new(SessionStore::new()?)),
+            store: Arc::new(Mutex::new(Some(SessionStore::new()?))),
         })
+    }
+
+    /// Create an empty state (no active session store)
+    pub fn new_empty() -> Self {
+        Self {
+            store: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Initialize the store at a specific directory
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let store = SessionStore::new_at(base_dir)?;
+        *self.store.lock().map_err(|e| format!("Lock error: {}", e))? = Some(store);
+        Ok(())
+    }
+
+    /// Close the store (logout)
+    pub fn teardown(&self) {
+        if let Ok(mut guard) = self.store.lock() {
+            *guard = None;
+        }
     }
 }
 
@@ -377,7 +407,8 @@ pub fn save_session_state(
         saved_at: 0, // Will be set in save_session
     };
 
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.save_session(&session)
 }
 
@@ -385,7 +416,8 @@ pub fn save_session_state(
 pub fn load_session_state(
     state: tauri::State<'_, SessionStoreState>,
 ) -> Result<PersistedSession, String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.load_session()
 }
 
@@ -394,7 +426,8 @@ pub fn save_session_volume(
     state: tauri::State<'_, SessionStoreState>,
     volume: f32,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.save_volume(volume)
 }
 
@@ -403,7 +436,8 @@ pub fn save_session_position(
     state: tauri::State<'_, SessionStoreState>,
     position_secs: u64,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.save_position(position_secs)
 }
 
@@ -413,7 +447,8 @@ pub fn save_session_playback_mode(
     shuffle: bool,
     repeat_mode: String,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.save_playback_mode(shuffle, &repeat_mode)
 }
 
@@ -421,6 +456,7 @@ pub fn save_session_playback_mode(
 pub fn clear_session(
     state: tauri::State<'_, SessionStoreState>,
 ) -> Result<(), String> {
-    let store = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.clear_session()
 }

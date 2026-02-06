@@ -4,6 +4,7 @@
 
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use log::info;
 
@@ -64,15 +65,11 @@ pub struct PlaybackPreferencesStore {
 }
 
 impl PlaybackPreferencesStore {
-    pub fn new() -> Result<Self, String> {
-        let data_dir = dirs::data_dir()
-            .ok_or("Could not determine data directory")?
-            .join("qbz");
-
-        std::fs::create_dir_all(&data_dir)
+    fn open_at(dir: &Path, db_name: &str) -> Result<Self, String> {
+        std::fs::create_dir_all(dir)
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
 
-        let db_path = data_dir.join("playback_preferences.db");
+        let db_path = dir.join(db_name);
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open playback preferences database: {}", e))?;
 
@@ -118,6 +115,17 @@ impl PlaybackPreferencesStore {
         Ok(Self { conn })
     }
 
+    pub fn new() -> Result<Self, String> {
+        let data_dir = dirs::data_dir()
+            .ok_or("Could not determine data directory")?
+            .join("qbz");
+        Self::open_at(&data_dir, "playback_preferences.db")
+    }
+
+    pub fn new_at(base_dir: &Path) -> Result<Self, String> {
+        Self::open_at(base_dir, "playback_preferences.db")
+    }
+
     pub fn get_preferences(&self) -> Result<PlaybackPreferences, String> {
         self.conn
             .query_row(
@@ -158,27 +166,54 @@ impl PlaybackPreferencesStore {
 
 /// Global state wrapper for thread-safe access
 pub struct PlaybackPreferencesState {
-    store: Arc<Mutex<PlaybackPreferencesStore>>,
+    pub store: Arc<Mutex<Option<PlaybackPreferencesStore>>>,
 }
 
 impl PlaybackPreferencesState {
     pub fn new() -> Result<Self, String> {
         let store = PlaybackPreferencesStore::new()?;
         Ok(Self {
-            store: Arc::new(Mutex::new(store)),
+            store: Arc::new(Mutex::new(Some(store))),
         })
     }
 
+    pub fn new_empty() -> Self {
+        Self {
+            store: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let new_store = PlaybackPreferencesStore::new_at(base_dir)?;
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock playback preferences store".to_string())?;
+        *guard = Some(new_store);
+        Ok(())
+    }
+
+    pub fn teardown(&self) -> Result<(), String> {
+        let mut guard = self.store.lock()
+            .map_err(|_| "Failed to lock playback preferences store".to_string())?;
+        *guard = None;
+        Ok(())
+    }
+
     pub fn get_preferences(&self) -> Result<PlaybackPreferences, String> {
-        self.store.lock().unwrap().get_preferences()
+        let guard = self.store.lock().map_err(|_| "Failed to lock playback preferences store".to_string())?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.get_preferences()
     }
 
     pub fn set_autoplay_mode(&self, mode: AutoplayMode) -> Result<(), String> {
-        self.store.lock().unwrap().set_autoplay_mode(mode)
+        let guard = self.store.lock().map_err(|_| "Failed to lock playback preferences store".to_string())?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.set_autoplay_mode(mode)
     }
 
     pub fn set_show_context_icon(&self, show: bool) -> Result<(), String> {
-        self.store.lock().unwrap().set_show_context_icon(show)
+        let guard = self.store.lock().map_err(|_| "Failed to lock playback preferences store".to_string())?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.set_show_context_icon(show)
     }
 }
 

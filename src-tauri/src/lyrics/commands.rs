@@ -26,7 +26,8 @@ pub async fn lyrics_get(
 
     // Try cache by track_id first, then by key
     {
-        let db = state.db.lock().await;
+        let db_opt__ = state.db.lock().await;
+        let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
         if let Some(id) = track_id {
             if let Ok(Some(payload)) = db.get_by_track_id(id) {
                 return Ok(Some(payload));
@@ -52,7 +53,8 @@ pub async fn lyrics_get(
             cached: false,
         };
 
-        let db = state.db.lock().await;
+        let db_opt__ = state.db.lock().await;
+        let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
         db.upsert(&cache_key, &payload)?;
         return Ok(Some(payload));
     }
@@ -70,7 +72,8 @@ pub async fn lyrics_get(
             cached: false,
         };
 
-        let db = state.db.lock().await;
+        let db_opt__ = state.db.lock().await;
+        let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
         db.upsert(&cache_key, &payload)?;
         return Ok(Some(payload));
     }
@@ -80,7 +83,8 @@ pub async fn lyrics_get(
 
 #[tauri::command]
 pub async fn lyrics_clear_cache(state: State<'_, LyricsState>) -> Result<(), String> {
-    let db = state.db.lock().await;
+    let db_opt__ = state.db.lock().await;
+    let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
     db.clear()
 }
 
@@ -94,7 +98,8 @@ pub struct LyricsCacheStats {
 #[tauri::command]
 pub async fn lyrics_get_cache_stats(state: State<'_, LyricsState>) -> Result<LyricsCacheStats, String> {
     let entries = {
-        let db = state.db.lock().await;
+        let db_opt__ = state.db.lock().await;
+        let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
         db.count_entries()?
     };
 

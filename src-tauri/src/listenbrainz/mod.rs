@@ -38,13 +38,14 @@ pub use models::{
     SubmitListensPayload, TrackMetadata, UserInfo,
 };
 
+use std::path::Path;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
 /// Shared state wrapper for Tauri
 pub struct ListenBrainzSharedState {
     pub client: Arc<Mutex<ListenBrainzClient>>,
-    pub cache: Arc<Mutex<ListenBrainzCache>>,
+    pub cache: Arc<Mutex<Option<ListenBrainzCache>>>,
 }
 
 impl ListenBrainzSharedState {
@@ -53,10 +54,14 @@ impl ListenBrainzSharedState {
 
         // Check for saved credentials and enabled state
         let (token, user_name, enabled) = {
-            let cache = cache_state.cache.blocking_lock();
-            let (token, user_name) = cache.get_credentials().unwrap_or((None, None));
-            let enabled = cache.is_enabled().unwrap_or(true);
-            (token, user_name, enabled)
+            let cache_guard = cache_state.cache.blocking_lock();
+            if let Some(cache) = cache_guard.as_ref() {
+                let (token, user_name) = cache.get_credentials().unwrap_or((None, None));
+                let enabled = cache.is_enabled().unwrap_or(true);
+                (token, user_name, enabled)
+            } else {
+                (None, None, true)
+            }
         };
 
         // Create client with saved config
@@ -75,5 +80,46 @@ impl ListenBrainzSharedState {
             client: Arc::new(Mutex::new(client)),
             cache: cache_state.cache,
         })
+    }
+
+    pub fn new_empty() -> Self {
+        let client = ListenBrainzClient::with_config(ListenBrainzConfig {
+            enabled: true,
+            token: None,
+            user_name: None,
+        });
+        Self {
+            client: Arc::new(Mutex::new(client)),
+            cache: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub async fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let cache_dir = base_dir.join("cache");
+        std::fs::create_dir_all(&cache_dir)
+            .map_err(|e| format!("Failed to create cache directory: {}", e))?;
+        let db_path = cache_dir.join("listenbrainz_cache.db");
+        let new_cache = ListenBrainzCache::new(&db_path)?;
+        log::info!("ListenBrainz cache initialized at {:?}", db_path);
+
+        // Restore credentials from new cache
+        let (token, user_name) = {
+            let (token, user_name) = new_cache.get_credentials().unwrap_or((None, None));
+            (token, user_name)
+        };
+
+        let mut guard = self.cache.lock().await;
+        *guard = Some(new_cache);
+
+        if token.is_some() && user_name.is_some() {
+            log::info!("ListenBrainz: restored session for user {:?}", user_name);
+        }
+
+        Ok(())
+    }
+
+    pub async fn teardown(&self) {
+        let mut guard = self.cache.lock().await;
+        *guard = None;
     }
 }

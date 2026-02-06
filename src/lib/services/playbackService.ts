@@ -10,6 +10,7 @@
  */
 
 import { invoke } from '@tauri-apps/api/core';
+import { getUserItem, setUserItem } from '$lib/utils/userStorage';
 
 /**
  * Get the preferred streaming quality from localStorage
@@ -17,7 +18,7 @@ import { invoke } from '@tauri-apps/api/core';
  */
 function getStreamingQuality(): string {
   if (typeof localStorage === 'undefined') return 'Hi-Res+';
-  return localStorage.getItem('qbz-streaming-quality') || 'Hi-Res+';
+  return getUserItem('qbz-streaming-quality') || 'Hi-Res+';
 }
 import {
   setCurrentTrack,
@@ -322,7 +323,7 @@ let systemNotificationsEnabled = true;
  * Load system notifications preference from localStorage
  */
 export function loadSystemNotificationsPreference(): void {
-  const saved = localStorage.getItem('qbz-system-notifications-enabled');
+  const saved = getUserItem('qbz-system-notifications-enabled');
   if (saved !== null) {
     systemNotificationsEnabled = saved === 'true';
   }
@@ -333,7 +334,7 @@ export function loadSystemNotificationsPreference(): void {
  */
 export function setSystemNotificationsEnabled(enabled: boolean): void {
   systemNotificationsEnabled = enabled;
-  localStorage.setItem('qbz-system-notifications-enabled', String(enabled));
+  setUserItem('qbz-system-notifications-enabled', String(enabled));
 }
 
 /**
@@ -568,8 +569,8 @@ export async function updateLastfmNowPlaying(
   trackId: number
 ): Promise<void> {
   // Check if scrobbling is enabled
-  const scrobblingEnabled = localStorage.getItem('qbz-lastfm-scrobbling') !== 'false';
-  const sessionKey = localStorage.getItem('qbz-lastfm-session-key');
+  const scrobblingEnabled = getUserItem('qbz-lastfm-scrobbling') !== 'false';
+  const sessionKey = getUserItem('qbz-lastfm-session-key');
 
   if (!scrobblingEnabled || !sessionKey) return;
 
@@ -634,8 +635,8 @@ export async function updateLastfmNowPlaying(
  */
 export async function flushScrobbleQueue(): Promise<{ sent: number; failed: number }> {
   // Check if scrobbling is enabled
-  const scrobblingEnabled = localStorage.getItem('qbz-lastfm-scrobbling') !== 'false';
-  const sessionKey = localStorage.getItem('qbz-lastfm-session-key');
+  const scrobblingEnabled = getUserItem('qbz-lastfm-scrobbling') !== 'false';
+  const sessionKey = getUserItem('qbz-lastfm-session-key');
 
   if (!scrobblingEnabled || !sessionKey) {
     return { sent: 0, failed: 0 };

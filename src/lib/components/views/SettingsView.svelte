@@ -36,6 +36,7 @@
   import { get } from 'svelte/store';
   import MigrationModal from '../MigrationModal.svelte';
   import { getDevicePrettyName } from '$lib/utils/audioDeviceNames';
+  import { getUserItem, setUserItem, removeUserItem } from '$lib/utils/userStorage';
   import { ZOOM_OPTIONS, findZoomOption, getZoomLevelFromOption } from '$lib/utils/zoom';
   import { getZoom, setZoom, subscribeZoom } from '$lib/stores/zoomStore';
   import {
@@ -204,7 +205,6 @@
   let offlineModeSection: HTMLElement;
   let appearanceSection: HTMLElement;
   let downloadsSection: HTMLElement;
-  let librarySection: HTMLElement;
   let contentFilteringSection: HTMLElement;
   let integrationsSection: HTMLElement;
   let remoteControlSection: HTMLElement;
@@ -224,7 +224,6 @@
     { id: 'offline', labelKey: 'offline.title' },
     { id: 'appearance', labelKey: 'settings.appearance.title' },
     { id: 'downloads', labelKey: 'settings.offlineLibrary.title' },
-    { id: 'library', labelKey: 'settings.library.title' },
     { id: 'content-filtering', labelKey: 'settings.contentFiltering.title' },
     { id: 'integrations', labelKey: 'settings.integrations.title' },
     { id: 'updates', labelKey: 'nav.updates' },
@@ -248,7 +247,6 @@
       case 'offline': return offlineModeSection;
       case 'appearance': return appearanceSection;
       case 'downloads': return downloadsSection;
-      case 'library': return librarySection;
       case 'content-filtering': return contentFilteringSection;
       case 'integrations': return integrationsSection;
       case 'remote-control': return remoteControlSection;
@@ -611,7 +609,7 @@
     'split-lyrics', 'split-trackInfo', 'split-suggestions', 'split-queue'
   ] as const;
   let immersiveDefaultView = $state(
-    localStorage.getItem('qbz-immersive-default-view') || 'remember'
+    getUserItem('qbz-immersive-default-view') || 'remember'
   );
 
   function getImmersiveViewOptions(): string[] {
@@ -628,7 +626,7 @@
     if (index >= 0) {
       const key = IMMERSIVE_VIEW_KEYS[index];
       immersiveDefaultView = key;
-      localStorage.setItem('qbz-immersive-default-view', key);
+      setUserItem('qbz-immersive-default-view', key);
     }
   }
 
@@ -685,7 +683,7 @@
     applyTheme(savedTheme);
 
     // Load streaming quality preference
-    const savedQuality = localStorage.getItem('qbz-streaming-quality');
+    const savedQuality = getUserItem('qbz-streaming-quality');
     if (savedQuality) {
       streamingQuality = savedQuality;
     }
@@ -709,7 +707,7 @@
     const unsubscribeZoom = subscribeZoom(updateZoomLevel);
 
     // Load library settings
-    const savedFetchArtistImages = localStorage.getItem('qbz-fetch-artist-images');
+    const savedFetchArtistImages = getUserItem('qbz-fetch-artist-images');
     if (savedFetchArtistImages !== null) {
       fetchQobuzArtistImages = savedFetchArtistImages === 'true';
     }
@@ -838,11 +836,11 @@
       hasEmbeddedCredentials = await invoke<boolean>('lastfm_has_embedded_credentials');
 
       // Load saved credentials from localStorage (for user-provided keys)
-      const savedApiKey = localStorage.getItem('qbz-lastfm-api-key');
-      const savedApiSecret = localStorage.getItem('qbz-lastfm-api-secret');
-      const savedSessionKey = localStorage.getItem('qbz-lastfm-session-key');
-      const savedUsername = localStorage.getItem('qbz-lastfm-username');
-      const savedScrobbling = localStorage.getItem('qbz-lastfm-scrobbling');
+      const savedApiKey = getUserItem('qbz-lastfm-api-key');
+      const savedApiSecret = getUserItem('qbz-lastfm-api-secret');
+      const savedSessionKey = getUserItem('qbz-lastfm-session-key');
+      const savedUsername = getUserItem('qbz-lastfm-username');
+      const savedScrobbling = getUserItem('qbz-lastfm-scrobbling');
 
       // If we have user-provided credentials, set them
       if (savedApiKey && savedApiSecret) {
@@ -881,8 +879,8 @@
     try {
       // If user provided credentials, save and set them
       if (lastfmApiKey && lastfmApiSecret) {
-        localStorage.setItem('qbz-lastfm-api-key', lastfmApiKey);
-        localStorage.setItem('qbz-lastfm-api-secret', lastfmApiSecret);
+        setUserItem('qbz-lastfm-api-key', lastfmApiKey);
+        setUserItem('qbz-lastfm-api-secret', lastfmApiSecret);
         await invoke('lastfm_set_credentials', {
           apiKey: lastfmApiKey,
           apiSecret: lastfmApiSecret
@@ -929,8 +927,8 @@
       lastfmAuthToken = '';
 
       // Save session
-      localStorage.setItem('qbz-lastfm-session-key', session.key);
-      localStorage.setItem('qbz-lastfm-username', session.name);
+      setUserItem('qbz-lastfm-session-key', session.key);
+      setUserItem('qbz-lastfm-username', session.name);
     } catch (err) {
       console.error('Failed to complete Last.fm auth:', err);
       alert(`Authorization failed: ${err}`);
@@ -946,8 +944,8 @@
       lastfmUsername = '';
 
       // Clear saved session
-      localStorage.removeItem('qbz-lastfm-session-key');
-      localStorage.removeItem('qbz-lastfm-username');
+      removeUserItem('qbz-lastfm-session-key');
+      removeUserItem('qbz-lastfm-username');
     } catch (err) {
       console.error('Failed to disconnect Last.fm:', err);
     }
@@ -955,7 +953,7 @@
 
   function handleScrobblingChange(enabled: boolean) {
     scrobbling = enabled;
-    localStorage.setItem('qbz-lastfm-scrobbling', String(enabled));
+    setUserItem('qbz-lastfm-scrobbling', String(enabled));
   }
 
   async function loadMusicBrainzState() {
@@ -1197,7 +1195,7 @@
   async function handleQualityChange(quality: string) {
     const previousQuality = streamingQuality;
     streamingQuality = quality;
-    localStorage.setItem('qbz-streaming-quality', quality);
+    setUserItem('qbz-streaming-quality', quality);
 
     // Clear playback cache when quality changes (issue #34)
     // This ensures cached tracks don't play at wrong quality
@@ -2615,6 +2613,13 @@
       </div>
       <div class="setting-row">
         <div class="setting-with-description">
+          <span class="setting-label">{$t('settings.offlineLibrary.showInLibrary')}</span>
+          <span class="setting-description">{$t('settings.offlineLibrary.showInLibraryDesc')}</span>
+        </div>
+        <Toggle enabled={showQobuzDownloadsInLibrary} onchange={handleShowDownloadsChange} />
+      </div>
+      <div class="setting-row">
+        <div class="setting-with-description">
           <span class="setting-label">{$t('settings.offlineLibrary.repair')}</span>
           <span class="setting-description">{$t('settings.offlineLibrary.repairDesc')}</span>
         </div>
@@ -2636,7 +2641,7 @@
           {isClearingDownloads ? $t('settings.storage.clearing') : $t('settings.offlineLibrary.clearCache')}
         </button>
       </div>
-      <div class="setting-row last">
+      <div class="setting-row">
         <div class="setting-with-description">
           <span class="setting-label">{$t('settings.offlineLibrary.manageCache')}</span>
           <span class="setting-description">{$t('settings.offlineLibrary.manageCacheDesc')}</span>
@@ -2648,22 +2653,17 @@
           {$t('settings.offlineLibrary.openFolder')}
         </button>
       </div>
-    {/if}
-  </section>
-
-  <!-- Library Section -->
-  <section class="section" bind:this={librarySection}>
-    <h3 class="section-title">{$t('settings.library.title')}</h3>
-    <div class="setting-row last">
-      <div class="setting-with-description">
-        <span class="setting-label">{$t('settings.library.fetchArtistImages')}</span>
-        <span class="setting-description">{$t('settings.library.fetchArtistImagesDesc')}</span>
+      <div class="setting-row last">
+        <div class="setting-with-description">
+          <span class="setting-label">{$t('settings.library.fetchArtistImages')}</span>
+          <span class="setting-description">{$t('settings.library.fetchArtistImagesDesc')}</span>
+        </div>
+        <Toggle enabled={fetchQobuzArtistImages} onchange={(v) => {
+          fetchQobuzArtistImages = v;
+          setUserItem('qbz-fetch-artist-images', String(v));
+        }} />
       </div>
-      <Toggle enabled={fetchQobuzArtistImages} onchange={(v) => {
-        fetchQobuzArtistImages = v;
-        localStorage.setItem('qbz-fetch-artist-images', String(v));
-      }} />
-    </div>
+    {/if}
   </section>
 
   <!-- Content Filtering Section -->

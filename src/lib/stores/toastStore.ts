@@ -4,6 +4,8 @@
  * Manages toast notifications across the app with auto-hide and queue support.
  */
 
+import { getUserItem, setUserItem, removeUserItem } from '$lib/utils/userStorage';
+
 export type ToastType = 'success' | 'error' | 'info' | 'warning' | 'buffering';
 
 export interface Toast {
@@ -25,16 +27,16 @@ let toastsEnabled = true;
  * Load toasts preference from localStorage
  */
 export function loadToastsPreference(): void {
-  const saved = localStorage.getItem('qbz-toasts-enabled');
+  const saved = getUserItem('qbz-toasts-enabled');
   if (saved !== null) {
     toastsEnabled = saved === 'true';
   } else {
     // Migrate from old key if exists
-    const oldSaved = localStorage.getItem('qbz-notifications-enabled');
+    const oldSaved = getUserItem('qbz-notifications-enabled');
     if (oldSaved !== null) {
       toastsEnabled = oldSaved === 'true';
-      localStorage.setItem('qbz-toasts-enabled', oldSaved);
-      localStorage.removeItem('qbz-notifications-enabled');
+      setUserItem('qbz-toasts-enabled', oldSaved);
+      removeUserItem('qbz-notifications-enabled');
     }
   }
 }
@@ -44,7 +46,7 @@ export function loadToastsPreference(): void {
  */
 export function setToastsEnabled(enabled: boolean): void {
   toastsEnabled = enabled;
-  localStorage.setItem('qbz-toasts-enabled', String(enabled));
+  setUserItem('qbz-toasts-enabled', String(enabled));
   if (!enabled) {
     hideToast();
   }

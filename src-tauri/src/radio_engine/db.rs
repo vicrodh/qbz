@@ -70,6 +70,14 @@ impl RadioDb {
         Self::open(&db_path)
     }
 
+    pub fn open_at(base_dir: &Path) -> Result<Self, String> {
+        let radio_dir = base_dir.join("radio");
+        std::fs::create_dir_all(&radio_dir)
+            .map_err(|e| format!("Failed to create radio data directory: {}", e))?;
+        let db_path = radio_dir.join("radio_engine.db");
+        Self::open(&db_path)
+    }
+
     pub fn open(path: &Path) -> Result<Self, String> {
         let conn = Connection::open(path)
             .map_err(|e| format!("Failed to open radio database: {}", e))?;

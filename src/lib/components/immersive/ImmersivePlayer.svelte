@@ -15,6 +15,7 @@
   import VisualizerPanel from './panels/VisualizerPanel.svelte';
   import LyricsFocusPanel from './panels/LyricsFocusPanel.svelte';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import { getUserItem, setUserItem } from '$lib/utils/userStorage';
 
   interface LyricsLine {
     text: string;
@@ -161,16 +162,16 @@
   }
 
   function saveLastUsedView() {
-    const setting = localStorage.getItem('qbz-immersive-default-view') || 'remember';
+    const setting = getUserItem('qbz-immersive-default-view') || 'remember';
     if (setting === 'remember') {
-      localStorage.setItem('qbz-immersive-last-view', getCurrentViewKey());
+      setUserItem('qbz-immersive-last-view', getCurrentViewKey());
     }
   }
 
   function restoreView() {
-    const setting = localStorage.getItem('qbz-immersive-default-view') || 'remember';
+    const setting = getUserItem('qbz-immersive-default-view') || 'remember';
     if (setting === 'remember') {
-      const lastView = localStorage.getItem('qbz-immersive-last-view');
+      const lastView = getUserItem('qbz-immersive-last-view');
       if (lastView) {
         applyStoredView(lastView as ImmersiveViewKey);
       }

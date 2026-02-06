@@ -12,6 +12,7 @@
   import LocalLibraryTagEditorModal from '../LocalLibraryTagEditorModal.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { t } from '$lib/i18n';
+  import { getUserItem } from '$lib/utils/userStorage';
   import { downloadSettingsVersion } from '$lib/stores/downloadSettingsStore';
   import { showToast } from '$lib/stores/toastStore';
   import AlbumCard from '../AlbumCard.svelte';
@@ -1129,7 +1130,7 @@
       // Load cached artist images from database
       await loadCachedArtistImages();
       // Fetch missing images in background if enabled
-      const fetchEnabled = localStorage.getItem('qbz-fetch-artist-images') !== 'false';
+      const fetchEnabled = getUserItem('qbz-fetch-artist-images') !== 'false';
       if (fetchEnabled) {
         fetchMissingArtistImages();
       }

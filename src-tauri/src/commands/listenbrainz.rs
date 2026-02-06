@@ -40,7 +40,8 @@ pub async fn listenbrainz_set_enabled(
 
     // Persist setting
     {
-        let cache = state.cache.lock().await;
+        let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         cache.set_enabled(enabled)?;
     }
 
@@ -67,7 +68,8 @@ pub async fn listenbrainz_connect(
 
     // Persist credentials
     {
-        let cache = state.cache.lock().await;
+        let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         cache.set_credentials(Some(&token), Some(&user_info.user_name))?;
     }
 
@@ -89,7 +91,8 @@ pub async fn listenbrainz_disconnect(
 
     // Clear persisted credentials
     {
-        let cache = state.cache.lock().await;
+        let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         cache.clear_credentials()?;
     }
 
@@ -173,7 +176,8 @@ pub async fn listenbrainz_queue_listen(
 ) -> Result<i64, String> {
     log::info!("Command: listenbrainz_queue_listen - {} - {}", artist, track);
 
-    let cache = state.cache.lock().await;
+    let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
     cache.queue_listen(
         timestamp,
         &artist,
@@ -193,7 +197,8 @@ pub async fn listenbrainz_get_queue(
     limit: Option<u32>,
     state: State<'_, ListenBrainzSharedState>,
 ) -> Result<Vec<QueuedListen>, String> {
-    let cache = state.cache.lock().await;
+    let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
     cache.get_queued_listens(limit.unwrap_or(50))
 }
 
@@ -202,7 +207,8 @@ pub async fn listenbrainz_get_queue(
 pub async fn listenbrainz_get_queue_count(
     state: State<'_, ListenBrainzSharedState>,
 ) -> Result<u32, String> {
-    let cache = state.cache.lock().await;
+    let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
     cache.get_queue_count()
 }
 
@@ -212,7 +218,8 @@ pub async fn listenbrainz_mark_sent(
     ids: Vec<i64>,
     state: State<'_, ListenBrainzSharedState>,
 ) -> Result<(), String> {
-    let cache = state.cache.lock().await;
+    let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
     cache.mark_listens_sent(&ids)
 }
 
@@ -225,7 +232,8 @@ pub async fn listenbrainz_flush_queue(
 
     // Get pending listens
     let pending = {
-        let cache = state.cache.lock().await;
+        let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         cache.get_queued_listens(50)?
     };
 
@@ -261,7 +269,8 @@ pub async fn listenbrainz_flush_queue(
             Err(e) => {
                 log::warn!("Failed to submit queued listen {}: {}", listen.id, e);
                 // Increment attempt count
-                let cache = state.cache.lock().await;
+                let cache_opt__ = state.cache.lock().await;
+                let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
                 let _ = cache.increment_attempts(listen.id);
             }
         }
@@ -269,7 +278,8 @@ pub async fn listenbrainz_flush_queue(
 
     // Mark successful ones as sent
     if !sent_ids.is_empty() {
-        let cache = state.cache.lock().await;
+        let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
         cache.mark_listens_sent(&sent_ids)?;
     }
 
@@ -285,7 +295,8 @@ pub async fn listenbrainz_clear_queue(
     state: State<'_, ListenBrainzSharedState>,
 ) -> Result<(), String> {
     log::info!("Command: listenbrainz_clear_queue");
-    let cache = state.cache.lock().await;
+    let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
     cache.clear_queue()
 }
 
@@ -295,6 +306,7 @@ pub async fn listenbrainz_cleanup_queue(
     older_than_days: Option<u32>,
     state: State<'_, ListenBrainzSharedState>,
 ) -> Result<u32, String> {
-    let cache = state.cache.lock().await;
+    let cache_opt__ = state.cache.lock().await;
+    let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
     cache.cleanup_sent_listens(older_than_days.unwrap_or(7))
 }

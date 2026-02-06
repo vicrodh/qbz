@@ -17,7 +17,7 @@ const VECTOR_TTL_SECS: i64 = 7 * 24 * 60 * 60;
 
 /// Shared state wrapper for Tauri
 pub struct ArtistVectorStoreState {
-    pub store: Arc<Mutex<ArtistVectorStore>>,
+    pub store: Arc<Mutex<Option<ArtistVectorStore>>>,
 }
 
 impl ArtistVectorStoreState {
@@ -36,8 +36,31 @@ impl ArtistVectorStoreState {
         log::info!("Artist vector store initialized at {:?}", db_path);
 
         Ok(Self {
-            store: Arc::new(Mutex::new(store)),
+            store: Arc::new(Mutex::new(Some(store))),
         })
+    }
+
+    pub fn new_empty() -> Self {
+        Self {
+            store: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub async fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+        let cache_dir = base_dir.join("cache");
+        std::fs::create_dir_all(&cache_dir)
+            .map_err(|e| format!("Failed to create cache directory: {}", e))?;
+        let db_path = cache_dir.join("artist_vectors.db");
+        let new_store = ArtistVectorStore::new(&db_path)?;
+        log::info!("Artist vector store initialized at {:?}", db_path);
+        let mut guard = self.store.lock().await;
+        *guard = Some(new_store);
+        Ok(())
+    }
+
+    pub async fn teardown(&self) {
+        let mut guard = self.store.lock().await;
+        *guard = None;
     }
 }
 

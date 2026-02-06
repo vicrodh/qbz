@@ -93,7 +93,8 @@ pub async fn get_playlist_suggestions_v2(
     for artist in &input.artists {
         // Check cache first
         let cached = {
-            let cache = mb_state.cache.lock().await;
+            let cache_opt__ = mb_state.cache.lock().await;
+            let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
             cache.get_artist(&artist.name).ok().flatten()
         };
 
@@ -149,7 +150,8 @@ pub async fn get_playlist_suggestions_v2(
                             confidence: MatchConfidence::High,
                         };
                         {
-                            let cache = mb_state.cache.lock().await;
+                            let cache_opt__ = mb_state.cache.lock().await;
+                            let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
                             let _ = cache.set_artist(&artist.name, &resolved);
                         }
                         artist_info.push((mbid, artist.name.clone()));
@@ -176,7 +178,8 @@ pub async fn get_playlist_suggestions_v2(
 
         // Cache negative result
         {
-            let cache = mb_state.cache.lock().await;
+            let cache_opt__ = mb_state.cache.lock().await;
+            let cache = cache_opt__.as_ref().ok_or("No active session - please log in")?;
             let _ = cache.set_artist(&artist.name, &ResolvedArtist::empty());
         }
         skipped_count += 1;
@@ -278,7 +281,8 @@ pub async fn get_playlist_suggestions_v2(
 pub async fn get_vector_store_stats(
     store_state: State<'_, ArtistVectorStoreState>,
 ) -> Result<StoreStats, String> {
-    let store = store_state.store.lock().await;
+    let guard = store_state.store.lock().await;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.get_stats()
 }
 
@@ -289,7 +293,8 @@ pub async fn cleanup_vector_store(
     store_state: State<'_, ArtistVectorStoreState>,
 ) -> Result<usize, String> {
     let max_age_secs = max_age_days.unwrap_or(30) * 24 * 60 * 60;
-    let mut store = store_state.store.lock().await;
+    let mut guard = store_state.store.lock().await;
+    let store = guard.as_mut().ok_or("No active session - please log in")?;
     store.cleanup_expired(max_age_secs)
 }
 
@@ -298,6 +303,7 @@ pub async fn cleanup_vector_store(
 pub async fn clear_vector_store(
     store_state: State<'_, ArtistVectorStoreState>,
 ) -> Result<usize, String> {
-    let mut store = store_state.store.lock().await;
+    let mut guard = store_state.store.lock().await;
+    let store = guard.as_mut().ok_or("No active session - please log in")?;
     store.clear_all()
 }

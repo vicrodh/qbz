@@ -6,6 +6,7 @@
 
 export interface UserInfo {
   userName: string;
+  userId: number;
   subscription: string;
   subscriptionValidUntil?: string | null;
 }
