@@ -157,6 +157,39 @@ export function getContext(): GenreFilterContext {
 }
 
 /** Initial load: use cache if valid, otherwise fetch from API */
+/**
+ * Validate and clean stored genre IDs, removing any that don't exist in loaded genres.
+ * This prevents stale localStorage data from causing empty API results.
+ */
+function validateAndCleanStoredGenreIds(): void {
+  const validIds = new Set(state.allGenres.map(g => g.id));
+  let cleaned = false;
+
+  for (const context of ['home', 'favorites'] as const) {
+    const ctxState = state.contexts[context];
+    const invalidIds: number[] = [];
+
+    for (const id of ctxState.selectedGenreIds) {
+      if (!validIds.has(id)) {
+        invalidIds.push(id);
+      }
+    }
+
+    if (invalidIds.length > 0) {
+      console.warn(`[DEBUG-43] Found ${invalidIds.length} stale genre ID(s) in ${context} context:`, invalidIds);
+      for (const id of invalidIds) {
+        ctxState.selectedGenreIds.delete(id);
+      }
+      cleaned = true;
+      saveToStorage(context);
+    }
+  }
+
+  if (cleaned) {
+    console.warn('[DEBUG-43] Cleaned stale genre IDs from localStorage');
+  }
+}
+
 export async function loadGenres(): Promise<void> {
   if (state.parentGenres.length > 0) return;
 
@@ -169,6 +202,8 @@ export async function loadGenres(): Promise<void> {
     state.genreTree = buildTreeFromCache(cache);
     loadFromStorage('home');
     loadFromStorage('favorites');
+    // Validate stored genre IDs against loaded genres
+    validateAndCleanStoredGenreIds();
     notifyAll();
     return;
   }
@@ -237,6 +272,8 @@ export async function loadGenres(): Promise<void> {
     saveGenreCache();
     loadFromStorage('home');
     loadFromStorage('favorites');
+    // Validate stored genre IDs against loaded genres
+    validateAndCleanStoredGenreIds();
   } catch (e) {
     console.error('Failed to load genres:', e);
     state.parentGenres = [];
