@@ -17,6 +17,8 @@ export const es = {
     lead: 'Qobuz transmite hasta 192 kHz. QBZ es un cliente no oficial nativo para Linux con un motor de audio en Rust que preserva el sample rate y la profundidad de bits, soporta passthrough al DAC y mantiene la reproducción transparente.',
     primaryCta: 'Descargar',
     secondaryCta: 'Ver en GitHub',
+    qobuzLinuxLink: 'Qobuz para Linux',
+    qobuzLinuxExplain: ' — Aprende por qué QBZ no es un web wrapper.',
     stats: {
       audio: 'Pipeline bit-perfect',
       dac: 'Passthrough al DAC',

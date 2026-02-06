@@ -70,7 +70,7 @@ export function HomePage() {
               </a>
             </div>
             <p style={{ marginTop: 16, fontSize: '0.9rem', color: 'var(--text-tertiary)' }}>
-              <a href="/qobuz-linux/" style={{ color: 'var(--accent)', textDecoration: 'underline' }}>Qobuz for Linux</a> — Learn why QBZ is not a web wrapper.
+              <a href={buildPath(language, 'qobuz-linux')} style={{ color: 'var(--accent)', textDecoration: 'underline' }}>{t('hero.qobuzLinuxLink')}</a>{t('hero.qobuzLinuxExplain')}
             </p>
             <div className="hero__stats">
               {stats.map((stat) => (
