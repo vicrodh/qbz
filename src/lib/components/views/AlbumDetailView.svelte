@@ -471,92 +471,99 @@
 
       <!-- Track Rows -->
       <div class="tracks">
-        {#each album.tracks as track, trackIndex (`${track.id}-${downloadStateVersion}`)}
-          {@const downloadInfo = getTrackOfflineCacheStatus?.(track.id) ?? {
-            status: "none" as const,
-            progress: 0,
-          }}
-          {@const isTrackDownloaded = downloadInfo.status === "ready"}
-          {@const trackArtistId = track.artistId ?? album.artistId}
-          {@const trackBlacklisted = trackArtistId
-            ? isArtistBlacklisted(trackArtistId)
-            : false}
-          <TrackRow
-            trackId={track.id}
-            number={track.number}
-            title={track.title}
-            artist={track.artist}
-            duration={track.duration}
-            quality={track.quality}
-            isPlaying={activeTrackId === track.id}
-            isBlacklisted={trackBlacklisted}
-            downloadStatus={downloadInfo.status}
-            downloadProgress={downloadInfo.progress}
-            hideFavorite={trackBlacklisted}
-            hideDownload={trackBlacklisted}
-            onPlay={trackBlacklisted
-              ? undefined
-              : () => {
-                  onTrackPlay?.(track);
-                }}
-            onDownload={!trackBlacklisted && onTrackDownload
-              ? () => onTrackDownload(track)
-              : undefined}
-            onRemoveDownload={!trackBlacklisted && onTrackRemoveDownload
-              ? () => onTrackRemoveDownload(track.id)
-              : undefined}
-            menuActions={trackBlacklisted
-              ? {
-                  // Blacklisted: only navigation and info
-                  onGoToArtist:
-                    album.artistId && onTrackGoToArtist
-                      ? () => onTrackGoToArtist(album.artistId!)
-                      : undefined,
-                  onShowInfo: onTrackShowInfo
-                    ? () => onTrackShowInfo(track.id)
-                    : undefined,
-                }
-              : {
-                  onPlayNow: () => {
+        {#if !album.tracks || album.tracks.length === 0}
+          <div class="empty-tracks-message">
+            <p>Unable to load tracks for this album.</p>
+            <button class="retry-btn" onclick={onBack}>Go Back</button>
+          </div>
+        {:else}
+          {#each album.tracks as track, trackIndex (`${track.id}-${downloadStateVersion}`)}
+            {@const downloadInfo = getTrackOfflineCacheStatus?.(track.id) ?? {
+              status: "none" as const,
+              progress: 0,
+            }}
+            {@const isTrackDownloaded = downloadInfo.status === "ready"}
+            {@const trackArtistId = track.artistId ?? album.artistId}
+            {@const trackBlacklisted = trackArtistId
+              ? isArtistBlacklisted(trackArtistId)
+              : false}
+            <TrackRow
+              trackId={track.id}
+              number={track.number}
+              title={track.title}
+              artist={track.artist}
+              duration={track.duration}
+              quality={track.quality}
+              isPlaying={activeTrackId === track.id}
+              isBlacklisted={trackBlacklisted}
+              downloadStatus={downloadInfo.status}
+              downloadProgress={downloadInfo.progress}
+              hideFavorite={trackBlacklisted}
+              hideDownload={trackBlacklisted}
+              onPlay={trackBlacklisted
+                ? undefined
+                : () => {
                     onTrackPlay?.(track);
-                  },
-                  onPlayNext: onTrackPlayNext
-                    ? () => onTrackPlayNext(track)
-                    : undefined,
-                  onPlayLater: onTrackPlayLater
-                    ? () => onTrackPlayLater(track)
-                    : undefined,
-                  onAddToPlaylist: onAddTrackToPlaylist
-                    ? () => onAddTrackToPlaylist(track.id)
-                    : undefined,
-                  onShareQobuz: onTrackShareQobuz
-                    ? () => onTrackShareQobuz(track.id)
-                    : undefined,
-                  onShareSonglink: onTrackShareSonglink
-                    ? () => onTrackShareSonglink(track)
-                    : undefined,
-                  onGoToArtist:
-                    album.artistId && onTrackGoToArtist
-                      ? () => onTrackGoToArtist(album.artistId!)
+                  }}
+              onDownload={!trackBlacklisted && onTrackDownload
+                ? () => onTrackDownload(track)
+                : undefined}
+              onRemoveDownload={!trackBlacklisted && onTrackRemoveDownload
+                ? () => onTrackRemoveDownload(track.id)
+                : undefined}
+              menuActions={trackBlacklisted
+                ? {
+                    // Blacklisted: only navigation and info
+                    onGoToArtist:
+                      album.artistId && onTrackGoToArtist
+                        ? () => onTrackGoToArtist(album.artistId!)
+                        : undefined,
+                    onShowInfo: onTrackShowInfo
+                      ? () => onTrackShowInfo(track.id)
                       : undefined,
-                  onShowInfo: onTrackShowInfo
-                    ? () => onTrackShowInfo(track.id)
-                    : undefined,
-                  onDownload: onTrackDownload
-                    ? () => onTrackDownload(track)
-                    : undefined,
-                  isTrackDownloaded,
-                  onReDownload:
-                    isTrackDownloaded && onTrackReDownload
-                      ? () => onTrackReDownload(track)
+                  }
+                : {
+                    onPlayNow: () => {
+                      onTrackPlay?.(track);
+                    },
+                    onPlayNext: onTrackPlayNext
+                      ? () => onTrackPlayNext(track)
                       : undefined,
-                  onRemoveDownload:
-                    isTrackDownloaded && onTrackRemoveDownload
-                      ? () => onTrackRemoveDownload(track.id)
+                    onPlayLater: onTrackPlayLater
+                      ? () => onTrackPlayLater(track)
                       : undefined,
-                }}
-          />
-        {/each}
+                    onAddToPlaylist: onAddTrackToPlaylist
+                      ? () => onAddTrackToPlaylist(track.id)
+                      : undefined,
+                    onShareQobuz: onTrackShareQobuz
+                      ? () => onTrackShareQobuz(track.id)
+                      : undefined,
+                    onShareSonglink: onTrackShareSonglink
+                      ? () => onTrackShareSonglink(track)
+                      : undefined,
+                    onGoToArtist:
+                      album.artistId && onTrackGoToArtist
+                        ? () => onTrackGoToArtist(album.artistId!)
+                        : undefined,
+                    onShowInfo: onTrackShowInfo
+                      ? () => onTrackShowInfo(track.id)
+                      : undefined,
+                    onDownload: onTrackDownload
+                      ? () => onTrackDownload(track)
+                      : undefined,
+                    isTrackDownloaded,
+                    onReDownload:
+                      isTrackDownloaded && onTrackReDownload
+                        ? () => onTrackReDownload(track)
+                        : undefined,
+                    onRemoveDownload:
+                      isTrackDownloaded && onTrackRemoveDownload
+                        ? () => onTrackRemoveDownload(track.id)
+                        : undefined,
+                  }}
+            />
+          {/each}
+        {/if}
       </div>
     </div>
 
@@ -870,6 +877,38 @@
     display: flex;
     flex-direction: column;
     width: 100%;
+  }
+
+  .empty-tracks-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--text-muted);
+    gap: 16px;
+  }
+
+  .empty-tracks-message p {
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .retry-btn {
+    padding: 8px 16px;
+    font-size: 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-strong);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .retry-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
   /* By the same artist section */
