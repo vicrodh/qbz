@@ -376,17 +376,37 @@ impl QobuzClient {
     /// Get album by ID
     pub async fn get_album(&self, album_id: &str) -> Result<Album> {
         let url = endpoints::build_url(paths::ALBUM_GET);
-        let response: Value = self
+        log::info!("[DEBUG-43] API get_album request: album_id={}", album_id);
+
+        let http_response = self
             .http
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
             .query(&[("album_id", album_id)])
             .send()
-            .await?
-            .json()
             .await?;
 
-        Ok(serde_json::from_value(response)?)
+        let status = http_response.status();
+        log::info!("[DEBUG-43] API get_album response status: {}", status);
+
+        let response_text = http_response.text().await?;
+        let preview = if response_text.len() > 500 {
+            format!("{}...(truncated)", &response_text[..500])
+        } else {
+            response_text.clone()
+        };
+        log::info!("[DEBUG-43] API get_album response body: {}", preview);
+
+        let response: Value = serde_json::from_str(&response_text)
+            .map_err(|e| {
+                log::warn!("[DEBUG-43] API get_album JSON parse error: {}", e);
+                ApiError::ParseError(e)
+            })?;
+
+        serde_json::from_value(response).map_err(|e| {
+            log::warn!("[DEBUG-43] API get_album deserialize error: {}", e);
+            ApiError::ParseError(e)
+        })
     }
 
     /// Get featured albums by type (new-releases, press-awards, most-streamed)
@@ -552,17 +572,37 @@ impl QobuzClient {
     /// Get track by ID
     pub async fn get_track(&self, track_id: u64) -> Result<Track> {
         let url = endpoints::build_url(paths::TRACK_GET);
-        let response: Value = self
+        log::info!("[DEBUG-43] API get_track request: track_id={}", track_id);
+
+        let http_response = self
             .http
             .get(&url)
             .header("X-App-Id", self.app_id().await?)
             .query(&[("track_id", track_id.to_string())])
             .send()
-            .await?
-            .json()
             .await?;
 
-        Ok(serde_json::from_value(response)?)
+        let status = http_response.status();
+        log::info!("[DEBUG-43] API get_track response status: {}", status);
+
+        let response_text = http_response.text().await?;
+        let preview = if response_text.len() > 500 {
+            format!("{}...(truncated)", &response_text[..500])
+        } else {
+            response_text.clone()
+        };
+        log::info!("[DEBUG-43] API get_track response body: {}", preview);
+
+        let response: Value = serde_json::from_str(&response_text)
+            .map_err(|e| {
+                log::warn!("[DEBUG-43] API get_track JSON parse error: {}", e);
+                ApiError::ParseError(e)
+            })?;
+
+        serde_json::from_value(response).map_err(|e| {
+            log::warn!("[DEBUG-43] API get_track deserialize error: {}", e);
+            ApiError::ParseError(e)
+        })
     }
 
     /// Get artist by ID (basic info only - no albums, faster response)
