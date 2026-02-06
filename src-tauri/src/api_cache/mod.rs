@@ -40,20 +40,20 @@ impl ApiCacheState {
         }
     }
 
-    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+    pub async fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let cache_dir = base_dir.join("cache");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| format!("Failed to create cache directory: {}", e))?;
         let db_path = cache_dir.join("api_cache.db");
         let new_cache = ApiCache::new(&db_path)?;
         log::info!("API cache initialized at {:?}", db_path);
-        let mut guard = self.cache.blocking_lock();
+        let mut guard = self.cache.lock().await;
         *guard = Some(new_cache);
         Ok(())
     }
 
-    pub fn teardown(&self) {
-        let mut guard = self.cache.blocking_lock();
+    pub async fn teardown(&self) {
+        let mut guard = self.cache.lock().await;
         *guard = None;
     }
 }

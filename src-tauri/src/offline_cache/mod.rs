@@ -186,7 +186,7 @@ impl OfflineCacheState {
         }
     }
 
-    pub fn init_at(&self, cache_base_dir: &std::path::Path) -> Result<(), String> {
+    pub async fn init_at(&self, cache_base_dir: &std::path::Path) -> Result<(), String> {
         let cache_dir = cache_base_dir.join("audio");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| format!("Failed to create cache directory: {}", e))?;
@@ -196,14 +196,14 @@ impl OfflineCacheState {
             .map_err(|e| format!("Failed to create artwork directory: {}", e))?;
         let db_path = cache_dir.join("index.db");
         let new_db = OfflineCacheDb::new(&db_path)?;
-        let mut guard = self.db.blocking_lock();
+        let mut guard = self.db.lock().await;
         *guard = Some(new_db);
         log::info!("Offline cache initialized at: {:?}", cache_dir);
         Ok(())
     }
 
-    pub fn teardown(&self) {
-        let mut guard = self.db.blocking_lock();
+    pub async fn teardown(&self) {
+        let mut guard = self.db.lock().await;
         *guard = None;
     }
 

@@ -94,7 +94,7 @@ impl ListenBrainzSharedState {
         }
     }
 
-    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+    pub async fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let cache_dir = base_dir.join("cache");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| format!("Failed to create cache directory: {}", e))?;
@@ -108,7 +108,7 @@ impl ListenBrainzSharedState {
             (token, user_name)
         };
 
-        let mut guard = self.cache.blocking_lock();
+        let mut guard = self.cache.lock().await;
         *guard = Some(new_cache);
 
         if token.is_some() && user_name.is_some() {
@@ -118,8 +118,8 @@ impl ListenBrainzSharedState {
         Ok(())
     }
 
-    pub fn teardown(&self) {
-        let mut guard = self.cache.blocking_lock();
+    pub async fn teardown(&self) {
+        let mut guard = self.cache.lock().await;
         *guard = None;
     }
 }

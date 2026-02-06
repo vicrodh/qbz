@@ -25,18 +25,18 @@ pub struct LibraryState {
 }
 
 impl LibraryState {
-    pub fn init_at(&self, base_dir: &std::path::Path) -> Result<(), String> {
+    pub async fn init_at(&self, base_dir: &std::path::Path) -> Result<(), String> {
         std::fs::create_dir_all(base_dir)
             .map_err(|e| format!("Failed to create directory: {}", e))?;
         let db_path = base_dir.join("library.db");
         let db = LibraryDatabase::open(&db_path).map_err(|e| e.to_string())?;
-        let mut guard = self.db.blocking_lock();
+        let mut guard = self.db.lock().await;
         *guard = Some(db);
         Ok(())
     }
 
-    pub fn teardown(&self) {
-        let mut guard = self.db.blocking_lock();
+    pub async fn teardown(&self) {
+        let mut guard = self.db.lock().await;
         *guard = None;
     }
 }

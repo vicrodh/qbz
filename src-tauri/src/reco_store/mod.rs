@@ -106,19 +106,19 @@ impl RecoState {
         }
     }
 
-    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+    pub async fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let reco_dir = base_dir.join("reco");
         std::fs::create_dir_all(&reco_dir)
             .map_err(|e| format!("Failed to create reco directory: {}", e))?;
         let db_path = reco_dir.join("events.db");
         let new_db = RecoStoreDb::new(&db_path)?;
-        let mut guard = self.db.blocking_lock();
+        let mut guard = self.db.lock().await;
         *guard = Some(new_db);
         Ok(())
     }
 
-    pub fn teardown(&self) {
-        let mut guard = self.db.blocking_lock();
+    pub async fn teardown(&self) {
+        let mut guard = self.db.lock().await;
         *guard = None;
     }
 }

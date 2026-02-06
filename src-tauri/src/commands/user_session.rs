@@ -122,14 +122,14 @@ pub async fn activate_user_session(
     remote_control_settings.init_at(&data_dir)?;
     allowed_origins.init_at(&data_dir)?;
     updates.init_at(&data_dir)?;
-    library.init_at(&data_dir)?;
-    reco.init_at(&data_dir)?;
-    api_cache.init_at(&data_dir)?;
-    artist_vectors.init_at(&data_dir)?;
+    library.init_at(&data_dir).await?;
+    reco.init_at(&data_dir).await?;
+    api_cache.init_at(&data_dir).await?;
+    artist_vectors.init_at(&data_dir).await?;
     blacklist.init_at(&data_dir)?;
     offline.init_at(&data_dir)?;
-    musicbrainz.init_at(&data_dir)?;
-    listenbrainz.init_at(&data_dir)?;
+    musicbrainz.init_at(&data_dir).await?;
+    listenbrainz.init_at(&data_dir).await?;
 
     // Type-alias states (no init_at method — init inline)
     init_type_alias_state(&*subscription_state, &data_dir, SubscriptionStateStore::new_at)?;
@@ -137,8 +137,8 @@ pub async fn activate_user_session(
     init_type_alias_state(&*legal_settings, &data_dir, LegalSettingsStore::new_at)?;
 
     // Cache-dir stores:
-    offline_cache.init_at(&cache_dir)?;
-    lyrics.init_at(&cache_dir)?;
+    offline_cache.init_at(&cache_dir).await?;
+    lyrics.init_at(&cache_dir).await?;
 
     // Run deferred subscription purge check (was removed from startup)
     let now = std::time::SystemTime::now()
@@ -213,16 +213,16 @@ pub async fn deactivate_user_session(
     remote_control_settings.teardown()?;
     allowed_origins.teardown()?;
     updates.teardown();
-    library.teardown();
-    reco.teardown();
-    api_cache.teardown();
-    artist_vectors.teardown();
+    library.teardown().await;
+    reco.teardown().await;
+    api_cache.teardown().await;
+    artist_vectors.teardown().await;
     blacklist.teardown();
     offline.teardown();
-    offline_cache.teardown();
-    lyrics.teardown();
-    musicbrainz.teardown();
-    listenbrainz.teardown();
+    offline_cache.teardown().await;
+    lyrics.teardown().await;
+    musicbrainz.teardown().await;
+    listenbrainz.teardown().await;
 
     // Type-alias states
     teardown_type_alias_state(&*subscription_state);

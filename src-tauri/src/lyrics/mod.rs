@@ -79,19 +79,19 @@ impl LyricsState {
         }
     }
 
-    pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
+    pub async fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let cache_dir = base_dir.join("lyrics");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| format!("Failed to create lyrics cache directory: {}", e))?;
         let db_path = cache_dir.join("lyrics.db");
         let new_db = LyricsCacheDb::new(&db_path)?;
-        let mut guard = self.db.blocking_lock();
+        let mut guard = self.db.lock().await;
         *guard = Some(new_db);
         Ok(())
     }
 
-    pub fn teardown(&self) {
-        let mut guard = self.db.blocking_lock();
+    pub async fn teardown(&self) {
+        let mut guard = self.db.lock().await;
         *guard = None;
     }
 }
