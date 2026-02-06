@@ -472,14 +472,16 @@
 
   async function fetchFeaturedAlbumsSingle(featuredType: string, limit: number, genreId?: number): Promise<AlbumCardData[]> {
     try {
+      console.warn(`[DEBUG-43] fetchFeaturedAlbums: type=${featuredType}, limit=${limit}, genreId=${genreId ?? 'null'}`);
       const response = await invoke<FeaturedAlbumsResponse>('get_featured_albums', {
         featuredType,
         limit,
         genreId: genreId ?? null
       });
+      console.warn(`[DEBUG-43] fetchFeaturedAlbums result: type=${featuredType}, returned=${response.items.length} albums`);
       return response.items.map(toAlbumCard);
     } catch (err) {
-      console.error(`Failed to fetch ${featuredType}:`, err);
+      console.error(`[DEBUG-43] Failed to fetch ${featuredType}:`, err);
       return [];
     }
   }

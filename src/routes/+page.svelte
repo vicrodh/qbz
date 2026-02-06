@@ -579,18 +579,22 @@
 
   async function handleAlbumClick(albumId: string) {
     try {
-      console.log('[Album] handleAlbumClick called with albumId:', albumId, 'type:', typeof albumId);
+      console.warn('[DEBUG-43] Album click: albumId=', albumId, 'type:', typeof albumId);
       showToast($t('toast.loadingAlbum'), 'info');
       const album = await invoke<QobuzAlbum>('get_album', { albumId });
-      console.log('[Album] API response received, id:', album?.id, 'title:', album?.title, 'tracks:', album?.tracks?.items?.length);
+      console.warn('[DEBUG-43] Album API response: id=', album?.id, 'title=', album?.title, 'tracksCount=', album?.tracks?.items?.length ?? 0);
 
       const converted = convertQobuzAlbum(album);
-      console.log('[Album] Converted album, id:', converted?.id, 'tracks:', converted?.tracks?.length);
+      console.warn('[DEBUG-43] Converted album: id=', converted?.id, 'tracksCount=', converted?.tracks?.length ?? 0);
 
       if (!converted || !converted.id) {
-        console.error('[Album] convertQobuzAlbum returned invalid data:', converted);
+        console.error('[DEBUG-43] convertQobuzAlbum returned invalid data:', converted);
         showToast($t('toast.failedLoadAlbum'), 'error');
         return;
+      }
+
+      if (!converted.tracks || converted.tracks.length === 0) {
+        console.warn('[DEBUG-43] Album has no tracks - may render blank');
       }
 
       selectedAlbum = converted;
@@ -604,7 +608,7 @@
         albumArtistAlbums = [];
       }
     } catch (err) {
-      console.error('[Album] Failed to load album:', err);
+      console.error('[DEBUG-43] Failed to load album:', err);
       showToast($t('toast.failedLoadAlbum'), 'error');
     }
   }

@@ -246,6 +246,15 @@
 
   // Check if album is in favorites on mount
   onMount(() => {
+    console.warn('[DEBUG-43] AlbumDetailView mounted:', {
+      albumId: album?.id, albumTitle: album?.title,
+      tracksCount: album?.tracks?.length ?? 0,
+      hasTracks: Array.isArray(album?.tracks) && album.tracks.length > 0
+    });
+    if (!album?.tracks || album.tracks.length === 0) {
+      console.error('[DEBUG-43] AlbumDetailView mounted with no tracks');
+    }
+
     let unsubscribe: (() => void) | null = null;
     (async () => {
       try {
