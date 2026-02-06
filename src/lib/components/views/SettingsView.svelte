@@ -205,7 +205,6 @@
   let offlineModeSection: HTMLElement;
   let appearanceSection: HTMLElement;
   let downloadsSection: HTMLElement;
-  let librarySection: HTMLElement;
   let contentFilteringSection: HTMLElement;
   let integrationsSection: HTMLElement;
   let remoteControlSection: HTMLElement;
@@ -225,7 +224,6 @@
     { id: 'offline', labelKey: 'offline.title' },
     { id: 'appearance', labelKey: 'settings.appearance.title' },
     { id: 'downloads', labelKey: 'settings.offlineLibrary.title' },
-    { id: 'library', labelKey: 'settings.library.title' },
     { id: 'content-filtering', labelKey: 'settings.contentFiltering.title' },
     { id: 'integrations', labelKey: 'settings.integrations.title' },
     { id: 'updates', labelKey: 'nav.updates' },
@@ -249,7 +247,6 @@
       case 'offline': return offlineModeSection;
       case 'appearance': return appearanceSection;
       case 'downloads': return downloadsSection;
-      case 'library': return librarySection;
       case 'content-filtering': return contentFilteringSection;
       case 'integrations': return integrationsSection;
       case 'remote-control': return remoteControlSection;
@@ -2644,7 +2641,7 @@
           {isClearingDownloads ? $t('settings.storage.clearing') : $t('settings.offlineLibrary.clearCache')}
         </button>
       </div>
-      <div class="setting-row last">
+      <div class="setting-row">
         <div class="setting-with-description">
           <span class="setting-label">{$t('settings.offlineLibrary.manageCache')}</span>
           <span class="setting-description">{$t('settings.offlineLibrary.manageCacheDesc')}</span>
@@ -2656,22 +2653,17 @@
           {$t('settings.offlineLibrary.openFolder')}
         </button>
       </div>
-    {/if}
-  </section>
-
-  <!-- Library Section -->
-  <section class="section" bind:this={librarySection}>
-    <h3 class="section-title">{$t('settings.library.title')}</h3>
-    <div class="setting-row last">
-      <div class="setting-with-description">
-        <span class="setting-label">{$t('settings.library.fetchArtistImages')}</span>
-        <span class="setting-description">{$t('settings.library.fetchArtistImagesDesc')}</span>
+      <div class="setting-row last">
+        <div class="setting-with-description">
+          <span class="setting-label">{$t('settings.library.fetchArtistImages')}</span>
+          <span class="setting-description">{$t('settings.library.fetchArtistImagesDesc')}</span>
+        </div>
+        <Toggle enabled={fetchQobuzArtistImages} onchange={(v) => {
+          fetchQobuzArtistImages = v;
+          setUserItem('qbz-fetch-artist-images', String(v));
+        }} />
       </div>
-      <Toggle enabled={fetchQobuzArtistImages} onchange={(v) => {
-        fetchQobuzArtistImages = v;
-        setUserItem('qbz-fetch-artist-images', String(v));
-      }} />
-    </div>
+    {/if}
   </section>
 
   <!-- Content Filtering Section -->
