@@ -61,6 +61,9 @@ impl ApiCacheState {
 /// Default TTL for cached items (24 hours)
 const DEFAULT_TTL_SECS: i64 = 24 * 60 * 60;
 
+/// TTL for genres — Qobuz rarely updates genre lists (7 days)
+const GENRE_TTL_SECS: i64 = 7 * 24 * 60 * 60;
+
 pub struct ApiCache {
     conn: Connection,
 }
@@ -103,6 +106,13 @@ impl ApiCache {
                     fetched_at INTEGER NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_cached_tracks_fetched ON cached_tracks(fetched_at);
+
+                CREATE TABLE IF NOT EXISTS cached_genres (
+                    cache_key TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    fetched_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_cached_genres_fetched ON cached_genres(fetched_at);
                 "#,
             )
             .map_err(|e| format!("Failed to initialize API cache: {}", e))?;
@@ -294,6 +304,46 @@ impl ApiCache {
         Ok(())
     }
 
+    // ============ Genre Cache ============
+
+    fn genre_cache_key(parent_id: Option<u64>) -> String {
+        match parent_id {
+            Some(id) => format!("parent_{}", id),
+            None => "root".to_string(),
+        }
+    }
+
+    /// Get cached genres if they exist and haven't expired
+    pub fn get_genres(&self, parent_id: Option<u64>) -> Result<Option<String>, String> {
+        let key = Self::genre_cache_key(parent_id);
+        let min_fetched_at = Self::current_timestamp() - GENRE_TTL_SECS;
+
+        let result: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT data FROM cached_genres WHERE cache_key = ? AND fetched_at > ?",
+                params![key, min_fetched_at],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("Failed to query cached genres: {}", e))?;
+
+        Ok(result)
+    }
+
+    /// Cache a genres response
+    pub fn set_genres(&self, parent_id: Option<u64>, data: &str) -> Result<(), String> {
+        let key = Self::genre_cache_key(parent_id);
+        let fetched_at = Self::current_timestamp();
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO cached_genres (cache_key, data, fetched_at) VALUES (?, ?, ?)",
+                params![key, data, fetched_at],
+            )
+            .map_err(|e| format!("Failed to cache genres: {}", e))?;
+        Ok(())
+    }
+
     // ============ Maintenance ============
 
     /// Clear all cached artists for a specific locale
@@ -353,6 +403,15 @@ impl ApiCache {
             )
             .map_err(|e| format!("Failed to cleanup cached tracks: {}", e))?;
 
+        let genre_min_fetched_at = Self::current_timestamp() - GENRE_TTL_SECS;
+        total_deleted += self
+            .conn
+            .execute(
+                "DELETE FROM cached_genres WHERE fetched_at <= ?",
+                params![genre_min_fetched_at],
+            )
+            .map_err(|e| format!("Failed to cleanup cached genres: {}", e))?;
+
         Ok(total_deleted)
     }
 
@@ -364,6 +423,7 @@ impl ApiCache {
                 DELETE FROM cached_albums;
                 DELETE FROM cached_artists;
                 DELETE FROM cached_tracks;
+                DELETE FROM cached_genres;
                 "#,
             )
             .map_err(|e| format!("Failed to clear API cache: {}", e))?;

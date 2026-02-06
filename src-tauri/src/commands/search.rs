@@ -630,14 +630,49 @@ pub async fn get_label(
 pub async fn get_genres(
     parent_id: Option<u64>,
     state: State<'_, AppState>,
+    cache_state: State<'_, ApiCacheState>,
 ) -> Result<Vec<crate::api::models::GenreInfo>, String> {
     log::debug!("Command: get_genres parent_id={:?}", parent_id);
 
+    // Check cache first
+    {
+        let guard = cache_state.cache.lock().await;
+        if let Some(cache) = guard.as_ref() {
+            match cache.get_genres(parent_id) {
+                Ok(Some(cached_data)) => {
+                    log::debug!("Cache hit for genres parent_id={:?}", parent_id);
+                    return serde_json::from_str(&cached_data)
+                        .map_err(|e| format!("Failed to parse cached genres: {}", e));
+                }
+                Ok(None) => {} // Cache miss
+                Err(e) => {
+                    log::warn!("Genre cache read error: {}", e);
+                }
+            }
+        }
+    }
+
+    // Cache miss - fetch from API
+    log::debug!("Cache miss for genres parent_id={:?}, fetching from API", parent_id);
     let client = state.client.lock().await;
-    client
+    let genres = client
         .get_genres(parent_id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+
+    // Cache the result
+    {
+        let guard = cache_state.cache.lock().await;
+        if let Some(cache) = guard.as_ref() {
+            let json = serde_json::to_string(&genres)
+                .map_err(|e| format!("Failed to serialize genres: {}", e))?;
+            if let Err(e) = cache.set_genres(parent_id, &json) {
+                log::warn!("Genre cache write error: {}", e);
+            }
+        }
+    }
+
+    Ok(genres)
 }
 
 /// Get discover index (home page content: playlists, ideal discography, etc.)
