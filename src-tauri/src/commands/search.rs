@@ -290,21 +290,38 @@ pub async fn get_album(
     state: State<'_, AppState>,
     cache_state: State<'_, ApiCacheState>,
 ) -> Result<Album, String> {
+    log::debug!("[DEBUG-43] get_album called: id={}", album_id);
+    
     // Check cache first
     {
         let guard__ = cache_state.cache.lock().await;
         let cache = guard__.as_ref().ok_or("No active session - please log in")?;
-        if let Some(cached_data) = cache.get_album(&album_id, None)? {
-            log::debug!("Cache hit for album {}", album_id);
-            return serde_json::from_str(&cached_data)
-                .map_err(|e| format!("Failed to parse cached album: {}", e));
+        match cache.get_album(&album_id, None) {
+            Ok(Some(cached_data)) => {
+                log::debug!("Cache hit for album {}", album_id);
+                return serde_json::from_str(&cached_data)
+                    .map_err(|e| {
+                        log::warn!("[DEBUG-43] get_album cache parse error: id={} err={}", album_id, e);
+                        format!("Failed to parse cached album: {}", e)
+                    });
+            }
+            Ok(None) => {
+                // Cache miss, continue to API fetch
+            }
+            Err(e) => {
+                log::warn!("[DEBUG-43] get_album cache read error: id={} err={}", album_id, e);
+                // Continue to API fetch on cache error
+            }
         }
     }
 
     // Cache miss - fetch from API
     log::debug!("Cache miss for album {}, fetching from API", album_id);
     let client = state.client.lock().await;
-    let album = client.get_album(&album_id).await.map_err(|e| e.to_string())?;
+    let album = client.get_album(&album_id).await.map_err(|e| {
+        log::warn!("[DEBUG-43] get_album API error: id={} err={}", album_id, e);
+        e.to_string()
+    })?;
 
     // Cache the result
     {
@@ -312,8 +329,12 @@ pub async fn get_album(
         let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&album)
             .map_err(|e| format!("Failed to serialize album: {}", e))?;
-        cache.set_album(&album_id, &json)?;
-        log::debug!("Cached album {}", album_id);
+        if let Err(e) = cache.set_album(&album_id, &json) {
+            log::warn!("[DEBUG-43] get_album cache write error: id={} err={}", album_id, e);
+            // Don't fail the request on cache write error
+        } else {
+            log::debug!("Cached album {}", album_id);
+        }
     }
 
     Ok(album)
@@ -348,21 +369,38 @@ pub async fn get_track(
     state: State<'_, AppState>,
     cache_state: State<'_, ApiCacheState>,
 ) -> Result<Track, String> {
+    log::debug!("[DEBUG-43] get_track called: id={}", track_id);
+    
     // Check cache first
     {
         let guard__ = cache_state.cache.lock().await;
         let cache = guard__.as_ref().ok_or("No active session - please log in")?;
-        if let Some(cached_data) = cache.get_track(track_id, None)? {
-            log::debug!("Cache hit for track {}", track_id);
-            return serde_json::from_str(&cached_data)
-                .map_err(|e| format!("Failed to parse cached track: {}", e));
+        match cache.get_track(track_id, None) {
+            Ok(Some(cached_data)) => {
+                log::debug!("Cache hit for track {}", track_id);
+                return serde_json::from_str(&cached_data)
+                    .map_err(|e| {
+                        log::warn!("[DEBUG-43] get_track cache parse error: id={} err={}", track_id, e);
+                        format!("Failed to parse cached track: {}", e)
+                    });
+            }
+            Ok(None) => {
+                // Cache miss, continue to API fetch
+            }
+            Err(e) => {
+                log::warn!("[DEBUG-43] get_track cache read error: id={} err={}", track_id, e);
+                // Continue to API fetch on cache error
+            }
         }
     }
 
     // Cache miss - fetch from API
     log::debug!("Cache miss for track {}, fetching from API", track_id);
     let client = state.client.lock().await;
-    let track = client.get_track(track_id).await.map_err(|e| e.to_string())?;
+    let track = client.get_track(track_id).await.map_err(|e| {
+        log::warn!("[DEBUG-43] get_track API error: id={} err={}", track_id, e);
+        e.to_string()
+    })?;
 
     // Cache the result
     {
@@ -370,7 +408,10 @@ pub async fn get_track(
         let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&track)
             .map_err(|e| format!("Failed to serialize track: {}", e))?;
-        cache.set_track(track_id, &json)?;
+        if let Err(e) = cache.set_track(track_id, &json) {
+            log::warn!("[DEBUG-43] get_track cache write error: id={} err={}", track_id, e);
+            // Don't fail the request on cache write error
+        }
     }
 
     Ok(track)
