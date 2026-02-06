@@ -120,9 +120,8 @@
   });
 
   // Get icon path based on tier
-  // NOTE: Using hi-res-gray.svg because hi-res.svg has poor text contrast
   const iconPath = $derived.by(() => {
-    if (tier === 'max' || tier === 'hires') return '/hi-res-gray.svg';
+    if (tier === 'max' || tier === 'hires') return '/hi-res.svg';
     if (tier === 'cd') return '/cd.svg';
     if (tier === 'mp3') return '/mp3.svg';
     return '/cd.svg';
@@ -207,7 +206,9 @@
   .badge-icon.hires {
     width: 24px;
     height: 24px;
-    filter: none; /* Hi-Res logo keeps original colors */
+    /* Sub-pixel drop-shadow reinforces thin black text strokes against */
+    /* the gold gradient, counteracting chromatic anti-aliasing blur */
+    filter: drop-shadow(0 0 0.4px rgba(0, 0, 0, 0.7));
   }
 
   .badge-text {
