@@ -1149,12 +1149,23 @@ pub async fn library_search(
 }
 
 #[tauri::command]
-pub async fn library_get_stats(state: State<'_, LibraryState>) -> Result<LibraryStats, String> {
+pub async fn library_get_stats(
+    state: State<'_, LibraryState>,
+    download_settings_state: State<'_, crate::config::DownloadSettingsState>,
+) -> Result<LibraryStats, String> {
     log::info!("Command: library_get_stats");
+
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
 
     let guard__ = state.db.lock().await;
     let db = guard__.as_ref().ok_or("No active session - please log in")?;
-    db.get_stats().map_err(|e| e.to_string())
+    db.get_stats(include_qobuz).map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -1596,11 +1596,15 @@ impl LibraryDatabase {
     }
 
     /// Get library statistics
-    pub fn get_stats(&self) -> Result<LibraryStats, LibraryError> {
-        let mut stmt = self
-            .conn
-            .prepare(
-                r#"
+    pub fn get_stats(&self, include_qobuz_downloads: bool) -> Result<LibraryStats, LibraryError> {
+        let source_filter = if include_qobuz_downloads {
+            ""
+        } else {
+            "WHERE (source IS NULL OR source != 'qobuz_download')"
+        };
+
+        let sql = format!(
+            r#"
             SELECT
                 COUNT(*) as track_count,
                 COUNT(DISTINCT COALESCE(album_group_key, album || '|' || COALESCE(album_artist, artist))) as album_count,
@@ -1608,8 +1612,14 @@ impl LibraryDatabase {
                 COALESCE(SUM(duration_secs), 0) as total_duration,
                 COALESCE(SUM(file_size_bytes), 0) as total_size
             FROM local_tracks
+            {}
         "#,
-            )
+            source_filter
+        );
+
+        let mut stmt = self
+            .conn
+            .prepare(&sql)
             .map_err(|e| LibraryError::Database(e.to_string()))?;
 
         stmt.query_row([], |row| {
