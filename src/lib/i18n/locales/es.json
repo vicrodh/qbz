@@ -185,7 +185,8 @@
     "addToPlaylist": "Agregar a Lista",
     "makeAvailableOffline": "Disponible offline",
     "makeAllAvailableOffline": "Todo disponible offline",
-    "disc": "Disco"
+    "disc": "Disco",
+    "loadError": "No se pudieron cargar las pistas del album. Intenta de nuevo."
   },
   "artist": {
     "albums": "Álbumes",

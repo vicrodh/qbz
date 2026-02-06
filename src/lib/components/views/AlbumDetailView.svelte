@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { t } from 'svelte-i18n';
   import { ArrowLeft, Play, Shuffle, Heart, CloudDownload, ChevronLeft, ChevronRight } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
@@ -424,6 +425,12 @@
 
     <!-- Track Rows -->
     <div class="tracks">
+      {#if !album.tracks || album.tracks.length === 0}
+        <div class="empty-tracks-message">
+          <p>{$t('album.loadError')}</p>
+          <button class="retry-btn" onclick={onBack}>{$t('actions.back')}</button>
+        </div>
+      {:else}
       {#each album.tracks as track, trackIndex (`${track.id}-${downloadStateVersion}`)}
         {@const downloadInfo = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
         {@const isTrackDownloaded = downloadInfo.status === 'ready'}
@@ -469,6 +476,7 @@
           }}
         />
       {/each}
+      {/if}
     </div>
   </div>
 
@@ -878,5 +886,33 @@
   .view-more-text {
     font-size: 13px;
     color: var(--text-muted);
+  }
+
+  .empty-tracks-message {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 32px 16px;
+    color: var(--text-muted);
+  }
+
+  .empty-tracks-message p {
+    margin: 0;
+    font-size: 14px;
+  }
+
+  .retry-btn {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .retry-btn:hover {
+    background: var(--bg-hover);
   }
 </style>

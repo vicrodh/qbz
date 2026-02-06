@@ -185,7 +185,8 @@
     "addToPlaylist": "Add to Playlist",
     "makeAvailableOffline": "Make available offline",
     "makeAllAvailableOffline": "Make all available offline",
-    "disc": "Disc"
+    "disc": "Disc",
+    "loadError": "Could not load album tracks. Please try again."
   },
   "artist": {
     "albums": "Albums",
