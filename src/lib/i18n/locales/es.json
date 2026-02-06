@@ -693,13 +693,15 @@
       "confirmClearText": "Esto eliminará los {count} artistas de tu lista negra. Esta acción no se puede deshacer."
     },
     "offlineLibrary": {
-      "title": "Biblioteca Offline",
-      "disclaimer": "La biblioteca offline es un caché temporal de reproducción para escucha sin conexión mientras tengas una suscripción válida de Qobuz. No recibes una licencia para conservar o redistribuir el contenido. Si tu suscripción deja de ser válida, QBZ eliminará todo el contenido en caché después de 3 días.",
+      "title": "Reproducción Offline",
+      "disclaimer": "El caché offline es un almacenamiento temporal de reproducción para escucha sin conexión mientras tengas una suscripción válida de Qobuz. No recibes una licencia para conservar o redistribuir el contenido. Si tu suscripción deja de ser válida, QBZ eliminará todo el contenido en caché después de 3 días.",
       "cachedTracks": "Pistas Offline",
       "cachedTracksDesc": "Pistas en caché para reproducción offline",
+      "showInLibrary": "Mostrar en Biblioteca Local",
+      "showInLibraryDesc": "Mostrar pistas del caché offline en la vista de Biblioteca Local",
       "clearCache": "Limpiar Todo",
       "openFolder": "Abrir Carpeta",
-      "repair": "Reparar Biblioteca Offline",
+      "repair": "Reparar Caché Offline",
       "repairDesc": "Corregir marcadores offline perdidos durante escaneos de biblioteca",
       "manageCache": "Administrar Caché Offline",
       "manageCacheDesc": "Abrir la carpeta de caché en tu administrador de archivos",

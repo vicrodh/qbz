@@ -2616,6 +2616,13 @@
       </div>
       <div class="setting-row">
         <div class="setting-with-description">
+          <span class="setting-label">{$t('settings.offlineLibrary.showInLibrary')}</span>
+          <span class="setting-description">{$t('settings.offlineLibrary.showInLibraryDesc')}</span>
+        </div>
+        <Toggle enabled={showQobuzDownloadsInLibrary} onchange={handleShowDownloadsChange} />
+      </div>
+      <div class="setting-row">
+        <div class="setting-with-description">
           <span class="setting-label">{$t('settings.offlineLibrary.repair')}</span>
           <span class="setting-description">{$t('settings.offlineLibrary.repairDesc')}</span>
         </div>
