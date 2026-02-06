@@ -146,13 +146,17 @@ pub async fn reco_get_home_ml(
     limit_favorites: Option<u32>,
     state: State<'_, RecoState>,
 ) -> Result<HomeSeeds, String> {
+    log::info!("[DEBUG-43] reco_get_home_ml called");
     let limit_recent_albums = limit_recent_albums.unwrap_or(12);
     let limit_continue_tracks = limit_continue_tracks.unwrap_or(10);
     let limit_top_artists = limit_top_artists.unwrap_or(10);
     let limit_favorites = limit_favorites.unwrap_or(12);
 
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__.as_ref().ok_or_else(|| {
+        log::error!("[DEBUG-43] reco_get_home_ml FAILED: No active session (RecoState.db is None)");
+        "No active session - please log in".to_string()
+    })?;
     let has_scores = db.has_scores("all")?;
 
     // HYBRID APPROACH: Always get fresh recent plays first, then supplement with scored
@@ -216,6 +220,15 @@ pub async fn reco_get_home_ml(
     if favorite_track_ids.is_empty() {
         favorite_track_ids = db.get_favorite_track_ids(limit_favorites)?;
     }
+
+    log::info!(
+        "[DEBUG-43] reco_get_home_ml OK: recent_albums={}, continue_tracks={}, top_artists={}, fav_albums={}, fav_tracks={}",
+        recently_played_album_ids.len(),
+        continue_listening_track_ids.len(),
+        top_artist_ids.len(),
+        favorite_album_ids.len(),
+        favorite_track_ids.len()
+    );
 
     Ok(HomeSeeds {
         recently_played_album_ids,

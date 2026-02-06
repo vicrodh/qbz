@@ -319,10 +319,17 @@
   // Check if all visible sections have finished loading
   function checkAllSectionsReady() {
     if (sectionsFinished >= totalVisibleSections && totalVisibleSections > 0 && isOverlayVisible) {
+      console.warn(`[DEBUG-43] ALL SECTIONS READY (${sectionsFinished}/${totalVisibleSections}), removing overlay in 150ms`);
       // Small delay to ensure DOM has rendered, then fade out
       setTimeout(() => {
         isOverlayVisible = false;
         isInitializing = false;
+        console.warn('[DEBUG-43] Overlay removed. hasContent =',
+          newReleases.length > 0 || pressAwards.length > 0 || mostStreamed.length > 0 ||
+          qobuzissimes.length > 0 || editorPicks.length > 0 || recentAlbums.length > 0 ||
+          continueTracks.length > 0 || topArtists.length > 0 || favoriteAlbums.length > 0 ||
+          qobuzPlaylists.length > 0 || essentialDiscography.length > 0,
+          'error =', error);
       }, 150);
       
       // Enable deferred sections after a short delay using requestIdleCallback
@@ -658,11 +665,14 @@
 
   async function fetchDiscoverData() {
     try {
+      console.warn('[DEBUG-43] fetchDiscoverData: invoking get_discover_index...');
       const response = await invoke<DiscoverResponse>('get_discover_index', { genreIds: null });
+      console.warn('[DEBUG-43] fetchDiscoverData: response received, containers:', Object.keys(response.containers || {}));
 
       // Extract playlists (limited) - initial load without tag filter
       if (response.containers.playlists?.data?.items) {
         qobuzPlaylists = response.containers.playlists.data.items.slice(0, LIMITS.qobuzPlaylists);
+        console.warn('[DEBUG-43] fetchDiscoverData: playlists =', qobuzPlaylists.length);
       }
 
       // Extract playlist tags
@@ -673,6 +683,7 @@
       // Extract essential discography (limited)
       if (response.containers.ideal_discography?.data?.items) {
         essentialDiscography = response.containers.ideal_discography.data.items.slice(0, LIMITS.essentialDiscography);
+        console.warn('[DEBUG-43] fetchDiscoverData: essentialDiscography =', essentialDiscography.length);
       }
 
       loadingQobuzPlaylists = false;
@@ -685,7 +696,7 @@
         markSectionFinished();
       }
     } catch (err) {
-      console.error('Failed to fetch discover data:', err);
+      console.error('[DEBUG-43] fetchDiscoverData FAILED:', err);
       loadingQobuzPlaylists = false;
       loadingEssentialDiscography = false;
       // Still mark sections as finished even on error
@@ -728,8 +739,10 @@
     if (isSectionVisible('favoriteAlbums')) totalVisibleSections++;
     if (isSectionVisible('qobuzPlaylists')) totalVisibleSections++;
     if (isSectionVisible('essentialDiscography')) totalVisibleSections++;
+    console.warn('[DEBUG-43] loadHome: totalVisibleSections =', totalVisibleSections);
 
     // Start ML data loading FIRST (local SQLite) - this gets the seeds
+    console.warn('[DEBUG-43] loadHome: invoking reco_get_home_ml...');
     const mlPromise = invoke<HomeSeeds>('reco_get_home_ml', {
       limitRecentAlbums: homeLimits.recentAlbums,
       limitContinueTracks: homeLimits.continueTracks,
@@ -833,6 +846,13 @@
     try {
       // Wait for ML seeds (local data)
       const seeds = await mlPromise;
+      console.warn('[DEBUG-43] mlPromise resolved:', {
+        recentAlbums: seeds.recentlyPlayedAlbumIds?.length ?? 0,
+        continueTracks: seeds.continueListeningTrackIds?.length ?? 0,
+        topArtists: seeds.topArtistIds?.length ?? 0,
+        favoriteAlbums: seeds.favoriteAlbumIds?.length ?? 0,
+        favoriteTracks: seeds.favoriteTrackIds?.length ?? 0,
+      });
 
       // Load ML-based sections in parallel
       // Continue Listening (tracks)
@@ -915,7 +935,9 @@
       }
 
     } catch (err) {
-      console.error('Failed to load home data:', err);
+      console.error('[DEBUG-43] mlPromise FAILED — catch block entered:', err);
+      console.error('[DEBUG-43] This sets error= which BLOCKS all content rendering.');
+      console.error('[DEBUG-43] Featured album sections already in flight will finish but be invisible.');
       error = String(err);
       isInitializing = false;
       isOverlayVisible = false;
