@@ -96,6 +96,7 @@ parts:
       - libasound2-dev
       - libsqlite3-dev
       - pkg-config
+      - curl
       # alsa-utils for aplay command (device enumeration)
       - alsa-utils
     stage-packages:
@@ -112,7 +113,9 @@ parts:
       # Include alsa-utils in the snap for aplay -L command
       - alsa-utils
     override-build: |
-      export PATH="$HOME/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      export CARGO_HOME="$SNAPCRAFT_PART_BUILD/.cargo"
+      export RUSTUP_HOME="$SNAPCRAFT_PART_BUILD/.rustup"
+      export PATH="$CARGO_HOME/bin:/usr/bin:/bin:/usr/sbin:/sbin"
       export PKG_CONFIG_PATH="/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/pkgconfig:/usr/share/pkgconfig:/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/pkgconfig:/snap/gnome-42-2204-sdk/current/usr/share/pkgconfig"
       export LIBRARY_PATH="/usr/lib/$SNAPCRAFT_ARCH_TRIPLET:/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET"
       export LD_LIBRARY_PATH="/usr/lib/$SNAPCRAFT_ARCH_TRIPLET:/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET"
@@ -122,6 +125,10 @@ parts:
       export SQLITE3_STATIC="0"
       export RUSTFLAGS="-L native=/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -L native=/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -L native=/snap/gnome-42-2204-sdk/current/usr/lib -C link-arg=-Wl,-rpath-link,/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -C link-arg=-Wl,-rpath-link,/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -C link-arg=-Wl,-rpath-link,/snap/gnome-42-2204-sdk/current/usr/lib"
       export LDFLAGS="-L/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -L/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -L/snap/gnome-42-2204-sdk/current/usr/lib -Wl,-rpath-link,/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -Wl,-rpath-link,/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -Wl,-rpath-link,/snap/gnome-42-2204-sdk/current/usr/lib"
+
+      if ! command -v cargo >/dev/null 2>&1; then
+        curl -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable
+      fi
 
       # Allow sandboxed builds to override GTK_USE_PORTAL.
       perl -0pi -e 'if ($_ !~ /var_os\\(\"GTK_USE_PORTAL\"\\)/) { s/std::env::set_var\\(\"GTK_USE_PORTAL\", \"1\"\\);/if std::env::var_os\\(\"GTK_USE_PORTAL\"\\).is_none() {\\n        std::env::set_var(\"GTK_USE_PORTAL\", \"1\");\\n    }/ }' src-tauri/src/main.rs
