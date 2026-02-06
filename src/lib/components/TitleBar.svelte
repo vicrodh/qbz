@@ -28,7 +28,7 @@
         const settings = await invoke<TraySettings>('get_tray_settings');
         minimizeToTray = settings.minimize_to_tray;
       } catch (e) {
-        console.error('Failed to load tray settings:', e);
+        console.debug('Failed to load tray settings:', e);
       }
 
       // Listen for window state changes

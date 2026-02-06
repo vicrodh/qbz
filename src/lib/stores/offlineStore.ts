@@ -135,7 +135,12 @@ async function fetchStatus(): Promise<void> {
       }
     }
   } catch (error) {
-    console.error('Failed to fetch offline status:', error);
+    const msg = String(error);
+    if (msg.includes('No active session')) {
+      console.debug('Failed to fetch offline status (no session yet):', error);
+    } else {
+      console.error('Failed to fetch offline status:', error);
+    }
   }
 }
 
@@ -147,7 +152,12 @@ async function fetchSettings(): Promise<void> {
     settings = await invoke<OfflineSettings>('get_offline_settings');
     notifyListeners();
   } catch (error) {
-    console.error('Failed to fetch offline settings:', error);
+    const msg = String(error);
+    if (msg.includes('No active session')) {
+      console.debug('Failed to fetch offline settings (no session yet):', error);
+    } else {
+      console.error('Failed to fetch offline settings:', error);
+    }
   }
 }
 

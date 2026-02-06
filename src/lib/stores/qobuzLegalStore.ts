@@ -21,7 +21,7 @@ export async function loadTosAcceptance(): Promise<boolean> {
     initialized = true;
     return accepted;
   } catch (err) {
-    console.error('Failed to load ToS acceptance from backend:', err);
+    console.debug('Failed to load ToS acceptance from backend:', err);
     // Fallback to localStorage for migration from old versions
     const localValue = localStorage.getItem('qbz-qobuz-tos-accepted') === 'true';
     if (localValue) {
@@ -73,7 +73,7 @@ if (browser) {
 
     // Persist to Rust (fire and forget, errors logged in setTosAcceptance)
     invoke('set_qobuz_tos_accepted', { accepted: value }).catch((err) => {
-      console.error('Failed to persist ToS acceptance:', err);
+      console.debug('Failed to persist ToS acceptance:', err);
     });
   });
 }

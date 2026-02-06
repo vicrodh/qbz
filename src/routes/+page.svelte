@@ -2201,6 +2201,11 @@
     setLoggedIn(info);
     showToast($t('toast.welcomeUser', { values: { name: info.userName } }), 'success');
 
+    // Initialize per-user stores now that the backend session is active
+    initOfflineCacheStates(); // has internal try/catch
+    initPlaybackPreferences().catch(err => console.debug('[PlaybackPrefs] Init deferred:', err));
+    initBlacklistStore().catch(err => console.debug('[Blacklist] Init deferred:', err));
+
     // Load favorites now that login is confirmed (sync with Qobuz)
     loadFavorites();        // Track favorites
     loadAlbumFavorites();   // Album favorites
@@ -2494,14 +2499,11 @@
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
 
-    // Initialize download states
-    initOfflineCacheStates();
+    // Start listening for offline cache events (just event listeners, no backend calls)
     startOfflineCacheEventListeners();
 
-    // Initialize playback context and preferences stores
+    // Initialize playback context store (local state only, no backend calls)
     initPlaybackContextStore();
-    initPlaybackPreferences();
-    initBlacklistStore();
 
     // Load infinite play preference
     try {
