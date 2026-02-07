@@ -57,17 +57,24 @@ export function getCurrentVersion(): string {
 export async function initUpdatesStore(): Promise<void> {
   if (initialized) return;
   initialized = true;
+
+  // get_current_version never needs a session (compile-time value).
+  // get_update_preferences needs the SQLite store which is only
+  // available after login.  Fetch them independently so a preference
+  // failure doesn't lose the version.
   try {
-    const [prefs, version] = await Promise.all([
-      invoke<UpdatePreferences>('get_update_preferences'),
-      invoke<string>('get_current_version'),
-    ]);
-    preferences = prefs;
-    currentVersion = version;
-    notify();
+    currentVersion = await invoke<string>('get_current_version');
   } catch (error) {
-    console.debug('[Updates] Failed to initialize updates store:', error);
+    console.error('[Updates] Failed to get current version:', error);
   }
+
+  try {
+    preferences = await invoke<UpdatePreferences>('get_update_preferences');
+  } catch {
+    // Expected before login — store not initialised yet.
+  }
+
+  notify();
 }
 
 export async function refreshUpdatePreferences(): Promise<void> {
