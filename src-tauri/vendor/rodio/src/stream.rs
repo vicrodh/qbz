@@ -7,7 +7,7 @@ use crate::dynamic_mixer::{self, DynamicMixerController};
 use crate::sink::Sink;
 use crate::source::Source;
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{BufferSize, Sample, SupportedBufferSize, SupportedStreamConfig};
+use cpal::{Sample, SupportedStreamConfig};
 
 /// `cpal::Stream` container. Also see the more useful `OutputStreamHandle`.
 ///
@@ -210,7 +210,7 @@ impl CpalDeviceExt for cpal::Device {
 
         let error_callback = |err| eprintln!("an error occurred on output stream: {}", err);
 
-        let mut config = format.config();
+        let config = format.config();
         match format.sample_format() {
             cpal::SampleFormat::F32 => self.build_output_stream::<f32, _, _>(
                 &config,
