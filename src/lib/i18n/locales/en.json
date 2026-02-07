@@ -718,7 +718,9 @@
       "check": "Check",
       "showWhatsNew": "Show what's new on new version launch",
       "showChangelog": "Show changelog for current version",
-      "currentVersion": "Current version: v{version}"
+      "currentVersion": "Current version: v{version}",
+      "versionUnavailable": "Version information not available yet",
+      "changelogUnavailable": "Could not load changelog for this version"
     },
     "networkCacheWarning": "The selected folder is on a network drive.",
     "networkCacheWarningDetail": "Cached tracks may not be available when the network is disconnected or in offline mode. Are you sure you want to use this location?",

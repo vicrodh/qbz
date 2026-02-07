@@ -718,7 +718,9 @@
       "check": "Verificar",
       "showWhatsNew": "Mostrar novedades al lanzar nueva versión",
       "showChangelog": "Mostrar registro de cambios para la versión actual",
-      "currentVersion": "Versión actual: v{version}"
+      "currentVersion": "Versión actual: v{version}",
+      "versionUnavailable": "Información de versión no disponible aún",
+      "changelogUnavailable": "No se pudo cargar el registro de cambios para esta versión"
     },
     "networkCacheWarning": "La carpeta seleccionada está en una unidad de red.",
     "networkCacheWarningDetail": "Las pistas en caché pueden no estar disponibles cuando la red esté desconectada o en modo offline. ¿Estás seguro de que quieres usar esta ubicación?",

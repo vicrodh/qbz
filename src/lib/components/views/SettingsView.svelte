@@ -194,6 +194,7 @@
   let updateResultRelease = $state<ReleaseInfo | null>(null);
   let isSettingsWhatsNewOpen = $state(false);
   let settingsWhatsNewRelease = $state<ReleaseInfo | null>(null);
+  let isFetchingChangelog = $state(false);
 
   // Blacklist state
   let blacklistCount = $state(getBlacklistCount());
@@ -298,11 +299,24 @@
 
   async function handleShowCurrentChangelog(): Promise<void> {
     const version = updatesCurrentVersion || getUpdatesCurrentVersion();
-    if (!version) return;
-    const release = await fetchReleaseForVersion(version);
-    if (!release) return;
-    settingsWhatsNewRelease = release;
-    isSettingsWhatsNewOpen = true;
+    if (!version) {
+      showToast($t('settings.updates.versionUnavailable'), 'error');
+      return;
+    }
+    isFetchingChangelog = true;
+    try {
+      const release = await fetchReleaseForVersion(version);
+      if (!release) {
+        showToast($t('settings.updates.changelogUnavailable'), 'error');
+        return;
+      }
+      settingsWhatsNewRelease = release;
+      isSettingsWhatsNewOpen = true;
+    } catch {
+      showToast($t('settings.updates.changelogUnavailable'), 'error');
+    } finally {
+      isFetchingChangelog = false;
+    }
   }
 
   function handleCloseSettingsWhatsNew(): void {
@@ -2907,8 +2921,9 @@
         class="connect-btn"
         onclick={handleShowCurrentChangelog}
         type="button"
+        disabled={isFetchingChangelog}
       >
-        {$t('actions.show')}
+        {isFetchingChangelog ? $t('actions.loading') : $t('actions.show')}
       </button>
     </div>
   </section>

@@ -696,7 +696,9 @@
       "check": "Prüfen",
       "showWhatsNew": "Zeige Neuigkeiten beim Start einer neuen Version",
       "showChangelog": "Änderungsprotokoll für aktuelle Version anzeigen",
-      "currentVersion": "Aktuelle Version: v{version}"
+      "currentVersion": "Aktuelle Version: v{version}",
+      "versionUnavailable": "Versionsinformationen noch nicht verfügbar",
+      "changelogUnavailable": "Änderungsprotokoll für diese Version konnte nicht geladen werden"
     },
     "networkCacheWarning": "Der ausgewählte Ordner befindet sich auf einem Netzlaufwerk.",
     "networkCacheWarningDetail": "Zwischengespeicherte Titel sind möglicherweise nicht verfügbar, wenn das Netzwerk getrennt ist oder im Offline-Modus. Bist du sicher, dass du diesen Speicherort verwenden möchtest?",

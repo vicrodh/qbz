@@ -696,7 +696,9 @@
       "check": "Vérifier",
       "showWhatsNew": "Afficher les nouveautés lors du lancement de la nouvelle version",
       "showChangelog": "Afficher le journal des modifications pour la version actuelle",
-      "currentVersion": "Version actuelle : v{version}"
+      "currentVersion": "Version actuelle : v{version}",
+      "versionUnavailable": "Informations de version pas encore disponibles",
+      "changelogUnavailable": "Impossible de charger le journal des modifications pour cette version"
     },
     "networkCacheWarning": "Le dossier sélectionné se trouve sur un lecteur réseau.",
     "networkCacheWarningDetail": "Les pistes mises en cache peuvent ne pas être disponibles lorsque le réseau est déconnecté ou en mode hors ligne. Voulez-vous vraiment utiliser cet emplacement ?",
