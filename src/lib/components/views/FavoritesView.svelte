@@ -405,10 +405,10 @@
   let filteredTracks = $derived.by(() => {
     if (!trackSearch.trim()) return favoriteTracks;
     const query = trackSearch.toLowerCase();
-    return favoriteTracks.filter(t =>
-      t.title.toLowerCase().includes(query) ||
-      t.performer?.name?.toLowerCase().includes(query) ||
-      t.album?.title?.toLowerCase().includes(query)
+    return favoriteTracks.filter(track =>
+      track.title.toLowerCase().includes(query) ||
+      track.performer?.name?.toLowerCase().includes(query) ||
+      track.album?.title?.toLowerCase().includes(query)
     );
   });
 

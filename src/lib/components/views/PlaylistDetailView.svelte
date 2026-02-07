@@ -204,11 +204,11 @@
   // Playlist suggestions: adaptive artist selection (quantity scales with playlist size,
   // mix of top artists for coherence + random artists for discovery)
   const playlistArtists = $derived(
-    extractAdaptiveArtists(tracks.filter(t => !t.isLocal))
+    extractAdaptiveArtists(tracks.filter(track => !track.isLocal))
   );
   // Track IDs to exclude from suggestions (already in playlist)
   const excludeTrackIds = $derived(
-    tracks.filter(t => !t.isLocal).map(t => t.id)
+    tracks.filter(track => !track.isLocal).map(track => track.id)
   );
 
   let loading = $state(true);
@@ -999,7 +999,7 @@
 
     // Calculate total count: must reach the highest local position
     const maxLocalPosition = localTracks.length > 0
-      ? Math.max(...localTracks.map(t => t.playlist_position))
+      ? Math.max(...localTracks.map(lt => lt.playlist_position))
       : -1;
     const minTotalCount = tracks.length + localTracks.length;
     const totalCount = Math.max(minTotalCount, maxLocalPosition + 1);

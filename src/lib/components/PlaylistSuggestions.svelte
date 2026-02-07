@@ -126,17 +126,17 @@
   const dismissedIds = $derived(getDismissedTrackIds(playlistId));
   const filteredPool = $derived.by(() => {
     // First filter by ID and dismissed
-    const byId = pool.filter(t =>
-      !dismissedIds.has(t.track_id) && !excludeTrackIds.includes(t.track_id)
+    const byId = pool.filter(item =>
+      !dismissedIds.has(item.track_id) && !excludeTrackIds.includes(item.track_id)
     );
 
     // Then filter by title+artist to avoid duplicates from compilations, live albums, etc.
-    const filtered = byId.filter(t => !isDuplicateOfExisting(t));
+    const filtered = byId.filter(item => !isDuplicateOfExisting(item));
 
     // Also deduplicate within the pool itself (same song from different albums)
     const seenKeys = new Set<string>();
-    return filtered.filter(t => {
-      const key = makeTrackKey(t.title, t.artist_name);
+    return filtered.filter(item => {
+      const key = makeTrackKey(item.title, item.artist_name);
       if (seenKeys.has(key)) return false;
       seenKeys.add(key);
       return true;

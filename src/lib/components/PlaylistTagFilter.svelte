@@ -19,7 +19,7 @@
 
   const selectedTagName = $derived.by(() => {
     if (!selectedTag) return null;
-    const tag = tags.find(t => t.slug === selectedTag);
+    const tag = tags.find(item => item.slug === selectedTag);
     return tag?.name ?? null;
   });
 
