@@ -28,6 +28,12 @@ const DEV_FAKE_BODY_KEY = 'qbz-updates-dev-fake-body';
 let sessionId = '';
 let launchFlowStarted = false;
 
+/** Reset launch flow state on logout so re-login can re-evaluate. */
+export function resetLaunchFlow(): void {
+  launchFlowStarted = false;
+  sessionId = '';
+}
+
 function ensureSessionId(): string {
   if (sessionId) return sessionId;
   if (typeof window === 'undefined') {

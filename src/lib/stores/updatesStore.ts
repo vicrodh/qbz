@@ -51,6 +51,13 @@ export function getPreferences(): UpdatePreferences {
   return preferences;
 }
 
+/** Reset store state on logout so re-login loads fresh preferences. */
+export function resetUpdatesStore(): void {
+  preferences = { checkOnLaunch: true, showWhatsNewOnLaunch: true };
+  prefsLoaded = false;
+  notify();
+}
+
 export function getCurrentVersion(): string {
   return currentVersion;
 }

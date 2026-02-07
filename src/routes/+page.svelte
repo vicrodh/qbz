@@ -323,13 +323,14 @@
   import KeyboardShortcutsModal from '$lib/components/KeyboardShortcutsModal.svelte';
   import KeybindingsSettings from '$lib/components/KeybindingsSettings.svelte';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
-  import { refreshUpdatePreferences } from '$lib/stores/updatesStore';
+  import { refreshUpdatePreferences, resetUpdatesStore } from '$lib/stores/updatesStore';
   import {
     decideLaunchModals,
     disableUpdateChecks,
     ignoreReleaseVersion,
     markFlatpakWelcomeShown,
     openReleasePageAndAcknowledge,
+    resetLaunchFlow,
   } from '$lib/services/updatesService';
 
   // Offline state
@@ -367,6 +368,7 @@
   let isWhatsNewModalOpen = $state(false);
   let isFlatpakWelcomeOpen = $state(false);
   let updatesLaunchTriggered = $state(false);
+  let sessionReady = $state(false);
 
   // Sequential modal queue: Flatpak → What's new → Update available
   let pendingWhatsNewRelease = $state<ReleaseInfo | null>(null);
@@ -479,6 +481,7 @@
   $effect(() => {
     if (updatesLaunchTriggered) return;
     if (activeView !== 'home') return;
+    if (!sessionReady) return; // Wait for activate_user_session to complete
     updatesLaunchTriggered = true;
     void runLaunchUpdateFlow();
   });
@@ -2199,6 +2202,10 @@
       }
     }
 
+    // Signal that per-user backend stores are ready — the launch update
+    // flow $effect gates on this to avoid reading default preferences
+    sessionReady = true;
+
     // Restore Last.fm session now that backend session is active
     restoreLastfmSession();
 
@@ -2343,6 +2350,10 @@
       // Clear session state
       await clearSession();
       setLoggedOut();
+      sessionReady = false;
+      updatesLaunchTriggered = false;
+      resetLaunchFlow();
+      resetUpdatesStore();
       currentTrack = null;
       isPlaying = false;
       showToast($t('toast.logoutSuccess'), 'info');
