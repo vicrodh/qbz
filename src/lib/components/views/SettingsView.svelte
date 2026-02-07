@@ -32,6 +32,7 @@
     setSystemNotificationsEnabled,
     loadSystemNotificationsPreference
   } from '$lib/services/playbackService';
+  import { getIsPlaying } from '$lib/stores/playerStore';
   import { setLocale, locale, t } from '$lib/i18n';
   import { get } from 'svelte/store';
   import MigrationModal from '../MigrationModal.svelte';
@@ -1365,6 +1366,21 @@
     return sinkDescriptionToName.get(outputDevice) ?? null;
   }
 
+  /**
+   * Reinitialize audio device and auto-resume playback if it was active.
+   * The backend preserves playback position across reinit, so resume
+   * will seek back to where the user was.
+   */
+  async function reinitAndResume(device: string | null): Promise<void> {
+    const wasPlaying = getIsPlaying();
+    await invoke('reinit_audio_device', { device });
+    if (wasPlaying) {
+      // Small delay to let the new stream initialize
+      await new Promise(r => setTimeout(r, 150));
+      await invoke('resume_playback');
+    }
+  }
+
   async function loadAudioDevices() {
     try {
       // Load PipeWire sinks - these have friendly descriptions already
@@ -1533,7 +1549,7 @@
       // Reinitialize audio with the selected device
       // CRITICAL: Pass the actual CPAL device name, not null
       // CPAL can now find this device because we're using CPAL names
-      await invoke('reinit_audio_device', { device: deviceToStore });
+      await reinitAndResume(deviceToStore);
 
       console.log('[Audio] Output device changed:', description, '(device:', deviceName ?? 'default', ', max_rate:', maxSampleRate ?? 'unknown', ')');
     } catch (err) {
@@ -1548,7 +1564,7 @@
 
       // Reinitialize audio with currently selected device
       const deviceName = getCurrentDeviceSinkName();
-      await invoke('reinit_audio_device', { device: deviceName });
+      await reinitAndResume(deviceName);
       console.log('[Audio] Exclusive mode changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change exclusive mode:', err);
@@ -1570,7 +1586,7 @@
 
       // Reinitialize audio with currently selected device
       const deviceName = getCurrentDeviceSinkName();
-      await invoke('reinit_audio_device', { device: deviceName });
+      await reinitAndResume(deviceName);
       console.log('[Audio] DAC passthrough changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change DAC passthrough:', err);
@@ -1623,7 +1639,7 @@
 
       // Reinitialize audio - recreates stream with new backend.
       // Position and audio data are preserved so the user can resume.
-      await invoke('reinit_audio_device', { device: null });
+      await reinitAndResume(null);
     } catch (err) {
       console.error('[Audio] Failed to change backend:', err);
     }
@@ -1643,7 +1659,7 @@
       // Reinitialize audio if ALSA backend is active
       if (selectedBackend === 'ALSA Direct') {
         const deviceName = getCurrentDeviceSinkName();
-        await invoke('reinit_audio_device', { device: deviceName });
+        await reinitAndResume(deviceName);
       }
     } catch (err) {
       console.error('[Audio] Failed to change ALSA plugin:', err);
@@ -1720,7 +1736,7 @@
       // Store device's max sample rate for quality limiting
       await invoke('set_audio_device_max_sample_rate', { rate: maxSampleRate });
       // Reinitialize audio - position and audio data preserved for resume.
-      await invoke('reinit_audio_device', { device: deviceId });
+      await reinitAndResume(deviceId);
       console.log('[Audio] Backend device changed:', deviceName, '(id:', deviceId ?? 'default', ', max_rate:', maxSampleRate ?? 'unknown', ')');
     } catch (err) {
       console.error('[Audio] Failed to change backend device:', err);
@@ -1739,7 +1755,7 @@
 
         // Reinitialize audio with currently selected device
         const deviceName = getCurrentDeviceSinkName();
-        await invoke('reinit_audio_device', { device: deviceName });
+        await reinitAndResume(deviceName);
       } catch (err) {
         console.error('[Audio] Failed to disable DAC passthrough:', err);
       }
@@ -1758,7 +1774,7 @@
 
         // Reinitialize audio with currently selected device
         const deviceName = getCurrentDeviceSinkName();
-        await invoke('reinit_audio_device', { device: deviceName });
+        await reinitAndResume(deviceName);
       } catch (err) {
         console.error('[Audio] Failed to disable DAC passthrough:', err);
       }
