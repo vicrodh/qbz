@@ -113,7 +113,6 @@
     onPlaylistShareQobuz?: (playlistId: number) => void;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
-    sidebarExpanded?: boolean;
   }
 
   let {
@@ -152,8 +151,7 @@
     onPlaylistCopyToLibrary,
     onPlaylistShareQobuz,
     activeTrackId = null,
-    isPlaybackActive = false,
-    sidebarExpanded = true
+    isPlaybackActive = false
   }: Props = $props();
 
   // Home settings state
@@ -181,18 +179,7 @@
     homeSettings.sections.filter(s => s.visible).map(s => s.id)
   );
 
-  // Deferred rendering: only render first N sections immediately, defer the rest
-  const IMMEDIATE_SECTIONS = 3;
-  let deferredSectionsReady = $state(false);
-
-  // Sections to render immediately vs deferred
-  const immediateSections = $derived(visibleSections.slice(0, IMMEDIATE_SECTIONS));
-  const deferredSections = $derived(visibleSections.slice(IMMEDIATE_SECTIONS));
-  
-  // All sections ready to render
-  const renderableSections = $derived(
-    deferredSectionsReady ? visibleSections : immediateSections
-  );
+  const renderableSections = $derived(visibleSections);
 
   const LIMITS = {
     recentAlbums: 20,
@@ -207,9 +194,7 @@
 
   let homeLimits = $state(getSettings().limits);
 
-  // Loading states for progressive render
-  let isInitializing = $state(true);
-  let isOverlayVisible = $state(true); // Overlay that fades out when ALL sections ready
+  // Loading states for progressive render (each section independent)
   let error = $state<string | null>(null);
   let loadingNewReleases = $state(true);
   let loadingPressAwards = $state(true);
@@ -223,9 +208,13 @@
   let loadingQobuzPlaylists = $state(true);
   let loadingEssentialDiscography = $state(true);
 
-  // Track loading completion for overlay
-  let totalVisibleSections = $state(0);
-  let sectionsFinished = $state(0);
+  // True when all sections have finished loading (for empty state detection)
+  const anyLoading = $derived(
+    loadingNewReleases || loadingPressAwards || loadingMostStreamed ||
+    loadingQobuzissimes || loadingEditorPicks || loadingRecentAlbums ||
+    loadingContinueTracks || loadingTopArtists || loadingFavoriteAlbums ||
+    loadingQobuzPlaylists || loadingEssentialDiscography
+  );
 
   // Featured albums (from Qobuz editorial)
   let newReleases = $state<AlbumCardData[]>([]);
@@ -309,41 +298,6 @@
     || essentialDiscography.length > 0
   );
 
-  // Mark a section as finished loading and check if we can hide overlay
-  function markSectionFinished() {
-    sectionsFinished++;
-    console.warn(`[DEBUG-43] markSectionFinished: ${sectionsFinished}/${totalVisibleSections}`);
-    checkAllSectionsReady();
-  }
-
-  // Check if all visible sections have finished loading
-  function checkAllSectionsReady() {
-    if (sectionsFinished >= totalVisibleSections && totalVisibleSections > 0 && isOverlayVisible) {
-      console.warn(`[DEBUG-43] ALL SECTIONS READY (${sectionsFinished}/${totalVisibleSections}), removing overlay in 150ms`);
-      // Small delay to ensure DOM has rendered, then fade out
-      setTimeout(() => {
-        isOverlayVisible = false;
-        isInitializing = false;
-        console.warn('[DEBUG-43] Overlay removed. hasContent =',
-          newReleases.length > 0 || pressAwards.length > 0 || mostStreamed.length > 0 ||
-          qobuzissimes.length > 0 || editorPicks.length > 0 || recentAlbums.length > 0 ||
-          continueTracks.length > 0 || topArtists.length > 0 || favoriteAlbums.length > 0 ||
-          qobuzPlaylists.length > 0 || essentialDiscography.length > 0,
-          'error =', error);
-      }, 150);
-      
-      // Enable deferred sections after a short delay using requestIdleCallback
-      if ('requestIdleCallback' in window) {
-        requestIdleCallback(() => {
-          deferredSectionsReady = true;
-        }, { timeout: 500 });
-      } else {
-        setTimeout(() => {
-          deferredSectionsReady = true;
-        }, 300);
-      }
-    }
-  }
 
   onMount(() => {
     // Subscribe to home settings changes
@@ -480,16 +434,14 @@
 
   async function fetchFeaturedAlbumsSingle(featuredType: string, limit: number, genreId?: number): Promise<AlbumCardData[]> {
     try {
-      console.warn(`[DEBUG-43] fetchFeaturedAlbums: type=${featuredType}, limit=${limit}, genreId=${genreId ?? 'null'}`);
       const response = await invoke<FeaturedAlbumsResponse>('get_featured_albums', {
         featuredType,
         limit,
         genreId: genreId ?? null
       });
-      console.warn(`[DEBUG-43] fetchFeaturedAlbums result: type=${featuredType}, returned=${response.items.length} albums`);
       return response.items.map(toAlbumCard);
     } catch (err) {
-      console.error(`[DEBUG-43] Failed to fetch ${featuredType}:`, err);
+      console.error(`Failed to fetch ${featuredType}:`, err);
       return [];
     }
   }
@@ -665,14 +617,11 @@
 
   async function fetchDiscoverData() {
     try {
-      console.warn('[DEBUG-43] fetchDiscoverData: invoking get_discover_index...');
       const response = await invoke<DiscoverResponse>('get_discover_index', { genreIds: null });
-      console.warn('[DEBUG-43] fetchDiscoverData: response received, containers:', Object.keys(response.containers || {}));
 
       // Extract playlists (limited) - initial load without tag filter
       if (response.containers.playlists?.data?.items) {
         qobuzPlaylists = response.containers.playlists.data.items.slice(0, LIMITS.qobuzPlaylists);
-        console.warn('[DEBUG-43] fetchDiscoverData: playlists =', qobuzPlaylists.length);
       }
 
       // Extract playlist tags
@@ -683,36 +632,18 @@
       // Extract essential discography (limited)
       if (response.containers.ideal_discography?.data?.items) {
         essentialDiscography = response.containers.ideal_discography.data.items.slice(0, LIMITS.essentialDiscography);
-        console.warn('[DEBUG-43] fetchDiscoverData: essentialDiscography =', essentialDiscography.length);
       }
 
       loadingQobuzPlaylists = false;
       loadingEssentialDiscography = false;
-
-      if (isSectionVisible('qobuzPlaylists')) {
-        markSectionFinished();
-      }
-      if (isSectionVisible('essentialDiscography')) {
-        markSectionFinished();
-      }
     } catch (err) {
-      console.error('[DEBUG-43] fetchDiscoverData FAILED:', err);
+      console.error('fetchDiscoverData failed:', err);
       loadingQobuzPlaylists = false;
       loadingEssentialDiscography = false;
-      // Still mark sections as finished even on error
-      if (isSectionVisible('qobuzPlaylists')) {
-        markSectionFinished();
-      }
-      if (isSectionVisible('essentialDiscography')) {
-        markSectionFinished();
-      }
     }
   }
 
   async function loadHome() {
-    isInitializing = true;
-    isOverlayVisible = true;
-    sectionsFinished = 0;
     error = null;
     loadingNewReleases = true;
     loadingPressAwards = true;
@@ -726,23 +657,7 @@
     loadingQobuzPlaylists = true;
     loadingEssentialDiscography = true;
 
-    // Count total visible sections to know when we're done
-    totalVisibleSections = 0;
-    if (isSectionVisible('newReleases')) totalVisibleSections++;
-    if (isSectionVisible('pressAwards')) totalVisibleSections++;
-    if (isSectionVisible('mostStreamed')) totalVisibleSections++;
-    if (isSectionVisible('qobuzissimes')) totalVisibleSections++;
-    if (isSectionVisible('editorPicks')) totalVisibleSections++;
-    if (isSectionVisible('recentAlbums')) totalVisibleSections++;
-    if (isSectionVisible('continueTracks')) totalVisibleSections++;
-    if (isSectionVisible('topArtists')) totalVisibleSections++;
-    if (isSectionVisible('favoriteAlbums')) totalVisibleSections++;
-    if (isSectionVisible('qobuzPlaylists')) totalVisibleSections++;
-    if (isSectionVisible('essentialDiscography')) totalVisibleSections++;
-    console.warn('[DEBUG-43] loadHome: totalVisibleSections =', totalVisibleSections);
-
     // Start ML data loading FIRST (local SQLite) - this gets the seeds
-    console.warn('[DEBUG-43] loadHome: invoking reco_get_home_ml...');
     const mlPromise = invoke<HomeSeeds>('reco_get_home_ml', {
       limitRecentAlbums: homeLimits.recentAlbums,
       limitContinueTracks: homeLimits.continueTracks,
@@ -755,80 +670,65 @@
 
     // Start Qobuz API calls in parallel (don't await)
     if (isSectionVisible('newReleases')) {
-      fetchFeaturedAlbums('new-releases', homeLimits.featuredAlbums, genreIds).then(async albums => {
+      fetchFeaturedAlbums('new-releases', homeLimits.featuredAlbums, genreIds).then(albums => {
         newReleases = albums;
-        await loadAllAlbumDownloadStatuses(albums);
         loadingNewReleases = false;
-        console.warn('[DEBUG-43] section finished: newReleases', albums.length, 'albums');
-        markSectionFinished();
+        loadAllAlbumDownloadStatuses(albums);
       }).catch(err => {
-        console.error('[DEBUG-43] section FAILED: newReleases', err);
+        console.error('Failed to load newReleases:', err);
         loadingNewReleases = false;
-        markSectionFinished();
       });
     } else {
       loadingNewReleases = false;
     }
 
     if (isSectionVisible('pressAwards')) {
-      fetchFeaturedAlbums('press-awards', homeLimits.featuredAlbums, genreIds).then(async albums => {
+      fetchFeaturedAlbums('press-awards', homeLimits.featuredAlbums, genreIds).then(albums => {
         pressAwards = albums;
-        await loadAllAlbumDownloadStatuses(albums);
         loadingPressAwards = false;
-        console.warn('[DEBUG-43] section finished: pressAwards', albums.length, 'albums');
-        markSectionFinished();
+        loadAllAlbumDownloadStatuses(albums);
       }).catch(err => {
-        console.error('[DEBUG-43] section FAILED: pressAwards', err);
+        console.error('Failed to load pressAwards:', err);
         loadingPressAwards = false;
-        markSectionFinished();
       });
     } else {
       loadingPressAwards = false;
     }
 
     if (isSectionVisible('mostStreamed')) {
-      fetchFeaturedAlbums('most-streamed', homeLimits.featuredAlbums, genreIds).then(async albums => {
+      fetchFeaturedAlbums('most-streamed', homeLimits.featuredAlbums, genreIds).then(albums => {
         mostStreamed = albums;
-        await loadAllAlbumDownloadStatuses(albums);
         loadingMostStreamed = false;
-        console.warn('[DEBUG-43] section finished: mostStreamed', albums.length, 'albums');
-        markSectionFinished();
+        loadAllAlbumDownloadStatuses(albums);
       }).catch(err => {
-        console.error('[DEBUG-43] section FAILED: mostStreamed', err);
+        console.error('Failed to load mostStreamed:', err);
         loadingMostStreamed = false;
-        markSectionFinished();
       });
     } else {
       loadingMostStreamed = false;
     }
 
     if (isSectionVisible('qobuzissimes')) {
-      fetchFeaturedAlbums('qobuzissimes', homeLimits.featuredAlbums, genreIds).then(async albums => {
+      fetchFeaturedAlbums('qobuzissimes', homeLimits.featuredAlbums, genreIds).then(albums => {
         qobuzissimes = albums;
-        await loadAllAlbumDownloadStatuses(albums);
         loadingQobuzissimes = false;
-        console.warn('[DEBUG-43] section finished: qobuzissimes', albums.length, 'albums');
-        markSectionFinished();
+        loadAllAlbumDownloadStatuses(albums);
       }).catch(err => {
-        console.error('[DEBUG-43] section FAILED: qobuzissimes', err);
+        console.error('Failed to load qobuzissimes:', err);
         loadingQobuzissimes = false;
-        markSectionFinished();
       });
     } else {
       loadingQobuzissimes = false;
     }
 
     if (isSectionVisible('editorPicks')) {
-      fetchFeaturedAlbums('editor-picks', homeLimits.featuredAlbums, genreIds).then(async albums => {
+      fetchFeaturedAlbums('editor-picks', homeLimits.featuredAlbums, genreIds).then(albums => {
         editorPicks = albums;
-        await loadAllAlbumDownloadStatuses(albums);
         loadingEditorPicks = false;
-        console.warn('[DEBUG-43] section finished: editorPicks', albums.length, 'albums');
-        markSectionFinished();
+        loadAllAlbumDownloadStatuses(albums);
       }).catch(err => {
-        console.error('[DEBUG-43] section FAILED: editorPicks', err);
+        console.error('Failed to load editorPicks:', err);
         loadingEditorPicks = false;
-        markSectionFinished();
       });
     } else {
       loadingEditorPicks = false;
@@ -846,13 +746,6 @@
     try {
       // Wait for ML seeds (local data)
       const seeds = await mlPromise;
-      console.warn('[DEBUG-43] mlPromise resolved:', {
-        recentAlbums: seeds.recentlyPlayedAlbumIds?.length ?? 0,
-        continueTracks: seeds.continueListeningTrackIds?.length ?? 0,
-        topArtists: seeds.topArtistIds?.length ?? 0,
-        favoriteAlbums: seeds.favoriteAlbumIds?.length ?? 0,
-        favoriteTracks: seeds.favoriteTrackIds?.length ?? 0,
-      });
 
       // Load ML-based sections in parallel
       // Continue Listening (tracks)
@@ -860,12 +753,9 @@
         fetchTracks(seeds.continueListeningTrackIds).then(tracks => {
           continueTracks = tracks;
           loadingContinueTracks = false;
-          console.warn('[DEBUG-43] section finished: continueTracks', tracks.length, 'tracks');
-          markSectionFinished();
         }).catch(err => {
-          console.error('[DEBUG-43] section FAILED: continueTracks', err);
+          console.error('Failed to load continueTracks:', err);
           loadingContinueTracks = false;
-          markSectionFinished();
         });
       } else {
         loadingContinueTracks = false;
@@ -876,17 +766,14 @@
         const recentAlbumIds = normalizeAlbumIds(seeds.recentlyPlayedAlbumIds);
         // Fetch more if filtering, to have enough after filter
         const fetchLimit = hasGenreFilter() ? homeLimits.recentAlbums * 3 : homeLimits.recentAlbums;
-        fetchAlbums(recentAlbumIds.slice(0, fetchLimit)).then(async albums => {
+        fetchAlbums(recentAlbumIds.slice(0, fetchLimit)).then(albums => {
           const filtered = filterAlbumsByGenre(albums).slice(0, homeLimits.recentAlbums);
           recentAlbums = filtered;
-          await loadAllAlbumDownloadStatuses(filtered);
           loadingRecentAlbums = false;
-          console.warn('[DEBUG-43] section finished: recentAlbums', filtered.length, 'albums');
-          markSectionFinished();
+          loadAllAlbumDownloadStatuses(filtered);
         }).catch(err => {
-          console.error('[DEBUG-43] section FAILED: recentAlbums', err);
+          console.error('Failed to load recentAlbums:', err);
           loadingRecentAlbums = false;
-          markSectionFinished();
         });
       } else {
         loadingRecentAlbums = false;
@@ -897,12 +784,9 @@
         fetchArtists(seeds.topArtistIds.slice(0, homeLimits.topArtists)).then(artists => {
           topArtists = artists;
           loadingTopArtists = false;
-          console.warn('[DEBUG-43] section finished: topArtists', artists.length, 'artists');
-          markSectionFinished();
         }).catch(err => {
-          console.error('[DEBUG-43] section FAILED: topArtists', err);
+          console.error('Failed to load topArtists:', err);
           loadingTopArtists = false;
-          markSectionFinished();
         });
       } else {
         loadingTopArtists = false;
@@ -921,50 +805,28 @@
           const albums = await fetchAlbums(favoriteAlbumIds.slice(0, fetchLimit));
           const filtered = filterAlbumsByGenre(albums).slice(0, homeLimits.favoriteAlbums);
           favoriteAlbums = filtered;
-          await loadAllAlbumDownloadStatuses(filtered);
           loadingFavoriteAlbums = false;
-          console.warn('[DEBUG-43] section finished: favoriteAlbums', filtered.length, 'albums');
-          markSectionFinished();
+          loadAllAlbumDownloadStatuses(filtered);
         }).catch(err => {
-          console.error('[DEBUG-43] section FAILED: favoriteAlbums', err);
+          console.error('Failed to load favoriteAlbums:', err);
           loadingFavoriteAlbums = false;
-          markSectionFinished();
         });
       } else {
         loadingFavoriteAlbums = false;
       }
 
     } catch (err) {
-      console.error('[DEBUG-43] mlPromise FAILED — catch block entered:', err);
-      console.error('[DEBUG-43] This sets error= which BLOCKS all content rendering.');
-      console.error('[DEBUG-43] Featured album sections already in flight will finish but be invisible.');
+      console.error('ML seeds failed:', err);
       error = String(err);
-      isInitializing = false;
-      isOverlayVisible = false;
       loadingRecentAlbums = false;
       loadingContinueTracks = false;
       loadingTopArtists = false;
       loadingFavoriteAlbums = false;
-      loadingQobuzPlaylists = false;
-      loadingEssentialDiscography = false;
     }
   }
 </script>
 
 <div class="home-view">
-  <!-- Loading Overlay - fades out when ALL sections are ready -->
-  {#if isOverlayVisible}
-    <div class="loading-overlay" class:fade-out={sectionsFinished >= totalVisibleSections && totalVisibleSections > 0} style="left: {sidebarExpanded ? '280px' : '64px'}">
-      <div class="loading-content">
-        <div class="loading-icon">
-          <Loader2 size={36} class="spinner" />
-        </div>
-        <h2>{$t('home.loading')}</h2>
-        <p>{$t('home.loadingDescription')}</p>
-      </div>
-    </div>
-  {/if}
-
   <!-- Header with greeting, filter and settings -->
   <div class="home-header">
     {#if homeSettings.greeting.enabled}
@@ -980,15 +842,7 @@
     </div>
   </div>
 
-  {#if isInitializing && !isOverlayVisible}
-    <div class="home-state">
-      <div class="state-icon loading">
-        <Loader2 size={36} class="spinner" />
-      </div>
-      <h1>{$t('home.loading')}</h1>
-      <p>{$t('home.loadingDescription')}</p>
-    </div>
-  {:else if error}
+  {#if error}
     <div class="home-state">
       <div class="state-icon">
         <Music size={36} />
@@ -996,10 +850,19 @@
       <h1>{$t('home.loadError')}</h1>
       <p>{error}</p>
     </div>
-  {:else if hasContent}
-    <!-- Render sections in user-defined order -->
-    {#each renderableSections as sectionId (sectionId)}
-      {#if sectionId === 'newReleases' && newReleases.length > 0}
+  {/if}
+
+  <!-- Progressive sections: each appears as soon as its data arrives -->
+  {#each renderableSections as sectionId (sectionId)}
+    {#if sectionId === 'newReleases'}
+      {#if loadingNewReleases}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+          </div>
+        </div>
+      {:else if newReleases.length > 0}
         <HorizontalScrollRow title={$t('home.newReleases')}>
           {#snippet children()}
             {#each newReleases as album}
@@ -1030,8 +893,17 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
+    {/if}
 
-      {#if sectionId === 'pressAwards' && pressAwards.length > 0}
+    {#if sectionId === 'pressAwards'}
+      {#if loadingPressAwards}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+          </div>
+        </div>
+      {:else if pressAwards.length > 0}
         <HorizontalScrollRow title={$t('home.pressAwards')}>
           {#snippet children()}
             {#each pressAwards as album}
@@ -1062,8 +934,17 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
+    {/if}
 
-      {#if sectionId === 'mostStreamed' && mostStreamed.length > 0}
+    {#if sectionId === 'mostStreamed'}
+      {#if loadingMostStreamed}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+          </div>
+        </div>
+      {:else if mostStreamed.length > 0}
         <HorizontalScrollRow title={$t('home.popularAlbums')}>
           {#snippet children()}
             {#each mostStreamed as album}
@@ -1094,8 +975,17 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
+    {/if}
 
-      {#if sectionId === 'qobuzissimes' && qobuzissimes.length > 0}
+    {#if sectionId === 'qobuzissimes'}
+      {#if loadingQobuzissimes}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+          </div>
+        </div>
+      {:else if qobuzissimes.length > 0}
         <HorizontalScrollRow title={$t('home.qobuzissimes')}>
           {#snippet children()}
             {#each qobuzissimes as album}
@@ -1126,8 +1016,17 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
+    {/if}
 
-      {#if sectionId === 'editorPicks' && editorPicks.length > 0}
+    {#if sectionId === 'editorPicks'}
+      {#if loadingEditorPicks}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+          </div>
+        </div>
+      {:else if editorPicks.length > 0}
         <HorizontalScrollRow title={$t('home.editorPicks')}>
           {#snippet children()}
             {#each editorPicks as album}
@@ -1158,8 +1057,17 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
+    {/if}
 
-      {#if sectionId === 'qobuzPlaylists' && qobuzPlaylists.length > 0}
+    {#if sectionId === 'qobuzPlaylists'}
+      {#if loadingQobuzPlaylists}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 5 } as _}<div class="skeleton-card-wide"></div>{/each}
+          </div>
+        </div>
+      {:else if qobuzPlaylists.length > 0}
         <HorizontalScrollRow>
           {#snippet header()}
             <h2 class="section-title">{$t('home.qobuzPlaylists')}</h2>
@@ -1199,8 +1107,17 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
+    {/if}
 
-      {#if sectionId === 'essentialDiscography' && essentialDiscography.length > 0}
+    {#if sectionId === 'essentialDiscography'}
+      {#if loadingEssentialDiscography}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+          </div>
+        </div>
+      {:else if essentialDiscography.length > 0}
         <HorizontalScrollRow title={$t('home.essentialDiscography')}>
           {#snippet children()}
             {#each essentialDiscography as album (album.id)}
@@ -1235,8 +1152,17 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
+    {/if}
 
-      {#if sectionId === 'recentAlbums' && recentAlbums.length > 0}
+    {#if sectionId === 'recentAlbums'}
+      {#if loadingRecentAlbums}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+          </div>
+        </div>
+      {:else if recentAlbums.length > 0}
         <HorizontalScrollRow title={$t('home.recentlyPlayed')}>
           {#snippet children()}
             {#each recentAlbums as album}
@@ -1267,8 +1193,17 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
+    {/if}
 
-      {#if sectionId === 'continueTracks' && continueTracks.length > 0}
+    {#if sectionId === 'continueTracks'}
+      {#if loadingContinueTracks}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-tracks">
+            {#each { length: 5 } as _}<div class="skeleton-track"></div>{/each}
+          </div>
+        </div>
+      {:else if continueTracks.length > 0}
         <div class="section">
           <div class="section-header">
             <h2>{$t('home.continueListening')}</h2>
@@ -1298,7 +1233,6 @@
                 onAlbumClick={track.albumId && onAlbumClick ? () => onAlbumClick(track.albumId!) : undefined}
                 onPlay={trackBlacklisted ? undefined : () => handleContinueTrackPlay(track, index)}
                 menuActions={trackBlacklisted ? {
-                  // Only navigation actions for blacklisted tracks
                   onGoToAlbum: track.albumId && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.albumId!) : undefined,
                   onGoToArtist: track.artistId && onTrackGoToArtist ? () => onTrackGoToArtist(track.artistId!) : undefined,
                   onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined
@@ -1322,8 +1256,17 @@
           </div>
         </div>
       {/if}
+    {/if}
 
-      {#if sectionId === 'topArtists' && topArtists.length > 0}
+    {#if sectionId === 'topArtists'}
+      {#if loadingTopArtists}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 6 } as _}<div class="skeleton-artist"></div>{/each}
+          </div>
+        </div>
+      {:else if topArtists.length > 0}
         <HorizontalScrollRow title={$t('home.yourTopArtists')}>
           {#snippet children()}
             {#each topArtists as artist}
@@ -1353,8 +1296,17 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
+    {/if}
 
-      {#if sectionId === 'favoriteAlbums' && favoriteAlbums.length > 0}
+    {#if sectionId === 'favoriteAlbums'}
+      {#if loadingFavoriteAlbums}
+        <div class="skeleton-section">
+          <div class="skeleton-title"></div>
+          <div class="skeleton-row">
+            {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+          </div>
+        </div>
+      {:else if favoriteAlbums.length > 0}
         <HorizontalScrollRow title={$t('home.moreFromFavorites')}>
           {#snippet children()}
             {#each favoriteAlbums as album}
@@ -1385,8 +1337,11 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
-    {/each}
-  {:else}
+    {/if}
+  {/each}
+
+  <!-- Empty state: only show after all loading completes with no content -->
+  {#if !anyLoading && !hasContent && !error}
     <div class="home-state">
       <div class="state-icon">
         <Music size={48} />
@@ -1443,61 +1398,71 @@
     background: var(--text-muted);
   }
 
-  /* Loading Overlay */
-  .loading-overlay {
-    position: fixed;
-    top: 0;
-    /* left is set dynamically via inline style based on sidebar state */
-    right: 0;
-    bottom: calc(var(--player-bar-height, 104px));
-    z-index: 10;
-    background: var(--bg-primary);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: opacity 300ms ease-out, left 200ms ease;
-  }
-
-  .loading-overlay.fade-out {
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .loading-content {
+  /* Skeleton loading placeholders */
+  .skeleton-section {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    gap: 12px;
-    text-align: center;
+    gap: 16px;
   }
 
-  .loading-icon {
-    width: 64px;
-    height: 64px;
-    border-radius: 16px;
-    background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary, #6366f1) 100%);
+  .skeleton-title {
+    width: 180px;
+    height: 22px;
+    background: var(--bg-tertiary);
+    border-radius: 6px;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  .skeleton-row {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
+    gap: 16px;
+    overflow: hidden;
   }
 
-  .loading-content h2 {
-    font-size: 24px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
+  .skeleton-card {
+    width: 180px;
+    height: 240px;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    flex-shrink: 0;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
   }
 
-  .loading-content p {
-    font-size: 15px;
-    color: var(--text-muted);
-    margin: 0;
-    max-width: 360px;
+  .skeleton-card-wide {
+    width: 260px;
+    height: 180px;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    flex-shrink: 0;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
   }
 
-  .loading-icon :global(.spinner) {
-    animation: spin 1s linear infinite;
+  .skeleton-artist {
+    width: 180px;
+    height: 220px;
+    background: var(--bg-tertiary);
+    border-radius: 12px;
+    flex-shrink: 0;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  .skeleton-tracks {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .skeleton-track {
+    width: 100%;
+    height: 40px;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    animation: skeleton-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes skeleton-pulse {
+    0%, 100% { opacity: 0.4; }
+    50% { opacity: 0.7; }
   }
 
   .home-header {
@@ -1696,15 +1661,6 @@
     align-items: center;
     justify-content: center;
     color: var(--text-muted);
-  }
-
-  .state-icon.loading {
-    background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary, #6366f1) 100%);
-    color: white;
-  }
-
-  .state-icon :global(.spinner) {
-    animation: spin 1s linear infinite;
   }
 
   @keyframes spin {
