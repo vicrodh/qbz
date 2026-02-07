@@ -9,6 +9,11 @@ on:
         description: "Version to publish (e.g. 1.0.0)"
         required: true
         type: string
+      pkgrel:
+        description: "Package release number (bump for same-version rebuilds)"
+        required: false
+        default: "1"
+        type: string
 
 jobs:
   update-aur:
@@ -99,9 +104,19 @@ jobs:
         run: |
           git clone ssh://aur@aur.archlinux.org/qbz-bin.git /tmp/aur-qbz-bin
 
+      - name: Determine pkgrel
+        id: pkgrel
+        run: |
+          if [[ "${{ github.event_name }}" == "release" ]]; then
+            echo "pkgrel=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "pkgrel=${{ inputs.pkgrel || '1' }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Update PKGBUILD
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          PKGREL: ${{ steps.pkgrel.outputs.pkgrel }}
           SHA256_AMD64: ${{ steps.checksums.outputs.sha256_amd64 }}
           SHA256_AARCH64: ${{ steps.checksums.outputs.sha256_aarch64 }}
         run: |
@@ -110,11 +125,9 @@ jobs:
           # Copy PKGBUILD from main repo (source of truth)
           cp ${{ github.workspace }}/packaging/aur/PKGBUILD .
 
-          # Update version
+          # Update version and pkgrel
           sed -i "s/^pkgver=.*/pkgver=${VERSION}/" PKGBUILD
-
-          # Reset pkgrel to 1 for new version
-          sed -i "s/^pkgrel=.*/pkgrel=1/" PKGBUILD
+          sed -i "s/^pkgrel=.*/pkgrel=${PKGREL}/" PKGBUILD
 
           # Update checksums for both architectures
           sed -i "s/^sha256sums_x86_64=.*/sha256sums_x86_64=('${SHA256_AMD64}')/" PKGBUILD
