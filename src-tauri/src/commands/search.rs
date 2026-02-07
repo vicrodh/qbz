@@ -290,8 +290,6 @@ pub async fn get_album(
     state: State<'_, AppState>,
     cache_state: State<'_, ApiCacheState>,
 ) -> Result<Album, String> {
-    log::info!("[DEBUG-43] get_album called: id={}", album_id);
-
     // Check cache first
     {
         let guard__ = cache_state.cache.lock().await;
@@ -300,14 +298,10 @@ pub async fn get_album(
             Ok(Some(cached_data)) => {
                 log::debug!("Cache hit for album {}", album_id);
                 return serde_json::from_str(&cached_data)
-                    .map_err(|e| {
-                        log::warn!("[DEBUG-43] get_album cache parse error: id={} err={}", album_id, e);
-                        format!("Failed to parse cached album: {}", e)
-                    });
+                    .map_err(|e| format!("Failed to parse cached album: {}", e));
             }
             Ok(None) => {} // Cache miss, continue to API fetch
-            Err(e) => {
-                log::warn!("[DEBUG-43] get_album cache read error: id={} err={}", album_id, e);
+            Err(_) => {
                 // Continue to API fetch on cache error
             }
         }
@@ -316,10 +310,7 @@ pub async fn get_album(
     // Cache miss - fetch from API
     log::debug!("Cache miss for album {}, fetching from API", album_id);
     let client = state.client.lock().await;
-    let album = client.get_album(&album_id).await.map_err(|e| {
-        log::warn!("[DEBUG-43] get_album API error: id={} err={}", album_id, e);
-        e.to_string()
-    })?;
+    let album = client.get_album(&album_id).await.map_err(|e| e.to_string())?;
 
     // Cache the result
     {
@@ -327,12 +318,9 @@ pub async fn get_album(
         let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&album)
             .map_err(|e| format!("Failed to serialize album: {}", e))?;
-        if let Err(e) = cache.set_album(&album_id, &json) {
-            log::warn!("[DEBUG-43] get_album cache write error: id={} err={}", album_id, e);
-        }
+        let _ = cache.set_album(&album_id, &json);
     }
 
-    log::info!("[DEBUG-43] get_album OK: id={}", album_id);
     Ok(album)
 }
 
@@ -345,19 +333,11 @@ pub async fn get_featured_albums(
     genre_id: Option<u64>,
     state: State<'_, AppState>,
 ) -> Result<SearchResultsPage<Album>, String> {
-    log::info!(
-        "[DEBUG-43] get_featured_albums called: type={} limit={:?} genre_id={:?}",
-        featured_type, limit, genre_id
-    );
     let client = state.client.lock().await;
     let result = client
         .get_featured_albums(&featured_type, limit.unwrap_or(12), offset.unwrap_or(0), genre_id)
         .await
-        .map_err(|e| {
-            log::error!("[DEBUG-43] get_featured_albums FAILED: type={} err={}", featured_type, e);
-            e.to_string()
-        })?;
-    log::info!("[DEBUG-43] get_featured_albums OK: type={} items={}", featured_type, result.items.len());
+        .map_err(|e| e.to_string())?;
     Ok(result)
 }
 
@@ -367,8 +347,6 @@ pub async fn get_track(
     state: State<'_, AppState>,
     cache_state: State<'_, ApiCacheState>,
 ) -> Result<Track, String> {
-    log::info!("[DEBUG-43] get_track called: id={}", track_id);
-
     // Check cache first
     {
         let guard__ = cache_state.cache.lock().await;
@@ -377,14 +355,10 @@ pub async fn get_track(
             Ok(Some(cached_data)) => {
                 log::debug!("Cache hit for track {}", track_id);
                 return serde_json::from_str(&cached_data)
-                    .map_err(|e| {
-                        log::warn!("[DEBUG-43] get_track cache parse error: id={} err={}", track_id, e);
-                        format!("Failed to parse cached track: {}", e)
-                    });
+                    .map_err(|e| format!("Failed to parse cached track: {}", e));
             }
             Ok(None) => {} // Cache miss, continue to API fetch
-            Err(e) => {
-                log::warn!("[DEBUG-43] get_track cache read error: id={} err={}", track_id, e);
+            Err(_) => {
                 // Continue to API fetch on cache error
             }
         }
@@ -393,10 +367,7 @@ pub async fn get_track(
     // Cache miss - fetch from API
     log::debug!("Cache miss for track {}, fetching from API", track_id);
     let client = state.client.lock().await;
-    let track = client.get_track(track_id).await.map_err(|e| {
-        log::warn!("[DEBUG-43] get_track API error: id={} err={}", track_id, e);
-        e.to_string()
-    })?;
+    let track = client.get_track(track_id).await.map_err(|e| e.to_string())?;
 
     // Cache the result
     {
@@ -404,12 +375,9 @@ pub async fn get_track(
         let cache = guard__.as_ref().ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&track)
             .map_err(|e| format!("Failed to serialize track: {}", e))?;
-        if let Err(e) = cache.set_track(track_id, &json) {
-            log::warn!("[DEBUG-43] get_track cache write error: id={} err={}", track_id, e);
-        }
+        let _ = cache.set_track(track_id, &json);
     }
 
-    log::info!("[DEBUG-43] get_track OK: id={}", track_id);
     Ok(track)
 }
 
@@ -466,8 +434,6 @@ pub async fn get_artist_basic(
     state: State<'_, AppState>,
     cache_state: State<'_, ApiCacheState>,
 ) -> Result<Artist, String> {
-    log::info!("[DEBUG-43] get_artist_basic called: id={}", artist_id);
-
     // Get current locale
     let locale = {
         let client = state.client.lock().await;
@@ -491,10 +457,7 @@ pub async fn get_artist_basic(
     let artist = client
         .get_artist_basic(artist_id)
         .await
-        .map_err(|e| {
-            log::error!("[DEBUG-43] get_artist_basic FAILED: id={} err={}", artist_id, e);
-            e.to_string()
-        })?;
+        .map_err(|e| e.to_string())?;
 
     // Cache the result
     {
@@ -505,7 +468,6 @@ pub async fn get_artist_basic(
         cache.set_artist(artist_id, &locale, &json)?;
     }
 
-    log::info!("[DEBUG-43] get_artist_basic OK: id={}", artist_id);
     Ok(artist)
 }
 
@@ -687,17 +649,11 @@ pub async fn get_discover_index(
     genre_ids: Option<Vec<u64>>,
     state: State<'_, AppState>,
 ) -> Result<DiscoverResponse, String> {
-    log::info!("[DEBUG-43] get_discover_index called: genre_ids={:?}", genre_ids);
-
     let client = state.client.lock().await;
     let result = client
         .get_discover_index(genre_ids)
         .await
-        .map_err(|e| {
-            log::error!("[DEBUG-43] get_discover_index FAILED: {}", e);
-            e.to_string()
-        })?;
-    log::info!("[DEBUG-43] get_discover_index OK: returning to frontend");
+        .map_err(|e| e.to_string())?;
     Ok(result)
 }
 
