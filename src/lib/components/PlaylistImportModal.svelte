@@ -7,6 +7,13 @@
     subscribe as subscribeOffline,
     isOffline as checkIsOffline
   } from '$lib/stores/offlineStore';
+  import {
+    getVisibleFolders,
+    movePlaylistToFolder,
+    loadFolders,
+    subscribe as subscribeFolders
+  } from '$lib/stores/playlistFoldersStore';
+  import type { PlaylistFolder } from '$lib/stores/playlistFoldersStore';
 
   type ProviderKey = 'spotify' | 'apple' | 'tidal' | 'deezer';
 
@@ -51,10 +58,29 @@
   let importCompleted = $state(false);
   let lastImportedUrl = $state('');
 
+  // Preview + customization state
+  let preview = $state<ImportPlaylist | null>(null);
+  let previewUrl = $state('');
+  let customName = $state('');
+  let selectedFolderId = $state('');
+  let availableFolders = $state<PlaylistFolder[]>([]);
+
+  // Whether to show the preview customization panel
+  const showPreview = $derived(preview !== null && url.trim() === previewUrl);
+
   // Subscribe to offline state changes
   $effect(() => {
     const unsubscribe = subscribeOffline(() => {
       isOffline = checkIsOffline();
+    });
+    return unsubscribe;
+  });
+
+  // Load folders and subscribe to changes
+  $effect(() => {
+    loadFolders();
+    const unsubscribe = subscribeFolders(() => {
+      availableFolders = getVisibleFolders();
     });
     return unsubscribe;
   });
@@ -80,6 +106,11 @@
       logEntries = [];
       importCompleted = false;
       lastImportedUrl = '';
+      preview = null;
+      previewUrl = '';
+      customName = '';
+      selectedFolderId = '';
+      availableFolders = getVisibleFolders();
     }
   });
 
@@ -121,7 +152,7 @@
     logEntries = [...logEntries, { message, status }];
   }
 
-  async function handleImport() {
+  async function handlePreview() {
     if (!isValid || loading) return;
 
     loading = true;
@@ -129,26 +160,55 @@
     summary = null;
     lockedProvider = detectedProvider;
     logEntries = [];
+    preview = null;
 
     try {
       pushLog('Checking playlist link...');
-      const preview = await invoke<ImportPlaylist>('playlist_import_preview', { url });
-      pushLog(`Found ${preview.tracks.length} tracks from ${formatProvider(preview.provider)}.`);
+      const result = await invoke<ImportPlaylist>('playlist_import_preview', { url });
+      preview = result;
+      previewUrl = url.trim();
+      customName = result.name;
+      pushLog(
+        $t('playlistImport.tracksFound', {
+          values: { count: result.tracks.length, provider: formatProvider(result.provider) }
+        }),
+        'success'
+      );
+    } catch (err) {
+      error = String(err);
+      pushLog(`Import failed: ${error}`, 'error');
+    } finally {
+      loading = false;
+    }
+  }
 
-      pushLog('Matching tracks in Qobuz™...');
+  async function handleExecute() {
+    if (!preview || loading) return;
+
+    loading = true;
+    error = null;
+
+    try {
+      pushLog('Matching tracks in Qobuz\u2122...');
+      const nameOverride = customName.trim() !== preview.name ? customName.trim() || null : null;
       const result = await invoke<ImportSummary>('playlist_import_execute', {
-        url,
-        nameOverride: null,
+        url: previewUrl,
+        nameOverride,
         isPublic: false
       });
 
       summary = result;
       importCompleted = true;
-      lastImportedUrl = url.trim();
+      lastImportedUrl = previewUrl;
       pushLog(`Imported ${result.matched_tracks} of ${result.total_tracks} tracks into QBZ.`, 'success');
 
       if (result.qobuz_playlist_id) {
-        pushLog('Playlist created in Qobuz™.', 'success');
+        pushLog('Playlist created in Qobuz\u2122.', 'success');
+
+        // Move to folder if selected
+        if (selectedFolderId) {
+          await movePlaylistToFolder(result.qobuz_playlist_id, selectedFolderId);
+        }
       } else {
         pushLog('No matching tracks found.', 'error');
       }
@@ -185,7 +245,11 @@
     if (e.key === 'Escape') {
       onClose();
     } else if (e.key === 'Enter' && !e.shiftKey) {
-      handleImport();
+      if (showPreview && !importCompleted) {
+        handleExecute();
+      } else if (!showPreview) {
+        handlePreview();
+      }
     }
   }
 </script>
@@ -202,8 +266,8 @@
     <div class="modal" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <div class="header-title">
-          <img src="/qobuz-logo.svg" alt="Qobuz™" class="qobuz-logo" />
-          <h2>Import Playlist</h2>
+          <img src="/qobuz-logo.svg" alt="Qobuz\u2122" class="qobuz-logo" />
+          <h2>{$t('playlistImport.title')}</h2>
         </div>
         <button class="close-btn" onclick={onClose}>
           <X size={20} />
@@ -223,7 +287,7 @@
         {/if}
 
         <div class="form-group">
-          <label for="playlist-url">Playlist URL</label>
+          <label for="playlist-url">{$t('playlistImport.urlLabel')}</label>
           <input
             id="playlist-url"
             type="text"
@@ -234,7 +298,7 @@
         </div>
 
         <div class="sources">
-          <span class="sources-label">Allowed sources</span>
+          <span class="sources-label">{$t('playlistImport.allowedSources')}</span>
           <div class="sources-logos">
             {#each providers as provider}
               <div class="provider" data-provider={provider.key}>
@@ -250,10 +314,40 @@
           </div>
         </div>
 
+        {#if showPreview && preview}
+          <div class="customization">
+            <div class="form-group">
+              <label for="playlist-name">{$t('playlistImport.playlistName')}</label>
+              <input
+                id="playlist-name"
+                type="text"
+                bind:value={customName}
+                disabled={loading || importCompleted}
+              />
+            </div>
+
+            {#if availableFolders.length > 0}
+              <div class="form-group">
+                <label for="playlist-folder">{$t('playlistImport.folder')}</label>
+                <select
+                  id="playlist-folder"
+                  bind:value={selectedFolderId}
+                  disabled={loading || importCompleted}
+                >
+                  <option value="">{$t('playlistImport.noFolder')}</option>
+                  {#each availableFolders as folder}
+                    <option value={folder.id}>{folder.name}</option>
+                  {/each}
+                </select>
+              </div>
+            {/if}
+          </div>
+        {/if}
+
         {#if logEntries.length > 0}
           <div class="progress-panel">
             <div class="progress-header">
-              <span>Conversion progress</span>
+              <span>{$t('playlistImport.progress')}</span>
               {#if loading}
                 <span class="spinner" aria-hidden="true"></span>
               {/if}
@@ -265,10 +359,10 @@
             </ul>
             {#if summary}
               <div class="summary">
-                <div class="summary-title">Summary</div>
-                <div class="summary-row">Playlist: {summary.playlist_name}</div>
-                <div class="summary-row">Tracks matched: {summary.matched_tracks} / {summary.total_tracks}</div>
-                <div class="summary-row">Skipped: {summary.skipped_tracks}</div>
+                <div class="summary-title">{$t('playlistImport.summary')}</div>
+                <div class="summary-row">{$t('playlistImport.playlistLabel', { values: { name: summary.playlist_name } })}</div>
+                <div class="summary-row">{$t('playlistImport.tracksMatched', { values: { matched: summary.matched_tracks, total: summary.total_tracks } })}</div>
+                <div class="summary-row">{$t('playlistImport.skipped', { values: { count: summary.skipped_tracks } })}</div>
               </div>
             {/if}
           </div>
@@ -276,14 +370,26 @@
       </div>
 
       <div class="modal-footer">
-        <button class="btn btn-secondary" onclick={onClose} disabled={loading}>Close</button>
-        <button class="btn btn-primary" onclick={handleImport} disabled={!isValid || loading || importCompleted}>
-          {#if loading}
-            Importing...
-          {:else}
-            Import playlist
-          {/if}
+        <button class="btn btn-secondary" onclick={onClose} disabled={loading}>
+          {$t('actions.close')}
         </button>
+        {#if !showPreview}
+          <button class="btn btn-primary" onclick={handlePreview} disabled={!isValid || loading}>
+            {#if loading}
+              {$t('playlistImport.fetching')}
+            {:else}
+              {$t('playlistImport.fetchPlaylist')}
+            {/if}
+          </button>
+        {:else}
+          <button class="btn btn-primary" onclick={handleExecute} disabled={loading || importCompleted}>
+            {#if loading}
+              {$t('playlistImport.importing')}
+            {:else}
+              {$t('playlistImport.importAction')}
+            {/if}
+          </button>
+        {/if}
       </div>
     </div>
   </div>
@@ -396,7 +502,8 @@
     margin-bottom: 8px;
   }
 
-  .form-group input[type="text"] {
+  .form-group input[type="text"],
+  .form-group select {
     width: 100%;
     padding: 10px 12px;
     background: var(--bg-secondary);
@@ -407,9 +514,36 @@
     transition: border-color 150ms ease;
   }
 
-  .form-group input[type="text"]:focus {
+  .form-group input[type="text"]:focus,
+  .form-group select:focus {
     outline: none;
     border-color: var(--accent-primary);
+  }
+
+  .form-group select {
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+  }
+
+  .form-group select option {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+  }
+
+  .customization {
+    padding: 16px;
+    border-radius: 12px;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--alpha-8);
+    margin-bottom: 12px;
+  }
+
+  .customization .form-group:last-child {
+    margin-bottom: 0;
   }
 
   .sources {
