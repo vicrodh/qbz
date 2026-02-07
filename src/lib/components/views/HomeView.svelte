@@ -165,14 +165,14 @@
   let homeSettings = $state<HomeSettings>(getSettings());
   let isSettingsModalOpen = $state(false);
 
-  // Computed greeting with i18n support
-  const greetingText = $derived.by(() => {
+  // Computed greeting with i18n support — never call $t() inside $derived()
+  function getGreetingText(): string {
     const info = getGreetingInfo(userName);
     if (info.type === 'custom') {
       return info.text;
     }
     return $t(info.key, { values: { name: info.name } });
-  });
+  }
 
 
   // Check if a section is visible
@@ -905,7 +905,7 @@
   <!-- Header with greeting, filter and settings -->
   <div class="home-header">
     {#if homeSettings.greeting.enabled}
-      <h2 class="greeting">{greetingText}</h2>
+      <h2 class="greeting">{getGreetingText()}</h2>
     {:else}
       <div></div>
     {/if}
