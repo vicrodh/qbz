@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useApp } from '../lib/appContext'
 import { formatDate } from '../lib/format'
+import { marked } from 'marked'
 
 type Release = {
   id: number
@@ -14,70 +15,15 @@ type Release = {
 
 const RELEASES_URL = 'https://api.github.com/repos/vicrodh/qbz/releases'
 
-const extractHighlights = (body: string | null | undefined): string[] => {
-  if (!body) return []
+// Configure marked for safe output (no raw HTML passthrough)
+marked.setOptions({
+  gfm: true,
+  breaks: false,
+})
 
-  const bullets = body
-    .split('\n')
-    .map((line) => line.trim())
-    .filter((line) => line.startsWith('- ') || line.startsWith('* '))
-    .map((line) => line.replace(/^[-*]\s*/, ''))
-    .filter(Boolean)
-  if (bullets.length > 0) {
-    return bullets.slice(0, 8)
-  }
-  const sentences = body
-    .split('. ')
-    .map((line) => line.trim())
-    .filter(Boolean)
-  return sentences.slice(0, 3)
-}
-
-// Simple inline markdown renderer for bold and code
-const renderInlineMarkdown = (text: string): React.ReactNode => {
-  // Process **bold** and `code` patterns
-  const parts: React.ReactNode[] = []
-  let remaining = text
-  let key = 0
-
-  while (remaining.length > 0) {
-    // Check for **bold**
-    const boldMatch = remaining.match(/\*\*(.+?)\*\*/)
-    // Check for `code`
-    const codeMatch = remaining.match(/`([^`]+)`/)
-
-    // Find which comes first
-    const boldIndex = boldMatch ? remaining.indexOf(boldMatch[0]) : -1
-    const codeIndex = codeMatch ? remaining.indexOf(codeMatch[0]) : -1
-
-    if (boldIndex === -1 && codeIndex === -1) {
-      // No more patterns, add remaining text
-      parts.push(remaining)
-      break
-    }
-
-    // Determine which pattern comes first
-    const useCode = codeIndex !== -1 && (boldIndex === -1 || codeIndex < boldIndex)
-    const match = useCode ? codeMatch! : boldMatch!
-    const matchIndex = useCode ? codeIndex : boldIndex
-
-    // Add text before the match
-    if (matchIndex > 0) {
-      parts.push(remaining.substring(0, matchIndex))
-    }
-
-    // Add the formatted element
-    if (useCode) {
-      parts.push(<code key={key++} className="inline-code">{match[1]}</code>)
-    } else {
-      parts.push(<strong key={key++}>{match[1]}</strong>)
-    }
-
-    // Continue with remaining text
-    remaining = remaining.substring(matchIndex + match[0].length)
-  }
-
-  return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : <>{parts}</>
+function renderBody(body: string | null): string {
+  if (!body) return ''
+  return marked.parse(body, { async: false }) as string
 }
 
 export function ChangelogPage() {
@@ -110,7 +56,7 @@ export function ChangelogPage() {
       releases.map((release, index) => ({
         ...release,
         isLatest: index === 0,
-        highlights: extractHighlights(release.body),
+        html: renderBody(release.body),
       })),
     [releases],
   )
@@ -136,11 +82,16 @@ export function ChangelogPage() {
                   {release.tag_name} · {formatDate(release.published_at, language)}
                 </div>
               </div>
-              <ul className="list">
-                {release.highlights.map((item, idx) => (
-                  <li key={idx}>{renderInlineMarkdown(item)}</li>
-                ))}
-              </ul>
+              {release.html ? (
+                <div
+                  className="release-body"
+                  dangerouslySetInnerHTML={{ __html: release.html }}
+                />
+              ) : (
+                <p style={{ color: 'var(--text-tertiary)', marginTop: 16 }}>
+                  {t('changelog.empty')}
+                </p>
+              )}
               <a className="btn btn-ghost" href={release.html_url} target="_blank" rel="noreferrer" style={{ marginTop: 24 }}>
                 {t('changelog.viewOnGitHub')}
               </a>

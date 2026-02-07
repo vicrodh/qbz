@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "i18next": "^25.7.4",
+    "marked": "^17.0.1",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-i18next": "^16.5.3"
