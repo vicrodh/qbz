@@ -10,11 +10,13 @@
   // Initialize i18n
   initI18n();
 
-  // Wait for translations to load
-  let ready = $derived(!$isLoading);
+  // Wait for translations to load — avoid store access inside $derived()
+  function isReady(): boolean {
+    return !$isLoading;
+  }
 </script>
 
-{#if ready}
+{#if isReady()}
   {@render children()}
 {:else}
   <div class="loading">
