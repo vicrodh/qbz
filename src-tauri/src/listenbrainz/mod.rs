@@ -102,17 +102,22 @@ impl ListenBrainzSharedState {
         let new_cache = ListenBrainzCache::new(&db_path)?;
         log::info!("ListenBrainz cache initialized at {:?}", db_path);
 
-        // Restore credentials from new cache
-        let (token, user_name) = {
-            let (token, user_name) = new_cache.get_credentials().unwrap_or((None, None));
-            (token, user_name)
-        };
+        // Restore credentials and enabled state from new cache
+        let (token, user_name) = new_cache.get_credentials().unwrap_or((None, None));
+        let enabled = new_cache.is_enabled().unwrap_or(true);
 
         let mut guard = self.cache.lock().await;
         *guard = Some(new_cache);
+        drop(guard);
 
-        if token.is_some() && user_name.is_some() {
-            log::info!("ListenBrainz: restored session for user {:?}", user_name);
+        // Restore enabled state and credentials to in-memory client
+        {
+            let client = self.client.lock().await;
+            client.set_enabled(enabled).await;
+            if let (Some(tok), Some(uname)) = (token, user_name) {
+                log::info!("ListenBrainz: restoring session for user {:?}", uname);
+                client.restore_token(tok, uname).await;
+            }
         }
 
         Ok(())
