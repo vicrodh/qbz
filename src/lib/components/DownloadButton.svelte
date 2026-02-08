@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { CloudDownload, Loader, AlertCircle, CloudOff } from 'lucide-svelte';
+  import { CloudDownload, AlertCircle, CloudOff } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import {
     subscribe as subscribeOffline,
@@ -95,9 +95,16 @@
   {#if status === 'ready'}
     <CloudOff {size} />
   {:else if status === 'downloading' || status === 'queued'}
-    <div class="progress-ring" style="--progress: {progress}">
-      <Loader {size} class="spinning" />
-    </div>
+    {@const r = (size - 2) / 2}
+    {@const circumference = 2 * Math.PI * r}
+    {@const dashOffset = status === 'queued' ? circumference * 0.75 : circumference * (1 - progress / 100)}
+    <svg class="progress-ring" class:indeterminate={status === 'queued'} width={size} height={size} viewBox="0 0 {size} {size}">
+      <circle class="ring-bg" cx={size / 2} cy={size / 2} r={r} />
+      <circle class="ring-fill" cx={size / 2} cy={size / 2} r={r}
+        stroke-dasharray={circumference}
+        stroke-dashoffset={dashOffset}
+      />
+    </svg>
   {:else if status === 'failed'}
     <AlertCircle {size} />
   {:else if isOffline}
@@ -155,22 +162,30 @@
   }
 
   .progress-ring {
-    position: relative;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    transform: rotate(-90deg);
   }
 
-  .progress-ring :global(.spinning) {
-    animation: spin 1s linear infinite;
+  .ring-bg {
+    fill: none;
+    stroke: var(--bg-tertiary, #333);
+    stroke-width: 1.5;
   }
 
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
+  .ring-fill {
+    fill: none;
+    stroke: var(--accent-primary);
+    stroke-width: 1.5;
+    stroke-linecap: round;
+    transition: stroke-dashoffset 300ms ease;
+  }
+
+  .progress-ring.indeterminate {
+    animation: ring-spin 1s linear infinite;
+  }
+
+  @keyframes ring-spin {
     to {
-      transform: rotate(360deg);
+      transform: rotate(270deg);
     }
   }
 </style>
