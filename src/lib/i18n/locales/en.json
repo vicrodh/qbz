@@ -440,7 +440,12 @@
     "sampleRate": "{rate} kHz",
     "lossless": "Lossless",
     "max": "Max",
-    "degradedTooltip": "{original} → {current} (resampled). Enable DAC Passthrough or Exclusive Mode in Settings → Audio."
+    "tooltip": {
+      "source": "Source",
+      "output": "Output",
+      "resampled": "Resampled by system",
+      "fix": "Enable DAC Passthrough or Exclusive Mode in Settings"
+    }
   },
   "actions": {
     "play": "Play",
