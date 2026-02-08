@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
+  import { t } from 'svelte-i18n';
   import { getDevicePrettyName, isExternalDevice } from '$lib/utils/audioDeviceNames';
   import { isCasting, getConnectedDevice, getConnectedProtocol, subscribe as subscribeCast } from '$lib/stores/castStore';
 
@@ -139,25 +140,6 @@
     settings?.exclusive_mode === true
   );
 
-  // Dynamic tooltip for DAC badge
-  const dacTooltip = $derived.by(() => {
-    if (!settings?.dac_passthrough) {
-      return 'DAC Passthrough desactivado - el sistema puede resamplear';
-    }
-
-    if (dacBadgeState === 'warning' && hardwareStatus?.hardware_sample_rate && samplingRate) {
-      const hwRate = (hardwareStatus.hardware_sample_rate / 1000).toFixed(1);
-      return `⚠ DAC Passthrough activo pero hay resampling\nArchivo: ${samplingRate} kHz → Hardware: ${hwRate} kHz`;
-    }
-
-    if (hardwareStatus?.hardware_sample_rate) {
-      const hwRate = (hardwareStatus.hardware_sample_rate / 1000).toFixed(1);
-      return `DAC Passthrough activo - ${hwRate} kHz bit-perfect`;
-    }
-
-    return 'DAC Passthrough activo';
-  });
-
   // Whether to show badges at all (only if at least one setting is enabled or device is external or casting)
   const shouldShowBadges = $derived(
     castConnected || settings?.dac_passthrough || settings?.exclusive_mode || isExternal || isAlsaDirect
@@ -275,7 +257,7 @@
     <div class="device-tooltip">
       <!-- Output Device -->
       <div class="tooltip-section">
-        <div class="tooltip-label">{castConnected ? 'Casting to' : 'Output Device'}</div>
+        <div class="tooltip-label">{castConnected ? $t('audioBadges.castingTo') : $t('audioBadges.outputDevice')}</div>
         {#if castConnected}
           <div class="tooltip-device cast-device">
             {#if castProtocol === 'dlna'}
@@ -285,7 +267,7 @@
             {/if}
             <span class="device-name-text">{castDeviceName || 'Unknown Device'}</span>
           </div>
-          <div class="tooltip-raw">{castProtocol?.toUpperCase()} Streaming</div>
+          <div class="tooltip-raw">{$t('audioBadges.streaming', { values: { protocol: castProtocol?.toUpperCase() ?? '' } })}</div>
         {:else}
         <div
           class="tooltip-device"
@@ -302,7 +284,7 @@
         {/if}
         {#if currentVolume !== null}
           <div class="tooltip-volume">
-            <span class="volume-label">Volume:</span>
+            <span class="volume-label">{$t('player.volume')}:</span>
             <span class="volume-value">{currentVolume}%</span>
           </div>
         {/if}
@@ -312,14 +294,14 @@
       <!-- Audio Settings (only show when not casting) -->
       {#if !castConnected && (isAlsaDirect || settings?.dac_passthrough || settings?.exclusive_mode)}
         <div class="tooltip-section">
-          <div class="tooltip-label">Audio Settings</div>
+          <div class="tooltip-label">{$t('audioBadges.audioSettings')}</div>
           {#if isAlsaDirect}
             <div class="tooltip-setting">
               <span class="setting-icon hw-icon">●</span>
               <span class="setting-text">
-                ✓ Hardware Direct: Bit-perfect ALSA
+                ✓ {$t('audioBadges.hwDirectBitPerfect')}
                 {#if hardwareStatus?.hardware_sample_rate}
-                  <br><span class="setting-detail">{(hardwareStatus.hardware_sample_rate / 1000).toFixed(1)} kHz native</span>
+                  <br><span class="setting-detail">{$t('audioBadges.kHzNative', { values: { rate: (hardwareStatus.hardware_sample_rate / 1000).toFixed(1) } })}</span>
                 {/if}
                 <br><span class="setting-detail">{prettyDeviceName}</span>
               </span>
@@ -330,18 +312,18 @@
               <span class="setting-icon" class:active={dacBadgeState === 'active'} class:warning={dacBadgeState === 'warning'}>●</span>
               <span class="setting-text">
                 {#if dacBadgeState === 'warning'}
-                  ⚠ ERROR: PipeWire is resampling
+                  ⚠ {$t('audioBadges.resamplingError')}
                   {#if hardwareStatus?.hardware_sample_rate && samplingRate}
-                    <br><span class="setting-detail">File: {samplingRate} kHz → Hardware: {(hardwareStatus.hardware_sample_rate / 1000).toFixed(1)} kHz</span>
-                    <br><span class="setting-help">Fix: Configure PipeWire sample rate switching</span>
+                    <br><span class="setting-detail">{$t('audioBadges.resamplingDetail', { values: { trackRate: samplingRate, hwRate: (hardwareStatus.hardware_sample_rate / 1000).toFixed(1) } })}</span>
+                    <br><span class="setting-help">{$t('audioBadges.resamplingFix')}</span>
                   {/if}
                 {:else if dacBadgeState === 'active'}
-                  ✓ DAC Passthrough: Bit-perfect
+                  ✓ {$t('audioBadges.dacBitPerfect')}
                   {#if hardwareStatus?.hardware_sample_rate}
-                    <br><span class="setting-detail">{(hardwareStatus.hardware_sample_rate / 1000).toFixed(1)} kHz native</span>
+                    <br><span class="setting-detail">{$t('audioBadges.kHzNative', { values: { rate: (hardwareStatus.hardware_sample_rate / 1000).toFixed(1) } })}</span>
                   {/if}
                 {:else}
-                  DAC Passthrough: Disabled
+                  {$t('audioBadges.dacDisabled')}
                 {/if}
               </span>
             </div>
@@ -349,7 +331,7 @@
           {#if settings.exclusive_mode}
             <div class="tooltip-setting">
               <span class="setting-icon" class:active={exclusiveModeActive}>●</span>
-              <span class="setting-text">Exclusive Mode</span>
+              <span class="setting-text">{$t('audioBadges.exclusiveMode')}</span>
             </div>
           {/if}
         </div>

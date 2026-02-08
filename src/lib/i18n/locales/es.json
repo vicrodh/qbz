@@ -410,6 +410,20 @@
     "minimize": "Minimizar",
     "exitImmersive": "Salir del modo inmersivo"
   },
+  "audioBadges": {
+    "castingTo": "Transmitiendo a",
+    "outputDevice": "Dispositivo de salida",
+    "streaming": "{protocol} Streaming",
+    "audioSettings": "Configuración de audio",
+    "hwDirectBitPerfect": "Hardware Directo: Bit-perfect ALSA",
+    "kHzNative": "{rate} kHz nativo",
+    "resamplingError": "ERROR: PipeWire está resampleando",
+    "resamplingDetail": "Archivo: {trackRate} kHz → Hardware: {hwRate} kHz",
+    "resamplingFix": "Solución: Configura el cambio de sample rate en PipeWire",
+    "dacBitPerfect": "Passthrough DAC: Bit-perfect",
+    "dacDisabled": "Passthrough DAC: Desactivado",
+    "exclusiveMode": "Modo Exclusivo"
+  },
   "quality": {
     "mp3": "MP3 320kbps",
     "cdQuality": "Calidad CD",
