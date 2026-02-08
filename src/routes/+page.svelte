@@ -3219,6 +3219,7 @@
           onReDownloadAlbum={reDownloadAlbumById}
           checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
           {downloadStateVersion}
+          onArtistClick={handleArtistClick}
         />
       {:else if activeView === 'library' || activeView === 'library-album'}
         <LocalLibraryView

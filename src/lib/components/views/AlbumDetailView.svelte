@@ -515,6 +515,8 @@
                 artwork={relatedAlbum.artwork}
                 title={relatedAlbum.title}
                 artist={album.artist}
+                artistId={album.artistId}
+                onArtistClick={onTrackGoToArtist}
                 genre={relatedAlbum.genre}
                 releaseDate={relatedAlbum.releaseDate}
                 size="large"

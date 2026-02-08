@@ -22,6 +22,7 @@
     onReDownloadAlbum?: (albumId: string) => void;
     checkAlbumFullyDownloaded?: (albumId: string) => Promise<boolean>;
     downloadStateVersion?: number;
+    onArtistClick?: (artistId: number) => void;
   }
 
   let {
@@ -39,7 +40,8 @@
     onOpenAlbumFolder,
     onReDownloadAlbum,
     checkAlbumFullyDownloaded,
-    downloadStateVersion
+    downloadStateVersion,
+    onArtistClick
   }: Props = $props();
 
   // State
@@ -277,6 +279,8 @@
             artwork={album.image?.large || album.image?.thumbnail || ''}
             title={album.title}
             artist={album.artist?.name || 'Unknown Artist'}
+            artistId={album.artist?.id}
+            onArtistClick={onArtistClick}
             genre={getGenreLabel(album)}
             releaseDate={album.release_date_original}
             quality={getQualityLabel(album)}

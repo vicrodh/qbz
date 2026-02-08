@@ -13,6 +13,7 @@ export interface AlbumCardData {
   artwork: string;
   title: string;
   artist: string;
+  artistId?: number;
   genre: string;
   quality?: string;
   releaseDate?: string;

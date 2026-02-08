@@ -1287,6 +1287,8 @@
                           artwork={getAlbumArtwork(album)}
                           title={album.title}
                           artist={album.artist?.name || 'Unknown Artist'}
+                          artistId={album.artist?.id}
+                          onArtistClick={onArtistClick}
                           genre={getGenreLabel(album)}
                           releaseDate={album.release_date_original}
                           size="large"
@@ -1459,6 +1461,8 @@
               artwork={getAlbumArtwork(album)}
               title={album.title}
               artist={album.artist?.name || 'Unknown Artist'}
+              artistId={album.artist?.id}
+              onArtistClick={onArtistClick}
               genre={getGenreLabel(album)}
               releaseDate={album.release_date_original}
               size="large"

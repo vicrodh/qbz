@@ -1639,6 +1639,8 @@
                         artwork={album.image?.large || album.image?.thumbnail || ''}
                         title={album.title}
                         artist={album.artist.name}
+                        artistId={album.artist.id}
+                        onArtistClick={onArtistClick}
                         genre={getGenreLabel(album)}
                         releaseDate={album.release_date_original}
                         size="large"
@@ -1715,6 +1717,8 @@
                 artwork={album.image?.large || album.image?.thumbnail || ''}
                 title={album.title}
                 artist={album.artist.name}
+                artistId={album.artist.id}
+                onArtistClick={onArtistClick}
                 genre={getGenreLabel(album)}
                 releaseDate={album.release_date_original}
                 size="large"
@@ -1889,6 +1893,8 @@
                           artwork={getQobuzImage(album.image)}
                           title={album.title}
                           artist={album.artist.name}
+                          artistId={album.artist.id}
+                          onArtistClick={onArtistClick}
                           genre={album.genre?.name}
                           releaseDate={album.release_date_original}
                           quality={formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate)}
@@ -1941,6 +1947,8 @@
                           artwork={getQobuzImage(album.image)}
                           title={album.title}
                           artist={album.artist.name}
+                          artistId={album.artist.id}
+                          onArtistClick={onArtistClick}
                           genre={album.genre?.name}
                           releaseDate={album.release_date_original}
                           quality={formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate)}
@@ -1993,6 +2001,8 @@
                           artwork={getQobuzImage(album.image)}
                           title={album.title}
                           artist={album.artist.name}
+                          artistId={album.artist.id}
+                          onArtistClick={onArtistClick}
                           genre={album.genre?.name}
                           releaseDate={album.release_date_original}
                           quality={formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate)}

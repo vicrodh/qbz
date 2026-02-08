@@ -71,6 +71,7 @@
     artwork: string;
     title: string;
     artist: string;
+    artistId?: number;
     genre: string;
     quality?: string;
     releaseDate?: string;
@@ -554,6 +555,7 @@
       artwork: getQobuzImage(album.image),
       title: album.title,
       artist: album.artist?.name || 'Unknown Artist',
+      artistId: album.artist?.id,
       genre: album.genre?.name || 'Unknown genre',
       quality: formatQuality(album.hires_streamable, album.maximum_bit_depth, album.maximum_sampling_rate),
       releaseDate: album.release_date_original
@@ -946,6 +948,8 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                artistId={album.artistId}
+                onArtistClick={onArtistClick}
                 genre={album.genre}
                 releaseDate={album.releaseDate}
                 size="large"
@@ -987,6 +991,8 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                artistId={album.artistId}
+                onArtistClick={onArtistClick}
                 genre={album.genre}
                 releaseDate={album.releaseDate}
                 size="large"
@@ -1028,6 +1034,8 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                artistId={album.artistId}
+                onArtistClick={onArtistClick}
                 genre={album.genre}
                 releaseDate={album.releaseDate}
                 size="large"
@@ -1069,6 +1077,8 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                artistId={album.artistId}
+                onArtistClick={onArtistClick}
                 genre={album.genre}
                 releaseDate={album.releaseDate}
                 size="large"
@@ -1110,6 +1120,8 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                artistId={album.artistId}
+                onArtistClick={onArtistClick}
                 genre={album.genre}
                 releaseDate={album.releaseDate}
                 size="large"
@@ -1201,6 +1213,8 @@
                 artwork={album.image?.large || album.image?.small || ''}
                 title={album.title}
                 artist={album.artists?.[0]?.name || 'Unknown Artist'}
+                artistId={album.artists?.[0]?.id}
+                onArtistClick={onArtistClick}
                 genre={album.genre?.name || ''}
                 releaseDate={album.dates?.original}
                 size="large"
@@ -1246,6 +1260,8 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                artistId={album.artistId}
+                onArtistClick={onArtistClick}
                 genre={album.genre}
                 releaseDate={album.releaseDate}
                 size="large"
@@ -1392,6 +1408,8 @@
                 artwork={album.artwork}
                 title={album.title}
                 artist={album.artist}
+                artistId={album.artistId}
+                onArtistClick={onArtistClick}
                 genre={album.genre}
                 releaseDate={album.releaseDate}
                 size="large"

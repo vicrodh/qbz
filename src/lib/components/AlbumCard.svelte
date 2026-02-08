@@ -81,7 +81,7 @@
   let titleRef: HTMLDivElement | null = $state(null);
   let titleTextRef: HTMLSpanElement | null = $state(null);
   let titleOverflow = $state(0);
-  let artistRef: HTMLDivElement | null = $state(null);
+  let artistRef: HTMLElement | null = $state(null);
   let artistTextRef: HTMLSpanElement | null = $state(null);
   let artistOverflow = $state(0);
   const titleOffset = $derived(titleOverflow > 0 ? `-${titleOverflow + 16}px` : '0px');
