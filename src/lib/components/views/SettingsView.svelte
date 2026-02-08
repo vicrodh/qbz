@@ -12,6 +12,7 @@
   import AlsaUtilsHelpModal from '../AlsaUtilsHelpModal.svelte';
   import DACSetupWizard from '../DACSetupWizard.svelte';
   import RemoteControlSetupGuide from '../RemoteControlSetupGuide.svelte';
+  import LogsModal from '../LogsModal.svelte';
   import VolumeSlider from '../VolumeSlider.svelte';
   import UpdateCheckResultModal from '../updates/UpdateCheckResultModal.svelte';
   import WhatsNewModal from '../updates/WhatsNewModal.svelte';
@@ -223,6 +224,9 @@
   // Collapsible sections state (closed by default)
   let offlineLibraryCollapsed = $state(true);
   let storageCollapsed = $state(true);
+  let developerCollapsed = $state(true);
+  let forceDmabuf = $state(false);
+  let showLogsModal = $state(false);
 
   // Navigation section IDs with translation keys
   const navSectionIds = [
@@ -801,6 +805,11 @@
 
     // Check for legacy cached files
     checkLegacyCachedFiles();
+
+    // Load developer settings
+    invoke('get_developer_settings').then((settings: any) => {
+      forceDmabuf = settings.force_dmabuf;
+    }).catch(() => {});
 
     // Subscribe to offline state changes
     const unsubscribeOffline = subscribeOffline(() => {
@@ -2162,6 +2171,17 @@
     }
   }
 
+  async function handleForceDmabufChange(enabled: boolean) {
+    try {
+      await invoke('set_developer_force_dmabuf', { enabled });
+      forceDmabuf = enabled;
+      showToast($t('settings.developer.restartRequired'), 'info');
+    } catch (err) {
+      console.error('Failed to set force_dmabuf:', err);
+      showToast(String(err), 'error');
+    }
+  }
+
   function formatBytes(bytes: number): string {
     if (bytes === 0) return '0 B';
     const k = 1024;
@@ -3321,7 +3341,6 @@
         {isClearingAllCaches ? $t('settings.storage.clearing') : $t('actions.clearAll')}
       </button>
     </div>
-    {/if}
     <div class="setting-row last">
       <div class="danger-zone">
         <div class="danger-zone-header">
@@ -3343,7 +3362,41 @@
         </div>
       </div>
     </div>
+    {/if}
   </section>
+
+  <!-- Developer Mode Section (not in jump-nav, collapsed by default) -->
+  <section class="section collapsible-section">
+    <button class="section-title-btn" onclick={() => developerCollapsed = !developerCollapsed}>
+      <h3 class="section-title">{$t('settings.developer.title')}</h3>
+      <span class="section-summary">{$t('settings.developer.summary')}</span>
+      {#if developerCollapsed}
+        <ChevronDown size={16} />
+      {:else}
+        <ChevronUp size={16} />
+      {/if}
+    </button>
+    {#if !developerCollapsed}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.developer.forceDmabuf')}</span>
+        <small class="setting-note">{$t('settings.developer.forceDmabufDesc')}</small>
+      </div>
+      <Toggle checked={forceDmabuf} onChange={handleForceDmabufChange} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.developer.viewLogs')}</span>
+        <small class="setting-note">{$t('settings.developer.viewLogsDesc')}</small>
+      </div>
+      <button class="clear-btn" onclick={() => showLogsModal = true}>
+        {$t('settings.developer.viewLogs')}
+      </button>
+    </div>
+    {/if}
+  </section>
+
+  <LogsModal isOpen={showLogsModal} onClose={() => showLogsModal = false} />
 
   <!-- Flatpak Section (only shown when running in Flatpak) -->
   <!-- NOTE: Keep this section LAST. If adding new settings sections, add them BEFORE this one. -->

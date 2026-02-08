@@ -4,6 +4,10 @@
   import { listen, emitTo, type UnlistenFn } from '@tauri-apps/api/event';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
+  // Console log capture (must be early, before other imports log)
+  import { initConsoleCapture } from '$lib/stores/consoleLogStore';
+  initConsoleCapture();
+
   // Offline cache state management
   import {
     initOfflineCacheStates,
