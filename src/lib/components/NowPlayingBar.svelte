@@ -69,6 +69,9 @@
     onTrackClick?: () => void;
     onContextClick?: () => void;
     queueOpen?: boolean;
+    normalizationEnabled?: boolean;
+    normalizationGain?: number | null;
+    onToggleNormalization?: () => void;
   }
 
   let {
@@ -110,7 +113,10 @@
     onAlbumClick,
     onTrackClick,
     onContextClick,
-    queueOpen = false
+    queueOpen = false,
+    normalizationEnabled = false,
+    normalizationGain = null,
+    onToggleNormalization
   }: Props = $props();
 
   let progressRef: HTMLDivElement;
@@ -382,6 +388,25 @@
         <Maximize2 size={16} />
       </button>
 
+      <!-- Normalization Toggle -->
+      <button
+        class="control-btn"
+        class:active={normalizationEnabled && normalizationGain !== null && normalizationGain !== 1.0}
+        class:norm-enabled={normalizationEnabled && (normalizationGain === null || normalizationGain === 1.0)}
+        onclick={onToggleNormalization}
+        title={!normalizationEnabled
+          ? $t('player.normalizationOff')
+          : normalizationGain !== null && normalizationGain !== 1.0
+            ? $t('player.normalizationApplied')
+            : $t('player.normalizationOn')}
+      >
+        <span
+          class="norm-icon"
+          class:norm-on={normalizationEnabled}
+          aria-hidden="true"
+        ></span>
+      </button>
+
       <!-- Volume Control -->
       <div class="volume-control">
         <div class="volume-value" class:visible={isDraggingVolume}>{volume}</div>
@@ -651,6 +676,31 @@
     opacity: 0.9;
   }
 
+  /* Normalization Icon (mask-image for currentColor inheritance) */
+  .norm-icon {
+    display: block;
+    width: 16px;
+    height: 16px;
+    background-color: currentColor;
+    mask-image: url('/bars-disorder-outlined.svg');
+    mask-size: contain;
+    mask-repeat: no-repeat;
+    mask-position: center;
+    -webkit-mask-image: url('/bars-disorder-outlined.svg');
+    -webkit-mask-size: contain;
+    -webkit-mask-repeat: no-repeat;
+    -webkit-mask-position: center;
+  }
+
+  .norm-icon.norm-on {
+    mask-image: url('/bars-normal.svg');
+    -webkit-mask-image: url('/bars-normal.svg');
+  }
+
+  .control-btn.norm-enabled {
+    color: var(--text-primary);
+  }
+
   .play-btn {
     width: 34px;
     height: 34px;
@@ -670,7 +720,7 @@
     padding: 2px;
     background: var(--bg-tertiary);
     border-radius: 8px;
-    min-width: 580px;
+    min-width: 508px;
     flex: 1;
     max-width: 800px;
   }

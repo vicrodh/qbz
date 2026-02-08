@@ -408,7 +408,10 @@
     "maximize": "Maximize",
     "restore": "Restore",
     "minimize": "Minimize",
-    "exitImmersive": "Exit Immersive"
+    "exitImmersive": "Exit Immersive",
+    "normalizationOff": "Volume Normalization: Off",
+    "normalizationOn": "Volume Normalization: On",
+    "normalizationApplied": "Volume Normalization: Active"
   },
   "audioBadges": {
     "castingTo": "Casting to",

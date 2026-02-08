@@ -531,6 +531,8 @@
   let duration = $state(0);
   let volume = $state(getVolume()); // Load persisted volume from localStorage
   let isFavorite = $state(false);
+  let normalizationEnabled = $state(false);
+  let normalizationGain = $state<number | null>(null);
 
   // Queue/Shuffle State (from queueStore subscription)
   let isShuffle = $state(false);
@@ -1379,6 +1381,16 @@
       showToast(result.isFavorite ? $t('toast.addedToFavorites') : $t('toast.removedFromFavorites'), 'success');
     } else {
       showToast($t('toast.failedUpdateFavorites'), 'error');
+    }
+  }
+
+  async function toggleNormalization() {
+    const newState = !normalizationEnabled;
+    try {
+      await invoke('set_audio_normalization_enabled', { enabled: newState });
+      normalizationEnabled = newState;
+    } catch (err) {
+      console.error('Failed to toggle normalization:', err);
     }
   }
 
@@ -2530,6 +2542,13 @@
       // Ignore storage errors
     }
 
+    // Load normalization enabled state from audio settings
+    invoke<{ normalization_enabled: boolean }>('get_audio_settings').then((settings) => {
+      normalizationEnabled = settings.normalization_enabled;
+    }).catch((err) => {
+      console.error('Failed to load normalization setting:', err);
+    });
+
     // Set up callback for cast disconnect handoff
     setOnAskContinueLocally(async (track, position) => {
       // Ask user if they want to continue locally
@@ -2635,6 +2654,7 @@
       duration = playerState.duration;
       volume = playerState.volume;
       isFavorite = playerState.isFavorite;
+      normalizationGain = playerState.normalizationGain;
 
       // Save position during playback (debounced to every 5s)
       if (isPlaying && currentTrack && currentTime > 0) {
@@ -3353,6 +3373,9 @@
         }}
         onContextClick={handleContextNavigation}
         queueOpen={isQueueOpen}
+        {normalizationEnabled}
+        {normalizationGain}
+        onToggleNormalization={toggleNormalization}
         onTrackClick={() => {
           if (currentTrack && !currentTrack.isLocal) {
             trackInfoTrackId = currentTrack.id;
@@ -3370,6 +3393,9 @@
         queueOpen={isQueueOpen}
         {volume}
         onVolumeChange={handleVolumeChange}
+        {normalizationEnabled}
+        {normalizationGain}
+        onToggleNormalization={toggleNormalization}
       />
     {/if}
 

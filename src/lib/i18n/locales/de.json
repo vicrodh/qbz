@@ -394,7 +394,10 @@
     "maximize": "Maximieren",
     "restore": "Wiederherstellen",
     "minimize": "Minimieren",
-    "exitImmersive": "Immersiv-Modus beenden"
+    "exitImmersive": "Immersiv-Modus beenden",
+    "normalizationOff": "Lautstärkenormalisierung: Aus",
+    "normalizationOn": "Lautstärkenormalisierung: Ein",
+    "normalizationApplied": "Lautstärkenormalisierung: Aktiv"
   },
   "audioBadges": {
     "castingTo": "Übertragung an",

@@ -76,6 +76,7 @@ interface PlaybackEvent {
   volume: number;
   sample_rate: number | null;  // Actual stream sample rate in Hz
   bit_depth: number | null;    // Actual stream bit depth
+  normalization_gain: number | null;  // Active normalization gain factor (null = not applied)
 }
 
 // Queue track from backend (for external track sync)
@@ -132,6 +133,7 @@ let castUnsubscribe: (() => void) | null = null;
 let isAdvancingTrack = false;
 let isSkipping = false;
 let queueEnded = false;
+let normalizationGain: number | null = null;  // Current normalization gain (null = not active)
 
 // Callbacks for track advancement (set by consumer)
 let onTrackEnded: (() => Promise<void>) | null = null;
@@ -188,6 +190,10 @@ export function getIsSkipping(): boolean {
   return isSkipping;
 }
 
+export function getNormalizationGain(): number | null {
+  return normalizationGain;
+}
+
 // ============ State Setter ============
 
 export interface PlayerState {
@@ -198,6 +204,7 @@ export interface PlayerState {
   volume: number;
   isFavorite: boolean;
   isSkipping: boolean;
+  normalizationGain: number | null;
 }
 
 export function getPlayerState(): PlayerState {
@@ -208,7 +215,8 @@ export function getPlayerState(): PlayerState {
     duration,
     volume,
     isFavorite,
-    isSkipping
+    isSkipping,
+    normalizationGain
   };
 }
 
@@ -546,6 +554,9 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     if (event.bit_depth && event.bit_depth > 0) {
       currentTrack.bitDepth = event.bit_depth;
     }
+
+    // Update normalization gain state
+    normalizationGain = event.normalization_gain;
 
     notifyListeners();
 
