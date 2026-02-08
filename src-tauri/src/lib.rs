@@ -490,6 +490,7 @@ pub fn run() {
             // Playlist commands
             commands::get_user_playlists,
             commands::get_playlist,
+            commands::check_playlist_duplicates,
             commands::search_playlists,
             commands::create_playlist,
             commands::delete_playlist,

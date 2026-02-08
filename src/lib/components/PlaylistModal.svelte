@@ -5,6 +5,8 @@
   import { subscribe as subscribeOffline, getStatus, createPendingPlaylist } from '$lib/stores/offlineStore';
   import { showToast } from '$lib/stores/toastStore';
   import { t } from '$lib/i18n';
+  import PlaylistDuplicateConfirmModal from './PlaylistDuplicateConfirmModal.svelte';
+  import type { PlaylistDuplicateResult } from '$lib/types/index';
   import {
     subscribe as subscribeFolders,
     getVisibleFolders,
@@ -75,6 +77,10 @@
   // Local track counts for playlists
   let localTrackCounts = $state<Map<number, number>>(new Map());
   let showDeleteConfirm = $state(false);
+
+  // State for duplicate checking
+  let showDuplicateConfirm = $state(false);
+  let duplicateResult = $state<PlaylistDuplicateResult | null>(null);
 
   // Load local track counts
   async function loadLocalTrackCounts() {
@@ -340,6 +346,48 @@
       return;
     }
 
+    // For pending playlists and local tracks add directly
+    if (selectedPlaylistId < 0 || isLocalTracks) {
+      await handleDirectAddToPlaylist();
+      return;
+    }
+
+    loading = true;
+    error = null;
+
+    try {
+      // Check for duplicates in regular playlists with Qobuz tracks
+      const result = await invoke<PlaylistDuplicateResult>('check_playlist_duplicates', {
+        playlistId: selectedPlaylistId,
+        trackIds
+      });
+      
+      duplicateResult = {
+        ...result,
+        duplicate_track_ids: new Set(result.duplicate_track_ids)
+      };
+
+      if (duplicateResult.duplicate_count > 0) {
+        // There are duplicates. Show confirmation dialog
+        // to allow the user to decide on what action to take
+        showDuplicateConfirm = true;
+      } else {
+        await executeAddTracks(false);
+      }
+    } catch (err) {
+      console.error('Failed to check playlist duplicates:', err);
+      error = String(err);
+    } finally {
+      loading = false;
+    }
+  }
+
+  async function handleDirectAddToPlaylist() {
+    if (!selectedPlaylistId || trackIds.length === 0) {
+      error = 'Please select a playlist';
+      return;
+    }
+
     loading = true;
     error = null;
 
@@ -382,11 +430,7 @@
         }
       } else {
         // Regular playlist with Qobuz tracks
-        await invoke('add_tracks_to_playlist', {
-          playlistId: selectedPlaylistId,
-          trackIds
-        });
-        void logPlaylistAdd(trackIds, selectedPlaylistId);
+        await executeAddTracks(false);
       }
       onSuccess?.();
       onClose();
@@ -396,6 +440,48 @@
     } finally {
       loading = false;
     }
+  }
+
+  async function executeAddTracks(skipDuplicates: boolean) {
+    try {
+      let tracksToAdd = trackIds;
+
+      if (skipDuplicates) {
+        tracksToAdd = trackIds.filter(id => !duplicateResult?.duplicate_track_ids.has(id));
+      }
+
+      if (tracksToAdd.length === 0) {
+        onSuccess?.();
+        onClose();
+        showDuplicateConfirm = false;
+        return;
+      }
+
+      await invoke('add_tracks_to_playlist', {
+        playlistId: selectedPlaylistId!,
+        trackIds: tracksToAdd
+      });
+      void logPlaylistAdd(trackIds, selectedPlaylistId!);
+      onSuccess?.();
+      onClose();
+      showDuplicateConfirm = false;
+    } catch (err) {
+      console.error('Failed to add tracks to playlist:', err);
+      error = String(err);
+    }
+  }
+
+  function handleDuplicateAddAll() {
+    executeAddTracks(false);
+  }
+
+  function handleDuplicateSkipDuplicates() {
+    executeAddTracks(true);
+  }
+
+  function handleDuplicateCancel() {
+    showDuplicateConfirm = false;
+    duplicateResult = null;
   }
 
   async function handleCreateAndAdd() {
@@ -732,6 +818,15 @@
     </div>
   </div>
 {/if}
+
+<PlaylistDuplicateConfirmModal
+  bind:isOpen={showDuplicateConfirm}
+  bind:duplicateResult={duplicateResult}
+  bind:loading={loading}
+  on:addAll={handleDuplicateAddAll}
+  on:skipDuplicates={handleDuplicateSkipDuplicates}
+  on:cancel={handleDuplicateCancel}
+/>
 
 <style>
   .modal-overlay {

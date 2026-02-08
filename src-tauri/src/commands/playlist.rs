@@ -3,7 +3,7 @@
 use serde::Serialize;
 use tauri::State;
 
-use crate::api::models::{Playlist, SearchResultsPage, Track};
+use crate::api::models::{Playlist, PlaylistDuplicateResult, SearchResultsPage, Track};
 use crate::api::performers::{parse_performers, Performer};
 use crate::AppState;
 
@@ -41,6 +41,50 @@ pub async fn get_playlist(
         .get_playlist(playlist_id)
         .await
         .map_err(|e| format!("Failed to get playlist: {}", e))
+}
+
+/// Check for duplicate tracks in a playlist
+#[tauri::command]
+pub async fn check_playlist_duplicates(
+    playlist_id: u64,
+    track_ids: Vec<u64>,
+    state: State<'_, AppState>,
+) -> Result<PlaylistDuplicateResult, String> {
+    log::debug!(
+        "Command: check_playlist_duplicates {} ({} tracks)",
+        playlist_id,
+        track_ids.len()
+    );
+
+    let client = state.client.lock().await;
+
+    let playlist = client
+        .get_playlist(playlist_id)
+        .await
+        .map_err(|e| format!("Failed to get playlist: {}", e))?;
+
+    let incoming_track_ids: std::collections::HashSet<u64> = track_ids.iter().copied().collect();
+
+    let duplicate_track_ids: std::collections::HashSet<u64> = playlist
+        .tracks
+        .map(|tracks| {
+            tracks
+                .items
+                .into_iter()
+                .filter(|track| incoming_track_ids.contains(&track.id))
+                .map(|track| track.id)
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let duplicate_count = duplicate_track_ids.len();
+    let total_tracks = track_ids.len();
+
+    Ok(PlaylistDuplicateResult {
+        total_tracks,
+        duplicate_count,
+        duplicate_track_ids,
+    })
 }
 
 /// Search playlists
