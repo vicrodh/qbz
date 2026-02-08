@@ -107,10 +107,13 @@ fn main() {
 
     // Wayland and WebKit compatibility fixes for Linux
     // Addresses: https://github.com/vicrodh/qbz/issues/6
+    //            https://github.com/vicrodh/qbz/issues/59
     //
-    // NVIDIA GPUs have known issues with WebKit's DMA-BUF renderer on Wayland,
-    // causing fatal protocol errors (Error 71) that cannot be recovered from.
-    // This must be mitigated BEFORE the WebView is initialized.
+    // WebKitGTK's DMA-BUF renderer can crash on Wayland with
+    // "Could not create default EGL display: EGL_BAD_PARAMETER. Aborting..."
+    // Known triggers: NVIDIA GPUs, AppImage builds (WebKitGTK version mismatch
+    // between build and host), and virtual machines.
+    // All env-var mitigations must be set BEFORE the WebView is initialized.
     #[cfg(target_os = "linux")]
     {
         let is_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
@@ -146,22 +149,35 @@ fn main() {
             qbz_nix_lib::logging::log_startup("[QBZ] Virtual machine detected");
         }
 
-        // Software rendering: VM auto-detection or user override
-        // This bypasses EGL hardware initialization entirely, preventing
-        // "Could not create default EGL display" crashes on virtual GPUs
+        // AppImage detection (APPIMAGE/APPDIR set by the AppImage runtime)
+        let is_appimage = std::env::var_os("APPIMAGE").is_some()
+            || std::env::var_os("APPDIR").is_some();
+        if is_appimage {
+            qbz_nix_lib::logging::log_startup("[QBZ] Running as AppImage");
+        }
+
+        // --- Software rendering (GL layer) ---
+        // LIBGL_ALWAYS_SOFTWARE=1 forces Mesa to use llvmpipe for all GL
+        // contexts.  Only needed in VMs or when the user explicitly requests it.
+        // Does NOT affect WebKit's DMA-BUF renderer decision (that is below).
         if force_software {
             qbz_nix_lib::logging::log_startup("[QBZ] User override: forcing software rendering (QBZ_SOFTWARE_RENDER=1)");
             std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         } else if is_vm {
-            qbz_nix_lib::logging::log_startup("[QBZ] Virtual machine detected: forcing software rendering to prevent EGL crashes");
+            qbz_nix_lib::logging::log_startup("[QBZ] Virtual machine detected: enabling software rendering (LIBGL_ALWAYS_SOFTWARE=1)");
             std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        }
+
+        // --- Opt-in: disable WebKit compositing mode ---
+        // WEBKIT_DISABLE_COMPOSITING_MODE=1 was previously set automatically
+        // on Wayland, but it causes a "ghost app" (process alive, tray/MPRIS OK,
+        // UI never renders) on Fedora + Wayland.  Now opt-in only.
+        if std::env::var("QBZ_WEBKIT_DISABLE_COMPOSITING").as_deref() == Ok("1") {
+            qbz_nix_lib::logging::log_startup("[QBZ] User override: disabling WebKit compositing mode (QBZ_WEBKIT_DISABLE_COMPOSITING=1)");
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         }
 
-        // Handle user overrides first
+        // --- GDK backend selection ---
         if force_x11 && is_wayland {
             qbz_nix_lib::logging::log_startup("[QBZ] User override: Forcing X11 backend (QBZ_FORCE_X11=1)");
             std::env::set_var("GDK_BACKEND", "x11");
@@ -169,18 +185,22 @@ fn main() {
             // Force Wayland backend to avoid fallback issues
             std::env::set_var("GDK_BACKEND", "wayland");
 
-            // Disable WebKit's compositing mode which can cause protocol errors
-            // with transparent windows on Wayland
-            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-
             // Prefer client-side decorations (we use custom titlebar anyway)
             std::env::set_var("GTK_CSD", "1");
         }
 
-        // DMA-BUF renderer control (the critical NVIDIA fix)
+        // --- DMA-BUF renderer control ---
+        // WebKitGTK's DMA-BUF renderer (default since 2.42) calls
+        // eglGetPlatformDisplay() during init.  On some Wayland configurations
+        // this fails with EGL_BAD_PARAMETER and aborts the process.
+        // Known triggers: NVIDIA GPUs, AppImage WebKitGTK version mismatches,
+        // virtual GPUs in VMs.
+        //
+        // Disabling the DMA-BUF renderer makes WebKit fall back to a simpler
+        // rendering path that does not require EGL platform display creation.
         if force_dmabuf {
             qbz_nix_lib::logging::log_startup("[QBZ] User override: Forcing DMA-BUF renderer enabled (QBZ_FORCE_DMABUF=1)");
-            qbz_nix_lib::logging::log_startup("[QBZ] Warning: This may cause crashes on NVIDIA + Wayland");
+            qbz_nix_lib::logging::log_startup("[QBZ] Warning: This may cause crashes on some Wayland configurations");
             // Do NOT set WEBKIT_DISABLE_DMABUF_RENDERER
         } else if disable_dmabuf {
             qbz_nix_lib::logging::log_startup("[QBZ] User override: Forcing DMA-BUF renderer disabled (QBZ_DISABLE_DMABUF=1)");
@@ -190,6 +210,15 @@ fn main() {
             qbz_nix_lib::logging::log_startup("[QBZ] Applying NVIDIA + Wayland workaround: disabling WebKit DMA-BUF renderer");
             qbz_nix_lib::logging::log_startup("[QBZ] This prevents fatal protocol errors on NVIDIA GPUs");
             qbz_nix_lib::logging::log_startup("[QBZ] To override: set QBZ_FORCE_DMABUF=1 (not recommended)");
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+        } else if is_wayland && is_appimage {
+            // Defensive: AppImage + Wayland.
+            // AppImages use the host system's WebKitGTK which may differ from
+            // the version the app was built against.  The DMA-BUF renderer's
+            // EGL initialisation is the most common failure point, producing
+            // "Could not create default EGL display: EGL_BAD_PARAMETER. Aborting..."
+            qbz_nix_lib::logging::log_startup("[QBZ] AppImage on Wayland: disabling WebKit DMA-BUF renderer (EGL crash prevention)");
+            qbz_nix_lib::logging::log_startup("[QBZ] To override: set QBZ_FORCE_DMABUF=1");
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         } else if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             // Non-NVIDIA systems: keep default behavior unless already set
