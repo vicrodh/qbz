@@ -77,6 +77,8 @@ interface PlaybackEvent {
   sample_rate: number | null;  // Actual stream sample rate in Hz
   bit_depth: number | null;    // Actual stream bit depth
   normalization_gain: number | null;  // Active normalization gain factor (null = not applied)
+  gapless_ready: boolean;       // Backend wants next track queued for gapless
+  gapless_next_track_id: number; // Track ID queued for gapless (0 = none)
 }
 
 // Queue track from backend (for external track sync)
@@ -138,6 +140,13 @@ let normalizationGain: number | null = null;  // Current normalization gain (nul
 // Callbacks for track advancement (set by consumer)
 let onTrackEnded: (() => Promise<void>) | null = null;
 let onResumeFromStop: (() => Promise<void>) | null = null;
+
+// Gapless: callback to get the next track ID for pre-queuing
+let gaplessGetNextTrackId: (() => number | null) | null = null;
+// Gapless: callback when backend transitions to next track (update frontend metadata/queue)
+let onGaplessTransition: ((trackId: number) => Promise<void>) | null = null;
+// Track whether gapless pre-queue request is in flight
+let gaplessRequestInFlight = false;
 
 // Session restore state - when set, next play will load the track first
 let pendingSessionRestore: { trackId: number; position: number } | null = null;
@@ -486,9 +495,42 @@ export function setOnTrackEnded(callback: () => Promise<void>): void {
 }
 
 /**
+ * Set callback to get the next track ID for gapless pre-queuing
+ */
+export function setGaplessGetNextTrackId(callback: () => number | null): void {
+  gaplessGetNextTrackId = callback;
+}
+
+/**
+ * Set callback for handling gapless track transitions (metadata/queue update)
+ */
+export function setOnGaplessTransition(callback: (trackId: number) => Promise<void>): void {
+  onGaplessTransition = callback;
+}
+
+/**
  * Handle playback event from backend
  */
 async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
+  // Gapless transition: backend changed track_id because gapless playback advanced
+  // Handle this BEFORE the external track change handler to prevent stale queue lookups
+  const isGaplessTransition = event.track_id !== 0
+    && currentTrack
+    && event.track_id !== currentTrack.id
+    && event.is_playing
+    && event.gapless_next_track_id === 0
+    && onGaplessTransition;
+
+  if (isGaplessTransition) {
+    console.log('[Gapless] Transition detected, updating to track', event.track_id);
+    try {
+      await onGaplessTransition!(event.track_id);
+    } catch (err) {
+      console.error('[Gapless] Failed to handle transition:', err);
+    }
+    return; // Don't process further — the transition callback updates everything
+  }
+
   // Track changed externally (e.g., from remote control)
   if (event.track_id !== 0 && (!currentTrack || event.track_id !== currentTrack.id)) {
     console.log('[Player] Track changed externally, fetching new track info...');
@@ -559,6 +601,29 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     normalizationGain = event.normalization_gain;
 
     notifyListeners();
+
+    // Gapless: when backend signals it's approaching end and wants next track queued
+    if (event.gapless_ready && !gaplessRequestInFlight && gaplessGetNextTrackId) {
+      const nextId = gaplessGetNextTrackId();
+      if (nextId && nextId > 0) {
+        gaplessRequestInFlight = true;
+        console.log('[Gapless] Backend ready, queueing track', nextId);
+        invoke<boolean>('play_next_gapless', { trackId: nextId })
+          .then((queued) => {
+            if (queued) {
+              console.log('[Gapless] Track', nextId, 'queued successfully');
+            } else {
+              console.log('[Gapless] Track', nextId, 'not cached, will use normal transition');
+            }
+          })
+          .catch((err) => {
+            console.error('[Gapless] Failed to queue track:', err);
+          })
+          .finally(() => {
+            gaplessRequestInFlight = false;
+          });
+      }
+    }
 
     // Check if track ended - auto-advance to next
     if (

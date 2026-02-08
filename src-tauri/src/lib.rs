@@ -336,6 +336,8 @@ pub fn run() {
                             shuffle: Some(shuffle),
                             repeat: Some(repeat.to_string()),
                             normalization_gain,
+                            gapless_ready: player_state.is_gapless_ready(),
+                            gapless_next_track_id: player_state.get_gapless_next_track_id(),
                         };
                         let _ = app_handle.emit("playback:state", &event);
                         api_server::broadcast_playback_event(&app_handle, &event);
@@ -449,6 +451,7 @@ pub fn run() {
             commands::pause_playback,
             commands::resume_playback,
             commands::stop_playback,
+            commands::play_next_gapless,
             commands::set_volume,
             commands::seek,
             commands::get_playback_state,

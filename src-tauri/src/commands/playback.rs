@@ -895,6 +895,63 @@ pub fn stop_playback(state: State<'_, AppState>) -> Result<(), String> {
     state.player.stop()
 }
 
+/// Queue next track for gapless playback (cache-only, no download)
+/// Returns true if gapless was queued, false if track not cached or ineligible
+#[tauri::command]
+pub async fn play_next_gapless(
+    track_id: u64,
+    state: State<'_, AppState>,
+    offline_cache: State<'_, OfflineCacheState>,
+) -> Result<bool, String> {
+    log::info!("Command: play_next_gapless for track {}", track_id);
+
+    // Check offline cache (persistent disk cache)
+    {
+        let cached_path = {
+            let db_opt = offline_cache.db.lock().await;
+            if let Some(db) = db_opt.as_ref() {
+                if let Ok(Some(file_path)) = db.get_file_path(track_id) {
+                    Some(file_path)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+        if let Some(file_path) = cached_path {
+            let path = std::path::Path::new(&file_path);
+            if path.exists() {
+                log::info!("[GAPLESS] Track {} from OFFLINE cache", track_id);
+                let audio_data = std::fs::read(path)
+                    .map_err(|e| format!("Failed to read cached file: {}", e))?;
+                state.player.play_next(audio_data, track_id)?;
+                return Ok(true);
+            }
+        }
+    }
+
+    // Check memory cache (L1)
+    let cache = state.audio_cache.clone();
+    if let Some(cached) = cache.get(track_id) {
+        log::info!("[GAPLESS] Track {} from MEMORY cache ({} bytes)", track_id, cached.size_bytes);
+        state.player.play_next(cached.data, track_id)?;
+        return Ok(true);
+    }
+
+    // Check playback cache (L2 - disk)
+    if let Some(playback_cache) = cache.get_playback_cache() {
+        if let Some(audio_data) = playback_cache.get(track_id) {
+            log::info!("[GAPLESS] Track {} from DISK cache ({} bytes)", track_id, audio_data.len());
+            state.player.play_next(audio_data, track_id)?;
+            return Ok(true);
+        }
+    }
+
+    log::info!("[GAPLESS] Track {} not in any cache, gapless not possible", track_id);
+    Ok(false)
+}
+
 /// Set media controls metadata (for MPRIS integration)
 #[tauri::command]
 pub fn set_media_metadata(

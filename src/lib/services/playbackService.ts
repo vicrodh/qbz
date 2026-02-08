@@ -74,6 +74,8 @@ export interface PlayTrackOptions {
   isLocal?: boolean;
   showLoadingToast?: boolean;
   showSuccessToast?: boolean;
+  /** When true, skip stop_playback and play_track — backend already has audio playing via gapless */
+  gaplessTransition?: boolean;
 }
 
 export interface MediaMetadata {
@@ -109,58 +111,65 @@ export async function playTrack(
   const {
     isLocal = false,
     showLoadingToast = true,
-    showSuccessToast = true
+    showSuccessToast = true,
+    gaplessTransition = false
   } = options;
 
   // Set current track in store
   setCurrentTrack(track);
 
   try {
-    // For Qobuz tracks: stop current playback immediately and show buffering
-    // This prevents the previous track from continuing while we download
-    // Local tracks load instantly so they don't need this
-    if (!isLocal && !isCasting()) {
-      // Stop current playback immediately
-      try {
-        await invoke('stop_playback');
-      } catch {
-        // Ignore errors - player might not be playing
-      }
-      // Show buffering indicator
-      if (showLoadingToast) {
+    // Gapless transition: backend already has audio playing, just update metadata
+    if (gaplessTransition) {
+      console.log('[Gapless] Transition mode — skipping stop/play, updating metadata only');
+      setIsPlaying(true);
+    } else {
+      // For Qobuz tracks: stop current playback immediately and show buffering
+      // This prevents the previous track from continuing while we download
+      // Local tracks load instantly so they don't need this
+      if (!isLocal && !isCasting()) {
+        // Stop current playback immediately
+        try {
+          await invoke('stop_playback');
+        } catch {
+          // Ignore errors - player might not be playing
+        }
+        // Show buffering indicator
+        if (showLoadingToast) {
+          showToast(track.title, 'buffering');
+        }
+      } else if (showLoadingToast && !isLocal) {
         showToast(track.title, 'buffering');
       }
-    } else if (showLoadingToast && !isLocal) {
-      showToast(track.title, 'buffering');
-    }
 
-    // Check if we're casting to an external device
-    if (isCasting() && !isLocal) {
-      // Cast to connected device
-      await castTrack(track.id, {
-        title: track.title,
-        artist: track.artist,
-        album: track.album,
-        artworkUrl: track.artwork,
-        durationSecs: track.duration
-      });
-    } else {
-      // Use appropriate local playback command
-      if (isLocal) {
-        await invoke('library_play_track', { trackId: track.id });
-      } else {
-        const result = await invoke<PlayTrackResult>('play_track', {
-          trackId: track.id,
-          durationSecs: track.duration,
-          quality: getStreamingQuality()
+      // Check if we're casting to an external device
+      if (isCasting() && !isLocal) {
+        // Cast to connected device
+        await castTrack(track.id, {
+          title: track.title,
+          artist: track.artist,
+          album: track.album,
+          artworkUrl: track.artwork,
+          durationSecs: track.duration
         });
+      } else {
+        // Use appropriate local playback command
+        if (isLocal) {
+          await invoke('library_play_track', { trackId: track.id });
+        } else {
+          const result = await invoke<PlayTrackResult>('play_track', {
+            trackId: track.id,
+            durationSecs: track.duration,
+            quality: getStreamingQuality()
+          });
 
-        // Update track format based on actual stream format_id from Qobuz
-        const actualFormat = formatIdToString(result.format_id);
-        if (actualFormat) {
-          track.format = actualFormat;
-          // Re-set current track to update the UI with actual format
-          setCurrentTrack(track);
+          // Update track format based on actual stream format_id from Qobuz
+          const actualFormat = formatIdToString(result.format_id);
+          if (actualFormat) {
+            track.format = actualFormat;
+            // Re-set current track to update the UI with actual format
+            setCurrentTrack(track);
+          }
         }
       }
     }

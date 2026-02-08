@@ -132,6 +132,8 @@
     setQueueEnded,
     setOnTrackEnded,
     setOnResumeFromStop,
+    setGaplessGetNextTrackId,
+    setOnGaplessTransition,
     togglePlay,
     seek as playerSeek,
     setVolume as playerSetVolume,
@@ -1471,7 +1473,7 @@
   }
 
   // Helper to play a track from the queue (with offline skip support)
-  async function playQueueTrack(track: BackendQueueTrack, skippedIds = new Set<number>()) {
+  async function playQueueTrack(track: BackendQueueTrack, skippedIds = new Set<number>(), gaplessTransition = false) {
     const isLocal = isLocalTrack(track.id);
 
     // In offline mode, check if track is available
@@ -1525,7 +1527,7 @@
       isLocal,
       albumId: track.album_id ?? undefined,
       artistId: track.artist_id ?? undefined
-    }, { isLocal, showLoadingToast: false });
+    }, { isLocal, showLoadingToast: false, gaplessTransition });
   }
 
   // Play a specific track from the queue panel
@@ -2749,6 +2751,34 @@
       if (queueState?.current_track && queueState.current_index !== null) {
         console.log('[Player] Resuming from stop, replaying queue index:', queueState.current_index);
         await playQueueTrack(queueState.current_track);
+      }
+    });
+
+    // Gapless: provide callback to get next track ID for pre-queuing
+    setGaplessGetNextTrackId(() => {
+      try {
+        const queueState = getQueueState();
+        if (queueState.queue.length > 0) {
+          return Number(queueState.queue[0].id);
+        }
+      } catch {
+        // Ignore
+      }
+      return null;
+    });
+
+    // Gapless: handle transition when backend switches to pre-queued track
+    setOnGaplessTransition(async (trackId: number) => {
+      console.log('[Gapless] Handling transition to track', trackId);
+      // Advance the queue to match backend state
+      const advanced = await nextTrack();
+      if (advanced && advanced.id === trackId) {
+        // Queue advanced successfully — update UI metadata
+        await playQueueTrack(advanced, undefined, true);
+      } else {
+        // Queue mismatch — sync from backend
+        console.warn('[Gapless] Queue mismatch, syncing state');
+        await syncQueueState();
       }
     });
 
