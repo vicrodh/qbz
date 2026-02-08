@@ -636,13 +636,18 @@
   }
 
   .artist.artist-link {
+    display: block;
+    appearance: none;
+    -webkit-appearance: none;
     background: none;
     border: none;
     padding: 0;
     margin: 0;
+    font: inherit;
     text-align: left;
     width: 100%;
     cursor: pointer;
+    color: var(--text-muted);
   }
 
   .artist.artist-link:hover {
