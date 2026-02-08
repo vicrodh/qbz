@@ -58,6 +58,23 @@ fn is_nvidia_gpu() -> bool {
 }
 
 fn main() {
+    // CLI flag: --reset-dmabuf — resets the developer force_dmabuf setting and exits
+    if std::env::args().any(|a| a == "--reset-dmabuf") {
+        match qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new() {
+            Ok(store) => {
+                match store.set_force_dmabuf(false) {
+                    Ok(()) => {
+                        eprintln!("[QBZ] Developer force_dmabuf has been reset to false.");
+                        eprintln!("[QBZ] You can now start QBZ normally.");
+                    }
+                    Err(e) => eprintln!("[QBZ] Failed to reset force_dmabuf: {}", e),
+                }
+            }
+            Err(e) => eprintln!("[QBZ] Failed to open developer settings: {}", e),
+        }
+        return;
+    }
+
     // Set the application name/class for Linux window managers
     // This helps task managers and window switchers identify the app correctly
     #[cfg(target_os = "linux")]
@@ -102,30 +119,43 @@ fn main() {
         let is_vm = is_virtual_machine();
         let force_software = std::env::var("QBZ_SOFTWARE_RENDER").as_deref() == Ok("1");
 
+        // Developer settings: force_dmabuf override (from Settings > Developer Mode)
+        // This sets the env var BEFORE the check below, so it integrates seamlessly
+        let dev_force_dmabuf = qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new()
+            .ok()
+            .and_then(|store| store.get_settings().ok())
+            .map(|s| s.force_dmabuf)
+            .unwrap_or(false);
+        if dev_force_dmabuf {
+            std::env::set_var("QBZ_FORCE_DMABUF", "1");
+            qbz_nix_lib::logging::log_startup("[QBZ] Developer override: force_dmabuf=true (from settings)");
+            qbz_nix_lib::logging::log_startup("[QBZ] To reset: run `qbz --reset-dmabuf`");
+        }
+
         // User overrides - these ALWAYS take precedence
         let force_dmabuf = std::env::var("QBZ_FORCE_DMABUF").as_deref() == Ok("1");
         let disable_dmabuf = std::env::var("QBZ_DISABLE_DMABUF").as_deref() == Ok("1");
         let force_x11 = std::env::var("QBZ_FORCE_X11").as_deref() == Ok("1");
 
         // Diagnostic logging for transparency and support
-        eprintln!("[QBZ] Display server: {}", if is_wayland { "Wayland" } else { "X11" });
+        qbz_nix_lib::logging::log_startup(&format!("[QBZ] Display server: {}", if is_wayland { "Wayland" } else { "X11" }));
         if has_nvidia {
-            eprintln!("[QBZ] NVIDIA GPU detected");
+            qbz_nix_lib::logging::log_startup("[QBZ] NVIDIA GPU detected");
         }
         if is_vm {
-            eprintln!("[QBZ] Virtual machine detected");
+            qbz_nix_lib::logging::log_startup("[QBZ] Virtual machine detected");
         }
 
         // Software rendering: VM auto-detection or user override
         // This bypasses EGL hardware initialization entirely, preventing
         // "Could not create default EGL display" crashes on virtual GPUs
         if force_software {
-            eprintln!("[QBZ] User override: forcing software rendering (QBZ_SOFTWARE_RENDER=1)");
+            qbz_nix_lib::logging::log_startup("[QBZ] User override: forcing software rendering (QBZ_SOFTWARE_RENDER=1)");
             std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         } else if is_vm {
-            eprintln!("[QBZ] Virtual machine detected: forcing software rendering to prevent EGL crashes");
+            qbz_nix_lib::logging::log_startup("[QBZ] Virtual machine detected: forcing software rendering to prevent EGL crashes");
             std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
@@ -133,7 +163,7 @@ fn main() {
 
         // Handle user overrides first
         if force_x11 && is_wayland {
-            eprintln!("[QBZ] User override: Forcing X11 backend (QBZ_FORCE_X11=1)");
+            qbz_nix_lib::logging::log_startup("[QBZ] User override: Forcing X11 backend (QBZ_FORCE_X11=1)");
             std::env::set_var("GDK_BACKEND", "x11");
         } else if is_wayland && std::env::var_os("GDK_BACKEND").is_none() {
             // Force Wayland backend to avoid fallback issues
@@ -149,26 +179,26 @@ fn main() {
 
         // DMA-BUF renderer control (the critical NVIDIA fix)
         if force_dmabuf {
-            eprintln!("[QBZ] User override: Forcing DMA-BUF renderer enabled (QBZ_FORCE_DMABUF=1)");
-            eprintln!("[QBZ] Warning: This may cause crashes on NVIDIA + Wayland");
+            qbz_nix_lib::logging::log_startup("[QBZ] User override: Forcing DMA-BUF renderer enabled (QBZ_FORCE_DMABUF=1)");
+            qbz_nix_lib::logging::log_startup("[QBZ] Warning: This may cause crashes on NVIDIA + Wayland");
             // Do NOT set WEBKIT_DISABLE_DMABUF_RENDERER
         } else if disable_dmabuf {
-            eprintln!("[QBZ] User override: Forcing DMA-BUF renderer disabled (QBZ_DISABLE_DMABUF=1)");
+            qbz_nix_lib::logging::log_startup("[QBZ] User override: Forcing DMA-BUF renderer disabled (QBZ_DISABLE_DMABUF=1)");
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         } else if is_wayland && has_nvidia {
             // Automatic mitigation: NVIDIA + Wayland = known issue
-            eprintln!("[QBZ] Applying NVIDIA + Wayland workaround: disabling WebKit DMA-BUF renderer");
-            eprintln!("[QBZ] This prevents fatal protocol errors on NVIDIA GPUs");
-            eprintln!("[QBZ] To override: set QBZ_FORCE_DMABUF=1 (not recommended)");
+            qbz_nix_lib::logging::log_startup("[QBZ] Applying NVIDIA + Wayland workaround: disabling WebKit DMA-BUF renderer");
+            qbz_nix_lib::logging::log_startup("[QBZ] This prevents fatal protocol errors on NVIDIA GPUs");
+            qbz_nix_lib::logging::log_startup("[QBZ] To override: set QBZ_FORCE_DMABUF=1 (not recommended)");
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         } else if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
             // Non-NVIDIA systems: keep default behavior unless already set
             // This ensures Intel/AMD systems maintain full hardware acceleration
             if has_nvidia {
-                eprintln!("[QBZ] NVIDIA GPU on X11: applying DMA-BUF workaround for compatibility");
+                qbz_nix_lib::logging::log_startup("[QBZ] NVIDIA GPU on X11: applying DMA-BUF workaround for compatibility");
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
             } else {
-                eprintln!("[QBZ] Non-NVIDIA GPU: using default WebKit renderer (hardware accelerated)");
+                qbz_nix_lib::logging::log_startup("[QBZ] Non-NVIDIA GPU: using default WebKit renderer (hardware accelerated)");
             }
         }
     }

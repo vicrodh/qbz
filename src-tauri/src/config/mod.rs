@@ -10,6 +10,7 @@
 //! - Cached favorites
 
 pub mod audio_settings;
+pub mod developer_settings;
 pub mod download_settings;
 pub mod playback_preferences;
 pub mod favorites_preferences;
@@ -102,4 +103,11 @@ pub use remote_control_settings::{
     RemoteControlSettingsState,
     AllowedOrigin,
     AllowedOriginsState,
+};
+
+pub use developer_settings::{
+    DeveloperSettings,
+    DeveloperSettingsState,
+    get_developer_settings,
+    set_developer_force_dmabuf,
 };
