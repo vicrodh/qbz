@@ -119,24 +119,24 @@
     if (!album) return;
     albumTitle = album.title ?? '';
     albumArtist = album.artist ?? '';
-    const firstWithYear = tracks.find(t => typeof t.year === 'number')?.year;
+    const firstWithYear = tracks.find(trk => typeof trk.year === 'number')?.year;
     yearInput = (album.year ?? firstWithYear) ? String(album.year ?? firstWithYear) : '';
 
-    const firstGenre = tracks.find(t => (t.genre ?? '').trim())?.genre;
+    const firstGenre = tracks.find(trk => (trk.genre ?? '').trim())?.genre;
     genre = (album.genre ?? firstGenre ?? '').toString();
 
-    const firstCatalog = tracks.find(t => (t.catalog_number ?? '').trim())?.catalog_number;
+    const firstCatalog = tracks.find(trk => (trk.catalog_number ?? '').trim())?.catalog_number;
     catalogNumber = (album.catalog_number ?? firstCatalog ?? '').toString();
     albumTotalDiscs = totalDiscs;
     persistence = 'sidecar';
 
-    trackEdits = tracks.map(t => ({
-      id: t.id,
-      filePath: t.file_path,
-      cueStartSecs: t.cue_start_secs,
-      title: t.title ?? '',
-      discNumber: t.disc_number,
-      trackNumber: t.track_number
+    trackEdits = tracks.map(trk => ({
+      id: trk.id,
+      filePath: trk.file_path,
+      cueStartSecs: trk.cue_start_secs,
+      title: trk.title ?? '',
+      discNumber: trk.disc_number,
+      trackNumber: trk.track_number
     }));
   }
 
@@ -286,13 +286,13 @@
       year,
       genre: genre.trim() ? genre.trim() : null,
       catalogNumber: catalogNumber.trim() ? catalogNumber.trim() : null,
-      tracks: trackEdits.map(t => ({
-        id: t.id,
-        filePath: t.filePath,
-        cueStartSecs: t.cueStartSecs ?? null,
-        title: t.title.trim(),
-        discNumber: t.discNumber ?? null,
-        trackNumber: t.trackNumber ?? null
+      tracks: trackEdits.map(trk => ({
+        id: trk.id,
+        filePath: trk.filePath,
+        cueStartSecs: trk.cueStartSecs ?? null,
+        title: trk.title.trim(),
+        discNumber: trk.discNumber ?? null,
+        trackNumber: trk.trackNumber ?? null
       }))
     };
   }
@@ -322,13 +322,13 @@
       alert('Album title is required.');
       return;
     }
-    if (trackEdits.some(t => !t.title.trim())) {
+    if (trackEdits.some(trk => !trk.title.trim())) {
       alert('Track titles cannot be empty.');
       return;
     }
 
     if (persistence === 'direct') {
-      const anyCue = tracks.some(t => !!t.cue_file_path || typeof t.cue_start_secs === 'number');
+      const anyCue = tracks.some(trk => !!trk.cue_file_path || typeof trk.cue_start_secs === 'number');
       if (anyCue) {
         alert('Writing tags to files is not supported for CUE-based albums. Use sidecar mode.');
         return;
