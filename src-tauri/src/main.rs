@@ -2,6 +2,42 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 #[cfg(target_os = "linux")]
+fn is_virtual_machine() -> bool {
+    // DMI product name (most reliable)
+    if let Ok(product) = std::fs::read_to_string("/sys/class/dmi/id/product_name") {
+        let p = product.trim().to_lowercase();
+        if p.contains("virtualbox")
+            || p.contains("vmware")
+            || p.contains("qemu")
+            || p.contains("bochs")
+            || p.contains("hyper-v")
+        {
+            return true;
+        }
+    }
+    // DMI system vendor
+    if let Ok(vendor) = std::fs::read_to_string("/sys/class/dmi/id/sys_vendor") {
+        let v = vendor.trim().to_lowercase();
+        if v.contains("innotek")
+            || v.contains("vmware")
+            || v.contains("qemu")
+            || v.contains("xen")
+            || v.contains("parallels")
+        {
+            return true;
+        }
+    }
+    // Hypervisor type (Xen, KVM)
+    if let Ok(h) = std::fs::read_to_string("/sys/hypervisor/type") {
+        let h = h.trim().to_lowercase();
+        if !h.is_empty() {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "linux")]
 fn is_nvidia_gpu() -> bool {
     // Method 1: Check for NVIDIA driver via /proc
     if std::path::Path::new("/proc/driver/nvidia/version").exists() {
@@ -63,6 +99,8 @@ fn main() {
         let is_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
             || std::env::var("XDG_SESSION_TYPE").as_deref() == Ok("wayland");
         let has_nvidia = is_nvidia_gpu();
+        let is_vm = is_virtual_machine();
+        let force_software = std::env::var("QBZ_SOFTWARE_RENDER").as_deref() == Ok("1");
 
         // User overrides - these ALWAYS take precedence
         let force_dmabuf = std::env::var("QBZ_FORCE_DMABUF").as_deref() == Ok("1");
@@ -73,6 +111,24 @@ fn main() {
         eprintln!("[QBZ] Display server: {}", if is_wayland { "Wayland" } else { "X11" });
         if has_nvidia {
             eprintln!("[QBZ] NVIDIA GPU detected");
+        }
+        if is_vm {
+            eprintln!("[QBZ] Virtual machine detected");
+        }
+
+        // Software rendering: VM auto-detection or user override
+        // This bypasses EGL hardware initialization entirely, preventing
+        // "Could not create default EGL display" crashes on virtual GPUs
+        if force_software {
+            eprintln!("[QBZ] User override: forcing software rendering (QBZ_SOFTWARE_RENDER=1)");
+            std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        } else if is_vm {
+            eprintln!("[QBZ] Virtual machine detected: forcing software rendering to prevent EGL crashes");
+            std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         }
 
         // Handle user overrides first
