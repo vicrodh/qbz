@@ -5,7 +5,7 @@
   import Modal from './Modal.svelte';
   import { getConsoleLogsAsText } from '$lib/stores/consoleLogStore';
   import { showToast } from '$lib/stores/toastStore';
-  import { Loader2 } from 'lucide-svelte';
+  import { Loader2, Copy, Check } from 'lucide-svelte';
 
   interface Props {
     isOpen: boolean;
@@ -17,12 +17,18 @@
   let activeTab = $state<'terminal' | 'console'>('terminal');
   let terminalLogs = $state('');
   let consoleLogs = $state('');
-  let isUploading = $state(false);
+  let isUploadingTerminal = $state(false);
+  let isUploadingConsole = $state(false);
   let isLoading = $state(false);
-  let uploadedUrl = $state('');
+  let terminalUrl = $state('');
+  let consoleUrl = $state('');
+  let copiedTerminal = $state(false);
+  let copiedConsole = $state(false);
 
   async function loadLogs() {
     isLoading = true;
+    terminalUrl = '';
+    consoleUrl = '';
     try {
       const lines: string[] = await invoke('get_backend_logs');
       terminalLogs = lines.join('\n');
@@ -33,29 +39,35 @@
     isLoading = false;
   }
 
-  function handleOpen() {
-    if (isOpen) {
-      loadLogs();
-    }
-  }
-
   $effect(() => {
-    handleOpen();
+    if (isOpen) loadLogs();
   });
 
-  async function handleUpload() {
-    isUploading = true;
+  async function uploadTab(tab: 'terminal' | 'console') {
+    const content = tab === 'terminal' ? terminalLogs : consoleLogs;
+    if (tab === 'terminal') isUploadingTerminal = true;
+    else isUploadingConsole = true;
+
     try {
-      const combined = `=== QBZ Terminal Logs ===\n${terminalLogs}\n\n=== QBZ Console Logs ===\n${consoleLogs}`;
-      const url: string = await invoke('upload_logs_to_paste', { content: combined });
-      uploadedUrl = url;
+      const url: string = await invoke('upload_logs_to_paste', { content });
+      if (tab === 'terminal') terminalUrl = url;
+      else consoleUrl = url;
       await copyToClipboard(url);
       showToast($t('settings.developer.uploadSuccess'), 'success');
     } catch (e) {
       showToast(`${$t('settings.developer.uploadError')}: ${e}`, 'error');
     } finally {
-      isUploading = false;
+      if (tab === 'terminal') isUploadingTerminal = false;
+      else isUploadingConsole = false;
     }
+  }
+
+  async function copyUrl(tab: 'terminal' | 'console') {
+    const url = tab === 'terminal' ? terminalUrl : consoleUrl;
+    if (!url) return;
+    await copyToClipboard(url);
+    if (tab === 'terminal') { copiedTerminal = true; setTimeout(() => copiedTerminal = false, 2000); }
+    else { copiedConsole = true; setTimeout(() => copiedConsole = false, 2000); }
   }
 </script>
 
@@ -68,6 +80,7 @@
         onclick={() => activeTab = 'terminal'}
       >
         {$t('settings.developer.tabTerminal')}
+        {#if terminalUrl}<span class="tab-check">&#10003;</span>{/if}
       </button>
       <button
         class="tab"
@@ -75,6 +88,7 @@
         onclick={() => activeTab = 'console'}
       >
         {$t('settings.developer.tabConsole')}
+        {#if consoleUrl}<span class="tab-check">&#10003;</span>{/if}
       </button>
     </div>
 
@@ -91,20 +105,41 @@
 
   {#snippet footer()}
     <div class="footer-content">
-      <button
-        class="upload-btn"
-        onclick={handleUpload}
-        disabled={isUploading}
-      >
-        {#if isUploading}
-          <Loader2 size={14} class="spin" />
-          {$t('settings.developer.uploading')}
-        {:else}
-          {$t('settings.developer.uploadLogs')}
+      <div class="footer-left">
+        <button
+          class="upload-btn"
+          onclick={() => uploadTab(activeTab)}
+          disabled={activeTab === 'terminal' ? isUploadingTerminal : isUploadingConsole}
+        >
+          {#if (activeTab === 'terminal' ? isUploadingTerminal : isUploadingConsole)}
+            <Loader2 size={14} class="spin" />
+            {$t('settings.developer.uploading')}
+          {:else}
+            {$t('settings.developer.uploadTab', { values: { tab: activeTab === 'terminal' ? $t('settings.developer.tabTerminal') : $t('settings.developer.tabConsole') } })}
+          {/if}
+        </button>
+        {#if activeTab === 'terminal' && terminalUrl}
+          <div class="url-row">
+            <code class="uploaded-url">{terminalUrl}</code>
+            <button class="copy-url-btn" onclick={() => copyUrl('terminal')}>
+              {#if copiedTerminal}<Check size={12} />{:else}<Copy size={12} />{/if}
+            </button>
+          </div>
         {/if}
-      </button>
-      {#if uploadedUrl}
-        <code class="uploaded-url">{uploadedUrl}</code>
+        {#if activeTab === 'console' && consoleUrl}
+          <div class="url-row">
+            <code class="uploaded-url">{consoleUrl}</code>
+            <button class="copy-url-btn" onclick={() => copyUrl('console')}>
+              {#if copiedConsole}<Check size={12} />{:else}<Copy size={12} />{/if}
+            </button>
+          </div>
+        {/if}
+      </div>
+
+      {#if terminalUrl || consoleUrl}
+        <p class="help-hint">
+          {$t('settings.developer.bugReportHint')}
+        </p>
       {/if}
     </div>
   {/snippet}
@@ -118,6 +153,9 @@
   }
 
   .tab {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     padding: 6px 16px;
     border: 1px solid var(--bg-tertiary);
     background: transparent;
@@ -137,6 +175,11 @@
     background: var(--accent-primary);
     color: white;
     border-color: var(--accent-primary);
+  }
+
+  .tab-check {
+    font-size: 11px;
+    opacity: 0.8;
   }
 
   .log-container {
@@ -166,6 +209,20 @@
     color: var(--text-muted);
   }
 
+  .footer-content {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+  }
+
+  .footer-left {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
   .upload-btn {
     display: flex;
     align-items: center;
@@ -178,6 +235,7 @@
     font-size: 13px;
     cursor: pointer;
     transition: all 150ms ease;
+    white-space: nowrap;
   }
 
   .upload-btn:hover:not(:disabled) {
@@ -189,11 +247,10 @@
     cursor: not-allowed;
   }
 
-  .footer-content {
+  .url-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    width: 100%;
+    gap: 6px;
   }
 
   .uploaded-url {
@@ -204,9 +261,33 @@
     padding: 4px 8px;
     border-radius: 4px;
     user-select: all;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+  }
+
+  .copy-url-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    background: transparent;
+    border: none;
+    color: var(--text-muted);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .copy-url-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .help-hint {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+    margin: 0;
+    max-width: 280px;
+    text-align: right;
   }
 
   :global(.spin) {

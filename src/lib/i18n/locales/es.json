@@ -724,9 +724,11 @@
       "tabTerminal": "Terminal",
       "tabConsole": "Consola",
       "uploadLogs": "Subir a 0x0.st",
+      "uploadTab": "Subir {tab}",
       "uploadSuccess": "URL del log copiada al portapapeles",
       "uploadError": "Error al subir los logs",
-      "uploading": "Subiendo..."
+      "uploading": "Subiendo...",
+      "bugReportHint": "Si vas a reportar un bug, sube ambas pestanas y comparte las dos URLs — nos ayuda a resolver el problema mas rapido. Gracias!"
     },
     "blacklist": {
       "title": "Lista Negra de Artistas",

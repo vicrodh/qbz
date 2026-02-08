@@ -724,9 +724,11 @@
       "tabTerminal": "Terminal",
       "tabConsole": "Console",
       "uploadLogs": "Upload to 0x0.st",
+      "uploadTab": "Upload {tab}",
       "uploadSuccess": "Log URL copied to clipboard",
       "uploadError": "Failed to upload logs",
-      "uploading": "Uploading..."
+      "uploading": "Uploading...",
+      "bugReportHint": "Reporting a bug? Upload both tabs and share both URLs — it helps us fix things faster. Thanks!"
     },
     "blacklist": {
       "title": "Artist Blacklist",

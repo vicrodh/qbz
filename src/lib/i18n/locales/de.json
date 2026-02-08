@@ -704,9 +704,11 @@
       "tabTerminal": "Terminal",
       "tabConsole": "Konsole",
       "uploadLogs": "Zu 0x0.st hochladen",
+      "uploadTab": "{tab} hochladen",
       "uploadSuccess": "Log-URL in Zwischenablage kopiert",
       "uploadError": "Fehler beim Hochladen der Logs",
-      "uploading": "Wird hochgeladen..."
+      "uploading": "Wird hochgeladen...",
+      "bugReportHint": "Fehler melden? Laden Sie beide Tabs hoch und teilen Sie beide URLs — das hilft uns, Probleme schneller zu beheben. Danke!"
     },
     "blacklist": {
       "title": "Künstler-Blacklist",

@@ -704,9 +704,11 @@
       "tabTerminal": "Terminal",
       "tabConsole": "Console",
       "uploadLogs": "Téléverser sur 0x0.st",
+      "uploadTab": "Téléverser {tab}",
       "uploadSuccess": "URL du log copiée dans le presse-papiers",
       "uploadError": "Échec du téléversement des logs",
-      "uploading": "Téléversement..."
+      "uploading": "Téléversement...",
+      "bugReportHint": "Vous signalez un bug ? Téléversez les deux onglets et partagez les deux URLs — cela nous aide a résoudre les problèmes plus vite. Merci !"
     },
     "blacklist": {
       "title": "Liste noire des artistes",
