@@ -364,12 +364,11 @@
     font-family: 'LINE Seed JP', var(--font-sans);
     font-size: 10px;
     font-weight: 100;
-    line-height: 1.2;
     color: var(--alpha-85);
     background: var(--alpha-10);
     border: 1px solid var(--alpha-15);
     border-radius: 4px;
-    padding: 2px 6px;
+    padding: 4px 6px;
     min-width: 90px;
     text-align: center;
     box-sizing: border-box;
@@ -637,15 +636,12 @@
   }
 
   .artist.artist-link {
-    all: unset;
-    display: block;
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--text-muted);
-    line-height: 1.4;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    background: none;
+    border: none;
+    padding: 0;
+    margin: 0;
+    text-align: left;
+    width: 100%;
     cursor: pointer;
   }
 
