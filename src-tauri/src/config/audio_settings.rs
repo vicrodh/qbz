@@ -30,6 +30,12 @@ pub struct AudioSettings {
     /// Cached max sample rate of the selected device (set when device is selected)
     /// Used when limit_quality_to_device is true
     pub device_max_sample_rate: Option<u32>,
+    /// When true, apply volume normalization using ReplayGain metadata.
+    /// When false (default), the audio pipeline is 100% bit-perfect — no sample modification.
+    pub normalization_enabled: bool,
+    /// Target loudness in LUFS for normalization.
+    /// Common values: -14.0 (Spotify/YouTube), -18.0 (audiophile), -23.0 (EBU broadcast)
+    pub normalization_target_lufs: f32,
 }
 
 impl Default for AudioSettings {
@@ -47,6 +53,8 @@ impl Default for AudioSettings {
             streaming_only: false,  // Disabled by default (cache tracks for instant replay)
             limit_quality_to_device: false,  // Disabled in 1.1.9 — detection logic unreliable (#45)
             device_max_sample_rate: None,   // Set when device is selected
+            normalization_enabled: false,   // Off by default — preserves bit-perfect pipeline
+            normalization_target_lufs: -14.0, // Spotify/YouTube standard
         }
     }
 }
@@ -90,6 +98,8 @@ impl AudioSettingsStore {
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN streaming_only INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN limit_quality_to_device INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN device_max_sample_rate INTEGER", []);
+        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN normalization_enabled INTEGER DEFAULT 0", []);
+        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN normalization_target_lufs REAL DEFAULT -14.0", []);
 
         Ok(Self { conn })
     }
@@ -108,7 +118,7 @@ impl AudioSettingsStore {
     pub fn get_settings(&self) -> Result<AudioSettings, String> {
         self.conn
             .query_row(
-                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate FROM audio_settings WHERE id = 1",
+                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate, normalization_enabled, normalization_target_lufs FROM audio_settings WHERE id = 1",
                 [],
                 |row| {
                     // Parse backend_type from JSON string
@@ -134,6 +144,8 @@ impl AudioSettingsStore {
                         streaming_only: row.get::<_, Option<i64>>(9)?.unwrap_or(0) != 0,
                         limit_quality_to_device: row.get::<_, Option<i64>>(10)?.unwrap_or(1) != 0,
                         device_max_sample_rate: row.get::<_, Option<i64>>(11)?.map(|r| r as u32),
+                        normalization_enabled: row.get::<_, Option<i64>>(12)?.unwrap_or(0) != 0,
+                        normalization_target_lufs: row.get::<_, Option<f64>>(13)?.unwrap_or(-14.0) as f32,
                     })
                 },
             )
@@ -269,6 +281,26 @@ impl AudioSettingsStore {
                 params![rate.map(|r| r as i64)],
             )
             .map_err(|e| format!("Failed to set device max sample rate: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_normalization_enabled(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET normalization_enabled = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set normalization enabled: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_normalization_target_lufs(&self, target: f32) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET normalization_target_lufs = ?1 WHERE id = 1",
+                params![target as f64],
+            )
+            .map_err(|e| format!("Failed to set normalization target LUFS: {}", e))?;
         Ok(())
     }
 }
@@ -447,4 +479,26 @@ pub fn set_audio_device_max_sample_rate(
     let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_device_max_sample_rate(rate)
+}
+
+#[tauri::command]
+pub fn set_audio_normalization_enabled(
+    state: tauri::State<'_, AudioSettingsState>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("Command: set_audio_normalization_enabled {}", enabled);
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_normalization_enabled(enabled)
+}
+
+#[tauri::command]
+pub fn set_audio_normalization_target(
+    state: tauri::State<'_, AudioSettingsState>,
+    target_lufs: f32,
+) -> Result<(), String> {
+    log::info!("Command: set_audio_normalization_target {} LUFS", target_lufs);
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_normalization_target_lufs(target_lufs)
 }

@@ -37,7 +37,7 @@ use symphonia::core::probe::Hint;
 use symphonia::default::{get_codecs, get_probe};
 
 use crate::api::{client::QobuzClient, models::Quality};
-use crate::audio::{AudioBackendType, AudioDiagnostic, BackendConfig, BackendManager, DiagnosticSource};
+use crate::audio::{AudioBackendType, AudioDiagnostic, BackendConfig, BackendManager, DiagnosticSource, extract_replaygain, calculate_gain_factor};
 use crate::config::audio_settings::AudioSettings;
 use crate::visualizer::{VisualizerTap, TappedSource};
 use playback_engine::PlaybackEngine;
@@ -682,11 +682,21 @@ impl Player {
         thread::spawn(move || {
             log::info!("Audio thread starting...");
 
-            // Helper to wrap source with visualizer tap and diagnostic capture
-            let wrap_source = |source: Box<dyn Source<Item = f32> + Send>| -> Box<dyn Source<Item = f32> + Send> {
+            // Helper to wrap source with visualizer tap, normalization, and diagnostic capture
+            // Pipeline order: Diagnostic (raw) → Amplify (normalization) → Visualizer
+            // When normalization_gain is None, no Amplify wrapper is inserted (bit-perfect)
+            let wrap_source = |source: Box<dyn Source<Item = f32> + Send>, normalization_gain: Option<f32>| -> Box<dyn Source<Item = f32> + Send> {
                 // Diagnostic tap (innermost — captures raw decoded samples)
                 let source: Box<dyn Source<Item = f32> + Send> =
                     Box::new(DiagnosticSource::new(source, thread_diagnostic.clone()));
+
+                // Normalization gain (only when enabled — no wrapper at all when OFF)
+                let source: Box<dyn Source<Item = f32> + Send> = if let Some(gain) = normalization_gain {
+                    log::info!("Audio thread: applying normalization gain factor {:.4}", gain);
+                    Box::new(source.amplify(gain))
+                } else {
+                    source
+                };
 
                 // Visualizer tap (outermost)
                 if let Some(ref tap) = thread_viz_tap {
@@ -822,6 +832,8 @@ impl Player {
             const PAUSE_SUSPEND_DELAY_MS: u64 = 2000;
             let mut pause_suspend_deadline: Option<Instant> = None;
             let mut last_empty_check = Instant::now();
+            // Current track's normalization gain factor (stored for reuse on resume/seek)
+            let mut current_normalization_gain: Option<f32> = None;
 
             log::info!("Audio thread ready and waiting for commands");
 
@@ -834,7 +846,8 @@ impl Player {
                                       consecutive_sink_failures: &mut u32,
                                       pause_suspend_deadline: &mut Option<Instant>,
                                       current_sample_rate: &mut Option<u32>,
-                                      current_channels: &mut Option<u16>| {
+                                      current_channels: &mut Option<u16>,
+                                      current_normalization_gain: &mut Option<f32>| {
                 match command {
                     AudioCommand::Play { data, track_id, duration_secs, sample_rate, channels } => {
                         log::info!(
@@ -1129,8 +1142,19 @@ impl Player {
                             .unwrap_or(duration_secs);
                         thread_state.duration.store(actual_duration, Ordering::SeqCst);
 
-                        // Wrap source for visualization (if enabled)
-                        let source = wrap_source(source);
+                        // Calculate normalization gain if enabled
+                        let normalization = thread_settings
+                            .lock()
+                            .ok()
+                            .filter(|s| s.normalization_enabled)
+                            .and_then(|s| {
+                                let target = s.normalization_target_lufs;
+                                extract_replaygain(&data).map(|rg| calculate_gain_factor(&rg, target))
+                            });
+                        *current_normalization_gain = normalization;
+
+                        // Wrap source with diagnostic, normalization, and visualizer
+                        let source = wrap_source(source, normalization);
                         if let Err(e) = engine.append(source) {
                             log::error!("Failed to append source to engine: {}", e);
                             return;
@@ -1143,8 +1167,9 @@ impl Player {
 
                         *current_engine = Some(engine);
                         log::info!(
-                            "Audio thread: playback started, duration: {}s",
-                            actual_duration
+                            "Audio thread: playback started, duration: {}s, normalization: {}",
+                            actual_duration,
+                            normalization.map(|g| format!("{:.4}x", g)).unwrap_or_else(|| "off".to_string())
                         );
                     }
                     AudioCommand::PlayStreaming { source, track_id, sample_rate, channels, duration_secs } => {
@@ -1353,10 +1378,24 @@ impl Player {
                         // This allows the seekbar to show progress even during streaming
                         thread_state.duration.store(duration_secs, Ordering::SeqCst);
 
+                        // Normalization for streaming: try to extract from buffered data
+                        // If not enough data is buffered yet, skip (bit-perfect for this play)
+                        let normalization = thread_settings
+                            .lock()
+                            .ok()
+                            .filter(|s| s.normalization_enabled)
+                            .and_then(|s| {
+                                let target = s.normalization_target_lufs;
+                                source.get_buffered_data().and_then(|data| {
+                                    extract_replaygain(&data).map(|rg| calculate_gain_factor(&rg, target))
+                                })
+                            });
+                        *current_normalization_gain = normalization;
+
                         // Box the incremental source to match the expected type
                         let source_to_play: Box<dyn Source<Item = f32> + Send> = Box::new(incremental_source);
-                        // Wrap source for visualization (if enabled)
-                        let source_to_play = wrap_source(source_to_play);
+                        // Wrap source with diagnostic, normalization, and visualizer
+                        let source_to_play = wrap_source(source_to_play, normalization);
                         if let Err(e) = engine.append(source_to_play) {
                             log::error!("Failed to append streaming source to engine: {}", e);
                             return;
@@ -1469,8 +1508,9 @@ impl Player {
                                 source
                             };
 
-                            // Wrap source for visualization (if enabled)
-                            let skipped_source = wrap_source(skipped_source);
+                            // Wrap source with diagnostic, normalization, and visualizer
+                            // Reuse the gain from the original Play (stored in current_normalization_gain)
+                            let skipped_source = wrap_source(skipped_source, *current_normalization_gain);
                             if let Err(e) = engine.append(skipped_source) {
                                 log::error!("Failed to append source for resume: {}", e);
                                 return;
@@ -1497,6 +1537,7 @@ impl Player {
                         }
                         *current_audio_data = None;
                         *current_streaming_source = None;
+                        *current_normalization_gain = None;
                         thread_state.is_playing.store(false, Ordering::SeqCst);
                         thread_state.position.store(0, Ordering::SeqCst);
                         thread_state.playback_start_millis.store(0, Ordering::SeqCst);
@@ -1568,8 +1609,9 @@ impl Player {
                         let skip_duration = Duration::from_secs(position_secs);
                         let skipped_source: Box<dyn Source<Item = f32> + Send> = Box::new(source.skip_duration(skip_duration));
 
-                        // Wrap source for visualization (if enabled)
-                        let skipped_source = wrap_source(skipped_source);
+                        // Wrap source with diagnostic, normalization, and visualizer
+                        // Reuse the gain from the current track
+                        let skipped_source = wrap_source(skipped_source, *current_normalization_gain);
                         if let Err(e) = engine.append(skipped_source) {
                             log::error!("Failed to append source for seek: {}", e);
                             return;
@@ -1647,6 +1689,7 @@ impl Player {
                             &mut pause_suspend_deadline,
                             &mut current_sample_rate,
                             &mut current_channels,
+                            &mut current_normalization_gain,
                         ),
                         Err(RecvTimeoutError::Timeout) => {
                             let now = Instant::now();
@@ -1698,6 +1741,7 @@ impl Player {
                                     &mut pause_suspend_deadline,
                                     &mut current_sample_rate,
                                     &mut current_channels,
+                                    &mut current_normalization_gain,
                                 ),
                                 Err(RecvTimeoutError::Timeout) => {}
                                 Err(RecvTimeoutError::Disconnected) => {
@@ -1722,6 +1766,7 @@ impl Player {
                             &mut pause_suspend_deadline,
                             &mut current_sample_rate,
                             &mut current_channels,
+                            &mut current_normalization_gain,
                         ),
                         Err(_) => {
                             log::info!("Audio thread: channel closed, exiting");

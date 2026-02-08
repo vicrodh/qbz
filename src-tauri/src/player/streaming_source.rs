@@ -242,6 +242,24 @@ impl BufferedMediaSource {
         }
     }
 
+    /// Get a copy of the currently buffered data (for metadata extraction).
+    ///
+    /// Returns whatever data has been downloaded so far, even if incomplete.
+    /// Useful for extracting file-level metadata (e.g., ReplayGain tags)
+    /// which are typically in the first few KB of the file.
+    pub fn get_buffered_data(&self) -> Option<Vec<u8>> {
+        let (lock, _) = &*self.state;
+        if let Ok(state) = lock.lock() {
+            if state.data.is_empty() {
+                None
+            } else {
+                Some(state.data.clone())
+            }
+        } else {
+            None
+        }
+    }
+
     /// Get download progress as a fraction (0.0 to 1.0)
     ///
     /// Returns None if total size is unknown
