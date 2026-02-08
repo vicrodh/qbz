@@ -7,6 +7,7 @@
     SkipForward,
     Repeat,
     Repeat1,
+    Disc3,
     Heart,
     Plus,
     Volume2,
@@ -72,6 +73,8 @@
     normalizationEnabled?: boolean;
     normalizationGain?: number | null;
     onToggleNormalization?: () => void;
+    gaplessEnabled?: boolean;
+    onToggleGapless?: () => void;
   }
 
   let {
@@ -116,7 +119,9 @@
     queueOpen = false,
     normalizationEnabled = false,
     normalizationGain = null,
-    onToggleNormalization
+    onToggleNormalization,
+    gaplessEnabled = false,
+    onToggleGapless
   }: Props = $props();
 
   let progressRef: HTMLDivElement;
@@ -272,6 +277,15 @@
         {:else}
           <Repeat size={16} />
         {/if}
+      </button>
+
+      <button
+        class="control-btn"
+        class:active={gaplessEnabled}
+        onclick={onToggleGapless}
+        title={gaplessEnabled ? $t('player.gaplessOn') : $t('player.gaplessOff')}
+      >
+        <Disc3 size={16} />
       </button>
 
       <button class="control-btn" onclick={onAddToPlaylist} title={$t('actions.addToPlaylist')}>

@@ -383,6 +383,8 @@
     "repeatAll": "Repeat All",
     "repeatOne": "Repeat One",
     "repeatOff": "Repeat Off",
+    "gaplessOn": "Gapless: On",
+    "gaplessOff": "Gapless: Off",
     "previous": "Previous",
     "next": "Next",
     "play": "Play",

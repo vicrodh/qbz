@@ -383,6 +383,8 @@
     "repeatAll": "Repetir Todo",
     "repeatOne": "Repetir Una",
     "repeatOff": "No Repetir",
+    "gaplessOn": "Sin pausas: Activado",
+    "gaplessOff": "Sin pausas: Desactivado",
     "previous": "Anterior",
     "next": "Siguiente",
     "play": "Reproducir",

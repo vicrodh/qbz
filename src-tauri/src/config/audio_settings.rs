@@ -36,6 +36,9 @@ pub struct AudioSettings {
     /// Target loudness in LUFS for normalization.
     /// Common values: -14.0 (Spotify/YouTube), -18.0 (audiophile), -23.0 (EBU broadcast)
     pub normalization_target_lufs: f32,
+    /// When true, tracks with the same format are cross-faded seamlessly via Rodio Sink queueing.
+    /// Only works with cached tracks on Rodio backend (not ALSA Direct or streaming).
+    pub gapless_enabled: bool,
 }
 
 impl Default for AudioSettings {
@@ -55,6 +58,7 @@ impl Default for AudioSettings {
             device_max_sample_rate: None,   // Set when device is selected
             normalization_enabled: false,   // Off by default — preserves bit-perfect pipeline
             normalization_target_lufs: -14.0, // Spotify/YouTube standard
+            gapless_enabled: true, // On by default — seamless track transitions
         }
     }
 }
@@ -100,6 +104,7 @@ impl AudioSettingsStore {
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN device_max_sample_rate INTEGER", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN normalization_enabled INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN normalization_target_lufs REAL DEFAULT -14.0", []);
+        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN gapless_enabled INTEGER DEFAULT 1", []);
 
         Ok(Self { conn })
     }
@@ -118,7 +123,7 @@ impl AudioSettingsStore {
     pub fn get_settings(&self) -> Result<AudioSettings, String> {
         self.conn
             .query_row(
-                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate, normalization_enabled, normalization_target_lufs FROM audio_settings WHERE id = 1",
+                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate, normalization_enabled, normalization_target_lufs, gapless_enabled FROM audio_settings WHERE id = 1",
                 [],
                 |row| {
                     // Parse backend_type from JSON string
@@ -146,6 +151,7 @@ impl AudioSettingsStore {
                         device_max_sample_rate: row.get::<_, Option<i64>>(11)?.map(|r| r as u32),
                         normalization_enabled: row.get::<_, Option<i64>>(12)?.unwrap_or(0) != 0,
                         normalization_target_lufs: row.get::<_, Option<f64>>(13)?.unwrap_or(-14.0) as f32,
+                        gapless_enabled: row.get::<_, Option<i64>>(14)?.unwrap_or(1) != 0,
                     })
                 },
             )
@@ -291,6 +297,16 @@ impl AudioSettingsStore {
                 params![enabled as i64],
             )
             .map_err(|e| format!("Failed to set normalization enabled: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_gapless_enabled(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET gapless_enabled = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set gapless enabled: {}", e))?;
         Ok(())
     }
 
@@ -501,4 +517,15 @@ pub fn set_audio_normalization_target(
     let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_normalization_target_lufs(target_lufs)
+}
+
+#[tauri::command]
+pub fn set_audio_gapless_enabled(
+    state: tauri::State<'_, AudioSettingsState>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("Command: set_audio_gapless_enabled {}", enabled);
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_gapless_enabled(enabled)
 }

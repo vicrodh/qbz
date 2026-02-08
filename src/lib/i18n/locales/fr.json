@@ -369,6 +369,8 @@
     "repeatAll": "Répéter tout",
     "repeatOne": "Répéter un",
     "repeatOff": "Répéter désactivé",
+    "gaplessOn": "Sans coupure : Activé",
+    "gaplessOff": "Sans coupure : Désactivé",
     "previous": "Précédent",
     "next": "Suivant",
     "play": "Lecture",

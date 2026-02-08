@@ -1997,8 +1997,14 @@ impl Player {
                                 }
 
                                 // Gapless readiness: signal frontend when ~5s remain
-                                // Only when: playing, not streaming, no gapless already pending
-                                if dur > 0
+                                // Only when: playing, not streaming, no gapless already pending, gapless enabled
+                                let gapless_enabled = thread_settings
+                                    .lock()
+                                    .ok()
+                                    .map(|s| s.gapless_enabled)
+                                    .unwrap_or(false);
+                                if gapless_enabled
+                                    && dur > 0
                                     && pos + 5 >= dur
                                     && gapless_pending.is_none()
                                     && !thread_state.is_gapless_ready()
