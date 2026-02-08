@@ -2127,14 +2127,14 @@
       selectedBackend = 'Auto';
       selectedAlsaPlugin = 'hw (Direct Hardware)';
       alsaHardwareVolume = false;
-      streamFirstTrack = true;
+      streamFirstTrack = false;
       streamBufferSeconds = 3;
       streamingOnly = false;
       limitQualityToDevice = false;
       // Reset playback UI state to defaults
       autoplayMode = 'continue';
-      showContextIcon = true;
-      gaplessPlayback = true;
+      showContextIcon = false;
+      gaplessPlayback = false;
       showToast($t('settings.audio.resetSuccess'), 'success');
     } catch (err) {
       console.error('Failed to reset audio settings:', err);

@@ -55,7 +55,7 @@ impl Default for PlaybackPreferences {
     fn default() -> Self {
         Self {
             autoplay_mode: AutoplayMode::ContinueWithinSource,
-            show_context_icon: true,
+            show_context_icon: false,
         }
     }
 }
@@ -99,7 +99,7 @@ impl PlaybackPreferencesStore {
         if !column_exists {
             info!("[PlaybackPrefs] Migrating: adding show_context_icon column");
             conn.execute(
-                "ALTER TABLE playback_preferences ADD COLUMN show_context_icon INTEGER NOT NULL DEFAULT 1",
+                "ALTER TABLE playback_preferences ADD COLUMN show_context_icon INTEGER NOT NULL DEFAULT 0",
                 []
             ).map_err(|e| format!("Failed to add show_context_icon column: {}", e))?;
             info!("[PlaybackPrefs] Migration successful");
@@ -108,7 +108,7 @@ impl PlaybackPreferencesStore {
         // Step 4: Insert default row if it doesn't exist
         conn.execute(
             "INSERT OR IGNORE INTO playback_preferences (id, autoplay_mode, show_context_icon)
-            VALUES (1, 'continue', 1)",
+            VALUES (1, 'continue', 0)",
             []
         ).map_err(|e| format!("Failed to insert default preferences: {}", e))?;
 

@@ -51,14 +51,14 @@ impl Default for AudioSettings {
             backend_type: None,  // Auto-detect (PipeWire if available, else ALSA)
             alsa_plugin: Some(AlsaPlugin::Hw),  // Default to hw (bit-perfect)
             alsa_hardware_volume: false,  // Disabled by default (maximum compatibility)
-            stream_first_track: true,  // Enabled by default for faster playback start
+            stream_first_track: false,  // Disabled by default — user opts in
             stream_buffer_seconds: 3,  // 3 seconds initial buffer
             streaming_only: false,  // Disabled by default (cache tracks for instant replay)
             limit_quality_to_device: false,  // Disabled in 1.1.9 — detection logic unreliable (#45)
             device_max_sample_rate: None,   // Set when device is selected
             normalization_enabled: false,   // Off by default — preserves bit-perfect pipeline
             normalization_target_lufs: -14.0, // Spotify/YouTube standard
-            gapless_enabled: true, // On by default — seamless track transitions
+            gapless_enabled: false, // Off by default — user opts in
         }
     }
 }
@@ -104,7 +104,7 @@ impl AudioSettingsStore {
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN device_max_sample_rate INTEGER", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN normalization_enabled INTEGER DEFAULT 0", []);
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN normalization_target_lufs REAL DEFAULT -14.0", []);
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN gapless_enabled INTEGER DEFAULT 1", []);
+        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN gapless_enabled INTEGER DEFAULT 0", []);
 
         Ok(Self { conn })
     }
@@ -151,7 +151,7 @@ impl AudioSettingsStore {
                         device_max_sample_rate: row.get::<_, Option<i64>>(11)?.map(|r| r as u32),
                         normalization_enabled: row.get::<_, Option<i64>>(12)?.unwrap_or(0) != 0,
                         normalization_target_lufs: row.get::<_, Option<f64>>(13)?.unwrap_or(-14.0) as f32,
-                        gapless_enabled: row.get::<_, Option<i64>>(14)?.unwrap_or(1) != 0,
+                        gapless_enabled: row.get::<_, Option<i64>>(14)?.unwrap_or(0) != 0,
                     })
                 },
             )
