@@ -364,12 +364,12 @@
     font-family: 'LINE Seed JP', var(--font-sans);
     font-size: 10px;
     font-weight: 100;
-    line-height: 1;
+    line-height: 1.2;
     color: var(--alpha-85);
     background: var(--alpha-10);
     border: 1px solid var(--alpha-15);
     border-radius: 4px;
-    padding: 1px 6px;
+    padding: 2px 6px;
     min-width: 90px;
     text-align: center;
     box-sizing: border-box;
@@ -662,7 +662,8 @@
     white-space: nowrap;
   }
 
-  .album-card:hover .artist.scrollable .artist-text {
+  .album-card:hover .artist.scrollable .artist-text,
+  .artist.artist-link.scrollable:hover .artist-text {
     animation: title-ticker var(--ticker-duration) linear infinite;
     will-change: transform;
   }
