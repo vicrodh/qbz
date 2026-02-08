@@ -318,8 +318,10 @@ pub async fn get_album(
 
     // Cache miss - fetch from API
     log::debug!("Cache miss for album {}, fetching from API", album_id);
-    let client = state.client.lock().await;
-    let album = client.get_album(&album_id).await.map_err(|e| e.to_string())?;
+    let album = {
+        let client = state.client.lock().await;
+        client.get_album(&album_id).await.map_err(|e| e.to_string())?
+    };
 
     // Cache the result
     {
@@ -342,11 +344,13 @@ pub async fn get_featured_albums(
     genre_id: Option<u64>,
     state: State<'_, AppState>,
 ) -> Result<SearchResultsPage<Album>, String> {
-    let client = state.client.lock().await;
-    let result = client
-        .get_featured_albums(&featured_type, limit.unwrap_or(12), offset.unwrap_or(0), genre_id)
-        .await
-        .map_err(|e| e.to_string())?;
+    let result = {
+        let client = state.client.lock().await;
+        client
+            .get_featured_albums(&featured_type, limit.unwrap_or(12), offset.unwrap_or(0), genre_id)
+            .await
+            .map_err(|e| e.to_string())?
+    };
     Ok(result)
 }
 
@@ -375,8 +379,10 @@ pub async fn get_track(
 
     // Cache miss - fetch from API
     log::debug!("Cache miss for track {}, fetching from API", track_id);
-    let client = state.client.lock().await;
-    let track = client.get_track(track_id).await.map_err(|e| e.to_string())?;
+    let track = {
+        let client = state.client.lock().await;
+        client.get_track(track_id).await.map_err(|e| e.to_string())?
+    };
 
     // Cache the result
     {
@@ -462,11 +468,13 @@ pub async fn get_artist_basic(
 
     // Cache miss - fetch from API (without albums - much faster)
     log::debug!("Cache miss for artist_basic {} (locale: {}), fetching from API", artist_id, locale);
-    let client = state.client.lock().await;
-    let artist = client
-        .get_artist_basic(artist_id)
-        .await
-        .map_err(|e| e.to_string())?;
+    let artist = {
+        let client = state.client.lock().await;
+        client
+            .get_artist_basic(artist_id)
+            .await
+            .map_err(|e| e.to_string())?
+    };
 
     // Cache the result
     {
@@ -658,11 +666,13 @@ pub async fn get_discover_index(
     genre_ids: Option<Vec<u64>>,
     state: State<'_, AppState>,
 ) -> Result<DiscoverResponse, String> {
-    let client = state.client.lock().await;
-    let result = client
-        .get_discover_index(genre_ids)
-        .await
-        .map_err(|e| e.to_string())?;
+    let result = {
+        let client = state.client.lock().await;
+        client
+            .get_discover_index(genre_ids)
+            .await
+            .map_err(|e| e.to_string())?
+    };
     Ok(result)
 }
 

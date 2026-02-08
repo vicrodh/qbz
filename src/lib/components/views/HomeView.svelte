@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { Music, User, Loader2 } from 'lucide-svelte';
   import {
@@ -747,10 +747,11 @@
 
     // Start Qobuz API calls in parallel (don't await)
     if (isSectionVisible('newReleases')) {
-      fetchFeaturedAlbums('new-releases', homeLimits.featuredAlbums, genreIds).then(albums => {
+      fetchFeaturedAlbums('new-releases', homeLimits.featuredAlbums, genreIds).then(async (albums) => {
         newReleases = albums;
         loadingNewReleases = false;
-        loadAllAlbumDownloadStatuses(albums);
+        await tick();
+        loadAllAlbumDownloadStatuses(albums).catch(() => {});
       }).catch(err => {
         console.error('Failed to load newReleases:', err);
         loadingNewReleases = false;
@@ -760,10 +761,11 @@
     }
 
     if (isSectionVisible('pressAwards')) {
-      fetchFeaturedAlbums('press-awards', homeLimits.featuredAlbums, genreIds).then(albums => {
+      fetchFeaturedAlbums('press-awards', homeLimits.featuredAlbums, genreIds).then(async (albums) => {
         pressAwards = albums;
         loadingPressAwards = false;
-        loadAllAlbumDownloadStatuses(albums);
+        await tick();
+        loadAllAlbumDownloadStatuses(albums).catch(() => {});
       }).catch(err => {
         console.error('Failed to load pressAwards:', err);
         loadingPressAwards = false;
@@ -773,10 +775,11 @@
     }
 
     if (isSectionVisible('mostStreamed')) {
-      fetchFeaturedAlbums('most-streamed', homeLimits.featuredAlbums, genreIds).then(albums => {
+      fetchFeaturedAlbums('most-streamed', homeLimits.featuredAlbums, genreIds).then(async (albums) => {
         mostStreamed = albums;
         loadingMostStreamed = false;
-        loadAllAlbumDownloadStatuses(albums);
+        await tick();
+        loadAllAlbumDownloadStatuses(albums).catch(() => {});
       }).catch(err => {
         console.error('Failed to load mostStreamed:', err);
         loadingMostStreamed = false;
@@ -786,10 +789,11 @@
     }
 
     if (isSectionVisible('qobuzissimes')) {
-      fetchFeaturedAlbums('qobuzissimes', homeLimits.featuredAlbums, genreIds).then(albums => {
+      fetchFeaturedAlbums('qobuzissimes', homeLimits.featuredAlbums, genreIds).then(async (albums) => {
         qobuzissimes = albums;
         loadingQobuzissimes = false;
-        loadAllAlbumDownloadStatuses(albums);
+        await tick();
+        loadAllAlbumDownloadStatuses(albums).catch(() => {});
       }).catch(err => {
         console.error('Failed to load qobuzissimes:', err);
         loadingQobuzissimes = false;
@@ -799,10 +803,11 @@
     }
 
     if (isSectionVisible('editorPicks')) {
-      fetchFeaturedAlbums('editor-picks', homeLimits.featuredAlbums, genreIds).then(albums => {
+      fetchFeaturedAlbums('editor-picks', homeLimits.featuredAlbums, genreIds).then(async (albums) => {
         editorPicks = albums;
         loadingEditorPicks = false;
-        loadAllAlbumDownloadStatuses(albums);
+        await tick();
+        loadAllAlbumDownloadStatuses(albums).catch(() => {});
       }).catch(err => {
         console.error('Failed to load editorPicks:', err);
         loadingEditorPicks = false;
@@ -843,11 +848,12 @@
         const recentAlbumIds = normalizeAlbumIds(seeds.recentlyPlayedAlbumIds);
         // Fetch more if filtering, to have enough after filter
         const fetchLimit = hasGenreFilter() ? homeLimits.recentAlbums * 3 : homeLimits.recentAlbums;
-        fetchAlbums(recentAlbumIds.slice(0, fetchLimit)).then(albums => {
+        fetchAlbums(recentAlbumIds.slice(0, fetchLimit)).then(async (albums) => {
           const filtered = filterAlbumsByGenre(albums).slice(0, homeLimits.recentAlbums);
           recentAlbums = filtered;
           loadingRecentAlbums = false;
-          loadAllAlbumDownloadStatuses(filtered);
+          await tick();
+          loadAllAlbumDownloadStatuses(filtered).catch(() => {});
         }).catch(err => {
           console.error('Failed to load recentAlbums:', err);
           loadingRecentAlbums = false;
@@ -883,7 +889,8 @@
           const filtered = filterAlbumsByGenre(albums).slice(0, homeLimits.favoriteAlbums);
           favoriteAlbums = filtered;
           loadingFavoriteAlbums = false;
-          loadAllAlbumDownloadStatuses(filtered);
+          await tick();
+          loadAllAlbumDownloadStatuses(filtered).catch(() => {});
         }).catch(err => {
           console.error('Failed to load favoriteAlbums:', err);
           loadingFavoriteAlbums = false;
