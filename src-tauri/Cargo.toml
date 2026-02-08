@@ -67,6 +67,9 @@ symphonia = { version = "0.5", features = ["all"] }
 # Audio visualization (FFT)
 spectrum-analyzer = "1.5"
 
+# EBU R128 loudness measurement (real-time normalization)
+ebur128 = "0.1"
+
 # Media controls (MPRIS on Linux)
 souvlaki = "0.7"
 

@@ -18,7 +18,7 @@ pub use streaming_source::{BufferedMediaSource, BufferWriter, StreamingConfig, I
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::mpsc::{self, Sender, RecvTimeoutError};
+use std::sync::mpsc::{self, Sender, SyncSender, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -37,7 +37,11 @@ use symphonia::core::probe::Hint;
 use symphonia::default::{get_codecs, get_probe};
 
 use crate::api::{client::QobuzClient, models::Quality};
-use crate::audio::{AudioBackendType, AudioDiagnostic, BackendConfig, BackendManager, DiagnosticSource, extract_replaygain, calculate_gain_factor};
+use crate::audio::{
+    AudioBackendType, AudioDiagnostic, BackendConfig, BackendManager, DiagnosticSource,
+    extract_replaygain, calculate_gain_factor, db_to_linear,
+    DynamicAmplify, AnalyzerTap, AnalyzerMessage, LoudnessCache, LoudnessAnalyzer,
+};
 use crate::config::audio_settings::AudioSettings;
 use crate::visualizer::{VisualizerTap, TappedSource};
 use playback_engine::PlaybackEngine;
@@ -702,17 +706,43 @@ impl Player {
         thread::spawn(move || {
             log::info!("Audio thread starting...");
 
+            // Initialize loudness analysis system
+            let (analyzer_tx, analyzer_rx) = mpsc::sync_channel::<AnalyzerMessage>(64);
+            let loudness_cache = match LoudnessCache::new() {
+                Ok(c) => Arc::new(c),
+                Err(e) => {
+                    log::error!("Failed to create loudness cache: {}. Normalization will work without caching.", e);
+                    // Create a fallback in-memory cache (will be lost on restart)
+                    // For now, just panic — this should not fail in practice
+                    panic!("LoudnessCache creation failed: {}", e);
+                }
+            };
+            let _analyzer_handle = LoudnessAnalyzer::spawn(analyzer_rx, loudness_cache.clone());
+            let analyzer_enabled = Arc::new(AtomicBool::new(false));
+
             // Helper to wrap source with visualizer tap, normalization, and diagnostic capture
-            // Pipeline order: Diagnostic (raw) → Amplify (normalization) → Visualizer
-            // When normalization_gain is None, no Amplify wrapper is inserted (bit-perfect)
-            let wrap_source = |source: Box<dyn Source<Item = f32> + Send>, normalization_gain: Option<f32>| -> Box<dyn Source<Item = f32> + Send> {
+            // Pipeline order (normalization ON):
+            //   Diagnostic (raw) → AnalyzerTap → DynamicAmplify → Visualizer
+            // Pipeline order (normalization OFF — bit-perfect):
+            //   Diagnostic (raw) → Visualizer
+            let wrap_source = |source: Box<dyn Source<Item = f32> + Send>,
+                               normalization_gain: Option<f32>,
+                               gain_atomic: Option<Arc<AtomicU32>>,
+                               analyzer_tx: &SyncSender<AnalyzerMessage>,
+                               analyzer_enabled: &Arc<AtomicBool>| -> Box<dyn Source<Item = f32> + Send> {
                 // Diagnostic tap (innermost — captures raw decoded samples)
                 let source: Box<dyn Source<Item = f32> + Send> =
                     Box::new(DiagnosticSource::new(source, thread_diagnostic.clone()));
 
-                // Normalization gain (only when enabled — no wrapper at all when OFF)
-                let source: Box<dyn Source<Item = f32> + Send> = if let Some(gain) = normalization_gain {
-                    log::info!("Audio thread: applying normalization gain factor {:.4}", gain);
+                // Normalization: dynamic (Phase 2) > static (Phase 1 fallback) > none (bit-perfect)
+                let source: Box<dyn Source<Item = f32> + Send> = if let Some(gain_atomic) = gain_atomic {
+                    let initial_gain = normalization_gain.unwrap_or(1.0);
+                    log::info!("Audio thread: dynamic normalization enabled (initial gain {:.4})", initial_gain);
+                    analyzer_enabled.store(true, Ordering::SeqCst);
+                    let source: Box<dyn Source<Item = f32> + Send> = Box::new(AnalyzerTap::new(source, analyzer_tx.clone(), analyzer_enabled.clone()));
+                    Box::new(DynamicAmplify::new(source, gain_atomic, initial_gain))
+                } else if let Some(gain) = normalization_gain {
+                    log::info!("Audio thread: applying static normalization gain factor {:.4}", gain);
                     Box::new(source.amplify(gain))
                 } else {
                     source
@@ -854,6 +884,8 @@ impl Player {
             let mut last_empty_check = Instant::now();
             // Current track's normalization gain factor (stored for reuse on resume/seek)
             let mut current_normalization_gain: Option<f32> = None;
+            // Current track's dynamic gain atomic (shared with DynamicAmplify + LoudnessAnalyzer)
+            let mut current_gain_atomic: Option<Arc<AtomicU32>> = None;
 
             log::info!("Audio thread ready and waiting for commands");
 
@@ -867,7 +899,8 @@ impl Player {
                                       pause_suspend_deadline: &mut Option<Instant>,
                                       current_sample_rate: &mut Option<u32>,
                                       current_channels: &mut Option<u16>,
-                                      current_normalization_gain: &mut Option<f32>| {
+                                      current_normalization_gain: &mut Option<f32>,
+                                      current_gain_atomic: &mut Option<Arc<AtomicU32>>| {
                 match command {
                     AudioCommand::Play { data, track_id, duration_secs, sample_rate, channels } => {
                         log::info!(
@@ -1163,19 +1196,48 @@ impl Player {
                         thread_state.duration.store(actual_duration, Ordering::SeqCst);
 
                         // Calculate normalization gain if enabled
-                        let normalization = thread_settings
+                        let norm_settings = thread_settings
                             .lock()
                             .ok()
                             .filter(|s| s.normalization_enabled)
-                            .and_then(|s| {
-                                let target = s.normalization_target_lufs;
-                                extract_replaygain(&data).map(|rg| calculate_gain_factor(&rg, target))
+                            .map(|s| s.normalization_target_lufs);
+
+                        let (normalization, gain_atomic) = if let Some(target_lufs) = norm_settings {
+                            // Check for ReplayGain metadata first (initial gain hint)
+                            let rg_gain = extract_replaygain(&data).map(|rg| calculate_gain_factor(&rg, target_lufs));
+
+                            // Create shared atomic for dynamic normalization
+                            let atomic = Arc::new(AtomicU32::new(
+                                rg_gain.unwrap_or(1.0).to_bits()
+                            ));
+
+                            // Check loudness cache for pre-computed EBU R128 gain
+                            if let Some(cached) = loudness_cache.get(track_id) {
+                                let cached_gain = db_to_linear(cached.gain_db.min(6.0));
+                                atomic.store(cached_gain.to_bits(), Ordering::Relaxed);
+                                log::info!("Normalization: cache hit for track {}, gain {:.4}", track_id, cached_gain);
+                            }
+
+                            // Notify analyzer of new track
+                            let _ = analyzer_tx.try_send(AnalyzerMessage::NewTrack {
+                                track_id,
+                                sample_rate,
+                                channels,
+                                target_lufs,
+                                gain_atomic: atomic.clone(),
                             });
+
+                            (rg_gain, Some(atomic))
+                        } else {
+                            (None, None)
+                        };
+
                         *current_normalization_gain = normalization;
+                        *current_gain_atomic = gain_atomic.clone();
                         thread_state.set_normalization_gain(normalization);
 
                         // Wrap source with diagnostic, normalization, and visualizer
-                        let source = wrap_source(source, normalization);
+                        let source = wrap_source(source, normalization, gain_atomic, &analyzer_tx, &analyzer_enabled);
                         if let Err(e) = engine.append(source) {
                             log::error!("Failed to append source to engine: {}", e);
                             return;
@@ -1399,25 +1461,54 @@ impl Player {
                         // This allows the seekbar to show progress even during streaming
                         thread_state.duration.store(duration_secs, Ordering::SeqCst);
 
-                        // Normalization for streaming: try to extract from buffered data
-                        // If not enough data is buffered yet, skip (bit-perfect for this play)
-                        let normalization = thread_settings
+                        // Normalization for streaming: try ReplayGain from buffered data,
+                        // then fall back to real-time EBU R128 analysis
+                        let norm_settings = thread_settings
                             .lock()
                             .ok()
                             .filter(|s| s.normalization_enabled)
-                            .and_then(|s| {
-                                let target = s.normalization_target_lufs;
-                                source.get_buffered_data().and_then(|data| {
-                                    extract_replaygain(&data).map(|rg| calculate_gain_factor(&rg, target))
-                                })
+                            .map(|s| s.normalization_target_lufs);
+
+                        let (normalization, gain_atomic) = if let Some(target_lufs) = norm_settings {
+                            // Try ReplayGain metadata from buffered data
+                            let rg_gain = source.get_buffered_data().and_then(|data| {
+                                extract_replaygain(&data).map(|rg| calculate_gain_factor(&rg, target_lufs))
                             });
+
+                            // Create shared atomic for dynamic normalization
+                            let atomic = Arc::new(AtomicU32::new(
+                                rg_gain.unwrap_or(1.0).to_bits()
+                            ));
+
+                            // Check loudness cache
+                            if let Some(cached) = loudness_cache.get(track_id) {
+                                let cached_gain = db_to_linear(cached.gain_db.min(6.0));
+                                atomic.store(cached_gain.to_bits(), Ordering::Relaxed);
+                                log::info!("Streaming normalization: cache hit for track {}, gain {:.4}", track_id, cached_gain);
+                            }
+
+                            // Notify analyzer of new track
+                            let _ = analyzer_tx.try_send(AnalyzerMessage::NewTrack {
+                                track_id,
+                                sample_rate,
+                                channels,
+                                target_lufs,
+                                gain_atomic: atomic.clone(),
+                            });
+
+                            (rg_gain, Some(atomic))
+                        } else {
+                            (None, None)
+                        };
+
                         *current_normalization_gain = normalization;
+                        *current_gain_atomic = gain_atomic.clone();
                         thread_state.set_normalization_gain(normalization);
 
                         // Box the incremental source to match the expected type
                         let source_to_play: Box<dyn Source<Item = f32> + Send> = Box::new(incremental_source);
                         // Wrap source with diagnostic, normalization, and visualizer
-                        let source_to_play = wrap_source(source_to_play, normalization);
+                        let source_to_play = wrap_source(source_to_play, normalization, gain_atomic, &analyzer_tx, &analyzer_enabled);
                         if let Err(e) = engine.append(source_to_play) {
                             log::error!("Failed to append streaming source to engine: {}", e);
                             return;
@@ -1531,8 +1622,8 @@ impl Player {
                             };
 
                             // Wrap source with diagnostic, normalization, and visualizer
-                            // Reuse the gain from the original Play (stored in current_normalization_gain)
-                            let skipped_source = wrap_source(skipped_source, *current_normalization_gain);
+                            // Reuse the gain + atomic from the original Play
+                            let skipped_source = wrap_source(skipped_source, *current_normalization_gain, current_gain_atomic.clone(), &analyzer_tx, &analyzer_enabled);
                             if let Err(e) = engine.append(skipped_source) {
                                 log::error!("Failed to append source for resume: {}", e);
                                 return;
@@ -1560,6 +1651,8 @@ impl Player {
                         *current_audio_data = None;
                         *current_streaming_source = None;
                         *current_normalization_gain = None;
+                        *current_gain_atomic = None;
+                        analyzer_enabled.store(false, Ordering::SeqCst);
                         thread_state.set_normalization_gain(None);
                         thread_state.is_playing.store(false, Ordering::SeqCst);
                         thread_state.position.store(0, Ordering::SeqCst);
@@ -1632,9 +1725,12 @@ impl Player {
                         let skip_duration = Duration::from_secs(position_secs);
                         let skipped_source: Box<dyn Source<Item = f32> + Send> = Box::new(source.skip_duration(skip_duration));
 
+                        // Send Reset to analyzer (seek invalidates accumulated samples)
+                        let _ = analyzer_tx.try_send(AnalyzerMessage::Reset);
+
                         // Wrap source with diagnostic, normalization, and visualizer
-                        // Reuse the gain from the current track
-                        let skipped_source = wrap_source(skipped_source, *current_normalization_gain);
+                        // Reuse the gain + atomic from the current track
+                        let skipped_source = wrap_source(skipped_source, *current_normalization_gain, current_gain_atomic.clone(), &analyzer_tx, &analyzer_enabled);
                         if let Err(e) = engine.append(skipped_source) {
                             log::error!("Failed to append source for seek: {}", e);
                             return;
@@ -1713,6 +1809,7 @@ impl Player {
                             &mut current_sample_rate,
                             &mut current_channels,
                             &mut current_normalization_gain,
+                            &mut current_gain_atomic,
                         ),
                         Err(RecvTimeoutError::Timeout) => {
                             let now = Instant::now();
@@ -1765,6 +1862,7 @@ impl Player {
                                     &mut current_sample_rate,
                                     &mut current_channels,
                                     &mut current_normalization_gain,
+                                    &mut current_gain_atomic,
                                 ),
                                 Err(RecvTimeoutError::Timeout) => {}
                                 Err(RecvTimeoutError::Disconnected) => {
@@ -1790,6 +1888,7 @@ impl Player {
                             &mut current_sample_rate,
                             &mut current_channels,
                             &mut current_normalization_gain,
+                            &mut current_gain_atomic,
                         ),
                         Err(_) => {
                             log::info!("Audio thread: channel closed, exiting");
