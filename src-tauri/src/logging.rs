@@ -80,7 +80,10 @@ pub async fn upload_logs_to_paste(content: String) -> Result<String, String> {
             .map_err(|e| format!("Failed to create multipart part: {}", e))?
         );
 
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .user_agent("QBZ/1.0")
+        .build()
+        .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
     let response = client
         .post("https://0x0.st")
         .multipart(form)
