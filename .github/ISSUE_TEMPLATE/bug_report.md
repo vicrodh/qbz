@@ -46,11 +46,32 @@ Logs help us diagnose problems much faster. To share them:
 - Terminal log URL:
 - Console log URL:
 
-> If QBZ crashes on startup, you can capture terminal output by running it from a terminal:
-> ```
-> ./QBZ*.AppImage 2>&1 | tee /tmp/qbz-crash.log
-> ```
-> Then attach or paste the contents of `/tmp/qbz-crash.log`.
+<details>
+<summary><strong>If QBZ crashes on startup</strong> (click to expand)</summary>
+
+Run QBZ from a terminal to capture the output. Use the command that matches your installation:
+
+```bash
+# AppImage
+./QBZ*.AppImage 2>&1 | tee /tmp/qbz-crash.log
+
+# AUR / Tarball
+qbz 2>&1 | tee /tmp/qbz-crash.log
+
+# .deb / .rpm
+qbz 2>&1 | tee /tmp/qbz-crash.log
+
+# Flatpak
+flatpak run com.blitzfc.qbz 2>&1 | tee /tmp/qbz-crash.log
+```
+
+Then upload the log and paste the URL here:
+
+```bash
+curl -F'file=@/tmp/qbz-crash.log' https://0x0.st
+```
+
+</details>
 
 ## Screenshots
 
