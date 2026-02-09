@@ -6,8 +6,9 @@
     getHomeCache,
     setHomeCache,
     clearHomeCache,
-    isHomeCacheValid,
-    updateHomeCacheScrollTop
+    getHomeCacheStatus,
+    updateHomeCacheScrollTop,
+    type HomeCacheData
   } from '$lib/stores/homeDataCache';
   import { t } from '$lib/i18n';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
@@ -309,6 +310,46 @@
 
   let homeViewEl: HTMLDivElement | undefined;
 
+  function restoreFromCache(cached: HomeCacheData) {
+    newReleases = cached.newReleases;
+    pressAwards = cached.pressAwards;
+    mostStreamed = cached.mostStreamed;
+    qobuzissimes = cached.qobuzissimes;
+    editorPicks = cached.editorPicks;
+    recentAlbums = cached.recentAlbums;
+    continueTracks = cached.continueTracks;
+    topArtists = cached.topArtists;
+    favoriteAlbums = cached.favoriteAlbums;
+    qobuzPlaylists = cached.qobuzPlaylists;
+    essentialDiscography = cached.essentialDiscography;
+    playlistTags = cached.playlistTags;
+
+    loadingNewReleases = false;
+    loadingPressAwards = false;
+    loadingMostStreamed = false;
+    loadingQobuzissimes = false;
+    loadingEditorPicks = false;
+    loadingRecentAlbums = false;
+    loadingContinueTracks = false;
+    loadingTopArtists = false;
+    loadingFavoriteAlbums = false;
+    loadingQobuzPlaylists = false;
+    loadingEssentialDiscography = false;
+
+    requestAnimationFrame(() => {
+      if (homeViewEl && cached.scrollTop > 0) {
+        homeViewEl.scrollTop = cached.scrollTop;
+      }
+    });
+
+    const allAlbums = [
+      ...cached.newReleases, ...cached.pressAwards, ...cached.mostStreamed,
+      ...cached.qobuzissimes, ...cached.editorPicks,
+      ...cached.recentAlbums, ...cached.favoriteAlbums
+    ];
+    loadAllAlbumDownloadStatuses(allAlbums);
+  }
+
   onMount(() => {
     // Subscribe to home settings changes — invalidate cache on change
     const unsubscribe = subscribeHomeSettings(() => {
@@ -317,52 +358,19 @@
       clearHomeCache();
     });
 
-    // Try to restore from cache
     const currentGenreIds = Array.from(getSelectedGenreIds());
-    if (isHomeCacheValid(currentGenreIds)) {
-      const cached = getHomeCache()!;
-      // Restore all data instantly
-      newReleases = cached.newReleases;
-      pressAwards = cached.pressAwards;
-      mostStreamed = cached.mostStreamed;
-      qobuzissimes = cached.qobuzissimes;
-      editorPicks = cached.editorPicks;
-      recentAlbums = cached.recentAlbums;
-      continueTracks = cached.continueTracks;
-      topArtists = cached.topArtists;
-      favoriteAlbums = cached.favoriteAlbums;
-      qobuzPlaylists = cached.qobuzPlaylists;
-      essentialDiscography = cached.essentialDiscography;
-      playlistTags = cached.playlistTags;
+    const cacheStatus = getHomeCacheStatus(currentGenreIds);
 
-      // Mark all sections as loaded
-      loadingNewReleases = false;
-      loadingPressAwards = false;
-      loadingMostStreamed = false;
-      loadingQobuzissimes = false;
-      loadingEditorPicks = false;
-      loadingRecentAlbums = false;
-      loadingContinueTracks = false;
-      loadingTopArtists = false;
-      loadingFavoriteAlbums = false;
-      loadingQobuzPlaylists = false;
-      loadingEssentialDiscography = false;
-
-      // Restore scroll position after DOM renders
-      requestAnimationFrame(() => {
-        if (homeViewEl && cached.scrollTop > 0) {
-          homeViewEl.scrollTop = cached.scrollTop;
-        }
-      });
-
-      // Fire-and-forget: refresh download statuses in background
-      const allAlbums = [
-        ...cached.newReleases, ...cached.pressAwards, ...cached.mostStreamed,
-        ...cached.qobuzissimes, ...cached.editorPicks,
-        ...cached.recentAlbums, ...cached.favoriteAlbums
-      ];
-      loadAllAlbumDownloadStatuses(allAlbums);
+    if (cacheStatus === 'fresh') {
+      // Fresh: use cache as-is, no revalidation
+      restoreFromCache(getHomeCache()!);
+    } else if (cacheStatus === 'stale') {
+      // Stale: show cache immediately, then revalidate silently in background
+      restoreFromCache(getHomeCache()!);
+      // Background revalidation — no skeletons, just update data if changed
+      loadHome({ showSkeletons: false });
     } else {
+      // Empty: full skeleton load
       loadHome();
     }
 
@@ -743,19 +751,22 @@
     }
   }
 
-  async function loadHome() {
+  async function loadHome(options?: { showSkeletons?: boolean }) {
+    const showSkeletons = options?.showSkeletons ?? true;
     error = null;
-    loadingNewReleases = true;
-    loadingPressAwards = true;
-    loadingMostStreamed = true;
-    loadingQobuzissimes = true;
-    loadingEditorPicks = true;
-    loadingRecentAlbums = true;
-    loadingContinueTracks = true;
-    loadingTopArtists = true;
-    loadingFavoriteAlbums = true;
-    loadingQobuzPlaylists = true;
-    loadingEssentialDiscography = true;
+    if (showSkeletons) {
+      loadingNewReleases = true;
+      loadingPressAwards = true;
+      loadingMostStreamed = true;
+      loadingQobuzissimes = true;
+      loadingEditorPicks = true;
+      loadingRecentAlbums = true;
+      loadingContinueTracks = true;
+      loadingTopArtists = true;
+      loadingFavoriteAlbums = true;
+      loadingQobuzPlaylists = true;
+      loadingEssentialDiscography = true;
+    }
 
     // Get current genre filter (array of IDs for multi-select)
     const genreIds = Array.from(getSelectedGenreIds());
