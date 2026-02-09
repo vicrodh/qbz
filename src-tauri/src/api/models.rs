@@ -365,6 +365,10 @@ pub struct DiscoverContainers {
     pub ideal_discography: Option<DiscoverContainer<DiscoverAlbum>>,
     pub playlists_tags: Option<DiscoverContainer<PlaylistTag>>,
     pub new_releases: Option<DiscoverContainer<DiscoverAlbum>>,
+    pub qobuzissims: Option<DiscoverContainer<DiscoverAlbum>>,
+    pub most_streamed: Option<DiscoverContainer<DiscoverAlbum>>,
+    pub press_awards: Option<DiscoverContainer<DiscoverAlbum>>,
+    pub album_of_the_week: Option<DiscoverContainer<DiscoverAlbum>>,
 }
 
 /// Generic discover container

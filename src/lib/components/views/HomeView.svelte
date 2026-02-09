@@ -503,50 +503,21 @@
     return artists;
   }
 
-  interface FeaturedAlbumsResponse {
-    items: QobuzAlbum[];
-    total: number;
-  }
-
-  async function fetchFeaturedAlbumsSingle(featuredType: string, limit: number, genreId?: number): Promise<AlbumCardData[]> {
-    try {
-      const response = await invoke<FeaturedAlbumsResponse>('get_featured_albums', {
-        featuredType,
-        limit,
-        genreId: genreId ?? null
-      });
-      return response.items.map(toAlbumCard);
-    } catch (err) {
-      console.error(`Failed to fetch ${featuredType}:`, err);
-      return [];
-    }
-  }
-
-  async function fetchFeaturedAlbums(featuredType: string, limit: number, genreIds: number[]): Promise<AlbumCardData[]> {
-    if (genreIds.length === 0) {
-      // No filter, fetch without genre
-      return fetchFeaturedAlbumsSingle(featuredType, limit);
-    }
-    if (genreIds.length === 1) {
-      // Single genre, use API filter
-      return fetchFeaturedAlbumsSingle(featuredType, limit, genreIds[0]);
-    }
-    // Multiple genres: fetch each and merge (dedupe by album id)
-    const perGenreLimit = Math.ceil(limit / genreIds.length) + 2;
-    const results = await Promise.all(
-      genreIds.map(gid => fetchFeaturedAlbumsSingle(featuredType, perGenreLimit, gid))
-    );
-    const seen = new Set<string>();
-    const merged: AlbumCardData[] = [];
-    for (const albums of results) {
-      for (const album of albums) {
-        if (!seen.has(album.id)) {
-          seen.add(album.id);
-          merged.push(album);
-        }
-      }
-    }
-    return merged.slice(0, limit);
+  function discoverAlbumToCardData(album: DiscoverAlbum): AlbumCardData {
+    return {
+      id: album.id,
+      artwork: album.image?.large || album.image?.small || '',
+      title: album.title,
+      artist: album.artists?.[0]?.name || 'Unknown Artist',
+      artistId: album.artists?.[0]?.id,
+      genre: album.genre?.name || '',
+      quality: formatQuality(
+        (album.audio_info?.maximum_bit_depth ?? 16) > 16,
+        album.audio_info?.maximum_bit_depth,
+        album.audio_info?.maximum_sampling_rate
+      ),
+      releaseDate: album.dates?.original
+    };
   }
 
   function toAlbumCard(album: QobuzAlbum): AlbumCardData {
@@ -692,29 +663,81 @@
     }
   }
 
-  async function fetchDiscoverData() {
+  async function fetchAllDiscoverData(genreIds: number[]) {
     try {
-      const response = await invoke<DiscoverResponse>('get_discover_index', { genreIds: null });
+      const apiGenreIds = genreIds.length > 0 ? genreIds : null;
+      const response = await invoke<DiscoverResponse>('get_discover_index', { genreIds: apiGenreIds });
+      const c = response.containers;
 
-      // Extract playlists (limited) - initial load without tag filter
-      if (response.containers.playlists?.data?.items) {
-        qobuzPlaylists = response.containers.playlists.data.items.slice(0, LIMITS.qobuzPlaylists);
+      // Extract editorial album sections
+      if (isSectionVisible('newReleases') && c.new_releases?.data?.items) {
+        newReleases = c.new_releases.data.items.slice(0, homeLimits.featuredAlbums).map(discoverAlbumToCardData);
+        loadingNewReleases = false;
+        await tick();
+        loadAllAlbumDownloadStatuses(newReleases).catch(() => {});
+      } else {
+        loadingNewReleases = false;
       }
 
+      if (isSectionVisible('pressAwards') && c.press_awards?.data?.items) {
+        pressAwards = c.press_awards.data.items.slice(0, homeLimits.featuredAlbums).map(discoverAlbumToCardData);
+        loadingPressAwards = false;
+        await tick();
+        loadAllAlbumDownloadStatuses(pressAwards).catch(() => {});
+      } else {
+        loadingPressAwards = false;
+      }
+
+      if (isSectionVisible('mostStreamed') && c.most_streamed?.data?.items) {
+        mostStreamed = c.most_streamed.data.items.slice(0, homeLimits.featuredAlbums).map(discoverAlbumToCardData);
+        loadingMostStreamed = false;
+        await tick();
+        loadAllAlbumDownloadStatuses(mostStreamed).catch(() => {});
+      } else {
+        loadingMostStreamed = false;
+      }
+
+      if (isSectionVisible('qobuzissimes') && c.qobuzissims?.data?.items) {
+        qobuzissimes = c.qobuzissims.data.items.slice(0, homeLimits.featuredAlbums).map(discoverAlbumToCardData);
+        loadingQobuzissimes = false;
+        await tick();
+        loadAllAlbumDownloadStatuses(qobuzissimes).catch(() => {});
+      } else {
+        loadingQobuzissimes = false;
+      }
+
+      if (isSectionVisible('editorPicks') && c.album_of_the_week?.data?.items) {
+        editorPicks = c.album_of_the_week.data.items.slice(0, homeLimits.featuredAlbums).map(discoverAlbumToCardData);
+        loadingEditorPicks = false;
+        await tick();
+        loadAllAlbumDownloadStatuses(editorPicks).catch(() => {});
+      } else {
+        loadingEditorPicks = false;
+      }
+
+      // Extract playlists (limited) - initial load without tag filter
+      if (isSectionVisible('qobuzPlaylists') && c.playlists?.data?.items) {
+        qobuzPlaylists = c.playlists.data.items.slice(0, LIMITS.qobuzPlaylists);
+      }
+      loadingQobuzPlaylists = false;
+
       // Extract playlist tags
-      if (response.containers.playlists_tags?.data?.items) {
-        playlistTags = response.containers.playlists_tags.data.items;
+      if (c.playlists_tags?.data?.items) {
+        playlistTags = c.playlists_tags.data.items;
       }
 
       // Extract essential discography (limited)
-      if (response.containers.ideal_discography?.data?.items) {
-        essentialDiscography = response.containers.ideal_discography.data.items.slice(0, LIMITS.essentialDiscography);
+      if (isSectionVisible('essentialDiscography') && c.ideal_discography?.data?.items) {
+        essentialDiscography = c.ideal_discography.data.items.slice(0, LIMITS.essentialDiscography);
       }
-
-      loadingQobuzPlaylists = false;
       loadingEssentialDiscography = false;
     } catch (err) {
-      console.error('fetchDiscoverData failed:', err);
+      console.error('fetchAllDiscoverData failed:', err);
+      loadingNewReleases = false;
+      loadingPressAwards = false;
+      loadingMostStreamed = false;
+      loadingQobuzissimes = false;
+      loadingEditorPicks = false;
       loadingQobuzPlaylists = false;
       loadingEssentialDiscography = false;
     }
@@ -734,96 +757,20 @@
     loadingQobuzPlaylists = true;
     loadingEssentialDiscography = true;
 
-    // Start ML data loading FIRST (local SQLite) - this gets the seeds
+    // Get current genre filter (array of IDs for multi-select)
+    const genreIds = Array.from(getSelectedGenreIds());
+
+    // Two parallel paths:
+    // 1. Single Qobuz discover API call (all editorial content)
+    // 2. ML seeds from local SQLite -> user-specific sections
+    const discoverPromise = fetchAllDiscoverData(genreIds);
+
     const mlPromise = invoke<HomeSeeds>('reco_get_home_ml', {
       limitRecentAlbums: homeLimits.recentAlbums,
       limitContinueTracks: homeLimits.continueTracks,
       limitTopArtists: homeLimits.topArtists,
       limitFavorites: Math.max(homeLimits.favoriteAlbums, homeLimits.favoriteTracks)
     });
-
-    // Get current genre filter (array of IDs for multi-select)
-    const genreIds = Array.from(getSelectedGenreIds());
-
-    // Start Qobuz API calls in parallel (don't await)
-    if (isSectionVisible('newReleases')) {
-      fetchFeaturedAlbums('new-releases', homeLimits.featuredAlbums, genreIds).then(async (albums) => {
-        newReleases = albums;
-        loadingNewReleases = false;
-        await tick();
-        loadAllAlbumDownloadStatuses(albums).catch(() => {});
-      }).catch(err => {
-        console.error('Failed to load newReleases:', err);
-        loadingNewReleases = false;
-      });
-    } else {
-      loadingNewReleases = false;
-    }
-
-    if (isSectionVisible('pressAwards')) {
-      fetchFeaturedAlbums('press-awards', homeLimits.featuredAlbums, genreIds).then(async (albums) => {
-        pressAwards = albums;
-        loadingPressAwards = false;
-        await tick();
-        loadAllAlbumDownloadStatuses(albums).catch(() => {});
-      }).catch(err => {
-        console.error('Failed to load pressAwards:', err);
-        loadingPressAwards = false;
-      });
-    } else {
-      loadingPressAwards = false;
-    }
-
-    if (isSectionVisible('mostStreamed')) {
-      fetchFeaturedAlbums('most-streamed', homeLimits.featuredAlbums, genreIds).then(async (albums) => {
-        mostStreamed = albums;
-        loadingMostStreamed = false;
-        await tick();
-        loadAllAlbumDownloadStatuses(albums).catch(() => {});
-      }).catch(err => {
-        console.error('Failed to load mostStreamed:', err);
-        loadingMostStreamed = false;
-      });
-    } else {
-      loadingMostStreamed = false;
-    }
-
-    if (isSectionVisible('qobuzissimes')) {
-      fetchFeaturedAlbums('qobuzissimes', homeLimits.featuredAlbums, genreIds).then(async (albums) => {
-        qobuzissimes = albums;
-        loadingQobuzissimes = false;
-        await tick();
-        loadAllAlbumDownloadStatuses(albums).catch(() => {});
-      }).catch(err => {
-        console.error('Failed to load qobuzissimes:', err);
-        loadingQobuzissimes = false;
-      });
-    } else {
-      loadingQobuzissimes = false;
-    }
-
-    if (isSectionVisible('editorPicks')) {
-      fetchFeaturedAlbums('editor-picks', homeLimits.featuredAlbums, genreIds).then(async (albums) => {
-        editorPicks = albums;
-        loadingEditorPicks = false;
-        await tick();
-        loadAllAlbumDownloadStatuses(albums).catch(() => {});
-      }).catch(err => {
-        console.error('Failed to load editorPicks:', err);
-        loadingEditorPicks = false;
-      });
-    } else {
-      loadingEditorPicks = false;
-    }
-
-    // Fetch Discover data (Qobuz Playlists + Essential Discography)
-    const needsDiscoverData = isSectionVisible('qobuzPlaylists') || isSectionVisible('essentialDiscography');
-    if (needsDiscoverData) {
-      fetchDiscoverData();
-    } else {
-      loadingQobuzPlaylists = false;
-      loadingEssentialDiscography = false;
-    }
 
     try {
       // Wait for ML seeds (local data)
@@ -907,6 +854,9 @@
       loadingTopArtists = false;
       loadingFavoriteAlbums = false;
     }
+
+    // Ensure discover promise completes (errors already handled internally)
+    await discoverPromise;
   }
 </script>
 

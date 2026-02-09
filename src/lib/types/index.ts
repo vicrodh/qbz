@@ -402,6 +402,10 @@ export interface DiscoverContainers {
   ideal_discography?: DiscoverContainer<DiscoverAlbum>;
   playlists_tags?: DiscoverContainer<PlaylistTag>;
   new_releases?: DiscoverContainer<DiscoverAlbum>;
+  qobuzissims?: DiscoverContainer<DiscoverAlbum>;
+  most_streamed?: DiscoverContainer<DiscoverAlbum>;
+  press_awards?: DiscoverContainer<DiscoverAlbum>;
+  album_of_the_week?: DiscoverContainer<DiscoverAlbum>;
 }
 
 export interface DiscoverContainer<T> {
