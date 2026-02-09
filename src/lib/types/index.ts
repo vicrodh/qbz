@@ -113,6 +113,12 @@ export interface QobuzPlaylist {
   duration?: number;
 }
 
+export interface PlaylistDuplicateResult {
+  total_tracks: number;
+  duplicate_count: number;
+  duplicate_track_ids: Set<number>;
+}
+
 export interface QobuzArtist {
   id: number;
   name: string;

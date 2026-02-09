@@ -254,6 +254,14 @@ pub struct PlaylistGenre {
     pub slug: Option<String>,
 }
 
+/// Result of checking for duplicate tracks in a playlist
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PlaylistDuplicateResult {
+    pub total_tracks: usize,
+    pub duplicate_count: usize,
+    pub duplicate_track_ids: std::collections::HashSet<u64>,
+}
+
 /// Image set with multiple resolutions
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ImageSet {
