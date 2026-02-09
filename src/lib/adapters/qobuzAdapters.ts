@@ -663,9 +663,11 @@ export function convertPageArtist(response: PageArtistResponse): ArtistDetail {
   const liveAlbums: ArtistAlbumSummaryFromPage[] = [];
   const others: ArtistAlbumSummaryFromPage[] = [];
   let totalAlbums = 0;
+  const releaseHasMore: Record<string, boolean> = {};
 
   for (const group of releaseGroups) {
     const category = mapReleaseType(group.type);
+    releaseHasMore[group.type] = group.has_more;
     for (const release of group.items) {
       const summary = pageReleaseToSummary(release, response.id);
       if (!summary) continue;
@@ -685,9 +687,7 @@ export function convertPageArtist(response: PageArtistResponse): ArtistDetail {
           break;
       }
     }
-    // Track total for pagination indication
     totalAlbums += group.items.length;
-    if (group.has_more) totalAlbums += 1; // signal there's more
   }
 
   // Build compilations from tracks_appears_on (albums by other artists featuring this artist)
@@ -752,6 +752,76 @@ export function convertPageArtist(response: PageArtistResponse): ArtistDetail {
     playlists,
     labels: extractLabelsFromPageReleases(releaseGroups, response.id),
     totalAlbums,
-    albumsFetched: totalAlbums
+    albumsFetched: totalAlbums,
+    releaseHasMore
   };
+}
+
+/**
+ * Append releases from get_releases_grid to an existing ArtistDetail.
+ * Used for per-category pagination (load more albums, load more EPs, etc.)
+ */
+export function appendPageReleases(
+  artist: ArtistDetail,
+  releaseType: string,
+  newReleases: PageArtistRelease[],
+  hasMore: boolean
+): ArtistDetail {
+  const category = mapReleaseType(releaseType);
+  const newSummaries: ArtistAlbumSummaryFromPage[] = [];
+
+  for (const release of newReleases) {
+    const summary = pageReleaseToSummary(release, artist.id);
+    if (summary) newSummaries.push(summary);
+  }
+
+  if (newSummaries.length === 0) return artist;
+
+  // Deduplicate against existing items in the target category
+  const existingIds = new Set(
+    (category === 'albums' ? artist.albums :
+     category === 'eps' ? artist.epsSingles :
+     category === 'live' ? artist.liveAlbums :
+     artist.others
+    ).map(a => a.id)
+  );
+
+  const unique = newSummaries.filter(s => !existingIds.has(s.id));
+
+  const updated = { ...artist };
+  switch (category) {
+    case 'albums':
+      updated.albums = [...artist.albums, ...unique];
+      break;
+    case 'eps':
+      updated.epsSingles = [...artist.epsSingles, ...unique];
+      break;
+    case 'live':
+      updated.liveAlbums = [...artist.liveAlbums, ...unique];
+      break;
+    case 'others':
+      updated.others = [...artist.others, ...unique];
+      break;
+  }
+
+  // Update has_more flag for this category
+  updated.releaseHasMore = { ...artist.releaseHasMore, [releaseType]: hasMore };
+
+  // Merge new labels from album releases
+  if (category === 'albums') {
+    const existingLabelIds = new Set(artist.labels.map(l => l.id));
+    const newLabels: { id: number; name: string }[] = [];
+    for (const release of newReleases) {
+      if (release.artist?.id && release.artist.id !== artist.id) continue;
+      if (release.label?.id && release.label?.name && !existingLabelIds.has(release.label.id)) {
+        existingLabelIds.add(release.label.id);
+        newLabels.push({ id: release.label.id, name: release.label.name });
+      }
+    }
+    if (newLabels.length > 0) {
+      updated.labels = [...artist.labels, ...newLabels].sort((a, b) => a.name.localeCompare(b.name));
+    }
+  }
+
+  return updated;
 }

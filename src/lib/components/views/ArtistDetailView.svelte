@@ -79,7 +79,7 @@
     onReDownloadAlbum?: (albumId: string) => void;
     checkAlbumFullyDownloaded?: (albumId: string) => Promise<boolean>;
     downloadStateVersion?: number;
-    onLoadMore?: () => void;
+    onLoadMoreReleases?: (releaseType: string) => void;
     isLoadingMore?: boolean;
     onPlaylistClick?: (playlistId: number) => void;
     onTrackPlay?: (track: DisplayTrack) => void;
@@ -114,7 +114,7 @@
     onReDownloadAlbum,
     checkAlbumFullyDownloaded,
     downloadStateVersion,
-    onLoadMore,
+    onLoadMoreReleases,
     isLoadingMore = false,
     onPlaylistClick,
     onTrackPlay,
@@ -1793,6 +1793,13 @@
             />
           {/each}
         </div>
+        {#if artist.releaseHasMore?.album && onLoadMoreReleases}
+          <div class="load-more-section">
+            <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('album')}>
+              {isLoadingMore ? 'Loading...' : 'Load more albums'}
+            </button>
+          </div>
+        {/if}
 
     {/if}
   </div>
@@ -1856,6 +1863,13 @@
           />
         {/each}
       </div>
+      {#if artist.releaseHasMore?.ep && onLoadMoreReleases}
+        <div class="load-more-section">
+          <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('ep')}>
+            {isLoadingMore ? 'Loading...' : 'Load more EPs & Singles'}
+          </button>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -1918,6 +1932,13 @@
           />
         {/each}
       </div>
+      {#if artist.releaseHasMore?.live && onLoadMoreReleases}
+        <div class="load-more-section">
+          <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('live')}>
+            {isLoadingMore ? 'Loading...' : 'Load more live albums'}
+          </button>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -2042,6 +2063,13 @@
           />
         {/each}
       </div>
+      {#if (artist.releaseHasMore?.compilation || artist.releaseHasMore?.other) && onLoadMoreReleases}
+        <div class="load-more-section">
+          <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('compilation')}>
+            {isLoadingMore ? 'Loading...' : 'Load more'}
+          </button>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -3504,6 +3532,33 @@
 
   .load-more-link:hover {
     color: var(--text-primary);
+  }
+
+  .load-more-section {
+    display: flex;
+    justify-content: center;
+    padding: 12px 0 4px;
+  }
+
+  .load-more-btn {
+    padding: 8px 24px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .load-more-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .load-more-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .tracks-loading {

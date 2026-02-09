@@ -205,7 +205,8 @@
     SongLinkResponse,
     PageArtistResponse,
     PageArtistTrack,
-    PageArtistSimilarItem
+    PageArtistSimilarItem,
+    ReleasesGridResponse
   } from '$lib/types';
 
   // Adapters
@@ -213,6 +214,7 @@
     convertQobuzAlbum,
     convertQobuzArtist,
     convertPageArtist,
+    appendPageReleases,
     formatDuration,
     appendArtistAlbums
   } from '$lib/adapters/qobuzAdapters';
@@ -849,37 +851,37 @@
     }
   }
 
-  interface ArtistAlbumsResponse {
-    items: QobuzAlbum[];
-    total: number;
-    offset: number;
-    limit: number;
-  }
-
-  async function loadMoreArtistAlbums() {
+  async function loadMoreArtistReleases(releaseType: string) {
     if (!selectedArtist || isArtistAlbumsLoading) return;
 
-    const offset = selectedArtist.albumsFetched || 0;
-    if (offset >= selectedArtist.totalAlbums) return;
+    // Count current items for this release type to use as offset
+    let currentCount = 0;
+    switch (releaseType) {
+      case 'album': currentCount = selectedArtist.albums.length; break;
+      case 'ep': case 'single': currentCount = selectedArtist.epsSingles.length; break;
+      case 'live': currentCount = selectedArtist.liveAlbums.length; break;
+      case 'compilation': case 'other': currentCount = selectedArtist.others.length; break;
+    }
 
     isArtistAlbumsLoading = true;
     try {
-      const result = await invoke<ArtistAlbumsResponse>('get_artist_albums', {
+      const result = await invoke<ReleasesGridResponse>('get_releases_grid', {
         artistId: selectedArtist.id,
-        limit: 200,
-        offset
+        releaseType,
+        limit: 25,
+        offset: currentCount
       });
 
       if (result.items.length === 0) return;
 
-      selectedArtist = appendArtistAlbums(
+      selectedArtist = appendPageReleases(
         selectedArtist,
+        releaseType,
         result.items,
-        result.total,
-        result.offset + result.items.length
+        result.has_more
       );
     } catch (err) {
-      console.error('Failed to load more artist albums:', err);
+      console.error(`Failed to load more ${releaseType} releases:`, err);
       showToast($t('toast.failedLoadMoreAlbums'), 'error');
     } finally {
       isArtistAlbumsLoading = false;
@@ -3209,7 +3211,7 @@
           onReDownloadAlbum={reDownloadAlbumById}
           checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
           {downloadStateVersion}
-          onLoadMore={loadMoreArtistAlbums}
+          onLoadMoreReleases={loadMoreArtistReleases}
           isLoadingMore={isArtistAlbumsLoading}
           onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queueQobuzTrackNext}

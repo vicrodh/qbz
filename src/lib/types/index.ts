@@ -254,6 +254,8 @@ export interface ArtistDetail {
   }[];
   totalAlbums: number;
   albumsFetched: number;
+  /** Per-category has_more flags from /artist/page release groups */
+  releaseHasMore?: Record<string, boolean>;
 }
 
 export interface LabelDetail {
