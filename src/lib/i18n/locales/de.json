@@ -272,6 +272,8 @@
     "newPlaylist": "Neue Playlist",
     "editPlaylist": "Playlist bearbeiten",
     "addToPlaylist": "Zur Playlist hinzufügen",
+    "enterName": "Bitte gib einen Playlist-Namen ein",
+    "selectPlaylist": "Bitte wähle eine Playlist",
     "duplicates": {
       "title": "Einige dieser Titel wurden bereits hinzugefügt",
       "description": "Diese Playlist enthält bereits {duplicateCount} der {totalCount} Titel, die du hinzufügst. Füge nur die neuen hinzu oder füge alle einschließlich Duplikate hinzu.",

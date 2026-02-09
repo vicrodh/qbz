@@ -272,6 +272,8 @@
     "newPlaylist": "Nouvelle playlist",
     "editPlaylist": "Modifier la playlist",
     "addToPlaylist": "Ajouter à la playlist",
+    "enterName": "Veuillez entrer un nom de playlist",
+    "selectPlaylist": "Veuillez sélectionner une playlist",
     "duplicates": {
       "title": "Certaines de ces pistes ont déjà été ajoutées",
       "description": "Cette playlist contient déjà {duplicateCount} des {totalCount} pistes que vous ajoutez. Ajoutez uniquement les nouvelles ou ajoutez tout y compris les doublons.",

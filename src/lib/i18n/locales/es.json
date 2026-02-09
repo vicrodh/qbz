@@ -274,6 +274,8 @@
     "createAndAdd": "Crear y Agregar",
     "playlistWithTracks": "{name} ({count} pistas)",
     "copyToLibrary": "Copiar a mi biblioteca",
+    "enterName": "Ingresa un nombre para la lista",
+    "selectPlaylist": "Selecciona una lista",
     "duplicates": {
       "title": "Algunas de estas pistas ya fueron agregadas",
       "description": "Esta lista ya contiene {duplicateCount} de las {totalCount} pistas que estás agregando. Agrega solo las nuevas o agrega todas incluyendo duplicadas.",

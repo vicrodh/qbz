@@ -231,7 +231,7 @@
 
   async function handleCreate() {
     if (!name.trim()) {
-      error = 'Please enter a playlist name';
+      error = $t('playlist.enterName');
       return;
     }
 
@@ -284,7 +284,7 @@
   async function handleUpdate() {
     if (!playlist) return;
     if (!name.trim()) {
-      error = 'Please enter a playlist name';
+      error = $t('playlist.enterName');
       return;
     }
 
@@ -342,7 +342,7 @@
 
   async function handleAddToPlaylist() {
     if (!selectedPlaylistId || trackIds.length === 0) {
-      error = 'Please select a playlist';
+      error = $t('playlist.selectPlaylist');
       return;
     }
 
@@ -384,7 +384,7 @@
 
   async function handleDirectAddToPlaylist() {
     if (!selectedPlaylistId || trackIds.length === 0) {
-      error = 'Please select a playlist';
+      error = $t('playlist.selectPlaylist');
       return;
     }
 
@@ -486,7 +486,7 @@
 
   async function handleCreateAndAdd() {
     if (!name.trim()) {
-      error = 'Please enter a playlist name';
+      error = $t('playlist.enterName');
       return;
     }
 

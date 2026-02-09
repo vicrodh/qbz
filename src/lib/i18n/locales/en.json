@@ -274,6 +274,8 @@
     "createAndAdd": "Create & Add",
     "playlistWithTracks": "{name} ({count} tracks)",
     "copyToLibrary": "Copy to library",
+    "enterName": "Please enter a playlist name",
+    "selectPlaylist": "Please select a playlist",
     "duplicates": {
       "title": "Some of these tracks were already added",
       "description": "This playlist already contains {duplicateCount} of the {totalCount} tracks you're adding. Add only the new ones, or add everything including duplicates.",
