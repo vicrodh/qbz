@@ -9,7 +9,7 @@
     subscribe as subscribeBlacklist
   } from '$lib/stores/artistBlacklistStore';
   import { showToast } from '$lib/stores/toastStore';
-  import type { ArtistDetail, QobuzArtist } from '$lib/types';
+  import type { ArtistDetail, QobuzArtist, PageArtistTrack, PageArtistSimilarItem } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import QualityBadge from '../QualityBadge.svelte';
@@ -65,6 +65,8 @@
 
   interface Props {
     artist: ArtistDetail;
+    initialTopTracks?: PageArtistTrack[];
+    initialSimilarArtists?: PageArtistSimilarItem[];
     onBack: () => void;
     onAlbumClick?: (albumId: string) => void;
     onAlbumPlay?: (albumId: string) => void;
@@ -77,7 +79,7 @@
     onReDownloadAlbum?: (albumId: string) => void;
     checkAlbumFullyDownloaded?: (albumId: string) => Promise<boolean>;
     downloadStateVersion?: number;
-    onLoadMore?: () => void;
+    onLoadMoreReleases?: (releaseType: string) => void;
     isLoadingMore?: boolean;
     onPlaylistClick?: (playlistId: number) => void;
     onTrackPlay?: (track: DisplayTrack) => void;
@@ -98,6 +100,8 @@
 
   let {
     artist,
+    initialTopTracks,
+    initialSimilarArtists,
     onBack,
     onAlbumClick,
     onAlbumPlay,
@@ -110,7 +114,7 @@
     onReDownloadAlbum,
     checkAlbumFullyDownloaded,
     downloadStateVersion,
-    onLoadMore,
+    onLoadMoreReleases,
     isLoadingMore = false,
     onPlaylistClick,
     onTrackPlay,
@@ -341,6 +345,45 @@
     limit: number;
   }
 
+  /** Convert PageArtistTrack[] from /artist/page to component-local Track[] */
+  function convertPageTopTracks(tracks: PageArtistTrack[]): Track[] {
+    return tracks.map(track => ({
+      id: track.id,
+      title: track.title,
+      duration: track.duration ?? 0,
+      album: track.album ? {
+        id: track.album.id,
+        title: track.album.title,
+        image: track.album.image
+      } : undefined,
+      performer: track.artist ? {
+        id: track.artist.id,
+        name: track.artist.name.display
+      } : undefined,
+      hires_streamable: track.rights?.hires_streamable,
+      maximum_bit_depth: track.audio_info?.maximum_bit_depth,
+      maximum_sampling_rate: track.audio_info?.maximum_sampling_rate,
+      isrc: track.isrc
+    }));
+  }
+
+  /** Convert PageArtistSimilarItem[] from /artist/page to QobuzArtist[] */
+  function convertPageSimilarArtists(items: PageArtistSimilarItem[]): QobuzArtist[] {
+    return items.map(item => {
+      let image: { small?: string; thumbnail?: string; large?: string } | undefined;
+      if (item.images?.portrait) {
+        const { hash, format } = item.images.portrait;
+        const url = `https://static.qobuz.com/images/artists/covers/medium/${hash}.${format}`;
+        image = { large: url, thumbnail: url, small: url };
+      }
+      return {
+        id: item.id,
+        name: item.name.display,
+        image
+      };
+    });
+  }
+
   $effect(() => {
     const artistId = artist.id;
     const artistName = artist.name;
@@ -356,8 +399,21 @@
     tributesExpanded = false;
     tributesVisibleCount = 20;
 
-    loadTopTracks();
-    loadSimilarArtists();
+    // Use pre-loaded data from /artist/page if available
+    if (initialTopTracks && initialTopTracks.length > 0) {
+      topTracks = convertPageTopTracks(initialTopTracks);
+    } else {
+      loadTopTracks();
+    }
+
+    if (initialSimilarArtists && initialSimilarArtists.length > 0) {
+      similarArtists = convertPageSimilarArtists(initialSimilarArtists)
+        .filter(item => item.id !== artist.id)
+        .slice(0, 5);
+    } else {
+      loadSimilarArtists();
+    }
+
     loadMusicBrainzRelationships();
     checkFavoriteStatus();
     loadArtistAlbumDownloadStatuses();
@@ -1737,6 +1793,13 @@
             />
           {/each}
         </div>
+        {#if artist.releaseHasMore?.album && onLoadMoreReleases}
+          <div class="load-more-section">
+            <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('album')}>
+              {isLoadingMore ? 'Loading...' : 'Load more albums'}
+            </button>
+          </div>
+        {/if}
 
     {/if}
   </div>
@@ -1800,6 +1863,13 @@
           />
         {/each}
       </div>
+      {#if artist.releaseHasMore?.ep && onLoadMoreReleases}
+        <div class="load-more-section">
+          <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('ep')}>
+            {isLoadingMore ? 'Loading...' : 'Load more EPs & Singles'}
+          </button>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -1862,6 +1932,13 @@
           />
         {/each}
       </div>
+      {#if artist.releaseHasMore?.live && onLoadMoreReleases}
+        <div class="load-more-section">
+          <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('live')}>
+            {isLoadingMore ? 'Loading...' : 'Load more live albums'}
+          </button>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -1986,6 +2063,13 @@
           />
         {/each}
       </div>
+      {#if (artist.releaseHasMore?.compilation || artist.releaseHasMore?.other) && onLoadMoreReleases}
+        <div class="load-more-section">
+          <button class="load-more-btn" disabled={isLoadingMore} onclick={() => onLoadMoreReleases('compilation')}>
+            {isLoadingMore ? 'Loading...' : 'Load more'}
+          </button>
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -3448,6 +3532,33 @@
 
   .load-more-link:hover {
     color: var(--text-primary);
+  }
+
+  .load-more-section {
+    display: flex;
+    justify-content: center;
+    padding: 12px 0 4px;
+  }
+
+  .load-more-btn {
+    padding: 8px 24px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .load-more-btn:hover:not(:disabled) {
+    background: var(--bg-tertiary);
+    color: var(--text-primary);
+  }
+
+  .load-more-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .tracks-loading {

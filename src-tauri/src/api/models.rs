@@ -470,3 +470,187 @@ pub struct DiscoverAudioInfo {
     pub maximum_bit_depth: Option<u32>,
     pub maximum_channel_count: Option<u32>,
 }
+
+// ============ Artist Page Types (/artist/page) ============
+
+/// Top-level response from /artist/page
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistResponse {
+    pub id: u64,
+    pub name: PageArtistName,
+    pub artist_category: Option<String>,
+    pub biography: Option<PageArtistBiography>,
+    pub images: Option<PageArtistImages>,
+    pub similar_artists: Option<PageArtistSimilar>,
+    pub top_tracks: Option<Vec<PageArtistTrack>>,
+    pub last_release: Option<serde_json::Value>,
+    pub releases: Option<Vec<PageArtistReleaseGroup>>,
+    pub tracks_appears_on: Option<Vec<PageArtistTrack>>,
+    pub playlists: Option<PageArtistPlaylists>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistName {
+    pub display: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistBiography {
+    pub content: Option<String>,
+    pub source: Option<serde_json::Value>,
+    pub language: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistImages {
+    pub portrait: Option<PageArtistPortrait>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistPortrait {
+    pub hash: String,
+    pub format: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistSimilar {
+    pub has_more: bool,
+    pub items: Vec<PageArtistSimilarItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistSimilarItem {
+    pub id: u64,
+    pub name: PageArtistName,
+    pub images: Option<PageArtistImages>,
+}
+
+/// A group of releases by type (e.g., "album", "ep", "live")
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistReleaseGroup {
+    #[serde(rename = "type")]
+    pub release_type: String,
+    pub has_more: bool,
+    pub items: Vec<PageArtistRelease>,
+}
+
+/// A release item (album/ep/live/etc) from /artist/page or /artist/getReleasesGrid
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistRelease {
+    pub id: String,
+    pub title: String,
+    pub version: Option<String>,
+    pub tracks_count: Option<u32>,
+    pub artist: Option<PageArtistReleaseArtist>,
+    pub artists: Option<Vec<PageArtistReleaseContributor>>,
+    pub image: Option<ImageSet>,
+    pub label: Option<Label>,
+    pub genre: Option<Genre>,
+    pub release_type: Option<String>,
+    pub release_tags: Option<Vec<String>>,
+    pub duration: Option<u32>,
+    pub dates: Option<DiscoverAlbumDates>,
+    pub parental_warning: Option<bool>,
+    pub audio_info: Option<DiscoverAudioInfo>,
+    pub rights: Option<PageArtistRights>,
+    pub awards: Option<Vec<PageArtistAward>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistReleaseArtist {
+    pub id: u64,
+    pub name: PageArtistName,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistReleaseContributor {
+    pub id: u64,
+    pub name: String,
+    pub roles: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistRights {
+    pub streamable: Option<bool>,
+    pub hires_streamable: Option<bool>,
+    pub hires_purchasable: Option<bool>,
+    pub purchasable: Option<bool>,
+    pub downloadable: Option<bool>,
+    pub previewable: Option<bool>,
+    pub sampleable: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistAward {
+    pub id: u64,
+    pub name: String,
+    pub awarded_at: Option<String>,
+}
+
+/// Track from /artist/page (top_tracks or tracks_appears_on)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistTrack {
+    pub id: u64,
+    pub title: String,
+    pub version: Option<String>,
+    pub duration: Option<u32>,
+    pub isrc: Option<String>,
+    pub parental_warning: Option<bool>,
+    pub artist: Option<PageArtistReleaseArtist>,
+    pub composer: Option<serde_json::Value>,
+    pub audio_info: Option<DiscoverAudioInfo>,
+    pub rights: Option<PageArtistRights>,
+    pub physical_support: Option<PageArtistPhysicalSupport>,
+    pub album: Option<PageArtistTrackAlbum>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistPhysicalSupport {
+    pub media_number: Option<u32>,
+    pub track_number: Option<u32>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistTrackAlbum {
+    pub id: String,
+    pub title: String,
+    pub version: Option<String>,
+    pub image: Option<ImageSet>,
+    pub label: Option<Label>,
+    pub genre: Option<Genre>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistPlaylists {
+    pub has_more: bool,
+    pub items: Vec<PageArtistPlaylist>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistPlaylist {
+    pub id: u64,
+    pub title: Option<String>,
+    pub description: Option<String>,
+    pub owner: Option<PageArtistPlaylistOwner>,
+    pub tracks_count: Option<u32>,
+    pub duration: Option<u32>,
+    pub images: Option<PageArtistPlaylistImages>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistPlaylistOwner {
+    pub id: u64,
+    pub name: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageArtistPlaylistImages {
+    pub rectangle: Option<Vec<String>>,
+}
+
+/// Response from /artist/getReleasesGrid
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ReleasesGridResponse {
+    pub has_more: bool,
+    pub items: Vec<PageArtistRelease>,
+}

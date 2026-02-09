@@ -460,6 +460,8 @@ pub fn run() {
             commands::get_artist_tracks,
             commands::get_artist_albums,
             commands::get_similar_artists,
+            commands::get_artist_page,
+            commands::get_releases_grid,
             commands::get_label,
             // Playback commands
             commands::play_track,

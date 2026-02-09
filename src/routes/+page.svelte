@@ -194,7 +194,6 @@
   import type {
     QobuzTrack,
     QobuzAlbum,
-    QobuzArtist,
     Track,
     AlbumDetail,
     ArtistDetail,
@@ -202,15 +201,19 @@
     PlaylistTrack,
     DisplayTrack,
     LocalLibraryTrack,
-    SongLinkResponse
+    SongLinkResponse,
+    PageArtistResponse,
+    PageArtistTrack,
+    PageArtistSimilarItem,
+    ReleasesGridResponse
   } from '$lib/types';
 
   // Adapters
   import {
     convertQobuzAlbum,
-    convertQobuzArtist,
-    formatDuration,
-    appendArtistAlbums
+    convertPageArtist,
+    appendPageReleases,
+    formatDuration
   } from '$lib/adapters/qobuzAdapters';
 
   // Services
@@ -383,6 +386,8 @@
   // Album, Artist and Label data are fetched, so kept local
   let selectedAlbum = $state<AlbumDetail | null>(null);
   let selectedArtist = $state<ArtistDetail | null>(null);
+  let artistTopTracks = $state<PageArtistTrack[]>([]);
+  let artistSimilarArtists = $state<PageArtistSimilarItem[]>([]);
   let selectedLabel = $state<{ id: number; name: string } | null>(null);
   let selectedMusician = $state<ResolvedMusician | null>(null);
   let musicianModalData = $state<ResolvedMusician | null>(null);
@@ -623,8 +628,8 @@
    */
   async function fetchAlbumArtistAlbums(artistId: number) {
     try {
-      const artist = await invoke<QobuzArtist>('get_artist_detail', { artistId });
-      const artistDetail = convertQobuzArtist(artist);
+      const response = await invoke<PageArtistResponse>('get_artist_page', { artistId });
+      const artistDetail = convertPageArtist(response);
 
       // Combine studio albums and live albums, limit to 16
       const combined = [
@@ -676,10 +681,12 @@
   async function handleArtistClick(artistId: number) {
     try {
       showToast($t('toast.loadingArtist'), 'info');
-      const artist = await invoke<QobuzArtist>('get_artist_detail', { artistId });
-      console.log('Artist details:', artist);
+      const response = await invoke<PageArtistResponse>('get_artist_page', { artistId });
+      console.log('Artist page:', response);
 
-      selectedArtist = convertQobuzArtist(artist);
+      selectedArtist = convertPageArtist(response);
+      artistTopTracks = response.top_tracks || [];
+      artistSimilarArtists = response.similar_artists?.items || [];
       navigateTo('artist');
       hideToast();
     } catch (err) {
@@ -841,37 +848,37 @@
     }
   }
 
-  interface ArtistAlbumsResponse {
-    items: QobuzAlbum[];
-    total: number;
-    offset: number;
-    limit: number;
-  }
-
-  async function loadMoreArtistAlbums() {
+  async function loadMoreArtistReleases(releaseType: string) {
     if (!selectedArtist || isArtistAlbumsLoading) return;
 
-    const offset = selectedArtist.albumsFetched || 0;
-    if (offset >= selectedArtist.totalAlbums) return;
+    // Count current items for this release type to use as offset
+    let currentCount = 0;
+    switch (releaseType) {
+      case 'album': currentCount = selectedArtist.albums.length; break;
+      case 'ep': case 'single': currentCount = selectedArtist.epsSingles.length; break;
+      case 'live': currentCount = selectedArtist.liveAlbums.length; break;
+      case 'compilation': case 'other': currentCount = selectedArtist.others.length; break;
+    }
 
     isArtistAlbumsLoading = true;
     try {
-      const result = await invoke<ArtistAlbumsResponse>('get_artist_albums', {
+      const result = await invoke<ReleasesGridResponse>('get_releases_grid', {
         artistId: selectedArtist.id,
-        limit: 200,
-        offset
+        releaseType,
+        limit: 25,
+        offset: currentCount
       });
 
       if (result.items.length === 0) return;
 
-      selectedArtist = appendArtistAlbums(
+      selectedArtist = appendPageReleases(
         selectedArtist,
+        releaseType,
         result.items,
-        result.total,
-        result.offset + result.items.length
+        result.has_more
       );
     } catch (err) {
-      console.error('Failed to load more artist albums:', err);
+      console.error(`Failed to load more ${releaseType} releases:`, err);
       showToast($t('toast.failedLoadMoreAlbums'), 'error');
     } finally {
       isArtistAlbumsLoading = false;
@@ -3187,6 +3194,8 @@
       {:else if activeView === 'artist' && selectedArtist}
         <ArtistDetailView
           artist={selectedArtist}
+          initialTopTracks={artistTopTracks}
+          initialSimilarArtists={artistSimilarArtists}
           onBack={navGoBack}
           onAlbumClick={handleAlbumClick}
           onAlbumPlay={playAlbumById}
@@ -3199,7 +3208,7 @@
           onReDownloadAlbum={reDownloadAlbumById}
           checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
           {downloadStateVersion}
-          onLoadMore={loadMoreArtistAlbums}
+          onLoadMoreReleases={loadMoreArtistReleases}
           isLoadingMore={isArtistAlbumsLoading}
           onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queueQobuzTrackNext}

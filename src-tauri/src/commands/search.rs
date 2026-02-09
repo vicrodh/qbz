@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use crate::api::{endpoints, endpoints::paths, Album, Artist, ArtistAlbums, DiscoverResponse, DiscoverPlaylistsResponse, LabelDetail, Playlist, SearchResultsPage, Track, TracksContainer};
+use crate::api::{endpoints, endpoints::paths, Album, Artist, ArtistAlbums, DiscoverResponse, DiscoverPlaylistsResponse, LabelDetail, PageArtistResponse, Playlist, ReleasesGridResponse, SearchResultsPage, Track, TracksContainer};
 use crate::api_cache::ApiCacheState;
 use crate::artist_blacklist::BlacklistState;
 use crate::AppState;
@@ -689,6 +689,50 @@ pub async fn get_discover_playlists(
     let client = state.client.lock().await;
     client
         .get_discover_playlists(tag, limit, offset)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get artist page (aggregated: bio, top tracks, releases, similar, playlists)
+#[tauri::command]
+pub async fn get_artist_page(
+    artist_id: u64,
+    sort: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<PageArtistResponse, String> {
+    log::debug!("Command: get_artist_page {} sort={:?}", artist_id, sort);
+
+    let client = state.client.lock().await;
+    client
+        .get_artist_page(artist_id, sort.as_deref())
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get artist releases grid (paginated by release_type)
+#[tauri::command]
+pub async fn get_releases_grid(
+    artist_id: u64,
+    release_type: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    sort: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<ReleasesGridResponse, String> {
+    log::debug!(
+        "Command: get_releases_grid {} type={} limit={:?} offset={:?}",
+        artist_id, release_type, limit, offset
+    );
+
+    let client = state.client.lock().await;
+    client
+        .get_releases_grid(
+            artist_id,
+            &release_type,
+            limit.unwrap_or(25),
+            offset.unwrap_or(0),
+            sort.as_deref(),
+        )
         .await
         .map_err(|e| e.to_string())
 }

@@ -1120,6 +1120,70 @@ impl QobuzClient {
             Err(ApiError::ApiResponse(format!("Failed to remove favorite: {}", response.status())))
         }
     }
+
+    // ============ Artist Page Endpoints ============
+
+    /// Get artist page (aggregated: bio, top tracks, releases, similar, playlists)
+    pub async fn get_artist_page(
+        &self,
+        artist_id: u64,
+        sort: Option<&str>,
+    ) -> Result<PageArtistResponse> {
+        let url = endpoints::build_url(paths::ARTIST_PAGE);
+        let mut query = vec![
+            ("artist_id", artist_id.to_string()),
+        ];
+        if let Some(s) = sort {
+            query.push(("sort", s.to_string()));
+        }
+
+        log::debug!("[API] get_artist_page({}) sort={:?}", artist_id, sort);
+        let response: serde_json::Value = self
+            .http
+            .get(&url)
+            .headers(self.api_headers().await?)
+            .query(&query)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get artist releases grid (paginated by release_type)
+    pub async fn get_releases_grid(
+        &self,
+        artist_id: u64,
+        release_type: &str,
+        limit: u32,
+        offset: u32,
+        sort: Option<&str>,
+    ) -> Result<ReleasesGridResponse> {
+        let url = endpoints::build_url(paths::ARTIST_RELEASES_GRID);
+        let mut query = vec![
+            ("artist_id", artist_id.to_string()),
+            ("release_type", release_type.to_string()),
+            ("limit", limit.to_string()),
+            ("offset", offset.to_string()),
+        ];
+        if let Some(s) = sort {
+            query.push(("sort", s.to_string()));
+        }
+
+        log::debug!("[API] get_releases_grid({}) type={} limit={} offset={}", artist_id, release_type, limit, offset);
+        let response: serde_json::Value = self
+            .http
+            .get(&url)
+            .headers(self.api_headers().await?)
+            .query(&query)
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(serde_json::from_value(response)?)
+    }
 }
 
 impl Default for QobuzClient {

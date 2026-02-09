@@ -254,6 +254,8 @@ export interface ArtistDetail {
   }[];
   totalAlbums: number;
   albumsFetched: number;
+  /** Per-category has_more flags from /artist/page release groups */
+  releaseHasMore?: Record<string, boolean>;
 }
 
 export interface LabelDetail {
@@ -485,4 +487,105 @@ export interface DiscoverAudioInfo {
   maximum_sampling_rate?: number;
   maximum_bit_depth?: number;
   maximum_channel_count?: number;
+}
+
+// ============ Artist Page Types (/artist/page) ============
+
+export interface PageArtistResponse {
+  id: number;
+  name: { display: string };
+  artist_category?: string;
+  biography?: PageArtistBiography;
+  images?: { portrait?: { hash: string; format: string } };
+  similar_artists?: { has_more: boolean; items: PageArtistSimilarItem[] };
+  top_tracks?: PageArtistTrack[];
+  last_release?: unknown;
+  releases?: PageArtistReleaseGroup[];
+  tracks_appears_on?: PageArtistTrack[];
+  playlists?: { has_more: boolean; items: PageArtistPlaylist[] };
+}
+
+export interface PageArtistBiography {
+  content?: string;
+  source?: unknown;
+  language?: string;
+}
+
+export interface PageArtistSimilarItem {
+  id: number;
+  name: { display: string };
+  images?: { portrait?: { hash: string; format: string } };
+}
+
+export interface PageArtistReleaseGroup {
+  type: string;
+  has_more: boolean;
+  items: PageArtistRelease[];
+}
+
+export interface PageArtistRelease {
+  id: string;
+  title: string;
+  version?: string;
+  tracks_count?: number;
+  artist?: { id: number; name: { display: string } };
+  artists?: { id: number; name: string; roles?: string[] }[];
+  image?: { small?: string; thumbnail?: string; large?: string };
+  label?: { id: number; name: string };
+  genre?: { id?: number; name: string };
+  release_type?: string;
+  release_tags?: string[];
+  duration?: number;
+  dates?: DiscoverAlbumDates;
+  parental_warning?: boolean;
+  audio_info?: DiscoverAudioInfo;
+  rights?: PageArtistRights;
+  awards?: { id: number; name: string; awarded_at?: string }[];
+}
+
+export interface PageArtistRights {
+  streamable?: boolean;
+  hires_streamable?: boolean;
+  hires_purchasable?: boolean;
+  purchasable?: boolean;
+  downloadable?: boolean;
+  previewable?: boolean;
+  sampleable?: boolean;
+}
+
+export interface PageArtistTrack {
+  id: number;
+  title: string;
+  version?: string;
+  duration?: number;
+  isrc?: string;
+  parental_warning?: boolean;
+  artist?: { id: number; name: { display: string } };
+  composer?: unknown;
+  audio_info?: DiscoverAudioInfo;
+  rights?: PageArtistRights;
+  physical_support?: { media_number?: number; track_number?: number };
+  album?: {
+    id: string;
+    title: string;
+    version?: string;
+    image?: { small?: string; thumbnail?: string; large?: string };
+    label?: { id: number; name: string };
+    genre?: { id?: number; name: string };
+  };
+}
+
+export interface PageArtistPlaylist {
+  id: number;
+  title?: string;
+  description?: string;
+  owner?: { id: number; name?: string };
+  tracks_count?: number;
+  duration?: number;
+  images?: { rectangle?: string[] };
+}
+
+export interface ReleasesGridResponse {
+  has_more: boolean;
+  items: PageArtistRelease[];
 }
