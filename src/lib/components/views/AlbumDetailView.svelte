@@ -444,7 +444,6 @@
           duration={track.duration}
           quality={track.quality}
           isPlaying={activeTrackId === track.id}
-          isBlacklisted={trackBlacklisted}
           downloadStatus={downloadInfo.status}
           downloadProgress={downloadInfo.progress}
           hideFavorite={trackBlacklisted}
