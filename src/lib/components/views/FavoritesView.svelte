@@ -9,6 +9,7 @@
   import QualityBadge from '../QualityBadge.svelte';
   import VirtualizedTrackList from '../VirtualizedTrackList.svelte';
   import VirtualizedFavoritesArtistGrid from '../VirtualizedFavoritesArtistGrid.svelte';
+  import VirtualizedFavoritesArtistList from '../VirtualizedFavoritesArtistList.svelte';
   import FavoritePlaylistCard from '../FavoritePlaylistCard.svelte';
   import FavoritesEditModal from '../FavoritesEditModal.svelte';
   import ViewTransition from '../ViewTransition.svelte';
@@ -355,31 +356,6 @@
       case 'title-asc': return translate('sort.titleAsc');
       case 'title-desc': return translate('sort.titleDesc');
     }
-  }
-
-  // Ticker animation for long artist names in sidepanel
-  let hoveredArtistId = $state<number | null>(null);
-  let artistNameOverflows = $state<Map<number, number>>(new Map());
-  const tickerSpeed = 40; // px per second
-
-  function measureArtistNameOverflow(artistId: number, element: HTMLElement | null) {
-    if (!element) return;
-    const textSpan = element.querySelector('.artist-name-text') as HTMLElement | null;
-    if (!textSpan) return;
-    const overflow = textSpan.scrollWidth - element.clientWidth;
-    if (overflow > 0) {
-      artistNameOverflows.set(artistId, overflow);
-    } else {
-      artistNameOverflows.delete(artistId);
-    }
-  }
-
-  function getArtistNameTickerStyle(artistId: number): string {
-    if (hoveredArtistId !== artistId) return '';
-    const overflow = artistNameOverflows.get(artistId);
-    if (!overflow || overflow <= 0) return '';
-    const duration = (overflow + 16) / tickerSpeed;
-    return `--ticker-offset: -${overflow + 16}px; --ticker-duration: ${duration}s;`;
   }
 
   let showTracksContextMenu = $state(false);
@@ -1760,50 +1736,14 @@
         <!-- Two-column sidepanel view -->
         {@const groupedArtistsSidepanel = groupArtists(filteredArtists)}
         <div class="artist-two-column-layout">
-          <!-- Left column: Artists list grouped A-Z -->
+          <!-- Left column: Artists list grouped A-Z (virtualized) -->
           <div class="artist-column">
-            <div class="artist-list-scroll">
-              {#each groupedArtistsSidepanel as group (group.id)}
-                <div class="artist-list-group-header" id={group.id}>{group.key}</div>
-                {#each group.artists as artist (artist.id)}
-                  {@const hasOverflow = artistNameOverflows.has(artist.id)}
-                  {@const isHovered = hoveredArtistId === artist.id}
-                  <button
-                    class="artist-list-item"
-                    class:selected={selectedFavoriteArtist?.id === artist.id}
-                    onclick={() => handleArtistSelect(artist)}
-                    onmouseenter={(e) => {
-                      hoveredArtistId = artist.id;
-                      const info = (e.currentTarget as HTMLElement).querySelector('.artist-list-name');
-                      measureArtistNameOverflow(artist.id, info as HTMLElement);
-                    }}
-                    onmouseleave={() => { hoveredArtistId = null; }}
-                  >
-                    <div class="artist-list-image">
-                      {#if artist.image?.thumbnail || artist.image?.small}
-                        <img src={artist.image?.thumbnail || artist.image?.small} alt={artist.name} />
-                      {:else}
-                        <div class="artist-list-placeholder">
-                          <Mic2 size={20} />
-                        </div>
-                      {/if}
-                    </div>
-                    <div class="artist-list-info">
-                      <div
-                        class="artist-list-name"
-                        class:scrollable={hasOverflow}
-                        style={getArtistNameTickerStyle(artist.id)}
-                      >
-                        <span class="artist-name-text" class:animating={isHovered && hasOverflow}>{artist.name}</span>
-                      </div>
-                      {#if artist.albums_count}
-                        <div class="artist-list-meta">{$t('library.albumCount', { values: { count: artist.albums_count } })}</div>
-                      {/if}
-                    </div>
-                  </button>
-                {/each}
-              {/each}
-            </div>
+            <VirtualizedFavoritesArtistList
+              groups={groupedArtistsSidepanel}
+              showGroupHeaders={true}
+              selectedArtistId={selectedFavoriteArtist?.id ?? null}
+              onArtistSelect={handleArtistSelect}
+            />
           </div>
 
           <!-- Right column: Selected artist's albums from Qobuz -->
@@ -2851,111 +2791,6 @@
     border-right: 1px solid var(--bg-tertiary);
     overflow: hidden;
     padding-left: 18px;
-  }
-
-  .artist-list-scroll {
-    flex: 1;
-    overflow-y: auto;
-    padding: 4px 12px 4px 0;
-    /* Smooth scrolling optimizations */
-    -webkit-overflow-scrolling: touch;
-    scroll-behavior: smooth;
-    overscroll-behavior: contain;
-    will-change: scroll-position;
-    contain: strict;
-  }
-
-  .artist-list-group-header {
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    padding: 12px 8px 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .artist-list-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    padding: 8px;
-    border: none;
-    background: transparent;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: background-color 150ms ease;
-    text-align: left;
-  }
-
-  .artist-list-item:hover {
-    background: var(--bg-hover);
-  }
-
-  .artist-list-item.selected {
-    background: var(--bg-tertiary);
-  }
-
-  .artist-list-image {
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    overflow: hidden;
-    flex-shrink: 0;
-    background: var(--bg-tertiary);
-  }
-
-  .artist-list-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .artist-list-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-  }
-
-  .artist-list-info {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .artist-list-name {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .artist-list-name.scrollable {
-    text-overflow: clip;
-  }
-
-  .artist-list-name .artist-name-text {
-    display: inline-block;
-  }
-
-  .artist-list-name .artist-name-text.animating {
-    animation: artist-name-ticker var(--ticker-duration, 0s) linear infinite;
-  }
-
-  @keyframes artist-name-ticker {
-    0%, 20% { transform: translateX(0); }
-    70%, 80% { transform: translateX(var(--ticker-offset, 0)); }
-    90%, 100% { transform: translateX(0); }
-  }
-
-  .artist-list-meta {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 2px;
   }
 
   .artist-albums-column {
