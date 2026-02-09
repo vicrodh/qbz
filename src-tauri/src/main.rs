@@ -55,65 +55,47 @@ fn main() {
     // Wayland and WebKit compatibility fixes for Linux
     // Addresses: https://github.com/vicrodh/qbz/issues/6
     //
-    // NVIDIA GPUs have known issues with WebKit's DMA-BUF renderer on Wayland,
-    // causing fatal protocol errors (Error 71) that cannot be recovered from.
-    // This must be mitigated BEFORE the WebView is initialized.
+    // WebKit's EGL/DMA-BUF renderer crashes on many GPU/driver/compositor
+    // combinations with "Could not create default EGL display" or fatal
+    // protocol errors (Error 71). Hardware acceleration is disabled by
+    // default and can be opted into with QBZ_HARDWARE_ACCEL=1.
     #[cfg(target_os = "linux")]
     {
         let is_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
             || std::env::var("XDG_SESSION_TYPE").as_deref() == Ok("wayland");
         let has_nvidia = is_nvidia_gpu();
 
-        // User overrides - these ALWAYS take precedence
-        let force_dmabuf = std::env::var("QBZ_FORCE_DMABUF").as_deref() == Ok("1");
-        let disable_dmabuf = std::env::var("QBZ_DISABLE_DMABUF").as_deref() == Ok("1");
+        // User overrides
+        let hardware_accel = std::env::var("QBZ_HARDWARE_ACCEL").as_deref() == Ok("1");
         let force_x11 = std::env::var("QBZ_FORCE_X11").as_deref() == Ok("1");
 
-        // Diagnostic logging for transparency and support
+        // Diagnostic logging
         eprintln!("[QBZ] Display server: {}", if is_wayland { "Wayland" } else { "X11" });
         if has_nvidia {
             eprintln!("[QBZ] NVIDIA GPU detected");
         }
 
-        // Handle user overrides first
+        // GDK backend selection
         if force_x11 && is_wayland {
             eprintln!("[QBZ] User override: Forcing X11 backend (QBZ_FORCE_X11=1)");
             std::env::set_var("GDK_BACKEND", "x11");
         } else if is_wayland && std::env::var_os("GDK_BACKEND").is_none() {
-            // Force Wayland backend to avoid fallback issues
             std::env::set_var("GDK_BACKEND", "wayland");
-
-            // Disable WebKit's compositing mode which can cause protocol errors
-            // with transparent windows on Wayland
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-
-            // Prefer client-side decorations (we use custom titlebar anyway)
             std::env::set_var("GTK_CSD", "1");
         }
 
-        // DMA-BUF renderer control (the critical NVIDIA fix)
-        if force_dmabuf {
-            eprintln!("[QBZ] User override: Forcing DMA-BUF renderer enabled (QBZ_FORCE_DMABUF=1)");
-            eprintln!("[QBZ] Warning: This may cause crashes on NVIDIA + Wayland");
-            // Do NOT set WEBKIT_DISABLE_DMABUF_RENDERER
-        } else if disable_dmabuf {
-            eprintln!("[QBZ] User override: Forcing DMA-BUF renderer disabled (QBZ_DISABLE_DMABUF=1)");
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        } else if is_wayland && has_nvidia {
-            // Automatic mitigation: NVIDIA + Wayland = known issue
-            eprintln!("[QBZ] Applying NVIDIA + Wayland workaround: disabling WebKit DMA-BUF renderer");
-            eprintln!("[QBZ] This prevents fatal protocol errors on NVIDIA GPUs");
-            eprintln!("[QBZ] To override: set QBZ_FORCE_DMABUF=1 (not recommended)");
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        } else if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
-            // Non-NVIDIA systems: keep default behavior unless already set
-            // This ensures Intel/AMD systems maintain full hardware acceleration
-            if has_nvidia {
-                eprintln!("[QBZ] NVIDIA GPU on X11: applying DMA-BUF workaround for compatibility");
-                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-            } else {
-                eprintln!("[QBZ] Non-NVIDIA GPU: using default WebKit renderer (hardware accelerated)");
+        // Hardware acceleration control
+        // Default: OFF for all GPUs (EGL crashes on too many configurations)
+        // Opt-in: QBZ_HARDWARE_ACCEL=1
+        if hardware_accel {
+            eprintln!("[QBZ] Hardware acceleration enabled (QBZ_HARDWARE_ACCEL=1)");
+            if has_nvidia && is_wayland {
+                eprintln!("[QBZ] Warning: NVIDIA + Wayland may cause crashes with hardware acceleration");
             }
+        } else if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+            eprintln!("[QBZ] Hardware acceleration disabled (default). Set QBZ_HARDWARE_ACCEL=1 to enable");
+            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
     }
 
