@@ -322,6 +322,7 @@ export interface LocalLibraryTrack {
   bit_depth?: number;
   sample_rate: number;
   artwork_path?: string;
+  source?: string;
 }
 
 // ============ External API Types ============

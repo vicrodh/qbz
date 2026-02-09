@@ -594,26 +594,26 @@
   }
 
   function buildContinueQueueTracks(tracks: DisplayTrack[]) {
-    return tracks.map(t => ({
-      id: t.id,
-      title: t.title,
-      artist: t.artist || 'Unknown Artist',
-      album: t.album || '',
-      duration_secs: t.durationSeconds,
-      artwork_url: t.albumArt || '',
-      hires: t.hires ?? false,
-      bit_depth: t.bitDepth ?? null,
-      sample_rate: t.samplingRate ?? null,
-      is_local: t.isLocal ?? false,
-      album_id: t.albumId || null,
-      artist_id: t.artistId ?? null,
+    return tracks.map(track => ({
+      id: track.id,
+      title: track.title,
+      artist: track.artist || 'Unknown Artist',
+      album: track.album || '',
+      duration_secs: track.durationSeconds,
+      artwork_url: track.albumArt || '',
+      hires: track.hires ?? false,
+      bit_depth: track.bitDepth ?? null,
+      sample_rate: track.samplingRate ?? null,
+      is_local: track.isLocal ?? false,
+      album_id: track.albumId || null,
+      artist_id: track.artistId ?? null,
     }));
   }
 
   async function handleContinueTrackPlay(track: DisplayTrack, trackIndex: number) {
     // Create continue listening context
     if (continueTracks.length > 0) {
-      const trackIds = continueTracks.map(t => t.id);
+      const trackIds = continueTracks.map(track => track.id);
 
       await setPlaybackContext(
         'home_list',
@@ -921,7 +921,14 @@
     <div class="header-actions">
       <GenreFilterButton onFilterChange={handleGenreFilterChange} />
       <button class="settings-btn" onclick={() => isSettingsModalOpen = true} title={$t('home.customizeHome')}>
-        <img src="/home-gear.svg" alt="Settings" class="settings-icon" />
+        <img
+          src="/home-gear.svg"
+          alt="Settings"
+          class="settings-icon"
+          width="22"
+          height="22"
+          style="width:22px;height:22px;filter:invert(1) opacity(0.8);"
+        />
       </button>
     </div>
   </div>

@@ -134,6 +134,42 @@
     url: string;
   }
 
+  interface PlexServerInfo {
+    friendlyName?: string | null;
+    version?: string | null;
+    machineIdentifier?: string | null;
+  }
+
+  interface PlexMusicSection {
+    key: string;
+    title: string;
+  }
+
+  interface PlexPinStartResult {
+    pinId: number;
+    code: string;
+    authUrl: string;
+    expiresIn?: number | null;
+  }
+
+  interface PlexPinCheckResult {
+    authorized: boolean;
+    expired: boolean;
+    authToken?: string | null;
+    expiresIn?: number | null;
+  }
+
+  interface PlexTrack {
+    ratingKey: string;
+    title: string;
+    artist?: string | null;
+    album?: string | null;
+    durationMs?: number | null;
+    artworkPath?: string | null;
+    bitDepth?: number | null;
+    samplingRateHz?: number | null;
+  }
+
   let {
     onBack,
     onLogout,
@@ -704,6 +740,37 @@
   let showRemoteControlGuide = $state(false);
   let remoteControlCollapsed = $state(true);
 
+  // Plex LAN POC state
+  let plexEnabled = $state(getUserItem('qbz-plex-enabled') === 'true');
+  let plexUiCollapsed = $state(getUserItem('qbz-plex-ui-collapsed') === 'true');
+  let plexManualTokenMode = $state(false);
+  let plexServerUrl = $state('http://127.0.0.1');
+  let plexBaseUrl = $state(getUserItem('qbz-plex-poc-base-url') || 'http://127.0.0.1:32400');
+  let plexToken = $state(getUserItem('qbz-plex-poc-token') || '');
+  let plexMetadataWriteEnabled = $state(getUserItem('qbz-plex-poc-metadata-write-enabled') === 'true');
+  let plexSections = $state<PlexMusicSection[]>([]);
+  let plexTracks = $state<PlexTrack[]>([]);
+  let plexSectionTrackCounts = $state<Record<string, number>>({});
+  let plexSelectedSectionKeys = $state<string[]>([]);
+  let plexStatusKey = $state('settings.integrations.plexStatusIdle');
+  let plexStatusValues = $state<Record<string, string | number>>({});
+  let plexBusy = $state(false);
+  let plexLastError = $state('');
+  let plexAuthBusy = $state(false);
+  let plexAuthPinId = $state<number | null>(null);
+  let plexAuthCode = $state('');
+  let plexAuthUrl = $state('');
+  let plexAuthClientId = $state(getUserItem('qbz-plex-poc-client-id') || '');
+  let plexAuthPollTimer: ReturnType<typeof setInterval> | null = null;
+
+  const PLEX_ENABLED_KEY = 'qbz-plex-enabled';
+  const PLEX_UI_COLLAPSED_KEY = 'qbz-plex-ui-collapsed';
+  const PLEX_CACHE_SELECTED_SECTIONS_KEY = 'qbz-plex-poc-selected-sections';
+  const PLEX_CACHE_SELECTED_SECTION_KEY = 'qbz-plex-poc-selected-section';
+  const PLEX_CACHE_SERVER_ID_KEY = 'qbz-plex-poc-machine-id';
+  const PLEX_CLIENT_ID_KEY = 'qbz-plex-poc-client-id';
+  const PLEX_METADATA_WRITE_KEY = 'qbz-plex-poc-metadata-write-enabled';
+
   // Load saved settings on mount
   onMount(() => {
     // Load theme
@@ -782,6 +849,13 @@
     // Load remote control status
     loadRemoteControlStatus();
 
+    // Warm-start Plex panel from local cache and refresh in background
+    hydratePlexAddressFieldsFromBaseUrl();
+    if (plexEnabled) {
+      void loadPlexCachedState();
+      void refreshPlexInBackground();
+    }
+
     // Load notification preferences
     loadToastsPreference();
     toastsEnabled = getToastsEnabled();
@@ -859,6 +933,9 @@
     settingsViewEl?.addEventListener('scroll', handleScroll);
 
     return () => {
+      if (plexAuthPollTimer) {
+        clearInterval(plexAuthPollTimer);
+      }
       unsubscribeOffline();
       unsubscribeZoom();
       unsubscribeTitleBar();
@@ -1068,6 +1145,454 @@
     } catch (err) {
       console.error('Failed to update ListenBrainz setting:', err);
     }
+  }
+
+  function normalizePlexServerUrl(value: string): string {
+    const trimmed = value.trim();
+    if (!trimmed) return '';
+    return /^https?:\/\//i.test(trimmed) ? trimmed : `http://${trimmed}`;
+  }
+
+  function isPrivateIpv4(hostname: string): boolean {
+    if (!/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return false;
+    const octets = hostname.split('.').map(Number);
+    if (octets.some((octet) => Number.isNaN(octet) || octet < 0 || octet > 255)) return false;
+    if (octets[0] === 10) return true;
+    if (octets[0] === 127) return true;
+    if (octets[0] === 192 && octets[1] === 168) return true;
+    if (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31) return true;
+    return false;
+  }
+
+  function isLocalPlexAddress(urlInput: string): boolean {
+    const normalized = normalizePlexServerUrl(urlInput);
+    if (!normalized) return false;
+    try {
+      const parsed = new URL(normalized);
+      const host = parsed.hostname.toLowerCase();
+      if (host === 'localhost' || host === '::1') return true;
+      if (host.endsWith('.local') || host.endsWith('.lan')) return true;
+      if (!host.includes('.')) return true;
+      return isPrivateIpv4(host);
+    } catch {
+      return false;
+    }
+  }
+
+  function resolvePlexBaseUrl(): string {
+    const normalizedUrl = normalizePlexServerUrl(plexServerUrl);
+    if (!normalizedUrl) return '';
+    try {
+      const parsed = new URL(normalizedUrl);
+      if (!['http:', 'https:'].includes(parsed.protocol)) return '';
+      if (!parsed.port) {
+        parsed.port = '32400';
+      }
+      return `${parsed.protocol}//${parsed.host}`;
+    } catch {
+      return '';
+    }
+  }
+
+  function hydratePlexAddressFieldsFromBaseUrl() {
+    try {
+      const parsed = new URL(plexBaseUrl || 'http://127.0.0.1:32400');
+      plexServerUrl = `${parsed.protocol}//${parsed.host}`;
+    } catch {
+      plexServerUrl = 'http://127.0.0.1';
+    }
+  }
+
+  function canUsePlexRequests(): boolean {
+    return plexEnabled && isLocalPlexAddress(plexServerUrl) && !!resolvePlexBaseUrl() && !!plexToken.trim();
+  }
+
+  function persistPlexConfig() {
+    plexBaseUrl = resolvePlexBaseUrl();
+    setUserItem('qbz-plex-poc-base-url', plexBaseUrl);
+    setUserItem('qbz-plex-poc-token', plexToken.trim());
+  }
+
+  function persistPlexSelectedSections() {
+    setUserItem(PLEX_CACHE_SELECTED_SECTIONS_KEY, JSON.stringify(plexSelectedSectionKeys));
+    if (plexSelectedSectionKeys.length === 1) {
+      setUserItem(PLEX_CACHE_SELECTED_SECTION_KEY, plexSelectedSectionKeys[0]);
+    } else {
+      removeUserItem(PLEX_CACHE_SELECTED_SECTION_KEY);
+    }
+  }
+
+  function readPersistedPlexSelectedSections(): string[] {
+    const raw = getUserItem(PLEX_CACHE_SELECTED_SECTIONS_KEY);
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.filter((item): item is string => typeof item === 'string' && item.trim().length > 0);
+        }
+      } catch (error) {
+        console.warn('Failed parsing persisted Plex section keys:', error);
+      }
+    }
+    const legacySingle = getUserItem(PLEX_CACHE_SELECTED_SECTION_KEY);
+    return legacySingle ? [legacySingle] : [];
+  }
+
+  function handlePlexEnabledToggle(enabled: boolean) {
+    plexEnabled = enabled;
+    setUserItem(PLEX_ENABLED_KEY, enabled ? 'true' : 'false');
+    if (!enabled) {
+      plexStatusKey = 'settings.integrations.plexStatusDisabled';
+      plexStatusValues = {};
+      return;
+    }
+    plexStatusKey = 'settings.integrations.plexStatusIdle';
+    plexStatusValues = {};
+    void loadPlexCachedState();
+    void refreshPlexInBackground();
+  }
+
+  function togglePlexUiCollapsed() {
+    plexUiCollapsed = !plexUiCollapsed;
+    setUserItem(PLEX_UI_COLLAPSED_KEY, plexUiCollapsed ? 'true' : 'false');
+  }
+
+  function handlePlexMetadataWriteToggle(enabled: boolean) {
+    plexMetadataWriteEnabled = enabled;
+    setUserItem(PLEX_METADATA_WRITE_KEY, enabled ? 'true' : 'false');
+  }
+
+  function ensurePlexClientId(): string {
+    if (plexAuthClientId) return plexAuthClientId;
+    const generated = (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
+      ? `qbz-${crypto.randomUUID()}`
+      : `qbz-${Date.now()}-${Math.floor(Math.random() * 1_000_000)}`;
+    plexAuthClientId = generated;
+    setUserItem(PLEX_CLIENT_ID_KEY, generated);
+    return generated;
+  }
+
+  async function handlePlexConnectEasy() {
+    if (!plexEnabled || plexAuthBusy || !isLocalPlexAddress(plexServerUrl) || !resolvePlexBaseUrl()) return;
+    plexAuthBusy = true;
+    plexLastError = '';
+    persistPlexConfig();
+    try {
+      const clientIdentifier = ensurePlexClientId();
+      const pin = await invoke<PlexPinStartResult>('plex_auth_pin_start', { clientIdentifier });
+      plexAuthPinId = pin.pinId;
+      plexAuthCode = pin.code;
+      plexAuthUrl = pin.authUrl;
+      plexStatusKey = 'settings.integrations.plexStatusAuthPending';
+      plexStatusValues = { code: pin.code };
+
+      if (plexAuthPollTimer) {
+        clearInterval(plexAuthPollTimer);
+      }
+
+      plexAuthPollTimer = setInterval(async () => {
+        if (!plexAuthPinId) return;
+        try {
+          const check = await invoke<PlexPinCheckResult>('plex_auth_pin_check', {
+            clientIdentifier,
+            pinId: plexAuthPinId,
+            code: plexAuthCode || null
+          });
+
+          if (check.authorized && check.authToken) {
+            plexToken = check.authToken;
+            persistPlexConfig();
+            plexStatusKey = 'settings.integrations.plexStatusAuthConnected';
+            plexStatusValues = {};
+            if (plexAuthPollTimer) {
+              clearInterval(plexAuthPollTimer);
+              plexAuthPollTimer = null;
+            }
+            plexAuthPinId = null;
+            plexAuthCode = '';
+            void runPlexAutoSetup();
+          } else if (check.expired) {
+            plexStatusKey = 'settings.integrations.plexStatusAuthExpired';
+            plexStatusValues = {};
+            if (plexAuthPollTimer) {
+              clearInterval(plexAuthPollTimer);
+              plexAuthPollTimer = null;
+            }
+            plexAuthPinId = null;
+            plexAuthCode = '';
+          }
+        } catch (error) {
+          console.warn('Plex auth polling failed:', error);
+        }
+      }, 2500);
+    } catch (error) {
+      console.error('Failed starting Plex easy connect:', error);
+      setPlexError(error);
+    } finally {
+      plexAuthBusy = false;
+    }
+  }
+
+  function handleOpenPlexAuthUrl() {
+    if (!plexAuthUrl) return;
+    invoke('plex_open_auth_url', { url: plexAuthUrl }).catch((error) => {
+      console.error('Failed opening Plex auth URL:', error);
+      setPlexError(error);
+    });
+  }
+
+  async function handleCopyPlexCode() {
+    if (!plexAuthCode) return;
+    try {
+      await copyToClipboard(plexAuthCode);
+      showToast(get(t)('settings.integrations.plexCodeCopied'), 'success');
+    } catch (error) {
+      console.error('Failed copying Plex code:', error);
+      showToast(get(t)('settings.integrations.plexCodeCopyFailed'), 'error');
+    }
+  }
+
+  async function handlePlexTokenBlur() {
+    persistPlexConfig();
+    if (canUsePlexRequests()) {
+      await runPlexAutoSetup();
+    }
+  }
+
+  function setPlexError(error: unknown) {
+    const message = String(error);
+    plexLastError = message;
+    plexStatusKey = 'settings.integrations.plexStatusError';
+    plexStatusValues = { error: message };
+  }
+
+  async function handlePlexDisconnect() {
+    const confirmed = await ask(get(t)('settings.integrations.plexDisconnectConfirmDesc'), {
+      title: get(t)('settings.integrations.plexDisconnectConfirmTitle'),
+      kind: 'warning',
+      okLabel: get(t)('settings.integrations.plexDisconnectConfirmOk'),
+      cancelLabel: get(t)('actions.cancel')
+    });
+    if (!confirmed) return;
+
+    if (plexAuthPollTimer) {
+      clearInterval(plexAuthPollTimer);
+      plexAuthPollTimer = null;
+    }
+
+    plexAuthPinId = null;
+    plexAuthCode = '';
+    plexAuthUrl = '';
+    plexAuthBusy = false;
+    plexToken = '';
+    plexSections = [];
+    plexTracks = [];
+    plexSelectedSectionKeys = [];
+    plexStatusKey = 'settings.integrations.plexStatusDisconnected';
+    plexStatusValues = {};
+    plexLastError = '';
+
+    removeUserItem('qbz-plex-poc-token');
+    removeUserItem(PLEX_CACHE_SELECTED_SECTIONS_KEY);
+    removeUserItem(PLEX_CACHE_SELECTED_SECTION_KEY);
+    removeUserItem(PLEX_CACHE_SERVER_ID_KEY);
+
+    try {
+      await invoke('plex_cache_clear');
+    } catch (error) {
+      console.warn('Failed clearing Plex cache:', error);
+    }
+  }
+
+  async function handlePlexClearCache() {
+    const confirmed = await ask(get(t)('settings.integrations.plexClearCacheConfirmDesc'), {
+      title: get(t)('settings.integrations.plexClearCacheConfirmTitle'),
+      kind: 'warning',
+      okLabel: get(t)('settings.integrations.plexClearCacheConfirmOk'),
+      cancelLabel: get(t)('actions.cancel')
+    });
+    if (!confirmed) return;
+
+    try {
+      await invoke('plex_cache_clear');
+      plexTracks = [];
+      plexStatusKey = 'settings.integrations.plexStatusCacheCleared';
+      plexStatusValues = {};
+      plexLastError = '';
+      removeUserItem(PLEX_CACHE_SERVER_ID_KEY);
+    } catch (error) {
+      console.error('Failed clearing Plex cache:', error);
+      setPlexError(error);
+    }
+  }
+
+  async function loadPlexCachedState() {
+    if (!plexEnabled) return;
+    try {
+      const cachedSections = await invoke<PlexMusicSection[]>('plex_cache_get_sections');
+      if (Array.isArray(cachedSections) && cachedSections.length > 0) {
+        plexSections = cachedSections;
+      }
+
+      const persistedSections = readPersistedPlexSelectedSections();
+      if (persistedSections.length > 0) {
+        plexSelectedSectionKeys = persistedSections;
+      }
+
+      const cachedTracks = await invoke<PlexTrack[]>('plex_cache_get_tracks', {
+        sectionKey: null
+      });
+      if (Array.isArray(cachedTracks) && cachedTracks.length > 0) {
+        plexTracks = cachedTracks;
+        plexStatusKey = 'settings.integrations.plexStatusCacheLoaded';
+        plexStatusValues = { count: cachedTracks.length };
+      }
+    } catch (error) {
+      console.warn('Failed to load Plex cached state:', error);
+    }
+  }
+
+  async function refreshPlexInBackground() {
+    if (!canUsePlexRequests()) return;
+    await runPlexAutoSetup();
+  }
+
+  async function handlePlexPing(): Promise<boolean> {
+    if (!canUsePlexRequests()) return false;
+    plexBusy = true;
+    plexLastError = '';
+    persistPlexConfig();
+    try {
+      const info = await invoke<PlexServerInfo>('plex_ping', {
+        baseUrl: plexBaseUrl.trim(),
+        token: plexToken.trim()
+      });
+      if (info.machineIdentifier) {
+        setUserItem(PLEX_CACHE_SERVER_ID_KEY, info.machineIdentifier);
+      }
+      plexStatusKey = 'settings.integrations.plexStatusConnected';
+      plexStatusValues = {
+        server: info.friendlyName || info.machineIdentifier || 'Plex',
+        version: info.version || '?'
+      };
+      return true;
+    } catch (error) {
+      console.error('Failed Plex ping:', error);
+      setPlexError(error);
+      return false;
+    } finally {
+      plexBusy = false;
+    }
+  }
+
+  async function syncSelectedPlexLibraries() {
+    if (!canUsePlexRequests()) return;
+    plexBusy = true;
+    plexLastError = '';
+    try {
+      const serverId = getUserItem(PLEX_CACHE_SERVER_ID_KEY) || null;
+      await invoke('plex_cache_clear');
+
+      if (plexSections.length > 0) {
+        await invoke<number>('plex_cache_save_sections', {
+          serverId,
+          sections: plexSections
+        });
+      }
+
+      if (plexSelectedSectionKeys.length === 0) {
+        plexTracks = [];
+        plexStatusKey = 'settings.integrations.plexStatusTracksLoaded';
+        plexStatusValues = { count: 0 };
+        return;
+      }
+
+      let totalCount = 0;
+      const sectionCounts: Record<string, number> = {};
+      for (const sectionKey of plexSelectedSectionKeys) {
+        const sectionTracks = await invoke<PlexTrack[]>('plex_get_section_tracks', {
+          baseUrl: plexBaseUrl.trim(),
+          token: plexToken.trim(),
+          sectionKey
+        });
+        const count = sectionTracks.length;
+        sectionCounts[sectionKey] = count;
+        totalCount += count;
+        await invoke<number>('plex_cache_save_tracks', {
+          serverId,
+          sectionKey,
+          tracks: sectionTracks
+        });
+      }
+
+      plexSectionTrackCounts = { ...plexSectionTrackCounts, ...sectionCounts };
+      plexTracks = await invoke<PlexTrack[]>('plex_cache_get_tracks', { sectionKey: null });
+      plexStatusKey = 'settings.integrations.plexStatusTracksLoaded';
+      plexStatusValues = { count: totalCount };
+    } catch (error) {
+      console.error('Failed syncing selected Plex libraries:', error);
+      setPlexError(error);
+    } finally {
+      plexBusy = false;
+    }
+  }
+
+  async function handlePlexLoadSections(options: { autoSyncSelected?: boolean } = {}) {
+    if (!canUsePlexRequests()) return;
+    plexBusy = true;
+    plexLastError = '';
+    persistPlexConfig();
+    try {
+      const sections = await invoke<PlexMusicSection[]>('plex_get_music_sections', {
+        baseUrl: plexBaseUrl.trim(),
+        token: plexToken.trim()
+      });
+      plexSections = sections;
+      await invoke<number>('plex_cache_save_sections', {
+        serverId: getUserItem(PLEX_CACHE_SERVER_ID_KEY) || null,
+        sections
+      });
+
+      const available = new Set(sections.map((section) => section.key));
+      const persisted = readPersistedPlexSelectedSections().filter((key) => available.has(key));
+      plexSelectedSectionKeys = persisted.length > 0 ? persisted : sections.map((section) => section.key);
+      persistPlexSelectedSections();
+
+      plexStatusKey = 'settings.integrations.plexStatusSectionsLoaded';
+      plexStatusValues = { count: sections.length };
+
+      if (options.autoSyncSelected !== false) {
+        await syncSelectedPlexLibraries();
+      }
+    } catch (error) {
+      console.error('Failed loading Plex sections:', error);
+      setPlexError(error);
+    } finally {
+      plexBusy = false;
+    }
+  }
+
+  async function runPlexAutoSetup() {
+    const connected = await handlePlexPing();
+    if (!connected) return;
+    await handlePlexLoadSections({ autoSyncSelected: true });
+  }
+
+  async function handlePlexLibraryToggle(sectionKey: string, checked: boolean) {
+    const current = new Set(plexSelectedSectionKeys);
+    if (checked) {
+      current.add(sectionKey);
+    } else {
+      current.delete(sectionKey);
+      const nextCounts = { ...plexSectionTrackCounts };
+      delete nextCounts[sectionKey];
+      plexSectionTrackCounts = nextCounts;
+    }
+    plexSelectedSectionKeys = plexSections
+      .map((section) => section.key)
+      .filter((key) => current.has(key));
+    persistPlexSelectedSections();
+    await syncSelectedPlexLibraries();
   }
 
   async function loadRemoteControlStatus() {
@@ -2968,7 +3493,7 @@
     {/if}
 
     <!-- MusicBrainz Integration -->
-    <div class="setting-row last">
+    <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.integrations.musicbrainz')}</span>
         <small class="setting-note">
@@ -2977,6 +3502,200 @@
       </div>
       <Toggle enabled={musicbrainzEnabled} onchange={handleMusicBrainzChange} />
     </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.plexConnection')}</span>
+        <small class="setting-note">{$t('settings.integrations.plexConnectionLore')}</small>
+      </div>
+      <div class="setting-row-controls">
+        <Toggle enabled={plexEnabled} onchange={handlePlexEnabledToggle} />
+        <button
+          class="setting-link-button section-collapse-btn"
+          onclick={togglePlexUiCollapsed}
+          title={$t('settings.integrations.plexCollapseHint')}
+        >
+          {#if plexUiCollapsed}
+            <ChevronDown size={16} />
+          {:else}
+            <ChevronUp size={16} />
+          {/if}
+        </button>
+      </div>
+    </div>
+
+    {#if plexEnabled && !plexUiCollapsed}
+      <div class="setting-row plex-two-column-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.integrations.plexServerUrl')}:</span>
+          <small class="setting-note">{$t('settings.integrations.plexServerUrlHelp')}</small>
+        </div>
+        <input
+          id="plex-server-url"
+          class="remote-control-input plex-server-url-input"
+          type="text"
+          bind:value={plexServerUrl}
+          placeholder={$t('settings.integrations.plexServerUrlPlaceholder')}
+          oninput={() => persistPlexConfig()}
+          onblur={() => persistPlexConfig()}
+        />
+      </div>
+
+      <div class="setting-row plex-two-column-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.integrations.plexAuthorizeLabel')}</span>
+          <small class="setting-note">{$t('settings.integrations.plexAuthorizeGenerateHelp')}</small>
+        </div>
+        <button
+          class="connect-btn plex-action-btn"
+          onclick={handlePlexConnectEasy}
+          disabled={plexBusy || plexAuthBusy || !isLocalPlexAddress(plexServerUrl) || !resolvePlexBaseUrl()}
+        >
+          {plexAuthBusy ? $t('actions.loading') : $t('settings.integrations.plexActionGenerateCode')}
+        </button>
+      </div>
+
+      {#if plexAuthCode}
+        <div class="plex-divider"></div>
+
+        <div class="setting-row plex-two-column-row">
+          <div class="setting-info">
+            <span class="setting-label">{$t('settings.integrations.plexLinkWithPlex')}</span>
+            <small class="setting-note">{$t('settings.integrations.plexLinkWithPlexHelp')}</small>
+          </div>
+          <div class="plex-code-row">
+            <input
+              class="remote-control-input plex-code-input"
+              type="text"
+              readonly
+              value={plexAuthCode}
+              title={$t('settings.integrations.plexCodeTooltip')}
+            />
+            <button
+              class="connect-btn plex-action-btn"
+              onclick={handleCopyPlexCode}
+              title={$t('settings.integrations.plexCodeTooltip')}
+            >
+              {$t('settings.integrations.plexActionCopyCode')}
+            </button>
+          </div>
+        </div>
+        <div class="setting-row plex-two-column-row">
+          <div class="setting-info">
+            <span class="setting-label">{$t('settings.integrations.plexAuthorizeUsingCode')}</span>
+            <small class="setting-note">{$t('settings.integrations.plexAuthorizeHelp')}</small>
+          </div>
+          <button
+            class="connect-btn plex-action-btn"
+            onclick={handleOpenPlexAuthUrl}
+            disabled={!plexAuthUrl}
+          >
+            {$t('settings.integrations.plexActionOpenAuth')}
+          </button>
+        </div>
+      {/if}
+
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.integrations.plexManualTokenToggle')}</span>
+          <small class="setting-note">{$t('settings.integrations.plexManualTokenHelp')}</small>
+        </div>
+        <Toggle enabled={plexManualTokenMode} onchange={(enabled) => plexManualTokenMode = enabled} />
+      </div>
+
+      {#if plexManualTokenMode}
+        <div class="setting-row plex-two-column-row">
+          <span class="setting-label">{$t('settings.integrations.plexToken')}</span>
+          <input
+            class="remote-control-input"
+            type="password"
+            bind:value={plexToken}
+            placeholder={$t('settings.integrations.plexTokenPlaceholder')}
+            onblur={handlePlexTokenBlur}
+          />
+        </div>
+      {/if}
+
+      <div class="setting-row plex-two-column-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.integrations.plexConnectionCheckLabel')}</span>
+          {#if plexStatusKey === 'settings.integrations.plexStatusConnected'}
+            <small class="setting-note plex-connected-note">{$t(plexStatusKey, { values: plexStatusValues })}</small>
+          {:else}
+            <small class="setting-note">{$t(plexStatusKey, { values: plexStatusValues })}</small>
+          {/if}
+        </div>
+        <button
+          class="connect-btn plex-action-btn"
+          onclick={() => handlePlexPing()}
+          disabled={plexBusy || !canUsePlexRequests()}
+        >
+          {plexBusy ? $t('actions.loading') : $t('settings.integrations.plexActionPing')}
+        </button>
+      </div>
+
+      <div class="setting-row plex-two-column-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.integrations.plexGetLibrariesLabel')}</span>
+          <small class="setting-note">{$t('settings.integrations.plexGetLibrariesHelp')}</small>
+        </div>
+        <button
+          class="connect-btn plex-action-btn"
+          onclick={() => handlePlexLoadSections({ autoSyncSelected: true })}
+          disabled={plexBusy || !canUsePlexRequests()}
+        >
+          {plexBusy ? $t('actions.loading') : $t('settings.integrations.plexActionLoadSections')}
+        </button>
+      </div>
+
+      <div class="setting-row plex-libraries-block">
+        <span class="setting-label">{$t('settings.integrations.plexMusicLibraries')}</span>
+        <div class="plex-libraries-grid">
+          {#each plexSections as plexSection}
+            <label class="plex-library-item">
+              <input
+                type="checkbox"
+                checked={plexSelectedSectionKeys.includes(plexSection.key)}
+                disabled={plexBusy || !canUsePlexRequests()}
+                onchange={(event) => handlePlexLibraryToggle(plexSection.key, (event.currentTarget as HTMLInputElement).checked)}
+              />
+              <span class="plex-library-name">{plexSection.title}</span>
+              {#if plexSectionTrackCounts[plexSection.key] !== undefined}
+                <span class="plex-library-count">({plexSectionTrackCounts[plexSection.key]} {$t('settings.integrations.plexTracksShort')})</span>
+              {/if}
+            </label>
+          {/each}
+        </div>
+        {#if plexLastError}
+          <small class="setting-note plex-error-note">{plexLastError}</small>
+        {/if}
+      </div>
+
+      <div class="setting-row plex-two-column-row">
+        <span class="setting-label">{$t('settings.integrations.plexDisconnectRowLabel')}</span>
+        <button
+          class="connect-btn plex-action-btn"
+          onclick={handlePlexDisconnect}
+          disabled={plexBusy || plexAuthBusy || !plexToken.trim()}
+        >
+          {$t('settings.integrations.plexActionDisconnect')}
+        </button>
+      </div>
+
+      <div class="setting-row last plex-two-column-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.integrations.plexClearCacheRowLabel')}</span>
+          <small class="setting-note">{$t('settings.integrations.plexClearCacheRowHelp')}</small>
+        </div>
+        <button
+          class="connect-btn plex-action-btn"
+          onclick={handlePlexClearCache}
+          disabled={plexBusy || plexAuthBusy}
+        >
+          {$t('settings.integrations.plexClearButton')}
+        </button>
+      </div>
+    {/if}
   </section>
 
   <!-- Updates Section -->
@@ -4646,6 +5365,124 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     font-size: 11px;
     color: var(--text-muted);
     word-break: break-all;
+  }
+
+  .setting-row-controls {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    align-self: center;
+  }
+
+  .section-collapse-btn {
+    width: 30px;
+    height: 30px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .plex-server-url-input {
+    width: 210px;
+    max-width: 210px;
+  }
+
+  .plex-two-column-row {
+    align-items: center;
+  }
+
+  .plex-divider {
+    width: 100%;
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 2px 0;
+  }
+
+  .plex-code-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  .plex-code-input {
+    flex: 1;
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+    letter-spacing: 0.06em;
+  }
+
+  .plex-action-btn {
+    min-width: 170px;
+    background: none;
+    border: 1px solid var(--border-subtle);
+    color: var(--text-secondary);
+  }
+
+  .plex-action-btn:hover:not(:disabled) {
+    color: var(--text-primary);
+    border-color: var(--border-default);
+    background: var(--bg-hover);
+  }
+
+  .plex-libraries-block {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: start;
+    width: 100%;
+    height: auto;
+    min-height: unset;
+  }
+
+  .setting-row.plex-libraries-block {
+    height: auto;
+    min-height: 48px;
+    align-items: stretch;
+    padding-bottom: 14px;
+  }
+
+  .plex-libraries-grid {
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    background: var(--bg-tertiary);
+    padding: 10px;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 16px;
+    width: 100%;
+    margin: 0 auto;
+    max-height: 130px;
+    overflow-y: auto;
+  }
+
+  .plex-library-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 28px;
+    color: var(--text-primary);
+  }
+
+  .plex-library-name {
+    font-size: 13px;
+    font-weight: 500;
+  }
+
+  .plex-library-count {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .plex-connected-note {
+    color: #86efac;
+  }
+
+  .plex-error-note {
+    color: #fca5a5;
+    word-break: break-word;
   }
 
 </style>

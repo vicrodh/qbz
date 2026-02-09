@@ -356,7 +356,7 @@
           const tracks = await invoke<Array<{ id: number; file_path: string }>>('library_get_tracks_by_ids', {
             trackIds
           });
-          localTrackPaths = tracks.map(t => t.file_path);
+          localTrackPaths = tracks.map(track => track.file_path);
         }
 
         await invoke('add_tracks_to_pending_playlist', {
@@ -419,7 +419,7 @@
           const tracks = await invoke<Array<{ id: number; file_path: string }>>('library_get_tracks_by_ids', {
             trackIds
           });
-          localTrackPaths = tracks.map(t => t.file_path);
+          localTrackPaths = tracks.map(track => track.file_path);
         }
 
         // Create pending playlist for sync when back online

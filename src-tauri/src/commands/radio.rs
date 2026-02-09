@@ -327,6 +327,7 @@ fn track_to_queue_track(track: &Track) -> QueueTrack {
         album_id,
         artist_id,
         streamable: track.streamable,
+        source: Some("qobuz".to_string()),
     }
 }
 

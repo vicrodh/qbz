@@ -33,6 +33,9 @@ pub struct QueueTrack {
     /// Whether the track is streamable on Qobuz (false = removed/unavailable)
     #[serde(default = "default_streamable")]
     pub streamable: bool,
+    /// Optional origin source (e.g. "qobuz", "local", "plex")
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 fn default_streamable() -> bool {

@@ -35,8 +35,8 @@
     onOpenContainingFolder?: () => void;
     onReDownloadAlbum?: () => void;
     downloadStateVersion?: number;
-    /** Source badge for local library: 'user' for local files, 'qobuz_download' for Qobuz offline */
-    sourceBadge?: 'user' | 'qobuz_download';
+    /** Source badge for local library: 'user' | 'qobuz_download' | 'plex' */
+    sourceBadge?: 'user' | 'qobuz_download' | 'plex';
     artistId?: number;
     onArtistClick?: (artistId: number) => void;
   }
@@ -216,7 +216,7 @@
 
     <!-- Image overlays placeholder when loaded -->
     {#if !imageError && artwork}
-      <img src={artwork} alt={title} loading="lazy" decoding="async" onerror={handleImageError} />
+      <img class="artwork-image" src={artwork} alt={title} loading="lazy" decoding="async" onerror={handleImageError} />
     {/if}
 
     <!-- Action Overlay -->
@@ -276,9 +276,15 @@
 
     <!-- Source Badge (Local Library only) -->
     {#if sourceBadge}
-      <div class="source-badge" class:local-badge={sourceBadge === 'user'} title={sourceBadge === 'user' ? 'Local file' : 'Qobuz offline'}>
+      <div
+        class="source-badge"
+        class:local-badge={sourceBadge === 'user'}
+        title={sourceBadge === 'user' ? 'Local file' : sourceBadge === 'plex' ? 'Plex library' : 'Qobuz offline'}
+      >
         {#if sourceBadge === 'user'}
           <HardDrive size={14} />
+        {:else if sourceBadge === 'plex'}
+          <img src="/plex-logo.svg" alt="Plex" class="qobuz-badge-icon plex-logo-icon" />
         {:else}
           <img src="/qobuz-logo-filled.svg" alt="Qobuz" class="qobuz-badge-icon" />
         {/if}
@@ -337,7 +343,7 @@
     overflow: hidden;
   }
 
-  .artwork-container img {
+  .artwork-container .artwork-image {
     position: absolute;
     inset: 0;
     width: 100%;
@@ -392,6 +398,7 @@
     width: 24px;
     height: 24px;
     color: var(--text-secondary);
+    border-radius: 4px;
   }
 
   .source-badge.local-badge {
@@ -403,6 +410,13 @@
   .source-badge .qobuz-badge-icon {
     width: 24px;
     height: 24px;
+  }
+
+  .source-badge .plex-logo-icon {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.45));
   }
 
   .action-overlay {

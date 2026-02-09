@@ -17,7 +17,7 @@
     bit_depth?: number;
     sample_rate: number;
     directory_path: string;
-    source?: string; // 'user' for local files, 'qobuz_download' for offline cached
+    source?: string; // 'user' | 'qobuz_download' | 'plex'
   }
 
   interface AlbumGroup {
@@ -324,7 +324,7 @@
                 onPlayNext={() => onAlbumQueueNext(album)}
                 onPlayLater={() => onAlbumQueueLater(album)}
                 onclick={() => onAlbumClick(album)}
-                sourceBadge={showSourceBadge ? (album.source === 'qobuz_download' ? 'qobuz_download' : 'user') : undefined}
+                sourceBadge={showSourceBadge ? (album.source === 'plex' ? 'plex' : (album.source === 'qobuz_download' ? 'qobuz_download' : 'user')) : undefined}
               />
             {/each}
           </div>

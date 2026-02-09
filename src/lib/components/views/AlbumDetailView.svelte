@@ -218,7 +218,7 @@
   }
   
   const albumFullyDownloaded = $derived(
-    isAlbumFullyCached(album.tracks.map(t => t.id))
+    isAlbumFullyCached(album.tracks.map(track => track.id))
   );
   
   const isVariousArtists = $derived(

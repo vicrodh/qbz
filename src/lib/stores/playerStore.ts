@@ -49,6 +49,7 @@ export interface PlayingTrack {
   samplingRate?: number;
   format?: string;
   isLocal?: boolean;
+  source?: string;
   // Optional IDs for recommendation tracking
   albumId?: string;
   artistId?: number;
@@ -93,8 +94,14 @@ interface QueueTrack {
   bit_depth: number | null;
   sample_rate: number | null;
   is_local?: boolean;
+  source?: string;
   album_id?: string | null;
   artist_id?: number | null;
+}
+
+interface PlexPlayTrackResult {
+  sampling_rate_hz?: number | null;
+  bit_depth?: number | null;
 }
 
 // ============ State ============
@@ -334,11 +341,27 @@ export async function togglePlay(): Promise<void> {
         const savedPosition = pendingSessionRestore.position;
         pendingSessionRestore = null; // Clear before loading
 
-        // Check if this is a local track (negative ID) or Qobuz track
-        if (currentTrack.id < 0) {
-          // Local track - use library_play_track with positive ID
+        // Restore source-specific playback
+        if (currentTrack.source === 'plex') {
+          const plexBaseUrl = getUserItem('qbz-plex-poc-base-url') || '';
+          const plexToken = getUserItem('qbz-plex-poc-token') || '';
+          if (!plexBaseUrl || !plexToken) {
+            throw new Error('Missing Plex configuration for session restore');
+          }
+          const result = await invoke<PlexPlayTrackResult>('plex_play_track', {
+            baseUrl: plexBaseUrl,
+            token: plexToken,
+            ratingKey: String(currentTrack.id)
+          });
+          if (result.sampling_rate_hz && result.sampling_rate_hz > 0) {
+            currentTrack.samplingRate = result.sampling_rate_hz / 1000;
+          }
+          if (result.bit_depth && result.bit_depth > 0) {
+            currentTrack.bitDepth = result.bit_depth;
+          }
+        } else if (currentTrack.isLocal || currentTrack.id < 0) {
+          // Local filesystem track
           const localTrackId = Math.abs(currentTrack.id);
-          console.log('[Player] Restoring local track:', localTrackId);
           await invoke('library_play_track', { trackId: localTrackId });
         } else {
           // Qobuz track - use play_track with duration for seekbar
@@ -539,6 +562,12 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     try {
       const queueTrack = await invoke<QueueTrack | null>('get_current_queue_track');
       if (queueTrack && queueTrack.id === event.track_id) {
+        const rawRate = queueTrack.sample_rate ?? undefined;
+        const normalizedRate = rawRate == null
+          ? undefined
+          : (queueTrack.is_local || queueTrack.source === 'plex')
+            ? rawRate / 1000
+            : rawRate;
         currentTrack = {
           id: queueTrack.id,
           title: queueTrack.title,
@@ -547,11 +576,12 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
           artwork: queueTrack.artwork_url || '',
           duration: queueTrack.duration_secs,
           quality: queueTrack.hires ? 'Hi-Res' : 'CD Quality',
-          bitDepth: queueTrack.bit_depth,
-          samplingRate: queueTrack.sample_rate,
+          bitDepth: queueTrack.bit_depth ?? undefined,
+          samplingRate: normalizedRate,
           isLocal: queueTrack.is_local,
-          albumId: queueTrack.album_id,
-          artistId: queueTrack.artist_id
+          source: queueTrack.source ?? undefined,
+          albumId: queueTrack.album_id ?? undefined,
+          artistId: queueTrack.artist_id ?? undefined
         };
         duration = queueTrack.duration_secs;
         // Update playback state from event
@@ -587,8 +617,8 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
       persistVolume(volume);
     }
 
-    // Update track with actual stream quality (issue #34)
-    // The backend now sends the real sample rate and bit depth from the decoded stream
+    // Update track with actual stream quality (issue #34).
+    // For Plex this is needed because cached metadata can be stale/inaccurate.
     if (event.sample_rate && event.sample_rate > 0) {
       // Convert Hz to kHz for display (44100 -> 44.1)
       currentTrack.samplingRate = event.sample_rate / 1000;

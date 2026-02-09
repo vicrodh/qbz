@@ -1477,7 +1477,8 @@
 
   // Helper to play a track from the queue (with offline skip support)
   async function playQueueTrack(track: BackendQueueTrack, skippedIds = new Set<number>(), gaplessTransition = false) {
-    const isLocal = isLocalTrack(track.id);
+    const source = track.source ?? (track.is_local ? 'local' : 'qobuz');
+    const isLocal = source !== 'qobuz' || isLocalTrack(track.id);
 
     // In offline mode, check if track is available
     if (offlineStatus.isOffline && !isLocal) {
@@ -1528,9 +1529,10 @@
       // Only convert Hz to kHz for local tracks. Qobuz tracks are already in kHz.
       samplingRate: isLocal && track.sample_rate ? track.sample_rate / 1000 : track.sample_rate ?? undefined,
       isLocal,
+      source,
       albumId: track.album_id ?? undefined,
       artistId: track.artist_id ?? undefined
-    }, { isLocal, showLoadingToast: false, gaplessTransition });
+    }, { isLocal, source: source as 'qobuz' | 'local' | 'plex', showLoadingToast: false, gaplessTransition });
   }
 
   // Play a specific track from the queue panel
@@ -2097,7 +2099,22 @@
     // DO NOT clear context - LocalLibraryView already sets it correctly
     // await clearPlaybackContext();
 
-    const artwork = track.artwork_path ? convertFileSrc(track.artwork_path) : '';
+    const source = track.source === 'plex' ? 'plex' : 'local';
+    const plexBaseUrl = getUserItem('qbz-plex-poc-base-url') || '';
+    const plexToken = getUserItem('qbz-plex-poc-token') || '';
+    const resolveArtwork = (path?: string): string => {
+      if (!path) return '';
+      if (/^https?:\/\//i.test(path)) return path;
+      if (source === 'plex' && path.startsWith('/library/') && plexBaseUrl && plexToken) {
+        const base = plexBaseUrl.replace(/\/+$/, '');
+        const sep = path.includes('?') ? '&' : '?';
+        return `${base}${path}${sep}X-Plex-Token=${encodeURIComponent(plexToken)}`;
+      }
+      return convertFileSrc(path);
+    };
+    const artwork = track.artwork_path
+      ? resolveArtwork(track.artwork_path)
+      : '';
     const quality = track.bit_depth && track.sample_rate
       ? (track.bit_depth >= 24 || track.sample_rate > 48000
         ? `${track.bit_depth}bit/${track.sample_rate / 1000}kHz`
@@ -2115,8 +2132,9 @@
       bitDepth: track.bit_depth,
       samplingRate: track.sample_rate ? track.sample_rate / 1000 : undefined,  // Convert Hz to kHz (44100 → 44.1) - NO ROUNDING
       format: track.format,
-      isLocal: true
-    }, { isLocal: true });
+      isLocal: source !== 'plex',
+      source
+    }, { isLocal: source !== 'plex', source });
   }
 
   // Handle setting queue from local library (tracks need different playback command)

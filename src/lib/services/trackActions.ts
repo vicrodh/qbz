@@ -46,7 +46,8 @@ export function buildQueueTrackFromQobuz(track: QobuzTrack): BackendQueueTrack {
     is_local: false,
     album_id: track.album?.id || null,
     artist_id: track.performer?.id ?? null,
-    streamable: track.streamable ?? true
+    streamable: track.streamable ?? true,
+    source: 'qobuz'
   };
 }
 
@@ -76,7 +77,8 @@ export function buildQueueTrackFromAlbumTrack(
     is_local: false,
     album_id: track.albumId || albumId || null,
     artist_id: track.artistId ?? artistId ?? null,
-    streamable: track.streamable ?? true
+    streamable: track.streamable ?? true,
+    source: 'qobuz'
   };
 }
 
@@ -99,14 +101,18 @@ export function buildQueueTrackFromPlaylistTrack(track: PlaylistTrack): BackendQ
     is_local: false,
     album_id: track.albumId || null,
     artist_id: track.artistId ?? null,
-    streamable: track.streamable ?? true
+    streamable: track.streamable ?? true,
+    source: 'qobuz'
   };
 }
 
 export function buildQueueTrackFromLocalTrack(track: LocalLibraryTrack): BackendQueueTrack {
-  const artwork = track.artwork_path ? convertFileSrc(track.artwork_path) : null;
+  const artwork = track.artwork_path
+    ? (/^https?:\/\//i.test(track.artwork_path) ? track.artwork_path : convertFileSrc(track.artwork_path))
+    : null;
   // Local tracks are hi-res if bit_depth > 16 or sample_rate > 44100
   const isHires = Boolean((track.bit_depth && track.bit_depth > 16) || (track.sample_rate && track.sample_rate > 44100));
+  const isPlexTrack = track.source === 'plex';
   return {
     id: track.id,
     title: track.title,
@@ -117,10 +123,11 @@ export function buildQueueTrackFromLocalTrack(track: LocalLibraryTrack): Backend
     hires: isHires,
     bit_depth: track.bit_depth ?? null,
     sample_rate: track.sample_rate ?? null,
-    is_local: true,
+    is_local: !isPlexTrack,
     album_id: null,  // Local tracks don't have Qobuz album IDs
     artist_id: null,  // Local tracks don't have Qobuz artist IDs
-    streamable: true  // Local tracks are always playable
+    streamable: true,  // Local tracks are always playable
+    source: isPlexTrack ? 'plex' : 'local'
   };
 }
 
@@ -163,11 +170,13 @@ export async function queuePlaylistTrackLater(track: PlaylistTrack): Promise<voi
 }
 
 export async function queueLocalTrackNext(track: LocalLibraryTrack): Promise<void> {
-  await queueTrackNext(buildQueueTrackFromLocalTrack(track), true);
+  const isPlexTrack = track.source === 'plex';
+  await queueTrackNext(buildQueueTrackFromLocalTrack(track), !isPlexTrack);
 }
 
 export async function queueLocalTrackLater(track: LocalLibraryTrack): Promise<void> {
-  await queueTrackLater(buildQueueTrackFromLocalTrack(track), true);
+  const isPlexTrack = track.source === 'plex';
+  await queueTrackLater(buildQueueTrackFromLocalTrack(track), !isPlexTrack);
 }
 
 // ============ Favorites ============

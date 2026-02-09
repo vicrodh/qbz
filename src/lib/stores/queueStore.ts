@@ -33,6 +33,8 @@ export interface BackendQueueTrack {
   artist_id?: number | null;
   /** Whether the track is streamable on Qobuz (false = removed/unavailable) */
   streamable?: boolean;
+  /** Track source: qobuz | local | plex */
+  source?: string;
 }
 
 interface BackendQueueState {

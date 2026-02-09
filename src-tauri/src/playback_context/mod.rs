@@ -32,6 +32,7 @@ pub enum ContextType {
 pub enum ContentSource {
     Qobuz,
     Local,
+    Plex,
 }
 
 /// Playback context - the semantic origin of playback

@@ -37,6 +37,7 @@ pub fn set_playback_context(
     let content_source = match source.as_str() {
         "qobuz" => ContentSource::Qobuz,
         "local" => ContentSource::Local,
+        "plex" => ContentSource::Plex,
         _ => return Err(format!("Invalid source: {}", source)),
     };
 

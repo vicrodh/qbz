@@ -662,26 +662,26 @@
   }
 
   function buildSearchQueueTracks(tracks: Track[]) {
-    return tracks.map(t => ({
-      id: t.id,
-      title: t.title,
-      artist: t.performer?.name || 'Unknown Artist',
-      album: t.album?.title || '',
-      duration_secs: t.duration,
-      artwork_url: t.album?.image?.large || t.album?.image?.thumbnail || t.album?.image?.small || '',
-      hires: t.hires_streamable ?? false,
-      bit_depth: t.maximum_bit_depth ?? null,
-      sample_rate: t.maximum_sampling_rate ?? null,
+    return tracks.map(track => ({
+      id: track.id,
+      title: track.title,
+      artist: track.performer?.name || 'Unknown Artist',
+      album: track.album?.title || '',
+      duration_secs: track.duration,
+      artwork_url: track.album?.image?.large || track.album?.image?.thumbnail || track.album?.image?.small || '',
+      hires: track.hires_streamable ?? false,
+      bit_depth: track.maximum_bit_depth ?? null,
+      sample_rate: track.maximum_sampling_rate ?? null,
       is_local: false,
-      album_id: t.album?.id || null,
-      artist_id: t.performer?.id ?? null,
+      album_id: track.album?.id || null,
+      artist_id: track.performer?.id ?? null,
     }));
   }
 
   async function handleSearchTrackPlay(track: Track, trackIndex: number) {
     // Create search results context
     if (trackResults && trackResults.items.length > 0) {
-      const trackIds = trackResults.items.map(t => t.id);
+      const trackIds = trackResults.items.map(track => track.id);
 
       await setPlaybackContext(
         'home_list', // Using home_list for search results (search type doesn't exist yet)

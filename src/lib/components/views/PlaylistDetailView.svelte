@@ -509,7 +509,7 @@
             }));
 
             // Update duration
-            playlist.duration = qobuzTracks.reduce((sum, t) => sum + t.duration, 0);
+            playlist.duration = qobuzTracks.reduce((sum, track) => sum + track.duration, 0);
           } catch (err) {
             console.error('Failed to load Qobuz tracks for pending playlist:', err);
             tracks = [];

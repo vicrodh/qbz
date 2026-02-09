@@ -27,6 +27,7 @@ pub mod musicbrainz;
 pub mod network;
 pub mod offline;
 pub mod playback_context;
+pub mod plex;
 pub mod player;
 pub mod playlist_import;
 pub mod queue;
@@ -687,6 +688,24 @@ pub fn run() {
             cast::dlna::commands::dlna_stop,
             cast::dlna::commands::dlna_seek,
             cast::dlna::commands::dlna_set_volume,
+            // Plex LAN-only POC commands
+            plex::plex_ping,
+            plex::plex_get_music_sections,
+            plex::plex_get_section_tracks,
+            plex::plex_get_track_metadata,
+            plex::plex_play_track,
+            plex::plex_auth_pin_start,
+            plex::plex_auth_pin_check,
+            plex::plex_open_auth_url,
+            plex::plex_cache_get_sections,
+            plex::plex_cache_save_sections,
+            plex::plex_cache_get_tracks,
+            plex::plex_cache_save_tracks,
+            plex::plex_cache_update_track_quality,
+            plex::plex_cache_get_albums,
+            plex::plex_cache_get_album_tracks,
+            plex::plex_cache_search_tracks,
+            plex::plex_cache_clear,
             // AirPlay casting commands - DISABLED until RAOP implementation is complete
             // See docs/AIRPLAY_IMPLEMENTATION_STATUS.md for details
             // cast::airplay::commands::airplay_start_discovery,

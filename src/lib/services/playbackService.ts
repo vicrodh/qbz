@@ -55,6 +55,12 @@ interface PlayTrackResult {
   format_id: number | null;
 }
 
+/** Result from plex_play_track command */
+interface PlexPlayTrackResult {
+  sampling_rate_hz?: number | null;
+  bit_depth?: number | null;
+}
+
 /**
  * Convert Qobuz format_id to format string for QualityBadge
  * 5=MP3, 6=FLAC 16-bit (CD), 7=FLAC 24-bit (Hi-Res), 27=FLAC 24-bit Hi-Res+
@@ -72,6 +78,7 @@ function formatIdToString(formatId: number | null): string | undefined {
 
 export interface PlayTrackOptions {
   isLocal?: boolean;
+  source?: 'qobuz' | 'local' | 'plex';
   showLoadingToast?: boolean;
   showSuccessToast?: boolean;
   /** When true, skip stop_playback and play_track — backend already has audio playing via gapless */
@@ -110,6 +117,7 @@ export async function playTrack(
 ): Promise<boolean> {
   const {
     isLocal = false,
+    source = isLocal ? 'local' : 'qobuz',
     showLoadingToast = true,
     showSuccessToast = true,
     gaplessTransition = false
@@ -154,7 +162,27 @@ export async function playTrack(
         });
       } else {
         // Use appropriate local playback command
-        if (isLocal) {
+        if (source === 'plex') {
+          const plexBaseUrl = getUserItem('qbz-plex-poc-base-url') || '';
+          const plexToken = getUserItem('qbz-plex-poc-token') || '';
+          if (!plexBaseUrl || !plexToken) {
+            throw new Error('Missing Plex base URL or token');
+          }
+          const result = await invoke<PlexPlayTrackResult>('plex_play_track', {
+            baseUrl: plexBaseUrl,
+            token: plexToken,
+            ratingKey: String(track.id)
+          });
+
+          // Plex metadata endpoint provides stream audio details even when queue list did not.
+          if (result.sampling_rate_hz && result.sampling_rate_hz > 0) {
+            track.samplingRate = result.sampling_rate_hz / 1000;
+          }
+          if (result.bit_depth && result.bit_depth > 0) {
+            track.bitDepth = result.bit_depth;
+          }
+          setCurrentTrack(track);
+        } else if (isLocal) {
           await invoke('library_play_track', { trackId: track.id });
         } else {
           const result = await invoke<PlayTrackResult>('play_track', {
@@ -181,7 +209,7 @@ export async function playTrack(
     }
 
     // Log play event for recommendations (fire-and-forget)
-    if (!isLocal) {
+    if (!isLocal && source !== 'plex') {
       void logRecoEvent({
         eventType: 'play',
         itemType: 'track',
@@ -224,7 +252,7 @@ export async function playTrack(
     );
 
     // Check favorite status (only for Qobuz tracks)
-    if (!isLocal) {
+    if (!isLocal && source !== 'plex') {
       const isFav = await checkTrackFavorite(track.id);
       setIsFavorite(isFav);
     } else {
@@ -252,18 +280,34 @@ export async function playTrack(
         console.log('Auto-skipping to next track:', next.title);
         // Small delay to let the toast be visible
         setTimeout(() => {
+          const nextSource = (next.source === 'plex' || next.source === 'local' || next.source === 'qobuz')
+            ? next.source
+            : (next.is_local ? 'local' : 'qobuz');
+          const nextSamplingRate = next.sample_rate == null
+            ? undefined
+            : (next.is_local || nextSource === 'plex')
+              ? next.sample_rate / 1000
+              : next.sample_rate;
           playTrack({
             id: next.id,
             title: next.title,
             artist: next.artist,
             album: next.album,
             duration: next.duration_secs,
-            artwork: next.artwork_url || undefined,
+            artwork: next.artwork_url || '',
+            quality: next.hires ? 'Hi-Res' : 'CD Quality',
             albumId: next.album_id || undefined,
             artistId: next.artist_id || undefined,
             bitDepth: next.bit_depth || undefined,
-            samplingRate: next.sample_rate || undefined
-          }, { showLoadingToast: true, showSuccessToast: true });
+            samplingRate: nextSamplingRate,
+            source: nextSource,
+            isLocal: next.is_local
+          }, {
+            isLocal: next.is_local ?? false,
+            source: nextSource,
+            showLoadingToast: true,
+            showSuccessToast: true
+          });
         }, 500);
       } else {
         setIsPlaying(false);

@@ -936,6 +936,7 @@ async fn play_album(
                 album_id: Some(album.id.clone()),
                 artist_id: t.performer.as_ref().map(|p| p.id),
                 streamable: t.streamable,
+                source: Some("qobuz".to_string()),
             }
         }).collect()
     } else {

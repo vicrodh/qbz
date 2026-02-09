@@ -10,7 +10,7 @@ import { invoke } from '@tauri-apps/api/core';
 // ============ Types ============
 
 export type ContextType = 'album' | 'playlist' | 'artist_top' | 'home_list' | 'favorites' | 'local_library' | 'radio';
-export type ContentSource = 'qobuz' | 'local';
+export type ContentSource = 'qobuz' | 'local' | 'plex';
 
 export interface PlaybackContext {
   type: ContextType;

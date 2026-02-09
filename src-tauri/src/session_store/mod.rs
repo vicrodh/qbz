@@ -27,6 +27,8 @@ pub struct PersistedQueueTrack {
     pub artist_id: Option<u64>,
     #[serde(default = "default_streamable")]
     pub streamable: bool,
+    #[serde(default)]
+    pub source: Option<String>,
 }
 
 /// Represents the full persisted session state
@@ -110,7 +112,8 @@ impl SessionStore {
                 artwork_url TEXT,
                 hires INTEGER NOT NULL DEFAULT 0,
                 bit_depth INTEGER,
-                sample_rate REAL
+                sample_rate REAL,
+                source TEXT
             );
 
             -- Insert default row if not exists
@@ -158,6 +161,22 @@ impl SessionStore {
             );
         }
 
+        let has_source: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('queue_tracks') WHERE name = 'source'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0) > 0;
+
+        if !has_source {
+            let _ = conn.execute_batch(
+                "
+                ALTER TABLE queue_tracks ADD COLUMN source TEXT;
+                "
+            );
+        }
+
         Ok(Self { conn })
     }
 
@@ -181,8 +200,8 @@ impl SessionStore {
         // Insert queue tracks
         for (pos, track) in session.queue_tracks.iter().enumerate() {
             if let Err(e) = self.conn.execute(
-                "INSERT INTO queue_tracks (position, track_id, title, artist, album, duration_secs, artwork_url, hires, bit_depth, sample_rate, is_local, album_id, artist_id)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                "INSERT INTO queue_tracks (position, track_id, title, artist, album, duration_secs, artwork_url, hires, bit_depth, sample_rate, is_local, album_id, artist_id, source)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 params![
                     pos as i64,
                     track.id as i64,
@@ -197,6 +216,7 @@ impl SessionStore {
                     track.is_local as i64,
                     track.album_id,
                     track.artist_id.map(|v| v as i64),
+                    track.source,
                 ],
             ) {
                 let _ = self.conn.execute("ROLLBACK", []);
@@ -258,7 +278,7 @@ impl SessionStore {
 
         // Load queue tracks
         let mut stmt = self.conn
-            .prepare("SELECT track_id, title, artist, album, duration_secs, artwork_url, hires, bit_depth, sample_rate, is_local, album_id, artist_id FROM queue_tracks ORDER BY position")
+            .prepare("SELECT track_id, title, artist, album, duration_secs, artwork_url, hires, bit_depth, sample_rate, is_local, album_id, artist_id, source FROM queue_tracks ORDER BY position")
             .map_err(|e| format!("Failed to prepare queue query: {}", e))?;
 
         let tracks: Vec<PersistedQueueTrack> = stmt
@@ -277,6 +297,7 @@ impl SessionStore {
                     album_id: row.get(10)?,
                     artist_id: row.get::<_, Option<i64>>(11)?.map(|v| v as u64),
                     streamable: true, // Default to true for persisted tracks
+                    source: row.get(12)?,
                 })
             })
             .map_err(|e| format!("Failed to query queue tracks: {}", e))?
