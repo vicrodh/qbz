@@ -124,6 +124,21 @@
   let showCreateFolderModal = $state(false);
   let newFolderName = $state('');
 
+  // Virtual scroll state for playlists
+  type VirtualPlaylistItem =
+    | { type: 'folder-header'; folder: PlaylistFolder; folderId: string; top: number; height: number }
+    | { type: 'folder-playlist'; playlist: Playlist; folder: PlaylistFolder; folderId: string; top: number; height: number }
+    | { type: 'root-playlist'; playlist: Playlist; folderId: null; top: number; height: number }
+    | { type: 'collapsed-folder'; folder: PlaylistFolder; folderId: string; top: number; height: number };
+
+  let playlistScrollEl: HTMLDivElement | null = $state(null);
+  let playlistScrollTop = $state(0);
+  let playlistContainerHeight = $state(0);
+
+  const PLAYLIST_ITEM_HEIGHT = 34; // 32px item + 2px gap
+  const PLAYLIST_FOLDER_HEADER_HEIGHT = 34; // ~32px header + 2px gap
+  const PLAYLIST_BUFFER_ITEMS = 10;
+
   // Context menu state
   let contextMenu = $state<{
     visible: boolean;
@@ -588,6 +603,154 @@
   // Check if any playlists exist in root (no folder)
   let rootPlaylists = $derived(getPlaylistsInFolder(null));
 
+  // Flattened virtual playlist items for virtualized scrolling
+  let virtualPlaylistItems = $derived.by(() => {
+    const items: VirtualPlaylistItem[] = [];
+    let currentTop = 0;
+
+    // Reference folderExpandState to trigger re-derivation when folders are toggled
+    // (isFolderExpanded reads from a non-reactive Set, so we need this dependency)
+    void folderExpandState;
+
+    if (isExpanded) {
+      // Expanded sidebar: folders with headers + playlists, then root playlists
+      for (const folder of folders) {
+        const folderPlaylists = getPlaylistsInFolder(folder.id);
+        const expanded = isFolderExpanded(folder.id);
+
+        // Folder header
+        items.push({
+          type: 'folder-header',
+          folder,
+          folderId: folder.id,
+          top: currentTop,
+          height: PLAYLIST_FOLDER_HEADER_HEIGHT
+        });
+        currentTop += PLAYLIST_FOLDER_HEADER_HEIGHT;
+
+        // Folder playlists (only if expanded)
+        if (expanded) {
+          for (const playlist of folderPlaylists) {
+            items.push({
+              type: 'folder-playlist',
+              playlist,
+              folder,
+              folderId: folder.id,
+              top: currentTop,
+              height: PLAYLIST_ITEM_HEIGHT
+            });
+            currentTop += PLAYLIST_ITEM_HEIGHT;
+          }
+        }
+      }
+
+      // Root playlists
+      for (const playlist of rootPlaylists) {
+        items.push({
+          type: 'root-playlist',
+          playlist,
+          folderId: null,
+          top: currentTop,
+          height: PLAYLIST_ITEM_HEIGHT
+        });
+        currentTop += PLAYLIST_ITEM_HEIGHT;
+      }
+    } else {
+      // Collapsed sidebar: folder icons + playlist icons
+      for (const folder of folders) {
+        items.push({
+          type: 'collapsed-folder',
+          folder,
+          folderId: folder.id,
+          top: currentTop,
+          height: PLAYLIST_ITEM_HEIGHT
+        });
+        currentTop += PLAYLIST_ITEM_HEIGHT;
+      }
+
+      for (const playlist of rootPlaylists) {
+        items.push({
+          type: 'root-playlist',
+          playlist,
+          folderId: null,
+          top: currentTop,
+          height: PLAYLIST_ITEM_HEIGHT
+        });
+        currentTop += PLAYLIST_ITEM_HEIGHT;
+      }
+    }
+
+    return items;
+  });
+
+  let totalPlaylistHeight = $derived(
+    virtualPlaylistItems.length > 0
+      ? virtualPlaylistItems[virtualPlaylistItems.length - 1].top + virtualPlaylistItems[virtualPlaylistItems.length - 1].height
+      : 0
+  );
+
+  // Binary search for first visible item
+  function playlistBinarySearchStart(items: VirtualPlaylistItem[], targetTop: number): number {
+    let low = 0;
+    let high = items.length - 1;
+    let result = 0;
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const item = items[mid];
+      if (item.top + item.height > targetTop) {
+        result = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+    return result;
+  }
+
+  // Binary search for last visible item
+  function playlistBinarySearchEnd(items: VirtualPlaylistItem[], targetBottom: number, startFrom: number): number {
+    let low = startFrom;
+    let high = items.length - 1;
+    let result = high;
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const item = items[mid];
+      if (item.top > targetBottom) {
+        result = mid;
+        high = mid - 1;
+      } else {
+        low = mid + 1;
+      }
+    }
+    return result;
+  }
+
+  let visiblePlaylistItems = $derived.by(() => {
+    if (virtualPlaylistItems.length === 0) return [];
+
+    const viewportTop = playlistScrollTop;
+    const viewportBottom = playlistScrollTop + playlistContainerHeight;
+
+    const firstVisible = playlistBinarySearchStart(virtualPlaylistItems, viewportTop);
+    const lastVisible = playlistBinarySearchEnd(virtualPlaylistItems, viewportBottom, firstVisible);
+
+    const startIdx = Math.max(0, firstVisible - PLAYLIST_BUFFER_ITEMS);
+    const endIdx = Math.min(virtualPlaylistItems.length - 1, lastVisible + PLAYLIST_BUFFER_ITEMS);
+
+    return virtualPlaylistItems.slice(startIdx, endIdx + 1);
+  });
+
+  function handlePlaylistScroll(e: Event) {
+    playlistScrollTop = (e.target as HTMLDivElement).scrollTop;
+  }
+
+  function getPlaylistItemKey(item: VirtualPlaylistItem): string {
+    if (item.type === 'folder-header' || item.type === 'collapsed-folder') return `f-${item.folder.id}`;
+    return `p-${item.playlist.id}`;
+  }
+
   // Subscribe to global floating menu store
   $effect(() => {
     const unsubscribe = subscribeFloatingMenu(() => {
@@ -794,6 +957,22 @@
       unsubscribeFolders();
       unsubscribeSearch();
     };
+  });
+
+  // ResizeObserver for playlist virtual scroll container
+  $effect(() => {
+    if (playlistScrollEl) {
+      playlistContainerHeight = playlistScrollEl.clientHeight;
+
+      const observer = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          playlistContainerHeight = entry.contentRect.height;
+        }
+      });
+      observer.observe(playlistScrollEl);
+
+      return () => observer.disconnect();
+    }
   });
 
   // Sidebar search handlers
@@ -1229,76 +1408,67 @@
       {/if}
 
       {#if !playlistsCollapsed || !isExpanded}
-        <div class="playlists-scroll">
+        <div class="playlists-scroll" bind:this={playlistScrollEl} onscroll={handlePlaylistScroll}>
           {#if playlistsLoading}
             {#if isExpanded}
               <div class="playlists-loading">{$t('actions.loading')}</div>
             {/if}
           {:else if visiblePlaylists.length > 0 || folders.length > 0}
-            <nav class="playlists-nav">
-              <!-- Folders with their playlists -->
-              {#each folders as folder (folder.id)}
-                {@const folderPlaylists = getPlaylistsInFolder(folder.id)}
-                {@const isExpanded_ = isFolderExpanded(folder.id)}
-                {#if isExpanded}
-                  <div class="folder-item">
+            <div class="playlists-virtual-content" style="height: {totalPlaylistHeight}px;">
+              {#each visiblePlaylistItems as item (getPlaylistItemKey(item))}
+                <div class="playlists-virtual-item" style="transform: translateY({item.top}px); height: {item.height}px;">
+                  {#if item.type === 'folder-header'}
+                    {@const folderPlaylists = getPlaylistsInFolder(item.folder.id)}
+                    {@const isFolderExp = isFolderExpanded(item.folder.id)}
                     <button
                       class="folder-header"
-                      onclick={() => handleToggleFolder(folder.id)}
+                      onclick={() => handleToggleFolder(item.folder.id)}
                     >
                       <Folder size={14} />
-                      <span class="folder-name">{folder.name}</span>
+                      <span class="folder-name">{item.folder.name}</span>
                       <span class="folder-count">{folderPlaylists.length}</span>
-                      <span class="folder-chevron" class:expanded={isExpanded_}>
+                      <span class="folder-chevron" class:expanded={isFolderExp}>
                         <ChevronRight size={12} />
                       </span>
                     </button>
-                    {#if isExpanded_}
-                      <div class="folder-playlists">
-                        {#each folderPlaylists as playlist (playlist.id)}
-                          <NavigationItem
-                            label={playlist.name}
-                            tooltip={getPlaylistTooltip(playlist, true)}
-                            active={activeView === 'playlist' && selectedPlaylistId === playlist.id}
-                            onclick={() => handlePlaylistClick(playlist)}
-                            onHover={() => loadPlaylistTooltip(playlist)}
-                            oncontextmenu={(e) => handlePlaylistContextMenu(e, playlist, folder.id)}
-                            showLabel={true}
-                            indented={true}
-                          >
-                            {#snippet icon()}<ListMusic size={14} />{/snippet}
-                          </NavigationItem>
-                        {/each}
-                      </div>
-                    {/if}
-                  </div>
-                {:else}
-                  <!-- Collapsed sidebar: show folder icon only -->
-                  <button
-                    class="collapsed-folder-btn"
-                    onclick={(e) => showFolderPopover(e, folder)}
-                    title="{folder.name} ({folderPlaylists.length})"
-                  >
-                    <Folder size={14} />
-                  </button>
-                {/if}
+                  {:else if item.type === 'folder-playlist'}
+                    <NavigationItem
+                      label={item.playlist.name}
+                      tooltip={getPlaylistTooltip(item.playlist, true)}
+                      active={activeView === 'playlist' && selectedPlaylistId === item.playlist.id}
+                      onclick={() => handlePlaylistClick(item.playlist)}
+                      onHover={() => loadPlaylistTooltip(item.playlist)}
+                      oncontextmenu={(e) => handlePlaylistContextMenu(e, item.playlist, item.folderId)}
+                      showLabel={true}
+                      indented={true}
+                    >
+                      {#snippet icon()}<ListMusic size={14} />{/snippet}
+                    </NavigationItem>
+                  {:else if item.type === 'root-playlist'}
+                    <NavigationItem
+                      label={item.playlist.name}
+                      tooltip={getPlaylistTooltip(item.playlist, isExpanded)}
+                      active={activeView === 'playlist' && selectedPlaylistId === item.playlist.id}
+                      onclick={() => handlePlaylistClick(item.playlist)}
+                      onHover={() => loadPlaylistTooltip(item.playlist)}
+                      oncontextmenu={(e) => handlePlaylistContextMenu(e, item.playlist, null)}
+                      showLabel={isExpanded}
+                    >
+                      {#snippet icon()}<ListMusic size={14} />{/snippet}
+                    </NavigationItem>
+                  {:else if item.type === 'collapsed-folder'}
+                    {@const folderPlaylists = getPlaylistsInFolder(item.folder.id)}
+                    <button
+                      class="collapsed-folder-btn"
+                      onclick={(e) => showFolderPopover(e, item.folder)}
+                      title="{item.folder.name} ({folderPlaylists.length})"
+                    >
+                      <Folder size={14} />
+                    </button>
+                  {/if}
+                </div>
               {/each}
-
-              <!-- Root playlists (not in any folder) -->
-              {#each rootPlaylists as playlist (playlist.id)}
-                <NavigationItem
-                  label={playlist.name}
-                  tooltip={getPlaylistTooltip(playlist, isExpanded)}
-                  active={activeView === 'playlist' && selectedPlaylistId === playlist.id}
-                  onclick={() => handlePlaylistClick(playlist)}
-                  onHover={() => loadPlaylistTooltip(playlist)}
-                  oncontextmenu={(e) => handlePlaylistContextMenu(e, playlist, null)}
-                  showLabel={isExpanded}
-                >
-                  {#snippet icon()}<ListMusic size={14} />{/snippet}
-                </NavigationItem>
-              {/each}
-            </nav>
+            </div>
           {:else if userPlaylists.length > 0}
             {#if isExpanded}
               <div class="no-playlists">{$t('playlist.allHidden')}</div>
@@ -1731,11 +1901,17 @@
     color: var(--text-primary);
   }
 
-  /* Playlist list view */
-  .playlists-nav {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+  /* Virtualized playlist list */
+  .playlists-virtual-content {
+    position: relative;
+    width: 100%;
+  }
+
+  .playlists-virtual-item {
+    position: absolute;
+    left: 0;
+    right: 0;
+    will-change: transform;
   }
 
   .playlists-scroll {
