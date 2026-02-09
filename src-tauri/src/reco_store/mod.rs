@@ -77,6 +77,59 @@ pub struct HomeSeeds {
     pub favorite_track_ids: Vec<u64>,
 }
 
+/// Fully resolved home page data returned by reco_get_home_resolved
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeResolved {
+    pub recently_played_albums: Vec<AlbumCardMeta>,
+    pub continue_listening_tracks: Vec<TrackDisplayMeta>,
+    pub top_artists: Vec<ArtistCardMeta>,
+    pub favorite_albums: Vec<AlbumCardMeta>,
+}
+
+/// Minimal album metadata for home card display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumCardMeta {
+    pub id: String,
+    pub artwork: String,
+    pub title: String,
+    pub artist: String,
+    pub artist_id: Option<u64>,
+    pub genre: String,
+    pub quality: String,
+    pub release_date: Option<String>,
+}
+
+/// Minimal track metadata for home display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TrackDisplayMeta {
+    pub id: u64,
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    pub album_art: String,
+    pub album_id: Option<String>,
+    pub artist_id: Option<u64>,
+    pub duration: String,
+    pub duration_seconds: u32,
+    pub hires: bool,
+    pub bit_depth: Option<u32>,
+    pub sampling_rate: Option<f64>,
+    pub isrc: Option<String>,
+}
+
+/// Minimal artist metadata for home card display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistCardMeta {
+    pub id: u64,
+    pub name: String,
+    pub image: Option<String>,
+    pub play_count: Option<u32>,
+}
+
 /// Recommendation store state shared across commands
 pub struct RecoState {
     pub db: Arc<Mutex<Option<RecoStoreDb>>>,

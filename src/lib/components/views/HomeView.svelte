@@ -59,14 +59,6 @@
     playCount: number;
   }
 
-  interface HomeSeeds {
-    recentlyPlayedAlbumIds: string[];
-    continueListeningTrackIds: number[];
-    topArtistIds: TopArtistSeed[];
-    favoriteAlbumIds: string[];
-    favoriteTrackIds: number[];
-  }
-
   interface AlbumCardData {
     id: string;
     artwork: string;
@@ -83,6 +75,13 @@
     name: string;
     image?: string;
     playCount?: number;
+  }
+
+  interface HomeResolved {
+    recentlyPlayedAlbums: AlbumCardData[];
+    continueListeningTracks: DisplayTrack[];
+    topArtists: ArtistCardData[];
+    favoriteAlbums: AlbumCardData[];
   }
 
   interface Props {
@@ -776,7 +775,8 @@
     // 2. ML seeds from local SQLite -> user-specific sections
     const discoverPromise = fetchAllDiscoverData(genreIds);
 
-    const mlPromise = invoke<HomeSeeds>('reco_get_home_ml', {
+    // Single IPC call returns fully-resolved card data (3-tier cache in Rust)
+    const mlPromise = invoke<HomeResolved>('reco_get_home_resolved', {
       limitRecentAlbums: homeLimits.recentAlbums,
       limitContinueTracks: homeLimits.continueTracks,
       limitTopArtists: homeLimits.topArtists,
@@ -784,81 +784,48 @@
     });
 
     try {
-      // Wait for ML seeds (local data)
-      const seeds = await mlPromise;
+      const resolved = await mlPromise;
 
-      // Load ML-based sections in parallel
-      // Continue Listening (tracks)
-      if (isSectionVisible('continueTracks')) {
-        fetchTracks(seeds.continueListeningTrackIds).then(tracks => {
-          continueTracks = tracks;
-          loadingContinueTracks = false;
-        }).catch(err => {
-          console.error('Failed to load continueTracks:', err);
-          loadingContinueTracks = false;
-        });
-      } else {
-        loadingContinueTracks = false;
-      }
-
-      // Recently Played (albums) - start immediately with seeds
+      // Recently Played Albums
       if (isSectionVisible('recentAlbums')) {
-        const recentAlbumIds = normalizeAlbumIds(seeds.recentlyPlayedAlbumIds);
-        // Fetch more if filtering, to have enough after filter
-        const fetchLimit = hasGenreFilter() ? homeLimits.recentAlbums * 3 : homeLimits.recentAlbums;
-        fetchAlbums(recentAlbumIds.slice(0, fetchLimit)).then(async (albums) => {
-          const filtered = filterAlbumsByGenre(albums).slice(0, homeLimits.recentAlbums);
-          recentAlbums = filtered;
-          loadingRecentAlbums = false;
-          await tick();
-          loadAllAlbumDownloadStatuses(filtered).catch(() => {});
-        }).catch(err => {
-          console.error('Failed to load recentAlbums:', err);
-          loadingRecentAlbums = false;
-        });
+        const filtered = filterAlbumsByGenre(resolved.recentlyPlayedAlbums).slice(0, homeLimits.recentAlbums);
+        recentAlbums = filtered;
+        loadingRecentAlbums = false;
+        await tick();
+        loadAllAlbumDownloadStatuses(filtered).catch(() => {});
       } else {
         loadingRecentAlbums = false;
       }
 
+      // Continue Listening Tracks
+      if (isSectionVisible('continueTracks')) {
+        continueTracks = resolved.continueListeningTracks;
+        loadingContinueTracks = false;
+      } else {
+        loadingContinueTracks = false;
+      }
+
       // Top Artists
       if (isSectionVisible('topArtists')) {
-        fetchArtists(seeds.topArtistIds.slice(0, homeLimits.topArtists)).then(artists => {
-          topArtists = artists;
-          loadingTopArtists = false;
-        }).catch(err => {
-          console.error('Failed to load topArtists:', err);
-          loadingTopArtists = false;
-        });
+        topArtists = resolved.topArtists;
+        loadingTopArtists = false;
       } else {
         loadingTopArtists = false;
       }
 
       // Favorite Albums
       if (isSectionVisible('favoriteAlbums')) {
-        // Get favorite track details to extract album IDs
-        fetchTracks(seeds.favoriteTrackIds.slice(0, homeLimits.favoriteTracks)).then(async favoriteTrackDetails => {
-          const favoriteAlbumIds = normalizeAlbumIds([
-            ...seeds.favoriteAlbumIds,
-            ...favoriteTrackDetails.map(track => track.albumId)
-          ]);
-          // Fetch more if filtering, to have enough after filter
-          const fetchLimit = hasGenreFilter() ? homeLimits.favoriteAlbums * 3 : homeLimits.favoriteAlbums;
-          const albums = await fetchAlbums(favoriteAlbumIds.slice(0, fetchLimit));
-          const filtered = filterAlbumsByGenre(albums).slice(0, homeLimits.favoriteAlbums);
-          favoriteAlbums = filtered;
-          loadingFavoriteAlbums = false;
-          await tick();
-          loadAllAlbumDownloadStatuses(filtered).catch(() => {});
-        }).catch(err => {
-          console.error('Failed to load favoriteAlbums:', err);
-          loadingFavoriteAlbums = false;
-        });
+        const filtered = filterAlbumsByGenre(resolved.favoriteAlbums).slice(0, homeLimits.favoriteAlbums);
+        favoriteAlbums = filtered;
+        loadingFavoriteAlbums = false;
+        await tick();
+        loadAllAlbumDownloadStatuses(filtered).catch(() => {});
       } else {
         loadingFavoriteAlbums = false;
       }
 
     } catch (err) {
-      console.error('ML seeds failed:', err);
+      console.error('Home resolved failed:', err);
       error = String(err);
       loadingRecentAlbums = false;
       loadingContinueTracks = false;

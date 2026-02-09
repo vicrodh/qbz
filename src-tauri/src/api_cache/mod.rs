@@ -240,6 +240,89 @@ impl ApiCache {
         Ok(results)
     }
 
+    /// Get multiple cached tracks at once
+    pub fn get_tracks(&self, track_ids: &[u64], ttl_secs: Option<i64>) -> Result<Vec<(u64, String)>, String> {
+        if track_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let ttl = ttl_secs.unwrap_or(DEFAULT_TTL_SECS);
+        let min_fetched_at = Self::current_timestamp() - ttl;
+
+        let placeholders: Vec<&str> = track_ids.iter().map(|_| "?").collect();
+        let query = format!(
+            "SELECT track_id, data FROM cached_tracks WHERE track_id IN ({}) AND fetched_at > ?",
+            placeholders.join(",")
+        );
+
+        let mut stmt = self
+            .conn
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare cached tracks query: {}", e))?;
+
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = track_ids
+            .iter()
+            .map(|id| Box::new(*id as i64) as Box<dyn rusqlite::ToSql>)
+            .collect();
+        params_vec.push(Box::new(min_fetched_at));
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok((row.get::<_, u64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| format!("Failed to query cached tracks: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read cached track row: {}", e))?);
+        }
+        Ok(results)
+    }
+
+    /// Get multiple cached artists at once (for a specific locale)
+    pub fn get_artists(&self, artist_ids: &[u64], locale: &str, ttl_secs: Option<i64>) -> Result<Vec<(u64, String)>, String> {
+        if artist_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let ttl = ttl_secs.unwrap_or(DEFAULT_TTL_SECS);
+        let min_fetched_at = Self::current_timestamp() - ttl;
+
+        let placeholders: Vec<&str> = artist_ids.iter().map(|_| "?").collect();
+        let query = format!(
+            "SELECT artist_id, data FROM cached_artists WHERE artist_id IN ({}) AND locale = ? AND fetched_at > ?",
+            placeholders.join(",")
+        );
+
+        let mut stmt = self
+            .conn
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare cached artists query: {}", e))?;
+
+        let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = artist_ids
+            .iter()
+            .map(|id| Box::new(*id as i64) as Box<dyn rusqlite::ToSql>)
+            .collect();
+        params_vec.push(Box::new(locale.to_string()));
+        params_vec.push(Box::new(min_fetched_at));
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok((row.get::<_, u64>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| format!("Failed to query cached artists: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read cached artist row: {}", e))?);
+        }
+        Ok(results)
+    }
+
     // ============ Artist Cache ============
 
     /// Get a cached artist if it exists and hasn't expired

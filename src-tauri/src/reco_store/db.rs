@@ -4,7 +4,7 @@ use rusqlite::{params, Connection};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::reco_store::{RecoEventInput, TopArtistSeed};
+use crate::reco_store::{AlbumCardMeta, ArtistCardMeta, RecoEventInput, TopArtistSeed, TrackDisplayMeta};
 
 #[derive(Debug, Clone)]
 pub struct RecoEventRecord {
@@ -80,6 +80,7 @@ impl RecoStoreDb {
 
         // Migrations - run after base schema
         self.migrate_add_genre_id()?;
+        self.migrate_add_meta_tables()?;
 
         Ok(())
     }
@@ -536,5 +537,273 @@ impl RecoStoreDb {
             artists.push(row.map_err(|e| format!("Failed to read scored artist row: {}", e))?);
         }
         Ok(artists)
+    }
+
+    // ============ Metadata Cache Tables ============
+
+    /// Migration to add persistent metadata cache tables (no TTL)
+    fn migrate_add_meta_tables(&self) -> Result<(), String> {
+        self.conn
+            .execute_batch(
+                r#"
+                CREATE TABLE IF NOT EXISTS reco_album_meta (
+                    album_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    artist_name TEXT NOT NULL,
+                    artist_id INTEGER,
+                    artwork_url TEXT NOT NULL DEFAULT '',
+                    genre_name TEXT NOT NULL DEFAULT '',
+                    quality TEXT NOT NULL DEFAULT '',
+                    release_date TEXT,
+                    updated_at INTEGER NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS reco_track_meta (
+                    track_id INTEGER PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    artist_name TEXT NOT NULL DEFAULT '',
+                    artist_id INTEGER,
+                    album_title TEXT NOT NULL DEFAULT '',
+                    album_id TEXT,
+                    album_art_url TEXT NOT NULL DEFAULT '',
+                    duration_secs INTEGER NOT NULL DEFAULT 0,
+                    hires INTEGER NOT NULL DEFAULT 0,
+                    bit_depth INTEGER,
+                    sampling_rate REAL,
+                    isrc TEXT,
+                    updated_at INTEGER NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS reco_artist_meta (
+                    artist_id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    image_url TEXT NOT NULL DEFAULT '',
+                    updated_at INTEGER NOT NULL
+                );
+                "#,
+            )
+            .map_err(|e| format!("Failed to create meta tables: {}", e))?;
+        Ok(())
+    }
+
+    /// Get album metadata for multiple IDs at once
+    pub fn get_album_metas(&self, ids: &[String]) -> Result<Vec<AlbumCardMeta>, String> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let placeholders: Vec<&str> = ids.iter().map(|_| "?").collect();
+        let query = format!(
+            "SELECT album_id, title, artist_name, artist_id, artwork_url, genre_name, quality, release_date FROM reco_album_meta WHERE album_id IN ({})",
+            placeholders.join(",")
+        );
+
+        let mut stmt = self.conn.prepare(&query)
+            .map_err(|e| format!("Failed to prepare album meta query: {}", e))?;
+
+        let params_vec: Vec<Box<dyn rusqlite::ToSql>> = ids
+            .iter()
+            .map(|id| Box::new(id.clone()) as Box<dyn rusqlite::ToSql>)
+            .collect();
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok(AlbumCardMeta {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    artist: row.get(2)?,
+                    artist_id: row.get(3)?,
+                    artwork: row.get(4)?,
+                    genre: row.get(5)?,
+                    quality: row.get(6)?,
+                    release_date: row.get(7)?,
+                })
+            })
+            .map_err(|e| format!("Failed to query album metas: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read album meta row: {}", e))?);
+        }
+        Ok(results)
+    }
+
+    /// Upsert a single album metadata entry
+    pub fn set_album_meta(&self, meta: &AlbumCardMeta) -> Result<(), String> {
+        let updated_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        self.conn
+            .execute(
+                r#"INSERT OR REPLACE INTO reco_album_meta
+                   (album_id, title, artist_name, artist_id, artwork_url, genre_name, quality, release_date, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                params![
+                    meta.id,
+                    meta.title,
+                    meta.artist,
+                    meta.artist_id,
+                    meta.artwork,
+                    meta.genre,
+                    meta.quality,
+                    meta.release_date,
+                    updated_at,
+                ],
+            )
+            .map_err(|e| format!("Failed to upsert album meta: {}", e))?;
+        Ok(())
+    }
+
+    /// Get track metadata for multiple IDs at once
+    pub fn get_track_metas(&self, ids: &[u64]) -> Result<Vec<TrackDisplayMeta>, String> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let placeholders: Vec<&str> = ids.iter().map(|_| "?").collect();
+        let query = format!(
+            "SELECT track_id, title, artist_name, artist_id, album_title, album_id, album_art_url, duration_secs, hires, bit_depth, sampling_rate, isrc FROM reco_track_meta WHERE track_id IN ({})",
+            placeholders.join(",")
+        );
+
+        let mut stmt = self.conn.prepare(&query)
+            .map_err(|e| format!("Failed to prepare track meta query: {}", e))?;
+
+        let params_vec: Vec<Box<dyn rusqlite::ToSql>> = ids
+            .iter()
+            .map(|id| Box::new(*id as i64) as Box<dyn rusqlite::ToSql>)
+            .collect();
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                let duration_secs: u32 = row.get(7)?;
+                let mins = duration_secs / 60;
+                let secs = duration_secs % 60;
+                let hires_int: i32 = row.get(8)?;
+                Ok(TrackDisplayMeta {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    artist: row.get(2)?,
+                    artist_id: row.get(3)?,
+                    album: row.get(4)?,
+                    album_id: row.get(5)?,
+                    album_art: row.get(6)?,
+                    duration: format!("{}:{:02}", mins, secs),
+                    duration_seconds: duration_secs,
+                    hires: hires_int != 0,
+                    bit_depth: row.get(9)?,
+                    sampling_rate: row.get(10)?,
+                    isrc: row.get(11)?,
+                })
+            })
+            .map_err(|e| format!("Failed to query track metas: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read track meta row: {}", e))?);
+        }
+        Ok(results)
+    }
+
+    /// Upsert a single track metadata entry
+    pub fn set_track_meta(&self, meta: &TrackDisplayMeta) -> Result<(), String> {
+        let updated_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        self.conn
+            .execute(
+                r#"INSERT OR REPLACE INTO reco_track_meta
+                   (track_id, title, artist_name, artist_id, album_title, album_id, album_art_url, duration_secs, hires, bit_depth, sampling_rate, isrc, updated_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                params![
+                    meta.id as i64,
+                    meta.title,
+                    meta.artist,
+                    meta.artist_id,
+                    meta.album,
+                    meta.album_id,
+                    meta.album_art,
+                    meta.duration_seconds,
+                    meta.hires as i32,
+                    meta.bit_depth,
+                    meta.sampling_rate,
+                    meta.isrc,
+                    updated_at,
+                ],
+            )
+            .map_err(|e| format!("Failed to upsert track meta: {}", e))?;
+        Ok(())
+    }
+
+    /// Get artist metadata for multiple IDs at once
+    pub fn get_artist_metas(&self, ids: &[u64]) -> Result<Vec<ArtistCardMeta>, String> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let placeholders: Vec<&str> = ids.iter().map(|_| "?").collect();
+        let query = format!(
+            "SELECT artist_id, name, image_url FROM reco_artist_meta WHERE artist_id IN ({})",
+            placeholders.join(",")
+        );
+
+        let mut stmt = self.conn.prepare(&query)
+            .map_err(|e| format!("Failed to prepare artist meta query: {}", e))?;
+
+        let params_vec: Vec<Box<dyn rusqlite::ToSql>> = ids
+            .iter()
+            .map(|id| Box::new(*id as i64) as Box<dyn rusqlite::ToSql>)
+            .collect();
+
+        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                let image_url: String = row.get(2)?;
+                Ok(ArtistCardMeta {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    image: if image_url.is_empty() { None } else { Some(image_url) },
+                    play_count: None, // filled by caller from seeds
+                })
+            })
+            .map_err(|e| format!("Failed to query artist metas: {}", e))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| format!("Failed to read artist meta row: {}", e))?);
+        }
+        Ok(results)
+    }
+
+    /// Upsert a single artist metadata entry
+    pub fn set_artist_meta(&self, meta: &ArtistCardMeta) -> Result<(), String> {
+        let updated_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
+
+        self.conn
+            .execute(
+                r#"INSERT OR REPLACE INTO reco_artist_meta
+                   (artist_id, name, image_url, updated_at)
+                   VALUES (?, ?, ?, ?)"#,
+                params![
+                    meta.id as i64,
+                    meta.name,
+                    meta.image.as_deref().unwrap_or(""),
+                    updated_at,
+                ],
+            )
+            .map_err(|e| format!("Failed to upsert artist meta: {}", e))?;
+        Ok(())
     }
 }
