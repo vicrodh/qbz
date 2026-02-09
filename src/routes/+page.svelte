@@ -202,13 +202,17 @@
     PlaylistTrack,
     DisplayTrack,
     LocalLibraryTrack,
-    SongLinkResponse
+    SongLinkResponse,
+    PageArtistResponse,
+    PageArtistTrack,
+    PageArtistSimilarItem
   } from '$lib/types';
 
   // Adapters
   import {
     convertQobuzAlbum,
     convertQobuzArtist,
+    convertPageArtist,
     formatDuration,
     appendArtistAlbums
   } from '$lib/adapters/qobuzAdapters';
@@ -383,6 +387,8 @@
   // Album, Artist and Label data are fetched, so kept local
   let selectedAlbum = $state<AlbumDetail | null>(null);
   let selectedArtist = $state<ArtistDetail | null>(null);
+  let artistTopTracks = $state<PageArtistTrack[]>([]);
+  let artistSimilarArtists = $state<PageArtistSimilarItem[]>([]);
   let selectedLabel = $state<{ id: number; name: string } | null>(null);
   let selectedMusician = $state<ResolvedMusician | null>(null);
   let musicianModalData = $state<ResolvedMusician | null>(null);
@@ -623,8 +629,8 @@
    */
   async function fetchAlbumArtistAlbums(artistId: number) {
     try {
-      const artist = await invoke<QobuzArtist>('get_artist_detail', { artistId });
-      const artistDetail = convertQobuzArtist(artist);
+      const response = await invoke<PageArtistResponse>('get_artist_page', { artistId });
+      const artistDetail = convertPageArtist(response);
 
       // Combine studio albums and live albums, limit to 16
       const combined = [
@@ -676,10 +682,12 @@
   async function handleArtistClick(artistId: number) {
     try {
       showToast($t('toast.loadingArtist'), 'info');
-      const artist = await invoke<QobuzArtist>('get_artist_detail', { artistId });
-      console.log('Artist details:', artist);
+      const response = await invoke<PageArtistResponse>('get_artist_page', { artistId });
+      console.log('Artist page:', response);
 
-      selectedArtist = convertQobuzArtist(artist);
+      selectedArtist = convertPageArtist(response);
+      artistTopTracks = response.top_tracks || [];
+      artistSimilarArtists = response.similar_artists?.items || [];
       navigateTo('artist');
       hideToast();
     } catch (err) {
@@ -3187,6 +3195,8 @@
       {:else if activeView === 'artist' && selectedArtist}
         <ArtistDetailView
           artist={selectedArtist}
+          initialTopTracks={artistTopTracks}
+          initialSimilarArtists={artistSimilarArtists}
           onBack={navGoBack}
           onAlbumClick={handleAlbumClick}
           onAlbumPlay={playAlbumById}

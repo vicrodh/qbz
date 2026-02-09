@@ -9,7 +9,7 @@
     subscribe as subscribeBlacklist
   } from '$lib/stores/artistBlacklistStore';
   import { showToast } from '$lib/stores/toastStore';
-  import type { ArtistDetail, QobuzArtist } from '$lib/types';
+  import type { ArtistDetail, QobuzArtist, PageArtistTrack, PageArtistSimilarItem } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import QualityBadge from '../QualityBadge.svelte';
@@ -65,6 +65,8 @@
 
   interface Props {
     artist: ArtistDetail;
+    initialTopTracks?: PageArtistTrack[];
+    initialSimilarArtists?: PageArtistSimilarItem[];
     onBack: () => void;
     onAlbumClick?: (albumId: string) => void;
     onAlbumPlay?: (albumId: string) => void;
@@ -98,6 +100,8 @@
 
   let {
     artist,
+    initialTopTracks,
+    initialSimilarArtists,
     onBack,
     onAlbumClick,
     onAlbumPlay,
@@ -341,6 +345,45 @@
     limit: number;
   }
 
+  /** Convert PageArtistTrack[] from /artist/page to component-local Track[] */
+  function convertPageTopTracks(tracks: PageArtistTrack[]): Track[] {
+    return tracks.map(track => ({
+      id: track.id,
+      title: track.title,
+      duration: track.duration ?? 0,
+      album: track.album ? {
+        id: track.album.id,
+        title: track.album.title,
+        image: track.album.image
+      } : undefined,
+      performer: track.artist ? {
+        id: track.artist.id,
+        name: track.artist.name.display
+      } : undefined,
+      hires_streamable: track.rights?.hires_streamable,
+      maximum_bit_depth: track.audio_info?.maximum_bit_depth,
+      maximum_sampling_rate: track.audio_info?.maximum_sampling_rate,
+      isrc: track.isrc
+    }));
+  }
+
+  /** Convert PageArtistSimilarItem[] from /artist/page to QobuzArtist[] */
+  function convertPageSimilarArtists(items: PageArtistSimilarItem[]): QobuzArtist[] {
+    return items.map(item => {
+      let image: { small?: string; thumbnail?: string; large?: string } | undefined;
+      if (item.images?.portrait) {
+        const { hash, format } = item.images.portrait;
+        const url = `https://static.qobuz.com/images/artists/covers/${hash}_600.${format}`;
+        image = { large: url, thumbnail: url, small: url };
+      }
+      return {
+        id: item.id,
+        name: item.name.display,
+        image
+      };
+    });
+  }
+
   $effect(() => {
     const artistId = artist.id;
     const artistName = artist.name;
@@ -356,8 +399,21 @@
     tributesExpanded = false;
     tributesVisibleCount = 20;
 
-    loadTopTracks();
-    loadSimilarArtists();
+    // Use pre-loaded data from /artist/page if available
+    if (initialTopTracks && initialTopTracks.length > 0) {
+      topTracks = convertPageTopTracks(initialTopTracks);
+    } else {
+      loadTopTracks();
+    }
+
+    if (initialSimilarArtists && initialSimilarArtists.length > 0) {
+      similarArtists = convertPageSimilarArtists(initialSimilarArtists)
+        .filter(item => item.id !== artist.id)
+        .slice(0, 5);
+    } else {
+      loadSimilarArtists();
+    }
+
     loadMusicBrainzRelationships();
     checkFavoriteStatus();
     loadArtistAlbumDownloadStatuses();
