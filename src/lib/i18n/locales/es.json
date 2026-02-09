@@ -629,6 +629,8 @@
         "split-suggestions": "Dividido: Sugerencias",
         "split-queue": "Dividido: Cola"
       },
+      "hardwareAcceleration": "Aceleración por hardware (GPU)",
+      "hardwareAccelerationDesc": "Habilitar renderizado acelerado por GPU. Desactivado por defecto para máxima compatibilidad. Si QBZ se cierra al iniciar después de activar esto, ejecuta: QBZ_HARDWARE_ACCEL=0 qbz",
       "tray": {
         "title": "Bandeja del Sistema",
         "enableTray": "Habilitar icono de bandeja",

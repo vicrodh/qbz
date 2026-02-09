@@ -226,6 +226,7 @@
   let storageCollapsed = $state(true);
   let developerCollapsed = $state(true);
   let forceDmabuf = $state(false);
+  let hardwareAcceleration = $state(false);
   let showLogsModal = $state(false);
 
   // Navigation section IDs with translation keys
@@ -809,6 +810,11 @@
     // Load developer settings
     invoke('get_developer_settings').then((settings: any) => {
       forceDmabuf = settings.force_dmabuf;
+    }).catch(() => {});
+
+    // Load graphics settings
+    invoke('get_graphics_settings').then((settings: any) => {
+      hardwareAcceleration = settings.hardware_acceleration;
     }).catch(() => {});
 
     // Subscribe to offline state changes
@@ -2171,6 +2177,17 @@
     }
   }
 
+  async function handleHardwareAccelerationChange(enabled: boolean) {
+    try {
+      await invoke('set_hardware_acceleration', { enabled });
+      hardwareAcceleration = enabled;
+      showToast($t('settings.developer.restartRequired'), 'info');
+    } catch (err) {
+      console.error('Failed to set hardware_acceleration:', err);
+      showToast(String(err), 'error');
+    }
+  }
+
   async function handleForceDmabufChange(enabled: boolean) {
     try {
       await invoke('set_developer_force_dmabuf', { enabled });
@@ -2662,6 +2679,14 @@
         options={getImmersiveViewOptions()}
         onchange={handleImmersiveViewChange}
       />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.hardwareAcceleration')}</span>
+        <span class="setting-desc">{$t('settings.appearance.hardwareAccelerationDesc')}</span>
+      </div>
+      <Toggle enabled={hardwareAcceleration} onchange={(v) => handleHardwareAccelerationChange(v)} />
     </div>
 
     <!-- System Tray subsection -->

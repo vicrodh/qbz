@@ -611,6 +611,8 @@
         "split-suggestions": "Geteilt: Vorschläge",
         "split-queue": "Geteilt: Warteschlange"
       },
+      "hardwareAcceleration": "Hardwarebeschleunigung (GPU)",
+      "hardwareAccelerationDesc": "GPU-beschleunigtes Rendering aktivieren. Standardmäßig deaktiviert für maximale Kompatibilität. Falls QBZ nach dem Aktivieren beim Start abstürzt: QBZ_HARDWARE_ACCEL=0 qbz",
       "tray": {
         "title": "Systemtray",
         "enableTray": "Tray-Symbol aktivieren",

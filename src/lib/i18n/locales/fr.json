@@ -611,6 +611,8 @@
         "split-suggestions": "Divisé : Suggestions",
         "split-queue": "Divisé : File d'attente"
       },
+      "hardwareAcceleration": "Accélération matérielle (GPU)",
+      "hardwareAccelerationDesc": "Activer le rendu accéléré par GPU. Désactivé par défaut pour une compatibilité maximale. Si QBZ plante au démarrage après activation : QBZ_HARDWARE_ACCEL=0 qbz",
       "tray": {
         "title": "Barre d'état système",
         "enableTray": "Activer l'icône dans la barre système",
