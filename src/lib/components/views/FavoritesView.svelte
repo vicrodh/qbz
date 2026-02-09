@@ -1598,7 +1598,6 @@
               {onAlbumDownload}
               {onOpenAlbumFolder}
               {onReDownloadAlbum}
-              {onArtistClick}
               {downloadStateVersion}
               {isAlbumDownloaded}
               onAlbumClick={onAlbumClick}

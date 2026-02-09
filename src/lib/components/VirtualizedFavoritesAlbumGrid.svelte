@@ -41,7 +41,6 @@
     onAlbumDownload?: (albumId: string) => void;
     onOpenAlbumFolder?: (albumId: string) => void;
     onReDownloadAlbum?: (albumId: string) => void;
-    onArtistClick?: (artistId: number) => void;
     downloadStateVersion?: number;
     isAlbumDownloaded?: (albumId: string) => boolean;
     onAlbumClicked?: (albumId: string) => void;
@@ -64,7 +63,6 @@
     onAlbumDownload,
     onOpenAlbumFolder,
     onReDownloadAlbum,
-    onArtistClick,
     downloadStateVersion,
     isAlbumDownloaded,
     onAlbumClicked,
@@ -291,8 +289,6 @@
                 artwork={album.image?.large || album.image?.thumbnail || ''}
                 title={album.title}
                 artist={album.artist.name}
-                artistId={album.artist.id}
-                onArtistClick={onArtistClick}
                 genre={getGenreLabel?.(album) ?? album.genre?.name ?? ''}
                 releaseDate={album.release_date_original}
                 size="large"
