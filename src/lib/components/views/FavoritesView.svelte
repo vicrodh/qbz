@@ -10,6 +10,7 @@
   import VirtualizedTrackList from '../VirtualizedTrackList.svelte';
   import VirtualizedFavoritesArtistGrid from '../VirtualizedFavoritesArtistGrid.svelte';
   import VirtualizedFavoritesArtistList from '../VirtualizedFavoritesArtistList.svelte';
+  import VirtualizedFavoritesAlbumGrid from '../VirtualizedFavoritesAlbumGrid.svelte';
   import FavoritePlaylistCard from '../FavoritePlaylistCard.svelte';
   import FavoritesEditModal from '../FavoritesEditModal.svelte';
   import ViewTransition from '../ViewTransition.svelte';
@@ -1131,7 +1132,7 @@
 </script>
 
 <ViewTransition duration={200} distance={12} direction="down">
-<div class="favorites-view" class:no-outer-scroll={(activeTab === 'tracks' && !loading && filteredTracks.length > 0) || (activeTab === 'artists' && !loading && filteredArtists.length > 0)} bind:this={scrollContainer}>
+<div class="favorites-view" class:no-outer-scroll={(activeTab === 'tracks' && !loading && filteredTracks.length > 0) || (activeTab === 'albums' && !loading && filteredAlbums.length > 0) || (activeTab === 'artists' && !loading && filteredArtists.length > 0)} bind:this={scrollContainer}>
   <!-- Header -->
   <div class="header">
     <div
@@ -1570,82 +1571,41 @@
           <Search size={48} />
           <p>{$t('favorites.noAlbumsMatch', { values: { query: albumSearch } })}</p>
         </div>
-      {:else if albumGroupingEnabled}
-        {@const groupedAlbums = groupAlbums(filteredAlbums, albumGroupMode)}
-        {@const alphaGroups = albumGroupMode === 'alpha'
-          ? new Set(groupedAlbums.map(group => group.key))
+      {:else}
+        <!-- Virtualized album grid/list (grouped or ungrouped) -->
+        {@const albumGridGroups = albumGroupingEnabled
+          ? groupAlbums(filteredAlbums, albumGroupMode)
+          : [{ key: '', id: 'all', albums: filteredAlbums }]}
+        {@const alphaGroups = albumGroupingEnabled && albumGroupMode === 'alpha'
+          ? new Set(albumGridGroups.map(grp => grp.key))
           : new Set<string>()}
 
         <div class="album-sections">
-          <div class="album-group-list">
-            {#each groupedAlbums as group (group.id)}
-              <div class="album-group" id={group.id}>
-                <div class="album-group-header">
-                  <span class="album-group-title">{group.key}</span>
-                  <span class="album-group-count">{group.albums.length}</span>
-                </div>
-                {#if albumViewMode === 'grid'}
-                  <div class="album-grid">
-                    {#each group.albums as album (album.id)}
-                      <AlbumCard
-                        albumId={album.id}
-                        artwork={album.image?.large || album.image?.thumbnail || ''}
-                        title={album.title}
-                        artist={album.artist.name}
-                        genre={getGenreLabel(album)}
-                        releaseDate={album.release_date_original}
-                        size="large"
-                        quality={getQualityLabel(album)}
-                        onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
-                        onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
-                        onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                        onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
-                        onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
-                        onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                        isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-                        onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
-                        onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-                        {downloadStateVersion}
-                        onclick={() => { onAlbumClick?.(album.id); loadAlbumOfflineCacheStatus(album.id); }}
-                      />
-                    {/each}
-                  </div>
-                {:else}
-                  <div class="album-list">
-                    {#each group.albums as album (album.id)}
-                      <div class="album-row" role="button" tabindex="0" onclick={() => onAlbumClick?.(album.id)}>
-                        <div class="album-row-art">
-                          {#if album.image?.thumbnail || album.image?.small || album.image?.large}
-                            <img src={album.image?.thumbnail || album.image?.small || album.image?.large} alt={album.title} loading="lazy" decoding="async" />
-                          {:else}
-                            <div class="artwork-placeholder">
-                              <Disc3 size={28} />
-                            </div>
-                          {/if}
-                        </div>
-                        <div class="album-row-info">
-                          <div class="album-row-title truncate">{album.title}</div>
-                          <div class="album-row-meta">
-                            <span>{album.artist.name}</span>
-                            {#if getAlbumYear(album)}<span>{getAlbumYear(album)}</span>{/if}
-                          </div>
-                        </div>
-                        <div class="album-row-quality">
-                          <QualityBadge
-                            bitDepth={album.maximum_bit_depth}
-                            samplingRate={album.maximum_sampling_rate}
-                            compact
-                          />
-                        </div>
-                      </div>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
-            {/each}
+          <div class="virtualized-album-grid-container">
+            <VirtualizedFavoritesAlbumGrid
+              groups={albumGridGroups}
+              showGroupHeaders={albumGroupingEnabled}
+              viewMode={albumViewMode}
+              {onAlbumPlay}
+              {onAlbumPlayNext}
+              {onAlbumPlayLater}
+              {onAlbumShareQobuz}
+              {onAlbumShareSonglink}
+              {onAlbumDownload}
+              {onOpenAlbumFolder}
+              {onReDownloadAlbum}
+              {onArtistClick}
+              {downloadStateVersion}
+              {isAlbumDownloaded}
+              onAlbumClick={onAlbumClick}
+              onAlbumClicked={(albumId) => loadAlbumOfflineCacheStatus(albumId)}
+              {getQualityLabel}
+              {getGenreLabel}
+              {getAlbumYear}
+            />
           </div>
 
-          {#if albumGroupMode === 'alpha'}
+          {#if albumGroupingEnabled && albumGroupMode === 'alpha'}
             <div class="alpha-index">
               {#each alphaIndexLetters as letter}
                 <button
@@ -1659,64 +1619,6 @@
             </div>
           {/if}
         </div>
-      {:else}
-        {#if albumViewMode === 'grid'}
-          <div class="album-grid">
-            {#each filteredAlbums as album (album.id)}
-              <AlbumCard
-                albumId={album.id}
-                artwork={album.image?.large || album.image?.thumbnail || ''}
-                title={album.title}
-                artist={album.artist.name}
-                genre={getGenreLabel(album)}
-                releaseDate={album.release_date_original}
-                size="large"
-                quality={getQualityLabel(album)}
-                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
-                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
-                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
-                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
-                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
-                onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
-                onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-                        {downloadStateVersion}
-                onclick={() => { onAlbumClick?.(album.id); loadAlbumOfflineCacheStatus(album.id); }}
-              />
-            {/each}
-          </div>
-        {:else}
-          <div class="album-list">
-            {#each filteredAlbums as album (album.id)}
-              <div class="album-row" role="button" tabindex="0" onclick={() => onAlbumClick?.(album.id)}>
-                <div class="album-row-art">
-                  {#if album.image?.thumbnail || album.image?.small || album.image?.large}
-                    <img src={album.image?.thumbnail || album.image?.small || album.image?.large} alt={album.title} loading="lazy" decoding="async" />
-                  {:else}
-                    <div class="artwork-placeholder">
-                      <Disc3 size={28} />
-                    </div>
-                  {/if}
-                </div>
-                <div class="album-row-info">
-                  <div class="album-row-title truncate">{album.title}</div>
-                  <div class="album-row-meta">
-                    <span>{album.artist.name}</span>
-                    {#if getAlbumYear(album)}<span>{getAlbumYear(album)}</span>{/if}
-                  </div>
-                </div>
-                <div class="album-row-quality">
-                  <QualityBadge
-                    bitDepth={album.maximum_bit_depth}
-                    samplingRate={album.maximum_sampling_rate}
-                    compact
-                  />
-                </div>
-              </div>
-            {/each}
-          </div>
-        {/if}
       {/if}
       </ViewTransition>
     {:else if activeTab === 'artists'}
@@ -2503,118 +2405,10 @@
     overflow: hidden;
   }
 
-  .album-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 24px 14px;
-  }
-
   .album-sections {
     display: flex;
     gap: 12px;
     align-items: flex-start;
-  }
-
-  .album-group-list {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  .album-group-header {
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-
-  .album-group-title {
-    font-size: 14px;
-    font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-
-  .album-group-count {
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .album-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .album-row {
-    display: grid;
-    grid-template-columns: 56px 1fr auto;
-    gap: 12px;
-    align-items: center;
-    padding: 10px 12px;
-    background: var(--bg-secondary);
-    border-radius: 10px;
-    cursor: pointer;
-    transition: background 150ms ease;
-  }
-
-  .album-row:hover {
-    background: var(--bg-tertiary);
-  }
-
-  .album-row-art {
-    width: 52px;
-    height: 52px;
-    border-radius: 8px;
-    overflow: hidden;
-    flex-shrink: 0;
-  }
-
-  .album-row-art img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .artwork-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-tertiary);
-    color: var(--text-muted);
-  }
-
-  .album-row-info {
-    min-width: 0;
-  }
-
-  .album-row-title {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-  }
-
-  .album-row-meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    font-size: 12px;
-    color: var(--text-muted);
-  }
-
-  .album-row-meta span + span::before {
-    content: "\2022";
-    margin: 0 8px;
-    color: var(--text-muted);
-  }
-
-  .album-row-quality {
-    display: flex;
-    justify-content: flex-end;
   }
 
   .artist-grid {
@@ -2629,7 +2423,8 @@
     align-items: flex-start;
   }
 
-  .virtualized-artist-grid-container {
+  .virtualized-artist-grid-container,
+  .virtualized-album-grid-container {
     flex: 1;
     height: calc(100vh - 380px);
     min-height: 400px;
