@@ -746,24 +746,63 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
-    /// Get playlist by ID
+    /// Get playlist by ID (paginates automatically to fetch all tracks)
     pub async fn get_playlist(&self, playlist_id: u64) -> Result<Playlist> {
         let url = endpoints::build_url(paths::PLAYLIST_GET);
+        const PAGE_SIZE: u32 = 500;
+
+        // First page
         let http_response = self
             .http
             .get(&url)
             .headers(self.api_headers().await?)
             .query(&[
                 ("playlist_id", playlist_id.to_string()),
-                ("limit", "500".to_string()),
+                ("limit", PAGE_SIZE.to_string()),
+                ("offset", "0".to_string()),
                 ("extra", "tracks".to_string()),
             ])
             .send()
             .await?;
         log::debug!("[API] get_playlist({}) status={}", playlist_id, http_response.status());
         let response: Value = http_response.json().await?;
+        let mut playlist: Playlist = serde_json::from_value(response)?;
 
-        Ok(serde_json::from_value(response)?)
+        // Paginate if there are more tracks
+        if let Some(ref mut container) = playlist.tracks {
+            let total = container.total;
+            let mut fetched = container.items.len() as u32;
+
+            while fetched < total {
+                log::debug!("[API] get_playlist({}) fetching tracks {}/{}", playlist_id, fetched, total);
+                let page_response = self
+                    .http
+                    .get(&url)
+                    .headers(self.api_headers().await?)
+                    .query(&[
+                        ("playlist_id", playlist_id.to_string()),
+                        ("limit", PAGE_SIZE.to_string()),
+                        ("offset", fetched.to_string()),
+                        ("extra", "tracks".to_string()),
+                    ])
+                    .send()
+                    .await?;
+                let page_value: Value = page_response.json().await?;
+                let page_playlist: Playlist = serde_json::from_value(page_value)?;
+
+                if let Some(page_tracks) = page_playlist.tracks {
+                    if page_tracks.items.is_empty() {
+                        break; // No more tracks
+                    }
+                    fetched += page_tracks.items.len() as u32;
+                    container.items.extend(page_tracks.items);
+                } else {
+                    break;
+                }
+            }
+        }
+
+        Ok(playlist)
     }
 
     /// Get label by ID with albums
