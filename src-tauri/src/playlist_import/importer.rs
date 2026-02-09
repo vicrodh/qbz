@@ -1,9 +1,11 @@
 //! Orchestrates playlist import
 
+use tauri::{AppHandle, Emitter};
+
 use crate::api::QobuzClient;
 use crate::playlist_import::errors::PlaylistImportError;
 use crate::playlist_import::match_qobuz::match_tracks;
-use crate::playlist_import::models::{ImportPlaylist, ImportSummary};
+use crate::playlist_import::models::{ImportPlaylist, ImportProgress, ImportSummary};
 use crate::playlist_import::providers::{detect_provider, fetch_playlist};
 
 const ADD_CHUNK_SIZE: usize = 50;
@@ -20,9 +22,13 @@ pub async fn import_public_playlist(
     client: &QobuzClient,
     name_override: Option<&str>,
     is_public: bool,
+    app: &AppHandle,
 ) -> Result<ImportSummary, PlaylistImportError> {
     let playlist = preview_public_playlist(url).await?;
-    let matches = match_tracks(client, &playlist.tracks).await?;
+
+    // Phase: matching
+    let _ = app.emit("import:phase", serde_json::json!({ "phase": "matching" }));
+    let matches = match_tracks(client, &playlist.tracks, app).await?;
 
     let mut matched_track_ids = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -41,6 +47,9 @@ pub async fn import_public_playlist(
     let mut qobuz_playlist_id = None;
 
     if !matched_track_ids.is_empty() {
+        // Phase: creating
+        let _ = app.emit("import:phase", serde_json::json!({ "phase": "creating" }));
+
         let name = name_override.unwrap_or(&playlist.name);
         let description = playlist
             .description
@@ -54,11 +63,28 @@ pub async fn import_public_playlist(
 
         qobuz_playlist_id = Some(created.id);
 
-        for chunk in matched_track_ids.chunks(ADD_CHUNK_SIZE) {
+        // Phase: adding
+        let _ = app.emit("import:phase", serde_json::json!({ "phase": "adding" }));
+
+        let chunks: Vec<&[u64]> = matched_track_ids.chunks(ADD_CHUNK_SIZE).collect();
+        let total_chunks = chunks.len() as u32;
+
+        for (i, chunk) in chunks.iter().enumerate() {
             client
                 .add_tracks_to_playlist(created.id, chunk)
                 .await
                 .map_err(|e| PlaylistImportError::Qobuz(e.to_string()))?;
+
+            let _ = app.emit(
+                "import:progress",
+                ImportProgress {
+                    phase: "adding".to_string(),
+                    current: (i as u32) + 1,
+                    total: total_chunks,
+                    matched_so_far: matched_count,
+                    current_track: None,
+                },
+            );
         }
     }
 

@@ -1318,6 +1318,11 @@
     "summary": "Zusammenfassung",
     "playlistLabel": "Playlist: {name}",
     "tracksMatched": "Titel zugeordnet: {matched} / {total}",
-    "skipped": "Übersprungen: {count}"
+    "skipped": "Übersprungen: {count}",
+    "matchingTracks": "Titel abgleichen: {current} / {total} ({matched} gefunden)",
+    "matchingPhase": "Qobuz-Katalog durchsuchen...",
+    "creatingPhase": "Playlist erstellen...",
+    "addingPhase": "Titel zur Playlist hinzufugen...",
+    "addingProgress": "Titel hinzufugen: {current} / {total}"
   }
 }

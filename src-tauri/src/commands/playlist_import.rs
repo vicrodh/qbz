@@ -20,6 +20,7 @@ pub async fn playlist_import_preview(
 
 #[tauri::command]
 pub async fn playlist_import_execute(
+    app: tauri::AppHandle,
     url: String,
     name_override: Option<String>,
     is_public: Option<bool>,
@@ -33,6 +34,7 @@ pub async fn playlist_import_execute(
         &client,
         name_override.as_deref(),
         is_public.unwrap_or(false),
+        &app,
     )
     .await
     .map_err(|e| e.to_string())

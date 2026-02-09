@@ -60,3 +60,12 @@ pub struct ImportSummary {
     pub qobuz_playlist_id: Option<u64>,
     pub matches: Vec<TrackMatch>,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ImportProgress {
+    pub phase: String,
+    pub current: u32,
+    pub total: u32,
+    pub matched_so_far: u32,
+    pub current_track: Option<String>,
+}

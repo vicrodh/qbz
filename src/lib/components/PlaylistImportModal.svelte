@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { X, CloudOff } from 'lucide-svelte';
   import { showToast } from '$lib/stores/toastStore';
   import { t } from '$lib/i18n';
@@ -57,6 +58,8 @@
   let isOffline = $state(checkIsOffline());
   let importCompleted = $state(false);
   let lastImportedUrl = $state('');
+  let importProgress = $state<{ phase: string; current: number; total: number; matched_so_far: number; current_track: string | null } | null>(null);
+  let importPhase = $state<string | null>(null);
 
   // Preview + customization state
   let preview = $state<ImportPlaylist | null>(null);
@@ -106,6 +109,8 @@
       logEntries = [];
       importCompleted = false;
       lastImportedUrl = '';
+      importProgress = null;
+      importPhase = null;
       preview = null;
       previewUrl = '';
       customName = '';
@@ -187,9 +192,57 @@
 
     loading = true;
     error = null;
+    importProgress = null;
+    importPhase = null;
+
+    let unlistenProgress: UnlistenFn | null = null;
+    let unlistenPhase: UnlistenFn | null = null;
+    let lastLoggedPercent = -1;
 
     try {
-      pushLog('Matching tracks in Qobuz\u2122...');
+      // Set up event listeners before invoking
+      unlistenProgress = await listen<{ phase: string; current: number; total: number; matched_so_far: number; current_track: string | null }>('import:progress', (event) => {
+        importProgress = event.payload;
+
+        if (event.payload.phase === 'matching' && event.payload.total > 0) {
+          const pct = Math.floor((event.payload.current / event.payload.total) * 100);
+          // Log at every 5% milestone
+          if (pct >= lastLoggedPercent + 5) {
+            lastLoggedPercent = pct;
+            pushLog(
+              $t('playlistImport.matchingTracks', {
+                values: {
+                  current: event.payload.current.toLocaleString(),
+                  total: event.payload.total.toLocaleString(),
+                  matched: event.payload.matched_so_far.toLocaleString()
+                }
+              })
+            );
+          }
+        } else if (event.payload.phase === 'adding') {
+          pushLog(
+            $t('playlistImport.addingProgress', {
+              values: {
+                current: event.payload.current,
+                total: event.payload.total
+              }
+            })
+          );
+        }
+      });
+
+      unlistenPhase = await listen<{ phase: string }>('import:phase', (event) => {
+        importPhase = event.payload.phase;
+
+        if (event.payload.phase === 'matching') {
+          pushLog($t('playlistImport.matchingPhase'));
+        } else if (event.payload.phase === 'creating') {
+          pushLog($t('playlistImport.creatingPhase'), 'success');
+        } else if (event.payload.phase === 'adding') {
+          pushLog($t('playlistImport.addingPhase'));
+        }
+      });
+
       const nameOverride = customName.trim() !== preview.name ? customName.trim() || null : null;
       const result = await invoke<ImportSummary>('playlist_import_execute', {
         url: previewUrl,
@@ -223,6 +276,8 @@
       showToast($t('toast.playlistImportFailed'), 'error');
     } finally {
       loading = false;
+      unlistenProgress?.();
+      unlistenPhase?.();
     }
   }
 
@@ -352,6 +407,26 @@
                 <span class="spinner" aria-hidden="true"></span>
               {/if}
             </div>
+            {#if importProgress && importProgress.total > 0 && loading}
+              <div class="progress-bar-container">
+                <div
+                  class="progress-bar-fill"
+                  style="width: {Math.min(100, (importProgress.current / importProgress.total) * 100)}%"
+                ></div>
+              </div>
+              <div class="progress-status">
+                {$t('playlistImport.matchingTracks', {
+                  values: {
+                    current: importProgress.current.toLocaleString(),
+                    total: importProgress.total.toLocaleString(),
+                    matched: importProgress.matched_so_far.toLocaleString()
+                  }
+                })}
+              </div>
+              {#if importProgress.current_track}
+                <div class="progress-current-track">{importProgress.current_track}</div>
+              {/if}
+            {/if}
             <ul class="progress-log">
               {#each logEntries as entry}
                 <li class={`log-item ${entry.status}`}>{entry.message}</li>
@@ -602,6 +677,37 @@
     font-size: 13px;
     font-weight: 600;
     color: var(--text-primary);
+    margin-bottom: 10px;
+  }
+
+  .progress-bar-container {
+    width: 100%;
+    height: 6px;
+    background: var(--alpha-8);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent-primary);
+    border-radius: 3px;
+    transition: width 200ms ease;
+  }
+
+  .progress-status {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 4px;
+  }
+
+  .progress-current-track {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
     margin-bottom: 10px;
   }
 

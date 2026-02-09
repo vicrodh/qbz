@@ -1520,6 +1520,11 @@
     "summary": "Summary",
     "playlistLabel": "Playlist: {name}",
     "tracksMatched": "Tracks matched: {matched} / {total}",
-    "skipped": "Skipped: {count}"
+    "skipped": "Skipped: {count}",
+    "matchingTracks": "Matching tracks: {current} / {total} ({matched} found)",
+    "matchingPhase": "Searching Qobuz catalog...",
+    "creatingPhase": "Creating playlist...",
+    "addingPhase": "Adding tracks to playlist...",
+    "addingProgress": "Adding tracks: {current} / {total}"
   }
 }
