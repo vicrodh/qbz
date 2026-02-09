@@ -177,18 +177,22 @@ fn main() {
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         }
 
-        // --- AppImage + Wayland: MUST force X11 (unconditional) ---
-        // AppImage builds have a fundamentally broken EGL stack on Wayland:
-        // libEGL is present but incomplete, Mesa EGL loaders are missing,
-        // and eglGetDisplay() returns EGL_BAD_PARAMETER.  There is NO
-        // runtime fallback once EGL is attempted — the process aborts.
+        // --- AppImage + Wayland: prevent ALL EGL usage (unconditional) ---
+        // AppImage builds bundle an incomplete/incompatible libEGL.so.
+        // On Wayland hosts, even with GDK_BACKEND=x11, WebKitGTK still
+        // initializes EGL for GPU compositing.  The bundled libEGL sees
+        // WAYLAND_DISPLAY, tries the Wayland EGL platform, and aborts
+        // with "Could not create default EGL display: EGL_BAD_PARAMETER."
         //
-        // The ONLY reliable fix is to prevent EGL entirely by forcing the
-        // X11 (XWayland) backend, which uses GLX instead of EGL.
+        // There is NO runtime fallback once EGL is attempted.
+        // Three env vars are needed to fully prevent EGL initialization:
+        //   GDK_BACKEND=x11           → GTK uses X11/XWayland (not Wayland)
+        //   WEBKIT_DISABLE_COMPOSITING_MODE=1 → WebKitGTK skips GPU compositing
+        //                                        (this is what actually prevents EGL init)
+        //   WEBKIT_DISABLE_DMABUF_RENDERER=1  → extra safety: no DMA-BUF EGL path
         //
-        // This is unconditional: we override any existing GDK_BACKEND value
-        // because the AppImage runtime or desktop session may have set it
-        // to "wayland", which would bypass the workaround.
+        // WEBKIT_DISABLE_COMPOSITING_MODE caused "ghost app" on native Wayland,
+        // but is safe on X11 (which we force here).
         //
         // Does NOT affect RPM, DEB, Flatpak, or native builds.
         // Users who want to test native Wayland can set QBZ_FORCE_WAYLAND=1.
@@ -199,10 +203,11 @@ fn main() {
                 qbz_nix_lib::logging::log_startup("[QBZ] Warning: This may crash with EGL_BAD_PARAMETER on some systems");
                 false
             } else {
-                qbz_nix_lib::logging::log_startup("[QBZ] AppImage on Wayland: forcing X11 backend to prevent EGL crash");
+                qbz_nix_lib::logging::log_startup("[QBZ] AppImage on Wayland: forcing X11 + disabling GPU compositing to prevent EGL crash");
                 qbz_nix_lib::logging::log_startup("[QBZ] To test native Wayland: set QBZ_FORCE_WAYLAND=1");
                 std::env::set_var("GDK_BACKEND", "x11");
                 std::env::set_var("QT_QPA_PLATFORM", "xcb");
+                std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
                 true
             }
