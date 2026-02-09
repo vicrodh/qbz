@@ -598,7 +598,7 @@
       "inAppToasts": "In-App-Benachrichtigungen",
       "systemNotifications": "Systembenachrichtigungen",
       "useSystemTitleBar": "System-Titelleiste verwenden",
-      "useSystemTitleBarDesc": "QBZ-eigene Titelleiste durch die native Fensterdekoration des Systems ersetzen. Die App wird neu gestartet, um diese Änderung anzuwenden.",
+      "useSystemTitleBarDesc": "QBZ-eigene Titelleiste durch die native Fensterdekoration des Systems ersetzen. Beim Aktivieren wird die App neu gestartet.",
       "hideTitleBar": "Titelleiste ausblenden",
       "hideTitleBarDesc": "Titelleiste komplett ausblenden (für Tiling-Window-Manager-Nutzer)",
       "immersiveDefaultView": "Standard-Ansicht im Immersiv-Modus",

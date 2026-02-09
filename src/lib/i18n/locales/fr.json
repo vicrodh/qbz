@@ -598,7 +598,7 @@
       "inAppToasts": "Notifications toast intégrées",
       "systemNotifications": "Notifications système",
       "useSystemTitleBar": "Utiliser la barre de titre du système",
-      "useSystemTitleBarDesc": "Remplacer la barre de titre personnalisée de QBZ par les décorations natives de votre système. L'application redémarrera pour appliquer ce changement.",
+      "useSystemTitleBarDesc": "Remplacer la barre de titre personnalisée de QBZ par les décorations natives de votre système. L'activation redémarrera l'application.",
       "hideTitleBar": "Masquer la barre de titre",
       "hideTitleBarDesc": "Masquer complètement la barre de titre (pour les utilisateurs de gestionnaires de fenêtres en mosaïque)",
       "immersiveDefaultView": "Vue par défaut du mode immersif",

@@ -617,7 +617,7 @@
       "inAppToasts": "In-app toasts notifications",
       "systemNotifications": "System Notifications",
       "useSystemTitleBar": "Use system title bar",
-      "useSystemTitleBarDesc": "Replace QBZ custom title bar with your system's native window decorations. The app will restart to apply this change.",
+      "useSystemTitleBarDesc": "Replace QBZ custom title bar with your system's native window decorations. Enabling this will restart the app.",
       "hideTitleBar": "Hide title bar",
       "hideTitleBarDesc": "Hide the title bar completely (for tiling window manager users)",
       "immersiveDefaultView": "Immersive default view",

@@ -617,7 +617,7 @@
       "inAppToasts": "Notificaciones en App",
       "systemNotifications": "Notificaciones del Sistema",
       "useSystemTitleBar": "Usar barra de título del sistema",
-      "useSystemTitleBarDesc": "Reemplazar la barra de título personalizada de QBZ con las decoraciones nativas de tu sistema. La app se reiniciará para aplicar este cambio.",
+      "useSystemTitleBarDesc": "Reemplazar la barra de título personalizada de QBZ con las decoraciones nativas de tu sistema. Activarlo reiniciará la app.",
       "hideTitleBar": "Ocultar barra de título",
       "hideTitleBarDesc": "Ocultar completamente la barra de título (para usuarios de gestores de ventanas en mosaico)",
       "immersiveDefaultView": "Vista predeterminada del modo inmersivo",
