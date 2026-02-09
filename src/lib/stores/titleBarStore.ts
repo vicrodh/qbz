@@ -9,6 +9,7 @@
  */
 
 import { getCurrentWindow } from '@tauri-apps/api/window';
+import { invoke } from '@tauri-apps/api/core';
 
 const STORAGE_KEY_HIDE = 'qbz-hide-titlebar';
 const STORAGE_KEY_SYSTEM = 'qbz-use-system-titlebar';
@@ -40,12 +41,8 @@ export function initTitleBarStore(): void {
     if (savedSystem !== null) {
       useSystemTitleBar = savedSystem === 'true';
     }
-
-    if (useSystemTitleBar) {
-      getCurrentWindow().setDecorations(true).catch((e) => {
-        console.error('[TitleBarStore] Failed to enable system decorations:', e);
-      });
-    }
+    // Note: decorations are set by Rust at window creation (before show),
+    // so no need to call setDecorations() here on init.
   } catch (e) {
     console.error('[TitleBarStore] Failed to initialize:', e);
   }
@@ -105,7 +102,9 @@ export function setHideTitleBar(value: boolean): void {
 
 /**
  * Set whether to use system (OS native) title bar
- * Toggles Tauri window decorations and hides the custom title bar
+ * Toggles Tauri window decorations and hides the custom title bar.
+ * Persists to both localStorage (for fast frontend init) and Rust backend
+ * (so decorations are set before the window is shown on next launch).
  */
 export function setUseSystemTitleBar(value: boolean): void {
   useSystemTitleBar = value;
@@ -114,6 +113,11 @@ export function setUseSystemTitleBar(value: boolean): void {
   } catch (e) {
     console.error('[TitleBarStore] Failed to save system titlebar setting:', e);
   }
+  // Persist to Rust backend (read at startup before window creation)
+  invoke('set_use_system_titlebar', { value }).catch((e) => {
+    console.error('[TitleBarStore] Failed to persist system titlebar to backend:', e);
+  });
+  // Apply runtime decoration change for immediate effect
   getCurrentWindow().setDecorations(value).catch((e) => {
     console.error('[TitleBarStore] Failed to set window decorations:', e);
   });

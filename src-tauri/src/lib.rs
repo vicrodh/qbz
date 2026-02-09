@@ -196,6 +196,16 @@ pub fn run() {
         tray_settings.close_to_tray
     );
 
+    // Read window settings for decoration configuration before window creation.
+    let window_settings = config::window_settings::WindowSettingsStore::new()
+        .and_then(|store| store.get_settings())
+        .unwrap_or_default();
+    log::info!(
+        "Window settings: use_system_titlebar={}",
+        window_settings.use_system_titlebar
+    );
+    let use_system_titlebar = window_settings.use_system_titlebar;
+
     // Initialize casting state (Chromecast, DLNA) — device-level, not per-user
     let cast_state = cast::CastState::new()
         .expect("Failed to initialize Chromecast state");
@@ -247,6 +257,11 @@ pub fn run() {
             log::warn!("Failed to initialize graphics settings: {}. Using empty state.", e);
             config::graphics_settings::GraphicsSettingsState::new_empty()
         });
+    let window_settings_state = config::window_settings::WindowSettingsState::new()
+        .unwrap_or_else(|e| {
+            log::warn!("Failed to initialize window settings: {}. Using empty state.", e);
+            config::window_settings::WindowSettingsState::new_empty()
+        });
 
     // Clone settings for use in closures
     let enable_tray = tray_settings.enable_tray;
@@ -262,6 +277,21 @@ pub fn run() {
         .manage(AppState::with_device_and_settings(saved_device, audio_settings))
         .manage(user_data_paths)
         .setup(move |app| {
+            // Apply window decorations before showing the window.
+            // The window starts with visible:false so the WM sees correct
+            // decoration state when it is first mapped (shown).
+            if let Some(main_window) = app.get_webview_window("main") {
+                if use_system_titlebar {
+                    log::info!("Enabling system window decorations (user setting)");
+                    if let Err(e) = main_window.set_decorations(true) {
+                        log::error!("Failed to set window decorations: {}", e);
+                    }
+                }
+                if let Err(e) = main_window.show() {
+                    log::error!("Failed to show main window: {}", e);
+                }
+            }
+
             // Initialize system tray icon (only if enabled)
             if enable_tray {
                 if let Err(e) = tray::init_tray(app.handle()) {
@@ -425,6 +455,7 @@ pub fn run() {
         .manage(blacklist_state)
         .manage(developer_settings_state)
         .manage(graphics_settings_state)
+        .manage(window_settings_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             commands::init_client,
@@ -935,6 +966,9 @@ pub fn run() {
             // Graphics settings commands
             config::graphics_settings::get_graphics_settings,
             config::graphics_settings::set_hardware_acceleration,
+            // Window settings commands
+            config::window_settings::get_window_settings,
+            config::window_settings::set_use_system_titlebar,
             // Log capture commands
             logging::get_backend_logs,
             logging::upload_logs_to_paste,

@@ -18,6 +18,7 @@ pub mod favorites_preferences;
 pub mod favorites_cache;
 pub mod subscription_state;
 pub mod tray_settings;
+pub mod window_settings;
 pub mod legal_settings;
 pub mod remote_control_settings;
 
@@ -118,4 +119,11 @@ pub use graphics_settings::{
     GraphicsSettingsState,
     get_graphics_settings,
     set_hardware_acceleration,
+};
+
+pub use window_settings::{
+    WindowSettings,
+    WindowSettingsState,
+    get_window_settings,
+    set_use_system_titlebar,
 };
