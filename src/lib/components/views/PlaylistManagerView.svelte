@@ -212,9 +212,18 @@
     }
   });
 
+  // Pre-computed playlist lookup by id (avoids O(n) find per call)
+  const playlistsById = $derived.by(() => {
+    const map = new Map<number, typeof playlists[0]>();
+    for (const p of playlists) {
+      map.set(p.id, p);
+    }
+    return map;
+  });
+
   // Helper to get local content status for a playlist (calculated from actual data)
   function getLocalContentStatus(playlistId: number): LocalContentStatus {
-    const playlist = playlists.find(p => p.id === playlistId);
+    const playlist = playlistsById.get(playlistId);
     const localCount = localTrackCounts.get(playlistId) ?? 0;
     const qobuzCount = playlist?.tracks_count ?? 0;
 
@@ -238,60 +247,44 @@
     return false;
   }
 
-  // Filtered and sorted playlists
+  // Filtered and sorted playlists (single-pass filter for search + visibility + folder)
   const displayPlaylists = $derived.by(() => {
-    let result = [...playlists];
+    const query = searchQuery.trim().toLowerCase();
+    const hasSearch = query.length > 0;
+    const isOffline = offlineStatus.isOffline;
 
-    // Apply search filter first
-    if (searchQuery.trim()) {
-      const query = searchQuery.trim().toLowerCase();
-      result = result.filter(p => p.name.toLowerCase().includes(query));
-    }
+    const result = playlists.filter(p => {
+      // Search filter
+      if (hasSearch && !p.name.toLowerCase().includes(query)) return false;
 
-    // Apply filter based on mode (offline or regular)
-    if (offlineStatus.isOffline) {
-      // In offline mode, use offline-specific filters
-      if (filter === 'offline_all' || filter === 'all') {
-        // Show only playlists where ALL tracks are available offline
-        result = result.filter(p => {
-          const localStatus = getLocalContentStatus(p.id);
-          return localStatus === 'all_local';
-        });
-      } else if (filter === 'offline_partial') {
-        // Show only playlists with partial local content
-        result = result.filter(p => {
-          const localStatus = getLocalContentStatus(p.id);
-          return localStatus === 'some_local';
-        });
-      } else if (filter === 'offline_unavailable') {
-        // Show playlists with NO local content (view-only)
-        result = result.filter(p => {
-          const localStatus = getLocalContentStatus(p.id);
-          return localStatus === 'no' || localStatus === 'unknown';
-        });
-      } else if (filter === 'visible') {
-        result = result.filter(p => {
-          const settings = playlistSettings.get(p.id);
-          return !settings?.hidden && isPlaylistAvailableOffline(p.id);
-        });
-      } else if (filter === 'hidden') {
-        result = result.filter(p => playlistSettings.get(p.id)?.hidden);
-      }
-    } else {
-      // Regular online mode filters
-      if (filter === 'visible') {
-        result = result.filter(p => !playlistSettings.get(p.id)?.hidden);
-      } else if (filter === 'hidden') {
-        result = result.filter(p => playlistSettings.get(p.id)?.hidden);
-      }
-      // 'all' shows everything
-    }
-
-    // Filter by current folder
-    result = result.filter(p => {
+      // Folder filter
       const settings = playlistSettings.get(p.id);
       const playlistFolderId = settings?.folder_id ?? null;
-      return playlistFolderId === currentFolderId;
+      if (playlistFolderId !== currentFolderId) return false;
+
+      // Visibility / offline filter
+      if (isOffline) {
+        if (filter === 'offline_all' || filter === 'all') {
+          return getLocalContentStatus(p.id) === 'all_local';
+        } else if (filter === 'offline_partial') {
+          return getLocalContentStatus(p.id) === 'some_local';
+        } else if (filter === 'offline_unavailable') {
+          const status = getLocalContentStatus(p.id);
+          return status === 'no' || status === 'unknown';
+        } else if (filter === 'visible') {
+          return !settings?.hidden && isPlaylistAvailableOffline(p.id);
+        } else if (filter === 'hidden') {
+          return !!settings?.hidden;
+        }
+      } else {
+        if (filter === 'visible') {
+          return !settings?.hidden;
+        } else if (filter === 'hidden') {
+          return !!settings?.hidden;
+        }
+      }
+
+      return true;
     });
 
     // Apply sort
@@ -323,7 +316,7 @@
 
   // Pre-computed index map: playlist id -> index in displayPlaylists (avoids O(n) findIndex per item)
   const displayPlaylistIndexMap = $derived.by(() => {
-    const map = new Map<string, number>();
+    const map = new Map<number, number>();
     for (let i = 0; i < displayPlaylists.length; i++) {
       map.set(displayPlaylists[i].id, i);
     }
