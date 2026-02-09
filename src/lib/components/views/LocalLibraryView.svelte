@@ -1853,7 +1853,7 @@
       const trackSource = track.source === 'plex' ? 'plex' : 'local';
       if (selectedAlbum && albumTracks.length > 0) {
         const trackIndex = albumTracks.findIndex(t => t.id === track.id);
-        const trackIds = albumTracks.map(t => t.id);
+        const trackIds = albumTracks.map(track => track.id);
 
         // Set playback context for Local Library album
         await setPlaybackContext(
@@ -2016,27 +2016,27 @@
   async function setQueueForLocalTracks(tracks: LocalTrack[], startIndex = 0) {
     console.log('[LocalLibrary Queue] Setting queue with', tracks.length, 'tracks, startIndex:', startIndex);
 
-    const queueTracks = tracks.map(t => ({
-      source: t.source === 'plex' ? 'plex' : 'local',
-      id: t.id,
-      title: t.title,
-      artist: t.artist,
-      album: t.album,
-      duration_secs: t.duration_secs,
-      artwork_url: t.artwork_path ? getArtworkUrl(t.artwork_path) : null,
-      hires: (t.bit_depth && t.bit_depth > 16) || t.sample_rate > 44100,
-      bit_depth: t.bit_depth ?? null,
-      sample_rate: t.sample_rate ?? null,
-      is_local: t.source !== 'plex',
+    const queueTracks = tracks.map(track => ({
+      source: track.source === 'plex' ? 'plex' : 'local',
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      duration_secs: track.duration_secs,
+      artwork_url: track.artwork_path ? getArtworkUrl(track.artwork_path) : null,
+      hires: (track.bit_depth && track.bit_depth > 16) || track.sample_rate > 44100,
+      bit_depth: track.bit_depth ?? null,
+      sample_rate: track.sample_rate ?? null,
+      is_local: track.source !== 'plex',
       album_id: null,  // Local tracks don't have Qobuz IDs
       artist_id: null,
     }));
 
     console.log('[LocalLibrary Queue] Mapped to', queueTracks.length, 'queue tracks');
-    console.log('[LocalLibrary Queue] Track IDs:', queueTracks.map(t => t.id));
+    console.log('[LocalLibrary Queue] Track IDs:', queueTracks.map(track => track.id));
 
     await invoke('set_queue', { tracks: queueTracks, startIndex });
-    onSetLocalQueue?.(tracks.filter(t => t.source !== 'plex').map(t => t.id));
+    onSetLocalQueue?.(tracks.filter(track => track.source !== 'plex').map(track => track.id));
 
     console.log('[LocalLibrary Queue] Queue set successfully');
   }
