@@ -321,6 +321,15 @@
     return result;
   });
 
+  // Pre-computed index map: playlist id -> index in displayPlaylists (avoids O(n) findIndex per item)
+  const displayPlaylistIndexMap = $derived.by(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < displayPlaylists.length; i++) {
+      map.set(displayPlaylists[i].id, i);
+    }
+    return map;
+  });
+
   // Get current folder info
   const currentFolder = $derived(
     currentFolderId ? folders.find(f => f.id === currentFolderId) : null
@@ -1087,7 +1096,7 @@
         >
           <!-- Top row: reorder controls (when in custom sort mode) -->
           {#if sort === 'custom' && !isUnavailable}
-            {@const playlistIndex = displayPlaylists.findIndex(p => p.id === playlist.id)}
+            {@const playlistIndex = displayPlaylistIndexMap.get(playlist.id) ?? 0}
             <div class="grid-item-header">
               <div class="reorder-controls">
                 <button
@@ -1208,7 +1217,7 @@
           title={isUnavailable ? $t('offline.viewOnly') : undefined}
         >
           {#if sort === 'custom' && !isUnavailable}
-            {@const playlistIndex = displayPlaylists.findIndex(p => p.id === playlist.id)}
+            {@const playlistIndex = displayPlaylistIndexMap.get(playlist.id) ?? 0}
             <div class="reorder-controls horizontal">
               <button
                 class="reorder-btn"
