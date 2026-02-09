@@ -88,14 +88,26 @@ fn main() {
         // Hardware acceleration control
         // Default: OFF for all GPUs (EGL crashes on too many configurations)
         // Opt-in: QBZ_HARDWARE_ACCEL=1
+        //
+        // WEBKIT_DISABLE_DMABUF_RENDERER alone is NOT enough — WebKit still
+        // tries eglGetDisplay() for compositing and crashes with
+        // "Could not create default EGL display: EGL_BAD_PARAMETER" on systems
+        // without working EGL (VMs, some driver combos).
+        // LIBGL_ALWAYS_SOFTWARE forces Mesa to use llvmpipe so EGL init
+        // succeeds through software rasterization instead of crashing.
         if hardware_accel {
             eprintln!("[QBZ] Hardware acceleration enabled (QBZ_HARDWARE_ACCEL=1)");
             if has_nvidia && is_wayland {
                 eprintln!("[QBZ] Warning: NVIDIA + Wayland may cause crashes with hardware acceleration");
             }
-        } else if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        } else {
             eprintln!("[QBZ] Hardware acceleration disabled (default). Set QBZ_HARDWARE_ACCEL=1 to enable");
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            }
+            if std::env::var_os("LIBGL_ALWAYS_SOFTWARE").is_none() {
+                std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
+            }
         }
     }
 
