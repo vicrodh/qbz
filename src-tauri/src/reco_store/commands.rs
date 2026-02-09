@@ -5,8 +5,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use tauri::State;
 
+use crate::api::models::{Album, Artist, ImageSet, Track};
+use crate::api_cache::ApiCacheState;
 use crate::reco_store::db::{RecoEventRecord, RecoScoreEntry};
-use crate::reco_store::{HomeSeeds, RecoEventInput, RecoState, TopArtistSeed};
+use crate::reco_store::{
+    AlbumCardMeta, ArtistCardMeta, HomeResolved, HomeSeeds, RecoEventInput, RecoState,
+    TopArtistSeed, TrackDisplayMeta,
+};
 use crate::AppState;
 
 const DEFAULT_LOOKBACK_DAYS: i64 = 90;
@@ -153,77 +158,14 @@ pub async fn reco_get_home_ml(
 
     let guard__ = state.db.lock().await;
     let db = guard__.as_ref().ok_or("No active session - please log in")?;
-    let has_scores = db.has_scores("all")?;
 
-    // HYBRID APPROACH: Always get fresh recent plays first, then supplement with scored
-    // This ensures newly played tracks appear immediately without waiting for score retraining
-
-    // Get truly recent plays (last few) to ensure freshness
-    let recent_fresh_albums = db.get_recent_album_ids(4)?;
-    let recent_fresh_tracks = db.get_recent_track_ids(4)?;
-
-    let mut recently_played_album_ids = if has_scores {
-        let scored = db.get_scored_album_ids("all", limit_recent_albums + 4)?;
-        merge_unique_preserve_order(recent_fresh_albums, scored, limit_recent_albums as usize)
-    } else {
-        db.get_recent_album_ids(limit_recent_albums)?
-    };
-
-    let mut continue_listening_track_ids = if has_scores {
-        let scored = db.get_scored_track_ids("all", limit_continue_tracks + 4)?;
-        merge_unique_preserve_order(recent_fresh_tracks, scored, limit_continue_tracks as usize)
-    } else {
-        db.get_recent_track_ids(limit_continue_tracks)?
-    };
-
-    let mut top_artist_ids = if has_scores {
-        db.get_scored_artist_scores("all", limit_top_artists)?
-            .into_iter()
-            .map(|(artist_id, score)| TopArtistSeed {
-                artist_id,
-                play_count: score.round().max(1.0) as u32,
-            })
-            .collect()
-    } else {
-        Vec::new()
-    };
-
-    let mut favorite_album_ids = if has_scores {
-        db.get_scored_album_ids("favorite", limit_favorites)?
-    } else {
-        Vec::new()
-    };
-
-    let mut favorite_track_ids = if has_scores {
-        db.get_scored_track_ids("favorite", limit_favorites)?
-    } else {
-        Vec::new()
-    };
-
-    // Fallbacks for empty results
-    if recently_played_album_ids.is_empty() {
-        recently_played_album_ids = db.get_recent_album_ids(limit_recent_albums)?;
-    }
-    if continue_listening_track_ids.is_empty() {
-        continue_listening_track_ids = db.get_recent_track_ids(limit_continue_tracks)?;
-    }
-    if top_artist_ids.is_empty() {
-        top_artist_ids = db.get_top_artist_ids(limit_top_artists)?;
-    }
-    if favorite_album_ids.is_empty() {
-        favorite_album_ids = db.get_favorite_album_ids(limit_favorites)?;
-    }
-    if favorite_track_ids.is_empty() {
-        favorite_track_ids = db.get_favorite_track_ids(limit_favorites)?;
-    }
-
-    Ok(HomeSeeds {
-        recently_played_album_ids,
-        continue_listening_track_ids,
-        top_artist_ids,
-        favorite_album_ids,
-        favorite_track_ids,
-    })
+    get_home_seeds_internal(
+        db,
+        limit_recent_albums,
+        limit_continue_tracks,
+        limit_top_artists,
+        limit_favorites,
+    )
 }
 
 /// Merge two lists preserving order: fresh items first, then scored items (excluding duplicates)
@@ -594,4 +536,661 @@ pub async fn reco_needs_genre_backfill(
     let db = guard__.as_ref().ok_or("No active session - please log in")?;
     let albums = db.get_album_ids_without_genre(1)?;
     Ok(!albums.is_empty())
+}
+
+// ============ Home Resolved Command ============
+
+fn format_duration(seconds: u32) -> String {
+    let mins = seconds / 60;
+    let secs = seconds % 60;
+    format!("{}:{:02}", mins, secs)
+}
+
+fn format_quality(hires: bool, bit_depth: Option<u32>, sampling_rate: Option<f64>) -> String {
+    if hires {
+        if let (Some(bd), Some(sr)) = (bit_depth, sampling_rate) {
+            return format!("{}bit/{}kHz", bd, sr);
+        }
+    }
+    "CD Quality".to_string()
+}
+
+fn get_image(image: &ImageSet) -> String {
+    image
+        .large
+        .as_ref()
+        .or(image.thumbnail.as_ref())
+        .or(image.small.as_ref())
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn album_to_card_meta(album: &Album) -> AlbumCardMeta {
+    AlbumCardMeta {
+        id: album.id.clone(),
+        artwork: get_image(&album.image),
+        title: album.title.clone(),
+        artist: album.artist.name.clone(),
+        artist_id: if album.artist.id > 0 {
+            Some(album.artist.id)
+        } else {
+            None
+        },
+        genre: album
+            .genre
+            .as_ref()
+            .map(|g| g.name.clone())
+            .unwrap_or_else(|| "Unknown genre".to_string()),
+        quality: format_quality(
+            album.hires_streamable,
+            album.maximum_bit_depth,
+            album.maximum_sampling_rate,
+        ),
+        release_date: album.release_date_original.clone(),
+    }
+}
+
+fn track_to_display_meta(track: &Track) -> TrackDisplayMeta {
+    TrackDisplayMeta {
+        id: track.id,
+        title: track.title.clone(),
+        artist: track
+            .performer
+            .as_ref()
+            .map(|p| p.name.clone())
+            .unwrap_or_else(|| "Unknown Artist".to_string()),
+        album: track
+            .album
+            .as_ref()
+            .map(|a| a.title.clone())
+            .unwrap_or_default(),
+        album_art: track
+            .album
+            .as_ref()
+            .map(|a| get_image(&a.image))
+            .unwrap_or_default(),
+        album_id: track.album.as_ref().map(|a| a.id.clone()),
+        artist_id: track.performer.as_ref().and_then(|p| {
+            if p.id > 0 {
+                Some(p.id)
+            } else {
+                None
+            }
+        }),
+        duration: format_duration(track.duration),
+        duration_seconds: track.duration,
+        hires: track.hires_streamable,
+        bit_depth: track.maximum_bit_depth,
+        sampling_rate: track.maximum_sampling_rate,
+        isrc: track.isrc.clone(),
+    }
+}
+
+fn artist_to_card_meta(artist: &Artist, play_count: Option<u32>) -> ArtistCardMeta {
+    ArtistCardMeta {
+        id: artist.id,
+        name: artist.name.clone(),
+        image: artist.image.as_ref().map(|img| get_image(img)).filter(|s| !s.is_empty()),
+        play_count,
+    }
+}
+
+/// Internal seed-gathering logic shared between reco_get_home_ml and reco_get_home_resolved
+fn get_home_seeds_internal(
+    db: &crate::reco_store::db::RecoStoreDb,
+    limit_recent_albums: u32,
+    limit_continue_tracks: u32,
+    limit_top_artists: u32,
+    limit_favorites: u32,
+) -> Result<HomeSeeds, String> {
+    let has_scores = db.has_scores("all")?;
+
+    let recent_fresh_albums = db.get_recent_album_ids(4)?;
+    let recent_fresh_tracks = db.get_recent_track_ids(4)?;
+
+    let mut recently_played_album_ids = if has_scores {
+        let scored = db.get_scored_album_ids("all", limit_recent_albums + 4)?;
+        merge_unique_preserve_order(recent_fresh_albums, scored, limit_recent_albums as usize)
+    } else {
+        db.get_recent_album_ids(limit_recent_albums)?
+    };
+
+    let mut continue_listening_track_ids = if has_scores {
+        let scored = db.get_scored_track_ids("all", limit_continue_tracks + 4)?;
+        merge_unique_preserve_order(recent_fresh_tracks, scored, limit_continue_tracks as usize)
+    } else {
+        db.get_recent_track_ids(limit_continue_tracks)?
+    };
+
+    let mut top_artist_ids = if has_scores {
+        db.get_scored_artist_scores("all", limit_top_artists)?
+            .into_iter()
+            .map(|(artist_id, score)| TopArtistSeed {
+                artist_id,
+                play_count: score.round().max(1.0) as u32,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+
+    let mut favorite_album_ids = if has_scores {
+        db.get_scored_album_ids("favorite", limit_favorites)?
+    } else {
+        Vec::new()
+    };
+
+    let mut favorite_track_ids = if has_scores {
+        db.get_scored_track_ids("favorite", limit_favorites)?
+    } else {
+        Vec::new()
+    };
+
+    // Fallbacks for empty results
+    if recently_played_album_ids.is_empty() {
+        recently_played_album_ids = db.get_recent_album_ids(limit_recent_albums)?;
+    }
+    if continue_listening_track_ids.is_empty() {
+        continue_listening_track_ids = db.get_recent_track_ids(limit_continue_tracks)?;
+    }
+    if top_artist_ids.is_empty() {
+        top_artist_ids = db.get_top_artist_ids(limit_top_artists)?;
+    }
+    if favorite_album_ids.is_empty() {
+        favorite_album_ids = db.get_favorite_album_ids(limit_favorites)?;
+    }
+    if favorite_track_ids.is_empty() {
+        favorite_track_ids = db.get_favorite_track_ids(limit_favorites)?;
+    }
+
+    Ok(HomeSeeds {
+        recently_played_album_ids,
+        continue_listening_track_ids,
+        top_artist_ids,
+        favorite_album_ids,
+        favorite_track_ids,
+    })
+}
+
+/// Return fully-resolved home page data in a single IPC call.
+///
+/// 3-tier resolution per entity type:
+/// 1. Reco meta (SQLite, no TTL) — sub-ms, covers previously played items
+/// 2. API cache (SQLite, 24h TTL) — sub-ms, covers recent API fetches
+/// 3. Qobuz API (HTTP, parallel) — fallback for truly new items
+#[tauri::command]
+pub async fn reco_get_home_resolved(
+    limit_recent_albums: Option<u32>,
+    limit_continue_tracks: Option<u32>,
+    limit_top_artists: Option<u32>,
+    limit_favorites: Option<u32>,
+    reco_state: State<'_, RecoState>,
+    app_state: State<'_, AppState>,
+    cache_state: State<'_, ApiCacheState>,
+) -> Result<HomeResolved, String> {
+    let limit_recent_albums = limit_recent_albums.unwrap_or(12);
+    let limit_continue_tracks = limit_continue_tracks.unwrap_or(10);
+    let limit_top_artists = limit_top_artists.unwrap_or(10);
+    let limit_favorites = limit_favorites.unwrap_or(12);
+
+    // Step 1: Get seeds (IDs) from reco DB
+    let seeds = {
+        let guard__ = reco_state.db.lock().await;
+        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        get_home_seeds_internal(
+            db,
+            limit_recent_albums,
+            limit_continue_tracks,
+            limit_top_artists,
+            limit_favorites,
+        )?
+    };
+
+    // Step 2: Collect all unique IDs needed
+    // For favorite albums: merge favorite album IDs + album IDs from favorite tracks
+    // (favorite tracks → their albums is done after track resolution)
+    let all_track_ids: Vec<u64> = {
+        let mut ids = seeds.continue_listening_track_ids.clone();
+        ids.extend(&seeds.favorite_track_ids);
+        ids.sort_unstable();
+        ids.dedup();
+        ids
+    };
+
+    let all_artist_ids: Vec<u64> = seeds
+        .top_artist_ids
+        .iter()
+        .map(|s| s.artist_id)
+        .collect();
+
+    // Build play_count map for artists
+    let artist_play_counts: HashMap<u64, u32> = seeds
+        .top_artist_ids
+        .iter()
+        .map(|s| (s.artist_id, s.play_count))
+        .collect();
+
+    // Step 3: Resolve albums (recent + favorite)
+    let recently_played_albums =
+        resolve_albums(&seeds.recently_played_album_ids, &reco_state, &app_state, &cache_state).await?;
+
+    // Step 4: Resolve tracks (continue + favorite)
+    let all_tracks =
+        resolve_tracks(&all_track_ids, &reco_state, &app_state, &cache_state).await?;
+
+    // Build track lookup
+    let track_map: HashMap<u64, &TrackDisplayMeta> =
+        all_tracks.iter().map(|tr| (tr.id, tr)).collect();
+
+    let continue_listening_tracks: Vec<TrackDisplayMeta> = seeds
+        .continue_listening_track_ids
+        .iter()
+        .filter_map(|id| track_map.get(id).map(|tr| (*tr).clone()))
+        .collect();
+
+    // Step 5: Favorite albums = direct favorite album IDs + albums from favorite tracks
+    let mut favorite_album_ids: Vec<String> = seeds.favorite_album_ids.clone();
+    for track_id in &seeds.favorite_track_ids {
+        if let Some(track) = track_map.get(track_id) {
+            if let Some(ref album_id) = track.album_id {
+                if !album_id.is_empty() {
+                    favorite_album_ids.push(album_id.clone());
+                }
+            }
+        }
+    }
+    // Deduplicate preserving order
+    {
+        let mut seen = std::collections::HashSet::new();
+        favorite_album_ids.retain(|id| seen.insert(id.clone()));
+    }
+
+    let favorite_albums =
+        resolve_albums(&favorite_album_ids, &reco_state, &app_state, &cache_state).await?;
+
+    // Step 6: Resolve artists
+    let top_artists =
+        resolve_artists(&all_artist_ids, &artist_play_counts, &reco_state, &app_state, &cache_state).await?;
+
+    Ok(HomeResolved {
+        recently_played_albums,
+        continue_listening_tracks,
+        top_artists,
+        favorite_albums,
+    })
+}
+
+/// Resolve album IDs → AlbumCardMeta with 3-tier cache
+async fn resolve_albums(
+    ids: &[String],
+    reco_state: &State<'_, RecoState>,
+    app_state: &State<'_, AppState>,
+    cache_state: &State<'_, ApiCacheState>,
+) -> Result<Vec<AlbumCardMeta>, String> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Tier 1: reco meta cache (no TTL)
+    let meta_hits = {
+        let guard__ = reco_state.db.lock().await;
+        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        db.get_album_metas(ids)?
+    };
+    let meta_map: HashMap<String, AlbumCardMeta> =
+        meta_hits.into_iter().map(|m| (m.id.clone(), m)).collect();
+
+    let missing_ids: Vec<String> = ids
+        .iter()
+        .filter(|id| !meta_map.contains_key(*id))
+        .cloned()
+        .collect();
+
+    // Tier 2: API cache (24h TTL)
+    let mut api_cache_resolved: HashMap<String, AlbumCardMeta> = HashMap::new();
+    if !missing_ids.is_empty() {
+        let cached = {
+            let guard__ = cache_state.cache.lock().await;
+            let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+            cache.get_albums(&missing_ids, None)?
+        };
+        for (album_id, json_str) in cached {
+            if let Ok(album) = serde_json::from_str::<Album>(&json_str) {
+                let meta = album_to_card_meta(&album);
+                // Write through to reco meta for future instant hits
+                {
+                    let guard__ = reco_state.db.lock().await;
+                    if let Some(db) = guard__.as_ref() {
+                        let _ = db.set_album_meta(&meta);
+                    }
+                }
+                api_cache_resolved.insert(album_id, meta);
+            }
+        }
+    }
+
+    let still_missing: Vec<String> = missing_ids
+        .iter()
+        .filter(|id| !api_cache_resolved.contains_key(*id))
+        .cloned()
+        .collect();
+
+    // Tier 3: Qobuz API (parallel with semaphore)
+    let mut api_resolved: HashMap<String, AlbumCardMeta> = HashMap::new();
+    if !still_missing.is_empty() {
+        log::info!(
+            "Home resolved: fetching {} albums from Qobuz API",
+            still_missing.len()
+        );
+        let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(10));
+        let client = app_state.client.clone();
+        let cache_arc = cache_state.cache.clone();
+        let reco_arc = reco_state.db.clone();
+
+        let mut handles = Vec::new();
+        for album_id in &still_missing {
+            let sem = sem.clone();
+            let client = client.clone();
+            let cache_arc = cache_arc.clone();
+            let reco_arc = reco_arc.clone();
+            let album_id = album_id.clone();
+
+            handles.push(tokio::spawn(async move {
+                let _permit = sem.acquire().await.ok()?;
+                let album = {
+                    let c = client.lock().await;
+                    c.get_album(&album_id).await.ok()?
+                };
+                let meta = album_to_card_meta(&album);
+
+                // Cache the full API response
+                if let Ok(json) = serde_json::to_string(&album) {
+                    let guard__ = cache_arc.lock().await;
+                    if let Some(cache) = guard__.as_ref() {
+                        let _ = cache.set_album(&album_id, &json);
+                    }
+                }
+                // Write to reco meta
+                {
+                    let guard__ = reco_arc.lock().await;
+                    if let Some(db) = guard__.as_ref() {
+                        let _ = db.set_album_meta(&meta);
+                    }
+                }
+
+                Some((album_id, meta))
+            }));
+        }
+
+        for handle in handles {
+            if let Ok(Some((id, meta))) = handle.await {
+                api_resolved.insert(id, meta);
+            }
+        }
+    }
+
+    // Assemble in seed order
+    let result: Vec<AlbumCardMeta> = ids
+        .iter()
+        .filter_map(|id| {
+            meta_map
+                .get(id)
+                .or_else(|| api_cache_resolved.get(id))
+                .or_else(|| api_resolved.get(id))
+                .cloned()
+        })
+        .collect();
+
+    Ok(result)
+}
+
+/// Resolve track IDs → TrackDisplayMeta with 3-tier cache
+async fn resolve_tracks(
+    ids: &[u64],
+    reco_state: &State<'_, RecoState>,
+    app_state: &State<'_, AppState>,
+    cache_state: &State<'_, ApiCacheState>,
+) -> Result<Vec<TrackDisplayMeta>, String> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Tier 1: reco meta
+    let meta_hits = {
+        let guard__ = reco_state.db.lock().await;
+        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        db.get_track_metas(ids)?
+    };
+    let meta_map: HashMap<u64, TrackDisplayMeta> =
+        meta_hits.into_iter().map(|m| (m.id, m)).collect();
+
+    let missing_ids: Vec<u64> = ids
+        .iter()
+        .filter(|id| !meta_map.contains_key(id))
+        .copied()
+        .collect();
+
+    // Tier 2: API cache
+    let mut api_cache_resolved: HashMap<u64, TrackDisplayMeta> = HashMap::new();
+    if !missing_ids.is_empty() {
+        let cached = {
+            let guard__ = cache_state.cache.lock().await;
+            let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+            cache.get_tracks(&missing_ids, None)?
+        };
+        for (track_id, json_str) in cached {
+            if let Ok(track) = serde_json::from_str::<Track>(&json_str) {
+                let meta = track_to_display_meta(&track);
+                {
+                    let guard__ = reco_state.db.lock().await;
+                    if let Some(db) = guard__.as_ref() {
+                        let _ = db.set_track_meta(&meta);
+                    }
+                }
+                api_cache_resolved.insert(track_id, meta);
+            }
+        }
+    }
+
+    let still_missing: Vec<u64> = missing_ids
+        .iter()
+        .filter(|id| !api_cache_resolved.contains_key(id))
+        .copied()
+        .collect();
+
+    // Tier 3: Qobuz API
+    let mut api_resolved: HashMap<u64, TrackDisplayMeta> = HashMap::new();
+    if !still_missing.is_empty() {
+        log::info!(
+            "Home resolved: fetching {} tracks from Qobuz API",
+            still_missing.len()
+        );
+        let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(10));
+        let client = app_state.client.clone();
+        let cache_arc = cache_state.cache.clone();
+        let reco_arc = reco_state.db.clone();
+
+        let mut handles = Vec::new();
+        for track_id in &still_missing {
+            let sem = sem.clone();
+            let client = client.clone();
+            let cache_arc = cache_arc.clone();
+            let reco_arc = reco_arc.clone();
+            let track_id = *track_id;
+
+            handles.push(tokio::spawn(async move {
+                let _permit = sem.acquire().await.ok()?;
+                let track = {
+                    let c = client.lock().await;
+                    c.get_track(track_id).await.ok()?
+                };
+                let meta = track_to_display_meta(&track);
+
+                if let Ok(json) = serde_json::to_string(&track) {
+                    let guard__ = cache_arc.lock().await;
+                    if let Some(cache) = guard__.as_ref() {
+                        let _ = cache.set_track(track_id, &json);
+                    }
+                }
+                {
+                    let guard__ = reco_arc.lock().await;
+                    if let Some(db) = guard__.as_ref() {
+                        let _ = db.set_track_meta(&meta);
+                    }
+                }
+
+                Some((track_id, meta))
+            }));
+        }
+
+        for handle in handles {
+            if let Ok(Some((id, meta))) = handle.await {
+                api_resolved.insert(id, meta);
+            }
+        }
+    }
+
+    let result: Vec<TrackDisplayMeta> = ids
+        .iter()
+        .filter_map(|id| {
+            meta_map
+                .get(id)
+                .or_else(|| api_cache_resolved.get(id))
+                .or_else(|| api_resolved.get(id))
+                .cloned()
+        })
+        .collect();
+
+    Ok(result)
+}
+
+/// Resolve artist IDs → ArtistCardMeta with 3-tier cache
+async fn resolve_artists(
+    ids: &[u64],
+    play_counts: &HashMap<u64, u32>,
+    reco_state: &State<'_, RecoState>,
+    app_state: &State<'_, AppState>,
+    cache_state: &State<'_, ApiCacheState>,
+) -> Result<Vec<ArtistCardMeta>, String> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Tier 1: reco meta
+    let meta_hits = {
+        let guard__ = reco_state.db.lock().await;
+        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        db.get_artist_metas(ids)?
+    };
+    let meta_map: HashMap<u64, ArtistCardMeta> =
+        meta_hits.into_iter().map(|m| (m.id, m)).collect();
+
+    let missing_ids: Vec<u64> = ids
+        .iter()
+        .filter(|id| !meta_map.contains_key(id))
+        .copied()
+        .collect();
+
+    // Tier 2: API cache (locale-aware)
+    let locale = {
+        let client = app_state.client.lock().await;
+        client.get_locale().await
+    };
+
+    let mut api_cache_resolved: HashMap<u64, ArtistCardMeta> = HashMap::new();
+    if !missing_ids.is_empty() {
+        let cached = {
+            let guard__ = cache_state.cache.lock().await;
+            let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+            cache.get_artists(&missing_ids, &locale, None)?
+        };
+        for (artist_id, json_str) in cached {
+            if let Ok(artist) = serde_json::from_str::<Artist>(&json_str) {
+                let meta = artist_to_card_meta(&artist, None);
+                {
+                    let guard__ = reco_state.db.lock().await;
+                    if let Some(db) = guard__.as_ref() {
+                        let _ = db.set_artist_meta(&meta);
+                    }
+                }
+                api_cache_resolved.insert(artist_id, meta);
+            }
+        }
+    }
+
+    let still_missing: Vec<u64> = missing_ids
+        .iter()
+        .filter(|id| !api_cache_resolved.contains_key(id))
+        .copied()
+        .collect();
+
+    // Tier 3: Qobuz API
+    let mut api_resolved: HashMap<u64, ArtistCardMeta> = HashMap::new();
+    if !still_missing.is_empty() {
+        log::info!(
+            "Home resolved: fetching {} artists from Qobuz API",
+            still_missing.len()
+        );
+        let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(10));
+        let client = app_state.client.clone();
+        let cache_arc = cache_state.cache.clone();
+        let reco_arc = reco_state.db.clone();
+        let locale_clone = locale.clone();
+
+        let mut handles = Vec::new();
+        for artist_id in &still_missing {
+            let sem = sem.clone();
+            let client = client.clone();
+            let cache_arc = cache_arc.clone();
+            let reco_arc = reco_arc.clone();
+            let locale = locale_clone.clone();
+            let artist_id = *artist_id;
+
+            handles.push(tokio::spawn(async move {
+                let _permit = sem.acquire().await.ok()?;
+                let artist = {
+                    let c = client.lock().await;
+                    c.get_artist_basic(artist_id).await.ok()?
+                };
+                let meta = artist_to_card_meta(&artist, None);
+
+                if let Ok(json) = serde_json::to_string(&artist) {
+                    let guard__ = cache_arc.lock().await;
+                    if let Some(cache) = guard__.as_ref() {
+                        let _ = cache.set_artist(artist_id, &locale, &json);
+                    }
+                }
+                {
+                    let guard__ = reco_arc.lock().await;
+                    if let Some(db) = guard__.as_ref() {
+                        let _ = db.set_artist_meta(&meta);
+                    }
+                }
+
+                Some((artist_id, meta))
+            }));
+        }
+
+        for handle in handles {
+            if let Ok(Some((id, meta))) = handle.await {
+                api_resolved.insert(id, meta);
+            }
+        }
+    }
+
+    // Assemble in seed order, attaching play_counts
+    let result: Vec<ArtistCardMeta> = ids
+        .iter()
+        .filter_map(|id| {
+            let mut meta = meta_map
+                .get(id)
+                .or_else(|| api_cache_resolved.get(id))
+                .or_else(|| api_resolved.get(id))
+                .cloned()?;
+            meta.play_count = play_counts.get(id).copied();
+            Some(meta)
+        })
+        .collect();
+
+    Ok(result)
 }
