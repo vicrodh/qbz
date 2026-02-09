@@ -164,7 +164,9 @@
     "editAlbumInfo": "Albuminformationen bearbeiten",
     "editAlbumMetadataTitle": "Album-Metadaten für die LocalLibrary-Indizierung und Suche bearbeiten",
     "hideAlbum": "Dieses Album in der Bibliothek ausblenden",
-    "hideAlbumHint": "Verborgene Alben können unter Einstellungen angezeigt werden"
+    "hideAlbumHint": "Verborgene Alben können unter Einstellungen angezeigt werden",
+    "localTrackIndicator": "Lokaler Titel - nur auf diesem Gerät verfügbar",
+    "plexTrackIndicator": "Plex-Titel - aus deiner lokalen Plex-Bibliothek bereitgestellt"
   },
   "album": {
     "tracks": "Titel",

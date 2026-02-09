@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { Play, Pause, Heart, HardDrive, AlertCircle, Ban } from 'lucide-svelte';
+  import { t } from '$lib/i18n';
   import TrackMenu from './TrackMenu.svelte';
   import DownloadButton from './DownloadButton.svelte';
   import {
@@ -24,6 +25,7 @@
     quality?: string;
     isPlaying?: boolean;
     isLocal?: boolean; // Whether this is a local library track
+    localSource?: 'local' | 'plex';
     isUnavailable?: boolean; // Track removed from Qobuz or otherwise unavailable
     unavailableTooltip?: string; // Tooltip for unavailable indicator
     isBlacklisted?: boolean; // Artist is blacklisted
@@ -71,6 +73,7 @@
     quality,
     isPlaying = false,
     isLocal = false,
+    localSource = 'local',
     isUnavailable = false,
     unavailableTooltip,
     isFavoriteOverride,
@@ -243,8 +246,16 @@
 
   <!-- Download Indicator / Local Indicator (placeholder when hidden to maintain column width) -->
   {#if isLocal}
-    <div class="local-indicator" title="Local track - only available on this device">
-      <HardDrive size={14} />
+    <div
+      class="local-indicator"
+      class:plex-source={localSource === 'plex'}
+      title={localSource === 'plex' ? $t('library.plexTrackIndicator') : $t('library.localTrackIndicator')}
+    >
+      {#if localSource === 'plex'}
+        <span class="plex-indicator-icon" aria-hidden="true"></span>
+      {:else}
+        <HardDrive size={14} />
+      {/if}
     </div>
   {:else if hideDownload}
     <div class="download-placeholder"></div>
@@ -518,6 +529,18 @@
     height: 28px;
     color: var(--text-muted);
     opacity: 0.6;
+  }
+
+  .local-indicator.plex-source {
+    opacity: 0.9;
+  }
+
+  .plex-indicator-icon {
+    width: 14px;
+    height: 14px;
+    background-color: var(--accent-primary);
+    -webkit-mask: url('/plex-mono.svg') center / contain no-repeat;
+    mask: url('/plex-mono.svg') center / contain no-repeat;
   }
 
   .download-placeholder {

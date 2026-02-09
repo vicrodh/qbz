@@ -167,7 +167,9 @@
     "editAlbumInfo": "Edit album info",
     "editAlbumMetadataTitle": "Edit album metadata for LocalLibrary indexing and search",
     "hideAlbum": "Hide this album from library",
-    "hideAlbumHint": "Hidden albums can be viewed from Settings"
+    "hideAlbumHint": "Hidden albums can be viewed from Settings",
+    "localTrackIndicator": "Local track - only available on this device",
+    "plexTrackIndicator": "Plex track - served from your local Plex library"
   },
   "album": {
     "tracks": "tracks",

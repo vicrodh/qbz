@@ -141,6 +141,14 @@
     bitDepth?: number;
   }
 
+  interface PlexTrackMetadata {
+    ratingKey: string;
+    container?: string;
+    codec?: string;
+    samplingRateHz?: number;
+    bitDepth?: number;
+  }
+
   interface LocalArtist {
     name: string;
     album_count: number;
@@ -1907,7 +1915,8 @@
         const plexTracks = await invoke<PlexCachedTrack[]>('plex_cache_get_album_tracks', {
           albumKey: album.id
         });
-        return plexTracks.map(mapPlexTrack);
+        const mappedTracks = plexTracks.map(mapPlexTrack);
+        return await hydratePlexTrackQuality(mappedTracks);
       }
 
       return await invoke<LocalTrack[]>('library_get_album_tracks', {
@@ -1917,6 +1926,57 @@
       console.error('Failed to load album tracks:', err);
       return [];
     }
+  }
+
+  function isLikelyFallbackPlexQuality(track: LocalTrack): boolean {
+    if (track.source !== 'plex') return false;
+    const format = (track.format || '').toLowerCase();
+    const bitDepth = track.bit_depth ?? 0;
+    const sampleRate = track.sample_rate ?? 0;
+    return format === 'flac' && bitDepth <= 16 && sampleRate <= 44100;
+  }
+
+  async function hydratePlexTrackQuality(tracks: LocalTrack[]): Promise<LocalTrack[]> {
+    const baseUrl = getUserItem('qbz-plex-poc-base-url') || '';
+    const token = getUserItem('qbz-plex-poc-token') || '';
+    if (!baseUrl || !token || tracks.length === 0) return tracks;
+
+    const candidates = tracks.filter((track) => isLikelyFallbackPlexQuality(track));
+    if (candidates.length === 0) return tracks;
+
+    const metadataEntries = await Promise.all(
+      candidates.map(async (track) => {
+        try {
+          const metadata = await invoke<PlexTrackMetadata>('plex_get_track_metadata', {
+            baseUrl,
+            token,
+            ratingKey: track.file_path
+          });
+          return [track.file_path, metadata] as const;
+        } catch (error) {
+          console.warn('[LocalLibrary] Failed to hydrate Plex track metadata for', track.file_path, error);
+          return null;
+        }
+      })
+    );
+
+    const metadataByRatingKey = new Map<string, PlexTrackMetadata>();
+    for (const entry of metadataEntries) {
+      if (!entry) continue;
+      metadataByRatingKey.set(entry[0], entry[1]);
+    }
+    if (metadataByRatingKey.size === 0) return tracks;
+
+    return tracks.map((track) => {
+      const metadata = metadataByRatingKey.get(track.file_path);
+      if (!metadata) return track;
+      return {
+        ...track,
+        format: (metadata.container ?? metadata.codec ?? track.format).toLowerCase(),
+        bit_depth: metadata.bitDepth ?? track.bit_depth,
+        sample_rate: metadata.samplingRateHz ?? track.sample_rate
+      };
+    });
   }
 
   async function setQueueForLocalTracks(tracks: LocalTrack[], startIndex = 0) {
@@ -2178,8 +2238,10 @@
 
   function getQualityBadge(track: LocalTrack): string {
     const format = track.format.toUpperCase();
-    const bitDepth = track.bit_depth ?? 16;
-    const sampleRate = track.sample_rate / 1000; // Convert to kHz
+    const bitDepth = track.bit_depth && track.bit_depth > 0 ? String(track.bit_depth) : '--';
+    const sampleRate = track.sample_rate > 0
+      ? Number((track.sample_rate / 1000).toFixed(1)).toString()
+      : '--';
 
     // Format: "FLAC 24/96" style that audiophiles love
     return `${format} ${bitDepth}/${sampleRate}`;
@@ -2190,17 +2252,20 @@
   }
 
   function formatSampleRate(hz: number): string {
+    if (hz <= 0) return '-- kHz';
     return `${(hz / 1000).toFixed(1)} kHz`;
   }
 
   function formatBitDepth(bits?: number): string {
-    return bits ? `${bits}-bit` : '16-bit';
+    return bits && bits > 0 ? `${bits}-bit` : '--bit';
   }
 
   function getAlbumQualityBadge(album: LocalAlbum): string {
     const format = album.format.toUpperCase();
-    const bitDepth = album.bit_depth ?? 16;
-    const sampleRate = album.sample_rate / 1000;
+    const bitDepth = album.bit_depth && album.bit_depth > 0 ? String(album.bit_depth) : '--';
+    const sampleRate = album.sample_rate > 0
+      ? Number((album.sample_rate / 1000).toFixed(1)).toString()
+      : '--';
     return `${format} ${bitDepth}/${sampleRate}`;
   }
 
@@ -2975,6 +3040,7 @@
               quality={getQualityBadge(track)}
               isPlaying={isPlaybackActive && activeTrackId === track.id}
               isLocal={true}
+              localSource={track.source === 'plex' ? 'plex' : 'local'}
               hideDownload={true}
               hideFavorite={true}
               onArtistClick={track.artist && track.artist !== selectedAlbum?.artist

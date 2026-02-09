@@ -656,6 +656,34 @@ pub async fn plex_get_section_tracks(
 }
 
 #[tauri::command]
+pub async fn plex_get_track_metadata(
+    base_url: String,
+    token: String,
+    rating_key: String,
+) -> Result<PlexTrack, String> {
+    let client = build_plex_client()?;
+    let base = normalize_base_url(&base_url);
+    let detail_url = format!("{base}/library/metadata/{rating_key}");
+    let url = with_token(&detail_url, &token);
+
+    let xml = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| format!("Plex track metadata request failed: {}", e))?
+        .error_for_status()
+        .map_err(|e| format!("Plex track metadata status error: {}", e))?
+        .text()
+        .await
+        .map_err(|e| format!("Failed to read Plex track metadata response: {}", e))?;
+
+    parse_tracks(&xml, Some(1))
+        .into_iter()
+        .next()
+        .ok_or_else(|| "Plex track metadata not found".to_string())
+}
+
+#[tauri::command]
 pub async fn plex_auth_pin_start(client_identifier: String) -> Result<PlexPinStartResult, String> {
     let client = build_plex_auth_client(&client_identifier)?;
     let pin = client

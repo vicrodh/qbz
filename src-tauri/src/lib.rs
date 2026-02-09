@@ -677,6 +677,7 @@ pub fn run() {
             plex::plex_ping,
             plex::plex_get_music_sections,
             plex::plex_get_section_tracks,
+            plex::plex_get_track_metadata,
             plex::plex_play_track,
             plex::plex_auth_pin_start,
             plex::plex_auth_pin_check,

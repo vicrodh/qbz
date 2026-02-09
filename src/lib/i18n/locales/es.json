@@ -167,7 +167,9 @@
     "editAlbumInfo": "Editar información del álbum",
     "editAlbumMetadataTitle": "Editar metadatos del álbum para indexación y búsqueda en LocalLibrary",
     "hideAlbum": "Ocultar este álbum de la biblioteca",
-    "hideAlbumHint": "Los álbumes ocultos se pueden ver desde Configuración"
+    "hideAlbumHint": "Los álbumes ocultos se pueden ver desde Configuración",
+    "localTrackIndicator": "Pista local - solo disponible en este dispositivo",
+    "plexTrackIndicator": "Pista de Plex - servida desde tu biblioteca local de Plex"
   },
   "album": {
     "tracks": "pistas",
