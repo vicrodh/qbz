@@ -490,14 +490,14 @@
   let trackSearch = $state('');
   let tracksHydrationRequestId = 0;
   let searchOpen = $state(false);
-  let searchInputEl: HTMLInputElement | undefined;
+  let searchInputEl = $state<HTMLInputElement | undefined>(undefined);
   type TrackGroupMode = 'album' | 'artist' | 'name';
   let trackGroupMode = $state<TrackGroupMode>('album');
   let trackGroupingEnabled = $state(false);
   let showTrackGroupMenu = $state(false);
   let trackSearchTimer: ReturnType<typeof setTimeout> | null = null;
   // Reference to virtualized track list for programmatic scrolling
-  let virtualizedTrackListRef: { scrollToGroup: (groupId: string) => void } | undefined;
+  let virtualizedTrackListRef = $state<{ scrollToGroup: (groupId: string) => void } | undefined>(undefined);
   let albumSearchTimer: ReturnType<typeof setTimeout> | null = null;
   let artistSearchTimer: ReturnType<typeof setTimeout> | null = null;
   let debouncedAlbumSearch = $state('');

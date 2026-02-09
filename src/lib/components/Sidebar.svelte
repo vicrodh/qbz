@@ -120,7 +120,7 @@
 
   // Sidebar search state - synced with SearchView
   let sidebarSearchQuery = $state(getSearchQuery());
-  let sidebarSearchInput: HTMLInputElement;
+  let sidebarSearchInput = $state<HTMLInputElement | null>(null);
 
   // Folder state
   let folders = $state<PlaylistFolder[]>([]);
@@ -217,11 +217,11 @@
   let menuOpen = $state(false);
   let sortSubmenuOpen = $state(false);
   let submenuCloseTimeout: ReturnType<typeof setTimeout> | null = null;
-  let menuRef: HTMLDivElement | null = null;
-  let menuEl: HTMLDivElement | null = null;
-  let triggerRef: HTMLButtonElement | null = null;
-  let sortTriggerRef: HTMLDivElement | null = null;
-  let submenuEl: HTMLDivElement | null = null;
+  let menuRef = $state<HTMLDivElement | null>(null);
+  let menuEl = $state<HTMLDivElement | null>(null);
+  let triggerRef = $state<HTMLButtonElement | null>(null);
+  let sortTriggerRef = $state<HTMLDivElement | null>(null);
+  let submenuEl = $state<HTMLDivElement | null>(null);
   let menuStyle = $state('');
   let submenuStyle = $state('');
   let isHoveringDropdown = $state(false);
@@ -2010,11 +2010,6 @@
   }
 
   /* Folder styles */
-  .folder-item {
-    display: flex;
-    flex-direction: column;
-  }
-
   .folder-header {
     display: flex;
     align-items: center;
@@ -2065,13 +2060,6 @@
 
   .folder-header:hover .folder-count {
     opacity: 1;
-  }
-
-  .folder-playlists {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    padding-left: 12px;
   }
 
   .collapsed-folder-btn {
@@ -2276,25 +2264,6 @@
     display: flex;
     justify-content: center;
     padding: 8px;
-  }
-
-  .collapsed-settings-btn {
-    width: 40px;
-    height: 40px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: none;
-    border-radius: 8px;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: color 150ms ease, background-color 150ms ease;
-  }
-
-  .collapsed-settings-btn:hover {
-    color: var(--text-primary);
-    background-color: var(--bg-hover);
   }
 
   /* Dropdown menu styles */

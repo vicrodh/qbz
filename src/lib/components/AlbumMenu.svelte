@@ -49,17 +49,17 @@
   let isOpen = $state(false);
   let shareOpen = $state(false);
   let downloadOpen = $state(false);
-  let menuRef: HTMLDivElement | null = null;
-  let triggerRef: HTMLButtonElement | null = null;
-  let menuEl: HTMLDivElement | null = null;
-  let shareTriggerRef: HTMLDivElement | null = null;
-  let downloadTriggerRef: HTMLDivElement | null = null;
-  let submenuEl: HTMLDivElement | null = null;
-  let downloadSubmenuEl: HTMLDivElement | null = null;
+  let menuRef = $state<HTMLDivElement | null>(null);
+  let triggerRef = $state<HTMLButtonElement | null>(null);
+  let menuEl = $state<HTMLDivElement | null>(null);
+  let shareTriggerRef = $state<HTMLDivElement | null>(null);
+  let downloadTriggerRef = $state<HTMLDivElement | null>(null);
+  let submenuEl = $state<HTMLDivElement | null>(null);
+  let downloadSubmenuEl = $state<HTMLDivElement | null>(null);
   let menuStyle = $state('');
   let submenuStyle = $state('');
   let downloadSubmenuStyle = $state('');
-  let portalTarget: HTMLElement | null = null;
+  let portalTarget = $state<HTMLElement | null>(null);
   let isHoveringMenu = $state(false);
 
   // Unique menu ID for global store

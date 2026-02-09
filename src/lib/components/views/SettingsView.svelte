@@ -256,7 +256,7 @@
   let remoteControlSection: HTMLElement;
   let updatesSection: HTMLElement;
   let storageSection: HTMLElement;
-  let flatpakSection: HTMLElement;
+  let flatpakSection = $state<HTMLElement | null>(null);
   let activeSection = $state('audio');
 
   // Collapsible sections state (closed by default)
@@ -4523,25 +4523,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     opacity: 0.7;
   }
 
-  .setup-guide-btn {
-    margin-left: auto;
-    padding: 6px 12px;
-    font-size: 12px;
-    font-weight: 500;
-    border-radius: 6px;
-    border: 1px solid var(--border-subtle);
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .setup-guide-btn:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-    border-color: var(--accent-primary);
-  }
-
   .subsection-title {
     font-size: 13px;
     font-weight: 600;
@@ -4674,12 +4655,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .collapsible-section .section-title-btn .experimental-badge {
     flex-shrink: 0;
     margin-left: -4px;
-  }
-
-  .section-header-actions {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 16px;
   }
 
   .setting-row {

@@ -34,7 +34,7 @@
 
   let menuOpen = $state(false);
   let menuTriggerRef: HTMLButtonElement | null = null;
-  let menuEl: HTMLDivElement | null = null;
+  let menuEl = $state<HTMLDivElement | null>(null);
   let menuStyle = $state('');
 
   // Ticker animation for long titles

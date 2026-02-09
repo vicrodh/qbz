@@ -28,7 +28,7 @@
   let { onFilterChange, context = 'home', variant = 'default', align = 'left' }: Props = $props();
 
   let isOpen = $state(false);
-  let buttonEl: HTMLButtonElement | null = null;
+  let buttonEl = $state<HTMLButtonElement | null>(null);
   let hasFilter = $state(false);
   let selectedGenreName = $state<string | null>(null);
   let initialized = false;

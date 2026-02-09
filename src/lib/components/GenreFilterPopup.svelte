@@ -40,7 +40,7 @@
   let searchQuery = $state('');
   let expandedNodes = $state<Set<number>>(new Set());
   let loadingNodes = $state<Set<number>>(new Set());
-  let popupEl: HTMLDivElement | null = null;
+  let popupEl = $state<HTMLDivElement | null>(null);
   let popupStyle = $state('');
 
   // Subscribe to store changes

@@ -529,11 +529,11 @@
   let albumCreditsAlbumId = $state<string | null>(null);
   
   // Sidebar reference for refreshing playlists and search
-  let sidebarRef: {
+  let sidebarRef = $state<{
     getPlaylists: () => { id: number; name: string; tracks_count: number }[];
     refreshPlaylists: () => void;
     focusSearch: () => void;
-  } | undefined;
+  } | undefined>(undefined);
 
   // Playback State (from playerStore subscription)
   let currentTrack = $state<PlayingTrack | null>(null);

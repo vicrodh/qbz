@@ -14,8 +14,8 @@
   import { t } from '$lib/i18n';
 
   let searchInput: HTMLInputElement | null = null;
-  let albumsCarouselContainer: HTMLDivElement | null = null;
-  let artistsCarouselContainer: HTMLDivElement | null = null;
+  let albumsCarouselContainer = $state<HTMLDivElement | null>(null);
+  let artistsCarouselContainer = $state<HTMLDivElement | null>(null);
   let scrollContainer: HTMLDivElement | null = null;
   let isScrolled = $state(false);
   let currentAlbumPage = $state(0);
@@ -104,8 +104,8 @@
 
   // Most Popular card menu state
   let mostPopularMenuOpen = $state(false);
-  let popularMenuTriggerRef: HTMLButtonElement | null = null;
-  let popularMenuEl: HTMLDivElement | null = null;
+  let popularMenuTriggerRef = $state<HTMLButtonElement | null>(null);
+  let popularMenuEl = $state<HTMLDivElement | null>(null);
   let popularMenuStyle = $state('');
 
   // Most Popular card ticker animation state
@@ -2317,18 +2317,6 @@
     gap: 24px;
   }
 
-  .albums-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 24px 14px;
-  }
-
-  .tracks-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
   .track-row {
     display: flex;
     align-items: center;
@@ -2433,12 +2421,6 @@
 
   .track-row:hover .track-actions {
     opacity: 1;
-  }
-
-  .artists-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 24px;
   }
 
   .playlists-grid {

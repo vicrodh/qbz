@@ -2465,12 +2465,6 @@
     align-items: flex-start;
   }
 
-  .artist-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 24px;
-  }
-
   .artist-sections {
     display: flex;
     gap: 12px;
@@ -2484,85 +2478,6 @@
     min-height: 400px;
     min-width: 0;
     overflow: hidden;
-  }
-
-  .artist-group-list {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
-
-  .artist-group-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: var(--text-muted);
-    font-size: 12px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    margin-bottom: 8px;
-  }
-
-  .artist-group-title {
-    font-weight: 600;
-  }
-
-  .artist-group-count {
-    font-size: 12px;
-  }
-
-  .artist-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 16px;
-    background-color: var(--bg-secondary);
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
-    transition: background-color 150ms ease;
-  }
-
-  .artist-card:hover {
-    background-color: var(--bg-tertiary);
-  }
-
-  .artist-image {
-    width: 120px;
-    height: 120px;
-    border-radius: 50%;
-    overflow: hidden;
-    margin-bottom: 12px;
-    background-color: var(--bg-tertiary);
-  }
-
-  .artist-image img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .artist-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-  }
-
-  .artist-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    text-align: center;
-  }
-
-  .artist-albums {
-    font-size: 12px;
-    color: var(--text-muted);
-    margin-top: 4px;
   }
 
   .alpha-index {

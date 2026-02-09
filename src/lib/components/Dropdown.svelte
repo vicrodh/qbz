@@ -23,8 +23,8 @@
   let isOpen = $state(false);
   let isHovering = $state(false);
   let dropdownRef: HTMLDivElement;
-  let menuRef: HTMLDivElement;
-  let searchInputRef: HTMLInputElement;
+  let menuRef = $state<HTMLDivElement | null>(null);
+  let searchInputRef = $state<HTMLInputElement | null>(null);
   let searchQuery = $state('');
 
   // Unique ID for this dropdown instance
