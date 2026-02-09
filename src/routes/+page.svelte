@@ -194,7 +194,6 @@
   import type {
     QobuzTrack,
     QobuzAlbum,
-    QobuzArtist,
     Track,
     AlbumDetail,
     ArtistDetail,
@@ -212,11 +211,9 @@
   // Adapters
   import {
     convertQobuzAlbum,
-    convertQobuzArtist,
     convertPageArtist,
     appendPageReleases,
-    formatDuration,
-    appendArtistAlbums
+    formatDuration
   } from '$lib/adapters/qobuzAdapters';
 
   // Services
