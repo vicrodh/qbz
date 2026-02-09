@@ -707,6 +707,7 @@ pub fn run() {
             plex::plex_cache_get_albums,
             plex::plex_cache_get_album_tracks,
             plex::plex_cache_search_tracks,
+            plex::plex_cache_get_tracks_needing_hydration,
             plex::plex_cache_clear,
             // AirPlay casting commands - DISABLED until RAOP implementation is complete
             // See docs/AIRPLAY_IMPLEMENTATION_STATUS.md for details

@@ -92,6 +92,7 @@ pub struct PlexCachedAlbum {
     pub bit_depth: Option<u32>,
     pub sample_rate: u32,
     pub source: String,
+    pub likely_single_file_album: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -944,6 +945,7 @@ pub fn plex_cache_get_albums() -> Result<Vec<PlexCachedAlbum>, String> {
             bit_depth: bit_depth_opt.map(|v| v as u32),
             sample_rate: sampling_rate_hz_opt.map(|v| v as u32).unwrap_or(44100),
             source: "plex".to_string(),
+            likely_single_file_album: false,
         });
 
         entry.track_count += 1;
@@ -973,6 +975,14 @@ pub fn plex_cache_get_albums() -> Result<Vec<PlexCachedAlbum>, String> {
     }
 
     let mut albums: Vec<PlexCachedAlbum> = grouped.into_values().collect();
+
+    // Detect likely single-file albums (one track, duration > 10 minutes)
+    for album in &mut albums {
+        if album.track_count == 1 && album.total_duration_secs > 600 {
+            album.likely_single_file_album = true;
+        }
+    }
+
     albums.sort_by(|a, b| {
         let artist_cmp = a.artist.to_lowercase().cmp(&b.artist.to_lowercase());
         if artist_cmp != std::cmp::Ordering::Equal {
@@ -1120,6 +1130,34 @@ pub fn plex_cache_save_tracks(
         .transaction()
         .map_err(|e| format!("Failed to start Plex cache tracks transaction: {}", e))?;
 
+    // Save existing hydrated quality data before clearing the section
+    let mut hydrated_quality: HashMap<String, (Option<String>, Option<i64>, Option<i64>)> =
+        HashMap::new();
+    {
+        let mut stmt = tx
+            .prepare(
+                "SELECT rating_key, container, sampling_rate_hz, bit_depth
+                 FROM plex_cache_tracks
+                 WHERE section_key = ?1 AND (sampling_rate_hz IS NOT NULL OR bit_depth IS NOT NULL)",
+            )
+            .map_err(|e| format!("Failed to prepare hydrated quality query: {}", e))?;
+        let rows = stmt
+            .query_map(params![section_key], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                ))
+            })
+            .map_err(|e| format!("Failed to read hydrated quality data: {}", e))?;
+        for row in rows {
+            let (key, container, rate, depth) =
+                row.map_err(|e| format!("Failed to read hydrated quality row: {}", e))?;
+            hydrated_quality.insert(key, (container, rate, depth));
+        }
+    }
+
     tx.execute(
         "DELETE FROM plex_cache_tracks WHERE section_key = ?1",
         params![section_key],
@@ -1128,27 +1166,27 @@ pub fn plex_cache_save_tracks(
 
     let now = now_epoch_secs();
     for track in &tracks {
+        // Use hydrated quality if bulk data has NULL and we have previously hydrated values
+        let saved = hydrated_quality.get(&track.rating_key);
+        let container = track
+            .container
+            .as_ref()
+            .cloned()
+            .or_else(|| saved.and_then(|s| s.0.clone()));
+        let sampling_rate_hz = track
+            .sampling_rate_hz
+            .map(|v| v as i64)
+            .or_else(|| saved.and_then(|s| s.1));
+        let bit_depth = track
+            .bit_depth
+            .map(|v| v as i64)
+            .or_else(|| saved.and_then(|s| s.2));
+
         tx.execute(
             "INSERT INTO plex_cache_tracks
              (rating_key, section_key, server_id, title, artist, album, duration_ms, artwork_path,
               part_key, container, codec, channels, bitrate_kbps, sampling_rate_hz, bit_depth, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)
-             ON CONFLICT(rating_key) DO UPDATE SET
-                section_key = excluded.section_key,
-                server_id = excluded.server_id,
-                title = excluded.title,
-                artist = excluded.artist,
-                album = excluded.album,
-                duration_ms = excluded.duration_ms,
-                artwork_path = excluded.artwork_path,
-                part_key = excluded.part_key,
-                container = excluded.container,
-                codec = excluded.codec,
-                channels = excluded.channels,
-                bitrate_kbps = excluded.bitrate_kbps,
-                sampling_rate_hz = excluded.sampling_rate_hz,
-                bit_depth = excluded.bit_depth,
-                updated_at = excluded.updated_at",
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
             params![
                 track.rating_key,
                 section_key,
@@ -1159,16 +1197,16 @@ pub fn plex_cache_save_tracks(
                 track.duration_ms.map(|v| v as i64),
                 track.artwork_path,
                 track.part_key,
-                track.container,
+                container,
                 track.codec,
                 track.channels.map(|v| v as i64),
                 track.bitrate_kbps.map(|v| v as i64),
-                track.sampling_rate_hz.map(|v| v as i64),
-                track.bit_depth.map(|v| v as i64),
+                sampling_rate_hz,
+                bit_depth,
                 now,
             ],
         )
-        .map_err(|e| format!("Failed to upsert Plex cache track: {}", e))?;
+        .map_err(|e| format!("Failed to insert Plex cache track: {}", e))?;
     }
 
     tx.commit()
@@ -1214,6 +1252,27 @@ pub fn plex_cache_update_track_quality(updates: Vec<PlexTrackQualityUpdate>) -> 
         .map_err(|e| format!("Failed to commit Plex cache quality update transaction: {}", e))?;
 
     Ok(updated_rows)
+}
+
+#[tauri::command]
+pub fn plex_cache_get_tracks_needing_hydration(limit: Option<u32>) -> Result<Vec<String>, String> {
+    let conn = open_plex_cache_db()?;
+    let max = limit.unwrap_or(50) as i64;
+    let mut stmt = conn
+        .prepare(
+            "SELECT rating_key FROM plex_cache_tracks
+             WHERE sampling_rate_hz IS NULL OR bit_depth IS NULL
+             LIMIT ?1",
+        )
+        .map_err(|e| format!("Failed to prepare hydration query: {}", e))?;
+    let rows = stmt
+        .query_map(params![max], |row| row.get::<_, String>(0))
+        .map_err(|e| format!("Failed to query tracks needing hydration: {}", e))?;
+    let mut keys = Vec::new();
+    for row in rows {
+        keys.push(row.map_err(|e| format!("Failed to read hydration row: {}", e))?);
+    }
+    Ok(keys)
 }
 
 #[tauri::command]
