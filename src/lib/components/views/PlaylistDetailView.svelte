@@ -202,11 +202,10 @@
   let localTracksDuration = $derived(localTracks.reduce((sum, track) => sum + track.duration_secs, 0));
   let totalDuration = $derived((playlist?.duration ?? 0) + localTracksDuration);
 
-  // Suggestions computation gating: avoid expensive work for large playlists.
+  // Suggestions computation gating: ALL playlists require manual activation.
   // >=2000 tracks: never compute (Qobuz limit, can't add more)
-  // >500 tracks: compute only when user manually activates suggestions
-  // <=500 tracks: compute immediately
-  const SUGGESTIONS_AUTO_THRESHOLD = 500;
+  // <2000 tracks: compute only when user manually activates suggestions
+  const SUGGESTIONS_AUTO_THRESHOLD = 0;
   const SUGGESTIONS_MAX_TRACKS = 2000;
   let suggestionsActivated = $state(false);
 
@@ -449,6 +448,11 @@
     const id = playlistId;
     // Reset suggestions state for new playlist
     suggestionsActivated = false;
+    // Reset virtual scroll state so new playlist renders from the top
+    trackListScrollTop = 0;
+    if (scrollContainer) {
+      scrollContainer.scrollTop = 0;
+    }
     // Load all data and notify parent when done
     (async () => {
       await Promise.all([loadPlaylist(), loadLocalTracks()]);
@@ -606,6 +610,13 @@
       setTimeout(() => {
         loading = false;
         spinnerFading = false;
+        // After content mounts, ensure virtual scroll has correct dimensions
+        requestAnimationFrame(() => {
+          if (scrollContainer) {
+            trackListViewHeight = scrollContainer.clientHeight;
+          }
+          trackListScrollTop = 0;
+        });
       }, 200);
     }
   }
