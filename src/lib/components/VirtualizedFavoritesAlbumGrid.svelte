@@ -308,7 +308,7 @@
             {#each item.albums as album, idx (album.id)}
               <div class="grid-card-wrapper">
                 {#if showRanking}
-                  <div class="rank-badge">#{item.startIndex + idx + 1}</div>
+                  <div class="rank-badge">{item.startIndex + idx + 1}</div>
                 {/if}
                 <AlbumCard
                   albumId={album.id}
@@ -524,16 +524,17 @@
 
   .rank-badge {
     position: absolute;
-    top: 4px;
-    left: 4px;
+    bottom: 114px;
+    right: 4px;
     z-index: 2;
-    background: rgba(0, 0, 0, 0.75);
+    background: rgba(0, 0, 0, 0.70);
     color: #fff;
-    font-size: 11px;
+    font-size: 33px;
     font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 6px;
+    padding: 2px 8px;
+    border-radius: 8px;
     pointer-events: none;
+    line-height: 1;
   }
 
   .rank-number {

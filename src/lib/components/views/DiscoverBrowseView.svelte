@@ -4,6 +4,11 @@
   import { t } from '$lib/i18n';
   import { ChevronLeft, Search, LayoutGrid, List, X } from 'lucide-svelte';
   import VirtualizedFavoritesAlbumGrid from '../VirtualizedFavoritesAlbumGrid.svelte';
+  import GenreFilterButton from '../GenreFilterButton.svelte';
+  import {
+    getSelectedGenreIds,
+    type GenreFilterContext
+  } from '$lib/stores/genreFilterStore';
 
   interface DiscoverAlbum {
     id: string;
@@ -34,11 +39,6 @@
     hires: boolean;
     maximum_bit_depth?: number;
     maximum_sampling_rate?: number;
-  }
-
-  interface GenreInfo {
-    id: number;
-    name: string;
   }
 
   interface Props {
@@ -83,6 +83,14 @@
 
   const PAGE_SIZE = 50;
 
+  // Map endpointType to GenreFilterContext for independent persistence
+  const GENRE_CONTEXT_MAP: Record<string, GenreFilterContext> = {
+    newReleases: 'discover-new-releases',
+    idealDiscography: 'discover-ideal-discography',
+    mostStreamed: 'discover-top-albums',
+  };
+  const genreContext = GENRE_CONTEXT_MAP[endpointType];
+
   // State
   let albums = $state<FavoriteAlbum[]>([]);
   let hasMore = $state(true);
@@ -91,8 +99,6 @@
   let isLoadingMore = $state(false);
   let searchQuery = $state('');
   let viewMode = $state<'grid' | 'list'>('grid');
-  let genres = $state<GenreInfo[]>([]);
-  let selectedGenreId = $state<number | null>(null);
   let albumDownloadStatuses = $state<Map<string, boolean>>(new Map());
 
   // Search filter (client-side on loaded items)
@@ -147,6 +153,11 @@
     };
   }
 
+  function getGenreIdsForFetch(): number[] | undefined {
+    const ids = getSelectedGenreIds(genreContext);
+    return ids.size > 0 ? Array.from(ids) : undefined;
+  }
+
   async function fetchAlbums(resetData: boolean = false) {
     if (resetData) {
       offset = 0;
@@ -158,7 +169,7 @@
     }
 
     try {
-      const genreIds = selectedGenreId ? [selectedGenreId] : undefined;
+      const genreIds = getGenreIdsForFetch();
       const response = await invoke<DiscoverAlbumsResponse>('get_discover_albums', {
         endpointType,
         genreIds,
@@ -193,22 +204,12 @@
     }
   }
 
-  function handleGenreChange(e: Event) {
-    const select = e.target as HTMLSelectElement;
-    selectedGenreId = select.value ? Number(select.value) : null;
+  function handleGenreFilterChange() {
     fetchAlbums(true);
   }
 
   function clearSearch() {
     searchQuery = '';
-  }
-
-  async function loadGenres() {
-    try {
-      genres = await invoke<GenreInfo[]>('get_genres', {});
-    } catch (err) {
-      console.error('Failed to load genres:', err);
-    }
   }
 
   function getQualityLabel(item: { hires?: boolean; maximum_bit_depth?: number; maximum_sampling_rate?: number }): string {
@@ -225,7 +226,6 @@
 
   onMount(() => {
     fetchAlbums(true);
-    loadGenres();
   });
 </script>
 
@@ -253,12 +253,7 @@
           </button>
         {/if}
       </div>
-      <select class="genre-select" onchange={handleGenreChange} value={selectedGenreId ?? ''}>
-        <option value="">{$t('discover.allGenres')}</option>
-        {#each genres as genre (genre.id)}
-          <option value={genre.id}>{genre.name}</option>
-        {/each}
-      </select>
+      <GenreFilterButton context={genreContext} variant="control" align="right" onFilterChange={handleGenreFilterChange} />
       <div class="view-toggle">
         <button
           class="toggle-btn"
@@ -328,6 +323,9 @@
     display: flex;
     flex-direction: column;
     height: 100%;
+    padding: 24px;
+    padding-left: 18px;
+    padding-right: 8px;
   }
 
   .top-bar {
@@ -335,7 +333,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    padding: 0 0 16px;
+    padding-bottom: 16px;
     flex-shrink: 0;
   }
 
@@ -414,23 +412,6 @@
   }
 
   .clear-btn:hover {
-    color: var(--text-primary);
-  }
-
-  .genre-select {
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    border: none;
-    border-radius: 8px;
-    padding: 6px 12px;
-    font-size: 13px;
-    cursor: pointer;
-    outline: none;
-    max-width: 160px;
-  }
-
-  .genre-select option {
-    background: var(--bg-primary);
     color: var(--text-primary);
   }
 

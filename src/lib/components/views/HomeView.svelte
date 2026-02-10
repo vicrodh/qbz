@@ -1739,16 +1739,17 @@
   .see-all-link {
     background: none;
     border: none;
-    color: var(--accent-primary, #7c5cbf);
+    color: #666666;
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     padding: 0;
     white-space: nowrap;
-    transition: opacity 150ms ease;
+    margin-left: auto;
+    transition: color 150ms ease;
   }
 
   .see-all-link:hover {
-    opacity: 0.8;
+    color: var(--text-primary);
   }
 </style>

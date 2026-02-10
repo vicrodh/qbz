@@ -20,7 +20,7 @@ export interface GenreTreeNode {
   loading?: boolean;
 }
 
-export type GenreFilterContext = 'home' | 'favorites';
+export type GenreFilterContext = 'home' | 'favorites' | 'discover-new-releases' | 'discover-ideal-discography' | 'discover-top-albums';
 
 interface ContextState {
   selectedGenreIds: Set<number>;
@@ -40,6 +40,9 @@ interface GenreFilterState {
 const STORAGE_KEYS: Record<GenreFilterContext, string> = {
   home: 'qbz_genre_filter_home',
   favorites: 'qbz_genre_filter_favorites',
+  'discover-new-releases': 'qbz_genre_filter_discover_new_releases',
+  'discover-ideal-discography': 'qbz_genre_filter_discover_ideal_discography',
+  'discover-top-albums': 'qbz_genre_filter_discover_top_albums',
 };
 
 const GENRE_CACHE_KEY = 'qbz_genre_cache';
@@ -103,6 +106,21 @@ const state: GenreFilterState = {
       rememberSelection: true,
       listeners: new Set(),
     },
+    'discover-new-releases': {
+      selectedGenreIds: new Set(),
+      rememberSelection: true,
+      listeners: new Set(),
+    },
+    'discover-ideal-discography': {
+      selectedGenreIds: new Set(),
+      rememberSelection: true,
+      listeners: new Set(),
+    },
+    'discover-top-albums': {
+      selectedGenreIds: new Set(),
+      rememberSelection: true,
+      listeners: new Set(),
+    },
   },
 };
 
@@ -116,8 +134,9 @@ function notify(context?: GenreFilterContext) {
 }
 
 function notifyAll() {
-  notify('home');
-  notify('favorites');
+  for (const ctx of Object.keys(state.contexts) as GenreFilterContext[]) {
+    notify(ctx);
+  }
 }
 
 function saveToStorage(context?: GenreFilterContext) {
@@ -165,7 +184,7 @@ function validateAndCleanStoredGenreIds(): void {
   const validIds = new Set(state.allGenres.map(g => g.id));
   let cleaned = false;
 
-  for (const context of ['home', 'favorites'] as const) {
+  for (const context of Object.keys(state.contexts) as GenreFilterContext[]) {
     const ctxState = state.contexts[context];
     const invalidIds: number[] = [];
 
@@ -200,8 +219,9 @@ export async function loadGenres(): Promise<void> {
     state.childrenByParent = new Map(Object.entries(cache.childrenByParent).map(([k, v]) => [Number(k), v]));
     state.allGenres = [...cache.parentGenres, ...Object.values(cache.childrenByParent).flat()];
     state.genreTree = buildTreeFromCache(cache);
-    loadFromStorage('home');
-    loadFromStorage('favorites');
+    for (const ctx of Object.keys(state.contexts) as GenreFilterContext[]) {
+      loadFromStorage(ctx);
+    }
     // Validate stored genre IDs against loaded genres
     validateAndCleanStoredGenreIds();
     notifyAll();
@@ -270,8 +290,9 @@ export async function loadGenres(): Promise<void> {
     state.childrenByParent = childrenByParent;
 
     saveGenreCache();
-    loadFromStorage('home');
-    loadFromStorage('favorites');
+    for (const ctx of Object.keys(state.contexts) as GenreFilterContext[]) {
+      loadFromStorage(ctx);
+    }
     // Validate stored genre IDs against loaded genres
     validateAndCleanStoredGenreIds();
   } catch (e) {
@@ -576,5 +597,6 @@ export function subscribe(callback: () => void, context?: GenreFilterContext): (
   return () => ctxState.listeners.delete(callback);
 }
 
-loadFromStorage('home');
-loadFromStorage('favorites');
+for (const ctx of Object.keys(STORAGE_KEYS) as GenreFilterContext[]) {
+  loadFromStorage(ctx);
+}
