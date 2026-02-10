@@ -49,13 +49,12 @@ impl GraphicsSettingsStore {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS graphics_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                hardware_acceleration INTEGER NOT NULL DEFAULT 0,
-                force_x11 INTEGER NOT NULL DEFAULT 0
+                hardware_acceleration INTEGER NOT NULL DEFAULT 0
             );
-            INSERT OR IGNORE INTO graphics_settings (id, hardware_acceleration, force_x11) VALUES (1, 0, 0);"
+            INSERT OR IGNORE INTO graphics_settings (id, hardware_acceleration) VALUES (1, 0);"
         ).map_err(|e| format!("Failed to create graphics settings table: {}", e))?;
 
-        // Migration: add force_x11 column for existing databases
+        // Migration: add force_x11 column (no-op if already present)
         let _ = conn.execute_batch(
             "ALTER TABLE graphics_settings ADD COLUMN force_x11 INTEGER NOT NULL DEFAULT 0;"
         );
