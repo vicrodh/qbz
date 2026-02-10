@@ -446,11 +446,14 @@
   $effect(() => {
     // Access playlistId to create dependency
     const id = playlistId;
+    const t0 = performance.now();
+    console.log(`[Perf] ---- playlist switch START (id=${id}) ----`);
     // FIRST: clear old data so no $derived recomputes against stale 800+ item arrays
     tracks = [];
     localTracks = [];
     localTracksMap = new Map();
     playlist = null;
+    console.log(`[Perf] clear old data: ${(performance.now() - t0).toFixed(1)}ms`);
     // Reset suggestions state for new playlist
     suggestionsActivated = false;
     // Reset virtual scroll state so new playlist renders from the top
@@ -458,13 +461,17 @@
     if (scrollContainer) {
       scrollContainer.scrollTop = 0;
     }
+    console.log(`[Perf] reset state: ${(performance.now() - t0).toFixed(1)}ms`);
     // Load all data and notify parent when done
+    const loadStart = performance.now();
     (async () => {
       await Promise.all([loadPlaylist(), loadLocalTracks()]);
+      console.log(`[Perf] all loads resolved: ${(performance.now() - t0).toFixed(1)}ms (network: ${(performance.now() - loadStart).toFixed(1)}ms)`);
       notifyParentOfCounts();
     })();
     loadSettings();
     loadStats();
+    console.log(`[Perf] effect sync done: ${(performance.now() - t0).toFixed(1)}ms`);
   });
 
   // Check local track status after loading tracks and when offline
@@ -476,6 +483,7 @@
 
 
   async function loadLocalTracks() {
+    const _lt0 = performance.now();
     try {
       // Check if this is a pending playlist (negative ID)
       if (playlistId < 0) {
@@ -510,10 +518,14 @@
       console.error('Failed to load local tracks:', err);
       localTracks = [];
       localTracksMap = new Map();
+    } finally {
+      console.log(`[Perf] loadLocalTracks() done: ${(performance.now() - _lt0).toFixed(1)}ms`);
     }
   }
 
   async function loadPlaylist() {
+    const _t0 = performance.now();
+    console.log(`[Perf] loadPlaylist() START`);
     loading = true;
     error = null;
     try {
@@ -578,10 +590,13 @@
         }
       } else {
         // Regular playlist - use existing command
+        console.log(`[Perf] invoke get_playlist START (+${(performance.now() - _t0).toFixed(1)}ms)`);
         const result = await invoke<Playlist>('get_playlist', { playlistId });
+        console.log(`[Perf] invoke get_playlist DONE (+${(performance.now() - _t0).toFixed(1)}ms) — ${result.tracks?.items?.length ?? 0} items from API`);
         playlist = result;
 
         if (result.tracks?.items) {
+          const mapStart = performance.now();
           tracks = result.tracks.items.map((t, idx) => ({
             id: t.id,
             number: idx + 1,
@@ -602,21 +617,27 @@
             addedIndex: idx,
             streamable: t.streamable,
           }));
+          console.log(`[Perf] tracks.map() ${tracks.length} items: ${(performance.now() - mapStart).toFixed(1)}ms`);
         }
       }
     } catch (err) {
       console.error('Failed to load playlist:', err);
       error = String(err);
     } finally {
+      console.log(`[Perf] loadPlaylist() try/catch done (+${(performance.now() - _t0).toFixed(1)}ms)`);
       if (playlist) {
-        console.log(`[Playlist] "${playlist.name}" loaded — ${tracks.length} tracks, virtualized`);
+        console.log(`[Perf] "${playlist.name}" — ${tracks.length} tracks`);
       }
       spinnerFading = true;
+      console.log(`[Perf] spinnerFading=true, scheduling loading=false in 200ms (+${(performance.now() - _t0).toFixed(1)}ms)`);
+      const finalT0 = _t0;
       setTimeout(() => {
+        console.log(`[Perf] loading=false NOW (+${(performance.now() - finalT0).toFixed(1)}ms)`);
         loading = false;
         spinnerFading = false;
         // After content mounts, ensure virtual scroll has correct dimensions
         requestAnimationFrame(() => {
+          console.log(`[Perf] rAF after mount (+${(performance.now() - finalT0).toFixed(1)}ms) — RENDER COMPLETE`);
           if (scrollContainer) {
             trackListViewHeight = scrollContainer.clientHeight;
           }
@@ -627,6 +648,7 @@
   }
 
   async function loadSettings() {
+    const _st0 = performance.now();
     // Reset state before loading new playlist settings
     sortBy = 'default';
     sortOrder = 'asc';
@@ -658,10 +680,13 @@
       }
     } catch (err) {
       console.error('Failed to load playlist settings:', err);
+    } finally {
+      console.log(`[Perf] loadSettings() done: ${(performance.now() - _st0).toFixed(1)}ms`);
     }
   }
 
   async function loadStats() {
+    const _stat0 = performance.now();
     // Skip loading stats for pending playlists
     if (playlistId < 0) {
       playlistStats = null;
@@ -673,6 +698,8 @@
       playlistStats = stats;
     } catch (err) {
       console.error('Failed to load playlist stats:', err);
+    } finally {
+      console.log(`[Perf] loadStats() done: ${(performance.now() - _stat0).toFixed(1)}ms`);
     }
   }
 

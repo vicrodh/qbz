@@ -34,13 +34,27 @@ pub async fn get_playlist(
     playlist_id: u64,
     state: State<'_, AppState>,
 ) -> Result<Playlist, String> {
+    let cmd_start = std::time::Instant::now();
     log::debug!("Command: get_playlist {}", playlist_id);
 
     let client = state.client.lock().await;
-    client
+    let lock_elapsed = cmd_start.elapsed();
+
+    let result = client
         .get_playlist(playlist_id)
         .await
-        .map_err(|e| format!("Failed to get playlist: {}", e))
+        .map_err(|e| format!("Failed to get playlist: {}", e));
+
+    let total_elapsed = cmd_start.elapsed();
+    log::info!(
+        "Command: get_playlist {} — lock: {:.1}ms, total: {:.1}ms, tracks: {}",
+        playlist_id,
+        lock_elapsed.as_secs_f64() * 1000.0,
+        total_elapsed.as_secs_f64() * 1000.0,
+        result.as_ref().map(|p| p.tracks.as_ref().map(|t| t.items.len()).unwrap_or(0)).unwrap_or(0)
+    );
+
+    result
 }
 
 /// Check for duplicate tracks in a playlist
