@@ -896,10 +896,12 @@
       {:else if newReleases.length > 0}
         <HorizontalScrollRow>
           {#snippet header()}
-            <h2 class="section-title">{$t('home.newReleases')}</h2>
-            {#if onNavigateNewReleases}
-              <button class="see-all-link" onclick={onNavigateNewReleases}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
-            {/if}
+            <div class="section-header-group">
+              <h2 class="section-title">{$t('home.newReleases')}</h2>
+              {#if onNavigateNewReleases}
+                <button class="see-all-link" onclick={onNavigateNewReleases}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
+              {/if}
+            </div>
           {/snippet}
           {#snippet children()}
             {#each newReleases as album}
@@ -945,10 +947,12 @@
       {:else if pressAwards.length > 0}
         <HorizontalScrollRow>
           {#snippet header()}
-            <h2 class="section-title">{$t('home.pressAwards')}</h2>
-            {#if onNavigatePressAccolades}
-              <button class="see-all-link" onclick={onNavigatePressAccolades}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
-            {/if}
+            <div class="section-header-group">
+              <h2 class="section-title">{$t('home.pressAwards')}</h2>
+              {#if onNavigatePressAccolades}
+                <button class="see-all-link" onclick={onNavigatePressAccolades}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
+              {/if}
+            </div>
           {/snippet}
           {#snippet children()}
             {#each pressAwards as album}
@@ -994,10 +998,12 @@
       {:else if mostStreamed.length > 0}
         <HorizontalScrollRow>
           {#snippet header()}
-            <h2 class="section-title">{$t('home.popularAlbums')}</h2>
-            {#if onNavigateTopAlbums}
-              <button class="see-all-link" onclick={onNavigateTopAlbums}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
-            {/if}
+            <div class="section-header-group">
+              <h2 class="section-title">{$t('home.popularAlbums')}</h2>
+              {#if onNavigateTopAlbums}
+                <button class="see-all-link" onclick={onNavigateTopAlbums}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
+              {/if}
+            </div>
           {/snippet}
           {#snippet children()}
             {#each mostStreamed as album}
@@ -1043,10 +1049,12 @@
       {:else if qobuzissimes.length > 0}
         <HorizontalScrollRow>
           {#snippet header()}
-            <h2 class="section-title">{$t('home.qobuzissimes')}</h2>
-            {#if onNavigateQobuzissimes}
-              <button class="see-all-link" onclick={onNavigateQobuzissimes}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
-            {/if}
+            <div class="section-header-group">
+              <h2 class="section-title">{$t('home.qobuzissimes')}</h2>
+              {#if onNavigateQobuzissimes}
+                <button class="see-all-link" onclick={onNavigateQobuzissimes}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
+              {/if}
+            </div>
           {/snippet}
           {#snippet children()}
             {#each qobuzissimes as album}
@@ -1092,10 +1100,12 @@
       {:else if editorPicks.length > 0}
         <HorizontalScrollRow>
           {#snippet header()}
-            <h2 class="section-title">{$t('home.editorPicks')}</h2>
-            {#if onNavigateAlbumsOfTheWeek}
-              <button class="see-all-link" onclick={onNavigateAlbumsOfTheWeek}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
-            {/if}
+            <div class="section-header-group">
+              <h2 class="section-title">{$t('home.editorPicks')}</h2>
+              {#if onNavigateAlbumsOfTheWeek}
+                <button class="see-all-link" onclick={onNavigateAlbumsOfTheWeek}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
+              {/if}
+            </div>
           {/snippet}
           {#snippet children()}
             {#each editorPicks as album}
@@ -1191,10 +1201,12 @@
       {:else if essentialDiscography.length > 0}
         <HorizontalScrollRow>
           {#snippet header()}
-            <h2 class="section-title">{$t('home.essentialDiscography')}</h2>
-            {#if onNavigateIdealDiscography}
-              <button class="see-all-link" onclick={onNavigateIdealDiscography}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
-            {/if}
+            <div class="section-header-group">
+              <h2 class="section-title">{$t('home.essentialDiscography')}</h2>
+              {#if onNavigateIdealDiscography}
+                <button class="see-all-link" onclick={onNavigateIdealDiscography}>{$t('home.seeAll')}<ArrowRight size={14} /></button>
+              {/if}
+            </div>
           {/snippet}
           {#snippet children()}
             {#each essentialDiscography as album (album.id)}
@@ -1760,6 +1772,12 @@
     margin: 0;
   }
 
+  .section-header-group {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
   .see-all-link {
     display: inline-flex;
     align-items: center;
@@ -1772,7 +1790,6 @@
     cursor: pointer;
     padding: 0;
     white-space: nowrap;
-    margin-left: auto;
     transition: color 150ms ease;
   }
 
