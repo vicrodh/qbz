@@ -652,7 +652,9 @@
           tracksLoadedCount = tracks.length;
         } else {
           // --- Large playlist: progressive loading ---
-          // Spinner stays up until first viewport batch is ready (no placeholder flash).
+          // No placeholders. Start with first batch of real tracks, grow the array.
+          // Each batch does ONE array reassignment (not N individual mutations)
+          // and yields to the browser so the UI stays responsive.
           console.log(`[Perf] large playlist (${allTrackIds.length} > ${PROGRESSIVE_THRESHOLD}), progressive load`);
 
           const BATCH_SIZE = 50;
@@ -676,38 +678,27 @@
             )
           );
 
-          // Build the full tracks array: real data for first group, placeholders for the rest
-          const firstTracks: DisplayTrack[] = [];
+          // Set tracks to ONLY the loaded tracks (no placeholders = no proxy bloat)
+          const loaded: DisplayTrack[] = [];
           for (const batchTracks of firstResults) {
             for (const apiTrack of batchTracks) {
-              firstTracks.push(mapPlaylistTrack(apiTrack, firstTracks.length));
+              loaded.push(mapPlaylistTrack(apiTrack, loaded.length));
             }
           }
+          tracks = loaded;
+          tracksLoadedCount = loaded.length;
+          console.log(`[Perf] first group: ${loaded.length}/${allTrackIds.length} tracks (+${(performance.now() - _t0).toFixed(1)}ms)`);
 
-          const placeholders: DisplayTrack[] = allTrackIds.slice(firstTracks.length).map((trackId, i) => ({
-            id: trackId,
-            number: firstTracks.length + i + 1,
-            title: '',
-            duration: '',
-            durationSeconds: 0,
-            addedIndex: firstTracks.length + i,
-          }));
+          // Spinner dismisses via finally block — viewport has real data now.
 
-          tracks = [...firstTracks, ...placeholders];
-          tracksLoadedCount = firstTracks.length;
-          console.log(`[Perf] first group loaded: ${firstTracks.length}/${allTrackIds.length} tracks (+${(performance.now() - _t0).toFixed(1)}ms)`);
-
-          // NOW dismiss spinner — viewport has real data
-          // (loading=false handled by the finally block)
-
-          // Load remaining batches in background
+          // Load remaining batches in background, appending to tracks.
+          // Key: one `tracks = newArray` per group (single reactive update),
+          // plus a setTimeout(0) yield between groups so the browser can paint.
           if (batches.length > CONCURRENCY) {
             const remaining = batches.slice(CONCURRENCY);
-            // Don't await — let it fill in after spinner is gone
             (async () => {
               for (let g = 0; g < remaining.length; g += CONCURRENCY) {
                 const group = remaining.slice(g, g + CONCURRENCY);
-                const groupStartIdx = (CONCURRENCY + g) * BATCH_SIZE;
 
                 const results = await Promise.all(
                   group.map(batch =>
@@ -719,18 +710,22 @@
                   )
                 );
 
-                let offset = groupStartIdx;
+                // Build new batch of DisplayTracks
+                const currentLen = tracks.length;
+                const newTracks: DisplayTrack[] = [];
                 for (const batchTracks of results) {
                   for (const apiTrack of batchTracks) {
-                    if (offset < tracks.length) {
-                      tracks[offset] = mapPlaylistTrack(apiTrack, offset);
-                    }
-                    offset++;
+                    newTracks.push(mapPlaylistTrack(apiTrack, currentLen + newTracks.length));
                   }
                 }
 
-                tracksLoadedCount = Math.min(offset, allTrackIds.length);
+                // Single reactive assignment: append batch
+                tracks = [...tracks, ...newTracks];
+                tracksLoadedCount = tracks.length;
                 console.log(`[Perf] loaded ${tracksLoadedCount}/${allTrackIds.length} tracks (+${(performance.now() - _t0).toFixed(1)}ms)`);
+
+                // Yield to browser — let it paint before next group
+                await new Promise(r => setTimeout(r, 0));
               }
             })();
           }
@@ -2066,21 +2061,6 @@
       <div class="virtual-track-content" style="height: {trackListTotalHeight}px;">
         {#each visibleDisplayTracks as track, loopIdx (`${visibleTrackRange.start + loopIdx}-${track.id}-${downloadStateVersion}`)}
           {@const idx = visibleTrackRange.start + loopIdx}
-          {@const isPlaceholder = track.title === ''}
-          {#if isPlaceholder}
-            <div
-              class="track-row-wrapper virtual-track-item placeholder-track"
-              style="transform: translateY({idx * TRACK_ROW_HEIGHT}px); height: {TRACK_ROW_HEIGHT}px;"
-            >
-              <div class="placeholder-number">{idx + 1}</div>
-              <div class="placeholder-bars">
-                <div class="placeholder-bar title-bar"></div>
-                <div class="placeholder-bar artist-bar"></div>
-              </div>
-              <div class="placeholder-bar album-bar"></div>
-              <div class="placeholder-bar duration-bar"></div>
-            </div>
-          {:else}
           {@const downloadInfo = track.isLocal ? { status: 'none' as const, progress: 0 } : (getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 })}
           {@const isActiveTrack = (
             track.isLocal
@@ -2188,7 +2168,6 @@
               } : {}}
             />
           </div>
-          {/if}
         {/each}
       </div>
 
@@ -2980,56 +2959,5 @@
     display: block;
   }
 
-  /* Placeholder track rows (progressive loading) */
-  .placeholder-track {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 0 16px;
-    position: absolute;
-    left: 0;
-    right: 0;
-  }
-
-  .placeholder-number {
-    width: 32px;
-    text-align: right;
-    font-size: 13px;
-    color: var(--text-tertiary, rgba(255, 255, 255, 0.3));
-    flex-shrink: 0;
-  }
-
-  .placeholder-bars {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex: 1;
-    min-width: 0;
-  }
-
-  .placeholder-bar {
-    height: 10px;
-    border-radius: 4px;
-    background: var(--alpha-08, rgba(255, 255, 255, 0.08));
-  }
-
-  .placeholder-bar.title-bar {
-    width: 45%;
-  }
-
-  .placeholder-bar.artist-bar {
-    width: 30%;
-    height: 8px;
-  }
-
-  .placeholder-bar.album-bar {
-    width: 120px;
-    flex-shrink: 0;
-  }
-
-  .placeholder-bar.duration-bar {
-    width: 40px;
-    flex-shrink: 0;
-  }
 
 </style>
