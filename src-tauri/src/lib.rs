@@ -503,6 +503,7 @@ pub fn run() {
             commands::get_genres,
             commands::get_discover_index,
             commands::get_discover_playlists,
+            commands::get_discover_albums,
             commands::get_track,
             commands::get_artist,
             commands::get_artist_basic,

@@ -121,6 +121,9 @@
     onPlaylistShareQobuz?: (playlistId: number) => void;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
+    onNavigateNewReleases?: () => void;
+    onNavigateIdealDiscography?: () => void;
+    onNavigateTopAlbums?: () => void;
   }
 
   let {
@@ -159,7 +162,10 @@
     onPlaylistCopyToLibrary,
     onPlaylistShareQobuz,
     activeTrackId = null,
-    isPlaybackActive = false
+    isPlaybackActive = false,
+    onNavigateNewReleases,
+    onNavigateIdealDiscography,
+    onNavigateTopAlbums,
   }: Props = $props();
 
   // Home settings state
@@ -882,7 +888,13 @@
           </div>
         </div>
       {:else if newReleases.length > 0}
-        <HorizontalScrollRow title={$t('home.newReleases')}>
+        <HorizontalScrollRow>
+          {#snippet header()}
+            <h2 class="section-title">{$t('home.newReleases')}</h2>
+            {#if onNavigateNewReleases}
+              <button class="see-all-link" onclick={onNavigateNewReleases}>{$t('home.seeAll')}</button>
+            {/if}
+          {/snippet}
           {#snippet children()}
             {#each newReleases as album}
               <AlbumCard
@@ -968,7 +980,13 @@
           </div>
         </div>
       {:else if mostStreamed.length > 0}
-        <HorizontalScrollRow title={$t('home.popularAlbums')}>
+        <HorizontalScrollRow>
+          {#snippet header()}
+            <h2 class="section-title">{$t('home.popularAlbums')}</h2>
+            {#if onNavigateTopAlbums}
+              <button class="see-all-link" onclick={onNavigateTopAlbums}>{$t('home.seeAll')}</button>
+            {/if}
+          {/snippet}
           {#snippet children()}
             {#each mostStreamed as album}
               <AlbumCard
@@ -1147,7 +1165,13 @@
           </div>
         </div>
       {:else if essentialDiscography.length > 0}
-        <HorizontalScrollRow title={$t('home.essentialDiscography')}>
+        <HorizontalScrollRow>
+          {#snippet header()}
+            <h2 class="section-title">{$t('home.essentialDiscography')}</h2>
+            {#if onNavigateIdealDiscography}
+              <button class="see-all-link" onclick={onNavigateIdealDiscography}>{$t('home.seeAll')}</button>
+            {/if}
+          {/snippet}
           {#snippet children()}
             {#each essentialDiscography as album (album.id)}
               <AlbumCard
@@ -1703,5 +1727,28 @@
   @keyframes spin {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
+  }
+
+  .section-title {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  .see-all-link {
+    background: none;
+    border: none;
+    color: var(--accent-primary, #7c5cbf);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0;
+    white-space: nowrap;
+    transition: opacity 150ms ease;
+  }
+
+  .see-all-link:hover {
+    opacity: 0.8;
   }
 </style>

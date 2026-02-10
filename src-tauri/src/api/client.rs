@@ -549,6 +549,40 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
+    /// Get discover albums from a specific browse endpoint (newReleases, idealDiscography, mostStreamed)
+    pub async fn get_discover_albums(
+        &self,
+        endpoint: &str,
+        genre_ids: Option<Vec<u64>>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<DiscoverData<DiscoverAlbum>> {
+        let url = endpoints::build_url(endpoint);
+        let mut query: Vec<(&str, String)> = vec![];
+
+        if let Some(gids) = genre_ids {
+            if !gids.is_empty() {
+                let ids_str = gids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
+                query.push(("genre_ids", ids_str));
+            }
+        }
+
+        query.push(("offset", offset.to_string()));
+        query.push(("limit", limit.to_string()));
+
+        let http_response = self
+            .http
+            .get(&url)
+            .headers(self.authenticated_headers().await?)
+            .query(&query)
+            .send()
+            .await?;
+        log::info!("[API] get_discover_albums({}) status={}", endpoint, http_response.status());
+        let response: serde_json::Value = http_response.json().await?;
+
+        Ok(serde_json::from_value(response)?)
+    }
+
     /// Get discover playlists with optional tag filter
     /// Example: tags=label, tags=partner
     pub async fn get_discover_playlists(

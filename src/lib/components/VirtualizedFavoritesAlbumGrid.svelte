@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { t } from '$lib/i18n';
-  import { Disc3 } from 'lucide-svelte';
+  import { Disc3, Loader2 } from 'lucide-svelte';
   import AlbumCard from './AlbumCard.svelte';
   import QualityBadge from './QualityBadge.svelte';
 
@@ -25,8 +25,8 @@
 
   type VirtualItem =
     | { type: 'header'; key: string; id: string; albumCount: number; height: number }
-    | { type: 'grid-row'; albums: FavoriteAlbum[]; height: number }
-    | { type: 'list-row'; album: FavoriteAlbum; height: number };
+    | { type: 'grid-row'; albums: FavoriteAlbum[]; startIndex: number; height: number }
+    | { type: 'list-row'; album: FavoriteAlbum; globalIndex: number; height: number };
 
   interface Props {
     groups: AlbumGroup[];
@@ -48,6 +48,10 @@
     getQualityLabel?: (item: { hires?: boolean; maximum_bit_depth?: number; maximum_sampling_rate?: number }) => string;
     getGenreLabel?: (album: FavoriteAlbum) => string;
     getAlbumYear?: (album: FavoriteAlbum) => string | null;
+    showRanking?: boolean;
+    onLoadMore?: () => void;
+    isLoadingMore?: boolean;
+    onAddAlbumToPlaylist?: (albumId: string) => void;
   }
 
   let {
@@ -70,6 +74,10 @@
     getQualityLabel,
     getGenreLabel,
     getAlbumYear,
+    showRanking = false,
+    onLoadMore,
+    isLoadingMore = false,
+    onAddAlbumToPlaylist,
   }: Props = $props();
 
   // Constants
@@ -98,6 +106,7 @@
   let virtualItems = $derived.by(() => {
     const items: (VirtualItem & { top: number; groupId?: string })[] = [];
     let currentTop = 0;
+    let albumIndex = 0;
 
     for (const group of groups) {
       if (showGroupHeaders && group.key) {
@@ -121,20 +130,24 @@
           items.push({
             type: 'grid-row',
             albums: rowAlbums,
+            startIndex: albumIndex + i,
             height: GRID_CARD_HEIGHT,
             top: currentTop,
           });
           currentTop += rowHeight;
         }
+        albumIndex += group.albums.length;
       } else {
         const rowHeight = LIST_ROW_HEIGHT + LIST_ROW_GAP;
         for (const album of group.albums) {
           items.push({
             type: 'list-row',
             album,
+            globalIndex: albumIndex,
             height: LIST_ROW_HEIGHT,
             top: currentTop,
           });
+          albumIndex++;
           currentTop += rowHeight;
         }
       }
@@ -216,7 +229,16 @@
   });
 
   function handleScroll(e: Event) {
-    scrollTop = (e.target as HTMLDivElement).scrollTop;
+    const el = e.target as HTMLDivElement;
+    scrollTop = el.scrollTop;
+
+    // Infinite scroll: fire onLoadMore when near bottom
+    if (onLoadMore && !isLoadingMore) {
+      const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      if (distanceFromBottom < 300) {
+        onLoadMore();
+      }
+    }
   }
 
   let resizeObserver: ResizeObserver | null = null;
@@ -283,33 +305,42 @@
           </div>
         {:else if item.type === 'grid-row'}
           <div class="album-grid-row">
-            {#each item.albums as album (album.id)}
-              <AlbumCard
-                albumId={album.id}
-                artwork={album.image?.large || album.image?.thumbnail || ''}
-                title={album.title}
-                artist={album.artist.name}
-                genre={getGenreLabel?.(album) ?? album.genre?.name ?? ''}
-                releaseDate={album.release_date_original}
-                size="large"
-                quality={getQualityLabel?.(album) ?? ''}
-                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
-                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
-                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
-                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
-                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
-                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
-                isAlbumFullyDownloaded={isAlbumDownloaded?.(album.id) ?? false}
-                onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
-                onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
-                {downloadStateVersion}
-                onclick={() => handleAlbumClickEvent(album.id)}
-              />
+            {#each item.albums as album, idx (album.id)}
+              <div class="grid-card-wrapper">
+                {#if showRanking}
+                  <div class="rank-badge">#{item.startIndex + idx + 1}</div>
+                {/if}
+                <AlbumCard
+                  albumId={album.id}
+                  artwork={album.image?.large || album.image?.thumbnail || ''}
+                  title={album.title}
+                  artist={album.artist.name}
+                  genre={getGenreLabel?.(album) ?? album.genre?.name ?? ''}
+                  releaseDate={album.release_date_original}
+                  size="large"
+                  quality={getQualityLabel?.(album) ?? ''}
+                  onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                  onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                  onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                  onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                  onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                  onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                  onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+                  isAlbumFullyDownloaded={isAlbumDownloaded?.(album.id) ?? false}
+                  onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+                  onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+                  {downloadStateVersion}
+                  onclick={() => handleAlbumClickEvent(album.id)}
+                />
+              </div>
             {/each}
           </div>
         {:else if item.type === 'list-row'}
           {@const album = item.album}
-          <div class="album-row" role="button" tabindex="0" onclick={() => handleAlbumClickEvent(album.id)}>
+          <div class="album-row" class:has-rank={showRanking} role="button" tabindex="0" onclick={() => handleAlbumClickEvent(album.id)}>
+            {#if showRanking}
+              <div class="rank-number">#{item.globalIndex + 1}</div>
+            {/if}
             <div class="album-row-art">
               {#if album.image?.thumbnail || album.image?.small || album.image?.large}
                 <img src={album.image?.thumbnail || album.image?.small || album.image?.large} alt={album.title} loading="lazy" decoding="async" />
@@ -338,6 +369,12 @@
       </div>
     {/each}
   </div>
+  {#if isLoadingMore}
+    <div class="loading-more">
+      <Loader2 size={20} class="spin" />
+      <span>{$t('discover.loadingMore')}</span>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -478,5 +515,57 @@
   .album-row-quality {
     display: flex;
     justify-content: flex-end;
+  }
+
+  /* Ranking styles */
+  .grid-card-wrapper {
+    position: relative;
+  }
+
+  .rank-badge {
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    z-index: 2;
+    background: rgba(0, 0, 0, 0.75);
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 6px;
+    pointer-events: none;
+  }
+
+  .rank-number {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-muted);
+    min-width: 36px;
+    text-align: right;
+    flex-shrink: 0;
+  }
+
+  .album-row.has-rank {
+    grid-template-columns: 36px 56px 1fr auto;
+  }
+
+  /* Loading more spinner */
+  .loading-more {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 24px 0;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  .loading-more :global(.spin) {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
   }
 </style>

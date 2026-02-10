@@ -45,6 +45,16 @@
     "startListening": "Commencer l'écoute",
     "startListeningDescription": "Lisez de la musique ou ajoutez des favoris pour activer les recommandations."
   },
+  "discover": {
+    "newReleases": "Nouvelles sorties",
+    "idealDiscography": "Discographie idéale",
+    "topAlbums": "Albums populaires",
+    "loadingMore": "Chargement...",
+    "noResults": "Aucun album trouvé",
+    "searchPlaceholder": "Rechercher des albums...",
+    "allGenres": "Tous les genres",
+    "backToHome": "Retour à l'accueil"
+  },
   "search": {
     "title": "Recherche",
     "placeholder": "Rechercher des albums, des artistes, des pistes...",

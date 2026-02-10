@@ -45,6 +45,16 @@
     "startListening": "Beginne mit dem Hören",
     "startListeningDescription": "Spiele Musik oder füge Favoriten hinzu, um Empfehlungen zu aktivieren."
   },
+  "discover": {
+    "newReleases": "Neuerscheinungen",
+    "idealDiscography": "Ideale Diskografie",
+    "topAlbums": "Beliebte Alben",
+    "loadingMore": "Mehr laden...",
+    "noResults": "Keine Alben gefunden",
+    "searchPlaceholder": "Alben suchen...",
+    "allGenres": "Alle Genres",
+    "backToHome": "Zurück zur Startseite"
+  },
   "search": {
     "title": "Suchen",
     "placeholder": "Alben, Künstler, Titel suchen...",

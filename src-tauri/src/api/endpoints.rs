@@ -53,6 +53,9 @@ pub mod paths {
     // Discover (home page content)
     pub const DISCOVER_INDEX: &str = "/discover/index";
     pub const DISCOVER_PLAYLISTS: &str = "/discover/playlists";
+    pub const DISCOVER_NEW_RELEASES: &str = "/discover/newReleases";
+    pub const DISCOVER_IDEAL_DISCOGRAPHY: &str = "/discover/idealDiscography";
+    pub const DISCOVER_MOST_STREAMED: &str = "/discover/mostStreamed";
 }
 
 /// Build full URL for an endpoint

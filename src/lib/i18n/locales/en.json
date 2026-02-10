@@ -48,6 +48,16 @@
     "startListening": "Start Listening",
     "startListeningDescription": "Play music or add favorites to activate recommendations."
   },
+  "discover": {
+    "newReleases": "New Releases",
+    "idealDiscography": "Ideal Discography",
+    "topAlbums": "Top Albums",
+    "loadingMore": "Loading more...",
+    "noResults": "No albums found",
+    "searchPlaceholder": "Search albums...",
+    "allGenres": "All Genres",
+    "backToHome": "Back to Home"
+  },
   "search": {
     "title": "Search",
     "placeholder": "Search albums, artists, tracks...",

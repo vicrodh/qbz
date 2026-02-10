@@ -314,6 +314,7 @@
   import LocalLibraryView from '$lib/components/views/LocalLibraryView.svelte';
   import PlaylistManagerView from '$lib/components/views/PlaylistManagerView.svelte';
   import BlacklistManagerView from '$lib/components/views/BlacklistManagerView.svelte';
+  import DiscoverBrowseView from '$lib/components/views/DiscoverBrowseView.svelte';
 
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
@@ -3114,6 +3115,9 @@
             onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
             activeTrackId={currentTrack?.id ?? null}
             isPlaybackActive={isPlaying}
+            onNavigateNewReleases={() => navigateTo('discover-new-releases')}
+            onNavigateIdealDiscography={() => navigateTo('discover-ideal-discography')}
+            onNavigateTopAlbums={() => navigateTo('discover-top-albums')}
           />
         {/if}
       {:else if activeView === 'search'}
@@ -3394,6 +3398,64 @@
         <BlacklistManagerView
           onBack={navGoBack}
           onArtistSelect={handleArtistClick}
+        />
+      {:else if activeView === 'discover-new-releases'}
+        <DiscoverBrowseView
+          endpointType="newReleases"
+          titleKey="discover.newReleases"
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
+        />
+      {:else if activeView === 'discover-ideal-discography'}
+        <DiscoverBrowseView
+          endpointType="idealDiscography"
+          titleKey="discover.idealDiscography"
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
+        />
+      {:else if activeView === 'discover-top-albums'}
+        <DiscoverBrowseView
+          endpointType="mostStreamed"
+          titleKey="discover.topAlbums"
+          showRanking={true}
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
         />
       {/if}
     </main>

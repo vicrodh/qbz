@@ -2,7 +2,7 @@
 
 use tauri::State;
 
-use crate::api::{endpoints, endpoints::paths, Album, Artist, ArtistAlbums, DiscoverResponse, DiscoverPlaylistsResponse, LabelDetail, PageArtistResponse, Playlist, ReleasesGridResponse, SearchResultsPage, Track, TracksContainer};
+use crate::api::{endpoints, endpoints::paths, Album, Artist, ArtistAlbums, DiscoverAlbum, DiscoverData, DiscoverResponse, DiscoverPlaylistsResponse, LabelDetail, PageArtistResponse, Playlist, ReleasesGridResponse, SearchResultsPage, Track, TracksContainer};
 use crate::api_cache::ApiCacheState;
 use crate::artist_blacklist::BlacklistState;
 use crate::AppState;
@@ -689,6 +689,34 @@ pub async fn get_discover_playlists(
     let client = state.client.read().await;
     client
         .get_discover_playlists(tag, limit, offset)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+/// Get discover albums from a browse endpoint (newReleases, idealDiscography, mostStreamed)
+#[tauri::command]
+pub async fn get_discover_albums(
+    endpoint_type: String,
+    genre_ids: Option<Vec<u64>>,
+    offset: Option<u32>,
+    limit: Option<u32>,
+    state: State<'_, AppState>,
+) -> Result<DiscoverData<DiscoverAlbum>, String> {
+    let endpoint = match endpoint_type.as_str() {
+        "newReleases" => paths::DISCOVER_NEW_RELEASES,
+        "idealDiscography" => paths::DISCOVER_IDEAL_DISCOGRAPHY,
+        "mostStreamed" => paths::DISCOVER_MOST_STREAMED,
+        _ => return Err(format!("Unknown discover endpoint type: {}", endpoint_type)),
+    };
+
+    log::debug!(
+        "Command: get_discover_albums type={} offset={:?} limit={:?}",
+        endpoint_type, offset, limit
+    );
+
+    let client = state.client.read().await;
+    client
+        .get_discover_albums(endpoint, genre_ids, offset.unwrap_or(0), limit.unwrap_or(50))
         .await
         .map_err(|e| e.to_string())
 }

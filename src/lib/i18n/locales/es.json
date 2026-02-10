@@ -48,6 +48,16 @@
     "startListening": "Empieza a Escuchar",
     "startListeningDescription": "Reproduce música o agrega favoritos para activar recomendaciones."
   },
+  "discover": {
+    "newReleases": "Novedades",
+    "idealDiscography": "Discografía Ideal",
+    "topAlbums": "Álbumes Populares",
+    "loadingMore": "Cargando más...",
+    "noResults": "No se encontraron álbumes",
+    "searchPlaceholder": "Buscar álbumes...",
+    "allGenres": "Todos los Géneros",
+    "backToHome": "Volver al Inicio"
+  },
   "search": {
     "title": "Buscar",
     "placeholder": "Buscar álbumes, artistas, pistas...",

@@ -22,7 +22,10 @@ export type ViewType =
   | 'favorites-tracks'
   | 'favorites-albums'
   | 'favorites-artists'
-  | 'favorites-playlists';
+  | 'favorites-playlists'
+  | 'discover-new-releases'
+  | 'discover-ideal-discography'
+  | 'discover-top-albums';
 export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'playlists';
 
 // Navigation state
