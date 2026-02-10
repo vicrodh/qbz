@@ -206,7 +206,7 @@
   }: Props = $props();
 
   let playlist = $state<Playlist | null>(null);
-  let tracks = $state<DisplayTrack[]>([]);
+  let tracks = $state.raw<DisplayTrack[]>([]);
   let localTracks = $state<PlaylistLocalTrack[]>([]);
   let localTracksMap = $state<Map<number, PlaylistLocalTrack>>(new Map());
   let hasLocalTracks = $derived(localTracks.length > 0);
@@ -1200,9 +1200,12 @@
 
   // Filtered and sorted tracks (merged Qobuz + local by position)
   let displayTracks = $derived.by(() => {
-    // Build merged list by interleaving based on position
-    // Local tracks have explicit playlist_position
-    // Qobuz tracks fill positions not occupied by local tracks
+    // Fast path: no local tracks, no search, default sort → skip copy entirely
+    if (localTracks.length === 0 && !searchQuery.trim() && sortBy === 'default') {
+      return tracks;
+    }
+
+    // Full path: interleave with local tracks, filter, sort
     const result: DisplayTrack[] = [];
 
     // Create a map of local track positions
