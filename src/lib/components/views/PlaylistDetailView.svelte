@@ -2189,6 +2189,11 @@
       {/if}
     </div>
 
+    <!-- Bottom spacer when no suggestions will render (prevents back-to-top covering last track actions) -->
+    {#if !isOwnPlaylist || !suggestionsEnabled || searchQuery}
+      <div class="track-list-bottom-spacer"></div>
+    {/if}
+
     <!-- Playlist Suggestions -->
     <!-- >=2000 tracks: hidden (Qobuz limit reached) -->
     <!-- >500 tracks: manual launch button shown here, computation deferred -->
@@ -2974,6 +2979,10 @@
     border-radius: 8px;
     object-fit: cover;
     display: block;
+  }
+
+  .track-list-bottom-spacer {
+    height: 64px;
   }
 
   /* Back to top floating button */
