@@ -676,19 +676,20 @@ pub async fn get_discover_index(
     Ok(result)
 }
 
-/// Get discover playlists with optional tag filter
+/// Get discover playlists with optional tag and genre filters
 #[tauri::command]
 pub async fn get_discover_playlists(
     tag: Option<String>,
+    genre_ids: Option<Vec<u64>>,
     limit: Option<u32>,
     offset: Option<u32>,
     state: State<'_, AppState>,
 ) -> Result<DiscoverPlaylistsResponse, String> {
-    log::debug!("Command: get_discover_playlists tag={:?} limit={:?} offset={:?}", tag, limit, offset);
+    log::debug!("Command: get_discover_playlists tag={:?} genre_ids={:?} limit={:?} offset={:?}", tag, genre_ids, limit, offset);
 
     let client = state.client.read().await;
     client
-        .get_discover_playlists(tag, limit, offset)
+        .get_discover_playlists(tag, genre_ids, limit, offset)
         .await
         .map_err(|e| e.to_string())
 }

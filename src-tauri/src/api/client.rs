@@ -583,11 +583,12 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
-    /// Get discover playlists with optional tag filter
-    /// Example: tags=label, tags=partner
+    /// Get discover playlists with optional tag and genre filters
+    /// Example: tags=label, genre_ids=112,119
     pub async fn get_discover_playlists(
         &self,
         tag: Option<String>,
+        genre_ids: Option<Vec<u64>>,
         limit: Option<u32>,
         offset: Option<u32>,
     ) -> Result<DiscoverPlaylistsResponse> {
@@ -597,6 +598,14 @@ impl QobuzClient {
         // Add tag filter if provided (e.g., "label", "partner")
         if let Some(ref t) = tag {
             query.push(("tags", t.clone()));
+        }
+
+        // Add genre_ids as comma-separated list if provided
+        if let Some(gids) = genre_ids {
+            if !gids.is_empty() {
+                let ids_str = gids.iter().map(|id| id.to_string()).collect::<Vec<_>>().join(",");
+                query.push(("genre_ids", ids_str));
+            }
         }
 
         // Add limit (default 20)
