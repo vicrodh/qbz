@@ -43,6 +43,12 @@
   });
 
   async function handleMinimize() {
+    // Re-read setting to pick up per-user value after login
+    try {
+      const settings = await invoke<TraySettings>('get_tray_settings');
+      minimizeToTray = settings.minimize_to_tray;
+    } catch {}
+
     if (minimizeToTray) {
       await appWindow?.hide();
     } else {

@@ -149,6 +149,7 @@
     reset as resetPlayer,
     getPlayerState,
     getVolume,
+    resyncPersistedVolume,
     type PlayingTrack,
     type PlayerState
   } from '$lib/stores/playerStore';
@@ -2266,6 +2267,9 @@
     if (info.userId) {
       migrateLocalStorage(info.userId);
     }
+
+    // Re-sync volume from the now-correct user-scoped localStorage key
+    await resyncPersistedVolume();
 
     // Activate per-user backend state (LoginView already did this for auto-login,
     // but we call again to ensure it's active for manual login too — it's idempotent)

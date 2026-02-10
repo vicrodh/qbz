@@ -271,7 +271,6 @@ pub fn run() {
 
     // Clone settings for use in closures
     let enable_tray = tray_settings.enable_tray;
-    let close_to_tray = tray_settings.close_to_tray;
 
     // Initialize per-user data paths (no user active yet until login)
     let user_data_paths = user_data::UserDataPaths::new();
@@ -422,8 +421,14 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(move |window, event| {
-            // Handle close to tray
+            // Handle close to tray — read dynamically from state so per-user
+            // settings take effect after login without needing a restart.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let close_to_tray = window.app_handle()
+                    .try_state::<config::tray_settings::TraySettingsState>()
+                    .and_then(|state| state.get_settings().ok())
+                    .map(|s| s.close_to_tray)
+                    .unwrap_or(false);
                 if close_to_tray {
                     log::info!("Close to tray: hiding window instead of closing");
                     let _ = window.hide();

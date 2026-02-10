@@ -427,6 +427,22 @@ export async function seek(position: number): Promise<void> {
 }
 
 /**
+ * Re-read volume from localStorage after user-scoped storage becomes available.
+ * Called after login sets the userId, so getUserItem reads the correct scoped key.
+ */
+export async function resyncPersistedVolume(): Promise<void> {
+  const persistedVolume = loadPersistedVolume();
+  volume = persistedVolume;
+  notifyListeners();
+  try {
+    await invoke('set_volume', { volume: persistedVolume / 100 });
+    console.log('[Player] Resynced volume after login:', persistedVolume);
+  } catch {
+    console.debug('[Player] Could not resync volume to backend');
+  }
+}
+
+/**
  * Set volume (0-100)
  * Always persists the volume, even when nothing is playing.
  * The volume will be applied when playback starts.
@@ -692,6 +708,8 @@ export async function startPolling(): Promise<void> {
 
     // Sync persisted volume to backend on startup
     // This ensures the backend knows the saved volume before any playback starts
+    // Note: at this point userId may not be set yet, so the volume may come from
+    // the unscoped key. resyncPersistedVolume() is called after login to fix this.
     const persistedVolume = loadPersistedVolume();
     try {
       await invoke('set_volume', { volume: persistedVolume / 100 });
