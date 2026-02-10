@@ -149,9 +149,12 @@ parts:
       npm ci
       npm run tauri build -- --no-bundle
 
-      # Install binary
+      # Install binary, desktop file, and icon
       mkdir -p $SNAPCRAFT_PART_INSTALL/bin
       cp src-tauri/target/release/qbz-nix $SNAPCRAFT_PART_INSTALL/bin/qbz
+      mkdir -p $SNAPCRAFT_PART_INSTALL/packaging/snap/snap/gui
+      cp packaging/snap/snap/gui/qbz.desktop $SNAPCRAFT_PART_INSTALL/packaging/snap/snap/gui/
+      cp packaging/snap/snap/gui/qbz.png $SNAPCRAFT_PART_INSTALL/packaging/snap/snap/gui/
     override-prime: |
       snapcraftctl prime
       if [ -d "$SNAPCRAFT_PRIME/usr/lib/aarch64-linux-gnu" ] && [ ! -e "$SNAPCRAFT_PRIME/usr/lib/x86_64-linux-gnu" ]; then
