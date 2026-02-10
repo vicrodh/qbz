@@ -119,9 +119,18 @@ parts:
       export PKG_CONFIG_PATH="/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/pkgconfig:/usr/share/pkgconfig:/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET/pkgconfig:/snap/gnome-42-2204-sdk/current/usr/share/pkgconfig"
       export LIBRARY_PATH="/usr/lib/$SNAPCRAFT_ARCH_TRIPLET:/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET"
       export LD_LIBRARY_PATH="/usr/lib/$SNAPCRAFT_ARCH_TRIPLET:/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET"
-      # Let rusqlite use its bundled SQLite (Cargo feature "bundled")
-      # instead of the system libsqlite3 which is too old on core22 (3.37
-      # vs 3.38+ required for sqlite3_error_offset).
+      # Core22 ships SQLite 3.37 which lacks sqlite3_error_offset (added 3.38).
+      # libsqlite3-dev is pulled in transitively by webkit2gtk-dev, and the
+      # RUSTFLAGS -L puts /usr/lib before the bundled sqlite output dir,
+      # so the linker finds the old system libsqlite3.a first.
+      # Fix: replace system sqlite with a version >= 3.38.
+      SQLITE_VER=3460100
+      curl -sSf "https://www.sqlite.org/2024/sqlite-autoconf-${SQLITE_VER}.tar.gz" | tar xz
+      pushd "sqlite-autoconf-${SQLITE_VER}"
+      ./configure --quiet --prefix=/usr --libdir="/usr/lib/$SNAPCRAFT_ARCH_TRIPLET"
+      make -j"$(nproc)" && make install
+      popd
+
       export RUSTFLAGS="-L native=/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -L native=/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -L native=/snap/gnome-42-2204-sdk/current/usr/lib -C link-arg=-Wl,-rpath-link,/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -C link-arg=-Wl,-rpath-link,/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -C link-arg=-Wl,-rpath-link,/snap/gnome-42-2204-sdk/current/usr/lib"
       export LDFLAGS="-L/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -L/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -L/snap/gnome-42-2204-sdk/current/usr/lib -Wl,-rpath-link,/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -Wl,-rpath-link,/snap/gnome-42-2204-sdk/current/usr/lib/$SNAPCRAFT_ARCH_TRIPLET -Wl,-rpath-link,/snap/gnome-42-2204-sdk/current/usr/lib"
 
