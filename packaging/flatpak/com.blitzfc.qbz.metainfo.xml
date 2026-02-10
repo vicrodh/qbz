@@ -47,6 +47,11 @@
     <binary>qbz</binary>
   </provides>
   <releases>
+    <release version="1.1.10" date="2026-02-10">
+      <description>
+        <p>Discover browse pages for albums and playlists, localized playlist tags, preserved Qobuz artwork on playlist copy, and UI fixes.</p>
+      </description>
+    </release>
     <release version="1.1.9" date="2026-02-07">
       <description>
         <p>Maintenance release: faster Home view, playback auto-resume after settings change, playlist import improvements, and bug fixes.</p>
