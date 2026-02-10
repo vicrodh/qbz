@@ -642,6 +642,8 @@
       },
       "hardwareAcceleration": "Accélération matérielle (GPU)",
       "hardwareAccelerationDesc": "Activer le rendu accéléré par GPU. Désactivé par défaut pour une compatibilité maximale. Si QBZ plante au démarrage après activation : QBZ_HARDWARE_ACCEL=0 qbz",
+      "forceX11": "Forcer le backend X11 (Wayland)",
+      "forceX11Desc": "Utiliser X11 (XWayland) au lieu de Wayland natif. Aide avec les plantages sur certaines configurations NVIDIA/Wayland. Redémarrage requis. Override : QBZ_FORCE_X11=0 qbz",
       "tray": {
         "title": "Barre d'état système",
         "enableTray": "Activer l'icône dans la barre système",

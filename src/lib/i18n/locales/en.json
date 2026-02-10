@@ -663,6 +663,8 @@
       },
       "hardwareAcceleration": "Hardware acceleration (GPU)",
       "hardwareAccelerationDesc": "Enable GPU-accelerated rendering. Disabled by default for maximum compatibility. If QBZ crashes on startup after enabling, run: QBZ_HARDWARE_ACCEL=0 qbz",
+      "forceX11": "Force X11 backend (Wayland)",
+      "forceX11Desc": "Use X11 (XWayland) instead of native Wayland. Helps with crashes on some NVIDIA/Wayland setups. Requires restart. Override: QBZ_FORCE_X11=0 qbz",
       "tray": {
         "title": "System Tray",
         "enableTray": "Enable tray icon",

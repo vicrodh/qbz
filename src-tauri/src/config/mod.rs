@@ -119,6 +119,7 @@ pub use graphics_settings::{
     GraphicsSettingsState,
     get_graphics_settings,
     set_hardware_acceleration,
+    set_force_x11,
 };
 
 pub use window_settings::{

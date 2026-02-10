@@ -265,6 +265,7 @@
   let developerCollapsed = $state(true);
   let forceDmabuf = $state(false);
   let hardwareAcceleration = $state(false);
+  let forceX11 = $state(false);
   let showLogsModal = $state(false);
 
   // Navigation section IDs with translation keys
@@ -892,6 +893,7 @@
     // Load graphics settings
     invoke('get_graphics_settings').then((settings: any) => {
       hardwareAcceleration = settings.hardware_acceleration;
+      forceX11 = settings.force_x11;
     }).catch(() => {});
 
     // Subscribe to offline state changes
@@ -2717,6 +2719,17 @@
     }
   }
 
+  async function handleForceX11Change(enabled: boolean) {
+    try {
+      await invoke('set_force_x11', { enabled });
+      forceX11 = enabled;
+      showToast($t('settings.developer.restartRequired'), 'info');
+    } catch (err) {
+      console.error('Failed to set force_x11:', err);
+      showToast(String(err), 'error');
+    }
+  }
+
   async function handleForceDmabufChange(enabled: boolean) {
     try {
       await invoke('set_developer_force_dmabuf', { enabled });
@@ -3223,6 +3236,13 @@
         <span class="setting-desc">{$t('settings.appearance.hardwareAccelerationDesc')}</span>
       </div>
       <Toggle enabled={hardwareAcceleration} onchange={(v) => handleHardwareAccelerationChange(v)} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.forceX11')}</span>
+        <span class="setting-desc">{$t('settings.appearance.forceX11Desc')}</span>
+      </div>
+      <Toggle enabled={forceX11} onchange={(v) => handleForceX11Change(v)} />
     </div>
 
     <!-- System Tray subsection -->

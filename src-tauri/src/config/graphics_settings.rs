@@ -5,6 +5,8 @@
 //!
 //! - hardware_acceleration: opt-in GPU rendering (default: off)
 //!   Env var QBZ_HARDWARE_ACCEL=1|0 always overrides the stored value.
+//! - force_x11: force X11/XWayland backend on Wayland sessions (default: off)
+//!   Env var QBZ_FORCE_X11=1|0 always overrides the stored value.
 
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
@@ -14,12 +16,15 @@ use std::sync::{Arc, Mutex};
 pub struct GraphicsSettings {
     /// Enable hardware-accelerated rendering (requires restart)
     pub hardware_acceleration: bool,
+    /// Force X11 (XWayland) backend on Wayland sessions (requires restart)
+    pub force_x11: bool,
 }
 
 impl Default for GraphicsSettings {
     fn default() -> Self {
         Self {
             hardware_acceleration: false,
+            force_x11: false,
         }
     }
 }
@@ -44,10 +49,16 @@ impl GraphicsSettingsStore {
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS graphics_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
-                hardware_acceleration INTEGER NOT NULL DEFAULT 0
+                hardware_acceleration INTEGER NOT NULL DEFAULT 0,
+                force_x11 INTEGER NOT NULL DEFAULT 0
             );
-            INSERT OR IGNORE INTO graphics_settings (id, hardware_acceleration) VALUES (1, 0);"
+            INSERT OR IGNORE INTO graphics_settings (id, hardware_acceleration, force_x11) VALUES (1, 0, 0);"
         ).map_err(|e| format!("Failed to create graphics settings table: {}", e))?;
+
+        // Migration: add force_x11 column for existing databases
+        let _ = conn.execute_batch(
+            "ALTER TABLE graphics_settings ADD COLUMN force_x11 INTEGER NOT NULL DEFAULT 0;"
+        );
 
         Ok(Self { conn })
     }
@@ -55,11 +66,12 @@ impl GraphicsSettingsStore {
     pub fn get_settings(&self) -> Result<GraphicsSettings, String> {
         self.conn
             .query_row(
-                "SELECT hardware_acceleration FROM graphics_settings WHERE id = 1",
+                "SELECT hardware_acceleration, force_x11 FROM graphics_settings WHERE id = 1",
                 [],
                 |row| {
                     Ok(GraphicsSettings {
                         hardware_acceleration: row.get::<_, i64>(0)? != 0,
+                        force_x11: row.get::<_, i64>(1)? != 0,
                     })
                 },
             )
@@ -73,6 +85,16 @@ impl GraphicsSettingsStore {
                 params![enabled as i64],
             )
             .map_err(|e| format!("Failed to set hardware_acceleration: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_force_x11(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE graphics_settings SET force_x11 = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set force_x11: {}", e))?;
         Ok(())
     }
 }
@@ -116,4 +138,15 @@ pub fn set_hardware_acceleration(
     let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("Graphics settings store not initialized")?;
     store.set_hardware_acceleration(enabled)
+}
+
+#[tauri::command]
+pub fn set_force_x11(
+    state: tauri::State<'_, GraphicsSettingsState>,
+    enabled: bool,
+) -> Result<(), String> {
+    log::info!("[GraphicsSettings] Setting force_x11 to {} (restart required)", enabled);
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("Graphics settings store not initialized")?;
+    store.set_force_x11(enabled)
 }

@@ -995,6 +995,7 @@ pub fn run() {
             // Graphics settings commands
             config::graphics_settings::get_graphics_settings,
             config::graphics_settings::set_hardware_acceleration,
+            config::graphics_settings::set_force_x11,
             // Window settings commands
             config::window_settings::get_window_settings,
             config::window_settings::set_use_system_titlebar,

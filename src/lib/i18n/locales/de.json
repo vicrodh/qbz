@@ -642,6 +642,8 @@
       },
       "hardwareAcceleration": "Hardwarebeschleunigung (GPU)",
       "hardwareAccelerationDesc": "GPU-beschleunigtes Rendering aktivieren. Standardmäßig deaktiviert für maximale Kompatibilität. Falls QBZ nach dem Aktivieren beim Start abstürzt: QBZ_HARDWARE_ACCEL=0 qbz",
+      "forceX11": "X11-Backend erzwingen (Wayland)",
+      "forceX11Desc": "X11 (XWayland) statt nativem Wayland verwenden. Hilft bei Abstürzen mit bestimmten NVIDIA/Wayland-Konfigurationen. Neustart erforderlich. Override: QBZ_FORCE_X11=0 qbz",
       "tray": {
         "title": "Systemtray",
         "enableTray": "Tray-Symbol aktivieren",

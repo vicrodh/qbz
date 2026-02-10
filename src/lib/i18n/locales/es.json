@@ -663,6 +663,8 @@
       },
       "hardwareAcceleration": "Aceleración por hardware (GPU)",
       "hardwareAccelerationDesc": "Habilitar renderizado acelerado por GPU. Desactivado por defecto para máxima compatibilidad. Si QBZ se cierra al iniciar después de activar esto, ejecuta: QBZ_HARDWARE_ACCEL=0 qbz",
+      "forceX11": "Forzar backend X11 (Wayland)",
+      "forceX11Desc": "Usar X11 (XWayland) en lugar de Wayland nativo. Ayuda con crashes en configuraciones NVIDIA/Wayland. Requiere reinicio. Override: QBZ_FORCE_X11=0 qbz",
       "tray": {
         "title": "Bandeja del Sistema",
         "enableTray": "Habilitar icono de bandeja",
