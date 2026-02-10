@@ -14,7 +14,7 @@
     "favorites": "Favoriten",
     "settings": "Einstellungen",
     "newReleases": "Neuerscheinungen",
-    "pressAwards": "Presspreise",
+    "pressAwards": "Presseauszeichnungen",
     "radio": "Radio",
     "recentlyAdded": "Kürzlich hinzugefügt",
     "backTo": "Zurück zu",
@@ -26,7 +26,7 @@
     "featuredForYou": "Für dich empfohlen",
     "recentlyPlayed": "Kürzlich gespielt",
     "newReleases": "Neuerscheinungen",
-    "pressAwards": "Presspreise",
+    "pressAwards": "Presseauszeichnungen",
     "madeForYou": "Für dich erstellt",
     "topPicks": "Top-Auswahl",
     "yourPlaylists": "Deine Playlists",
@@ -37,7 +37,7 @@
     "loadError": "Startseite konnte nicht geladen werden",
     "popularAlbums": "Beliebte Alben",
     "qobuzissimes": "Qobuzissimes",
-    "editorPicks": "Redaktionsempfehlungen",
+    "editorPicks": "Alben der Woche",
     "continueListening": "Weiterhören",
     "yourTopArtists": "Deine Top-Künstler",
     "artistPlays": "{count} Wiedergaben",
@@ -53,7 +53,10 @@
     "noResults": "Keine Alben gefunden",
     "searchPlaceholder": "Alben suchen...",
     "allGenres": "Alle Genres",
-    "backToHome": "Zurück zur Startseite"
+    "backToHome": "Zurück zur Startseite",
+    "qobuzissimes": "Qobuzissimes",
+    "albumsOfTheWeek": "Alben der Woche",
+    "pressAccolades": "Presseauszeichnungen"
   },
   "search": {
     "title": "Suchen",

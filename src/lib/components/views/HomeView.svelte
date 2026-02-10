@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { Music, User, Loader2 } from 'lucide-svelte';
+  import { Music, User, Loader2, ChevronRight } from 'lucide-svelte';
   import {
     getHomeCache,
     setHomeCache,
@@ -124,6 +124,9 @@
     onNavigateNewReleases?: () => void;
     onNavigateIdealDiscography?: () => void;
     onNavigateTopAlbums?: () => void;
+    onNavigateQobuzissimes?: () => void;
+    onNavigateAlbumsOfTheWeek?: () => void;
+    onNavigatePressAccolades?: () => void;
   }
 
   let {
@@ -166,6 +169,9 @@
     onNavigateNewReleases,
     onNavigateIdealDiscography,
     onNavigateTopAlbums,
+    onNavigateQobuzissimes,
+    onNavigateAlbumsOfTheWeek,
+    onNavigatePressAccolades,
   }: Props = $props();
 
   // Home settings state
@@ -892,7 +898,8 @@
           {#snippet header()}
             <h2 class="section-title">{$t('home.newReleases')}</h2>
             {#if onNavigateNewReleases}
-              <button class="see-all-link" onclick={onNavigateNewReleases}>{$t('home.seeAll')}</button>
+              <button class="see-all-link" onclick={onNavigateNewReleases}>{$t('home.seeAll')}<ChevronRight size={14} /></button>
+              <span class="see-all-divider">|</span>
             {/if}
           {/snippet}
           {#snippet children()}
@@ -937,7 +944,14 @@
           </div>
         </div>
       {:else if pressAwards.length > 0}
-        <HorizontalScrollRow title={$t('home.pressAwards')}>
+        <HorizontalScrollRow>
+          {#snippet header()}
+            <h2 class="section-title">{$t('home.pressAwards')}</h2>
+            {#if onNavigatePressAccolades}
+              <button class="see-all-link" onclick={onNavigatePressAccolades}>{$t('home.seeAll')}<ChevronRight size={14} /></button>
+              <span class="see-all-divider">|</span>
+            {/if}
+          {/snippet}
           {#snippet children()}
             {#each pressAwards as album}
               <AlbumCard
@@ -984,7 +998,8 @@
           {#snippet header()}
             <h2 class="section-title">{$t('home.popularAlbums')}</h2>
             {#if onNavigateTopAlbums}
-              <button class="see-all-link" onclick={onNavigateTopAlbums}>{$t('home.seeAll')}</button>
+              <button class="see-all-link" onclick={onNavigateTopAlbums}>{$t('home.seeAll')}<ChevronRight size={14} /></button>
+              <span class="see-all-divider">|</span>
             {/if}
           {/snippet}
           {#snippet children()}
@@ -1029,7 +1044,14 @@
           </div>
         </div>
       {:else if qobuzissimes.length > 0}
-        <HorizontalScrollRow title={$t('home.qobuzissimes')}>
+        <HorizontalScrollRow>
+          {#snippet header()}
+            <h2 class="section-title">{$t('home.qobuzissimes')}</h2>
+            {#if onNavigateQobuzissimes}
+              <button class="see-all-link" onclick={onNavigateQobuzissimes}>{$t('home.seeAll')}<ChevronRight size={14} /></button>
+              <span class="see-all-divider">|</span>
+            {/if}
+          {/snippet}
           {#snippet children()}
             {#each qobuzissimes as album}
               <AlbumCard
@@ -1072,7 +1094,14 @@
           </div>
         </div>
       {:else if editorPicks.length > 0}
-        <HorizontalScrollRow title={$t('home.editorPicks')}>
+        <HorizontalScrollRow>
+          {#snippet header()}
+            <h2 class="section-title">{$t('home.editorPicks')}</h2>
+            {#if onNavigateAlbumsOfTheWeek}
+              <button class="see-all-link" onclick={onNavigateAlbumsOfTheWeek}>{$t('home.seeAll')}<ChevronRight size={14} /></button>
+              <span class="see-all-divider">|</span>
+            {/if}
+          {/snippet}
           {#snippet children()}
             {#each editorPicks as album}
               <AlbumCard
@@ -1169,7 +1198,8 @@
           {#snippet header()}
             <h2 class="section-title">{$t('home.essentialDiscography')}</h2>
             {#if onNavigateIdealDiscography}
-              <button class="see-all-link" onclick={onNavigateIdealDiscography}>{$t('home.seeAll')}</button>
+              <button class="see-all-link" onclick={onNavigateIdealDiscography}>{$t('home.seeAll')}<ChevronRight size={14} /></button>
+              <span class="see-all-divider">|</span>
             {/if}
           {/snippet}
           {#snippet children()}
@@ -1737,6 +1767,9 @@
   }
 
   .see-all-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
     background: none;
     border: none;
     color: #666666;
@@ -1751,5 +1784,12 @@
 
   .see-all-link:hover {
     color: var(--text-primary);
+  }
+
+  .see-all-divider {
+    color: #666666;
+    font-size: 16px;
+    margin-left: 12px;
+    user-select: none;
   }
 </style>

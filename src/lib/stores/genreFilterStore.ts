@@ -20,7 +20,7 @@ export interface GenreTreeNode {
   loading?: boolean;
 }
 
-export type GenreFilterContext = 'home' | 'favorites' | 'discover-new-releases' | 'discover-ideal-discography' | 'discover-top-albums';
+export type GenreFilterContext = 'home' | 'favorites' | 'discover-new-releases' | 'discover-ideal-discography' | 'discover-top-albums' | 'discover-qobuzissimes' | 'discover-albums-of-the-week' | 'discover-press-accolades';
 
 interface ContextState {
   selectedGenreIds: Set<number>;
@@ -43,6 +43,9 @@ const STORAGE_KEYS: Record<GenreFilterContext, string> = {
   'discover-new-releases': 'qbz_genre_filter_discover_new_releases',
   'discover-ideal-discography': 'qbz_genre_filter_discover_ideal_discography',
   'discover-top-albums': 'qbz_genre_filter_discover_top_albums',
+  'discover-qobuzissimes': 'qbz_genre_filter_discover_qobuzissimes',
+  'discover-albums-of-the-week': 'qbz_genre_filter_discover_albums_of_the_week',
+  'discover-press-accolades': 'qbz_genre_filter_discover_press_accolades',
 };
 
 const GENRE_CACHE_KEY = 'qbz_genre_cache';
@@ -117,6 +120,21 @@ const state: GenreFilterState = {
       listeners: new Set(),
     },
     'discover-top-albums': {
+      selectedGenreIds: new Set(),
+      rememberSelection: true,
+      listeners: new Set(),
+    },
+    'discover-qobuzissimes': {
+      selectedGenreIds: new Set(),
+      rememberSelection: true,
+      listeners: new Set(),
+    },
+    'discover-albums-of-the-week': {
+      selectedGenreIds: new Set(),
+      rememberSelection: true,
+      listeners: new Set(),
+    },
+    'discover-press-accolades': {
       selectedGenreIds: new Set(),
       rememberSelection: true,
       listeners: new Set(),

@@ -706,6 +706,9 @@ pub async fn get_discover_albums(
         "newReleases" => paths::DISCOVER_NEW_RELEASES,
         "idealDiscography" => paths::DISCOVER_IDEAL_DISCOGRAPHY,
         "mostStreamed" => paths::DISCOVER_MOST_STREAMED,
+        "qobuzissimes" => paths::DISCOVER_QOBUZISSIMS,
+        "albumOfTheWeek" => paths::DISCOVER_ALBUM_OF_THE_WEEK,
+        "pressAward" => paths::DISCOVER_PRESS_AWARD,
         _ => return Err(format!("Unknown discover endpoint type: {}", endpoint_type)),
     };
 

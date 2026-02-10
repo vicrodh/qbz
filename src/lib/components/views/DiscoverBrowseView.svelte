@@ -42,7 +42,7 @@
   }
 
   interface Props {
-    endpointType: 'newReleases' | 'idealDiscography' | 'mostStreamed';
+    endpointType: 'newReleases' | 'idealDiscography' | 'mostStreamed' | 'qobuzissimes' | 'albumOfTheWeek' | 'pressAward';
     titleKey: string;
     showRanking?: boolean;
     onBack: () => void;
@@ -88,6 +88,9 @@
     newReleases: 'discover-new-releases',
     idealDiscography: 'discover-ideal-discography',
     mostStreamed: 'discover-top-albums',
+    qobuzissimes: 'discover-qobuzissimes',
+    albumOfTheWeek: 'discover-albums-of-the-week',
+    pressAward: 'discover-press-accolades',
   };
   const genreContext = GENRE_CONTEXT_MAP[endpointType];
 

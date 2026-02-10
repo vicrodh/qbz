@@ -524,12 +524,13 @@
 
   .rank-badge {
     position: absolute;
-    bottom: 114px;
+    top: 4px;
     right: 4px;
     z-index: 2;
     background: rgba(0, 0, 0, 0.70);
     color: #fff;
-    font-size: 33px;
+    font-family: Impact, 'Arial Black', sans-serif;
+    font-size: 35px;
     font-weight: 700;
     padding: 2px 8px;
     border-radius: 8px;

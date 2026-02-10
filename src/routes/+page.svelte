@@ -3118,6 +3118,9 @@
             onNavigateNewReleases={() => navigateTo('discover-new-releases')}
             onNavigateIdealDiscography={() => navigateTo('discover-ideal-discography')}
             onNavigateTopAlbums={() => navigateTo('discover-top-albums')}
+            onNavigateQobuzissimes={() => navigateTo('discover-qobuzissimes')}
+            onNavigateAlbumsOfTheWeek={() => navigateTo('discover-albums-of-the-week')}
+            onNavigatePressAccolades={() => navigateTo('discover-press-accolades')}
           />
         {/if}
       {:else if activeView === 'search'}
@@ -3442,6 +3445,63 @@
           endpointType="mostStreamed"
           titleKey="discover.topAlbums"
           showRanking={true}
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
+        />
+      {:else if activeView === 'discover-qobuzissimes'}
+        <DiscoverBrowseView
+          endpointType="qobuzissimes"
+          titleKey="discover.qobuzissimes"
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
+        />
+      {:else if activeView === 'discover-albums-of-the-week'}
+        <DiscoverBrowseView
+          endpointType="albumOfTheWeek"
+          titleKey="discover.albumsOfTheWeek"
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
+        />
+      {:else if activeView === 'discover-press-accolades'}
+        <DiscoverBrowseView
+          endpointType="pressAward"
+          titleKey="discover.pressAccolades"
           onBack={navGoBack}
           onAlbumClick={handleAlbumClick}
           onAlbumPlay={playAlbumById}

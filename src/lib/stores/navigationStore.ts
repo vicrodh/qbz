@@ -25,7 +25,10 @@ export type ViewType =
   | 'favorites-playlists'
   | 'discover-new-releases'
   | 'discover-ideal-discography'
-  | 'discover-top-albums';
+  | 'discover-top-albums'
+  | 'discover-qobuzissimes'
+  | 'discover-albums-of-the-week'
+  | 'discover-press-accolades';
 export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'playlists';
 
 // Navigation state

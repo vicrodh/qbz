@@ -56,6 +56,9 @@ pub mod paths {
     pub const DISCOVER_NEW_RELEASES: &str = "/discover/newReleases";
     pub const DISCOVER_IDEAL_DISCOGRAPHY: &str = "/discover/idealDiscography";
     pub const DISCOVER_MOST_STREAMED: &str = "/discover/mostStreamed";
+    pub const DISCOVER_QOBUZISSIMS: &str = "/discover/qobuzissims";
+    pub const DISCOVER_ALBUM_OF_THE_WEEK: &str = "/discover/albumOfTheWeek";
+    pub const DISCOVER_PRESS_AWARD: &str = "/discover/pressAward";
 }
 
 /// Build full URL for an endpoint

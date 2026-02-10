@@ -14,7 +14,7 @@
     "favorites": "Favorites",
     "settings": "Settings",
     "newReleases": "New Releases",
-    "pressAwards": "Press Awards",
+    "pressAwards": "Press Accolades",
     "radio": "Radio",
     "recentlyAdded": "Recently Added",
     "backTo": "Back to",
@@ -26,7 +26,7 @@
     "featuredForYou": "Featured for you",
     "recentlyPlayed": "Recently Played",
     "newReleases": "New Releases",
-    "pressAwards": "Press Awards",
+    "pressAwards": "Press Accolades",
     "madeForYou": "Made for You",
     "topPicks": "Top Picks",
     "yourPlaylists": "Your Playlists",
@@ -37,7 +37,7 @@
     "loadError": "Could not load Home",
     "popularAlbums": "Popular Albums",
     "qobuzissimes": "Qobuzissimes",
-    "editorPicks": "Editor's Picks",
+    "editorPicks": "Albums of the Week",
     "qobuzPlaylists": "Qobuz Playlists",
     "essentialDiscography": "Essential Discography",
     "allTags": "All",
@@ -56,7 +56,10 @@
     "noResults": "No albums found",
     "searchPlaceholder": "Search albums...",
     "allGenres": "All Genres",
-    "backToHome": "Back to Home"
+    "backToHome": "Back to Home",
+    "qobuzissimes": "Qobuzissimes",
+    "albumsOfTheWeek": "Albums of the Week",
+    "pressAccolades": "Press Accolades"
   },
   "search": {
     "title": "Search",

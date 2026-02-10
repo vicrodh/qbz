@@ -26,7 +26,7 @@
     "featuredForYou": "Destacados para ti",
     "recentlyPlayed": "Escuchado Recientemente",
     "newReleases": "Novedades",
-    "pressAwards": "Premios de Prensa",
+    "pressAwards": "Reconocimientos de Prensa",
     "madeForYou": "Hecho para Ti",
     "topPicks": "Selecciones Destacadas",
     "yourPlaylists": "Tus Listas",
@@ -37,7 +37,7 @@
     "loadError": "No se pudo cargar el Inicio",
     "popularAlbums": "Álbumes Populares",
     "qobuzissimes": "Qobuzissimes",
-    "editorPicks": "Selección del Editor",
+    "editorPicks": "Álbumes de la Semana",
     "qobuzPlaylists": "Playlists de Qobuz",
     "essentialDiscography": "Discografía Esencial",
     "allTags": "Todo",
@@ -56,7 +56,10 @@
     "noResults": "No se encontraron álbumes",
     "searchPlaceholder": "Buscar álbumes...",
     "allGenres": "Todos los Géneros",
-    "backToHome": "Volver al Inicio"
+    "backToHome": "Volver al Inicio",
+    "qobuzissimes": "Qobuzissimes",
+    "albumsOfTheWeek": "Álbumes de la Semana",
+    "pressAccolades": "Reconocimientos de Prensa"
   },
   "search": {
     "title": "Buscar",
