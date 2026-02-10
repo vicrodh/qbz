@@ -71,6 +71,24 @@
     const target = event.target as HTMLDivElement;
     isScrolled = target.scrollTop > 60;
     saveScrollPosition('search', target.scrollTop);
+
+    // Feed virtual scroll calculations from the main scroll container
+    const viewportH = target.clientHeight;
+    if (albumsVirtualEl) {
+      const offset = albumsVirtualEl.offsetTop;
+      albumsScrollTop = Math.max(0, target.scrollTop - offset);
+      albumsContainerHeight = viewportH;
+    }
+    if (tracksVirtualEl) {
+      const offset = tracksVirtualEl.offsetTop;
+      tracksScrollTop = Math.max(0, target.scrollTop - offset);
+      tracksContainerHeight = viewportH;
+    }
+    if (artistsVirtualEl) {
+      const offset = artistsVirtualEl.offsetTop;
+      artistsScrollTop = Math.max(0, target.scrollTop - offset);
+      artistsContainerHeight = viewportH;
+    }
   }
 
   function handleResize() {
@@ -891,10 +909,6 @@
     return albumVirtualItems.slice(s, e + 1);
   });
 
-  function handleAlbumsScroll(e: Event) {
-    albumsScrollTop = (e.target as HTMLDivElement).scrollTop;
-  }
-
   // --- Tracks tab virtualization ---
   const TRACK_ROW_HEIGHT = 72;
   const TRACK_ROW_GAP = 4;
@@ -902,7 +916,6 @@
   let tracksVirtualEl: HTMLDivElement | null = $state(null);
   let tracksScrollTop = $state(0);
   let tracksContainerHeight = $state(0);
-  let tracksResizeObs: ResizeObserver | null = null;
 
   interface TrackVirtualItem {
     type: 'track';
@@ -947,10 +960,6 @@
     const e = Math.min(trackVirtualItems.length - 1, last + V_BUFFER);
     return trackVirtualItems.slice(s, e + 1);
   });
-
-  function handleTracksScroll(e: Event) {
-    tracksScrollTop = (e.target as HTMLDivElement).scrollTop;
-  }
 
   // --- Artists tab virtualization ---
   const ARTIST_CARD_WIDTH = 160;
@@ -1021,38 +1030,31 @@
     return artistVirtualItems.slice(s, e + 1);
   });
 
-  function handleArtistsScroll(e: Event) {
-    artistsScrollTop = (e.target as HTMLDivElement).scrollTop;
-  }
-
   // --- ResizeObserver setup/teardown ---
+  // Height comes from the parent scroll container (.search-view), not from virtual elements.
+  // ResizeObservers only track width for album/artist grid column calculations.
   function setupResizeObservers() {
+    // Set initial container heights from the scroll container
+    if (scrollContainer) {
+      const viewportH = scrollContainer.clientHeight;
+      albumsContainerHeight = viewportH;
+      tracksContainerHeight = viewportH;
+      artistsContainerHeight = viewportH;
+    }
+
     if (albumsVirtualEl && !albumsResizeObs) {
-      albumsContainerHeight = albumsVirtualEl.clientHeight;
       albumsContainerWidth = albumsVirtualEl.clientWidth;
       albumsResizeObs = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          albumsContainerHeight = entry.contentRect.height;
           albumsContainerWidth = entry.contentRect.width;
         }
       });
       albumsResizeObs.observe(albumsVirtualEl);
     }
-    if (tracksVirtualEl && !tracksResizeObs) {
-      tracksContainerHeight = tracksVirtualEl.clientHeight;
-      tracksResizeObs = new ResizeObserver((entries) => {
-        for (const entry of entries) {
-          tracksContainerHeight = entry.contentRect.height;
-        }
-      });
-      tracksResizeObs.observe(tracksVirtualEl);
-    }
     if (artistsVirtualEl && !artistsResizeObs) {
-      artistsContainerHeight = artistsVirtualEl.clientHeight;
       artistsContainerWidth = artistsVirtualEl.clientWidth;
       artistsResizeObs = new ResizeObserver((entries) => {
         for (const entry of entries) {
-          artistsContainerHeight = entry.contentRect.height;
           artistsContainerWidth = entry.contentRect.width;
         }
       });
@@ -1069,7 +1071,6 @@
 
   onDestroy(() => {
     albumsResizeObs?.disconnect();
-    tracksResizeObs?.disconnect();
     artistsResizeObs?.disconnect();
   });
 </script>
@@ -1755,7 +1756,7 @@
       {#if albumResults.items.length === 0}
         <div class="no-results">{$t('search.noAlbumsFor', { values: { query } })}</div>
       {:else}
-        <div class="virtual-scroll-container" bind:this={albumsVirtualEl} onscroll={handleAlbumsScroll}>
+        <div class="virtual-scroll-container" bind:this={albumsVirtualEl}>
           <div class="virtual-scroll-content" style="height: {albumTotalHeight}px;">
             {#each albumVisibleItems as vItem (vItem.type === 'row' ? `row-${vItem.startIdx}` : 'load-more')}
               <div class="virtual-scroll-item" style="transform: translateY({vItem.top}px); height: {vItem.height}px;">
@@ -1802,7 +1803,7 @@
       {#if trackResults.items.length === 0}
         <div class="no-results">{$t('search.noTracksFor', { values: { query } })}</div>
       {:else}
-        <div class="virtual-scroll-container" bind:this={tracksVirtualEl} onscroll={handleTracksScroll}>
+        <div class="virtual-scroll-container" bind:this={tracksVirtualEl}>
           <div class="virtual-scroll-content" style="height: {trackTotalHeight}px;">
             {#each trackVisibleItems as vItem (vItem.type === 'track' ? `track-${vItem.index}` : 'load-more')}
               <div class="virtual-scroll-item" style="transform: translateY({vItem.top}px); height: {vItem.height}px;">
@@ -1917,7 +1918,7 @@
       {#if artistResults.items.length === 0}
         <div class="no-results">{$t('search.noArtistsFor', { values: { query } })}</div>
       {:else}
-        <div class="virtual-scroll-container" bind:this={artistsVirtualEl} onscroll={handleArtistsScroll}>
+        <div class="virtual-scroll-container" bind:this={artistsVirtualEl}>
           <div class="virtual-scroll-content" style="height: {artistTotalHeight}px;">
             {#each artistVisibleItems as vItem (vItem.type === 'row' ? `row-${vItem.startIdx}` : 'load-more')}
               <div class="virtual-scroll-item" style="transform: translateY({vItem.top}px); height: {vItem.height}px;">
@@ -2270,28 +2271,7 @@
 
   /* Virtual scroll containers for tab results */
   .virtual-scroll-container {
-    height: calc(100vh - 280px);
-    min-height: 400px;
-    overflow-y: auto;
-    overflow-x: hidden;
     position: relative;
-  }
-
-  .virtual-scroll-container::-webkit-scrollbar {
-    width: 6px;
-  }
-
-  .virtual-scroll-container::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .virtual-scroll-container::-webkit-scrollbar-thumb {
-    background: var(--bg-tertiary);
-    border-radius: 3px;
-  }
-
-  .virtual-scroll-container::-webkit-scrollbar-thumb:hover {
-    background: var(--text-muted);
   }
 
   .virtual-scroll-content {
