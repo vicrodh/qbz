@@ -283,6 +283,24 @@ fn main() {
                 qbz_nix_lib::logging::log_startup("[QBZ] Using default WebKit renderer (full hardware acceleration)");
             }
         }
+
+        // --- GPU rendering summary ---
+        let sw = std::env::var_os("LIBGL_ALWAYS_SOFTWARE").is_some();
+        let comp_off = std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_some();
+        let dmabuf_off = std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some();
+
+        let gpu_status = if sw {
+            "OFF (software rendering via llvmpipe)"
+        } else if comp_off && dmabuf_off {
+            "partial (compositing: CPU, DMA-BUF: disabled, GL: GPU)"
+        } else if comp_off {
+            "partial (compositing: CPU, DMA-BUF: GPU)"
+        } else if dmabuf_off {
+            "partial (compositing: GPU, DMA-BUF: disabled)"
+        } else {
+            "FULL (compositing: GPU, DMA-BUF: GPU)"
+        };
+        qbz_nix_lib::logging::log_startup(&format!("[QBZ] GPU rendering: {}", gpu_status));
     }
 
     qbz_nix_lib::run()
