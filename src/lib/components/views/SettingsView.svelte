@@ -5,7 +5,7 @@
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
   import { ask } from '@tauri-apps/plugin-dialog';
-  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, HelpCircle, Ban } from 'lucide-svelte';
+  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, HelpCircle, Ban, AlertTriangle } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import DeviceDropdown from '../DeviceDropdown.svelte';
@@ -264,8 +264,10 @@
   let storageCollapsed = $state(true);
   let developerCollapsed = $state(true);
   let forceDmabuf = $state(false);
-  let hardwareAcceleration = $state(false);
   let forceX11 = $state(false);
+  let gdkScale = $state('');
+  let gdkDpiScale = $state('');
+  let compositionCollapsed = $state(true);
   let showLogsModal = $state(false);
 
   // Navigation section IDs with translation keys
@@ -640,14 +642,16 @@
       : null
   );
   let gaplessDisabled = $derived(
-    selectedBackend === 'ALSA Direct' || streamingOnly
+    selectedBackend === 'ALSA Direct' || streamingOnly || dacPassthrough
   );
   let gaplessDisabledReasonKey = $derived(
     selectedBackend === 'ALSA Direct'
       ? 'settings.playback.gaplessDisabledAlsa'
-      : streamingOnly
-        ? 'settings.playback.gaplessDisabledStreaming'
-        : null
+      : dacPassthrough
+        ? 'settings.playback.gaplessDisabledDac'
+        : streamingOnly
+          ? 'settings.playback.gaplessDisabledStreaming'
+          : null
   );
 
   // Playback settings
@@ -892,8 +896,9 @@
 
     // Load graphics settings
     invoke('get_graphics_settings').then((settings: any) => {
-      hardwareAcceleration = settings.hardware_acceleration;
       forceX11 = settings.force_x11;
+      gdkScale = settings.gdk_scale || '';
+      gdkDpiScale = settings.gdk_dpi_scale || '';
     }).catch(() => {});
 
     // Subscribe to offline state changes
@@ -2132,6 +2137,13 @@
   async function handleDacPassthroughChange(enabled: boolean) {
     dacPassthrough = enabled;
 
+    // Gapless not compatible with DAC Passthrough
+    if (enabled && gaplessPlayback) {
+      gaplessPlayback = false;
+      await invoke('set_audio_gapless_enabled', { enabled: false });
+      console.log('[Audio] Disabled gapless playback (not compatible with DAC Passthrough)');
+    }
+
     try {
       await invoke('set_audio_dac_passthrough', { enabled });
 
@@ -2708,17 +2720,6 @@
     }
   }
 
-  async function handleHardwareAccelerationChange(enabled: boolean) {
-    try {
-      await invoke('set_hardware_acceleration', { enabled });
-      hardwareAcceleration = enabled;
-      showToast($t('settings.developer.restartRequired'), 'info');
-    } catch (err) {
-      console.error('Failed to set hardware_acceleration:', err);
-      showToast(String(err), 'error');
-    }
-  }
-
   async function handleForceX11Change(enabled: boolean) {
     try {
       await invoke('set_force_x11', { enabled });
@@ -2726,6 +2727,28 @@
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {
       console.error('Failed to set force_x11:', err);
+      showToast(String(err), 'error');
+    }
+  }
+
+  async function handleGdkScaleChange() {
+    try {
+      const value = gdkScale.trim() || null;
+      await invoke('set_gdk_scale', { value });
+      showToast($t('settings.developer.restartRequired'), 'info');
+    } catch (err) {
+      console.error('Failed to set gdk_scale:', err);
+      showToast(String(err), 'error');
+    }
+  }
+
+  async function handleGdkDpiScaleChange() {
+    try {
+      const value = gdkDpiScale.trim() || null;
+      await invoke('set_gdk_dpi_scale', { value });
+      showToast($t('settings.developer.restartRequired'), 'info');
+    } catch (err) {
+      console.error('Failed to set gdk_dpi_scale:', err);
       showToast(String(err), 'error');
     }
   }
@@ -3230,19 +3253,96 @@
       />
     </div>
 
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.appearance.hardwareAcceleration')}</span>
-        <span class="setting-desc">{$t('settings.appearance.hardwareAccelerationDesc')}</span>
-      </div>
-      <Toggle enabled={hardwareAcceleration} onchange={(v) => handleHardwareAccelerationChange(v)} />
-    </div>
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.appearance.forceX11')}</span>
-        <span class="setting-desc">{$t('settings.appearance.forceX11Desc')}</span>
-      </div>
-      <Toggle enabled={forceX11} onchange={(v) => handleForceX11Change(v)} />
+    <!-- Composition subsection (collapsible) -->
+    <div class="collapsible-section composition-subsection">
+      <button class="section-title-btn" onclick={() => compositionCollapsed = !compositionCollapsed}>
+        <span class="section-title composition-title">{$t('settings.appearance.composition.title')}</span>
+        <span class="section-summary">{$t('settings.appearance.composition.summary')}</span>
+        {#if compositionCollapsed}
+          <ChevronDown size={16} />
+        {:else}
+          <ChevronUp size={16} />
+        {/if}
+      </button>
+      {#if !compositionCollapsed}
+        <p class="section-note">{$t('settings.appearance.composition.helpText')}</p>
+
+        <div class="composition-warning">
+          <AlertTriangle size={14} />
+          <div>
+            <span>{$t('settings.appearance.composition.recoveryNote')}</span>
+            <code class="recovery-cmd">{$t('settings.appearance.composition.recoveryCmd')}</code>
+          </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">{$t('settings.appearance.composition.forceX11')}</span>
+            <span class="setting-desc">{$t('settings.appearance.composition.forceX11Desc')}</span>
+          </div>
+          <Toggle enabled={forceX11} onchange={(v) => handleForceX11Change(v)} />
+        </div>
+
+        {#if forceX11}
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">{$t('settings.appearance.composition.gdkScale')}</span>
+              <span class="setting-desc">{$t('settings.appearance.composition.gdkScaleDesc')}</span>
+            </div>
+            <input
+              class="composition-input"
+              type="text"
+              placeholder="auto"
+              bind:value={gdkScale}
+              onblur={handleGdkScaleChange}
+            />
+          </div>
+          <div class="setting-row">
+            <div class="setting-info">
+              <span class="setting-label">{$t('settings.appearance.composition.gdkDpiScale')}</span>
+              <span class="setting-desc">{$t('settings.appearance.composition.gdkDpiScaleDesc')}</span>
+            </div>
+            <input
+              class="composition-input"
+              type="text"
+              placeholder="auto"
+              bind:value={gdkDpiScale}
+              onblur={handleGdkDpiScaleChange}
+            />
+          </div>
+        {/if}
+
+        <div class="composition-env-section">
+          <span class="composition-env-title">{$t('settings.appearance.composition.envVarsTitle')}</span>
+          <p class="section-note">{$t('settings.appearance.composition.envVarsDesc')}</p>
+          <div class="env-vars-list">
+            <div class="env-var-row">
+              <code>QBZ_HARDWARE_ACCEL=0</code>
+              <span>{$t('settings.appearance.composition.envVarHwAccel0')}</span>
+            </div>
+            <div class="env-var-row">
+              <code>QBZ_HARDWARE_ACCEL=1</code>
+              <span>{$t('settings.appearance.composition.envVarHwAccel1')}</span>
+            </div>
+            <div class="env-var-row">
+              <code>QBZ_FORCE_X11=1</code>
+              <span>{$t('settings.appearance.composition.envVarForceX11')}</span>
+            </div>
+            <div class="env-var-row">
+              <code>QBZ_SOFTWARE_RENDER=1</code>
+              <span>{$t('settings.appearance.composition.envVarSoftwareRender')}</span>
+            </div>
+            <div class="env-var-row">
+              <code>QBZ_FORCE_DMABUF=1</code>
+              <span>{$t('settings.appearance.composition.envVarForceDmabuf')}</span>
+            </div>
+            <div class="env-var-row">
+              <code>QBZ_DISABLE_DMABUF=1</code>
+              <span>{$t('settings.appearance.composition.envVarDisableDmabuf')}</span>
+            </div>
+          </div>
+        </div>
+      {/if}
     </div>
 
     <!-- System Tray subsection -->
@@ -4675,6 +4775,100 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .collapsible-section .section-title-btn .experimental-badge {
     flex-shrink: 0;
     margin-left: -4px;
+  }
+
+  /* Composition subsection (inside Appearance) */
+  .composition-subsection {
+    padding-top: 16px;
+    margin-top: 8px;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .composition-title {
+    font-size: 14px !important;
+  }
+
+  .composition-warning {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 10px 12px;
+    margin-bottom: 16px;
+    border-radius: 8px;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.2);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .composition-warning :global(svg) {
+    flex-shrink: 0;
+    color: #f59e0b;
+    margin-top: 1px;
+  }
+
+  .recovery-cmd {
+    display: block;
+    margin-top: 4px;
+    padding: 4px 8px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--text-primary);
+    user-select: all;
+  }
+
+  .composition-input {
+    width: 80px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid var(--bg-tertiary);
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-size: 12px;
+    text-align: center;
+  }
+
+  .composition-env-section {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-color);
+  }
+
+  .composition-env-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .env-vars-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .env-var-row {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    font-size: 12px;
+  }
+
+  .env-var-row code {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--bg-tertiary);
+    font-family: monospace;
+    font-size: 11px;
+    color: var(--text-primary);
+  }
+
+  .env-var-row span {
+    color: var(--text-muted);
   }
 
   .setting-row {

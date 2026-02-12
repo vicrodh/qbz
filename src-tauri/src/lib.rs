@@ -276,6 +276,14 @@ pub fn run() {
     let user_data_paths = user_data::UserDataPaths::new();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // Second instance launched — bring existing window to front
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
@@ -996,6 +1004,8 @@ pub fn run() {
             config::graphics_settings::get_graphics_settings,
             config::graphics_settings::set_hardware_acceleration,
             config::graphics_settings::set_force_x11,
+            config::graphics_settings::set_gdk_scale,
+            config::graphics_settings::set_gdk_dpi_scale,
             // Window settings commands
             config::window_settings::get_window_settings,
             config::window_settings::set_use_system_titlebar,

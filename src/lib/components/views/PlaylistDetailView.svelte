@@ -7,11 +7,11 @@
   import ViewTransition from '../ViewTransition.svelte';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
   import { invoke } from '@tauri-apps/api/core';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { open, ask } from '@tauri-apps/plugin-dialog';
   import TrackRow from '../TrackRow.svelte';
   import PlaylistSuggestions from '../PlaylistSuggestions.svelte';
   import { extractAdaptiveArtists } from '$lib/services/playlistSuggestionsService';
-  import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
+  import { type OfflineCacheStatus, cacheTrackForOffline, getOfflineCacheState } from '$lib/stores/offlineCacheState';
   import {
     subscribe as subscribeOffline,
     getStatus as getOfflineStatus,
@@ -22,6 +22,7 @@
   import { isTrackUnavailable, clearTrackUnavailable, subscribe as subscribeUnavailable } from '$lib/stores/unavailableTracksStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { showToast } from '$lib/stores/toastStore';
+  import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
   import { onMount, tick } from 'svelte';
 
@@ -1854,6 +1855,56 @@
     const url = `https://play.qobuz.com/playlist/${playlist.id}`;
     writeText(url);
   }
+
+  async function handleMakePlaylistOffline() {
+    const translate = get(t);
+    // Filter to Qobuz-only tracks (not local)
+    const qobuzTracks = displayTracks.filter(track => !track.isLocal);
+
+    // Filter out already-cached tracks
+    const tracksToCache = qobuzTracks.filter(track => {
+      const status = getOfflineCacheState(track.id).status;
+      return status === 'none' || status === 'failed';
+    });
+
+    if (tracksToCache.length === 0) {
+      showToast(translate('toast.allTracksOffline'), 'info');
+      return;
+    }
+
+    // Warn for large playlists
+    if (tracksToCache.length > 300) {
+      const confirmed = await ask(
+        translate('playlist.makeOfflineConfirmDesc', { values: { count: tracksToCache.length } }),
+        {
+          title: translate('playlist.makeOfflineConfirmTitle'),
+          kind: 'warning'
+        }
+      );
+      if (!confirmed) return;
+    }
+
+    const playlistName = playlist?.name || '';
+    showToast(translate('playlist.preparingPlaylistOffline', { values: { count: tracksToCache.length, name: playlistName } }), 'info');
+
+    for (const track of tracksToCache) {
+      try {
+        await cacheTrackForOffline({
+          id: track.id,
+          title: track.title,
+          artist: track.artist || 'Unknown',
+          album: track.album,
+          albumId: track.albumId,
+          durationSecs: track.durationSeconds,
+          quality: '-',
+          bitDepth: track.bitDepth,
+          sampleRate: track.samplingRate,
+        });
+      } catch (err) {
+        console.error(`Failed to queue offline cache for "${track.title}":`, err);
+      }
+    }
+  }
 </script>
 
 <ViewTransition duration={200} distance={12} direction="down">
@@ -1981,6 +2032,7 @@
             onPlayNext={handlePlayAllNext}
             onPlayLater={handlePlayAllLater}
             onShareQobuz={sharePlaylistQobuz}
+            onMakeOffline={handleMakePlaylistOffline}
           />
         </div>
       </div>

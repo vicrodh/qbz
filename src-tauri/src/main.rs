@@ -108,13 +108,18 @@ fn main() {
     // Wayland and WebKit compatibility fixes for Linux
     // Addresses: https://github.com/vicrodh/qbz/issues/6
     //            https://github.com/vicrodh/qbz/issues/59
+    //            https://github.com/vicrodh/qbz/issues/67
     //
-    // The primary EGL crash ("Could not create default EGL display") in
-    // AppImage is fixed at the build level by pinning WebKitGTK to 2.44.0-2
-    // in the CI workflow (see tauri-apps/tauri#11994).
-    //
-    // Runtime workarounds below handle NVIDIA DMA-BUF issues, VM detection,
-    // and provide escape hatches for edge cases.
+    // v1.1.12: Reverted to v1.1.9 rendering defaults. The v1.1.10/11 approach
+    // of disabling hardware acceleration by default caused severe UI lag for
+    // all users (WEBKIT_DISABLE_DMABUF_RENDERER applied globally instead of
+    // only to NVIDIA GPUs). Now:
+    //   - X11: full hardware acceleration (nothing disabled)
+    //   - Wayland: compositing disabled (prevents protocol errors), DMA-BUF
+    //     disabled on Wayland for all GPUs (prevents EGL crashes on Intel Arc
+    //     and NVIDIA Error 71)
+    //   - NVIDIA on X11: only DMA-BUF disabled
+    //   - Everything bypassable via env vars
     #[cfg(target_os = "linux")]
     {
         let is_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
@@ -123,25 +128,26 @@ fn main() {
         let is_vm = is_virtual_machine();
         let force_software = std::env::var("QBZ_SOFTWARE_RENDER").as_deref() == Ok("1");
 
-        // Graphics settings: hardware acceleration opt-in (from Settings > Appearance)
-        // Default is OFF — safest for AppImage across heterogeneous hardware.
-        // Env var QBZ_HARDWARE_ACCEL=1|0 ALWAYS overrides the DB value (crash recovery).
+        // Graphics settings from DB (force_x11, scaling)
         let graphics_db = qbz_nix_lib::config::graphics_settings::GraphicsSettingsStore::new()
             .ok()
             .and_then(|store| store.get_settings().ok());
-        let hw_accel_db = graphics_db.as_ref().map(|s| s.hardware_acceleration).unwrap_or(false);
+
+        // Hardware acceleration override (env var only — not a DB setting anymore).
+        // Default: ON (v1.1.9 behavior). QBZ_HARDWARE_ACCEL=0 is the nuclear
+        // opt-out that disables all GPU compositing and DMA-BUF everywhere.
         let hardware_accel = match std::env::var("QBZ_HARDWARE_ACCEL").as_deref() {
-            Ok("1") => {
-                qbz_nix_lib::logging::log_startup("[QBZ] Env override: QBZ_HARDWARE_ACCEL=1 (GPU rendering forced on)");
-                true
-            }
             Ok("0") => {
-                qbz_nix_lib::logging::log_startup("[QBZ] Env override: QBZ_HARDWARE_ACCEL=0 (GPU rendering forced off)");
+                qbz_nix_lib::logging::log_startup("[QBZ] Env override: QBZ_HARDWARE_ACCEL=0 (all GPU rendering disabled)");
                 false
             }
-            _ => hw_accel_db,
+            // "1" is the default behavior, log only if explicitly set
+            Ok("1") => {
+                qbz_nix_lib::logging::log_startup("[QBZ] Env override: QBZ_HARDWARE_ACCEL=1 (full GPU, all safety bypassed)");
+                true
+            }
+            _ => true, // Default: hardware acceleration ON (v1.1.9 behavior)
         };
-        qbz_nix_lib::logging::log_startup(&format!("[QBZ] Hardware acceleration: {}", if hardware_accel { "enabled" } else { "disabled (default)" }));
 
         // Developer settings: force_dmabuf override (from Settings > Developer Mode)
         let dev_force_dmabuf = qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new()
@@ -155,7 +161,7 @@ fn main() {
             qbz_nix_lib::logging::log_startup("[QBZ] To reset: run `qbz --reset-dmabuf`");
         }
 
-        // User overrides
+        // User overrides for DMA-BUF (finer-grained than QBZ_HARDWARE_ACCEL)
         let force_dmabuf = std::env::var("QBZ_FORCE_DMABUF").as_deref() == Ok("1");
         let disable_dmabuf = std::env::var("QBZ_DISABLE_DMABUF").as_deref() == Ok("1");
 
@@ -173,7 +179,7 @@ fn main() {
             _ => force_x11_db,
         };
 
-        // Diagnostic logging (display server logged after GDK backend selection below)
+        // Diagnostic logging
         if has_nvidia {
             qbz_nix_lib::logging::log_startup("[QBZ] NVIDIA GPU detected");
         }
@@ -183,7 +189,7 @@ fn main() {
 
         // --- Software rendering (GL layer) ---
         // LIBGL_ALWAYS_SOFTWARE=1 forces Mesa to use llvmpipe for all GL contexts.
-        // Only needed in VMs or when the user explicitly requests it.
+        // Only for VMs or explicit user request.
         if force_software {
             qbz_nix_lib::logging::log_startup("[QBZ] User override: forcing software rendering (QBZ_SOFTWARE_RENDER=1)");
             std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
@@ -194,16 +200,24 @@ fn main() {
 
         // --- GDK backend selection ---
         if force_x11 && is_wayland {
-            qbz_nix_lib::logging::log_startup("[QBZ] User override: Forcing X11 backend (QBZ_FORCE_X11=1)");
+            qbz_nix_lib::logging::log_startup("[QBZ] Forcing X11 backend on Wayland session");
             std::env::set_var("GDK_BACKEND", "x11");
+
+            // Apply XWayland display scaling overrides if configured
+            if let Some(ref gdk_scale) = graphics_db.as_ref().and_then(|s| s.gdk_scale.clone()) {
+                std::env::set_var("GDK_SCALE", gdk_scale);
+                qbz_nix_lib::logging::log_startup(&format!("[QBZ] GDK_SCALE={}", gdk_scale));
+            }
+            if let Some(ref gdk_dpi) = graphics_db.as_ref().and_then(|s| s.gdk_dpi_scale.clone()) {
+                std::env::set_var("GDK_DPI_SCALE", gdk_dpi);
+                qbz_nix_lib::logging::log_startup(&format!("[QBZ] GDK_DPI_SCALE={}", gdk_dpi));
+            }
         } else if is_wayland && std::env::var_os("GDK_BACKEND").is_none() {
             std::env::set_var("GDK_BACKEND", "wayland");
             std::env::set_var("GTK_CSD", "1");
         }
 
-        // Log effective display server AFTER GDK backend selection so the
-        // message reflects what GDK will actually use (not just the session
-        // type). GDK_BACKEND=x11 on a Wayland session = XWayland.
+        // Log effective display server AFTER GDK backend selection
         let effective_display = match std::env::var("GDK_BACKEND").as_deref() {
             Ok("x11") if is_wayland => "X11 (XWayland)",
             Ok("x11") => "X11",
@@ -212,28 +226,81 @@ fn main() {
         };
         qbz_nix_lib::logging::log_startup(&format!("[QBZ] Display server: {}", effective_display));
 
-        // --- DMA-BUF renderer control ---
-        // NVIDIA GPUs have known issues with WebKit's DMA-BUF renderer on
-        // Wayland, causing fatal protocol errors (Error 71).
-        // When hardware_accel is off, we also disable the DMA-BUF renderer
-        // as an extra safety layer for AppImage compatibility.
-        if force_dmabuf {
-            qbz_nix_lib::logging::log_startup("[QBZ] User override: Forcing DMA-BUF renderer enabled (QBZ_FORCE_DMABUF=1)");
-            qbz_nix_lib::logging::log_startup("[QBZ] Warning: This may cause crashes on some Wayland configurations");
-        } else if disable_dmabuf {
-            qbz_nix_lib::logging::log_startup("[QBZ] User override: Forcing DMA-BUF renderer disabled (QBZ_DISABLE_DMABUF=1)");
+        // --- WebKit renderer control ---
+        //
+        // QBZ_HARDWARE_ACCEL=0 is the nuclear option: disables everything.
+        // QBZ_HARDWARE_ACCEL=1 (explicit) bypasses ALL safety measures.
+        // Default (no env var): v1.1.9 targeted mitigations only.
+        //
+        // v1.1.9 defaults:
+        //   - Wayland: COMPOSITING off + DMABUF off (prevents EGL/protocol errors)
+        //   - X11 + NVIDIA: DMABUF off only (prevents Error 71)
+        //   - X11 + non-NVIDIA: nothing disabled (full GPU acceleration)
+        //
+        // Override hierarchy (highest to lowest):
+        //   1. QBZ_HARDWARE_ACCEL=0 → disable everything
+        //   2. QBZ_HARDWARE_ACCEL=1 → enable everything (bypass all safety)
+        //   3. QBZ_FORCE_DMABUF=1 / QBZ_DISABLE_DMABUF=1 → fine-grained DMA-BUF
+        //   4. Auto-detection (Wayland/NVIDIA)
+        if !hardware_accel {
+            // Nuclear opt-out: disable all GPU compositing and DMA-BUF
+            qbz_nix_lib::logging::log_startup("[QBZ] Hardware acceleration disabled: all GPU rendering off");
+            qbz_nix_lib::logging::log_startup("[QBZ] To restore: unset QBZ_HARDWARE_ACCEL or set to 1");
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        } else if !hardware_accel {
-            qbz_nix_lib::logging::log_startup("[QBZ] Hardware acceleration disabled: disabling WebKit DMA-BUF renderer");
-            qbz_nix_lib::logging::log_startup("[QBZ] To enable: Settings > Appearance > Hardware Acceleration");
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-        } else if has_nvidia {
-            qbz_nix_lib::logging::log_startup("[QBZ] NVIDIA GPU detected: disabling WebKit DMA-BUF renderer");
-            qbz_nix_lib::logging::log_startup("[QBZ] To override: set QBZ_FORCE_DMABUF=1 (not recommended)");
-            std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        } else if std::env::var("QBZ_HARDWARE_ACCEL").as_deref() == Ok("1") {
+            // Explicit full GPU: skip ALL safety measures
+            qbz_nix_lib::logging::log_startup("[QBZ] Full GPU mode: all WebKit safety bypassed");
         } else {
-            qbz_nix_lib::logging::log_startup("[QBZ] Hardware acceleration enabled, using default WebKit renderer");
+            // Default path: v1.1.9 targeted mitigations
+
+            // Wayland compositing: disable to prevent protocol errors with
+            // transparent windows. This was in v1.1.9 and worked fine.
+            // Only applies to native Wayland (not force_x11/XWayland).
+            if is_wayland && !force_x11 {
+                std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+                qbz_nix_lib::logging::log_startup("[QBZ] Wayland: compositing mode disabled (prevents protocol errors)");
+            }
+
+            // DMA-BUF renderer control
+            if force_dmabuf {
+                qbz_nix_lib::logging::log_startup("[QBZ] User override: DMA-BUF renderer forced ON (QBZ_FORCE_DMABUF=1)");
+            } else if disable_dmabuf {
+                qbz_nix_lib::logging::log_startup("[QBZ] User override: DMA-BUF renderer forced OFF (QBZ_DISABLE_DMABUF=1)");
+                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            } else if is_wayland && !force_x11 {
+                // Wayland: disable DMA-BUF for ALL GPUs. Prevents:
+                //   - NVIDIA Error 71 (protocol error)
+                //   - Intel Arc EGL crash (Could not create default EGL display)
+                // This is an improvement over v1.1.9 which only covered NVIDIA.
+                qbz_nix_lib::logging::log_startup("[QBZ] Wayland: DMA-BUF renderer disabled (prevents EGL crashes)");
+                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            } else if has_nvidia {
+                // X11 + NVIDIA: disable DMA-BUF only (keeps full compositing)
+                qbz_nix_lib::logging::log_startup("[QBZ] NVIDIA on X11: DMA-BUF renderer disabled");
+                std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+            } else {
+                qbz_nix_lib::logging::log_startup("[QBZ] Using default WebKit renderer (full hardware acceleration)");
+            }
         }
+
+        // --- GPU rendering summary ---
+        let sw = std::env::var_os("LIBGL_ALWAYS_SOFTWARE").is_some();
+        let comp_off = std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_some();
+        let dmabuf_off = std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some();
+
+        let gpu_status = if sw {
+            "OFF (software rendering via llvmpipe)"
+        } else if comp_off && dmabuf_off {
+            "partial (compositing: CPU, DMA-BUF: disabled, GL: GPU)"
+        } else if comp_off {
+            "partial (compositing: CPU, DMA-BUF: GPU)"
+        } else if dmabuf_off {
+            "partial (compositing: GPU, DMA-BUF: disabled)"
+        } else {
+            "FULL (compositing: GPU, DMA-BUF: GPU)"
+        };
+        qbz_nix_lib::logging::log_startup(&format!("[QBZ] GPU rendering: {}", gpu_status));
     }
 
     qbz_nix_lib::run()

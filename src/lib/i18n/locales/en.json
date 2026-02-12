@@ -230,12 +230,16 @@
     "playlists": "Playlists"
   },
   "sort": {
-    "label": "Sort",
+    "nameAZ": "Name (A-Z)",
+    "recent": "Recent",
+    "trackCount": "# of Tracks",
+    "playCount": "Play Count",
+    "custom": "Custom",
     "default": "Default",
     "newest": "Newest First",
     "oldest": "Oldest First",
-    "titleAsc": "Title (A-Z)",
-    "titleDesc": "Title (Z-A)",
+    "titleAZ": "Title (A-Z)",
+    "titleZA": "Title (Z-A)",
     "artist": "Artist"
   },
   "playlist": {
@@ -289,6 +293,9 @@
     "hideFromSidebar": "Hide from sidebar",
     "createAndAdd": "Create & Add",
     "playlistWithTracks": "{name} ({count} tracks)",
+    "makeOfflineConfirmTitle": "Make playlist available offline",
+    "makeOfflineConfirmDesc": "This will cache {count} tracks for offline listening. This may use significant disk space and take a while to complete.",
+    "preparingPlaylistOffline": "Preparing {count} tracks from \"{name}\" for offline listening...",
     "copyToLibrary": "Copy to library",
     "enterName": "Please enter a playlist name",
     "selectPlaylist": "Please select a playlist",
@@ -301,19 +308,6 @@
     },
     "suggestSongs": "Suggest songs for this playlist",
     "suggestionsLargePlaylist": "This playlist has many tracks. Tap the button to generate suggestions."
-  },
-  "sort": {
-    "nameAZ": "Name (A-Z)",
-    "recent": "Recent",
-    "trackCount": "# of Tracks",
-    "playCount": "Play Count",
-    "custom": "Custom",
-    "default": "Default",
-    "newest": "Newest First",
-    "oldest": "Oldest First",
-    "titleAZ": "Title (A-Z)",
-    "titleZA": "Title (Z-A)",
-    "artist": "Artist"
   },
   "favorites": {
     "title": "Favorites",
@@ -398,7 +392,7 @@
     "lyrics": "Lyrics",
     "noLyrics": "No lyrics available",
     "fetchingLyrics": "Fetching lyrics...",
-"trackUnavailable": "Track no longer available in Qobuz library",
+    "trackUnavailable": "Track no longer available in Qobuz library",
     "credits": "Credits",
     "trackInfo": "Track Info",
     "suggestions": "Suggestions",
@@ -562,8 +556,6 @@
       "parsingHardware": "Parsing hardware information",
       "limitQualityToDevice": "Limit Quality to Device",
       "limitQualityToDeviceDesc": "When enabled, overrides the quality setting above if your audio device doesn't support the selected sample rate. Prevents resampling to guarantee bit-perfect playback.",
-      "audioBackend": "Audio Backend",
-      "audioBackendDesc": "Choose audio system: Auto (recommended), PipeWire (modern), ALSA Direct (bit-perfect, exclusive), or PulseAudio (legacy).",
       "alsaPlugin": "ALSA Plugin",
       "alsaPluginDesc": "hw: Bit-perfect, exclusive. plughw: Auto-convert. pcm: Most compatible.",
       "hardwareVolume": "Enable Hardware Volume Control",
@@ -594,6 +586,7 @@
       "gapless": "Gapless Playback",
       "gaplessDesc": "Seamless transitions between cached tracks with matching format",
       "gaplessDisabledAlsa": "Not available with ALSA Direct backend",
+      "gaplessDisabledDac": "Not compatible with DAC Passthrough",
       "gaplessDisabledStreaming": "Not available in streaming-only mode",
       "experimental": "experimental",
       "crossfade": "Crossfade",
@@ -673,6 +666,27 @@
         "minimizeToTrayDesc": "Hide window to tray when minimizing",
         "closeToTray": "Close to tray",
         "closeToTrayDesc": "Hide window to tray instead of quitting"
+      },
+      "composition": {
+        "title": "Composition",
+        "summary": "Visual rendering and GPU acceleration settings",
+        "helpText": "These settings control how QBZ renders the UI. Incorrect settings may cause crashes or poor performance. All options require a restart to take effect.",
+        "recoveryNote": "If QBZ crashes after changing these settings, launch from terminal with:",
+        "recoveryCmd": "QBZ_HARDWARE_ACCEL=0 qbz",
+        "forceX11": "Force X11 backend (Wayland)",
+        "forceX11Desc": "Use XWayland instead of native Wayland. Recommended for NVIDIA GPUs that crash on Wayland.",
+        "gdkScale": "Display scale (XWayland)",
+        "gdkScaleDesc": "GDK_SCALE override for XWayland. Leave empty for auto.",
+        "gdkDpiScale": "DPI scale (XWayland)",
+        "gdkDpiScaleDesc": "GDK_DPI_SCALE override for XWayland. Leave empty for auto.",
+        "envVarsTitle": "Environment variable overrides",
+        "envVarsDesc": "For advanced users. Set these before launching QBZ to override any setting above.",
+        "envVarHwAccel0": "Disable all GPU rendering (maximum compatibility)",
+        "envVarHwAccel1": "Force full GPU rendering (bypass all safety)",
+        "envVarForceX11": "Force XWayland backend",
+        "envVarSoftwareRender": "Force software rendering (Mesa llvmpipe)",
+        "envVarForceDmabuf": "Force DMA-BUF renderer on (may crash)",
+        "envVarDisableDmabuf": "Force DMA-BUF renderer off"
       }
     },
     "library": {

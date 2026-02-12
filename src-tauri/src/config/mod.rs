@@ -120,6 +120,8 @@ pub use graphics_settings::{
     get_graphics_settings,
     set_hardware_acceleration,
     set_force_x11,
+    set_gdk_scale,
+    set_gdk_dpi_scale,
 };
 
 pub use window_settings::{
