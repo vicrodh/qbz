@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.blitzfc.qbz</id>
+  <name>QBZ</name>
+  <summary>Native Qobuz client with hi-res audio support</summary>
+  <description>
+    <p>
+      QBZ is a native Qobuz streaming client for Linux built for audiophiles who want reliable, bit-perfect playback without browser sample-rate limitations.
+    </p>
+    <p>Features:</p>
+    <ul>
+      <li>Bit-perfect playback up to 24-bit/192kHz</li>
+      <li>Native Linux audio backends (ALSA, PulseAudio, PipeWire)</li>
+      <li>DAC routing and exclusive mode support</li>
+      <li>Offline playlist support</li>
+      <li>MPRIS integration for desktop media controls</li>
+      <li>Last.fm scrobbling support</li>
+    </ul>
+  </description>
+  <developer id="com.blitzfc">
+    <name>QBZ Contributors</name>
+  </developer>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <url type="homepage">https://github.com/vicrodh/qbz</url>
+  <url type="bugtracker">https://github.com/vicrodh/qbz/issues</url>
+  <url type="vcs-browser">https://github.com/vicrodh/qbz</url>
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Music</category>
+    <category>Player</category>
+  </categories>
+  <keywords>
+    <keyword>music</keyword>
+    <keyword>audio</keyword>
+    <keyword>qobuz</keyword>
+    <keyword>hifi</keyword>
+    <keyword>streaming</keyword>
+    <keyword>audiophile</keyword>
+  </keywords>
+  <launchable type="desktop-id">com.blitzfc.qbz.desktop</launchable>
+  <provides>
+    <binary>qbz</binary>
+  </provides>
+  <content_rating type="oars-1.1" />
+  <screenshots>
+    <screenshot type="default">
+      <caption>Home and discovery view</caption>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/v1.1.13/flatpak/screenshots/home-discover.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Immersive cover flow mode</caption>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/v1.1.13/flatpak/screenshots/immersive-cover-flow.png</image>
+    </screenshot>
+    <screenshot>
+      <caption>Local library view</caption>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/v1.1.13/flatpak/screenshots/local-library.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="1.1.12" date="2026-02-12">
+      <description>
+        <p>Bug fix release addressing graphics rendering regressions and performance improvements.</p>
+      </description>
+    </release>
+    <release version="1.1.10" date="2026-02-10">
+      <description>
+        <p>Discover browse pages for albums and playlists, localized playlist tags, preserved Qobuz artwork on playlist copy, and UI fixes.</p>
+      </description>
+    </release>
+    <release version="1.1.9" date="2026-02-07">
+      <description>
+        <p>Maintenance release with Home performance improvements, playback auto-resume after settings changes, and playlist import fixes.</p>
+      </description>
+    </release>
+  </releases>
+</component>
