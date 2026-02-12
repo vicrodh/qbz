@@ -95,6 +95,11 @@ export async function initOfflineCacheStates(): Promise<void> {
 
 // Start listening for offline cache events
 export async function startOfflineCacheEventListeners(): Promise<void> {
+  // Idempotency guard: prevent duplicate listeners on HMR/remount
+  if (unlisteners.length > 0) {
+    return;
+  }
+
   try {
     const unlistenStarted = await listen<{ trackId: number }>('offline:caching_started', (event) => {
       console.log('Offline caching started:', event.payload.trackId);
