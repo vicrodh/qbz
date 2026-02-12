@@ -663,6 +663,8 @@
         "helpText": "Ces parametres controlent comment QBZ rend l'interface. Des parametres incorrects peuvent causer des crashes ou une mauvaise performance. Toutes les options necessitent un redemarrage.",
         "recoveryNote": "Si QBZ plante apres avoir modifie ces parametres, lancez depuis le terminal avec :",
         "recoveryCmd": "QBZ_HARDWARE_ACCEL=0 qbz",
+        "fallbackWarning": "Les parametres graphiques n'ont pas pu etre charges",
+        "fallbackDesc": "Utilisation des valeurs par defaut securisees. Cela peut causer une performance degradee. Pour reinitialiser :",
         "forceX11": "Forcer le backend X11 (Wayland)",
         "forceX11Desc": "Utiliser XWayland au lieu du Wayland natif. Recommande pour les GPU NVIDIA avec des crashes sous Wayland.",
         "gdkScale": "Echelle d'affichage (XWayland)",

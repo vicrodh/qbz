@@ -1002,6 +1002,7 @@ pub fn run() {
             config::developer_settings::set_developer_force_dmabuf,
             // Graphics settings commands
             config::graphics_settings::get_graphics_settings,
+            config::graphics_settings::get_graphics_startup_status,
             config::graphics_settings::set_hardware_acceleration,
             config::graphics_settings::set_force_x11,
             config::graphics_settings::set_gdk_scale,

@@ -280,6 +280,16 @@ fn main() {
             is_wayland, has_nvidia, force_x11, hardware_accel, graphics_using_fallback
         ));
 
+        // Store startup state for frontend queries
+        qbz_nix_lib::config::graphics_settings::set_startup_graphics_state(
+            graphics_using_fallback,
+            is_wayland,
+            has_nvidia,
+            is_vm,
+            hardware_accel,
+            force_x11,
+        );
+
         // --- Software rendering (GL layer) ---
         // LIBGL_ALWAYS_SOFTWARE=1 forces Mesa to use llvmpipe for all GL contexts.
         // Only for VMs or explicit user request.

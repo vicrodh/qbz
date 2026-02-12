@@ -268,6 +268,10 @@
   let gdkScale = $state('');
   let gdkDpiScale = $state('');
   let compositionCollapsed = $state(true);
+  // Graphics startup status (for showing degraded mode warning)
+  let graphicsUsingFallback = $state(false);
+  let graphicsIsWayland = $state(false);
+  let graphicsHasNvidia = $state(false);
   let showLogsModal = $state(false);
 
   // Navigation section IDs with translation keys
@@ -899,6 +903,13 @@
       forceX11 = settings.force_x11;
       gdkScale = settings.gdk_scale || '';
       gdkDpiScale = settings.gdk_dpi_scale || '';
+    }).catch(() => {});
+
+    // Load graphics startup status (for fallback warning)
+    invoke('get_graphics_startup_status').then((status: any) => {
+      graphicsUsingFallback = status.using_fallback;
+      graphicsIsWayland = status.is_wayland;
+      graphicsHasNvidia = status.has_nvidia;
     }).catch(() => {});
 
     // Subscribe to offline state changes
@@ -3267,6 +3278,17 @@
       {#if !compositionCollapsed}
         <p class="section-note">{$t('settings.appearance.composition.helpText')}</p>
 
+        {#if graphicsUsingFallback}
+          <div class="composition-warning fallback-warning">
+            <AlertTriangle size={14} />
+            <div>
+              <span class="fallback-title">{$t('settings.appearance.composition.fallbackWarning')}</span>
+              <span class="fallback-desc">{$t('settings.appearance.composition.fallbackDesc')}</span>
+              <code class="recovery-cmd">qbz --reset-graphics</code>
+            </div>
+          </div>
+        {/if}
+
         <div class="composition-warning">
           <AlertTriangle size={14} />
           <div>
@@ -4805,6 +4827,28 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     flex-shrink: 0;
     color: #f59e0b;
     margin-top: 1px;
+  }
+
+  /* Fallback warning (more prominent - red/error style) */
+  .composition-warning.fallback-warning {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+
+  .composition-warning.fallback-warning :global(svg) {
+    color: #ef4444;
+  }
+
+  .fallback-title {
+    display: block;
+    font-weight: 600;
+    color: #ef4444;
+    margin-bottom: 2px;
+  }
+
+  .fallback-desc {
+    display: block;
+    color: var(--text-secondary);
   }
 
   .recovery-cmd {

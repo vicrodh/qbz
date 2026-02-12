@@ -663,6 +663,8 @@
         "helpText": "Diese Einstellungen steuern, wie QBZ die Benutzeroberflaeche rendert. Falsche Einstellungen koennen zu Abstuerzen oder schlechter Leistung fuehren. Alle Optionen erfordern einen Neustart.",
         "recoveryNote": "Falls QBZ nach dem Aendern dieser Einstellungen abstuerzt, starte vom Terminal mit:",
         "recoveryCmd": "QBZ_HARDWARE_ACCEL=0 qbz",
+        "fallbackWarning": "Grafikeinstellungen konnten nicht geladen werden",
+        "fallbackDesc": "Sichere Standardwerte werden verwendet. Dies kann zu verringerter Leistung fuehren. Zum Zuruecksetzen:",
         "forceX11": "X11-Backend erzwingen (Wayland)",
         "forceX11Desc": "XWayland statt nativem Wayland verwenden. Empfohlen fuer NVIDIA-GPUs mit Wayland-Abstuerzen.",
         "gdkScale": "Anzeigeskalierung (XWayland)",

@@ -673,6 +673,8 @@
         "helpText": "These settings control how QBZ renders the UI. Incorrect settings may cause crashes or poor performance. All options require a restart to take effect.",
         "recoveryNote": "If QBZ crashes after changing these settings, launch from terminal with:",
         "recoveryCmd": "QBZ_HARDWARE_ACCEL=0 qbz",
+        "fallbackWarning": "Graphics settings failed to load",
+        "fallbackDesc": "Using safe defaults. This may cause degraded performance. To reset:",
         "forceX11": "Force X11 backend (Wayland)",
         "forceX11Desc": "Use XWayland instead of native Wayland. Recommended for NVIDIA GPUs that crash on Wayland.",
         "gdkScale": "Display scale (XWayland)",

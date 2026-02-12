@@ -15,6 +15,37 @@
 use rusqlite::{Connection, params};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+// --- Global startup state (set once in main.rs, read-only thereafter) ---
+static GRAPHICS_USING_FALLBACK: AtomicBool = AtomicBool::new(false);
+static GRAPHICS_IS_WAYLAND: AtomicBool = AtomicBool::new(false);
+static GRAPHICS_HAS_NVIDIA: AtomicBool = AtomicBool::new(false);
+static GRAPHICS_IS_VM: AtomicBool = AtomicBool::new(false);
+static GRAPHICS_HW_ACCEL: AtomicBool = AtomicBool::new(true);
+static GRAPHICS_FORCE_X11: AtomicBool = AtomicBool::new(false);
+
+/// Set startup graphics state (called once from main.rs)
+pub fn set_startup_graphics_state(
+    using_fallback: bool,
+    is_wayland: bool,
+    has_nvidia: bool,
+    is_vm: bool,
+    hw_accel: bool,
+    force_x11: bool,
+) {
+    GRAPHICS_USING_FALLBACK.store(using_fallback, Ordering::SeqCst);
+    GRAPHICS_IS_WAYLAND.store(is_wayland, Ordering::SeqCst);
+    GRAPHICS_HAS_NVIDIA.store(has_nvidia, Ordering::SeqCst);
+    GRAPHICS_IS_VM.store(is_vm, Ordering::SeqCst);
+    GRAPHICS_HW_ACCEL.store(hw_accel, Ordering::SeqCst);
+    GRAPHICS_FORCE_X11.store(force_x11, Ordering::SeqCst);
+}
+
+/// Check if graphics is using fallback defaults (for UI warning)
+pub fn is_using_graphics_fallback() -> bool {
+    GRAPHICS_USING_FALLBACK.load(Ordering::SeqCst)
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphicsSettings {
@@ -208,4 +239,37 @@ pub fn set_gdk_dpi_scale(
     let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("Graphics settings store not initialized")?;
     store.set_gdk_dpi_scale(value)
+}
+
+// --- Startup Status (set once at app launch, read-only thereafter) ---
+
+/// Tracks graphics configuration status from startup
+/// Used to show warnings in UI when settings failed to load
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GraphicsStartupStatus {
+    /// True if graphics settings failed to load from DB (using safe defaults)
+    pub using_fallback: bool,
+    /// True if running on Wayland
+    pub is_wayland: bool,
+    /// True if NVIDIA GPU was detected
+    pub has_nvidia: bool,
+    /// True if running in a virtual machine
+    pub is_vm: bool,
+    /// True if hardware acceleration is enabled
+    pub hardware_accel_enabled: bool,
+    /// True if force_x11 is active
+    pub force_x11_active: bool,
+}
+
+/// Get graphics startup status (reads from static atomics set in main.rs)
+#[tauri::command]
+pub fn get_graphics_startup_status() -> GraphicsStartupStatus {
+    GraphicsStartupStatus {
+        using_fallback: GRAPHICS_USING_FALLBACK.load(Ordering::SeqCst),
+        is_wayland: GRAPHICS_IS_WAYLAND.load(Ordering::SeqCst),
+        has_nvidia: GRAPHICS_HAS_NVIDIA.load(Ordering::SeqCst),
+        is_vm: GRAPHICS_IS_VM.load(Ordering::SeqCst),
+        hardware_accel_enabled: GRAPHICS_HW_ACCEL.load(Ordering::SeqCst),
+        force_x11_active: GRAPHICS_FORCE_X11.load(Ordering::SeqCst),
+    }
 }
