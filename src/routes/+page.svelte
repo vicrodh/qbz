@@ -2518,7 +2518,7 @@
       if (!sessionSaveInterval) {
         sessionSaveInterval = setInterval(() => {
           saveSessionBeforeClose();
-        }, 30000); // Save every 30 seconds
+        }, 60000); // Save every 60 seconds (reduced from 30s to lower IPC overhead)
       }
     } else {
       if (sessionSaveInterval) {
