@@ -269,6 +269,7 @@
   let storageCollapsed = $state(true);
   let developerCollapsed = $state(true);
   let forceDmabuf = $state(false);
+  let hardwareAcceleration = $state(true);
   let verboseLogCapture = $state(false);
   let forceX11 = $state(false);
   let gdkScale = $state('');
@@ -278,6 +279,7 @@
   let graphicsUsingFallback = $state(false);
   let graphicsIsWayland = $state(false);
   let graphicsHasNvidia = $state(false);
+  let graphicsHwAccelEnabled = $state(true);
   let showLogsModal = $state(false);
 
   // Navigation section IDs with translation keys
@@ -912,6 +914,7 @@
       forceX11 = settings.force_x11;
       gdkScale = settings.gdk_scale || '';
       gdkDpiScale = settings.gdk_dpi_scale || '';
+      hardwareAcceleration = settings.hardware_acceleration;
     }).catch(() => {});
 
     // Load graphics startup status (for fallback warning)
@@ -919,6 +922,7 @@
       graphicsUsingFallback = status.using_fallback;
       graphicsIsWayland = status.is_wayland;
       graphicsHasNvidia = status.has_nvidia;
+      graphicsHwAccelEnabled = status.hardware_accel_enabled;
     }).catch(() => {});
 
     // Subscribe to offline state changes
@@ -2773,6 +2777,17 @@
     }
   }
 
+  async function handleHardwareAccelerationChange(enabled: boolean) {
+    try {
+      await invoke('set_hardware_acceleration', { enabled });
+      hardwareAcceleration = enabled;
+      showToast($t('settings.developer.restartRequired'), 'info');
+    } catch (err) {
+      console.error('Failed to set hardware_acceleration:', err);
+      showToast(String(err), 'error');
+    }
+  }
+
   async function handleForceDmabufChange(enabled: boolean) {
     try {
       await invoke('set_developer_force_dmabuf', { enabled });
@@ -3319,6 +3334,22 @@
             <span>{$t('settings.appearance.composition.recoveryNote')}</span>
             <code class="recovery-cmd">{$t('settings.appearance.composition.recoveryCmd')}</code>
           </div>
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">{$t('settings.appearance.composition.hardwareAcceleration')}</span>
+            <span class="setting-desc">{$t('settings.appearance.composition.hardwareAccelerationDesc')}</span>
+          </div>
+          <Toggle enabled={hardwareAcceleration} onchange={(v) => handleHardwareAccelerationChange(v)} />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">{$t('settings.appearance.composition.forceDmabuf')}</span>
+            <span class="setting-desc">{$t('settings.appearance.composition.forceDmabufDesc')}</span>
+          </div>
+          <Toggle enabled={forceDmabuf} onchange={(v) => handleForceDmabufChange(v)} />
         </div>
 
         <div class="setting-row">
@@ -4306,13 +4337,6 @@
       {/if}
     </button>
     {#if !developerCollapsed}
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.developer.forceDmabuf')}</span>
-        <small class="setting-note">{$t('settings.developer.forceDmabufDesc')}</small>
-      </div>
-      <Toggle enabled={forceDmabuf} onchange={handleForceDmabufChange} />
-    </div>
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.developer.verboseLogCapture')}</span>
