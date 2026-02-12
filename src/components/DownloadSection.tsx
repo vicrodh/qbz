@@ -131,6 +131,15 @@ const getHelperCmds = (type: DownloadItem['type']): { label: string; cmds: strin
       cmds: ['yay -Syu qbz-bin', 'paru -Syu qbz-bin']
     }
   }
+  if (type === 'flatpak') {
+    return {
+      label: 'Local Library Access (NAS, external drives)',
+      cmds: [
+        'flatpak override --user --filesystem=/path/to/your/music com.blitzfc.qbz',
+        'flatpak override --user --filesystem=/mnt/nas com.blitzfc.qbz',
+      ]
+    }
+  }
   return undefined
 }
 
@@ -207,9 +216,18 @@ const snapItem: DownloadItem = {
   size: 0,
   arch: null,
   installCmd: getInstallCmd('snap', 'qbz-player'),
+  helperCmds: {
+    label: 'Required: Enable audio plugs',
+    cmds: [
+      'sudo snap connect qbz-player:alsa',
+      'sudo snap connect qbz-player:pulseaudio',
+      'sudo snap connect qbz-player:pipewire',
+      'sudo snap connect qbz-player:mpris',
+    ]
+  },
   helperNote: {
-    label: 'Or install from Snap Store GUI',
-    note: 'Search for "QBZ" in your Snap Store application, or click the link below to open the store page.'
+    label: 'Optional: Access external drives / NAS',
+    note: 'Run: sudo snap connect qbz-player:removable-media — This allows QBZ to access music on external drives, NAS mounts, or other removable storage.'
   },
 }
 
