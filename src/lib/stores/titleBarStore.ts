@@ -43,11 +43,10 @@ export function initTitleBarStore(): void {
     // Sync localStorage value to Rust backend so it's available at next
     // startup (before window creation). Handles migration from the
     // localStorage-only era and keeps both stores in sync.
-    if (useSystemTitleBar) {
-      invoke('set_use_system_titlebar', { value: true }).catch((e) => {
-        console.error('[TitleBarStore] Failed to sync system titlebar to backend:', e);
-      });
-    }
+    // Always sync, not just when true - otherwise false values never propagate.
+    invoke('set_use_system_titlebar', { value: useSystemTitleBar }).catch((e) => {
+      console.error('[TitleBarStore] Failed to sync system titlebar to backend:', e);
+    });
   } catch (e) {
     console.error('[TitleBarStore] Failed to initialize:', e);
   }
