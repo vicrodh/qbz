@@ -400,6 +400,70 @@ qbz/
 - Use the in-app Settings wizard for guided setup
 - **Flatpak users:** PipeWire bit-perfect can work if PipeWire is configured correctly. If it does not, use ALSA Direct.
 
+### Graphics and Rendering
+
+QBZ uses WebKit for rendering. Some hardware/driver combinations may cause crashes or poor performance. Settings are available in **Settings → Appearance → Composition**.
+
+#### Quick Recovery
+
+If QBZ crashes on startup after changing graphics settings:
+
+```bash
+QBZ_HARDWARE_ACCEL=0 qbz
+```
+
+This disables all GPU rendering and lets you access settings to fix the configuration.
+
+#### Environment Variables
+
+Set these before launching QBZ to override settings:
+
+| Variable | Effect | When to use |
+|----------|--------|-------------|
+| `QBZ_HARDWARE_ACCEL=0` | Disable all GPU rendering | Crashes on startup, severe UI glitches |
+| `QBZ_HARDWARE_ACCEL=1` | Force full GPU (bypass safety) | Only if you know your GPU works perfectly |
+| `QBZ_FORCE_X11=1` | Use XWayland instead of Wayland | NVIDIA crashes on Wayland, protocol errors |
+| `QBZ_SOFTWARE_RENDER=1` | Force Mesa llvmpipe | VMs, headless servers, broken GPU drivers |
+| `QBZ_DISABLE_DMABUF=1` | Disable DMA-BUF renderer | Intel Arc EGL crashes, NVIDIA Error 71 |
+| `QBZ_FORCE_DMABUF=1` | Force DMA-BUF renderer | Testing only, may crash |
+
+#### Common Scenarios
+
+**NVIDIA on Wayland (crashes, protocol errors, black screen)**
+```bash
+QBZ_FORCE_X11=1 qbz
+```
+Or enable "Force X11 backend" in Settings → Appearance → Composition.
+
+**Intel Arc GPU (EGL crashes, "Could not create default EGL display")**
+```bash
+QBZ_DISABLE_DMABUF=1 qbz
+```
+
+**Virtual machines or containers**
+```bash
+QBZ_SOFTWARE_RENDER=1 qbz
+```
+
+**Severe UI lag or freezing**
+```bash
+QBZ_HARDWARE_ACCEL=0 qbz
+```
+
+**XWayland scaling issues (blurry UI)**
+
+After enabling Force X11, configure scaling in Settings → Appearance → Composition:
+- **GDK_SCALE**: Integer scaling (1, 2)
+- **GDK_DPI_SCALE**: Fractional scaling (0.5, 1, 1.5, 2)
+
+#### What the defaults do
+
+- **X11 sessions**: Full GPU acceleration, nothing disabled
+- **Wayland sessions**: Compositing mode disabled (prevents protocol errors), DMA-BUF disabled for all GPUs (prevents EGL crashes)
+- **NVIDIA on X11**: Only DMA-BUF disabled
+
+All settings require a restart to take effect.
+
 ## Contributing
 
 Contributions are welcome. Please read `CONTRIBUTING.md` before submitting issues or pull requests.
