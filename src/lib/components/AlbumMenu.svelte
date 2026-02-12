@@ -12,6 +12,7 @@
     Link,
     RefreshCw
   } from 'lucide-svelte';
+  import { t } from '$lib/i18n';
   import {
     openMenu as openGlobalMenu,
     closeMenu as closeGlobalMenu,
@@ -27,6 +28,7 @@
     onShareQobuz?: () => void;
     onShareSonglink?: () => void;
     onDownload?: () => void;
+    onMakeOffline?: () => void;
     onOpenChange?: (open: boolean) => void;
     isAlbumFullyDownloaded?: boolean;
     onOpenContainingFolder?: () => void;
@@ -40,6 +42,7 @@
     onShareQobuz,
     onShareSonglink,
     onDownload,
+    onMakeOffline,
     onOpenChange,
     isAlbumFullyDownloaded = false,
     onOpenContainingFolder: _onOpenContainingFolder,
@@ -70,7 +73,8 @@
   const hasLibrary = $derived(!!onAddToPlaylist);
   const hasShare = $derived(!!(onShareQobuz || onShareSonglink));
   const hasDownload = $derived(!!onDownload || isAlbumFullyDownloaded);
-  const hasMenu = $derived(hasQueue || hasLibrary || hasShare || hasDownload);
+  const hasOffline = $derived(!!onMakeOffline);
+  const hasMenu = $derived(hasQueue || hasLibrary || hasShare || hasDownload || hasOffline);
 
   function closeMenu() {
     isOpen = false;
@@ -411,6 +415,16 @@
                 <span>Make album available offline</span>
               </button>
             {/if}
+          {/if}
+
+          {#if hasOffline}
+            {#if hasDownload || hasShare || hasLibrary || hasQueue}
+              <div class="separator"></div>
+            {/if}
+            <button class="menu-item" onclick={() => handleAction(onMakeOffline)}>
+              <CloudDownload size={14} />
+              <span>{$t('download.makeAvailable')}</span>
+            </button>
           {/if}
         </div>
       </Portal>
