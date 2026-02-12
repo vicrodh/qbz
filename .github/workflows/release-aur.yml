@@ -53,9 +53,11 @@ jobs:
           while [ $ELAPSED -lt $MAX_WAIT ]; do
             echo "Checking for release assets (${ELAPSED}s elapsed)..."
 
-            # Check if both tarballs exist
-            AMD64_EXISTS=$(curl -sI "https://github.com/vicrodh/qbz/releases/download/v${VERSION}/qbz_${VERSION}_amd64.tar.gz" | head -n 1 | grep -q "200 OK" && echo "true" || echo "false")
-            AARCH64_EXISTS=$(curl -sI "https://github.com/vicrodh/qbz/releases/download/v${VERSION}/qbz_${VERSION}_aarch64.tar.gz" | head -n 1 | grep -q "200 OK" && echo "true" || echo "false")
+            # Check if both tarballs exist (follow redirects, GitHub returns 302)
+            AMD64_CODE=$(curl -sL -o /dev/null -w "%{http_code}" "https://github.com/vicrodh/qbz/releases/download/v${VERSION}/qbz_${VERSION}_amd64.tar.gz")
+            AARCH64_CODE=$(curl -sL -o /dev/null -w "%{http_code}" "https://github.com/vicrodh/qbz/releases/download/v${VERSION}/qbz_${VERSION}_aarch64.tar.gz")
+            AMD64_EXISTS=$([[ "$AMD64_CODE" == "200" ]] && echo "true" || echo "false")
+            AARCH64_EXISTS=$([[ "$AARCH64_CODE" == "200" ]] && echo "true" || echo "false")
 
             if [ "$AMD64_EXISTS" = "true" ] && [ "$AARCH64_EXISTS" = "true" ]; then
               echo "Both release assets are available!"
