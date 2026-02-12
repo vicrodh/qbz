@@ -573,6 +573,7 @@
       "gapless": "Lückenlose Wiedergabe",
       "gaplessDesc": "Nahtlose Übergänge zwischen gecachten Titeln mit gleichem Format",
       "gaplessDisabledAlsa": "Nicht verfügbar mit ALSA Direct-Backend",
+      "gaplessDisabledDac": "Nicht kompatibel mit DAC Passthrough",
       "gaplessDisabledStreaming": "Nicht verfügbar im Nur-Streaming-Modus",
       "experimental": "experimentell",
       "crossfade": "Überblenden",

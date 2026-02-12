@@ -642,14 +642,16 @@
       : null
   );
   let gaplessDisabled = $derived(
-    selectedBackend === 'ALSA Direct' || streamingOnly
+    selectedBackend === 'ALSA Direct' || streamingOnly || dacPassthrough
   );
   let gaplessDisabledReasonKey = $derived(
     selectedBackend === 'ALSA Direct'
       ? 'settings.playback.gaplessDisabledAlsa'
-      : streamingOnly
-        ? 'settings.playback.gaplessDisabledStreaming'
-        : null
+      : dacPassthrough
+        ? 'settings.playback.gaplessDisabledDac'
+        : streamingOnly
+          ? 'settings.playback.gaplessDisabledStreaming'
+          : null
   );
 
   // Playback settings
@@ -2134,6 +2136,13 @@
 
   async function handleDacPassthroughChange(enabled: boolean) {
     dacPassthrough = enabled;
+
+    // Gapless not compatible with DAC Passthrough
+    if (enabled && gaplessPlayback) {
+      gaplessPlayback = false;
+      await invoke('set_audio_gapless_enabled', { enabled: false });
+      console.log('[Audio] Disabled gapless playback (not compatible with DAC Passthrough)');
+    }
 
     try {
       await invoke('set_audio_dac_passthrough', { enabled });

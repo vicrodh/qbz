@@ -573,6 +573,7 @@
       "gapless": "Lecture sans interruption",
       "gaplessDesc": "Transitions fluides entre les pistes en cache avec un format compatible",
       "gaplessDisabledAlsa": "Non disponible avec le backend ALSA Direct",
+      "gaplessDisabledDac": "Non compatible avec DAC Passthrough",
       "gaplessDisabledStreaming": "Non disponible en mode streaming uniquement",
       "experimental": "expérimental",
       "crossfade": "Fondu enchaîné",
