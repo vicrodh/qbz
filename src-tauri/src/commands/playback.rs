@@ -26,7 +26,6 @@ fn parse_quality(quality_str: Option<&str>) -> Quality {
 
 /// Limit quality based on device's max sample rate
 /// This ensures bit-perfect playback by not requesting tracks that exceed device capabilities
-#[allow(dead_code)]
 fn limit_quality_for_device(quality: Quality, max_sample_rate: Option<u32>) -> Quality {
     let Some(max_rate) = max_sample_rate else {
         return quality; // No limit if device max rate unknown
@@ -88,12 +87,38 @@ pub async fn play_track(
 ) -> Result<PlayTrackResult, String> {
     let preferred_quality = parse_quality(quality.as_deref());
 
-    // NOTE: limit_quality_to_device disabled in 1.1.9 — was causing incorrect downgrades (#45)
-    // The feature code is preserved but disconnected until the detection logic is reliable.
+    // Apply per-device sample rate limit if enabled
+    let final_quality = {
+        let guard = audio_settings
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        if let Some(store) = guard.as_ref() {
+            if let Ok(settings) = store.get_settings() {
+                if settings.limit_quality_to_device {
+                    // Get the device ID (use current output device or "default")
+                    let device_id = settings.output_device.as_deref().unwrap_or("default");
+                    // Get per-device limit, falling back to global limit
+                    let max_rate = settings
+                        .device_sample_rate_limits
+                        .get(device_id)
+                        .copied()
+                        .or(settings.device_max_sample_rate);
+                    limit_quality_for_device(preferred_quality, max_rate)
+                } else {
+                    preferred_quality
+                }
+            } else {
+                preferred_quality
+            }
+        } else {
+            preferred_quality
+        }
+    };
 
     log::info!(
-        "Command: play_track {} (duration: {:?}s, quality_str={:?}, parsed={:?}, format_id={})",
-        track_id, duration_secs, quality, preferred_quality, preferred_quality.id()
+        "Command: play_track {} (duration: {:?}s, quality_str={:?}, parsed={:?}, final={:?}, format_id={})",
+        track_id, duration_secs, quality, preferred_quality, final_quality, final_quality.id()
     );
 
     // First check offline cache (persistent disk cache)
@@ -133,7 +158,7 @@ pub async fn play_track(
                     state.client.clone(),
                     state.audio_cache.clone(),
                     &state.queue,
-                    preferred_quality,
+                    final_quality,
                     skip_prefetch,
                 );
 
@@ -160,7 +185,7 @@ pub async fn play_track(
             state.client.clone(),
             state.audio_cache.clone(),
             &state.queue,
-            preferred_quality,
+            final_quality,
             skip_prefetch,
         );
 
@@ -188,7 +213,7 @@ pub async fn play_track(
                 state.client.clone(),
                 state.audio_cache.clone(),
                 &state.queue,
-                preferred_quality,
+                final_quality,
                 skip_prefetch,
             );
 
@@ -218,9 +243,9 @@ pub async fn play_track(
 
     let client = state.client.read().await;
 
-    // Get the stream URL with preferred quality
+    // Get the stream URL with final quality (after per-device limiting)
     let stream_url = client
-        .get_stream_url_with_fallback(track_id, preferred_quality)
+        .get_stream_url_with_fallback(track_id, final_quality)
         .await
         .map_err(|e| format!("Failed to get stream URL: {}", e))?;
 
@@ -283,7 +308,7 @@ pub async fn play_track(
             state.client.clone(),
             state.audio_cache.clone(),
             &state.queue,
-            preferred_quality,
+            final_quality,
             streaming_only,
         );
 
@@ -318,7 +343,7 @@ pub async fn play_track(
         state.client.clone(),
         state.audio_cache.clone(),
         &state.queue,
-        preferred_quality,
+        final_quality,
         streaming_only,
     );
 
@@ -332,16 +357,40 @@ pub async fn prefetch_track(
     quality: Option<String>,
     state: State<'_, AppState>,
     offline_cache: State<'_, OfflineCacheState>,
-    _audio_settings: State<'_, AudioSettingsState>,
+    audio_settings: State<'_, AudioSettingsState>,
 ) -> Result<(), String> {
     let preferred_quality = parse_quality(quality.as_deref());
 
-    // NOTE: limit_quality_to_device disabled in 1.1.9 — was causing incorrect downgrades (#45)
-    // The feature code is preserved but disconnected until the detection logic is reliable.
+    // Apply per-device sample rate limit if enabled
+    let final_quality = {
+        let guard = audio_settings
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        if let Some(store) = guard.as_ref() {
+            if let Ok(settings) = store.get_settings() {
+                if settings.limit_quality_to_device {
+                    let device_id = settings.output_device.as_deref().unwrap_or("default");
+                    let max_rate = settings
+                        .device_sample_rate_limits
+                        .get(device_id)
+                        .copied()
+                        .or(settings.device_max_sample_rate);
+                    limit_quality_for_device(preferred_quality, max_rate)
+                } else {
+                    preferred_quality
+                }
+            } else {
+                preferred_quality
+            }
+        } else {
+            preferred_quality
+        }
+    };
 
     log::info!(
-        "Command: prefetch_track {} (quality_str={:?}, parsed={:?}, format_id={})",
-        track_id, quality, preferred_quality, preferred_quality.id()
+        "Command: prefetch_track {} (quality_str={:?}, parsed={:?}, final={:?}, format_id={})",
+        track_id, quality, preferred_quality, final_quality, final_quality.id()
     );
 
     let cache = state.audio_cache.clone();
@@ -382,7 +431,7 @@ pub async fn prefetch_track(
 
         let client = state.client.read().await;
         let stream_url = client
-            .get_stream_url_with_fallback(track_id, preferred_quality)
+            .get_stream_url_with_fallback(track_id, final_quality)
             .await
             .map_err(|e| format!("Failed to get stream URL: {}", e))?;
         drop(client);

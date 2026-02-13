@@ -844,6 +844,8 @@ pub fn run() {
             config::audio_settings::set_audio_streaming_only,
             config::audio_settings::set_audio_limit_quality_to_device,
             config::audio_settings::set_audio_device_max_sample_rate,
+            config::audio_settings::set_device_sample_rate_limit,
+            config::audio_settings::get_device_sample_rate_limit,
             config::audio_settings::set_audio_normalization_enabled,
             config::audio_settings::set_audio_normalization_target,
             config::audio_settings::set_audio_gapless_enabled,

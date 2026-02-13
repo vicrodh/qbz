@@ -5,7 +5,7 @@
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
   import { ask } from '@tauri-apps/plugin-dialog';
-  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, HelpCircle, Ban, AlertTriangle } from 'lucide-svelte';
+  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, HelpCircle, Ban, AlertTriangle, RefreshCw } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import DeviceDropdown from '../DeviceDropdown.svelte';
@@ -508,7 +508,17 @@
   let streamFirstTrack = $state(false);
   let streamBufferSeconds = $state(3);
   let streamingOnly = $state(false);
-  let limitQualityToDevice = $state(false);  // Disabled in 1.1.9 — detection unreliable (#45)
+  let limitQualityToDevice = $state(false);  // Re-enabled in 1.2.x with manual per-device config
+  let deviceMaxSampleRate = $state<number | null>(null);  // Per-device max sample rate
+
+  // Sample rate options for the dropdown
+  const sampleRateOptions = [
+    { value: 44100, label: '44.1 kHz (CD)' },
+    { value: 48000, label: '48 kHz (DVD)' },
+    { value: 96000, label: '96 kHz (Hi-Res)' },
+    { value: 192000, label: '192 kHz (Hi-Res+)' },
+    { value: 384000, label: '384 kHz (DSD)' },
+  ];
 
   // Backend system state
   let availableBackends = $state<BackendInfo[]>([]);
@@ -2045,6 +2055,16 @@
     }
   }
 
+  async function handleRefreshDevices() {
+    if (isLoadingDevices) return;
+    const backendType = selectedBackend === 'ALSA Direct' ? 'Alsa' :
+                        selectedBackend === 'PipeWire' ? 'PipeWire' :
+                        selectedBackend === 'PulseAudio' ? 'Pulse' : null;
+    if (backendType) {
+      await loadBackendDevices(backendType);
+    }
+  }
+
   async function loadFlatpakStatus() {
     try {
       isFlatpak = await invoke<boolean>('is_running_in_flatpak');
@@ -2121,8 +2141,12 @@
       streamFirstTrack = settings.stream_first_track ?? false;
       streamBufferSeconds = settings.stream_buffer_seconds ?? 3;
       streamingOnly = settings.streaming_only ?? false;
-      limitQualityToDevice = settings.limit_quality_to_device ?? true;
+      limitQualityToDevice = settings.limit_quality_to_device ?? false;
       gaplessPlayback = settings.gapless_enabled ?? true;
+
+      // Load per-device sample rate limit
+      const deviceId = settings.output_device ?? 'default';
+      await loadDeviceSampleRateLimit(deviceId);
     } catch (err) {
       console.error('Failed to load audio settings:', err);
     }
@@ -2337,6 +2361,31 @@
     }
   }
 
+  async function handleDeviceMaxSampleRateChange(rate: number | null) {
+    deviceMaxSampleRate = rate;
+    // Get current device ID
+    const device = deviceByDisplayName.get(outputDevice);
+    const deviceId = outputDevice === 'System Default' ? 'default' : device?.id ?? 'default';
+
+    try {
+      await invoke('set_device_sample_rate_limit', { deviceId, rate });
+      console.log('[Audio] Device max sample rate changed:', deviceId, rate);
+    } catch (err) {
+      console.error('[Audio] Failed to change device max sample rate:', err);
+    }
+  }
+
+  async function loadDeviceSampleRateLimit(deviceId: string) {
+    try {
+      const rate = await invoke<number | null>('get_device_sample_rate_limit', { deviceId });
+      deviceMaxSampleRate = rate;
+      console.log('[Audio] Loaded sample rate limit for', deviceId, ':', rate);
+    } catch (err) {
+      console.error('[Audio] Failed to load device sample rate limit:', err);
+      deviceMaxSampleRate = null;
+    }
+  }
+
   async function handleBackendDeviceChange(deviceName: string) {
     outputDevice = deviceName;
 
@@ -2354,6 +2403,8 @@
       await invoke('set_audio_output_device', { device: deviceId });
       // Store device's max sample rate for quality limiting
       await invoke('set_audio_device_max_sample_rate', { rate: maxSampleRate });
+      // Load per-device sample rate limit for the new device
+      await loadDeviceSampleRateLimit(deviceId ?? 'default');
       // Reinitialize audio - position and audio data preserved for resume.
       await reinitAndResume(deviceId);
       console.log('[Audio] Backend device changed:', deviceName, '(id:', deviceId ?? 'default', ', max_rate:', maxSampleRate ?? 'unknown', ')');
@@ -2944,8 +2995,36 @@
         onchange={handleQualityChange}
       />
     </div>
-    <!-- NOTE: limitQualityToDevice hidden in 1.1.9 — was causing incorrect downgrades (#45) -->
-    <!-- The setting is preserved but hidden until the detection logic is reliable. -->
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.limitQualityToDevice')}</span>
+        <span class="setting-desc">{$t('settings.audio.limitQualityToDeviceDesc')}</span>
+      </div>
+      <Toggle enabled={limitQualityToDevice} onchange={handleLimitQualityToDeviceChange} />
+    </div>
+    {#if limitQualityToDevice}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.maxSampleRate')}</span>
+        <span class="setting-desc">{$t('settings.audio.maxSampleRateDesc')}</span>
+      </div>
+      <Dropdown
+        value={deviceMaxSampleRate ? sampleRateOptions.find(o => o.value === deviceMaxSampleRate)?.label ?? 'No limit' : 'No limit'}
+        options={['No limit', ...sampleRateOptions.map(o => o.label)]}
+        onchange={(label) => {
+          if (label === 'No limit') {
+            handleDeviceMaxSampleRateChange(null);
+          } else {
+            const option = sampleRateOptions.find(o => o.label === label);
+            if (option) handleDeviceMaxSampleRateChange(option.value);
+          }
+        }}
+        wide
+        expandLeft
+        compact
+      />
+    </div>
+    {/if}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.audioBackend')}</span>
@@ -3003,6 +3082,13 @@
           />
           <button
             class="help-icon-btn"
+            onclick={handleRefreshDevices}
+            title={$t('settings.audio.refreshDevices')}
+          >
+            <RefreshCw size={16} />
+          </button>
+          <button
+            class="help-icon-btn"
             onclick={() => showAlsaUtilsHelpModal = true}
             title={$t('settings.audio.helpBitPerfect')}
           >
@@ -3010,23 +3096,41 @@
           </button>
         </div>
       {:else if selectedBackend === 'PipeWire'}
-        <DeviceDropdown
-          value={outputDevice}
-          devices={groupedDeviceOptions}
-          onchange={handleBackendDeviceChange}
-          backend="pipewire"
-          wide
-          expandLeft
-        />
+        <div class="dropdown-with-help">
+          <DeviceDropdown
+            value={outputDevice}
+            devices={groupedDeviceOptions}
+            onchange={handleBackendDeviceChange}
+            backend="pipewire"
+            wide
+            expandLeft
+          />
+          <button
+            class="help-icon-btn"
+            onclick={handleRefreshDevices}
+            title={$t('settings.audio.refreshDevices')}
+          >
+            <RefreshCw size={16} />
+          </button>
+        </div>
       {:else}
-        <Dropdown
-          value={outputDevice}
-          options={deviceOptions}
-          onchange={handleBackendDeviceChange}
-          wide
-          expandLeft
-          compact
-        />
+        <div class="dropdown-with-help">
+          <Dropdown
+            value={outputDevice}
+            options={deviceOptions}
+            onchange={handleBackendDeviceChange}
+            wide
+            expandLeft
+            compact
+          />
+          <button
+            class="help-icon-btn"
+            onclick={handleRefreshDevices}
+            title={$t('settings.audio.refreshDevices')}
+          >
+            <RefreshCw size={16} />
+          </button>
+        </div>
       {/if}
     </div>
     {#if showAlsaPluginSelector}

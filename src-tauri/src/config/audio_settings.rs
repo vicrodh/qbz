@@ -5,6 +5,7 @@
 use crate::audio::{AlsaPlugin, AudioBackendType};
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -30,6 +31,10 @@ pub struct AudioSettings {
     /// Cached max sample rate of the selected device (set when device is selected)
     /// Used when limit_quality_to_device is true
     pub device_max_sample_rate: Option<u32>,
+    /// Per-device sample rate limits: device_id -> max_sample_rate
+    /// Allows different DACs to have independent max sample rate configurations
+    #[serde(default)]
+    pub device_sample_rate_limits: HashMap<String, u32>,
     /// When true, apply volume normalization using ReplayGain metadata.
     /// When false (default), the audio pipeline is 100% bit-perfect — no sample modification.
     pub normalization_enabled: bool,
@@ -56,6 +61,7 @@ impl Default for AudioSettings {
             streaming_only: false, // Disabled by default (cache tracks for instant replay)
             limit_quality_to_device: false, // Disabled in 1.1.9 — detection logic unreliable (#45)
             device_max_sample_rate: None, // Set when device is selected
+            device_sample_rate_limits: HashMap::new(), // Per-device limits (empty = no limit)
             normalization_enabled: false, // Off by default — preserves bit-perfect pipeline
             normalization_target_lufs: -14.0, // Spotify/YouTube standard
             gapless_enabled: false, // Off by default — user opts in
@@ -139,6 +145,10 @@ impl AudioSettingsStore {
             "ALTER TABLE audio_settings ADD COLUMN gapless_enabled INTEGER DEFAULT 0",
             [],
         );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN device_sample_rate_limits TEXT",
+            [],
+        );
 
         Ok(Self { conn })
     }
@@ -157,7 +167,7 @@ impl AudioSettingsStore {
     pub fn get_settings(&self) -> Result<AudioSettings, String> {
         self.conn
             .query_row(
-                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate, normalization_enabled, normalization_target_lufs, gapless_enabled FROM audio_settings WHERE id = 1",
+                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate, normalization_enabled, normalization_target_lufs, gapless_enabled, device_sample_rate_limits FROM audio_settings WHERE id = 1",
                 [],
                 |row| {
                     // Parse backend_type from JSON string
@@ -169,6 +179,12 @@ impl AudioSettingsStore {
                     let alsa_plugin: Option<AlsaPlugin> = row
                         .get::<_, Option<String>>(5)?
                         .and_then(|s| serde_json::from_str(&s).ok());
+
+                    // Parse device_sample_rate_limits from JSON string
+                    let device_sample_rate_limits: HashMap<String, u32> = row
+                        .get::<_, Option<String>>(15)?
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                        .unwrap_or_default();
 
                     Ok(AudioSettings {
                         output_device: row.get(0)?,
@@ -183,6 +199,7 @@ impl AudioSettingsStore {
                         streaming_only: row.get::<_, Option<i64>>(9)?.unwrap_or(0) != 0,
                         limit_quality_to_device: row.get::<_, Option<i64>>(10)?.unwrap_or(1) != 0,
                         device_max_sample_rate: row.get::<_, Option<i64>>(11)?.map(|r| r as u32),
+                        device_sample_rate_limits,
                         normalization_enabled: row.get::<_, Option<i64>>(12)?.unwrap_or(0) != 0,
                         normalization_target_lufs: row.get::<_, Option<f64>>(13)?.unwrap_or(-14.0) as f32,
                         gapless_enabled: row.get::<_, Option<i64>>(14)?.unwrap_or(0) != 0,
@@ -324,6 +341,64 @@ impl AudioSettingsStore {
         Ok(())
     }
 
+    /// Set the sample rate limit for a specific device
+    /// If rate is None, removes the limit for that device
+    pub fn set_device_sample_rate_limit(
+        &self,
+        device_id: &str,
+        rate: Option<u32>,
+    ) -> Result<(), String> {
+        // Get current limits
+        let mut limits = self.get_device_sample_rate_limits()?;
+
+        // Update or remove the limit for this device
+        if let Some(r) = rate {
+            limits.insert(device_id.to_string(), r);
+        } else {
+            limits.remove(device_id);
+        }
+
+        // Serialize and save
+        let json = serde_json::to_string(&limits)
+            .map_err(|e| format!("Failed to serialize device sample rate limits: {}", e))?;
+
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET device_sample_rate_limits = ?1 WHERE id = 1",
+                params![json],
+            )
+            .map_err(|e| format!("Failed to set device sample rate limits: {}", e))?;
+        Ok(())
+    }
+
+    /// Get the sample rate limit for a specific device
+    /// Returns None if no limit is set for this device
+    pub fn get_device_sample_rate_limit(&self, device_id: &str) -> Result<Option<u32>, String> {
+        let limits = self.get_device_sample_rate_limits()?;
+        Ok(limits.get(device_id).copied())
+    }
+
+    /// Get all device sample rate limits
+    fn get_device_sample_rate_limits(&self) -> Result<HashMap<String, u32>, String> {
+        let json: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT device_sample_rate_limits FROM audio_settings WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to get device sample rate limits: {}", e))?;
+
+        match json {
+            Some(s) if !s.is_empty() => {
+                serde_json::from_str(&s).map_err(|e| {
+                    format!("Failed to parse device sample rate limits: {}", e)
+                })
+            }
+            _ => Ok(HashMap::new()),
+        }
+    }
+
     pub fn set_normalization_enabled(&self, enabled: bool) -> Result<(), String> {
         self.conn
             .execute(
@@ -368,6 +443,10 @@ impl AudioSettingsStore {
             .transpose()
             .map_err(|e| format!("Failed to serialize ALSA plugin: {}", e))?;
 
+        // Serialize per-device limits (empty on reset)
+        let limits_json = serde_json::to_string(&defaults.device_sample_rate_limits)
+            .map_err(|e| format!("Failed to serialize device sample rate limits: {}", e))?;
+
         self.conn
             .execute(
                 "UPDATE audio_settings SET
@@ -385,7 +464,8 @@ impl AudioSettingsStore {
                     device_max_sample_rate = ?12,
                     normalization_enabled = ?13,
                     normalization_target_lufs = ?14,
-                    gapless_enabled = ?15
+                    gapless_enabled = ?15,
+                    device_sample_rate_limits = ?16
                 WHERE id = 1",
                 params![
                     defaults.output_device,
@@ -403,6 +483,7 @@ impl AudioSettingsStore {
                     defaults.normalization_enabled as i64,
                     defaults.normalization_target_lufs as f64,
                     defaults.gapless_enabled as i64,
+                    limits_json,
                 ],
             )
             .map_err(|e| format!("Failed to reset audio settings: {}", e))?;
@@ -628,6 +709,42 @@ pub fn set_audio_device_max_sample_rate(
         .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_device_max_sample_rate(rate)
+}
+
+/// Set the sample rate limit for a specific device
+/// If rate is None, removes the limit for that device
+#[tauri::command]
+pub fn set_device_sample_rate_limit(
+    state: tauri::State<'_, AudioSettingsState>,
+    device_id: String,
+    rate: Option<u32>,
+) -> Result<(), String> {
+    log::info!(
+        "Command: set_device_sample_rate_limit device={} rate={:?}",
+        device_id,
+        rate
+    );
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_device_sample_rate_limit(&device_id, rate)
+}
+
+/// Get the sample rate limit for a specific device
+/// Returns None if no limit is set
+#[tauri::command]
+pub fn get_device_sample_rate_limit(
+    state: tauri::State<'_, AudioSettingsState>,
+    device_id: String,
+) -> Result<Option<u32>, String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.get_device_sample_rate_limit(&device_id)
 }
 
 #[tauri::command]
