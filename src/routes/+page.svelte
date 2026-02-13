@@ -1634,6 +1634,7 @@
   async function handleRemoveFromQueue(upcomingIndex: number) {
     try {
       await invoke('remove_upcoming_track', { upcomingIndex });
+      await syncQueueState(); // Refresh UI
       showToast($t('toast.removedFromQueue'), 'info');
     } catch (err) {
       console.error('Failed to remove from queue:', err);

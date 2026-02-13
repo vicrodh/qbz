@@ -243,6 +243,7 @@ impl QueueManager {
         let mut state = self.state.lock().unwrap();
 
         // Calculate the actual track index based on the upcoming index
+        // Must match how get_state() builds the upcoming list
         let actual_index = if state.shuffle {
             // In shuffle mode, upcoming is built from shuffle_order starting at shuffle_position + 1
             let shuffle_pos = state.shuffle_position + 1 + upcoming_index;
@@ -251,9 +252,13 @@ impl QueueManager {
             }
             state.shuffle_order[shuffle_pos]
         } else {
-            // In normal mode, upcoming starts at current_index + 1
-            let curr_idx = state.current_index.unwrap_or(0);
-            curr_idx + 1 + upcoming_index
+            // In normal mode:
+            // - If current_index exists: upcoming starts at current_index + 1
+            // - If current_index is None: upcoming starts at 0 (full queue)
+            match state.current_index {
+                Some(curr_idx) => curr_idx + 1 + upcoming_index,
+                None => upcoming_index,
+            }
         };
 
         if actual_index >= state.tracks.len() {
