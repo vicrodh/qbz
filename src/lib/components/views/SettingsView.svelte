@@ -609,6 +609,11 @@
     });
 
     backendDevices.forEach((device, idx) => {
+      // Skip 'default' device - we already added explicit "System Default" above
+      if (device.id === 'default' || device.name === 'default') {
+        return;
+      }
+
       let displayName = displayNames[idx];
 
       // If duplicate, append device ID to make unique
