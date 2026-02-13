@@ -5,11 +5,11 @@
 //! - minimize_to_tray: Hide to tray when minimizing
 //! - close_to_tray: Hide to tray when closing window
 
-use rusqlite::{Connection, params};
+use log::info;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use log::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TraySettings {
@@ -44,6 +44,9 @@ impl TraySettingsStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open tray settings database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for tray settings database: {}", e))?;
+
         // Create table
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS tray_settings (
@@ -51,15 +54,17 @@ impl TraySettingsStore {
                 enable_tray INTEGER NOT NULL DEFAULT 1,
                 minimize_to_tray INTEGER NOT NULL DEFAULT 0,
                 close_to_tray INTEGER NOT NULL DEFAULT 0
-            );"
-        ).map_err(|e| format!("Failed to create tray settings table: {}", e))?;
+            );",
+        )
+        .map_err(|e| format!("Failed to create tray settings table: {}", e))?;
 
         // Insert default row if it doesn't exist
         conn.execute(
             "INSERT OR IGNORE INTO tray_settings (id, enable_tray, minimize_to_tray, close_to_tray)
             VALUES (1, 1, 0, 0)",
-            []
-        ).map_err(|e| format!("Failed to insert default tray settings: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to insert default tray settings: {}", e))?;
 
         info!("[TraySettings] Database initialized");
 
@@ -148,39 +153,55 @@ impl TraySettingsState {
 
     pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let new_store = TraySettingsStore::new_at(base_dir)?;
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock tray settings store".to_string())?;
         *guard = Some(new_store);
         Ok(())
     }
 
     pub fn teardown(&self) -> Result<(), String> {
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock tray settings store".to_string())?;
         *guard = None;
         Ok(())
     }
 
     pub fn get_settings(&self) -> Result<TraySettings, String> {
-        let guard = self.store.lock().map_err(|_| "Failed to lock tray settings store".to_string())?;
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock tray settings store".to_string())?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
         store.get_settings()
     }
 
     pub fn set_enable_tray(&self, value: bool) -> Result<(), String> {
-        let guard = self.store.lock().map_err(|_| "Failed to lock tray settings store".to_string())?;
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock tray settings store".to_string())?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
         store.set_enable_tray(value)
     }
 
     pub fn set_minimize_to_tray(&self, value: bool) -> Result<(), String> {
-        let guard = self.store.lock().map_err(|_| "Failed to lock tray settings store".to_string())?;
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock tray settings store".to_string())?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
         store.set_minimize_to_tray(value)
     }
 
     pub fn set_close_to_tray(&self, value: bool) -> Result<(), String> {
-        let guard = self.store.lock().map_err(|_| "Failed to lock tray settings store".to_string())?;
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock tray settings store".to_string())?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
         store.set_close_to_tray(value)
     }
@@ -189,18 +210,16 @@ impl TraySettingsState {
 // Tauri commands
 
 #[tauri::command]
-pub fn get_tray_settings(
-    state: tauri::State<TraySettingsState>,
-) -> Result<TraySettings, String> {
+pub fn get_tray_settings(state: tauri::State<TraySettingsState>) -> Result<TraySettings, String> {
     state.get_settings()
 }
 
 #[tauri::command]
-pub fn set_enable_tray(
-    value: bool,
-    state: tauri::State<TraySettingsState>,
-) -> Result<(), String> {
-    info!("[TraySettings] Setting enable_tray to {} (restart required)", value);
+pub fn set_enable_tray(value: bool, state: tauri::State<TraySettingsState>) -> Result<(), String> {
+    info!(
+        "[TraySettings] Setting enable_tray to {} (restart required)",
+        value
+    );
     state.set_enable_tray(value)
 }
 

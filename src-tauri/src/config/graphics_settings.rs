@@ -12,10 +12,10 @@
 //! auto-detection (Wayland/NVIDIA). Use QBZ_HARDWARE_ACCEL=0 env var to
 //! explicitly disable all GPU rendering.
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 // --- Global startup state (set once in main.rs, read-only thereafter) ---
 static GRAPHICS_USING_FALLBACK: AtomicBool = AtomicBool::new(false);
@@ -87,24 +87,24 @@ impl GraphicsSettingsStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open graphics settings database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for graphics settings database: {}", e))?;
+
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS graphics_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 hardware_acceleration INTEGER NOT NULL DEFAULT 0
             );
-            INSERT OR IGNORE INTO graphics_settings (id, hardware_acceleration) VALUES (1, 0);"
-        ).map_err(|e| format!("Failed to create graphics settings table: {}", e))?;
+            INSERT OR IGNORE INTO graphics_settings (id, hardware_acceleration) VALUES (1, 0);",
+        )
+        .map_err(|e| format!("Failed to create graphics settings table: {}", e))?;
 
         // Migrations: add columns (no-op if already present)
         let _ = conn.execute_batch(
-            "ALTER TABLE graphics_settings ADD COLUMN force_x11 INTEGER NOT NULL DEFAULT 0;"
+            "ALTER TABLE graphics_settings ADD COLUMN force_x11 INTEGER NOT NULL DEFAULT 0;",
         );
-        let _ = conn.execute_batch(
-            "ALTER TABLE graphics_settings ADD COLUMN gdk_scale TEXT;"
-        );
-        let _ = conn.execute_batch(
-            "ALTER TABLE graphics_settings ADD COLUMN gdk_dpi_scale TEXT;"
-        );
+        let _ = conn.execute_batch("ALTER TABLE graphics_settings ADD COLUMN gdk_scale TEXT;");
+        let _ = conn.execute_batch("ALTER TABLE graphics_settings ADD COLUMN gdk_dpi_scale TEXT;");
 
         Ok(Self { conn })
     }
@@ -192,8 +192,13 @@ impl GraphicsSettingsState {
 pub fn get_graphics_settings(
     state: tauri::State<'_, GraphicsSettingsState>,
 ) -> Result<GraphicsSettings, String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("Graphics settings store not initialized")?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Graphics settings store not initialized")?;
     store.get_settings()
 }
 
@@ -202,9 +207,17 @@ pub fn set_hardware_acceleration(
     state: tauri::State<'_, GraphicsSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    log::info!("[GraphicsSettings] Setting hardware_acceleration to {} (restart required)", enabled);
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("Graphics settings store not initialized")?;
+    log::info!(
+        "[GraphicsSettings] Setting hardware_acceleration to {} (restart required)",
+        enabled
+    );
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Graphics settings store not initialized")?;
     store.set_hardware_acceleration(enabled)
 }
 
@@ -213,9 +226,17 @@ pub fn set_force_x11(
     state: tauri::State<'_, GraphicsSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    log::info!("[GraphicsSettings] Setting force_x11 to {} (restart required)", enabled);
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("Graphics settings store not initialized")?;
+    log::info!(
+        "[GraphicsSettings] Setting force_x11 to {} (restart required)",
+        enabled
+    );
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Graphics settings store not initialized")?;
     store.set_force_x11(enabled)
 }
 
@@ -224,9 +245,17 @@ pub fn set_gdk_scale(
     state: tauri::State<'_, GraphicsSettingsState>,
     value: Option<String>,
 ) -> Result<(), String> {
-    log::info!("[GraphicsSettings] Setting gdk_scale to {:?} (restart required)", value);
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("Graphics settings store not initialized")?;
+    log::info!(
+        "[GraphicsSettings] Setting gdk_scale to {:?} (restart required)",
+        value
+    );
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Graphics settings store not initialized")?;
     store.set_gdk_scale(value)
 }
 
@@ -235,9 +264,17 @@ pub fn set_gdk_dpi_scale(
     state: tauri::State<'_, GraphicsSettingsState>,
     value: Option<String>,
 ) -> Result<(), String> {
-    log::info!("[GraphicsSettings] Setting gdk_dpi_scale to {:?} (restart required)", value);
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("Graphics settings store not initialized")?;
+    log::info!(
+        "[GraphicsSettings] Setting gdk_dpi_scale to {:?} (restart required)",
+        value
+    );
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Graphics settings store not initialized")?;
     store.set_gdk_dpi_scale(value)
 }
 

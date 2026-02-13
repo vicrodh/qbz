@@ -29,7 +29,7 @@ impl BlacklistService {
             .map_err(|e| format!("Failed to open blacklist database: {}", e))?;
 
         // Enable WAL mode for better concurrent access
-        conn.execute_batch("PRAGMA journal_mode=WAL;")
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
             .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
 
         let service = Self {
@@ -97,7 +97,10 @@ impl BlacklistService {
             .map_err(|_| "Failed to acquire write lock")?;
         *set = ids.into_iter().collect();
 
-        log::info!("[Blacklist] Loaded {} blacklisted artists into memory", count);
+        log::info!(
+            "[Blacklist] Loaded {} blacklisted artists into memory",
+            count
+        );
         Ok(())
     }
 
@@ -138,7 +141,12 @@ impl BlacklistService {
     }
 
     /// Add an artist to the blacklist
-    pub fn add(&self, artist_id: u64, artist_name: &str, notes: Option<&str>) -> Result<(), String> {
+    pub fn add(
+        &self,
+        artist_id: u64,
+        artist_name: &str,
+        notes: Option<&str>,
+    ) -> Result<(), String> {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap_or_default()

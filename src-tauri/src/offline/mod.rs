@@ -7,7 +7,7 @@
 //! - Offline settings persistence
 //! - Pending playlist sync queue (playlists created offline)
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -105,6 +105,9 @@ impl OfflineStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open offline settings database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for offline settings database: {}", e))?;
+
         // Create base tables (with original schema for backward compatibility)
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS offline_settings (
@@ -136,8 +139,9 @@ impl OfflineStore {
                 created_at INTEGER NOT NULL,
                 sent INTEGER NOT NULL DEFAULT 0
             );
-            CREATE INDEX IF NOT EXISTS idx_scrobble_queue_sent ON scrobble_queue(sent);"
-        ).map_err(|e| format!("Failed to create offline settings table: {}", e))?;
+            CREATE INDEX IF NOT EXISTS idx_scrobble_queue_sent ON scrobble_queue(sent);",
+        )
+        .map_err(|e| format!("Failed to create offline settings table: {}", e))?;
 
         // Migration: Add new columns if they don't exist (run each separately to handle partial migrations)
         let migrations = [
@@ -274,13 +278,14 @@ impl OfflineStore {
 
     /// Get all pending (unsynced) playlists
     pub fn get_pending_playlists(&self) -> Result<Vec<PendingPlaylist>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(
                 "SELECT id, name, description, is_public, track_ids,
                         COALESCE(local_track_ids, '[]'),
                         COALESCE(local_track_paths, '[]'),
                         created_at, synced, qobuz_playlist_id
-                 FROM pending_playlist_sync WHERE synced = 0 ORDER BY created_at ASC"
+                 FROM pending_playlist_sync WHERE synced = 0 ORDER BY created_at ASC",
             )
             .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
@@ -290,10 +295,12 @@ impl OfflineStore {
                 let track_ids: Vec<u64> = serde_json::from_str(&track_ids_json).unwrap_or_default();
 
                 let local_track_ids_json: String = row.get(5)?;
-                let local_track_ids: Vec<i64> = serde_json::from_str(&local_track_ids_json).unwrap_or_default();
+                let local_track_ids: Vec<i64> =
+                    serde_json::from_str(&local_track_ids_json).unwrap_or_default();
 
                 let local_track_paths_json: String = row.get(6)?;
-                let local_track_paths: Vec<String> = serde_json::from_str(&local_track_paths_json).unwrap_or_default();
+                let local_track_paths: Vec<String> =
+                    serde_json::from_str(&local_track_paths_json).unwrap_or_default();
 
                 Ok(PendingPlaylist {
                     id: row.get(0)?,
@@ -316,7 +323,11 @@ impl OfflineStore {
     }
 
     /// Update the Qobuz playlist ID without marking as synced (for partial sync recovery)
-    pub fn update_qobuz_playlist_id(&self, pending_id: i64, qobuz_playlist_id: u64) -> Result<(), String> {
+    pub fn update_qobuz_playlist_id(
+        &self,
+        pending_id: i64,
+        qobuz_playlist_id: u64,
+    ) -> Result<(), String> {
         self.conn
             .execute(
                 "UPDATE pending_playlist_sync SET qobuz_playlist_id = ?1 WHERE id = ?2",
@@ -327,7 +338,11 @@ impl OfflineStore {
     }
 
     /// Mark a pending playlist as synced with its Qobuz ID
-    pub fn mark_playlist_synced(&self, pending_id: i64, qobuz_playlist_id: u64) -> Result<(), String> {
+    pub fn mark_playlist_synced(
+        &self,
+        pending_id: i64,
+        qobuz_playlist_id: u64,
+    ) -> Result<(), String> {
         self.conn
             .execute(
                 "UPDATE pending_playlist_sync SET synced = 1, qobuz_playlist_id = ?1 WHERE id = ?2",
@@ -361,15 +376,13 @@ impl OfflineStore {
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
         let (current_qobuz_json, current_local_paths_json): (String, String) = stmt
-            .query_row(params![pending_id], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
+            .query_row(params![pending_id], |row| Ok((row.get(0)?, row.get(1)?)))
             .map_err(|e| format!("Failed to get pending playlist: {}", e))?;
 
-        let mut current_qobuz: Vec<u64> = serde_json::from_str(&current_qobuz_json)
-            .unwrap_or_default();
-        let mut current_local_paths: Vec<String> = serde_json::from_str(&current_local_paths_json)
-            .unwrap_or_default();
+        let mut current_qobuz: Vec<u64> =
+            serde_json::from_str(&current_qobuz_json).unwrap_or_default();
+        let mut current_local_paths: Vec<String> =
+            serde_json::from_str(&current_local_paths_json).unwrap_or_default();
 
         // Append new tracks
         current_qobuz.extend_from_slice(qobuz_track_ids);
@@ -432,10 +445,11 @@ impl OfflineStore {
 
     /// Get all unsent scrobbles (up to 50 for Last.fm batch limit)
     pub fn get_queued_scrobbles(&self, limit: u32) -> Result<Vec<QueuedScrobble>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(
                 "SELECT id, artist, track, album, timestamp, created_at, sent
-                 FROM scrobble_queue WHERE sent = 0 ORDER BY timestamp ASC LIMIT ?1"
+                 FROM scrobble_queue WHERE sent = 0 ORDER BY timestamp ASC LIMIT ?1",
             )
             .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
@@ -470,11 +484,13 @@ impl OfflineStore {
             placeholders.join(",")
         );
 
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(&sql)
             .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
-        let params: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        let params: Vec<&dyn rusqlite::ToSql> =
+            ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
         stmt.execute(params.as_slice())
             .map_err(|e| format!("Failed to mark scrobbles as sent: {}", e))?;
 
@@ -489,7 +505,8 @@ impl OfflineStore {
             .unwrap_or(0)
             - (older_than_days as i64 * 24 * 60 * 60);
 
-        let deleted = self.conn
+        let deleted = self
+            .conn
             .execute(
                 "DELETE FROM scrobble_queue WHERE sent = 1 AND created_at < ?1",
                 params![cutoff],
@@ -532,7 +549,10 @@ impl OfflineState {
 
     pub fn init_at(&self, base_dir: &std::path::Path) -> Result<(), String> {
         let new_store = OfflineStore::new_at(base_dir)?;
-        let mut guard = self.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let mut guard = self
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
         *guard = Some(new_store);
         Ok(())
     }
@@ -583,7 +603,12 @@ pub async fn check_network_connectivity() -> bool {
                 }
             }
             Err(e) => {
-                log::warn!("Network check attempt {} to {} failed: {}", attempt, endpoint, e);
+                log::warn!(
+                    "Network check attempt {} to {} failed: {}",
+                    attempt,
+                    endpoint,
+                    e
+                );
             }
         }
 
@@ -625,8 +650,13 @@ pub mod commands {
         offline_state: State<'_, OfflineState>,
     ) -> Result<OfflineStatus, String> {
         let settings = {
-            let guard__ = offline_state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-            let store = guard__.as_ref().ok_or("No active session - please log in")?;
+            let guard__ = offline_state
+                .store
+                .lock()
+                .map_err(|e| format!("Lock error: {}", e))?;
+            let store = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
             store.get_settings()?
         };
 
@@ -659,11 +689,14 @@ pub mod commands {
 
     /// Get offline settings
     #[tauri::command]
-    pub fn get_offline_settings(
-        state: State<'_, OfflineState>,
-    ) -> Result<OfflineSettings, String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+    pub fn get_offline_settings(state: State<'_, OfflineState>) -> Result<OfflineSettings, String> {
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.get_settings()
     }
 
@@ -675,8 +708,13 @@ pub mod commands {
         app_handle: AppHandle,
     ) -> Result<OfflineStatus, String> {
         {
-            let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-            let store = guard__.as_ref().ok_or("No active session - please log in")?;
+            let guard__ = state
+                .store
+                .lock()
+                .map_err(|e| format!("Lock error: {}", e))?;
+            let store = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
             store.set_manual_offline_mode(enabled)?;
         }
 
@@ -695,8 +733,13 @@ pub mod commands {
         enabled: bool,
         state: State<'_, OfflineState>,
     ) -> Result<(), String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.set_show_partial_playlists(enabled)
     }
 
@@ -706,8 +749,13 @@ pub mod commands {
         enabled: bool,
         state: State<'_, OfflineState>,
     ) -> Result<(), String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.set_allow_cast_while_offline(enabled)
     }
 
@@ -717,8 +765,13 @@ pub mod commands {
         enabled: bool,
         state: State<'_, OfflineState>,
     ) -> Result<(), String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.set_allow_immediate_scrobbling(enabled)
     }
 
@@ -728,8 +781,13 @@ pub mod commands {
         enabled: bool,
         state: State<'_, OfflineState>,
     ) -> Result<(), String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.set_allow_accumulated_scrobbling(enabled)
     }
 
@@ -739,8 +797,13 @@ pub mod commands {
         enabled: bool,
         state: State<'_, OfflineState>,
     ) -> Result<(), String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.set_show_network_folders_in_manual_offline(enabled)
     }
 
@@ -762,9 +825,20 @@ pub mod commands {
         local_track_paths: Vec<String>,
         state: State<'_, OfflineState>,
     ) -> Result<i64, String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
-        store.create_pending_playlist(&name, description.as_deref(), is_public, &track_ids, &local_track_paths)
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
+        store.create_pending_playlist(
+            &name,
+            description.as_deref(),
+            is_public,
+            &track_ids,
+            &local_track_paths,
+        )
     }
 
     /// Get all playlists pending sync
@@ -772,8 +846,13 @@ pub mod commands {
     pub fn get_pending_playlists(
         state: State<'_, OfflineState>,
     ) -> Result<Vec<PendingPlaylist>, String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.get_pending_playlists()
     }
 
@@ -785,18 +864,26 @@ pub mod commands {
         local_track_paths: Vec<String>,
         state: State<'_, OfflineState>,
     ) -> Result<(), String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.add_tracks_to_pending_playlist(pending_id, &qobuz_track_ids, &local_track_paths)
     }
 
     /// Get count of pending playlists
     #[tauri::command]
-    pub fn get_pending_playlist_count(
-        state: State<'_, OfflineState>,
-    ) -> Result<u32, String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+    pub fn get_pending_playlist_count(state: State<'_, OfflineState>) -> Result<u32, String> {
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.get_pending_playlist_count()
     }
 
@@ -807,8 +894,13 @@ pub mod commands {
         qobuz_playlist_id: u64,
         state: State<'_, OfflineState>,
     ) -> Result<(), String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.update_qobuz_playlist_id(pending_id, qobuz_playlist_id)
     }
 
@@ -819,8 +911,13 @@ pub mod commands {
         qobuz_playlist_id: u64,
         state: State<'_, OfflineState>,
     ) -> Result<(), String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.mark_playlist_synced(pending_id, qobuz_playlist_id)
     }
 
@@ -830,8 +927,13 @@ pub mod commands {
         pending_id: i64,
         state: State<'_, OfflineState>,
     ) -> Result<(), String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.delete_pending_playlist(pending_id)
     }
 
@@ -846,8 +948,13 @@ pub mod commands {
         timestamp: i64,
         state: State<'_, OfflineState>,
     ) -> Result<i64, String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.queue_scrobble(&artist, &track, album.as_deref(), timestamp)
     }
 
@@ -857,8 +964,13 @@ pub mod commands {
         limit: Option<u32>,
         state: State<'_, OfflineState>,
     ) -> Result<Vec<QueuedScrobble>, String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.get_queued_scrobbles(limit.unwrap_or(50))
     }
 
@@ -868,18 +980,26 @@ pub mod commands {
         ids: Vec<i64>,
         state: State<'_, OfflineState>,
     ) -> Result<(), String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.mark_scrobbles_sent(&ids)
     }
 
     /// Get count of queued (unsent) scrobbles
     #[tauri::command]
-    pub fn get_queued_scrobble_count(
-        state: State<'_, OfflineState>,
-    ) -> Result<u32, String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+    pub fn get_queued_scrobble_count(state: State<'_, OfflineState>) -> Result<u32, String> {
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.get_queued_scrobble_count()
     }
 
@@ -889,8 +1009,13 @@ pub mod commands {
         older_than_days: Option<u32>,
         state: State<'_, OfflineState>,
     ) -> Result<u32, String> {
-        let guard__ = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-        let store = guard__.as_ref().ok_or("No active session - please log in")?;
+        let guard__ = state
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        let store = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         store.cleanup_sent_scrobbles(older_than_days.unwrap_or(7))
     }
 }

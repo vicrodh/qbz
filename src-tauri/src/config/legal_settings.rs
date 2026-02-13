@@ -3,11 +3,11 @@
 //! Persists user acceptance of legal terms:
 //! - qobuz_tos_accepted: User has accepted Qobuz Terms of Service
 
-use rusqlite::{Connection, params};
+use log::info;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use log::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LegalSettings {
@@ -36,19 +36,24 @@ impl LegalSettingsStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open legal settings database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for legal settings database: {}", e))?;
+
         // Create table
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS legal_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 qobuz_tos_accepted INTEGER NOT NULL DEFAULT 0
-            );"
-        ).map_err(|e| format!("Failed to create legal settings table: {}", e))?;
+            );",
+        )
+        .map_err(|e| format!("Failed to create legal settings table: {}", e))?;
 
         // Insert default row if it doesn't exist
         conn.execute(
             "INSERT OR IGNORE INTO legal_settings (id, qobuz_tos_accepted) VALUES (1, 0)",
-            []
-        ).map_err(|e| format!("Failed to insert default legal settings: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to insert default legal settings: {}", e))?;
 
         info!("[LegalSettings] Database initialized");
 
@@ -117,9 +122,7 @@ pub fn get_legal_settings(
 }
 
 #[tauri::command]
-pub fn get_qobuz_tos_accepted(
-    state: tauri::State<'_, LegalSettingsState>,
-) -> Result<bool, String> {
+pub fn get_qobuz_tos_accepted(state: tauri::State<'_, LegalSettingsState>) -> Result<bool, String> {
     let guard = state.lock().map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     let settings = store.get_settings()?;

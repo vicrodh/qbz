@@ -508,9 +508,11 @@ impl ArtistVectorStore {
 
         let vector_count: i64 = self
             .conn
-            .query_row("SELECT COUNT(DISTINCT artist_idx) FROM vector_entries", [], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(DISTINCT artist_idx) FROM vector_entries",
+                [],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Failed to count vectors: {}", e))?;
 
         let entry_count: i64 = self
@@ -663,7 +665,9 @@ mod tests {
 
         // Query similar to A
         let query = vec_a.clone();
-        let results = store.find_nearest(&query, 5, &["artist-a".to_string()]).unwrap();
+        let results = store
+            .find_nearest(&query, 5, &["artist-a".to_string()])
+            .unwrap();
 
         // B should be most similar (both connect to each other)
         assert!(!results.is_empty());

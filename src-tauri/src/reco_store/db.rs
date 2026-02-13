@@ -4,7 +4,9 @@ use rusqlite::{params, Connection};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::reco_store::{AlbumCardMeta, ArtistCardMeta, RecoEventInput, TopArtistSeed, TrackDisplayMeta};
+use crate::reco_store::{
+    AlbumCardMeta, ArtistCardMeta, RecoEventInput, TopArtistSeed, TrackDisplayMeta,
+};
 
 #[derive(Debug, Clone)]
 pub struct RecoEventRecord {
@@ -31,8 +33,11 @@ pub struct RecoStoreDb {
 
 impl RecoStoreDb {
     pub fn new(path: &Path) -> Result<Self, String> {
-        let conn = Connection::open(path)
-            .map_err(|e| format!("Failed to open reco database: {}", e))?;
+        let conn =
+            Connection::open(path).map_err(|e| format!("Failed to open reco database: {}", e))?;
+
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for reco database: {}", e))?;
         let db = Self { conn };
         db.init()?;
         Ok(db)
@@ -150,7 +155,8 @@ impl RecoStoreDb {
     }
 
     pub fn get_recent_album_ids(&self, limit: u32) -> Result<Vec<String>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(
                 r#"
                 SELECT album_id, MAX(created_at) AS last_played
@@ -175,7 +181,8 @@ impl RecoStoreDb {
     }
 
     pub fn get_recent_track_ids(&self, limit: u32) -> Result<Vec<u64>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(
                 r#"
                 SELECT track_id, MAX(created_at) AS last_played
@@ -272,7 +279,8 @@ impl RecoStoreDb {
 
     /// Get unique album_ids that have NULL genre_id (for backfill)
     pub fn get_album_ids_without_genre(&self, limit: u32) -> Result<Vec<String>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(
                 r#"
                 SELECT DISTINCT album_id
@@ -296,7 +304,8 @@ impl RecoStoreDb {
 
     /// Update genre_id for all events with a given album_id
     pub fn update_genre_for_album(&self, album_id: &str, genre_id: u64) -> Result<u64, String> {
-        let affected = self.conn
+        let affected = self
+            .conn
             .execute(
                 "UPDATE reco_events SET genre_id = ? WHERE album_id = ? AND genre_id IS NULL",
                 params![genre_id, album_id],
@@ -306,7 +315,8 @@ impl RecoStoreDb {
     }
 
     pub fn get_top_artist_ids(&self, limit: u32) -> Result<Vec<TopArtistSeed>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(
                 r#"
                 SELECT artist_id, COUNT(*) AS play_count, MAX(created_at) AS last_played
@@ -336,7 +346,8 @@ impl RecoStoreDb {
     }
 
     pub fn get_favorite_album_ids(&self, limit: u32) -> Result<Vec<String>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(
                 r#"
                 SELECT album_id, MAX(created_at) AS last_favorite
@@ -361,7 +372,8 @@ impl RecoStoreDb {
     }
 
     pub fn get_favorite_track_ids(&self, limit: u32) -> Result<Vec<u64>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(
                 r#"
                 SELECT track_id, MAX(created_at) AS last_favorite
@@ -461,8 +473,13 @@ impl RecoStoreDb {
         Ok(count > 0)
     }
 
-    pub fn get_scored_album_ids(&self, score_type: &str, limit: u32) -> Result<Vec<String>, String> {
-        let mut stmt = self.conn
+    pub fn get_scored_album_ids(
+        &self,
+        score_type: &str,
+        limit: u32,
+    ) -> Result<Vec<String>, String> {
+        let mut stmt = self
+            .conn
             .prepare(
                 r#"
                 SELECT album_id
@@ -486,7 +503,8 @@ impl RecoStoreDb {
     }
 
     pub fn get_scored_track_ids(&self, score_type: &str, limit: u32) -> Result<Vec<u64>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(
                 r#"
                 SELECT track_id
@@ -514,7 +532,8 @@ impl RecoStoreDb {
         score_type: &str,
         limit: u32,
     ) -> Result<Vec<(u64, f64)>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare(
                 r#"
                 SELECT artist_id, score
@@ -598,7 +617,9 @@ impl RecoStoreDb {
             placeholders.join(",")
         );
 
-        let mut stmt = self.conn.prepare(&query)
+        let mut stmt = self
+            .conn
+            .prepare(&query)
             .map_err(|e| format!("Failed to prepare album meta query: {}", e))?;
 
         let params_vec: Vec<Box<dyn rusqlite::ToSql>> = ids
@@ -606,7 +627,8 @@ impl RecoStoreDb {
             .map(|id| Box::new(id.clone()) as Box<dyn rusqlite::ToSql>)
             .collect();
 
-        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
 
         let rows = stmt
             .query_map(params_refs.as_slice(), |row| {
@@ -670,7 +692,9 @@ impl RecoStoreDb {
             placeholders.join(",")
         );
 
-        let mut stmt = self.conn.prepare(&query)
+        let mut stmt = self
+            .conn
+            .prepare(&query)
             .map_err(|e| format!("Failed to prepare track meta query: {}", e))?;
 
         let params_vec: Vec<Box<dyn rusqlite::ToSql>> = ids
@@ -678,7 +702,8 @@ impl RecoStoreDb {
             .map(|id| Box::new(*id as i64) as Box<dyn rusqlite::ToSql>)
             .collect();
 
-        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
 
         let rows = stmt
             .query_map(params_refs.as_slice(), |row| {
@@ -755,7 +780,9 @@ impl RecoStoreDb {
             placeholders.join(",")
         );
 
-        let mut stmt = self.conn.prepare(&query)
+        let mut stmt = self
+            .conn
+            .prepare(&query)
             .map_err(|e| format!("Failed to prepare artist meta query: {}", e))?;
 
         let params_vec: Vec<Box<dyn rusqlite::ToSql>> = ids
@@ -763,7 +790,8 @@ impl RecoStoreDb {
             .map(|id| Box::new(*id as i64) as Box<dyn rusqlite::ToSql>)
             .collect();
 
-        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
 
         let rows = stmt
             .query_map(params_refs.as_slice(), |row| {
@@ -771,7 +799,11 @@ impl RecoStoreDb {
                 Ok(ArtistCardMeta {
                     id: row.get(0)?,
                     name: row.get(1)?,
-                    image: if image_url.is_empty() { None } else { Some(image_url) },
+                    image: if image_url.is_empty() {
+                        None
+                    } else {
+                        Some(image_url)
+                    },
                     play_count: None, // filled by caller from seeds
                 })
             })

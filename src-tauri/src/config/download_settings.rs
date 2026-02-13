@@ -2,7 +2,7 @@
 //!
 //! Stores user preferences for download path and library integration.
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -42,6 +42,9 @@ impl DownloadSettingsStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open download settings database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for download settings database: {}", e))?;
+
         let default_settings = DownloadSettings::default();
 
         conn.execute_batch(
@@ -49,14 +52,16 @@ impl DownloadSettingsStore {
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 download_root TEXT NOT NULL,
                 show_in_library INTEGER NOT NULL DEFAULT 0
-            );"
-        ).map_err(|e| format!("Failed to create download settings table: {}", e))?;
+            );",
+        )
+        .map_err(|e| format!("Failed to create download settings table: {}", e))?;
 
         conn.execute(
             "INSERT OR IGNORE INTO download_settings (id, download_root, show_in_library)
              VALUES (1, ?1, 0)",
             params![default_settings.download_root],
-        ).map_err(|e| format!("Failed to initialize download settings: {}", e))?;
+        )
+        .map_err(|e| format!("Failed to initialize download settings: {}", e))?;
 
         Ok(Self { conn })
     }

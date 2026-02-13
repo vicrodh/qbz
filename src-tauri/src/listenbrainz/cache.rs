@@ -151,7 +151,11 @@ impl ListenBrainzCache {
     }
 
     /// Save token and username
-    pub fn set_credentials(&self, token: Option<&str>, user_name: Option<&str>) -> Result<(), String> {
+    pub fn set_credentials(
+        &self,
+        token: Option<&str>,
+        user_name: Option<&str>,
+    ) -> Result<(), String> {
         let now = Self::current_timestamp();
         self.conn
             .execute(
@@ -173,7 +177,9 @@ impl ListenBrainzCache {
     pub fn is_enabled(&self) -> Result<bool, String> {
         let enabled: i64 = self
             .conn
-            .query_row("SELECT enabled FROM lb_settings WHERE id = 1", [], |row| row.get(0))
+            .query_row("SELECT enabled FROM lb_settings WHERE id = 1", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(1);
         Ok(enabled != 0)
     }
@@ -208,7 +214,8 @@ impl ListenBrainzCache {
         self.enforce_queue_limits()?;
 
         let now = Self::current_timestamp();
-        let artist_mbids_json = artist_mbids.map(|ids| serde_json::to_string(ids).unwrap_or_default());
+        let artist_mbids_json =
+            artist_mbids.map(|ids| serde_json::to_string(ids).unwrap_or_default());
 
         self.conn
             .execute(
@@ -247,7 +254,9 @@ impl ListenBrainzCache {
         // Remove excess entries (keep newest)
         let count: i64 = self
             .conn
-            .query_row("SELECT COUNT(*) FROM lb_queue WHERE sent = 0", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM lb_queue WHERE sent = 0", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         if count >= QUEUE_MAX_SIZE {
@@ -282,8 +291,8 @@ impl ListenBrainzCache {
         let listens = stmt
             .query_map(params![limit], |row| {
                 let artist_mbids_json: Option<String> = row.get(7)?;
-                let artist_mbids: Option<Vec<String>> = artist_mbids_json
-                    .and_then(|json| serde_json::from_str(&json).ok());
+                let artist_mbids: Option<Vec<String>> =
+                    artist_mbids_json.and_then(|json| serde_json::from_str(&json).ok());
 
                 Ok(QueuedListen {
                     id: row.get(0)?,
@@ -325,7 +334,8 @@ impl ListenBrainzCache {
             .prepare(&sql)
             .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
-        let params: Vec<&dyn rusqlite::ToSql> = ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        let params: Vec<&dyn rusqlite::ToSql> =
+            ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
         stmt.execute(params.as_slice())
             .map_err(|e| format!("Failed to mark listens as sent: {}", e))?;
 
@@ -346,11 +356,9 @@ impl ListenBrainzCache {
     /// Get count of queued (unsent) listens
     pub fn get_queue_count(&self) -> Result<u32, String> {
         self.conn
-            .query_row(
-                "SELECT COUNT(*) FROM lb_queue WHERE sent = 0",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
+            .query_row("SELECT COUNT(*) FROM lb_queue WHERE sent = 0", [], |row| {
+                row.get::<_, i64>(0)
+            })
             .map(|count| count as u32)
             .map_err(|e| format!("Failed to count queued listens: {}", e))
     }

@@ -296,7 +296,11 @@ impl MusicBrainzCache {
     }
 
     /// Cache artist relationships
-    pub fn set_artist_relations(&self, mbid: &str, data: &ArtistRelationships) -> Result<(), String> {
+    pub fn set_artist_relations(
+        &self,
+        mbid: &str,
+        data: &ArtistRelationships,
+    ) -> Result<(), String> {
         let fetched_at = Self::current_timestamp();
         let json = serde_json::to_string(data)
             .map_err(|e| format!("Failed to serialize relations: {}", e))?;
@@ -350,7 +354,10 @@ impl MusicBrainzCache {
             .map_err(|e| format!("Failed to cleanup relations: {}", e))?;
 
         if total_deleted > 0 {
-            log::info!("MusicBrainz cache cleanup: removed {} expired entries", total_deleted);
+            log::info!(
+                "MusicBrainz cache cleanup: removed {} expired entries",
+                total_deleted
+            );
         }
 
         Ok(total_deleted)
@@ -392,7 +399,9 @@ impl MusicBrainzCache {
 
         let relations: i64 = self
             .conn
-            .query_row("SELECT COUNT(*) FROM mb_artist_relations", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM mb_artist_relations", [], |row| {
+                row.get(0)
+            })
             .unwrap_or(0);
 
         Ok(CacheStats {

@@ -1,4 +1,4 @@
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -85,7 +85,7 @@ impl SessionStore {
             .map_err(|e| format!("Failed to open session database: {}", e))?;
 
         // Enable WAL mode for better concurrent access
-        conn.execute_batch("PRAGMA journal_mode=WAL;")
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
             .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
 
         // Create tables
@@ -130,7 +130,8 @@ impl SessionStore {
                 [],
                 |row| row.get(0),
             )
-            .unwrap_or(0) > 0;
+            .unwrap_or(0)
+            > 0;
 
         if !has_hires {
             let _ = conn.execute_batch(
@@ -138,7 +139,7 @@ impl SessionStore {
                 ALTER TABLE queue_tracks ADD COLUMN hires INTEGER NOT NULL DEFAULT 0;
                 ALTER TABLE queue_tracks ADD COLUMN bit_depth INTEGER;
                 ALTER TABLE queue_tracks ADD COLUMN sample_rate REAL;
-                "
+                ",
             );
         }
 
@@ -149,7 +150,8 @@ impl SessionStore {
                 [],
                 |row| row.get(0),
             )
-            .unwrap_or(0) > 0;
+            .unwrap_or(0)
+            > 0;
 
         if !has_is_local {
             let _ = conn.execute_batch(
@@ -157,7 +159,7 @@ impl SessionStore {
                 ALTER TABLE queue_tracks ADD COLUMN is_local INTEGER NOT NULL DEFAULT 0;
                 ALTER TABLE queue_tracks ADD COLUMN album_id TEXT;
                 ALTER TABLE queue_tracks ADD COLUMN artist_id INTEGER;
-                "
+                ",
             );
         }
 
@@ -167,13 +169,14 @@ impl SessionStore {
                 [],
                 |row| row.get(0),
             )
-            .unwrap_or(0) > 0;
+            .unwrap_or(0)
+            > 0;
 
         if !has_source {
             let _ = conn.execute_batch(
                 "
                 ALTER TABLE queue_tracks ADD COLUMN source TEXT;
-                "
+                ",
             );
         }
 
@@ -188,7 +191,8 @@ impl SessionStore {
             .as_secs() as i64;
 
         // Use a transaction for atomicity
-        self.conn.execute("BEGIN TRANSACTION", [])
+        self.conn
+            .execute("BEGIN TRANSACTION", [])
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
         // Clear existing queue
@@ -249,7 +253,8 @@ impl SessionStore {
             return Err(format!("Failed to update player state: {}", e));
         }
 
-        self.conn.execute("COMMIT", [])
+        self.conn
+            .execute("COMMIT", [])
             .map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
         Ok(())
@@ -359,7 +364,8 @@ impl SessionStore {
 
     /// Clear the session (e.g., on logout)
     pub fn clear_session(&self) -> Result<(), String> {
-        self.conn.execute("DELETE FROM queue_tracks", [])
+        self.conn
+            .execute("DELETE FROM queue_tracks", [])
             .map_err(|e| format!("Failed to clear queue: {}", e))?;
 
         self.conn.execute(
@@ -393,7 +399,10 @@ impl SessionStoreState {
     /// Initialize the store at a specific directory
     pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let store = SessionStore::new_at(base_dir)?;
-        *self.store.lock().map_err(|e| format!("Lock error: {}", e))? = Some(store);
+        *self
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))? = Some(store);
         Ok(())
     }
 
@@ -428,7 +437,10 @@ pub fn save_session_state(
         saved_at: 0, // Will be set in save_session
     };
 
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.save_session(&session)
 }
@@ -437,7 +449,10 @@ pub fn save_session_state(
 pub fn load_session_state(
     state: tauri::State<'_, SessionStoreState>,
 ) -> Result<PersistedSession, String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.load_session()
 }
@@ -447,7 +462,10 @@ pub fn save_session_volume(
     state: tauri::State<'_, SessionStoreState>,
     volume: f32,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.save_volume(volume)
 }
@@ -457,7 +475,10 @@ pub fn save_session_position(
     state: tauri::State<'_, SessionStoreState>,
     position_secs: u64,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.save_position(position_secs)
 }
@@ -468,16 +489,20 @@ pub fn save_session_playback_mode(
     shuffle: bool,
     repeat_mode: String,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.save_playback_mode(shuffle, &repeat_mode)
 }
 
 #[tauri::command]
-pub fn clear_session(
-    state: tauri::State<'_, SessionStoreState>,
-) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+pub fn clear_session(state: tauri::State<'_, SessionStoreState>) -> Result<(), String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.clear_session()
 }

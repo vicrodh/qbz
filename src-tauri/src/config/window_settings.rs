@@ -3,11 +3,11 @@
 //! Stores user preferences for window title bar behavior:
 //! - use_system_titlebar: Use OS native window decorations instead of custom CSD title bar
 
-use rusqlite::{Connection, params};
+use log::info;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use log::info;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WindowSettings {
@@ -36,18 +36,23 @@ impl WindowSettingsStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open window settings database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for window settings database: {}", e))?;
+
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS window_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 use_system_titlebar INTEGER NOT NULL DEFAULT 0
-            );"
-        ).map_err(|e| format!("Failed to create window settings table: {}", e))?;
+            );",
+        )
+        .map_err(|e| format!("Failed to create window settings table: {}", e))?;
 
         conn.execute(
             "INSERT OR IGNORE INTO window_settings (id, use_system_titlebar)
             VALUES (1, 0)",
-            []
-        ).map_err(|e| format!("Failed to insert default window settings: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to insert default window settings: {}", e))?;
 
         info!("[WindowSettings] Database initialized");
 
@@ -111,14 +116,24 @@ impl WindowSettingsState {
     }
 
     pub fn get_settings(&self) -> Result<WindowSettings, String> {
-        let guard = self.store.lock().map_err(|_| "Failed to lock window settings store".to_string())?;
-        let store = guard.as_ref().ok_or("Window settings store not initialized")?;
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock window settings store".to_string())?;
+        let store = guard
+            .as_ref()
+            .ok_or("Window settings store not initialized")?;
         store.get_settings()
     }
 
     pub fn set_use_system_titlebar(&self, value: bool) -> Result<(), String> {
-        let guard = self.store.lock().map_err(|_| "Failed to lock window settings store".to_string())?;
-        let store = guard.as_ref().ok_or("Window settings store not initialized")?;
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock window settings store".to_string())?;
+        let store = guard
+            .as_ref()
+            .ok_or("Window settings store not initialized")?;
         store.set_use_system_titlebar(value)
     }
 }
