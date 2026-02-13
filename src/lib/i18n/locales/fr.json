@@ -530,6 +530,7 @@
       "qualityChangedCacheCleared": "Qualité modifiée. Cache de lecture effacé.",
       "outputDevice": "Périphérique de sortie",
       "outputDeviceDesc": "Sélectionnez votre périphérique de sortie audio préféré. Les périphériques affichés proviennent du backend sélectionné.",
+      "systemDefaultIs": "Périphérique par défaut: {device}",
       "audioDevice": "Périphérique audio",
       "audioDeviceDesc": "Sélectionnez votre périphérique de sortie audio préféré. Les périphériques affichés proviennent du backend sélectionné.",
       "exclusiveMode": "Mode exclusif",

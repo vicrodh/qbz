@@ -530,6 +530,7 @@
       "qualityChangedCacheCleared": "Qualität geändert. Wiedergabe-Cache geleert.",
       "outputDevice": "Ausgabegerät",
       "outputDeviceDesc": "Wählen Sie Ihr bevorzugtes Audioausgabegerät. Angezeigte Geräte stammen aus dem ausgewählten Backend.",
+      "systemDefaultIs": "System-Standard ist: {device}",
       "audioDevice": "Audio-Gerät",
       "audioDeviceDesc": "Wählen Sie Ihr bevorzugtes Audioausgabegerät. Angezeigte Geräte stammen aus dem ausgewählten Backend.",
       "exclusiveMode": "Exklusivmodus",

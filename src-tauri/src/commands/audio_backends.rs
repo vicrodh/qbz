@@ -110,6 +110,93 @@ pub fn check_alsa_utils_installed() -> bool {
     true
 }
 
+/// Get the name/description of the current default audio device for a backend
+#[tauri::command]
+pub fn get_default_device_name(backend_type: AudioBackendType) -> Option<String> {
+    use std::process::Command;
+
+    match backend_type {
+        AudioBackendType::PipeWire | AudioBackendType::Pulse => {
+            // Use pactl to get default sink description
+            let output = Command::new("pactl")
+                .args(["get-default-sink"])
+                .output()
+                .ok()?;
+
+            if !output.status.success() {
+                return None;
+            }
+
+            let sink_name = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if sink_name.is_empty() {
+                return None;
+            }
+
+            // Now get the description for this sink
+            let list_output = Command::new("pactl")
+                .args(["list", "sinks", "short"])
+                .output()
+                .ok()?;
+
+            // If we can't get description, return the sink name itself
+            if !list_output.status.success() {
+                return Some(sink_name);
+            }
+
+            // Try to get a nicer description from pactl list sinks
+            let full_list = Command::new("pactl")
+                .args(["list", "sinks"])
+                .output()
+                .ok()?;
+
+            if full_list.status.success() {
+                let stdout = String::from_utf8_lossy(&full_list.stdout);
+                let mut in_target = false;
+
+                for line in stdout.lines() {
+                    if line.contains("Name:") && line.contains(&sink_name) {
+                        in_target = true;
+                    }
+                    if in_target && line.trim().starts_with("Description:") {
+                        return line.trim()
+                            .strip_prefix("Description:")
+                            .map(|s| s.trim().to_string());
+                    }
+                    if in_target && line.starts_with("Sink #") {
+                        break; // Moved to next sink
+                    }
+                }
+            }
+
+            Some(sink_name)
+        }
+        AudioBackendType::Alsa => {
+            // For ALSA, read from /proc/asound to find which card is default
+            // The "default" ALSA device typically follows PipeWire/Pulse default
+            // So we can reuse the PipeWire logic, or read ALSA config
+
+            // Simple approach: use CPAL to get default device name
+            use rodio::cpal::traits::HostTrait;
+
+            let available_hosts = rodio::cpal::available_hosts();
+            let alsa_host_id = available_hosts.into_iter().find(|h| h.name() == "ALSA")?;
+            let host = rodio::cpal::host_from_id(alsa_host_id).ok()?;
+
+            let default_device = host.default_output_device()?;
+            use rodio::cpal::traits::DeviceTrait;
+            let device_name = default_device.name().ok()?;
+
+            // If it's just "default", try to resolve what it actually points to
+            if device_name == "default" {
+                // Fall back to PipeWire/Pulse default since ALSA often uses that
+                return get_default_device_name(AudioBackendType::PipeWire);
+            }
+
+            Some(device_name)
+        }
+    }
+}
+
 /// Linux distribution info for install commands
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinuxDistroInfo {

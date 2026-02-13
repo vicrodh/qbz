@@ -540,6 +540,7 @@
       "qualityChangedCacheCleared": "Quality changed. Playback cache cleared.",
       "outputDevice": "Output Device",
       "outputDeviceDesc": "Select your preferred audio output device. Devices shown are from the selected backend.",
+      "systemDefaultIs": "System Default is: {device}",
       "audioDevice": "Audio Device",
       "audioDeviceDesc": "Select your preferred audio output device. Devices shown are from the selected backend.",
       "exclusiveMode": "Exclusive Mode",

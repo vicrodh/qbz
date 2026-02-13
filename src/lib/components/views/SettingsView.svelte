@@ -515,6 +515,7 @@
   let backendDevices = $state<AudioDevice[]>([]);
   let alsaPlugins = $state<AlsaPluginInfo[]>([]);
   let isLoadingDevices = $state(false);
+  let defaultDeviceName = $state<string | null>(null);
 
   // Backend selector options (derived)
   // TEST: Re-enable ALSA Direct to verify if CPAL can actually open hw: devices
@@ -2027,9 +2028,18 @@
       const devices = await invoke<AudioDevice[]>('get_devices_for_backend', { backendType });
       backendDevices = devices;
       console.log(`[Audio] Devices for ${backendType}:`, devices);
+
+      // Fetch the name of the current default device for this backend
+      try {
+        const name = await invoke<string | null>('get_default_device_name', { backendType });
+        defaultDeviceName = name;
+      } catch {
+        defaultDeviceName = null;
+      }
     } catch (err) {
       console.error(`Failed to load devices for ${backendType}:`, err);
       backendDevices = [];
+      defaultDeviceName = null;
     } finally {
       isLoadingDevices = false;
     }
@@ -2973,6 +2983,11 @@
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.outputDevice')}</span>
         <span class="setting-desc">{$t('settings.audio.outputDeviceDesc')}</span>
+        {#if defaultDeviceName}
+          <span class="setting-desc-secondary">
+            {$t('settings.audio.systemDefaultIs', { values: { device: defaultDeviceName } })}
+          </span>
+        {/if}
       </div>
       {#if isLoadingDevices}
         <span class="loading-text">{$t('settings.audio.loadingDevices')}</span>
@@ -5018,6 +5033,13 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .setting-desc {
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .setting-desc-secondary {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.7;
+    font-style: italic;
   }
 
   .setting-note {

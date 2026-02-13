@@ -855,6 +855,7 @@ pub fn run() {
             commands::check_alsa_utils_installed,
             commands::get_linux_distro,
             commands::query_dac_capabilities,
+            commands::get_default_device_name,
             // Download settings commands
             config::download_settings::get_download_settings,
             config::download_settings::set_download_root,

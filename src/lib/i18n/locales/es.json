@@ -540,6 +540,7 @@
       "qualityChangedCacheCleared": "Calidad cambiada. Caché de reproducción limpiado.",
       "outputDevice": "Dispositivo de Salida",
       "outputDeviceDesc": "Selecciona tu dispositivo de audio preferido. Se muestran los dispositivos del backend seleccionado.",
+      "systemDefaultIs": "Sistema Default es: {device}",
       "audioDevice": "Dispositivo de Audio",
       "audioDeviceDesc": "Selecciona tu dispositivo de salida de audio preferido. Los dispositivos mostrados son del backend seleccionado.",
       "exclusiveMode": "Modo Exclusivo",
