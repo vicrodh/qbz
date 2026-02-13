@@ -6,6 +6,7 @@
 //! - Low-latency audio output
 //!
 //! Uses CPAL's ALSA host with specific device selection.
+//! Device enumeration reads directly from /proc/asound (no alsa-utils dependency).
 
 use super::backend::{AlsaPlugin, AudioBackend, AudioBackendType, AudioDevice, BackendConfig, BackendResult};
 use rodio::{
@@ -15,7 +16,8 @@ use rodio::{
     },
     OutputStream, OutputStreamHandle,
 };
-use std::process::Command;
+use std::collections::HashMap;
+use std::fs;
 
 /// Common audio sample rates to check for device support
 const COMMON_SAMPLE_RATES: &[u32] = &[
@@ -60,6 +62,181 @@ fn get_supported_sample_rates(device: &rodio::cpal::Device) -> Option<Vec<u32>> 
     }
 }
 
+// ============================================================================
+// /proc/asound helpers - No aplay dependency
+// ============================================================================
+
+/// Information about an ALSA sound card read from /proc/asound
+#[derive(Debug, Clone)]
+struct ProcCardInfo {
+    /// Card number (0, 1, 2, ...)
+    number: String,
+    /// Short name used in ALSA device IDs (e.g., "C20", "NVidia", "sofhdadsp")
+    short_name: String,
+    /// Long descriptive name (e.g., "Cambridge Audio USB Audio 2.0")
+    long_name: String,
+    /// PCM playback devices on this card
+    pcm_playback_devices: Vec<ProcPcmInfo>,
+}
+
+/// Information about a PCM device
+#[derive(Debug, Clone)]
+struct ProcPcmInfo {
+    /// Device number within the card
+    device_num: String,
+    /// Device name (e.g., "USB Audio", "HDMI 0")
+    name: String,
+}
+
+/// Read all sound card information from /proc/asound
+fn read_proc_asound_cards() -> Vec<ProcCardInfo> {
+    let mut cards = Vec::new();
+
+    // Parse /proc/asound/cards for basic card info
+    // Format: " 0 [C20            ]: USB-Audio - Cambridge Audio USB Audio 2.0"
+    let cards_content = match fs::read_to_string("/proc/asound/cards") {
+        Ok(c) => c,
+        Err(e) => {
+            log::warn!("[ALSA] Cannot read /proc/asound/cards: {}", e);
+            return cards;
+        }
+    };
+
+    // Parse cards file - each card has two lines
+    let lines: Vec<&str> = cards_content.lines().collect();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i].trim();
+
+        // First line format: " 0 [C20            ]: USB-Audio - Cambridge Audio USB Audio 2.0"
+        if let Some(card_info) = parse_proc_card_line(line) {
+            // Read PCM devices for this card
+            let pcm_devices = read_card_pcm_devices(&card_info.0);
+
+            cards.push(ProcCardInfo {
+                number: card_info.0,
+                short_name: card_info.1,
+                long_name: card_info.2,
+                pcm_playback_devices: pcm_devices,
+            });
+        }
+        i += 1;
+    }
+
+    cards
+}
+
+/// Parse a line from /proc/asound/cards
+/// Returns (card_number, short_name, long_name)
+fn parse_proc_card_line(line: &str) -> Option<(String, String, String)> {
+    // Format: " 0 [C20            ]: USB-Audio - Cambridge Audio USB Audio 2.0"
+    let line = line.trim();
+
+    // Find card number (first number)
+    let parts: Vec<&str> = line.splitn(2, '[').collect();
+    if parts.len() < 2 {
+        return None;
+    }
+
+    let card_num = parts[0].trim().to_string();
+    if card_num.is_empty() || !card_num.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+
+    // Find short name (inside brackets)
+    let rest = parts[1];
+    let bracket_end = rest.find(']')?;
+    let short_name = rest[..bracket_end].trim().to_string();
+
+    // Find long name (after " - ")
+    let long_name = if let Some(dash_pos) = rest.find(" - ") {
+        rest[dash_pos + 3..].trim().to_string()
+    } else {
+        // Fallback: use everything after ]:
+        rest[bracket_end + 1..]
+            .trim()
+            .trim_start_matches(':')
+            .trim()
+            .split(" - ")
+            .last()
+            .unwrap_or(&short_name)
+            .to_string()
+    };
+
+    Some((card_num, short_name, long_name))
+}
+
+/// Read PCM playback devices for a specific card from /proc/asound
+fn read_card_pcm_devices(card_num: &str) -> Vec<ProcPcmInfo> {
+    let mut devices = Vec::new();
+    let card_path = format!("/proc/asound/card{}", card_num);
+
+    // Read PCM device info files
+    if let Ok(entries) = fs::read_dir(&card_path) {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let name_str = name.to_string_lossy();
+
+            // PCM playback devices are named pcmXp (X = device number, p = playback)
+            if name_str.starts_with("pcm") && name_str.ends_with('p') {
+                let info_path = entry.path().join("info");
+                if let Ok(content) = fs::read_to_string(&info_path) {
+                    let mut pcm_name = String::new();
+                    let mut device_num = String::new();
+
+                    for line in content.lines() {
+                        if let Some(val) = line.strip_prefix("name: ") {
+                            pcm_name = val.trim().to_string();
+                        }
+                        if let Some(val) = line.strip_prefix("device: ") {
+                            device_num = val.trim().to_string();
+                        }
+                    }
+
+                    if !device_num.is_empty() {
+                        devices.push(ProcPcmInfo {
+                            device_num,
+                            name: if pcm_name.is_empty() { "Unknown".to_string() } else { pcm_name },
+                        });
+                    }
+                }
+            }
+        }
+    }
+
+    // Sort by device number
+    devices.sort_by(|a, b| {
+        a.device_num.parse::<u32>().unwrap_or(0)
+            .cmp(&b.device_num.parse::<u32>().unwrap_or(0))
+    });
+
+    devices
+}
+
+/// Build a map of card_number -> (short_name, long_name) from /proc/asound
+fn build_card_info_map() -> HashMap<String, (String, String)> {
+    let cards = read_proc_asound_cards();
+    let mut map = HashMap::new();
+
+    for card in cards {
+        map.insert(card.number.clone(), (card.short_name, card.long_name));
+    }
+
+    map
+}
+
+/// Find card number by short name (e.g., "C20" -> "0")
+fn find_card_number_by_name(short_name: &str) -> Option<String> {
+    let cards = read_proc_asound_cards();
+    cards.iter()
+        .find(|c| c.short_name == short_name)
+        .map(|c| c.number.clone())
+}
+
+// ============================================================================
+// ALSA Backend Implementation
+// ============================================================================
+
 pub struct AlsaBackend {
     host: rodio::cpal::Host,
 }
@@ -87,136 +264,51 @@ impl AlsaBackend {
         Ok(Self { host })
     }
 
-    /// Enumerate ALSA devices via CPAL with descriptions from aplay -L
-    fn enumerate_via_aplay(&self) -> BackendResult<Vec<AudioDevice>> {
+    /// Enumerate ALSA devices using /proc/asound for descriptions
+    fn enumerate_with_proc_descriptions(&self) -> BackendResult<Vec<AudioDevice>> {
         // First: Get devices from CPAL (these are the device IDs that actually work)
-        let cpal_devices_result = self.enumerate_via_cpal();
-        if cpal_devices_result.is_err() {
-            return cpal_devices_result;
-        }
-        let mut devices = cpal_devices_result.unwrap();
+        let mut devices = self.enumerate_via_cpal()?;
 
-        // Second: Build description map from aplay -L
-        let output = Command::new("aplay")
-            .arg("-L")
-            .output()
-            .map_err(|e| format!("Failed to run aplay -L: {}", e))?;
+        // Second: Read card info from /proc/asound
+        let cards = read_proc_asound_cards();
 
-        if !output.status.success() {
-            log::warn!("[ALSA Backend] aplay -L failed, using CPAL names only");
-            return Ok(devices);
-        }
+        // Build description map: short_name -> long_name
+        let mut card_descriptions: HashMap<String, String> = HashMap::new();
+        let mut card_num_to_short_name: HashMap<String, String> = HashMap::new();
 
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let lines: Vec<&str> = stdout.lines().collect();
-
-        // Build map: device_id -> friendly description
-        let mut description_map = std::collections::HashMap::new();
-        let mut i = 0;
-        while i < lines.len() {
-            let line = lines[i].trim_end();
-
-            // Device ID lines don't start with whitespace
-            if !line.starts_with(' ') && !line.is_empty() {
-                let device_id = line.to_string();
-
-                // Get description from next line (if it exists and is indented)
-                let description = if i + 1 < lines.len() && lines[i + 1].starts_with(' ') {
-                    Some(lines[i + 1].trim().to_string())
-                } else {
-                    None
-                };
-
-                if let Some(desc) = description {
-                    description_map.insert(device_id, desc);
-                }
-
-                // Skip description lines
-                i += 1;
-                while i < lines.len() && lines[i].starts_with(' ') {
-                    i += 1;
-                }
-            } else {
-                i += 1;
-            }
+        for card in &cards {
+            card_descriptions.insert(card.short_name.clone(), card.long_name.clone());
+            card_num_to_short_name.insert(card.number.clone(), card.short_name.clone());
+            log::debug!(
+                "[ALSA Backend] Card {}: {} = {}",
+                card.number, card.short_name, card.long_name
+            );
         }
 
-        // Build card number -> (short_name, description) map from aplay -l
-        // Short name is used for stable device IDs (front:CARD=name,DEV=0)
-        // Description is the human-readable full name
-        let mut card_map = std::collections::HashMap::new();
-        let mut card_num_to_short_name = std::collections::HashMap::new();
-        let aplay_l_output = Command::new("aplay")
-            .arg("-l")
-            .output()
-            .ok()
-            .and_then(|o| if o.status.success() { Some(o) } else { None });
-
-        if let Some(output) = aplay_l_output {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            for line in stdout.lines() {
-                if let Some(card_info) = line.strip_prefix("card ") {
-                    // Parse: "card 4: C20 [Cambridge Audio USB Audio 2.0], device 0: ..."
-                    let parts: Vec<&str> = card_info.splitn(2, ':').collect();
-                    if parts.len() == 2 {
-                        let card_num = parts[0].trim();
-                        let rest = parts[1].trim();
-
-                        // Extract short name (before bracket) and description (inside bracket)
-                        // "C20 [Cambridge Audio USB Audio 2.0], device 0: ..."
-                        let short_name = rest.split_whitespace().next().unwrap_or("Unknown");
-
-                        if let Some(start) = rest.find('[') {
-                            if let Some(end) = rest.find(']') {
-                                let card_desc = &rest[start + 1..end];
-                                card_map.insert(card_num.to_string(), card_desc.to_string());
-                                card_num_to_short_name.insert(card_num.to_string(), short_name.to_string());
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Third: Update device descriptions from aplay -L map
+        // Third: Update device descriptions
+        // Match by card name in device ID (e.g., "sysdefault:CARD=C20" contains "C20")
         for device in &mut devices {
-            if let Some(desc) = description_map.get(&device.name) {
-                device.description = Some(desc.clone());
+            for (short_name, long_name) in &card_descriptions {
+                if device.name.contains(short_name) {
+                    device.description = Some(format!("{}, {}", long_name, device.name));
+                    break;
+                }
             }
         }
 
         // Fourth: Add hw:X,Y and plughw:X,Y devices manually (CPAL doesn't enumerate these)
-        // Parse aplay -l to create these devices
-        for (card_num, card_desc) in &card_map {
-            // Create hw:X,0 device (bit-perfect direct hardware access)
-            let hw_device_id = format!("hw:{},0", card_num);
+        for card in &cards {
+            for pcm in &card.pcm_playback_devices {
+                // Create hw:X,Y device (bit-perfect direct hardware access)
+                let hw_device_id = format!("hw:{},{}", card.number, pcm.device_num);
 
-            // Test if CPAL can open this device
-            let can_open = self.host
-                .output_devices()
-                .ok()
-                .and_then(|mut devs| devs.find(|d| d.name().ok().as_deref() == Some(&hw_device_id)))
-                .is_some();
-
-            if !can_open {
-                // Try to get supported configs to validate device exists
-                // Create a test device to check if it's valid
-                if let Ok(_test_devices) = self.host.output_devices() {
-                    // CPAL may not enumerate hw: devices but can still open them
-                    // We'll add them anyway and let the backend handle errors
-                    devices.push(AudioDevice {
-                        id: hw_device_id.clone(),
-                        name: hw_device_id.clone(),
-                        description: Some(format!("{} (Direct Hardware - Bit-perfect)", card_desc)),
-                        is_default: false,
-                        max_sample_rate: Some(384000), // Assume high sample rate capability
-                        supported_sample_rates: None, // Can't detect without CPAL access
-                        device_bus: None,
-                        is_hardware: true,
-                    });
+                // Check if we already have this device
+                let already_exists = devices.iter().any(|d| d.name == hw_device_id);
+                if already_exists {
+                    continue;
                 }
-            } else {
-                // CPAL found it, get real sample rate info
+
+                // Test if CPAL can open this device
                 let cpal_device = self.host
                     .output_devices()
                     .ok()
@@ -240,70 +332,54 @@ impl AlsaBackend {
                 devices.push(AudioDevice {
                     id: hw_device_id.clone(),
                     name: hw_device_id.clone(),
-                    description: Some(format!("{} (Direct Hardware - Bit-perfect)", card_desc)),
+                    description: Some(format!("{} - {} (Direct Hardware - Bit-perfect)", card.long_name, pcm.name)),
                     is_default: false,
-                    max_sample_rate,
+                    max_sample_rate: max_sample_rate.or(Some(384000)),
                     supported_sample_rates,
                     device_bus: None,
                     is_hardware: true,
                 });
-            }
 
-            // Also create plughw:X,0 device (plugin hardware with auto-conversion)
-            let plughw_device_id = format!("plughw:{},0", card_num);
-            devices.push(AudioDevice {
-                id: plughw_device_id.clone(),
-                name: plughw_device_id.clone(),
-                description: Some(format!("{} (Plugin Hardware)", card_desc)),
-                is_default: false,
-                max_sample_rate: Some(384000),
-                supported_sample_rates: None, // plughw can convert, so all rates are "supported"
-                device_bus: None,
-                is_hardware: true,
-            });
+                // Also create plughw:X,Y device (plugin hardware with auto-conversion)
+                let plughw_device_id = format!("plughw:{},{}", card.number, pcm.device_num);
+                if !devices.iter().any(|d| d.name == plughw_device_id) {
+                    devices.push(AudioDevice {
+                        id: plughw_device_id.clone(),
+                        name: plughw_device_id.clone(),
+                        description: Some(format!("{} - {} (Plugin Hardware)", card.long_name, pcm.name)),
+                        is_default: false,
+                        max_sample_rate: Some(384000),
+                        supported_sample_rates: None, // plughw can convert, so all rates are "supported"
+                        device_bus: None,
+                        is_hardware: true,
+                    });
+                }
+            }
         }
 
-        // Fifth: Add front:CARD=X,DEV=Y devices from aplay -L (issue #30)
-        // Some USB DACs (e.g., SMSL AD18) don't expose hw: devices but have working front: devices
-        // DeaDBeef and Audacious use these for bit-perfect playback
-        for (device_id, desc) in &description_map {
-            // Match front:CARD=X,DEV=Y pattern
-            if device_id.starts_with("front:CARD=") {
+        // Fifth: Add front:CARD=X,DEV=Y devices (issue #30)
+        // Some USB DACs don't expose hw: devices but have working front: devices
+        for card in &cards {
+            for pcm in &card.pcm_playback_devices {
+                let front_device_id = format!("front:CARD={},DEV={}", card.short_name, pcm.device_num);
+
                 // Check if we already have this device
-                let already_exists = devices.iter().any(|d| d.name == *device_id);
-                if already_exists {
+                if devices.iter().any(|d| d.name == front_device_id) {
                     continue;
                 }
 
-                // Extract card name for friendly description
-                // front:CARD=AMP,DEV=0 -> "AMP"
-                let card_name = device_id
-                    .strip_prefix("front:CARD=")
-                    .and_then(|s| s.split(',').next())
-                    .unwrap_or("Unknown");
-
-                // Use card_map description if available, otherwise use aplay -L description
-                let friendly_desc = card_map
-                    .iter()
-                    .find(|(_, card_desc)| {
-                        // Match by card short name in the description
-                        card_desc.to_lowercase().contains(&card_name.to_lowercase())
-                    })
-                    .map(|(_, card_desc)| card_desc.clone())
-                    .unwrap_or_else(|| desc.clone());
-
                 log::info!(
                     "[ALSA Backend] Adding front: device for bit-perfect: {} ({})",
-                    device_id,
-                    friendly_desc
+                    front_device_id,
+                    card.long_name
                 );
 
                 devices.push(AudioDevice {
-                    id: device_id.clone(),
-                    name: device_id.clone(),
-                    description: Some(format!("{} (Direct Hardware - Bit-perfect)", friendly_desc)),
+                    id: front_device_id.clone(),
+                    name: front_device_id.clone(),
+                    description: Some(format!("{} - {} (Direct Hardware - Bit-perfect)", card.long_name, pcm.name)),
                     is_default: false,
-                    max_sample_rate: Some(384000), // Assume high sample rate capability
+                    max_sample_rate: Some(384000),
                     supported_sample_rates: None,
                     device_bus: None,
                     is_hardware: true,
@@ -325,7 +401,7 @@ impl AlsaBackend {
         Ok(devices)
     }
 
-    /// Enumerate ALSA devices via CPAL (fallback - no descriptions)
+    /// Enumerate ALSA devices via CPAL (basic enumeration, no descriptions)
     fn enumerate_via_cpal(&self) -> BackendResult<Vec<AudioDevice>> {
         let mut devices = Vec::new();
 
@@ -383,7 +459,7 @@ impl AlsaBackend {
             devices.push(AudioDevice {
                 id: id.clone(),
                 name: name.clone(),
-                description: None,  // CPAL doesn't provide descriptions
+                description: None,  // Will be filled by enumerate_with_proc_descriptions
                 is_default,
                 max_sample_rate,
                 supported_sample_rates,
@@ -392,28 +468,9 @@ impl AlsaBackend {
             });
         }
 
-        log::info!("[ALSA Backend] Enumerated {} devices via CPAL (fallback)", devices.len());
-        for (idx, dev) in devices.iter().enumerate() {
-            log::info!("  [{}] {} (max_rate: {:?})", idx, dev.name, dev.max_sample_rate);
-        }
+        log::debug!("[ALSA Backend] CPAL enumerated {} base devices", devices.len());
 
         Ok(devices)
-    }
-
-    /// Enumerate ALSA devices with fallback
-    fn enumerate_alsa_devices(&self) -> BackendResult<Vec<AudioDevice>> {
-        // Try aplay -L first (preferred - has real hardware descriptions)
-        match self.enumerate_via_aplay() {
-            Ok(devices) => Ok(devices),
-            Err(e) => {
-                log::warn!(
-                    "[ALSA Backend] aplay -L failed: {}. Falling back to CPAL enumeration (no descriptions). \
-                    Install alsa-utils package for better device names.",
-                    e
-                );
-                self.enumerate_via_cpal()
-            }
-        }
     }
 
     /// Try to create direct ALSA stream for hw: devices (bypasses CPAL)
@@ -545,42 +602,21 @@ pub fn normalize_device_id_to_stable(device_id: &str) -> String {
     let card_num = parts[0];
     let device_num = parts[1];
 
-    // Get card short name from aplay -l
-    let output = match Command::new("aplay").arg("-l").output() {
-        Ok(o) if o.status.success() => o,
-        _ => {
-            log::warn!("[ALSA] aplay -l failed, cannot normalize device ID");
-            return device_id.to_string();
-        }
-    };
+    // Get card info from /proc/asound
+    let card_map = build_card_info_map();
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    // Parse: "card 0: C20 [Cambridge Audio USB Audio 2.0], device 0: ..."
-    for line in stdout.lines() {
-        if let Some(card_info) = line.strip_prefix("card ") {
-            let line_parts: Vec<&str> = card_info.splitn(2, ':').collect();
-            if line_parts.len() == 2 {
-                let this_card_num = line_parts[0].trim();
-                if this_card_num == card_num {
-                    let rest = line_parts[1].trim();
-                    // Extract short name (first word before the bracket)
-                    if let Some(short_name) = rest.split_whitespace().next() {
-                        let stable_id = format!("front:CARD={},DEV={}", short_name, device_num);
-                        log::info!(
-                            "[ALSA] Normalized device ID: {} -> {} (stable)",
-                            device_id,
-                            stable_id
-                        );
-                        return stable_id;
-                    }
-                }
-            }
-        }
+    if let Some((short_name, _long_name)) = card_map.get(card_num) {
+        let stable_id = format!("front:CARD={},DEV={}", short_name, device_num);
+        log::info!(
+            "[ALSA] Normalized device ID: {} -> {} (stable)",
+            device_id,
+            stable_id
+        );
+        return stable_id;
     }
 
     log::warn!(
-        "[ALSA] Could not find card {} in aplay -l output, keeping original ID",
+        "[ALSA] Could not find card {} in /proc/asound, keeping original ID",
         card_num
     );
     device_id.to_string()
@@ -602,29 +638,11 @@ pub fn resolve_stable_to_current_hw(device_id: &str) -> Option<String> {
     let card_name = parts.first()?;
     let dev_part = parts.get(1).and_then(|s| s.strip_prefix("DEV=")).unwrap_or("0");
 
-    // Find current card number for this name
-    let output = Command::new("aplay").arg("-l").output().ok()?;
-    if !output.status.success() {
-        return None;
-    }
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    for line in stdout.lines() {
-        if let Some(card_info) = line.strip_prefix("card ") {
-            let line_parts: Vec<&str> = card_info.splitn(2, ':').collect();
-            if line_parts.len() == 2 {
-                let card_num = line_parts[0].trim();
-                let rest = line_parts[1].trim();
-                if let Some(short_name) = rest.split_whitespace().next() {
-                    if short_name == *card_name {
-                        let hw_id = format!("hw:{},{}", card_num, dev_part);
-                        log::debug!("[ALSA] Resolved {} -> {}", device_id, hw_id);
-                        return Some(hw_id);
-                    }
-                }
-            }
-        }
+    // Find current card number for this name using /proc/asound
+    if let Some(card_num) = find_card_number_by_name(card_name) {
+        let hw_id = format!("hw:{},{}", card_num, dev_part);
+        log::debug!("[ALSA] Resolved {} -> {}", device_id, hw_id);
+        return Some(hw_id);
     }
 
     log::warn!("[ALSA] Card '{}' not found in current enumeration", card_name);
@@ -637,7 +655,7 @@ impl AudioBackend for AlsaBackend {
     }
 
     fn enumerate_devices(&self) -> BackendResult<Vec<AudioDevice>> {
-        self.enumerate_alsa_devices()
+        self.enumerate_with_proc_descriptions()
     }
 
     fn create_output_stream(

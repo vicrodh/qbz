@@ -101,16 +101,13 @@ pub fn get_alsa_plugins() -> Result<Vec<AlsaPluginInfo>, String> {
     Ok(plugins)
 }
 
-/// Check if alsa-utils is installed (aplay command available)
+/// Check if ALSA device enumeration is available
+/// Note: As of v1.1.14, we read directly from /proc/asound instead of using aplay,
+/// so alsa-utils package is no longer required. This always returns true for compatibility.
 #[tauri::command]
 pub fn check_alsa_utils_installed() -> bool {
-    use std::process::Command;
-
-    Command::new("which")
-        .arg("aplay")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false)
+    // We no longer depend on alsa-utils - device info comes from /proc/asound
+    true
 }
 
 /// Linux distribution info for install commands
@@ -293,10 +290,9 @@ pub fn query_dac_capabilities(node_name: String) -> DacCapabilities {
     caps
 }
 
-/// Query ALSA hardware capabilities from /proc/asound or aplay
+/// Query ALSA hardware capabilities from /proc/asound
 fn query_alsa_hw_capabilities(node_name: &str, caps: &mut DacCapabilities) {
     use std::fs;
-    use std::process::Command;
 
     // Try to extract card info from node name
     // Format: alsa_output.usb-Manufacturer_Product-00.analog-stereo
@@ -355,19 +351,13 @@ fn query_alsa_hw_capabilities(node_name: &str, caps: &mut DacCapabilities) {
             parse_alsa_stream_info(&stream_info, caps);
         }
 
-        // Also try aplay --dump-hw-params for more detailed info
-        // This requires a valid device, try common subdevices
+        // Try /proc/asound/cardX/pcmXp/sub0/hw_params for additional info (if stream is active)
+        // This provides current hardware params but may not be available if device isn't in use
         for subdev in 0..2 {
-            let device = format!("hw:{},{}", card, subdev);
-            let output = Command::new("aplay")
-                .args(["-D", &device, "--dump-hw-params", "/dev/null"])
-                .output();
-
-            if let Ok(out) = output {
-                // aplay outputs to stderr for --dump-hw-params
-                let stderr = String::from_utf8_lossy(&out.stderr);
-                if stderr.contains("RATE") {
-                    parse_aplay_hw_params(&stderr, caps);
+            let hw_params_path = format!("/proc/asound/card{}/pcm{}p/sub0/hw_params", card, subdev);
+            if let Ok(hw_params) = fs::read_to_string(&hw_params_path) {
+                if hw_params.contains("rate:") {
+                    parse_proc_hw_params(&hw_params, caps);
                     break;
                 }
             }
@@ -419,58 +409,30 @@ fn parse_alsa_stream_info(output: &str, caps: &mut DacCapabilities) {
     }
 }
 
-/// Parse aplay --dump-hw-params output
-fn parse_aplay_hw_params(output: &str, caps: &mut DacCapabilities) {
+/// Parse /proc/asound/cardX/pcmXp/sub0/hw_params output (when device is active)
+fn parse_proc_hw_params(output: &str, caps: &mut DacCapabilities) {
     for line in output.lines() {
         let line = line.trim();
 
-        // RATE: [44100 192000]  or  RATE: 44100 48000 88200 96000 176400 192000
-        if line.starts_with("RATE:") {
-            if let Some(rates_part) = line.strip_prefix("RATE:") {
-                let rates_str = rates_part.trim();
-
-                // Check if it's a range [min max]
-                if rates_str.starts_with('[') {
-                    // Range format: [44100 192000]
-                    // We'll add common rates within this range
-                    let common_rates = [44100, 48000, 88200, 96000, 176400, 192000, 352800, 384000];
-
-                    let nums: Vec<u32> = rates_str
-                        .trim_matches(|c| c == '[' || c == ']')
-                        .split_whitespace()
-                        .filter_map(|s| s.parse().ok())
-                        .collect();
-
-                    if nums.len() >= 2 {
-                        let min = nums[0];
-                        let max = nums[1];
-                        for rate in common_rates {
-                            if rate >= min && rate <= max && !caps.sample_rates.contains(&rate) {
-                                caps.sample_rates.push(rate);
-                            }
-                        }
-                    }
-                } else {
-                    // List format: 44100 48000 88200 96000
-                    for rate_str in rates_str.split_whitespace() {
-                        if let Ok(rate) = rate_str.parse::<u32>() {
-                            if !caps.sample_rates.contains(&rate) {
-                                caps.sample_rates.push(rate);
-                            }
-                        }
+        // Format: "rate: 192000 (192000/1)"
+        if line.starts_with("rate:") {
+            if let Some(rate_part) = line.strip_prefix("rate:") {
+                // Take first number before any parenthesis or space
+                let rate_str = rate_part.trim().split_whitespace().next().unwrap_or("");
+                if let Ok(rate) = rate_str.parse::<u32>() {
+                    if !caps.sample_rates.contains(&rate) {
+                        caps.sample_rates.push(rate);
                     }
                 }
             }
         }
 
-        // FORMAT: S16_LE S24_LE S32_LE
-        if line.starts_with("FORMAT:") {
-            if let Some(formats_str) = line.strip_prefix("FORMAT:") {
-                for format in formats_str.split_whitespace() {
-                    let format = format.trim().to_string();
-                    if !format.is_empty() && !format.starts_with('[') && !caps.formats.contains(&format) {
-                        caps.formats.push(format);
-                    }
+        // Format: "format: S32_LE"
+        if line.starts_with("format:") {
+            if let Some(format_str) = line.strip_prefix("format:") {
+                let format = format_str.trim().to_string();
+                if !format.is_empty() && !caps.formats.contains(&format) {
+                    caps.formats.push(format);
                 }
             }
         }
