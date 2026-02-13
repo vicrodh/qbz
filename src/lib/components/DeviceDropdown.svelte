@@ -332,7 +332,7 @@
       {#each filteredGroups as group (group.key)}
         <div class="group">
           <div class="group-header">{group.label}</div>
-          {#each group.devices as device (device.value)}
+          {#each group.devices as device (device.id)}
             {@const sampleRatesText = formatSampleRates(device.sampleRates)}
             <button
               class="option"
