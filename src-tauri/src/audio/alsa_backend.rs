@@ -318,10 +318,12 @@ impl AlsaBackend {
                     card.long_name
                 );
 
+                // Use consistent description format: "{card_name}, {device_id}"
+                // This matches the format used when CPAL finds the device
                 devices.push(AudioDevice {
                     id: front_device_id.clone(),
                     name: front_device_id.clone(),
-                    description: Some(format!("{} - {} (Direct Hardware - Bit-perfect)", card.long_name, pcm.name)),
+                    description: Some(format!("{}, {}", card.long_name, front_device_id)),
                     is_default: false,
                     max_sample_rate: Some(384000),
                     supported_sample_rates: None,
