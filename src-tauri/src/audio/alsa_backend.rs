@@ -264,69 +264,104 @@ impl AlsaBackend {
         Ok(Self { host })
     }
 
-    /// Enumerate ALSA devices using /proc/asound for descriptions
+    /// Enumerate ALSA devices using /proc/asound as PRIMARY source
+    ///
+    /// This approach ensures consistent device enumeration regardless of playback state.
+    /// CPAL enumeration fails when devices are in exclusive mode, but /proc/asound
+    /// always sees all devices.
+    ///
+    /// Architecture:
+    /// 1. /proc/asound = PRIMARY source (always complete)
+    /// 2. CPAL = OPTIONAL enrichment (sample rates only, may fail during playback)
     fn enumerate_with_proc_descriptions(&self) -> BackendResult<Vec<AudioDevice>> {
-        // First: Get devices from CPAL (these are the device IDs that actually work)
-        let mut devices = self.enumerate_via_cpal()?;
+        let mut devices = Vec::new();
 
-        // Second: Read card info from /proc/asound
+        // Read all cards from /proc/asound (PRIMARY SOURCE)
         let cards = read_proc_asound_cards();
 
-        // Build description map: short_name -> long_name
-        let mut card_descriptions: HashMap<String, String> = HashMap::new();
-        let mut card_num_to_short_name: HashMap<String, String> = HashMap::new();
-
+        log::info!("[ALSA Backend] /proc/asound found {} cards", cards.len());
         for card in &cards {
-            card_descriptions.insert(card.short_name.clone(), card.long_name.clone());
-            card_num_to_short_name.insert(card.number.clone(), card.short_name.clone());
             log::debug!(
-                "[ALSA Backend] Card {}: {} = {}",
-                card.number, card.short_name, card.long_name
+                "[ALSA Backend] Card {}: {} = {} ({} PCM devices)",
+                card.number, card.short_name, card.long_name, card.pcm_playback_devices.len()
             );
         }
 
-        // Third: Update device descriptions
-        // Match by card name in device ID (e.g., "sysdefault:CARD=C20" contains "C20")
-        for device in &mut devices {
-            for (short_name, long_name) in &card_descriptions {
-                if device.name.contains(short_name) {
-                    device.description = Some(format!("{}, {}", long_name, device.name));
-                    break;
-                }
-            }
-        }
+        // Build CPAL device map for sample rate enrichment (OPTIONAL - may be incomplete)
+        let cpal_devices = self.build_cpal_device_map();
+        log::debug!("[ALSA Backend] CPAL found {} devices for enrichment", cpal_devices.len());
 
-        // Fourth: Add front:CARD=X,DEV=Y devices for bit-perfect playback
-        // NOTE: We intentionally do NOT add hw:X,Y and plughw:X,Y devices because:
-        // - Their card numbers (X) are UNSTABLE and change between boots
-        // - front:CARD=name,DEV=Y uses the card NAME which is stable
-        // - Both formats are functionally equivalent for bit-perfect playback
-        // This fixes issue #69 where saved device wouldn't be recognized after reboot
-        // Some USB DACs don't expose hw: devices but have working front: devices
+        // Add system default device
+        let default_sample_rates = cpal_devices.get("default")
+            .and_then(|d| get_supported_sample_rates(d));
+        let default_max_rate = default_sample_rates.as_ref()
+            .and_then(|rates| rates.iter().max().copied());
+
+        devices.push(AudioDevice {
+            id: "default".to_string(),
+            name: "default".to_string(),
+            description: None,  // Frontend shows "System Default"
+            is_default: true,
+            max_sample_rate: default_max_rate.or(Some(384000)),
+            supported_sample_rates: default_sample_rates,
+            device_bus: None,
+            is_hardware: false,
+        });
+
+        // For each card, add relevant devices using STABLE IDs (card NAME, not number)
         for card in &cards {
-            for pcm in &card.pcm_playback_devices {
-                let front_device_id = format!("front:CARD={},DEV={}", card.short_name, pcm.device_num);
+            // Add sysdefault:CARD=name (card default with software mixing)
+            let sysdefault_id = format!("sysdefault:CARD={}", card.short_name);
+            let sysdefault_rates = cpal_devices.get(&sysdefault_id)
+                .and_then(|d| get_supported_sample_rates(d));
 
-                // Check if we already have this device
-                if devices.iter().any(|d| d.name == front_device_id) {
+            devices.push(AudioDevice {
+                id: sysdefault_id.clone(),
+                name: sysdefault_id.clone(),
+                description: Some(format!("{}, {}", card.long_name, sysdefault_id)),
+                is_default: false,
+                max_sample_rate: sysdefault_rates.as_ref()
+                    .and_then(|r| r.iter().max().copied())
+                    .or(Some(192000)),
+                supported_sample_rates: sysdefault_rates,
+                device_bus: None,
+                is_hardware: false,  // sysdefault uses dmix
+            });
+
+            // Add PCM-specific devices (front:, iec958:, hdmi:)
+            for pcm in &card.pcm_playback_devices {
+                // Determine device type based on PCM name
+                let device_prefix = if pcm.name.to_lowercase().contains("hdmi") {
+                    "hdmi"
+                } else if pcm.name.to_lowercase().contains("iec958")
+                       || pcm.name.to_lowercase().contains("spdif")
+                       || pcm.name.to_lowercase().contains("s/pdif") {
+                    "iec958"
+                } else {
+                    "front"  // Default to front: for analog/USB audio
+                };
+
+                let device_id = format!("{}:CARD={},DEV={}", device_prefix, card.short_name, pcm.device_num);
+
+                // Skip if already added (shouldn't happen, but be safe)
+                if devices.iter().any(|d| d.id == device_id) {
                     continue;
                 }
 
-                log::info!(
-                    "[ALSA Backend] Adding front: device for bit-perfect: {} ({})",
-                    front_device_id,
-                    card.long_name
-                );
+                // Try to get sample rates from CPAL (may fail if device is busy)
+                let sample_rates = cpal_devices.get(&device_id)
+                    .and_then(|d| get_supported_sample_rates(d));
+                let max_rate = sample_rates.as_ref()
+                    .and_then(|r| r.iter().max().copied())
+                    .or(Some(384000));  // Assume high capability if CPAL unavailable
 
-                // Use consistent description format: "{card_name}, {device_id}"
-                // This matches the format used when CPAL finds the device
                 devices.push(AudioDevice {
-                    id: front_device_id.clone(),
-                    name: front_device_id.clone(),
-                    description: Some(format!("{}, {}", card.long_name, front_device_id)),
+                    id: device_id.clone(),
+                    name: device_id.clone(),
+                    description: Some(format!("{}, {}", card.long_name, device_id)),
                     is_default: false,
-                    max_sample_rate: Some(384000),
-                    supported_sample_rates: None,
+                    max_sample_rate: max_rate,
+                    supported_sample_rates: sample_rates,
                     device_bus: None,
                     is_hardware: true,
                 });
@@ -336,87 +371,32 @@ impl AlsaBackend {
         log::info!("[ALSA Backend] Enumerated {} ALSA devices", devices.len());
         for (idx, dev) in devices.iter().enumerate() {
             log::info!(
-                "  [{}] {} - {} (max_rate: {:?})",
+                "  [{}] {} - {} (max_rate: {:?}, rates: {:?})",
                 idx,
                 dev.name,
-                dev.description.as_deref().unwrap_or("No description"),
-                dev.max_sample_rate
+                dev.description.as_deref().unwrap_or("(default)"),
+                dev.max_sample_rate,
+                dev.supported_sample_rates
             );
         }
 
         Ok(devices)
     }
 
-    /// Enumerate ALSA devices via CPAL (basic enumeration, no descriptions)
-    fn enumerate_via_cpal(&self) -> BackendResult<Vec<AudioDevice>> {
-        let mut devices = Vec::new();
+    /// Build a map of device_id -> CPAL Device for sample rate queries
+    /// This is OPTIONAL enrichment - devices may be missing if in exclusive use
+    fn build_cpal_device_map(&self) -> HashMap<String, rodio::cpal::Device> {
+        let mut map = HashMap::new();
 
-        // Get all output devices from ALSA host
-        let output_devices = self.host
-            .output_devices()
-            .map_err(|e| format!("Failed to enumerate ALSA devices: {}", e))?;
-
-        for (idx, device) in output_devices.enumerate() {
-            let name = device.name().unwrap_or_else(|_| format!("ALSA Device {}", idx));
-
-            // Skip non-useful devices
-            // Keep hw: and plughw: devices - these are bit-perfect
-            if name == "null"
-                || name.starts_with("lavrate")
-                || name.starts_with("samplerate")
-                || name.starts_with("speexrate")
-                || name == "jack"
-                || name == "oss"
-                || name == "speex"
-                || name == "upmix"
-                || name == "vdownmix"
-                || name.starts_with("surround")  // Skip surround variants
-                || name.starts_with("usbstream")  // Skip USB stream
-                || name == "pipewire"
-                || name == "pulse"
-                || name == "sysdefault"  // Skip bare sysdefault
-            {
-                continue;
+        if let Ok(output_devices) = self.host.output_devices() {
+            for device in output_devices {
+                if let Ok(name) = device.name() {
+                    map.insert(name, device);
+                }
             }
-
-            // ID is the device name
-            let id = name.clone();
-
-            // Check if this is the default device
-            let is_default = self.host
-                .default_output_device()
-                .and_then(|d| d.name().ok())
-                .map(|default_name| default_name == name)
-                .unwrap_or(false);
-
-            // Try to get max sample rate from supported configs
-            let max_sample_rate = device
-                .supported_output_configs()
-                .ok()
-                .and_then(|configs| {
-                    configs
-                        .max_by_key(|c| c.max_sample_rate().0)
-                        .map(|c| c.max_sample_rate().0)
-                });
-
-            // Get supported sample rates
-            let supported_sample_rates = get_supported_sample_rates(&device);
-
-            devices.push(AudioDevice {
-                id: id.clone(),
-                name: name.clone(),
-                description: None,  // Will be filled by enumerate_with_proc_descriptions
-                is_default,
-                max_sample_rate,
-                supported_sample_rates,
-                device_bus: None,
-                is_hardware: true,
-            });
         }
 
-        log::debug!("[ALSA Backend] CPAL enumerated {} base devices", devices.len());
-
-        Ok(devices)
+        map
     }
 
     /// Try to create direct ALSA stream for hw: devices (bypasses CPAL)
