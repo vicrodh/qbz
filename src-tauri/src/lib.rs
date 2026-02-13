@@ -555,6 +555,7 @@ pub fn run() {
             commands::set_queue,
             commands::clear_queue,
             commands::remove_from_queue,
+            commands::remove_upcoming_track,
             commands::move_queue_track,
             commands::get_current_queue_track,
             commands::peek_next_track,

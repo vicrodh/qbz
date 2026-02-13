@@ -78,6 +78,9 @@
   // Context menu state for queue tracks
   let openMenuIndex = $state<number | null>(null);
 
+  // Context menu state for history tracks
+  let openHistoryMenuId = $state<string | null>(null);
+
   // Display limit
   const DISPLAY_LIMIT = 20;
   let displayCount = $state(DISPLAY_LIMIT);
@@ -226,14 +229,23 @@
     onClose();
   }
 
-  // Context menu handlers
+  // Context menu handlers for queue tracks
   function toggleTrackMenu(e: MouseEvent, index: number) {
     e.stopPropagation();
+    openHistoryMenuId = null; // Close any open history menu
     openMenuIndex = openMenuIndex === index ? null : index;
+  }
+
+  // Context menu handlers for history tracks
+  function toggleHistoryMenu(e: MouseEvent, trackId: string) {
+    e.stopPropagation();
+    openMenuIndex = null; // Close any open queue menu
+    openHistoryMenuId = openHistoryMenuId === trackId ? null : trackId;
   }
 
   function closeMenu() {
     openMenuIndex = null;
+    openHistoryMenuId = null;
   }
 
   function handleRemoveFromQueue(e: MouseEvent, index: number) {
@@ -256,7 +268,7 @@
 
   // Close menu when clicking outside
   function handlePanelClick() {
-    if (openMenuIndex !== null) {
+    if (openMenuIndex !== null || openHistoryMenuId !== null) {
       closeMenu();
     }
   }
@@ -422,11 +434,28 @@
                     <div class="track-artist">{track.artist}</div>
                   </div>
                   <span class="track-duration">{track.duration}</span>
-                  {#if hoveredHistoryTrack === track.id}
-                    <button class="track-menu" onclick={(e) => e.stopPropagation()}>
+                  <div class="track-menu-container">
+                    <button
+                      class="track-menu-btn"
+                      class:visible={hoveredHistoryTrack === track.id || openHistoryMenuId === track.id}
+                      onclick={(e) => toggleHistoryMenu(e, track.id)}
+                      title={$t('actions.more')}
+                    >
                       <MoreVertical size={16} />
                     </button>
-                  {/if}
+                    {#if openHistoryMenuId === track.id}
+                      <div class="track-context-menu">
+                        <button class="menu-item" onclick={(e) => handleAddToPlaylist(e, track.id)}>
+                          <ListPlus size={14} />
+                          <span>{$t('actions.addToPlaylist')}</span>
+                        </button>
+                        <button class="menu-item" onclick={(e) => handleShowTrackInfo(e, track.id)}>
+                          <Info size={14} />
+                          <span>{$t('player.trackInfo')}</span>
+                        </button>
+                      </div>
+                    {/if}
+                  </div>
                 </div>
               {/each}
               {#if historyTracks.length > historyDisplayCount}
@@ -851,7 +880,9 @@
     transition: all 150ms ease;
   }
 
-  .queue-track:hover .track-menu-btn {
+  .queue-track:hover .track-menu-btn,
+  .history-track:hover .track-menu-btn,
+  .track-menu-btn.visible {
     opacity: 1;
   }
 
@@ -948,25 +979,6 @@
     border-radius: 4px;
     object-fit: cover;
     flex-shrink: 0;
-  }
-
-  .track-menu {
-    position: absolute;
-    right: 6px;
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-secondary);
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-radius: 4px;
-  }
-
-  .track-menu:hover {
-    color: var(--text-primary);
   }
 
   /* Empty State */

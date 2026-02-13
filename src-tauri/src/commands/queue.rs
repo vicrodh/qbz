@@ -95,6 +95,14 @@ pub fn remove_from_queue(index: usize, state: State<'_, AppState>) -> Result<Opt
     Ok(state.queue.remove_track(index))
 }
 
+/// Remove a track from the upcoming queue by its position in the upcoming list
+/// (0 = first upcoming track, handles shuffle mode correctly)
+#[tauri::command]
+pub fn remove_upcoming_track(upcoming_index: usize, state: State<'_, AppState>) -> Result<Option<QueueTrack>, String> {
+    log::info!("Command: remove_upcoming_track - upcoming_index {}", upcoming_index);
+    Ok(state.queue.remove_upcoming_track(upcoming_index))
+}
+
 /// Move a track from one position to another in the queue
 #[tauri::command]
 pub fn move_queue_track(from_index: usize, to_index: usize, state: State<'_, AppState>) -> Result<bool, String> {

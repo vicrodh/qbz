@@ -1630,10 +1630,10 @@
     }
   }
 
-  // Remove a track from the queue by index
-  async function handleRemoveFromQueue(index: number) {
+  // Remove a track from the upcoming queue by its position in the upcoming list
+  async function handleRemoveFromQueue(upcomingIndex: number) {
     try {
-      await invoke('remove_from_queue', { index });
+      await invoke('remove_upcoming_track', { upcomingIndex });
       showToast($t('toast.removedFromQueue'), 'info');
     } catch (err) {
       console.error('Failed to remove from queue:', err);

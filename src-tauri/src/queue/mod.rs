@@ -237,6 +237,48 @@ impl QueueManager {
         Some(removed)
     }
 
+    /// Remove a track by its position in the upcoming list (0 = first upcoming track)
+    /// This handles shuffle mode correctly by mapping the upcoming index to the actual track index
+    pub fn remove_upcoming_track(&self, upcoming_index: usize) -> Option<QueueTrack> {
+        let mut state = self.state.lock().unwrap();
+
+        // Calculate the actual track index based on the upcoming index
+        let actual_index = if state.shuffle {
+            // In shuffle mode, upcoming is built from shuffle_order starting at shuffle_position + 1
+            let shuffle_pos = state.shuffle_position + 1 + upcoming_index;
+            if shuffle_pos >= state.shuffle_order.len() {
+                return None;
+            }
+            state.shuffle_order[shuffle_pos]
+        } else {
+            // In normal mode, upcoming starts at current_index + 1
+            let curr_idx = state.current_index.unwrap_or(0);
+            curr_idx + 1 + upcoming_index
+        };
+
+        if actual_index >= state.tracks.len() {
+            return None;
+        }
+
+        log::info!("remove_upcoming_track: upcoming_index={} -> actual_index={}", upcoming_index, actual_index);
+
+        let removed = state.tracks.remove(actual_index);
+
+        // Adjust current index if needed
+        if let Some(curr_idx) = state.current_index {
+            if actual_index < curr_idx {
+                state.current_index = Some(curr_idx - 1);
+            } else if actual_index == curr_idx {
+                if curr_idx >= state.tracks.len() {
+                    state.current_index = if state.tracks.is_empty() { None } else { Some(state.tracks.len() - 1) };
+                }
+            }
+        }
+
+        Self::regenerate_shuffle_order_internal(&mut state);
+        Some(removed)
+    }
+
     /// Move a track from one position to another
     pub fn move_track(&self, from_index: usize, to_index: usize) -> bool {
         let mut state = self.state.lock().unwrap();
