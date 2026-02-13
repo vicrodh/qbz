@@ -109,8 +109,11 @@ impl UpdatesStore {
     }
 
     fn open_at(db_path: &Path) -> Result<Self, String> {
-        let conn =
-            Connection::open(db_path).map_err(|e| format!("Failed to open updates database: {}", e))?;
+        let conn = Connection::open(db_path)
+            .map_err(|e| format!("Failed to open updates database: {}", e))?;
+
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for updates database: {}", e))?;
 
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS update_preferences (
@@ -446,9 +449,12 @@ fn select_latest_valid_update(
         if !is_newer_version(current_version, &info.version) {
             continue;
         }
-        let is_blocked = state.with_store(|store| {
-            store.is_release_acknowledged(&info.version) || store.is_release_ignored(&info.version)
-        }).unwrap_or(false);
+        let is_blocked = state
+            .with_store(|store| {
+                store.is_release_acknowledged(&info.version)
+                    || store.is_release_ignored(&info.version)
+            })
+            .unwrap_or(false);
         if is_blocked {
             continue;
         }
@@ -460,7 +466,9 @@ fn select_latest_valid_update(
 // ==================== Tauri commands ====================
 
 #[tauri::command]
-pub fn get_update_preferences(state: tauri::State<UpdatesState>) -> Result<UpdatePreferences, String> {
+pub fn get_update_preferences(
+    state: tauri::State<UpdatesState>,
+) -> Result<UpdatePreferences, String> {
     state.with_store(|store| store.get_preferences())?
 }
 
@@ -481,7 +489,10 @@ pub fn set_show_whats_new_on_launch(
 }
 
 #[tauri::command]
-pub fn acknowledge_release(version: String, state: tauri::State<UpdatesState>) -> Result<(), String> {
+pub fn acknowledge_release(
+    version: String,
+    state: tauri::State<UpdatesState>,
+) -> Result<(), String> {
     state.with_store(|store| store.acknowledge_release(&version))?
 }
 
@@ -491,22 +502,34 @@ pub fn ignore_release(version: String, state: tauri::State<UpdatesState>) -> Res
 }
 
 #[tauri::command]
-pub fn is_release_acknowledged(version: String, state: tauri::State<UpdatesState>) -> Result<bool, String> {
+pub fn is_release_acknowledged(
+    version: String,
+    state: tauri::State<UpdatesState>,
+) -> Result<bool, String> {
     state.with_store(|store| store.is_release_acknowledged(&version))
 }
 
 #[tauri::command]
-pub fn is_release_ignored(version: String, state: tauri::State<UpdatesState>) -> Result<bool, String> {
+pub fn is_release_ignored(
+    version: String,
+    state: tauri::State<UpdatesState>,
+) -> Result<bool, String> {
     state.with_store(|store| store.is_release_ignored(&version))
 }
 
 #[tauri::command]
-pub fn has_whats_new_been_shown(version: String, state: tauri::State<UpdatesState>) -> Result<bool, String> {
+pub fn has_whats_new_been_shown(
+    version: String,
+    state: tauri::State<UpdatesState>,
+) -> Result<bool, String> {
     state.with_store(|store| store.has_whats_new_been_shown(&version))
 }
 
 #[tauri::command]
-pub fn mark_whats_new_shown(version: String, state: tauri::State<UpdatesState>) -> Result<(), String> {
+pub fn mark_whats_new_shown(
+    version: String,
+    state: tauri::State<UpdatesState>,
+) -> Result<(), String> {
     state.with_store(|store| store.mark_whats_new_shown(&version))?
 }
 
@@ -533,7 +556,10 @@ pub async fn check_for_updates(
     let current_version = state.current_version();
 
     if mode == "launch" {
-        let prefs = match state.with_store(|store| store.get_preferences()).and_then(|r| r) {
+        let prefs = match state
+            .with_store(|store| store.get_preferences())
+            .and_then(|r| r)
+        {
             Ok(p) => p,
             Err(e) => {
                 warn!("[Updates] Failed to read preferences: {}", e);

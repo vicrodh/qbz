@@ -1,9 +1,11 @@
 //! SQLite database for offline cache index
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::path::Path;
 
-use super::{CachedTrackInfo, OfflineCacheStats, OfflineCacheStatus, ReadyTrackForSync, TrackCacheInfo};
+use super::{
+    CachedTrackInfo, OfflineCacheStats, OfflineCacheStatus, ReadyTrackForSync, TrackCacheInfo,
+};
 
 /// Database wrapper for cached tracks index
 pub struct OfflineCacheDb {
@@ -15,6 +17,9 @@ impl OfflineCacheDb {
     pub fn new(path: &Path) -> Result<Self, String> {
         let conn = Connection::open(path)
             .map_err(|e| format!("Failed to open offline cache database: {}", e))?;
+
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for offline cache database: {}", e))?;
 
         let db = Self { conn };
         db.init_schema()?;
@@ -28,8 +33,9 @@ impl OfflineCacheDb {
 
     /// Initialize database schema
     fn init_schema(&self) -> Result<(), String> {
-        self.conn.execute_batch(
-            "
+        self.conn
+            .execute_batch(
+                "
             CREATE TABLE IF NOT EXISTS cached_tracks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 track_id INTEGER UNIQUE NOT NULL,
@@ -55,8 +61,9 @@ impl OfflineCacheDb {
             CREATE INDEX IF NOT EXISTS idx_track_id ON cached_tracks(track_id);
             CREATE INDEX IF NOT EXISTS idx_status ON cached_tracks(status);
             CREATE INDEX IF NOT EXISTS idx_last_accessed ON cached_tracks(last_accessed_at);
-            "
-        ).map_err(|e| format!("Failed to initialize database schema: {}", e))?;
+            ",
+            )
+            .map_err(|e| format!("Failed to initialize database schema: {}", e))?;
 
         Ok(())
     }
@@ -85,17 +92,29 @@ impl OfflineCacheDb {
     }
 
     /// Update track status
-    pub fn update_status(&self, track_id: u64, status: OfflineCacheStatus, error: Option<&str>) -> Result<(), String> {
-        self.conn.execute(
-            "UPDATE cached_tracks SET status = ?1, error_message = ?2 WHERE track_id = ?3",
-            params![status.as_str(), error, track_id as i64],
-        ).map_err(|e| format!("Failed to update status: {}", e))?;
+    pub fn update_status(
+        &self,
+        track_id: u64,
+        status: OfflineCacheStatus,
+        error: Option<&str>,
+    ) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE cached_tracks SET status = ?1, error_message = ?2 WHERE track_id = ?3",
+                params![status.as_str(), error, track_id as i64],
+            )
+            .map_err(|e| format!("Failed to update status: {}", e))?;
 
         Ok(())
     }
 
     /// Update caching progress
-    pub fn update_progress(&self, track_id: u64, progress: u8, size_bytes: u64) -> Result<(), String> {
+    pub fn update_progress(
+        &self,
+        track_id: u64,
+        progress: u8,
+        size_bytes: u64,
+    ) -> Result<(), String> {
         self.conn.execute(
             "UPDATE cached_tracks SET progress_percent = ?1, file_size_bytes = ?2 WHERE track_id = ?3",
             params![progress as i64, size_bytes as i64, track_id as i64],
@@ -116,21 +135,26 @@ impl OfflineCacheDb {
 
     /// Update last accessed time (for LRU)
     pub fn touch(&self, track_id: u64) -> Result<(), String> {
-        self.conn.execute(
-            "UPDATE cached_tracks SET last_accessed_at = datetime('now') WHERE track_id = ?1",
-            params![track_id as i64],
-        ).map_err(|e| format!("Failed to update access time: {}", e))?;
+        self.conn
+            .execute(
+                "UPDATE cached_tracks SET last_accessed_at = datetime('now') WHERE track_id = ?1",
+                params![track_id as i64],
+            )
+            .map_err(|e| format!("Failed to update access time: {}", e))?;
 
         Ok(())
     }
 
     /// Check if a track is cached and ready
     pub fn is_cached(&self, track_id: u64) -> Result<bool, String> {
-        let count: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM cached_tracks WHERE track_id = ?1 AND status = 'ready'",
-            params![track_id as i64],
-            |row| row.get(0),
-        ).map_err(|e| format!("Failed to check cache: {}", e))?;
+        let count: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM cached_tracks WHERE track_id = ?1 AND status = 'ready'",
+                params![track_id as i64],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to check cache: {}", e))?;
 
         Ok(count > 0)
     }
@@ -157,18 +181,20 @@ impl OfflineCacheDb {
              FROM cached_tracks WHERE status = 'ready'"
         ).map_err(|e| format!("Failed to prepare query: {}", e))?;
 
-        let tracks = stmt.query_map([], |row| {
-            Ok(ReadyTrackForSync {
-                track_id: row.get::<_, i64>(0)? as u64,
-                title: row.get(1)?,
-                artist: row.get(2)?,
-                album: row.get(3)?,
-                duration_secs: row.get::<_, i64>(4)? as u64,
-                file_path: row.get(5)?,
-                bit_depth: row.get::<_, Option<i64>>(6)?.map(|v| v as u32),
-                sample_rate: row.get(7)?,
+        let tracks = stmt
+            .query_map([], |row| {
+                Ok(ReadyTrackForSync {
+                    track_id: row.get::<_, i64>(0)? as u64,
+                    title: row.get(1)?,
+                    artist: row.get(2)?,
+                    album: row.get(3)?,
+                    duration_secs: row.get::<_, i64>(4)? as u64,
+                    file_path: row.get(5)?,
+                    bit_depth: row.get::<_, Option<i64>>(6)?.map(|v| v as u32),
+                    sample_rate: row.get(7)?,
+                })
             })
-        }).map_err(|e| format!("Failed to query tracks: {}", e))?;
+            .map_err(|e| format!("Failed to query tracks: {}", e))?;
 
         let mut result = Vec::new();
         for track in tracks {
@@ -219,25 +245,27 @@ impl OfflineCacheDb {
              FROM cached_tracks ORDER BY last_accessed_at DESC"
         ).map_err(|e| format!("Failed to prepare query: {}", e))?;
 
-        let tracks = stmt.query_map([], |row| {
-            Ok(CachedTrackInfo {
-                track_id: row.get::<_, i64>(0)? as u64,
-                title: row.get(1)?,
-                artist: row.get(2)?,
-                album: row.get(3)?,
-                album_id: row.get(4)?,
-                duration_secs: row.get::<_, i64>(5)? as u64,
-                file_size_bytes: row.get::<_, i64>(6)? as u64,
-                quality: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
-                bit_depth: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
-                sample_rate: row.get(9)?,
-                status: OfflineCacheStatus::from_str(&row.get::<_, String>(10)?),
-                progress_percent: row.get::<_, i64>(11)? as u8,
-                error_message: row.get(12)?,
-                created_at: row.get(13)?,
-                last_accessed_at: row.get(14)?,
+        let tracks = stmt
+            .query_map([], |row| {
+                Ok(CachedTrackInfo {
+                    track_id: row.get::<_, i64>(0)? as u64,
+                    title: row.get(1)?,
+                    artist: row.get(2)?,
+                    album: row.get(3)?,
+                    album_id: row.get(4)?,
+                    duration_secs: row.get::<_, i64>(5)? as u64,
+                    file_size_bytes: row.get::<_, i64>(6)? as u64,
+                    quality: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
+                    bit_depth: row.get::<_, Option<i64>>(8)?.map(|v| v as u32),
+                    sample_rate: row.get(9)?,
+                    status: OfflineCacheStatus::from_str(&row.get::<_, String>(10)?),
+                    progress_percent: row.get::<_, i64>(11)? as u8,
+                    error_message: row.get(12)?,
+                    created_at: row.get(13)?,
+                    last_accessed_at: row.get(14)?,
+                })
             })
-        }).map_err(|e| format!("Failed to query tracks: {}", e))?;
+            .map_err(|e| format!("Failed to query tracks: {}", e))?;
 
         let mut result = Vec::new();
         for track in tracks {
@@ -250,33 +278,44 @@ impl OfflineCacheDb {
     /// Delete a track from cache
     pub fn delete_track(&self, track_id: u64) -> Result<Option<String>, String> {
         // Get file path before deleting
-        let file_path: Option<String> = self.conn.query_row(
-            "SELECT file_path FROM cached_tracks WHERE track_id = ?1",
-            params![track_id as i64],
-            |row| row.get(0),
-        ).ok();
+        let file_path: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT file_path FROM cached_tracks WHERE track_id = ?1",
+                params![track_id as i64],
+                |row| row.get(0),
+            )
+            .ok();
 
-        self.conn.execute(
-            "DELETE FROM cached_tracks WHERE track_id = ?1",
-            params![track_id as i64],
-        ).map_err(|e| format!("Failed to delete track: {}", e))?;
+        self.conn
+            .execute(
+                "DELETE FROM cached_tracks WHERE track_id = ?1",
+                params![track_id as i64],
+            )
+            .map_err(|e| format!("Failed to delete track: {}", e))?;
 
         Ok(file_path)
     }
 
     /// Get statistics
-    pub fn get_stats(&self, cache_path: &str, limit_bytes: Option<u64>) -> Result<OfflineCacheStats, String> {
-        let total_tracks: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM cached_tracks",
-            [],
-            |row| row.get(0),
-        ).map_err(|e| format!("Failed to count tracks: {}", e))?;
+    pub fn get_stats(
+        &self,
+        cache_path: &str,
+        limit_bytes: Option<u64>,
+    ) -> Result<OfflineCacheStats, String> {
+        let total_tracks: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM cached_tracks", [], |row| row.get(0))
+            .map_err(|e| format!("Failed to count tracks: {}", e))?;
 
-        let ready_tracks: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM cached_tracks WHERE status = 'ready'",
-            [],
-            |row| row.get(0),
-        ).map_err(|e| format!("Failed to count ready tracks: {}", e))?;
+        let ready_tracks: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM cached_tracks WHERE status = 'ready'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to count ready tracks: {}", e))?;
 
         let downloading_tracks: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM cached_tracks WHERE status = 'downloading' OR status = 'queued'",
@@ -284,11 +323,14 @@ impl OfflineCacheDb {
             |row| row.get(0),
         ).map_err(|e| format!("Failed to count downloading tracks: {}", e))?;
 
-        let failed_tracks: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM cached_tracks WHERE status = 'failed'",
-            [],
-            |row| row.get(0),
-        ).map_err(|e| format!("Failed to count failed tracks: {}", e))?;
+        let failed_tracks: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM cached_tracks WHERE status = 'failed'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to count failed tracks: {}", e))?;
 
         let total_size: i64 = self.conn.query_row(
             "SELECT COALESCE(SUM(file_size_bytes), 0) FROM cached_tracks WHERE status = 'ready'",
@@ -308,29 +350,38 @@ impl OfflineCacheDb {
     }
 
     /// Get tracks to evict (LRU order) to free up space
-    pub fn get_tracks_for_eviction(&self, bytes_to_free: u64) -> Result<Vec<(u64, String)>, String> {
-        let mut stmt = self.conn.prepare(
-            "SELECT track_id, file_path, file_size_bytes FROM cached_tracks
+    pub fn get_tracks_for_eviction(
+        &self,
+        bytes_to_free: u64,
+    ) -> Result<Vec<(u64, String)>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT track_id, file_path, file_size_bytes FROM cached_tracks
              WHERE status = 'ready'
-             ORDER BY last_accessed_at ASC"
-        ).map_err(|e| format!("Failed to prepare eviction query: {}", e))?;
+             ORDER BY last_accessed_at ASC",
+            )
+            .map_err(|e| format!("Failed to prepare eviction query: {}", e))?;
 
         let mut result = Vec::new();
         let mut freed = 0u64;
 
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, i64>(0)? as u64,
-                row.get::<_, String>(1)?,
-                row.get::<_, i64>(2)? as u64,
-            ))
-        }).map_err(|e| format!("Failed to query for eviction: {}", e))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)? as u64,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)? as u64,
+                ))
+            })
+            .map_err(|e| format!("Failed to query for eviction: {}", e))?;
 
         for row in rows {
             if freed >= bytes_to_free {
                 break;
             }
-            let (track_id, file_path, size) = row.map_err(|e| format!("Failed to read row: {}", e))?;
+            let (track_id, file_path, size) =
+                row.map_err(|e| format!("Failed to read row: {}", e))?;
             result.push((track_id, file_path));
             freed += size;
         }
@@ -341,15 +392,19 @@ impl OfflineCacheDb {
     /// Clear all entries
     pub fn clear_all(&self) -> Result<Vec<String>, String> {
         // Get all file paths first
-        let mut stmt = self.conn.prepare("SELECT file_path FROM cached_tracks")
+        let mut stmt = self
+            .conn
+            .prepare("SELECT file_path FROM cached_tracks")
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
-        let paths: Vec<String> = stmt.query_map([], |row| row.get(0))
+        let paths: Vec<String> = stmt
+            .query_map([], |row| row.get(0))
             .map_err(|e| format!("Failed to query paths: {}", e))?
             .filter_map(|r| r.ok())
             .collect();
 
-        self.conn.execute("DELETE FROM cached_tracks", [])
+        self.conn
+            .execute("DELETE FROM cached_tracks", [])
             .map_err(|e| format!("Failed to clear database: {}", e))?;
 
         Ok(paths)
@@ -357,19 +412,23 @@ impl OfflineCacheDb {
 
     /// Update file path for a track (after organizing)
     pub fn update_file_path(&self, track_id: u64, new_path: &str) -> Result<(), String> {
-        self.conn.execute(
-            "UPDATE cached_tracks SET file_path = ?1 WHERE track_id = ?2",
-            params![new_path, track_id as i64],
-        ).map_err(|e| format!("Failed to update file path: {}", e))?;
+        self.conn
+            .execute(
+                "UPDATE cached_tracks SET file_path = ?1 WHERE track_id = ?2",
+                params![new_path, track_id as i64],
+            )
+            .map_err(|e| format!("Failed to update file path: {}", e))?;
         Ok(())
     }
 
     /// Update artwork path for a track
     pub fn update_artwork_path(&self, track_id: u64, artwork_path: &str) -> Result<(), String> {
-        self.conn.execute(
-            "UPDATE cached_tracks SET artwork_path = ?1 WHERE track_id = ?2",
-            params![artwork_path, track_id as i64],
-        ).map_err(|e| format!("Failed to update artwork path: {}", e))?;
+        self.conn
+            .execute(
+                "UPDATE cached_tracks SET artwork_path = ?1 WHERE track_id = ?2",
+                params![artwork_path, track_id as i64],
+            )
+            .map_err(|e| format!("Failed to update artwork path: {}", e))?;
         Ok(())
     }
 }

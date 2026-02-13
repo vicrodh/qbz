@@ -9,7 +9,7 @@ use std::hash::{Hash, Hasher};
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 
@@ -171,6 +171,9 @@ fn open_plex_cache_db() -> Result<Connection, String> {
     let conn = Connection::open(db_path)
         .map_err(|e| format!("Failed to open Plex cache database: {}", e))?;
 
+    conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+        .map_err(|e| format!("Failed to enable WAL for Plex cache database: {}", e))?;
+
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS plex_cache_sections (
@@ -199,8 +202,9 @@ fn open_plex_cache_db() -> Result<Connection, String> {
             updated_at INTEGER NOT NULL
         );
         CREATE INDEX IF NOT EXISTS idx_plex_cache_tracks_section ON plex_cache_tracks(section_key);
-        "
-    ).map_err(|e| format!("Failed to initialize Plex cache schema: {}", e))?;
+        ",
+    )
+    .map_err(|e| format!("Failed to initialize Plex cache schema: {}", e))?;
 
     Ok(conn)
 }
@@ -289,7 +293,9 @@ fn decode_xml_entities(input: &str) -> String {
                     "quot" => Some('"'),
                     "apos" => Some('\''),
                     _ if entity.starts_with("#x") || entity.starts_with("#X") => {
-                        u32::from_str_radix(&entity[2..], 16).ok().and_then(char::from_u32)
+                        u32::from_str_radix(&entity[2..], 16)
+                            .ok()
+                            .and_then(char::from_u32)
                     }
                     _ if entity.starts_with('#') => {
                         entity[1..].parse::<u32>().ok().and_then(char::from_u32)
@@ -916,13 +922,25 @@ pub fn plex_cache_get_albums() -> Result<Vec<PlexCachedAlbum>, String> {
                 row.get::<_, Option<i64>>(6)?,
             ))
         })
-        .map_err(|e| format!("Failed to query Plex cache tracks for album aggregation: {}", e))?;
+        .map_err(|e| {
+            format!(
+                "Failed to query Plex cache tracks for album aggregation: {}",
+                e
+            )
+        })?;
 
     let mut grouped: HashMap<String, PlexCachedAlbum> = HashMap::new();
 
     for row in rows {
-        let (artist_opt, album_opt, duration_ms_opt, artwork_path, container, sampling_rate_hz_opt, bit_depth_opt) =
-            row.map_err(|e| format!("Failed to read Plex cache aggregation row: {}", e))?;
+        let (
+            artist_opt,
+            album_opt,
+            duration_ms_opt,
+            artwork_path,
+            container,
+            sampling_rate_hz_opt,
+            bit_depth_opt,
+        ) = row.map_err(|e| format!("Failed to read Plex cache aggregation row: {}", e))?;
         let artist = artist_opt
             .map(|v| decode_xml_entities(v.trim()))
             .filter(|v| !v.is_empty())
@@ -934,19 +952,21 @@ pub fn plex_cache_get_albums() -> Result<Vec<PlexCachedAlbum>, String> {
         let album = normalize_album_title(Some(&artist), &album_raw);
         let album_key = plex_album_key(&artist, &album);
 
-        let entry = grouped.entry(album_key.clone()).or_insert_with(|| PlexCachedAlbum {
-            id: album_key.clone(),
-            title: album.clone(),
-            artist: artist.clone(),
-            artwork_path: artwork_path.clone(),
-            track_count: 0,
-            total_duration_secs: 0,
-            format: container.clone().unwrap_or_else(|| "flac".to_string()),
-            bit_depth: bit_depth_opt.map(|v| v as u32),
-            sample_rate: sampling_rate_hz_opt.map(|v| v as u32).unwrap_or(44100),
-            source: "plex".to_string(),
-            likely_single_file_album: false,
-        });
+        let entry = grouped
+            .entry(album_key.clone())
+            .or_insert_with(|| PlexCachedAlbum {
+                id: album_key.clone(),
+                title: album.clone(),
+                artist: artist.clone(),
+                artwork_path: artwork_path.clone(),
+                track_count: 0,
+                total_duration_secs: 0,
+                format: container.clone().unwrap_or_else(|| "flac".to_string()),
+                bit_depth: bit_depth_opt.map(|v| v as u32),
+                sample_rate: sampling_rate_hz_opt.map(|v| v as u32).unwrap_or(44100),
+                source: "plex".to_string(),
+                likely_single_file_album: false,
+            });
 
         entry.track_count += 1;
         if let Some(duration_ms) = duration_ms_opt {
@@ -1022,8 +1042,17 @@ pub fn plex_cache_get_album_tracks(album_key: String) -> Result<Vec<PlexCachedTr
 
     let mut tracks = Vec::new();
     for row in rows {
-        let (rating_key, title, artist_opt, album_opt, duration_ms_opt, container_opt, bit_depth_opt, sampling_rate_opt, artwork_path) =
-            row.map_err(|e| format!("Failed to read Plex cache album track row: {}", e))?;
+        let (
+            rating_key,
+            title,
+            artist_opt,
+            album_opt,
+            duration_ms_opt,
+            container_opt,
+            bit_depth_opt,
+            sampling_rate_opt,
+            artwork_path,
+        ) = row.map_err(|e| format!("Failed to read Plex cache album track row: {}", e))?;
         let artist = artist_opt
             .map(|v| decode_xml_entities(v.trim()))
             .filter(|v| !v.is_empty())
@@ -1055,7 +1084,10 @@ pub fn plex_cache_get_album_tracks(album_key: String) -> Result<Vec<PlexCachedTr
 }
 
 #[tauri::command]
-pub fn plex_cache_search_tracks(query: String, limit: Option<u32>) -> Result<Vec<PlexCachedTrack>, String> {
+pub fn plex_cache_search_tracks(
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<PlexCachedTrack>, String> {
     let conn = open_plex_cache_db()?;
     let max = limit.unwrap_or(5000) as i64;
     let needle = format!("%{}%", query.to_lowercase());
@@ -1090,8 +1122,17 @@ pub fn plex_cache_search_tracks(query: String, limit: Option<u32>) -> Result<Vec
 
     let mut tracks = Vec::new();
     for row in rows {
-        let (rating_key, title, artist_opt, album_opt, duration_ms_opt, container_opt, bit_depth_opt, sampling_rate_opt, artwork_path) =
-            row.map_err(|e| format!("Failed to read Plex cache search row: {}", e))?;
+        let (
+            rating_key,
+            title,
+            artist_opt,
+            album_opt,
+            duration_ms_opt,
+            container_opt,
+            bit_depth_opt,
+            sampling_rate_opt,
+            artwork_path,
+        ) = row.map_err(|e| format!("Failed to read Plex cache search row: {}", e))?;
         let artist = artist_opt
             .map(|v| decode_xml_entities(v.trim()))
             .filter(|v| !v.is_empty())
@@ -1215,15 +1256,20 @@ pub fn plex_cache_save_tracks(
 }
 
 #[tauri::command]
-pub fn plex_cache_update_track_quality(updates: Vec<PlexTrackQualityUpdate>) -> Result<usize, String> {
+pub fn plex_cache_update_track_quality(
+    updates: Vec<PlexTrackQualityUpdate>,
+) -> Result<usize, String> {
     if updates.is_empty() {
         return Ok(0);
     }
 
     let mut conn = open_plex_cache_db()?;
-    let tx = conn
-        .transaction()
-        .map_err(|e| format!("Failed to start Plex cache quality update transaction: {}", e))?;
+    let tx = conn.transaction().map_err(|e| {
+        format!(
+            "Failed to start Plex cache quality update transaction: {}",
+            e
+        )
+    })?;
 
     let now = now_epoch_secs();
     let mut updated_rows = 0usize;
@@ -1248,8 +1294,12 @@ pub fn plex_cache_update_track_quality(updates: Vec<PlexTrackQualityUpdate>) -> 
         updated_rows += affected;
     }
 
-    tx.commit()
-        .map_err(|e| format!("Failed to commit Plex cache quality update transaction: {}", e))?;
+    tx.commit().map_err(|e| {
+        format!(
+            "Failed to commit Plex cache quality update transaction: {}",
+            e
+        )
+    })?;
 
     Ok(updated_rows)
 }
@@ -1387,7 +1437,10 @@ mod tests {
             tracks[0].part_key.as_deref(),
             Some("/library/parts/999/file.flac")
         );
-        assert_eq!(tracks[0].artwork_path.as_deref(), Some("/library/metadata/42/thumb/1"));
+        assert_eq!(
+            tracks[0].artwork_path.as_deref(),
+            Some("/library/metadata/42/thumb/1")
+        );
         assert_eq!(tracks[0].sampling_rate_hz, Some(96000));
         assert_eq!(tracks[0].bit_depth, Some(24));
     }

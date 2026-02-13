@@ -2,11 +2,11 @@
 //!
 //! Stores user preferences for playback behavior (autoplay mode, etc.)
 
-use rusqlite::{Connection, params};
+use log::info;
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
-use log::info;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AutoplayMode {
@@ -73,13 +73,22 @@ impl PlaybackPreferencesStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open playback preferences database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| {
+                format!(
+                    "Failed to enable WAL for playback preferences database: {}",
+                    e
+                )
+            })?;
+
         // Step 1: Create table with old schema (for new installs) or do nothing if exists
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS playback_preferences (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 autoplay_mode TEXT NOT NULL DEFAULT 'continue'
-            );"
-        ).map_err(|e| format!("Failed to create playback preferences table: {}", e))?;
+            );",
+        )
+        .map_err(|e| format!("Failed to create playback preferences table: {}", e))?;
 
         // Step 2: Check if show_context_icon column exists
         let column_exists: bool = conn
@@ -93,7 +102,10 @@ impl PlaybackPreferencesStore {
             )
             .unwrap_or(false);
 
-        info!("[PlaybackPrefs] Column show_context_icon exists: {}", column_exists);
+        info!(
+            "[PlaybackPrefs] Column show_context_icon exists: {}",
+            column_exists
+        );
 
         // Step 3: Add column if it doesn't exist (migration for existing users)
         if !column_exists {
@@ -109,8 +121,9 @@ impl PlaybackPreferencesStore {
         conn.execute(
             "INSERT OR IGNORE INTO playback_preferences (id, autoplay_mode, show_context_icon)
             VALUES (1, 'continue', 0)",
-            []
-        ).map_err(|e| format!("Failed to insert default preferences: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to insert default preferences: {}", e))?;
 
         Ok(Self { conn })
     }
@@ -197,33 +210,46 @@ impl PlaybackPreferencesState {
 
     pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let new_store = PlaybackPreferencesStore::new_at(base_dir)?;
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock playback preferences store".to_string())?;
         *guard = Some(new_store);
         Ok(())
     }
 
     pub fn teardown(&self) -> Result<(), String> {
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock playback preferences store".to_string())?;
         *guard = None;
         Ok(())
     }
 
     pub fn get_preferences(&self) -> Result<PlaybackPreferences, String> {
-        let guard = self.store.lock().map_err(|_| "Failed to lock playback preferences store".to_string())?;
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock playback preferences store".to_string())?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
         store.get_preferences()
     }
 
     pub fn set_autoplay_mode(&self, mode: AutoplayMode) -> Result<(), String> {
-        let guard = self.store.lock().map_err(|_| "Failed to lock playback preferences store".to_string())?;
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock playback preferences store".to_string())?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
         store.set_autoplay_mode(mode)
     }
 
     pub fn set_show_context_icon(&self, show: bool) -> Result<(), String> {
-        let guard = self.store.lock().map_err(|_| "Failed to lock playback preferences store".to_string())?;
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock playback preferences store".to_string())?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
         store.set_show_context_icon(show)
     }

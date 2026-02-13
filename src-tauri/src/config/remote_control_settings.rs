@@ -25,7 +25,7 @@ impl Default for RemoteControlSettings {
         Self {
             enabled: false,
             port: 8182,
-            secure: true,  // HTTPS by default for security
+            secure: true, // HTTPS by default for security
             token: String::new(),
         }
     }
@@ -44,6 +44,14 @@ impl RemoteControlSettingsStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open remote control settings database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| {
+                format!(
+                    "Failed to enable WAL for remote control settings database: {}",
+                    e
+                )
+            })?;
+
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS remote_control_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -51,8 +59,9 @@ impl RemoteControlSettingsStore {
                 port INTEGER NOT NULL DEFAULT 8182,
                 secure INTEGER NOT NULL DEFAULT 1,
                 token TEXT NOT NULL DEFAULT ''
-            );"
-        ).map_err(|e| format!("Failed to create remote control settings table: {}", e))?;
+            );",
+        )
+        .map_err(|e| format!("Failed to create remote control settings table: {}", e))?;
 
         ensure_secure_column(&conn)?;
 
@@ -61,7 +70,8 @@ impl RemoteControlSettingsStore {
             "INSERT OR IGNORE INTO remote_control_settings (id, enabled, port, secure, token)
             VALUES (1, 0, 8182, 0, ?1)",
             params![token],
-        ).map_err(|e| format!("Failed to insert default remote control settings: {}", e))?;
+        )
+        .map_err(|e| format!("Failed to insert default remote control settings: {}", e))?;
 
         Ok(Self { conn })
     }
@@ -78,7 +88,8 @@ impl RemoteControlSettingsStore {
     }
 
     pub fn get_settings(&self) -> Result<RemoteControlSettings, String> {
-        let mut settings = self.conn
+        let mut settings = self
+            .conn
             .query_row(
                 "SELECT enabled, port, secure, token FROM remote_control_settings WHERE id = 1",
                 [],
@@ -172,21 +183,26 @@ impl RemoteControlSettingsState {
 
     pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let new_store = RemoteControlSettingsStore::new_at(base_dir)?;
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock remote control settings store".to_string())?;
         *guard = Some(new_store);
         Ok(())
     }
 
     pub fn teardown(&self) -> Result<(), String> {
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock remote control settings store".to_string())?;
         *guard = None;
         Ok(())
     }
 
     pub fn get_settings(&self) -> Result<RemoteControlSettings, String> {
-        let guard = self.store
+        let guard = self
+            .store
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
@@ -194,7 +210,8 @@ impl RemoteControlSettingsState {
     }
 
     pub fn set_enabled(&self, enabled: bool) -> Result<(), String> {
-        let guard = self.store
+        let guard = self
+            .store
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
@@ -202,7 +219,8 @@ impl RemoteControlSettingsState {
     }
 
     pub fn set_port(&self, port: u16) -> Result<(), String> {
-        let guard = self.store
+        let guard = self
+            .store
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
@@ -210,7 +228,8 @@ impl RemoteControlSettingsState {
     }
 
     pub fn set_secure(&self, secure: bool) -> Result<(), String> {
-        let guard = self.store
+        let guard = self
+            .store
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
@@ -218,7 +237,8 @@ impl RemoteControlSettingsState {
     }
 
     pub fn regenerate_token(&self) -> Result<String, String> {
-        let guard = self.store
+        let guard = self
+            .store
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
@@ -244,7 +264,9 @@ fn ensure_secure_column(conn: &Connection) -> Result<(), String> {
         .next()
         .map_err(|e| format!("Schema read error: {}", e))?
     {
-        let name: String = row.get(1).map_err(|e| format!("Schema read error: {}", e))?;
+        let name: String = row
+            .get(1)
+            .map_err(|e| format!("Schema read error: {}", e))?;
         if name == "secure" {
             return Ok(());
         }
@@ -292,28 +314,31 @@ impl AllowedOriginsStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open allowed origins database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for allowed origins database: {}", e))?;
+
         // Create allowed_origins table
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS allowed_origins (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 origin TEXT NOT NULL UNIQUE,
                 is_default INTEGER NOT NULL DEFAULT 0
-            );"
-        ).map_err(|e| format!("Failed to create allowed_origins table: {}", e))?;
+            );",
+        )
+        .map_err(|e| format!("Failed to create allowed_origins table: {}", e))?;
 
         // Insert default origins if table is empty
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM allowed_origins",
-            [],
-            |row| row.get(0)
-        ).unwrap_or(0);
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM allowed_origins", [], |row| row.get(0))
+            .unwrap_or(0);
 
         if count == 0 {
             for origin in DEFAULT_ALLOWED_ORIGINS {
                 conn.execute(
                     "INSERT OR IGNORE INTO allowed_origins (origin, is_default) VALUES (?1, 1)",
                     params![origin],
-                ).ok();
+                )
+                .ok();
             }
         }
 
@@ -337,25 +362,30 @@ impl AllowedOriginsStore {
             .prepare("SELECT id, origin, is_default FROM allowed_origins ORDER BY is_default DESC, origin ASC")
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
-        let origins = stmt.query_map([], |row| {
-            Ok(AllowedOrigin {
-                id: row.get(0)?,
-                origin: row.get(1)?,
-                is_default: row.get::<_, i32>(2)? != 0,
+        let origins = stmt
+            .query_map([], |row| {
+                Ok(AllowedOrigin {
+                    id: row.get(0)?,
+                    origin: row.get(1)?,
+                    is_default: row.get::<_, i32>(2)? != 0,
+                })
             })
-        }).map_err(|e| format!("Failed to query origins: {}", e))?;
+            .map_err(|e| format!("Failed to query origins: {}", e))?;
 
-        origins.collect::<Result<Vec<_>, _>>()
+        origins
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|e| format!("Failed to collect origins: {}", e))
     }
 
     /// Check if an origin is allowed
     pub fn is_origin_allowed(&self, origin: &str) -> bool {
-        self.conn.query_row(
-            "SELECT 1 FROM allowed_origins WHERE origin = ?1",
-            params![origin],
-            |_| Ok(())
-        ).is_ok()
+        self.conn
+            .query_row(
+                "SELECT 1 FROM allowed_origins WHERE origin = ?1",
+                params![origin],
+                |_| Ok(()),
+            )
+            .is_ok()
     }
 
     /// Add a new allowed origin
@@ -367,16 +397,18 @@ impl AllowedOriginsStore {
             return Err("Origin cannot be empty".to_string());
         }
 
-        self.conn.execute(
-            "INSERT INTO allowed_origins (origin, is_default) VALUES (?1, 0)",
-            params![normalized],
-        ).map_err(|e| {
-            if e.to_string().contains("UNIQUE constraint") {
-                "Origin already exists".to_string()
-            } else {
-                format!("Failed to add origin: {}", e)
-            }
-        })?;
+        self.conn
+            .execute(
+                "INSERT INTO allowed_origins (origin, is_default) VALUES (?1, 0)",
+                params![normalized],
+            )
+            .map_err(|e| {
+                if e.to_string().contains("UNIQUE constraint") {
+                    "Origin already exists".to_string()
+                } else {
+                    format!("Failed to add origin: {}", e)
+                }
+            })?;
 
         let id = self.conn.last_insert_rowid();
         Ok(AllowedOrigin {
@@ -388,10 +420,10 @@ impl AllowedOriginsStore {
 
     /// Remove an allowed origin by ID
     pub fn remove_origin(&self, id: i64) -> Result<(), String> {
-        let affected = self.conn.execute(
-            "DELETE FROM allowed_origins WHERE id = ?1",
-            params![id],
-        ).map_err(|e| format!("Failed to remove origin: {}", e))?;
+        let affected = self
+            .conn
+            .execute("DELETE FROM allowed_origins WHERE id = ?1", params![id])
+            .map_err(|e| format!("Failed to remove origin: {}", e))?;
 
         if affected == 0 {
             return Err("Origin not found".to_string());
@@ -402,10 +434,12 @@ impl AllowedOriginsStore {
     /// Restore default origins (adds missing defaults back)
     pub fn restore_defaults(&self) -> Result<(), String> {
         for origin in DEFAULT_ALLOWED_ORIGINS {
-            self.conn.execute(
-                "INSERT OR IGNORE INTO allowed_origins (origin, is_default) VALUES (?1, 1)",
-                params![origin],
-            ).ok();
+            self.conn
+                .execute(
+                    "INSERT OR IGNORE INTO allowed_origins (origin, is_default) VALUES (?1, 1)",
+                    params![origin],
+                )
+                .ok();
         }
         Ok(())
     }
@@ -431,21 +465,26 @@ impl AllowedOriginsState {
 
     pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let new_store = AllowedOriginsStore::new_at(base_dir)?;
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock allowed origins store".to_string())?;
         *guard = Some(new_store);
         Ok(())
     }
 
     pub fn teardown(&self) -> Result<(), String> {
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock allowed origins store".to_string())?;
         *guard = None;
         Ok(())
     }
 
     pub fn get_origins(&self) -> Result<Vec<AllowedOrigin>, String> {
-        let guard = self.store
+        let guard = self
+            .store
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
@@ -456,7 +495,8 @@ impl AllowedOriginsState {
         self.store
             .lock()
             .map(|guard| {
-                guard.as_ref()
+                guard
+                    .as_ref()
                     .map(|s| s.is_origin_allowed(origin))
                     .unwrap_or(false)
             })
@@ -464,7 +504,8 @@ impl AllowedOriginsState {
     }
 
     pub fn add_origin(&self, origin: &str) -> Result<AllowedOrigin, String> {
-        let guard = self.store
+        let guard = self
+            .store
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
@@ -472,7 +513,8 @@ impl AllowedOriginsState {
     }
 
     pub fn remove_origin(&self, id: i64) -> Result<(), String> {
-        let guard = self.store
+        let guard = self
+            .store
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;
@@ -480,7 +522,8 @@ impl AllowedOriginsState {
     }
 
     pub fn restore_defaults(&self) -> Result<(), String> {
-        let guard = self.store
+        let guard = self
+            .store
             .lock()
             .map_err(|e| format!("Lock error: {}", e))?;
         let store = guard.as_ref().ok_or("No active session - please log in")?;

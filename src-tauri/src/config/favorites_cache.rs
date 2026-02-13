@@ -46,6 +46,9 @@ impl FavoritesCacheStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open favorites cache database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for favorites cache database: {}", e))?;
+
         // Create tables
         conn.execute(
             "CREATE TABLE IF NOT EXISTS favorite_tracks (
@@ -91,7 +94,8 @@ impl FavoritesCacheStore {
     // ============ Track favorites ============
 
     pub fn get_favorite_track_ids(&self) -> Result<Vec<i64>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare("SELECT track_id FROM favorite_tracks")
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
@@ -107,7 +111,8 @@ impl FavoritesCacheStore {
     }
 
     pub fn is_track_favorite(&self, track_id: i64) -> Result<bool, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare("SELECT 1 FROM favorite_tracks WHERE track_id = ?1")
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
@@ -158,7 +163,8 @@ impl FavoritesCacheStore {
     // ============ Album favorites ============
 
     pub fn get_favorite_album_ids(&self) -> Result<Vec<String>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare("SELECT album_id FROM favorite_albums")
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
@@ -174,7 +180,8 @@ impl FavoritesCacheStore {
     }
 
     pub fn is_album_favorite(&self, album_id: &str) -> Result<bool, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare("SELECT 1 FROM favorite_albums WHERE album_id = ?1")
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
@@ -224,7 +231,8 @@ impl FavoritesCacheStore {
     // ============ Artist favorites ============
 
     pub fn get_favorite_artist_ids(&self) -> Result<Vec<i64>, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare("SELECT artist_id FROM favorite_artists")
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
@@ -240,7 +248,8 @@ impl FavoritesCacheStore {
     }
 
     pub fn is_artist_favorite(&self, artist_id: i64) -> Result<bool, String> {
-        let mut stmt = self.conn
+        let mut stmt = self
+            .conn
             .prepare("SELECT 1 FROM favorite_artists WHERE artist_id = ?1")
             .map_err(|e| format!("Failed to prepare query: {}", e))?;
 
@@ -325,14 +334,18 @@ impl FavoritesCacheState {
 
     pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let new_store = FavoritesCacheStore::new_at(base_dir)?;
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock favorites cache store".to_string())?;
         *guard = Some(new_store);
         Ok(())
     }
 
     pub fn teardown(&self) -> Result<(), String> {
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock favorites cache store".to_string())?;
         *guard = None;
         Ok(())
@@ -508,9 +521,7 @@ pub fn sync_cached_favorite_artists(
 
 /// Clear all cached favorites (call on logout)
 #[tauri::command]
-pub fn clear_favorites_cache(
-    state: tauri::State<FavoritesCacheState>,
-) -> Result<(), String> {
+pub fn clear_favorites_cache(state: tauri::State<FavoritesCacheState>) -> Result<(), String> {
     let guard = state
         .store
         .lock()

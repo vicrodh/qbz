@@ -5,7 +5,7 @@
 //!
 //! Thread-safe via `Mutex<Connection>`.
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use std::sync::Mutex;
 
 #[derive(Debug, Clone)]
@@ -33,6 +33,9 @@ impl LoudnessCache {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open loudness cache database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for loudness cache database: {}", e))?;
+
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS track_loudness (
                 track_id INTEGER PRIMARY KEY,
@@ -40,12 +43,15 @@ impl LoudnessCache {
                 peak REAL NOT NULL DEFAULT 0.0,
                 source TEXT NOT NULL DEFAULT 'ebur128',
                 created_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-            )"
-        ).map_err(|e| format!("Failed to create loudness table: {}", e))?;
+            )",
+        )
+        .map_err(|e| format!("Failed to create loudness table: {}", e))?;
 
         log::info!("[LoudnessCache] Opened at {}", db_path.display());
 
-        Ok(Self { conn: Mutex::new(conn) })
+        Ok(Self {
+            conn: Mutex::new(conn),
+        })
     }
 
     /// Look up cached loudness for a track.
@@ -61,7 +67,8 @@ impl LoudnessCache {
                     source: row.get(2)?,
                 })
             },
-        ).ok()
+        )
+        .ok()
     }
 
     /// Store or update loudness data for a track.
@@ -73,7 +80,11 @@ impl LoudnessCache {
                 params![track_id as i64, gain_db as f64, peak as f64, source],
             );
             if let Err(e) = result {
-                log::warn!("[LoudnessCache] Failed to store loudness for track {}: {}", track_id, e);
+                log::warn!(
+                    "[LoudnessCache] Failed to store loudness for track {}: {}",
+                    track_id,
+                    e
+                );
             }
         }
     }

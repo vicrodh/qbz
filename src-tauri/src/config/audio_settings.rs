@@ -3,20 +3,20 @@
 //! Stores user preferences for audio output device, exclusive mode, and DAC passthrough.
 
 use crate::audio::{AlsaPlugin, AudioBackendType};
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioSettings {
-    pub output_device: Option<String>,  // None = system default
+    pub output_device: Option<String>, // None = system default
     pub exclusive_mode: bool,
     pub dac_passthrough: bool,
-    pub preferred_sample_rate: Option<u32>,  // None = auto
-    pub backend_type: Option<AudioBackendType>,  // None = auto-detect
-    pub alsa_plugin: Option<AlsaPlugin>,  // Only used when backend is ALSA
-    pub alsa_hardware_volume: bool,  // Use ALSA mixer for volume (only with hw: devices)
+    pub preferred_sample_rate: Option<u32>,     // None = auto
+    pub backend_type: Option<AudioBackendType>, // None = auto-detect
+    pub alsa_plugin: Option<AlsaPlugin>,        // Only used when backend is ALSA
+    pub alsa_hardware_volume: bool,             // Use ALSA mixer for volume (only with hw: devices)
     /// When true, uncached tracks start playing via streaming instead of waiting for full download
     pub stream_first_track: bool,
     /// Initial buffer size in seconds before starting streaming playback (1-10, default 3)
@@ -48,15 +48,15 @@ impl Default for AudioSettings {
             exclusive_mode: false,
             dac_passthrough: false,
             preferred_sample_rate: None,
-            backend_type: None,  // Auto-detect (PipeWire if available, else ALSA)
-            alsa_plugin: Some(AlsaPlugin::Hw),  // Default to hw (bit-perfect)
-            alsa_hardware_volume: false,  // Disabled by default (maximum compatibility)
-            stream_first_track: false,  // Disabled by default — user opts in
-            stream_buffer_seconds: 3,  // 3 seconds initial buffer
-            streaming_only: false,  // Disabled by default (cache tracks for instant replay)
-            limit_quality_to_device: false,  // Disabled in 1.1.9 — detection logic unreliable (#45)
-            device_max_sample_rate: None,   // Set when device is selected
-            normalization_enabled: false,   // Off by default — preserves bit-perfect pipeline
+            backend_type: None, // Auto-detect (PipeWire if available, else ALSA)
+            alsa_plugin: Some(AlsaPlugin::Hw), // Default to hw (bit-perfect)
+            alsa_hardware_volume: false, // Disabled by default (maximum compatibility)
+            stream_first_track: false, // Disabled by default — user opts in
+            stream_buffer_seconds: 3, // 3 seconds initial buffer
+            streaming_only: false, // Disabled by default (cache tracks for instant replay)
+            limit_quality_to_device: false, // Disabled in 1.1.9 — detection logic unreliable (#45)
+            device_max_sample_rate: None, // Set when device is selected
+            normalization_enabled: false, // Off by default — preserves bit-perfect pipeline
             normalization_target_lufs: -14.0, // Spotify/YouTube standard
             gapless_enabled: false, // Off by default — user opts in
         }
@@ -76,6 +76,9 @@ impl AudioSettingsStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open audio settings database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for audio settings database: {}", e))?;
+
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS audio_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -90,21 +93,52 @@ impl AudioSettingsStore {
                 stream_buffer_seconds INTEGER NOT NULL DEFAULT 3
             );
             INSERT OR IGNORE INTO audio_settings (id, exclusive_mode, dac_passthrough)
-            VALUES (1, 0, 0);"
-        ).map_err(|e| format!("Failed to create audio settings table: {}", e))?;
+            VALUES (1, 0, 0);",
+        )
+        .map_err(|e| format!("Failed to create audio settings table: {}", e))?;
 
         // Migration: Add new columns if they don't exist (for existing databases)
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN backend_type TEXT", []);
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN backend_type TEXT",
+            [],
+        );
         let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN alsa_plugin TEXT", []);
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN alsa_hardware_volume INTEGER DEFAULT 0", []);
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN stream_first_track INTEGER DEFAULT 0", []);
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN stream_buffer_seconds INTEGER DEFAULT 3", []);
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN streaming_only INTEGER DEFAULT 0", []);
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN limit_quality_to_device INTEGER DEFAULT 0", []);
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN device_max_sample_rate INTEGER", []);
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN normalization_enabled INTEGER DEFAULT 0", []);
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN normalization_target_lufs REAL DEFAULT -14.0", []);
-        let _ = conn.execute("ALTER TABLE audio_settings ADD COLUMN gapless_enabled INTEGER DEFAULT 0", []);
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN alsa_hardware_volume INTEGER DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN stream_first_track INTEGER DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN stream_buffer_seconds INTEGER DEFAULT 3",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN streaming_only INTEGER DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN limit_quality_to_device INTEGER DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN device_max_sample_rate INTEGER",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN normalization_enabled INTEGER DEFAULT 0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN normalization_target_lufs REAL DEFAULT -14.0",
+            [],
+        );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN gapless_enabled INTEGER DEFAULT 0",
+            [],
+        );
 
         Ok(Self { conn })
     }
@@ -323,11 +357,13 @@ impl AudioSettingsStore {
     /// Reset all audio settings to their default values
     pub fn reset_all(&self) -> Result<AudioSettings, String> {
         let defaults = AudioSettings::default();
-        let backend_json: Option<String> = defaults.backend_type
+        let backend_json: Option<String> = defaults
+            .backend_type
             .map(|b| serde_json::to_string(&b))
             .transpose()
             .map_err(|e| format!("Failed to serialize backend type: {}", e))?;
-        let plugin_json: Option<String> = defaults.alsa_plugin
+        let plugin_json: Option<String> = defaults
+            .alsa_plugin
             .map(|p| serde_json::to_string(&p))
             .transpose()
             .map_err(|e| format!("Failed to serialize ALSA plugin: {}", e))?;
@@ -395,14 +431,18 @@ impl AudioSettingsState {
 
     pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let new_store = AudioSettingsStore::new_at(base_dir)?;
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock audio settings store".to_string())?;
         *guard = Some(new_store);
         Ok(())
     }
 
     pub fn teardown(&self) -> Result<(), String> {
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock audio settings store".to_string())?;
         *guard = None;
         Ok(())
@@ -414,7 +454,10 @@ impl AudioSettingsState {
 pub fn get_audio_settings(
     state: tauri::State<'_, AudioSettingsState>,
 ) -> Result<AudioSettings, String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.get_settings()
 }
@@ -426,9 +469,9 @@ pub fn set_audio_output_device(
 ) -> Result<(), String> {
     // Normalize hw:X,0 to stable front:CARD=name,DEV=0 format
     // This ensures the saved device ID survives reboots and USB reconnections
-    let normalized_device = device.as_ref().map(|d| {
-        crate::audio::normalize_device_id_to_stable(d)
-    });
+    let normalized_device = device
+        .as_ref()
+        .map(|d| crate::audio::normalize_device_id_to_stable(d));
 
     log::info!(
         "Command: set_audio_output_device {:?} -> {:?} (normalized)",
@@ -436,7 +479,10 @@ pub fn set_audio_output_device(
         normalized_device
     );
 
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_output_device(normalized_device.as_deref())
 }
@@ -446,7 +492,10 @@ pub fn set_audio_exclusive_mode(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_exclusive_mode(enabled)
 }
@@ -456,7 +505,10 @@ pub fn set_audio_dac_passthrough(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_dac_passthrough(enabled)
 }
@@ -466,7 +518,10 @@ pub fn set_audio_sample_rate(
     state: tauri::State<'_, AudioSettingsState>,
     rate: Option<u32>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_sample_rate(rate)
 }
@@ -476,7 +531,10 @@ pub fn set_audio_backend_type(
     state: tauri::State<'_, AudioSettingsState>,
     backend_type: Option<AudioBackendType>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_backend_type(backend_type)
 }
@@ -486,7 +544,10 @@ pub fn set_audio_alsa_plugin(
     state: tauri::State<'_, AudioSettingsState>,
     plugin: Option<AlsaPlugin>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_alsa_plugin(plugin)
 }
@@ -496,7 +557,10 @@ pub fn set_audio_alsa_hardware_volume(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_alsa_hardware_volume(enabled)
 }
@@ -506,7 +570,10 @@ pub fn set_audio_stream_first_track(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_stream_first_track(enabled)
 }
@@ -516,7 +583,10 @@ pub fn set_audio_stream_buffer_seconds(
     state: tauri::State<'_, AudioSettingsState>,
     seconds: u8,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_stream_buffer_seconds(seconds)
 }
@@ -526,7 +596,10 @@ pub fn set_audio_streaming_only(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_streaming_only(enabled)
 }
@@ -536,7 +609,10 @@ pub fn set_audio_limit_quality_to_device(
     state: tauri::State<'_, AudioSettingsState>,
     enabled: bool,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_limit_quality_to_device(enabled)
 }
@@ -546,7 +622,10 @@ pub fn set_audio_device_max_sample_rate(
     state: tauri::State<'_, AudioSettingsState>,
     rate: Option<u32>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_device_max_sample_rate(rate)
 }
@@ -557,7 +636,10 @@ pub fn set_audio_normalization_enabled(
     enabled: bool,
 ) -> Result<(), String> {
     log::info!("Command: set_audio_normalization_enabled {}", enabled);
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_normalization_enabled(enabled)
 }
@@ -567,8 +649,14 @@ pub fn set_audio_normalization_target(
     state: tauri::State<'_, AudioSettingsState>,
     target_lufs: f32,
 ) -> Result<(), String> {
-    log::info!("Command: set_audio_normalization_target {} LUFS", target_lufs);
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    log::info!(
+        "Command: set_audio_normalization_target {} LUFS",
+        target_lufs
+    );
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_normalization_target_lufs(target_lufs)
 }
@@ -579,7 +667,10 @@ pub fn set_audio_gapless_enabled(
     enabled: bool,
 ) -> Result<(), String> {
     log::info!("Command: set_audio_gapless_enabled {}", enabled);
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_gapless_enabled(enabled)
 }
@@ -592,13 +683,21 @@ pub fn reset_audio_settings(
     log::info!("Command: reset_audio_settings (resetting audio + playback to defaults)");
 
     // Reset audio settings
-    let guard = audio_state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = audio_state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     let defaults = store.reset_all()?;
 
     // Reset playback preferences
-    let pb_guard = playback_state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let pb_store = pb_guard.as_ref().ok_or("No active session - please log in")?;
+    let pb_guard = playback_state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let pb_store = pb_guard
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     pb_store.reset_all()?;
 
     Ok(defaults)

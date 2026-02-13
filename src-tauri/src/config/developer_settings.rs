@@ -3,7 +3,7 @@
 //! Stores developer-mode toggles (e.g. force DMA-BUF override for NVIDIA+Wayland).
 //! These settings are device-level (not per-user) and persist across sessions.
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
 
@@ -37,13 +37,22 @@ impl DeveloperSettingsStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open developer settings database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| {
+                format!(
+                    "Failed to enable WAL for developer settings database: {}",
+                    e
+                )
+            })?;
+
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS developer_settings (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 force_dmabuf INTEGER NOT NULL DEFAULT 0
             );
-            INSERT OR IGNORE INTO developer_settings (id, force_dmabuf) VALUES (1, 0);"
-        ).map_err(|e| format!("Failed to create developer settings table: {}", e))?;
+            INSERT OR IGNORE INTO developer_settings (id, force_dmabuf) VALUES (1, 0);",
+        )
+        .map_err(|e| format!("Failed to create developer settings table: {}", e))?;
 
         Ok(Self { conn })
     }
@@ -98,8 +107,13 @@ impl DeveloperSettingsState {
 pub fn get_developer_settings(
     state: tauri::State<'_, DeveloperSettingsState>,
 ) -> Result<DeveloperSettings, String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("Developer settings store not initialized")?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Developer settings store not initialized")?;
     store.get_settings()
 }
 
@@ -109,7 +123,12 @@ pub fn set_developer_force_dmabuf(
     enabled: bool,
 ) -> Result<(), String> {
     log::info!("Command: set_developer_force_dmabuf {}", enabled);
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("Developer settings store not initialized")?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Developer settings store not initialized")?;
     store.set_force_dmabuf(enabled)
 }

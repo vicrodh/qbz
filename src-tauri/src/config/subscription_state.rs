@@ -4,7 +4,7 @@
 //! invalid state persists for more than a grace period, offline downloads are
 //! purged.
 
-use rusqlite::{Connection, params};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -46,6 +46,14 @@ impl SubscriptionStateStore {
         let conn = Connection::open(&db_path)
             .map_err(|e| format!("Failed to open subscription state database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| {
+                format!(
+                    "Failed to enable WAL for subscription state database: {}",
+                    e
+                )
+            })?;
+
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS subscription_state (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -55,8 +63,9 @@ impl SubscriptionStateStore {
                 last_checked_at INTEGER,
                 downloads_purged_at INTEGER
             );
-            INSERT OR IGNORE INTO subscription_state (id) VALUES (1);"
-        ).map_err(|e| format!("Failed to create subscription state table: {}", e))?;
+            INSERT OR IGNORE INTO subscription_state (id) VALUES (1);",
+        )
+        .map_err(|e| format!("Failed to create subscription state table: {}", e))?;
 
         Ok(Self { conn })
     }
@@ -132,7 +141,9 @@ impl SubscriptionStateStore {
 
     pub fn should_purge_offline_cache(&self, now: i64) -> Result<bool, String> {
         let state = self.get_state()?;
-        let Some(invalid_since) = state.invalid_since else { return Ok(false); };
+        let Some(invalid_since) = state.invalid_since else {
+            return Ok(false);
+        };
         if now - invalid_since < GRACE_PERIOD_SECS {
             return Ok(false);
         }

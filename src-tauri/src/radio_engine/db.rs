@@ -79,9 +79,9 @@ impl RadioDb {
     }
 
     pub fn open(path: &Path) -> Result<Self, String> {
-        let conn = Connection::open(path)
-            .map_err(|e| format!("Failed to open radio database: {}", e))?;
-        conn.execute_batch("PRAGMA journal_mode=WAL;")
+        let conn =
+            Connection::open(path).map_err(|e| format!("Failed to open radio database: {}", e))?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
             .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
         let db = Self {
             conn,
@@ -379,7 +379,8 @@ impl RadioDb {
 
         let mut artists = Vec::new();
         for row in rows {
-            artists.push(row.map_err(|e| format!("Failed to read recent artist row: {}", e))? as u64);
+            artists
+                .push(row.map_err(|e| format!("Failed to read recent artist row: {}", e))? as u64);
         }
         Ok(artists)
     }

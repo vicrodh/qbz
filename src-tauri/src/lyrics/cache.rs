@@ -16,14 +16,18 @@ impl LyricsCacheDb {
         let conn = Connection::open(path)
             .map_err(|e| format!("Failed to open lyrics cache database: {}", e))?;
 
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL for lyrics cache database: {}", e))?;
+
         let db = Self { conn };
         db.init_schema()?;
         Ok(db)
     }
 
     fn init_schema(&self) -> Result<(), String> {
-        self.conn.execute_batch(
-            "
+        self.conn
+            .execute_batch(
+                "
             CREATE TABLE IF NOT EXISTS lyrics_cache (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 track_id INTEGER,
@@ -42,8 +46,8 @@ impl LyricsCacheDb {
             CREATE INDEX IF NOT EXISTS idx_lyrics_track_id ON lyrics_cache(track_id);
             CREATE INDEX IF NOT EXISTS idx_lyrics_cache_key ON lyrics_cache(cache_key);
             ",
-        )
-        .map_err(|e| format!("Failed to initialize lyrics cache schema: {}", e))?;
+            )
+            .map_err(|e| format!("Failed to initialize lyrics cache schema: {}", e))?;
 
         Ok(())
     }
