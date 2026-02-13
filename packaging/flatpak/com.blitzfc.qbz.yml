@@ -40,9 +40,6 @@ finish-args:
   - --talk-name=org.freedesktop.portal.FileChooser
   - --talk-name=org.mpris.MediaPlayer2.*
 
-  # Own MPRIS name to register as media player
-  - --own-name=org.mpris.MediaPlayer2.qbz
-
   # OAuth browser authentication
   - --talk-name=org.freedesktop.portal.OpenURI
 

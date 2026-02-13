@@ -52,7 +52,7 @@ impl MediaControlsManager {
         // (souvlaki requires a window handle on some platforms)
         thread::spawn(move || {
             let config = PlatformConfig {
-                dbus_name: "qbz",
+                dbus_name: "com.blitzfc.qbz",
                 display_name: "QBZ",
                 hwnd: None, // Not needed on Linux
             };
