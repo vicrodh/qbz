@@ -296,68 +296,12 @@ impl AlsaBackend {
             }
         }
 
-        // Fourth: Add hw:X,Y and plughw:X,Y devices manually (CPAL doesn't enumerate these)
-        for card in &cards {
-            for pcm in &card.pcm_playback_devices {
-                // Create hw:X,Y device (bit-perfect direct hardware access)
-                let hw_device_id = format!("hw:{},{}", card.number, pcm.device_num);
-
-                // Check if we already have this device
-                let already_exists = devices.iter().any(|d| d.name == hw_device_id);
-                if already_exists {
-                    continue;
-                }
-
-                // Test if CPAL can open this device
-                let cpal_device = self.host
-                    .output_devices()
-                    .ok()
-                    .and_then(|mut devs| {
-                        devs.find(|d| d.name().ok().as_deref() == Some(&hw_device_id))
-                    });
-
-                let max_sample_rate = cpal_device.as_ref().and_then(|device| {
-                    device
-                        .supported_output_configs()
-                        .ok()
-                        .and_then(|configs| {
-                            configs
-                                .max_by_key(|c| c.max_sample_rate().0)
-                                .map(|c| c.max_sample_rate().0)
-                        })
-                });
-
-                let supported_sample_rates = cpal_device.as_ref().and_then(get_supported_sample_rates);
-
-                devices.push(AudioDevice {
-                    id: hw_device_id.clone(),
-                    name: hw_device_id.clone(),
-                    description: Some(format!("{} - {} (Direct Hardware - Bit-perfect)", card.long_name, pcm.name)),
-                    is_default: false,
-                    max_sample_rate: max_sample_rate.or(Some(384000)),
-                    supported_sample_rates,
-                    device_bus: None,
-                    is_hardware: true,
-                });
-
-                // Also create plughw:X,Y device (plugin hardware with auto-conversion)
-                let plughw_device_id = format!("plughw:{},{}", card.number, pcm.device_num);
-                if !devices.iter().any(|d| d.name == plughw_device_id) {
-                    devices.push(AudioDevice {
-                        id: plughw_device_id.clone(),
-                        name: plughw_device_id.clone(),
-                        description: Some(format!("{} - {} (Plugin Hardware)", card.long_name, pcm.name)),
-                        is_default: false,
-                        max_sample_rate: Some(384000),
-                        supported_sample_rates: None, // plughw can convert, so all rates are "supported"
-                        device_bus: None,
-                        is_hardware: true,
-                    });
-                }
-            }
-        }
-
-        // Fifth: Add front:CARD=X,DEV=Y devices (issue #30)
+        // Fourth: Add front:CARD=X,DEV=Y devices for bit-perfect playback
+        // NOTE: We intentionally do NOT add hw:X,Y and plughw:X,Y devices because:
+        // - Their card numbers (X) are UNSTABLE and change between boots
+        // - front:CARD=name,DEV=Y uses the card NAME which is stable
+        // - Both formats are functionally equivalent for bit-perfect playback
+        // This fixes issue #69 where saved device wouldn't be recognized after reboot
         // Some USB DACs don't expose hw: devices but have working front: devices
         for card in &cards {
             for pcm in &card.pcm_playback_devices {
