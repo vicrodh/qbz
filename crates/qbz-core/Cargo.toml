@@ -10,7 +10,10 @@ tokio = { workspace = true }
 async-trait = { workspace = true }
 
 # HTTP
-reqwest = { workspace = true }
+reqwest = { version = "0.12", features = ["json", "rustls-tls", "cookies"] }
+
+# Error handling
+anyhow = "1"
 
 # Serialization
 serde = { workspace = true }
@@ -26,8 +29,17 @@ thiserror = { workspace = true }
 symphonia = { workspace = true }
 
 # Crypto
-md5 = { workspace = true }
+md-5 = "0.10"
 base64 = { workspace = true }
+
+# Time
+chrono = "0.4"
+
+# Regex
+regex = "1"
+
+# Async utilities
+futures-util = "0.3"
 
 # Audio output - using vendored versions from src-tauri
 # IMPORTANT: Must use symphonia-all to match qbz-nix config (f32 pipeline)

@@ -1,53 +1,16 @@
 //! QBZ Core - Frontend-agnostic music player library
-//!
-//! This crate provides the core functionality for QBZ:
-//! - Qobuz API client
-//! - Audio playback (via rodio/cpal)
-//! - Queue management
-//! - Audio caching
-//!
-//! ## Architecture
-//!
-//! The core is designed to be used by multiple frontends:
-//! - `qbz-slint`: Slint UI (this POC)
-//! - `qbz-nix`: Tauri + Svelte (current production app)
-//! - `qbz-daemon`: Headless daemon with REST API (future)
-//!
-//! ## Usage
-//!
-//! ```rust,ignore
-//! use qbz_core::{QbzCore, FrontendAdapter, CoreEvent};
-//!
-//! struct MyAdapter;
-//!
-//! #[async_trait::async_trait]
-//! impl FrontendAdapter for MyAdapter {
-//!     async fn on_event(&self, event: CoreEvent) {
-//!         // Handle event - update UI, etc.
-//!     }
-//! }
-//!
-//! #[tokio::main]
-//! async fn main() {
-//!     let core = QbzCore::new(MyAdapter);
-//!     core.init().await.unwrap();
-//!     core.login("email", "password").await.unwrap();
-//! }
-//! ```
 
+pub mod api;
 pub mod events;
 pub mod traits;
 pub mod types;
 
-// These will be copied from src-tauri
-// pub mod api;
-// pub mod audio;
-// pub mod player;
-// pub mod queue;
-// pub mod cache;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 
 // Re-exports
-pub use events::CoreEvent;
+pub use api::{QobuzClient, ApiError};
+pub use events::{CoreEvent, PlaybackState, RepeatMode, AppError};
 pub use traits::{FrontendAdapter, NullAdapter};
 pub use types::*;
 
@@ -55,7 +18,7 @@ pub use types::*;
 #[derive(Debug, thiserror::Error)]
 pub enum CoreError {
     #[error("API error: {0}")]
-    Api(String),
+    Api(#[from] api::ApiError),
 
     #[error("Audio error: {0}")]
     Audio(String),
@@ -73,27 +36,122 @@ pub enum CoreError {
     Io(#[from] std::io::Error),
 }
 
-/// Placeholder for QbzCore - will be fully implemented after copying modules
+/// Main QBZ core - holds all state and provides the public API
 pub struct QbzCore<A: FrontendAdapter> {
-    adapter: std::sync::Arc<A>,
+    adapter: Arc<A>,
+    client: Arc<RwLock<QobuzClient>>,
 }
 
 impl<A: FrontendAdapter> QbzCore<A> {
+    /// Create a new QbzCore instance with the given frontend adapter
     pub fn new(adapter: A) -> Self {
         Self {
-            adapter: std::sync::Arc::new(adapter),
+            adapter: Arc::new(adapter),
+            client: Arc::new(RwLock::new(QobuzClient::default())),
         }
     }
 
-    /// Initialize the Qobuz API client
+    /// Get a reference to the adapter
+    pub fn adapter(&self) -> &Arc<A> {
+        &self.adapter
+    }
+
+    // ─── Authentication ─────────────────────────────────────────────────────
+
+    /// Initialize the Qobuz API client (fetch bundle tokens)
     pub async fn init(&self) -> Result<(), CoreError> {
-        log::info!("QbzCore::init() - placeholder");
+        log::info!("Initializing Qobuz API client...");
+        self.client.write().await.init().await?;
+        log::info!("Qobuz API client initialized");
         Ok(())
+    }
+
+    /// Login with email and password
+    pub async fn login(&self, email: &str, password: &str) -> Result<UserInfo, CoreError> {
+        log::info!("Logging in as {}...", email);
+
+        let session = self.client.write().await
+            .login(email, password).await?;
+
+        let user_info = UserInfo {
+            id: session.user_id,
+            email: session.email.clone(),
+            display_name: session.display_name.clone(),
+            subscription_type: session.subscription_label.clone(),
+        };
+
+        log::info!("Login successful: {} ({})", user_info.display_name, user_info.subscription_type);
+
+        // Notify frontend
+        self.adapter.on_event(CoreEvent::LoginSuccess(user_info.clone())).await;
+
+        Ok(user_info)
     }
 
     /// Check if user is logged in
     pub async fn is_logged_in(&self) -> bool {
-        false
+        self.client.read().await.is_logged_in().await
+    }
+
+    /// Logout current user
+    pub async fn logout(&self) {
+        log::info!("Logging out...");
+        self.client.write().await.logout().await;
+        self.adapter.on_event(CoreEvent::LoggedOut).await;
+    }
+
+    // ─── Search (simplified for POC) ────────────────────────────────────────
+
+    /// Search for albums
+    pub async fn search_albums(&self, query: &str, limit: usize) -> Result<Vec<Album>, CoreError> {
+        log::info!("Searching albums: {}", query);
+
+        let client = self.client.read().await;
+        let response = client.search_albums(query, limit as u32, 0, None).await?;
+
+        let albums = response.items.into_iter().map(|a| Album {
+            id: a.id,
+            title: a.title,
+            artist: a.artist.name,
+            artist_id: a.artist.id,
+            cover_url: a.image.large.clone(),
+            release_date: a.release_date_original,
+            track_count: a.tracks_count.unwrap_or(0) as u32,
+            duration: a.duration.unwrap_or(0) as u64 * 1000,
+            hires_available: a.hires_streamable,
+            genre: a.genre.map(|g| g.name),
+        }).collect();
+
+        Ok(albums)
+    }
+
+    /// Search for tracks
+    pub async fn search_tracks(&self, query: &str, limit: usize) -> Result<Vec<Track>, CoreError> {
+        log::info!("Searching tracks: {}", query);
+
+        let client = self.client.read().await;
+        let response = client.search_tracks(query, limit as u32, 0, None).await?;
+
+        let tracks = response.items.into_iter().filter_map(|t| {
+            let album = t.album?;
+            Some(Track {
+                id: t.id,
+                title: t.title,
+                artist: t.performer.as_ref().map(|p| p.name.clone()).unwrap_or_default(),
+                artist_id: t.performer.as_ref().map(|p| p.id).unwrap_or(0),
+                album: album.title.clone(),
+                album_id: album.id,
+                duration: t.duration as u64 * 1000,
+                track_number: t.track_number as u32,
+                disc_number: t.media_number.unwrap_or(1) as u32,
+                cover_url: album.image.large.clone(),
+                hires_available: t.hires_streamable,
+                sample_rate: t.maximum_sampling_rate.map(|r| (r * 1000.0) as u32),
+                bit_depth: t.maximum_bit_depth.map(|b| b as u8),
+            })
+        }).collect();
+
+        Ok(tracks)
     }
 }
 
