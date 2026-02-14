@@ -117,27 +117,5 @@ impl Default for PlaybackStatus {
     }
 }
 
-// ============ Audio Backend Types ============
-
-/// Audio backend type selection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum AudioBackendType {
-    /// PipeWire/PulseAudio via CPAL (default, most compatible)
-    PipeWire,
-    /// Direct ALSA for bit-perfect playback
-    AlsaDirect,
-}
-
-impl Default for AudioBackendType {
-    fn default() -> Self {
-        Self::PipeWire
-    }
-}
-
-/// Audio device information
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct AudioDevice {
-    pub id: String,
-    pub name: String,
-    pub is_default: bool,
-}
+// Note: Audio backend types (AudioBackendType, AudioDevice, etc.) are defined
+// in qbz-audio crate to keep the audio module self-contained and immutable.

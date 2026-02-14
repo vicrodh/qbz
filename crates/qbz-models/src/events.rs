@@ -145,7 +145,8 @@ pub enum CoreEvent {
 
     /// Audio backend changed
     AudioBackendChanged {
-        backend: crate::playback::AudioBackendType,
+        /// Backend name: "pipewire", "alsa", "pulse"
+        backend: String,
     },
 
     /// Audio system diagnostic info

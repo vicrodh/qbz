@@ -38,10 +38,7 @@ pub mod types;
 // Re-export commonly used types at crate root
 pub use error::{QbzError, QbzResult};
 pub use events::CoreEvent;
-pub use playback::{
-    AudioBackendType, AudioDevice, PlaybackState, PlaybackStatus, QueueState, QueueTrack,
-    RepeatMode,
-};
+pub use playback::{PlaybackState, PlaybackStatus, QueueState, QueueTrack, RepeatMode};
 pub use traits::{FrontendAdapter, LoggingAdapter, NoOpAdapter};
 pub use types::{
     Album, AlbumSummary, Artist, ArtistAlbums, ArtistBiography, Favorites, Genre, GenreInfo,
