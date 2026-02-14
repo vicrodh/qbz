@@ -1,0 +1,25 @@
+[package]
+name = "qbz-audio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Audio backend system for QBZ - bit-perfect playback"
+
+[dependencies]
+qbz-models = { path = "../qbz-models" }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Audio will use vendored rodio/cpal from qbz-player
+# symphonia = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+alsa = "0.9"

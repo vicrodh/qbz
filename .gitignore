@@ -71,3 +71,4 @@ qbz-nix-docs/
 
 # AI agent instructions (untracked)
 .github/copilot-instructions.md
+/crates/target/
