@@ -179,29 +179,64 @@ fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
         });
     });
 
-    // Play/Pause callback (placeholder for now)
+    // Play/Pause callback - toggles playing state
+    let app_weak = app.as_weak();
     app.on_play_pause(move || {
-        log::info!("Play/Pause clicked (not implemented yet)");
+        if let Some(app) = app_weak.upgrade() {
+            let is_playing = app.get_is_playing();
+            app.set_is_playing(!is_playing);
+            log::info!("Play/Pause: {} -> {}", is_playing, !is_playing);
+            // In real implementation, would call core.play_pause()
+        }
     });
 
     // Next track callback
+    let app_weak = app.as_weak();
     app.on_next(move || {
-        log::info!("Next clicked (not implemented yet)");
+        log::info!("Next track");
+        if let Some(app) = app_weak.upgrade() {
+            let idx = app.get_queue_index();
+            app.set_queue_index(idx + 1);
+            // In real implementation, would call core.next()
+        }
     });
 
     // Previous track callback
+    let app_weak = app.as_weak();
     app.on_previous(move || {
-        log::info!("Previous clicked (not implemented yet)");
+        log::info!("Previous track");
+        if let Some(app) = app_weak.upgrade() {
+            let idx = app.get_queue_index();
+            if idx > 0 {
+                app.set_queue_index(idx - 1);
+            }
+            // In real implementation, would call core.previous()
+        }
     });
 
-    // Seek callback
+    // Seek callback - updates position
+    let app_weak = app.as_weak();
     app.on_seek(move |position| {
-        log::info!("Seek to {} (not implemented yet)", position);
+        log::info!("Seek to {:.2}", position);
+        if let Some(app) = app_weak.upgrade() {
+            app.set_position(position);
+            // Update position text (mock: assume 3 min track)
+            let secs = (position * 180.0) as u64;
+            let mins = secs / 60;
+            let secs = secs % 60;
+            app.set_position_text(format!("{}:{:02}", mins, secs).into());
+            // In real implementation, would call core.seek(position)
+        }
     });
 
-    // Volume callback
+    // Volume callback - updates volume
+    let app_weak = app.as_weak();
     app.on_set_volume(move |volume| {
-        log::info!("Set volume to {} (not implemented yet)", volume);
+        log::info!("Set volume to {:.2}", volume);
+        if let Some(app) = app_weak.upgrade() {
+            app.set_volume(volume);
+            // In real implementation, would call core.set_volume(volume)
+        }
     });
 
     // Load home data callback
@@ -215,10 +250,41 @@ fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
         });
     });
 
-    // Play album callback
+    // Play album callback - demonstrates queue population
+    let app_weak = app.as_weak();
     app.on_play_album(move |album_id| {
-        log::info!("Play album {} (not implemented yet)", album_id);
-        // TODO: Fetch album tracks and start playback
+        log::info!("Play album {}", album_id);
+
+        // For POC: Create mock queue items to demonstrate UI
+        if let Some(app) = app_weak.upgrade() {
+            let mock_tracks: Vec<QueueItem> = (0..5).map(|i| {
+                QueueItem {
+                    index: i,
+                    id: SharedString::from(format!("track_{}", i)),
+                    title: SharedString::from(format!("Track {} from Album", i + 1)),
+                    artist: SharedString::from("Demo Artist"),
+                    album: SharedString::from(format!("Album {}", album_id)),
+                    duration: SharedString::from(format!("{}:{:02}", 3 + i % 2, (i * 17) % 60)),
+                    hires: i % 3 == 0,
+                }
+            }).collect();
+
+            let model = ModelRc::new(VecModel::from(mock_tracks));
+            app.set_queue_tracks(model);
+            app.set_queue_index(0);
+
+            // Set current track info
+            app.set_current_title("Track 1 from Album".into());
+            app.set_current_artist("Demo Artist".into());
+            app.set_current_album(format!("Album {}", album_id).into());
+            app.set_is_playing(true);
+            app.set_duration_text("3:00".into());
+            app.set_position(0.0);
+            app.set_position_text("0:00".into());
+
+            log::info!("Populated queue with 5 mock tracks");
+            // In real implementation, would call core.play_album(album_id)
+        }
     });
 
     // Play track callback
