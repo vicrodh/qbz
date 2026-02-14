@@ -5,7 +5,7 @@
 
 use tauri::State;
 
-use qbz_models::{QueueState, RepeatMode, UserSession};
+use qbz_models::{Album, Artist, QueueState, RepeatMode, Track, UserSession};
 
 use crate::core_bridge::CoreBridgeState;
 
@@ -79,4 +79,74 @@ pub async fn v2_clear_queue(
     let bridge = bridge.get().await;
     bridge.clear_queue().await;
     Ok(())
+}
+
+// ==================== Search Commands (V2) ====================
+
+/// Search for albums (V2 - uses QbzCore)
+#[tauri::command]
+pub async fn v2_search_albums(
+    query: String,
+    limit: u32,
+    offset: u32,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<Vec<Album>, String> {
+    let bridge = bridge.get().await;
+    bridge.search_albums(&query, limit, offset).await
+}
+
+/// Search for tracks (V2 - uses QbzCore)
+#[tauri::command]
+pub async fn v2_search_tracks(
+    query: String,
+    limit: u32,
+    offset: u32,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<Vec<Track>, String> {
+    let bridge = bridge.get().await;
+    bridge.search_tracks(&query, limit, offset).await
+}
+
+/// Search for artists (V2 - uses QbzCore)
+#[tauri::command]
+pub async fn v2_search_artists(
+    query: String,
+    limit: u32,
+    offset: u32,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<Vec<Artist>, String> {
+    let bridge = bridge.get().await;
+    bridge.search_artists(&query, limit, offset).await
+}
+
+// ==================== Catalog Commands (V2) ====================
+
+/// Get album by ID (V2 - uses QbzCore)
+#[tauri::command]
+pub async fn v2_get_album(
+    album_id: String,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<Album, String> {
+    let bridge = bridge.get().await;
+    bridge.get_album(&album_id).await
+}
+
+/// Get track by ID (V2 - uses QbzCore)
+#[tauri::command]
+pub async fn v2_get_track(
+    track_id: u64,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<Track, String> {
+    let bridge = bridge.get().await;
+    bridge.get_track(track_id).await
+}
+
+/// Get artist by ID (V2 - uses QbzCore)
+#[tauri::command]
+pub async fn v2_get_artist(
+    artist_id: u64,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<Artist, String> {
+    let bridge = bridge.get().await;
+    bridge.get_artist(artist_id).await
 }

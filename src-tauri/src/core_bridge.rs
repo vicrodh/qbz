@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_core::QbzCore;
-use qbz_models::{QueueState, RepeatMode, UserSession};
+use qbz_models::{Album, Artist, QueueState, RepeatMode, Track, UserSession};
 
 use crate::tauri_adapter::TauriAdapter;
 
@@ -73,6 +73,62 @@ impl CoreBridge {
     /// Clear the queue
     pub async fn clear_queue(&self) {
         self.core.clear_queue().await
+    }
+
+    // ==================== Search & Catalog ====================
+
+    /// Search for albums
+    pub async fn search_albums(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Album>, String> {
+        self.core
+            .search_albums(query, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Search for tracks
+    pub async fn search_tracks(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Track>, String> {
+        self.core
+            .search_tracks(query, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Search for artists
+    pub async fn search_artists(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Artist>, String> {
+        self.core
+            .search_artists(query, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get album by ID
+    pub async fn get_album(&self, album_id: &str) -> Result<Album, String> {
+        self.core.get_album(album_id).await.map_err(|e| e.to_string())
+    }
+
+    /// Get track by ID
+    pub async fn get_track(&self, track_id: u64) -> Result<Track, String> {
+        self.core.get_track(track_id).await.map_err(|e| e.to_string())
+    }
+
+    /// Get artist by ID
+    pub async fn get_artist(&self, artist_id: u64) -> Result<Artist, String> {
+        self.core.get_artist(artist_id).await.map_err(|e| e.to_string())
     }
 }
 

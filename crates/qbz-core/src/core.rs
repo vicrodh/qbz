@@ -6,7 +6,9 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-use qbz_models::{CoreEvent, FrontendAdapter, QueueState, RepeatMode, UserSession};
+use qbz_models::{
+    Album, Artist, CoreEvent, FrontendAdapter, QueueState, RepeatMode, Track, UserSession,
+};
 use qbz_player::QueueManager;
 use qbz_qobuz::QobuzClient;
 
@@ -144,6 +146,86 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             state: queue.get_state(),
         })
         .await;
+    }
+
+    // ==================== Search & Catalog ====================
+
+    /// Search for albums
+    pub async fn search_albums(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Album>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .search_albums(query, limit, offset, None)
+            .await
+            .map(|r| r.items)
+            .map_err(CoreError::Api)
+    }
+
+    /// Search for tracks
+    pub async fn search_tracks(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Track>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .search_tracks(query, limit, offset, None)
+            .await
+            .map(|r| r.items)
+            .map_err(CoreError::Api)
+    }
+
+    /// Search for artists
+    pub async fn search_artists(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<Vec<Artist>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .search_artists(query, limit, offset, None)
+            .await
+            .map(|r| r.items)
+            .map_err(CoreError::Api)
+    }
+
+    /// Get album by ID
+    pub async fn get_album(&self, album_id: &str) -> Result<Album, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client.get_album(album_id).await.map_err(CoreError::Api)
+    }
+
+    /// Get track by ID
+    pub async fn get_track(&self, track_id: u64) -> Result<Track, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client.get_track(track_id).await.map_err(CoreError::Api)
+    }
+
+    /// Get artist by ID
+    pub async fn get_artist(&self, artist_id: u64) -> Result<Artist, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_artist_basic(artist_id)
+            .await
+            .map_err(CoreError::Api)
     }
 
     // ==================== Event Emission ====================

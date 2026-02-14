@@ -1044,13 +1044,23 @@ pub fn run() {
             logging::get_backend_logs,
             logging::upload_logs_to_paste,
             // V2 commands (new multi-crate architecture)
+            // Auth
             commands_v2::v2_is_logged_in,
             commands_v2::v2_login,
             commands_v2::v2_logout,
+            // Queue
             commands_v2::v2_get_queue_state,
             commands_v2::v2_set_repeat_mode,
             commands_v2::v2_toggle_shuffle,
             commands_v2::v2_clear_queue,
+            // Search
+            commands_v2::v2_search_albums,
+            commands_v2::v2_search_tracks,
+            commands_v2::v2_search_artists,
+            // Catalog
+            commands_v2::v2_get_album,
+            commands_v2::v2_get_track,
+            commands_v2::v2_get_artist,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
