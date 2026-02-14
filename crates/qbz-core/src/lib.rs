@@ -1,6 +1,7 @@
 //! QBZ Core - Frontend-agnostic music player library
 
 pub mod api;
+pub mod audio;
 pub mod events;
 pub mod traits;
 pub mod types;
@@ -9,7 +10,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 // Re-exports
-pub use api::{QobuzClient, ApiError};
+pub use api::{QobuzClient, ApiError, Quality};
+pub use audio::AudioPlayer;
 pub use events::{CoreEvent, PlaybackState, RepeatMode, AppError};
 pub use traits::{FrontendAdapter, NullAdapter};
 pub use types::*;
@@ -37,9 +39,11 @@ pub enum CoreError {
 }
 
 /// Main QBZ core - holds all state and provides the public API
+/// Note: Audio playback is handled separately (AudioPlayer is not Send)
 pub struct QbzCore<A: FrontendAdapter> {
     adapter: Arc<A>,
     client: Arc<RwLock<QobuzClient>>,
+    http_client: reqwest::Client,
 }
 
 impl<A: FrontendAdapter> QbzCore<A> {
@@ -48,6 +52,7 @@ impl<A: FrontendAdapter> QbzCore<A> {
         Self {
             adapter: Arc::new(adapter),
             client: Arc::new(RwLock::new(QobuzClient::default())),
+            http_client: reqwest::Client::new(),
         }
     }
 
@@ -203,6 +208,93 @@ impl<A: FrontendAdapter> QbzCore<A> {
         }).collect();
 
         Ok(tracks)
+    }
+
+    // ─── Album ─────────────────────────────────────────────────────────────
+
+    /// Get album with tracks
+    pub async fn get_album_tracks(&self, album_id: &str) -> Result<(Album, Vec<Track>), CoreError> {
+        log::info!("Fetching album tracks: {}", album_id);
+
+        let client = self.client.read().await;
+        let api_album = client.get_album(album_id).await?;
+
+        let album = Album {
+            id: api_album.id.clone(),
+            title: api_album.title.clone(),
+            artist: api_album.artist.name.clone(),
+            artist_id: api_album.artist.id,
+            cover_url: api_album.image.large.clone(),
+            release_date: api_album.release_date_original.clone(),
+            track_count: api_album.tracks_count.unwrap_or(0) as u32,
+            duration: api_album.duration.unwrap_or(0) as u64 * 1000,
+            hires_available: api_album.hires_streamable,
+            genre: api_album.genre.as_ref().map(|g| g.name.clone()),
+        };
+
+        let tracks = api_album.tracks
+            .map(|tc| tc.items)
+            .unwrap_or_default()
+            .into_iter()
+            .map(|t| {
+                Track {
+                    id: t.id,
+                    title: t.title,
+                    artist: t.performer.as_ref().map(|p| p.name.clone()).unwrap_or_else(|| api_album.artist.name.clone()),
+                    artist_id: t.performer.as_ref().map(|p| p.id).unwrap_or(api_album.artist.id),
+                    album: api_album.title.clone(),
+                    album_id: api_album.id.clone(),
+                    duration: t.duration as u64 * 1000,
+                    track_number: t.track_number as u32,
+                    disc_number: t.media_number.unwrap_or(1) as u32,
+                    cover_url: api_album.image.large.clone(),
+                    hires_available: t.hires_streamable,
+                    sample_rate: t.maximum_sampling_rate.map(|r| (r * 1000.0) as u32),
+                    bit_depth: t.maximum_bit_depth.map(|b| b as u8),
+                }
+            })
+            .collect();
+
+        log::info!("Album {} has {} tracks", album.title, album.track_count);
+        Ok((album, tracks))
+    }
+
+    // ─── Playback ──────────────────────────────────────────────────────────
+
+    /// Get audio data for a track (downloads the audio)
+    /// Returns the audio bytes that can be played by AudioPlayer
+    pub async fn get_track_audio(&self, track_id: u64) -> Result<Vec<u8>, CoreError> {
+        log::info!("Getting audio for track {}", track_id);
+
+        // Get stream URL
+        let client = self.client.read().await;
+        let stream_url = client.get_stream_url_with_fallback(track_id, Quality::HiRes).await?;
+        drop(client); // Release lock before downloading
+
+        log::info!(
+            "Got stream URL: {} ({}kHz, {} bit)",
+            stream_url.mime_type,
+            stream_url.sampling_rate,
+            stream_url.bit_depth.unwrap_or(16)
+        );
+
+        // Download audio data
+        log::info!("Downloading audio...");
+        let response = self.http_client
+            .get(&stream_url.url)
+            .send()
+            .await
+            .map_err(|e| CoreError::Network(e.to_string()))?;
+
+        let audio_data = response
+            .bytes()
+            .await
+            .map_err(|e| CoreError::Network(e.to_string()))?
+            .to_vec();
+
+        log::info!("Downloaded {} bytes", audio_data.len());
+
+        Ok(audio_data)
     }
 }
 

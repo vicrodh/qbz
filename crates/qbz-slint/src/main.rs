@@ -3,11 +3,62 @@
 mod adapter;
 
 use adapter::SlintAdapter;
-use qbz_core::{Album, QbzCore, Track};
+use qbz_core::{Album, AudioPlayer, QbzCore, Track};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
-use std::sync::Arc;
+use std::sync::{mpsc, Arc};
 
 slint::include_modules!();
+
+/// Commands sent to the audio thread
+enum AudioCommand {
+    Play(Vec<u8>),
+    Pause,
+    Resume,
+    Toggle,
+    Stop,
+    SetVolume(f32),
+}
+
+/// Start the audio thread and return a sender for commands
+fn start_audio_thread() -> Option<mpsc::Sender<AudioCommand>> {
+    let (tx, rx) = mpsc::channel::<AudioCommand>();
+
+    std::thread::spawn(move || {
+        let player = match AudioPlayer::new() {
+            Ok(p) => {
+                log::info!("Audio thread: player initialized");
+                p
+            }
+            Err(e) => {
+                log::error!("Audio thread: failed to create player: {}", e);
+                return;
+            }
+        };
+
+        loop {
+            match rx.recv() {
+                Ok(cmd) => match cmd {
+                    AudioCommand::Play(data) => {
+                        if let Err(e) = player.play_bytes_sync(data) {
+                            log::error!("Audio thread: play failed: {}", e);
+                        }
+                    }
+                    AudioCommand::Pause => player.pause_sync(),
+                    AudioCommand::Resume => player.resume_sync(),
+                    AudioCommand::Toggle => player.toggle_sync(),
+                    AudioCommand::Stop => player.stop_sync(),
+                    AudioCommand::SetVolume(v) => player.set_volume_sync(v),
+                },
+                Err(_) => {
+                    log::info!("Audio thread: channel closed, exiting");
+                    break;
+                }
+            }
+        }
+    });
+
+    Some(tx)
+}
 
 #[tokio::main]
 async fn main() {
@@ -27,6 +78,9 @@ async fn main() {
     // Create core with our adapter
     let core = Arc::new(QbzCore::new(adapter));
 
+    // Start audio thread
+    let audio_tx = start_audio_thread();
+
     // Initialize Qobuz API client in background
     let core_init = core.clone();
     tokio::spawn(async move {
@@ -36,7 +90,7 @@ async fn main() {
     });
 
     // Setup UI callbacks
-    setup_callbacks(&app, core.clone());
+    setup_callbacks(&app, core.clone(), audio_tx);
 
     log::info!("Running Slint event loop...");
 
@@ -75,6 +129,19 @@ fn format_duration(ms: u64) -> String {
     let mins = secs / 60;
     let secs = secs % 60;
     format!("{}:{:02}", mins, secs)
+}
+
+/// Convert Track to QueueItem with index
+fn track_to_queue_item(track: &Track, index: i32) -> QueueItem {
+    QueueItem {
+        index,
+        id: SharedString::from(track.id.to_string()),
+        title: SharedString::from(track.title.clone()),
+        artist: SharedString::from(track.artist.clone()),
+        album: SharedString::from(track.album.clone()),
+        duration: SharedString::from(format_duration(track.duration)),
+        hires: track.hires_available,
+    }
 }
 
 /// Load home data (featured albums) and update UI
@@ -131,7 +198,7 @@ async fn load_home_data(core: Arc<QbzCore<SlintAdapter>>, app_weak: slint::Weak<
     });
 }
 
-fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
+fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>, audio_tx: Option<mpsc::Sender<AudioCommand>>) {
     // Login callback
     let core_login = core.clone();
     let app_weak = app.as_weak();
@@ -180,13 +247,16 @@ fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
     });
 
     // Play/Pause callback - toggles playing state
+    let audio_pp = audio_tx.clone();
     let app_weak = app.as_weak();
     app.on_play_pause(move || {
+        if let Some(tx) = &audio_pp {
+            let _ = tx.send(AudioCommand::Toggle);
+        }
+        // Toggle UI state (we don't get feedback from audio thread for simplicity)
         if let Some(app) = app_weak.upgrade() {
             let is_playing = app.get_is_playing();
             app.set_is_playing(!is_playing);
-            log::info!("Play/Pause: {} -> {}", is_playing, !is_playing);
-            // In real implementation, would call core.play_pause()
         }
     });
 
@@ -230,12 +300,14 @@ fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
     });
 
     // Volume callback - updates volume
+    let audio_vol = audio_tx.clone();
     let app_weak = app.as_weak();
     app.on_set_volume(move |volume| {
-        log::info!("Set volume to {:.2}", volume);
+        if let Some(tx) = &audio_vol {
+            let _ = tx.send(AudioCommand::SetVolume(volume));
+        }
         if let Some(app) = app_weak.upgrade() {
             app.set_volume(volume);
-            // In real implementation, would call core.set_volume(volume)
         }
     });
 
@@ -250,41 +322,84 @@ fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
         });
     });
 
-    // Play album callback - demonstrates queue population
+    // Play album callback - fetches real tracks and plays
+    let core_album = core.clone();
+    let audio_album = audio_tx.clone();
     let app_weak = app.as_weak();
     app.on_play_album(move |album_id| {
-        log::info!("Play album {}", album_id);
+        let album_id = album_id.to_string();
+        let core = core_album.clone();
+        let audio_tx = audio_album.clone();
+        let app_weak = app_weak.clone();
 
-        // For POC: Create mock queue items to demonstrate UI
-        if let Some(app) = app_weak.upgrade() {
-            let mock_tracks: Vec<QueueItem> = (0..5).map(|i| {
-                QueueItem {
-                    index: i,
-                    id: SharedString::from(format!("track_{}", i)),
-                    title: SharedString::from(format!("Track {} from Album", i + 1)),
-                    artist: SharedString::from("Demo Artist"),
-                    album: SharedString::from(format!("Album {}", album_id)),
-                    duration: SharedString::from(format!("{}:{:02}", 3 + i % 2, (i * 17) % 60)),
-                    hires: i % 3 == 0,
+        tokio::spawn(async move {
+            log::info!("Fetching album tracks: {}", album_id);
+
+            match core.get_album_tracks(&album_id).await {
+                Ok((album, tracks)) => {
+                    log::info!("Got {} tracks from album '{}'", tracks.len(), album.title);
+
+                    if tracks.is_empty() {
+                        log::warn!("Album has no tracks");
+                        return;
+                    }
+
+                    // Store tracks for queue reference
+                    let tracks_clone = tracks.clone();
+                    let first_track = tracks[0].clone();
+                    let album_title = album.title.clone();
+                    let track_duration = first_track.duration;
+
+                    // Update UI with queue
+                    let _ = slint::invoke_from_event_loop({
+                        let app_weak = app_weak.clone();
+                        let first_track = first_track.clone();
+                        move || {
+                            if let Some(app) = app_weak.upgrade() {
+                                // Populate queue
+                                let queue_items: Vec<QueueItem> = tracks_clone
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(i, t)| track_to_queue_item(t, i as i32))
+                                    .collect();
+
+                                let model = ModelRc::new(VecModel::from(queue_items));
+                                app.set_queue_tracks(model);
+                                app.set_queue_index(0);
+
+                                // Set current track info
+                                app.set_current_title(first_track.title.clone().into());
+                                app.set_current_artist(first_track.artist.clone().into());
+                                app.set_current_album(album_title.into());
+                                app.set_is_playing(true);
+                                app.set_duration_text(format_duration(track_duration).into());
+                                app.set_position(0.0);
+                                app.set_position_text("0:00".into());
+                            }
+                        }
+                    });
+
+                    // Download and play the first track
+                    let first_track_id = first_track.id;
+                    match core.get_track_audio(first_track_id).await {
+                        Ok(audio_data) => {
+                            // Send to audio thread
+                            if let Some(tx) = audio_tx {
+                                if let Err(e) = tx.send(AudioCommand::Play(audio_data)) {
+                                    log::error!("Failed to send play command: {}", e);
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            log::error!("Failed to download track: {}", e);
+                        }
+                    }
                 }
-            }).collect();
-
-            let model = ModelRc::new(VecModel::from(mock_tracks));
-            app.set_queue_tracks(model);
-            app.set_queue_index(0);
-
-            // Set current track info
-            app.set_current_title("Track 1 from Album".into());
-            app.set_current_artist("Demo Artist".into());
-            app.set_current_album(format!("Album {}", album_id).into());
-            app.set_is_playing(true);
-            app.set_duration_text("3:00".into());
-            app.set_position(0.0);
-            app.set_position_text("0:00".into());
-
-            log::info!("Populated queue with 5 mock tracks");
-            // In real implementation, would call core.play_album(album_id)
-        }
+                Err(e) => {
+                    log::error!("Failed to fetch album: {}", e);
+                }
+            }
+        });
     });
 
     // Play track callback
