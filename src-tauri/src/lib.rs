@@ -293,6 +293,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState::with_device_and_settings(saved_device, audio_settings))
+        .manage(core_bridge::CoreBridgeState::new())
         .manage(user_data_paths)
         .setup(move |app| {
             // Create main window programmatically so we can set the correct
@@ -336,6 +337,24 @@ pub fn run() {
             app.state::<AppState>()
                 .media_controls
                 .init(app.handle().clone());
+
+            // Initialize CoreBridge (new multi-crate architecture)
+            {
+                let core_bridge_arc = app.state::<core_bridge::CoreBridgeState>().0.clone();
+                let adapter = tauri_adapter::TauriAdapter::new(app.handle().clone());
+                tauri::async_runtime::spawn(async move {
+                    let bridge = core_bridge::CoreBridge::new(adapter).await;
+                    match bridge {
+                        Ok(b) => {
+                            *core_bridge_arc.write().await = Some(b);
+                            log::info!("CoreBridge initialized successfully");
+                        }
+                        Err(e) => {
+                            log::error!("Failed to initialize CoreBridge: {}", e);
+                        }
+                    }
+                });
+            }
 
             // NOTE: Visualizer FFT thread and Remote Control API server are started
             // in activate_user_session (post-login), not here. They need per-user
@@ -1024,6 +1043,14 @@ pub fn run() {
             // Log capture commands
             logging::get_backend_logs,
             logging::upload_logs_to_paste,
+            // V2 commands (new multi-crate architecture)
+            commands_v2::v2_is_logged_in,
+            commands_v2::v2_login,
+            commands_v2::v2_logout,
+            commands_v2::v2_get_queue_state,
+            commands_v2::v2_set_repeat_mode,
+            commands_v2::v2_toggle_shuffle,
+            commands_v2::v2_clear_queue,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
