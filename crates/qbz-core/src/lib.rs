@@ -125,6 +125,57 @@ impl<A: FrontendAdapter> QbzCore<A> {
         Ok(albums)
     }
 
+    // ─── Home/Discover ───────────────────────────────────────────────────
+
+    /// Get featured/new albums for home page
+    pub async fn get_featured_albums(&self, limit: usize) -> Result<Vec<Album>, CoreError> {
+        log::info!("Fetching featured albums...");
+
+        let client = self.client.read().await;
+        // "new-releases" is one of the common featured types
+        let response = client.get_featured_albums("new-releases", limit as u32, 0, None).await?;
+
+        let albums = response.items.into_iter().map(|a| Album {
+            id: a.id,
+            title: a.title,
+            artist: a.artist.name,
+            artist_id: a.artist.id,
+            cover_url: a.image.large.clone(),
+            release_date: a.release_date_original,
+            track_count: a.tracks_count.unwrap_or(0) as u32,
+            duration: a.duration.unwrap_or(0) as u64 * 1000,
+            hires_available: a.hires_streamable,
+            genre: a.genre.map(|g| g.name),
+        }).collect();
+
+        Ok(albums)
+    }
+
+    /// Get editor's picks albums
+    pub async fn get_editor_picks(&self, limit: usize) -> Result<Vec<Album>, CoreError> {
+        log::info!("Fetching editor picks...");
+
+        let client = self.client.read().await;
+        let response = client.get_featured_albums("editor-picks", limit as u32, 0, None).await?;
+
+        let albums = response.items.into_iter().map(|a| Album {
+            id: a.id,
+            title: a.title,
+            artist: a.artist.name,
+            artist_id: a.artist.id,
+            cover_url: a.image.large.clone(),
+            release_date: a.release_date_original,
+            track_count: a.tracks_count.unwrap_or(0) as u32,
+            duration: a.duration.unwrap_or(0) as u64 * 1000,
+            hires_available: a.hires_streamable,
+            genre: a.genre.map(|g| g.name),
+        }).collect();
+
+        Ok(albums)
+    }
+
+    // ─── Search ─────────────────────────────────────────────────────────────
+
     /// Search for tracks
     pub async fn search_tracks(&self, query: &str, limit: usize) -> Result<Vec<Track>, CoreError> {
         log::info!("Searching tracks: {}", query);

@@ -3,8 +3,8 @@
 mod adapter;
 
 use adapter::SlintAdapter;
-use qbz_core::QbzCore;
-use slint::ComponentHandle;
+use qbz_core::{Album, QbzCore};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::sync::Arc;
 
 slint::include_modules!();
@@ -46,6 +46,71 @@ async fn main() {
     log::info!("QBZ Slint POC exiting.");
 }
 
+/// Convert core Album to Slint AlbumData
+fn album_to_slint(album: &Album) -> AlbumData {
+    AlbumData {
+        id: SharedString::from(album.id.clone()),
+        title: SharedString::from(album.title.clone()),
+        artist: SharedString::from(album.artist.clone()),
+        cover_url: SharedString::from(album.cover_url.clone().unwrap_or_default()),
+        hires: album.hires_available,
+    }
+}
+
+/// Load home data (featured albums) and update UI
+async fn load_home_data(core: Arc<QbzCore<SlintAdapter>>, app_weak: slint::Weak<App>) {
+    log::info!("Loading home data...");
+
+    // Set loading state
+    let _ = slint::invoke_from_event_loop({
+        let app_weak = app_weak.clone();
+        move || {
+            if let Some(app) = app_weak.upgrade() {
+                app.set_is_loading(true);
+            }
+        }
+    });
+
+    // Fetch new releases and editor picks in parallel
+    let (new_releases, editor_picks) = tokio::join!(
+        core.get_featured_albums(10),
+        core.get_editor_picks(10)
+    );
+
+    // Update UI with results
+    let _ = slint::invoke_from_event_loop(move || {
+        if let Some(app) = app_weak.upgrade() {
+            app.set_is_loading(false);
+
+            // New releases
+            match new_releases {
+                Ok(albums) => {
+                    log::info!("Loaded {} new releases", albums.len());
+                    let items: Vec<AlbumData> = albums.iter().map(album_to_slint).collect();
+                    let model = ModelRc::new(VecModel::from(items));
+                    app.set_new_releases(model);
+                }
+                Err(e) => {
+                    log::error!("Failed to load new releases: {}", e);
+                }
+            }
+
+            // Editor picks
+            match editor_picks {
+                Ok(albums) => {
+                    log::info!("Loaded {} editor picks", albums.len());
+                    let items: Vec<AlbumData> = albums.iter().map(album_to_slint).collect();
+                    let model = ModelRc::new(VecModel::from(items));
+                    app.set_editor_picks(model);
+                }
+                Err(e) => {
+                    log::error!("Failed to load editor picks: {}", e);
+                }
+            }
+        }
+    });
+}
+
 fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
     // Login callback
     let core_login = core.clone();
@@ -66,7 +131,20 @@ fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
             match core.login(&email, &password).await {
                 Ok(user) => {
                     log::info!("Login successful: {}", user.display_name);
-                    // UI update is handled by adapter via CoreEvent::LoginSuccess
+
+                    // Update user name in UI
+                    let user_name = user.display_name.clone();
+                    let _ = slint::invoke_from_event_loop({
+                        let app_weak = app_weak.clone();
+                        move || {
+                            if let Some(app) = app_weak.upgrade() {
+                                app.set_user_name(user_name.into());
+                            }
+                        }
+                    });
+
+                    // Load home data after successful login
+                    load_home_data(core, app_weak).await;
                 }
                 Err(e) => {
                     log::error!("Login failed: {}", e);
@@ -104,5 +182,22 @@ fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
     // Volume callback
     app.on_set_volume(move |volume| {
         log::info!("Set volume to {} (not implemented yet)", volume);
+    });
+
+    // Load home data callback
+    let core_home = core.clone();
+    let app_weak = app.as_weak();
+    app.on_load_home_data(move || {
+        let core = core_home.clone();
+        let app_weak = app_weak.clone();
+        tokio::spawn(async move {
+            load_home_data(core, app_weak).await;
+        });
+    });
+
+    // Play album callback
+    app.on_play_album(move |album_id| {
+        log::info!("Play album {} (not implemented yet)", album_id);
+        // TODO: Fetch album tracks and start playback
     });
 }

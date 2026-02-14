@@ -1,18 +1,129 @@
 // QBZ Slint POC - Main Application
-//
-// This is a minimal UI to test the Slint + qbz-core integration.
 
-import { VerticalBox, HorizontalBox, LineEdit, Button, Slider } from "std-widgets.slint";
+import { VerticalBox, HorizontalBox, LineEdit, Button, Slider, ScrollView } from "std-widgets.slint";
 
 // Theme colors matching QBZ dark theme
 global Theme {
     out property <color> bg-primary: #0f0f0f;
     out property <color> bg-secondary: #1a1a1a;
     out property <color> bg-elevated: #252525;
+    out property <color> bg-hover: #333333;
     out property <color> text-primary: #ffffff;
     out property <color> text-secondary: #b3b3b3;
     out property <color> accent-primary: #4285F4;
     out property <color> error: #ff4444;
+}
+
+// Album data structure
+export struct AlbumData {
+    id: string,
+    title: string,
+    artist: string,
+    cover-url: string,
+    hires: bool,
+}
+
+// Album card component
+component AlbumCard inherits Rectangle {
+    in property <string> title;
+    in property <string> artist;
+    in property <bool> hires: false;
+
+    callback clicked();
+
+    width: 160px;
+    height: 220px;
+    background: transparent;
+
+    VerticalLayout {
+        spacing: 8px;
+
+        // Cover placeholder
+        Rectangle {
+            width: 160px;
+            height: 160px;
+            background: Theme.bg-secondary;
+            border-radius: 8px;
+
+            // Hi-Res badge
+            if hires: Rectangle {
+                x: 8px;
+                y: 8px;
+                width: 40px;
+                height: 18px;
+                background: #ff9500;
+                border-radius: 4px;
+
+                Text {
+                    text: "Hi-Res";
+                    color: white;
+                    font-size: 10px;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            // Play overlay on hover
+            Rectangle {
+                width: 100%;
+                height: 100%;
+                background: touch.has-hover ? #00000066 : transparent;
+                border-radius: 8px;
+
+                if touch.has-hover: Text {
+                    text: "▶";
+                    color: white;
+                    font-size: 32px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            touch := TouchArea {
+                clicked => { root.clicked(); }
+            }
+        }
+
+        // Title
+        Text {
+            text: title;
+            color: Theme.text-primary;
+            font-size: 13px;
+            font-weight: 500;
+            overflow: elide;
+            max-width: 160px;
+        }
+
+        // Artist
+        Text {
+            text: artist;
+            color: Theme.text-secondary;
+            font-size: 12px;
+            overflow: elide;
+            max-width: 160px;
+        }
+    }
+}
+
+// Section header
+component SectionHeader inherits Rectangle {
+    in property <string> title;
+
+    height: 40px;
+    background: transparent;
+
+    HorizontalLayout {
+        padding-left: 4px;
+
+        Text {
+            text: title;
+            color: Theme.text-primary;
+            font-size: 22px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+    }
 }
 
 export component App inherits Window {
@@ -23,13 +134,20 @@ export component App inherits Window {
 
     // ─── State Properties ───────────────────────────────────────────────────
 
-    // View state (0=Login, 1=Home, 2=Search)
+    // View state (0=Login, 1=Home)
     in-out property <int> current-view: 0;
     in-out property <bool> is-logged-in: false;
     in-out property <bool> is-loading: false;
 
     // Login state
     in-out property <string> login-error: "";
+
+    // User info
+    in-out property <string> user-name: "";
+
+    // Home data
+    in-out property <[AlbumData]> new-releases: [];
+    in-out property <[AlbumData]> editor-picks: [];
 
     // Playback state
     in-out property <bool> is-playing: false;
@@ -51,6 +169,8 @@ export component App inherits Window {
     // ─── Callbacks ──────────────────────────────────────────────────────────
 
     callback login(string, string);
+    callback load-home-data();
+    callback play-album(string);
     callback play-pause();
     callback next();
     callback previous();
@@ -59,7 +179,7 @@ export component App inherits Window {
 
     // ─── Layout ─────────────────────────────────────────────────────────────
 
-    VerticalBox {
+    VerticalLayout {
         // Main content area
         Rectangle {
             vertical-stretch: 1;
@@ -82,7 +202,14 @@ export component App inherits Window {
                         horizontal-alignment: center;
                     }
 
-                    Rectangle { height: 32px; }
+                    Text {
+                        text: "Slint POC";
+                        color: Theme.text-secondary;
+                        font-size: 14px;
+                        horizontal-alignment: center;
+                    }
+
+                    Rectangle { height: 24px; }
 
                     Rectangle {
                         width: 360px;
@@ -115,6 +242,7 @@ export component App inherits Window {
                                 color: Theme.error;
                                 font-size: 13px;
                                 horizontal-alignment: center;
+                                wrap: word-wrap;
                             }
 
                             Button {
@@ -129,31 +257,100 @@ export component App inherits Window {
                 }
             }
 
-            // Home View (placeholder)
+            // Home View
             if current-view == 1: Rectangle {
                 background: Theme.bg-primary;
 
-                VerticalBox {
-                    padding: 32px;
-                    spacing: 16px;
+                ScrollView {
+                    VerticalLayout {
+                        padding: 32px;
+                        spacing: 24px;
 
-                    Text {
-                        text: "Home";
-                        color: Theme.text-primary;
-                        font-size: 32px;
-                        font-weight: 600;
-                    }
+                        // Welcome header
+                        Text {
+                            text: "Welcome, " + user-name;
+                            color: Theme.text-primary;
+                            font-size: 28px;
+                            font-weight: 600;
+                        }
 
-                    Text {
-                        text: "Welcome to QBZ Slint POC!";
-                        color: Theme.text-secondary;
-                        font-size: 16px;
-                    }
+                        // Loading indicator
+                        if is-loading: HorizontalLayout {
+                            alignment: center;
+                            Rectangle {
+                                height: 100px;
+                                Text {
+                                    text: "Loading...";
+                                    color: Theme.text-secondary;
+                                    font-size: 16px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
 
-                    Text {
-                        text: "This is a placeholder. Full implementation coming in Phase 3.";
-                        color: Theme.text-secondary;
-                        font-size: 14px;
+                        // New Releases section
+                        if new-releases.length > 0: VerticalLayout {
+                            spacing: 16px;
+
+                            SectionHeader {
+                                title: "New Releases";
+                            }
+
+                            ScrollView {
+                                height: 240px;
+                                viewport-width: new-releases.length * 176px;
+
+                                HorizontalLayout {
+                                    spacing: 16px;
+
+                                    for album in new-releases: AlbumCard {
+                                        title: album.title;
+                                        artist: album.artist;
+                                        hires: album.hires;
+                                        clicked => { root.play-album(album.id); }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Editor's Picks section
+                        if editor-picks.length > 0: VerticalLayout {
+                            spacing: 16px;
+
+                            SectionHeader {
+                                title: "Editor's Picks";
+                            }
+
+                            ScrollView {
+                                height: 240px;
+                                viewport-width: editor-picks.length * 176px;
+
+                                HorizontalLayout {
+                                    spacing: 16px;
+
+                                    for album in editor-picks: AlbumCard {
+                                        title: album.title;
+                                        artist: album.artist;
+                                        hires: album.hires;
+                                        clicked => { root.play-album(album.id); }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Empty state
+                        if !is-loading && new-releases.length == 0 && editor-picks.length == 0: Rectangle {
+                            height: 200px;
+
+                            Text {
+                                text: "No albums loaded yet";
+                                color: Theme.text-secondary;
+                                font-size: 16px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
                     }
                 }
             }
@@ -164,17 +361,17 @@ export component App inherits Window {
             height: 80px;
             background: Theme.bg-elevated;
 
-            HorizontalBox {
+            HorizontalLayout {
                 padding: 16px;
                 spacing: 16px;
 
                 // Track info
-                VerticalBox {
+                VerticalLayout {
                     width: 200px;
                     spacing: 4px;
 
                     Text {
-                        text: current-title != "" ? current-title : "No track";
+                        text: current-title != "" ? current-title : "No track playing";
                         color: Theme.text-primary;
                         font-size: 14px;
                         overflow: elide;
@@ -189,11 +386,11 @@ export component App inherits Window {
                 }
 
                 // Playback controls
-                VerticalBox {
+                VerticalLayout {
                     horizontal-stretch: 1;
                     spacing: 8px;
 
-                    HorizontalBox {
+                    HorizontalLayout {
                         alignment: center;
                         spacing: 16px;
 
@@ -255,7 +452,7 @@ export component App inherits Window {
                     }
 
                     // Progress bar
-                    HorizontalBox {
+                    HorizontalLayout {
                         spacing: 8px;
 
                         Text {
@@ -283,7 +480,7 @@ export component App inherits Window {
                 }
 
                 // Volume
-                HorizontalBox {
+                HorizontalLayout {
                     width: 150px;
                     spacing: 8px;
 
