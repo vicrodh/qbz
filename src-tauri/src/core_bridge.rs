@@ -1,0 +1,107 @@
+//! Core Bridge
+//!
+//! Bridges the new QbzCore architecture with the existing Tauri app.
+//! This allows gradual migration - new code uses QbzCore, old code
+//! continues to work until migrated.
+
+use std::sync::Arc;
+use tokio::sync::RwLock;
+
+use qbz_core::QbzCore;
+use qbz_models::{QueueState, RepeatMode, UserSession};
+
+use crate::tauri_adapter::TauriAdapter;
+
+/// Bridge to the new QbzCore architecture
+///
+/// This struct provides access to QbzCore functionality while
+/// the old AppState continues to handle unmigrated features.
+pub struct CoreBridge {
+    core: Arc<QbzCore<TauriAdapter>>,
+}
+
+impl CoreBridge {
+    /// Create a new CoreBridge with the given TauriAdapter
+    pub async fn new(adapter: TauriAdapter) -> Result<Self, String> {
+        let core = QbzCore::new(adapter);
+        core.init().await.map_err(|e| e.to_string())?;
+
+        Ok(Self {
+            core: Arc::new(core),
+        })
+    }
+
+    /// Get a reference to the underlying QbzCore
+    pub fn core(&self) -> &Arc<QbzCore<TauriAdapter>> {
+        &self.core
+    }
+
+    // ==================== Auth Commands ====================
+
+    /// Check if user is logged in
+    pub async fn is_logged_in(&self) -> bool {
+        self.core.has_session().await
+    }
+
+    /// Login with email and password
+    pub async fn login(&self, email: &str, password: &str) -> Result<UserSession, String> {
+        self.core.login(email, password).await.map_err(|e| e.to_string())
+    }
+
+    /// Logout current user
+    pub async fn logout(&self) -> Result<(), String> {
+        self.core.logout().await.map_err(|e| e.to_string())
+    }
+
+    // ==================== Queue Commands ====================
+
+    /// Get current queue state
+    pub async fn get_queue_state(&self) -> QueueState {
+        self.core.get_queue_state().await
+    }
+
+    /// Set repeat mode
+    pub async fn set_repeat_mode(&self, mode: RepeatMode) {
+        self.core.set_repeat_mode(mode).await
+    }
+
+    /// Toggle shuffle
+    pub async fn toggle_shuffle(&self) -> bool {
+        self.core.toggle_shuffle().await
+    }
+
+    /// Clear the queue
+    pub async fn clear_queue(&self) {
+        self.core.clear_queue().await
+    }
+}
+
+/// State wrapper for Tauri's managed state
+pub struct CoreBridgeState(pub Arc<RwLock<Option<CoreBridge>>>);
+
+impl CoreBridgeState {
+    pub fn new() -> Self {
+        Self(Arc::new(RwLock::new(None)))
+    }
+
+    /// Initialize the core bridge with the app handle
+    pub async fn init(&self, adapter: TauriAdapter) -> Result<(), String> {
+        let bridge = CoreBridge::new(adapter).await?;
+        *self.0.write().await = Some(bridge);
+        Ok(())
+    }
+
+    /// Get the bridge (panics if not initialized)
+    pub async fn get(&self) -> impl std::ops::Deref<Target = CoreBridge> + '_ {
+        tokio::sync::RwLockReadGuard::map(
+            self.0.read().await,
+            |opt| opt.as_ref().expect("CoreBridge not initialized")
+        )
+    }
+}
+
+impl Default for CoreBridgeState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
