@@ -37,6 +37,8 @@ pub mod dynamic_amplify;
 pub mod analyzer_tap;
 pub mod loudness_cache;
 pub mod loudness_analyzer;
+pub mod settings;
+pub mod visualizer;
 
 // Re-export commonly used types
 pub use backend::{
@@ -58,3 +60,5 @@ pub use dynamic_amplify::DynamicAmplify;
 pub use analyzer_tap::{AnalyzerTap, AnalyzerMessage};
 pub use loudness_cache::LoudnessCache;
 pub use loudness_analyzer::LoudnessAnalyzer;
+pub use settings::AudioSettings;
+pub use visualizer::{VisualizerTap, TappedSource, RingBuffer};
