@@ -56,6 +56,12 @@ impl Default for RepeatMode {
     }
 }
 
+#[derive(Debug, PartialEq, Eq)]
+enum QueueMoveDirection {
+    Up,
+    Down
+}
+
 /// Queue state snapshot for frontend
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct QueueState {
@@ -240,22 +246,53 @@ impl QueueManager {
     /// Move a track from one position to another
     pub fn move_track(&self, from_index: usize, to_index: usize) -> bool {
         let mut state = self.state.lock().unwrap();
-        if from_index >= state.tracks.len() || to_index >= state.tracks.len() || from_index == to_index {
+
+        let direction: QueueMoveDirection = if from_index > to_index {
+            QueueMoveDirection::Up
+        } else {
+            QueueMoveDirection::Down
+        };
+
+        let mut from_idx = from_index;
+        let mut to_idx = to_index;
+
+        if let Some(curr_idx) = state.current_index {
+          // map to the internal state, which differs from the frontend's
+          // representation because the here we also have the current playing
+          // track part of the tracks.
+          from_idx = from_idx + curr_idx + 1;
+          to_idx = to_idx + curr_idx + 1;
+        }
+
+        if direction == QueueMoveDirection::Down {
+            // When moving tracks down this makes the new position
+            // more intuitive (since we usually drop tracks in between)
+            to_idx = to_idx - 1;
+        }
+
+        log::info!("Queue: move_track - {:?} from {} to {} (internal indices:{} -> {}). Tracks in queue: {}", direction, from_index, to_index, from_idx, to_idx, state.tracks.len());
+
+        // Moving a track to its already existing position, just ignore
+        if from_idx == to_idx {
+            return true;
+        }
+
+        if from_idx >= state.tracks.len() || to_idx >= state.tracks.len() {
             return false;
         }
 
-        let track = state.tracks.remove(from_index);
-        state.tracks.insert(to_index, track);
+        let track = state.tracks.remove(from_idx);
+        state.tracks.insert(to_idx, track);
 
         // Adjust current index if needed
         if let Some(curr_idx) = state.current_index {
-            if from_index == curr_idx {
+            if from_idx == curr_idx {
                 // The current track was moved
-                state.current_index = Some(to_index);
-            } else if from_index < curr_idx && to_index >= curr_idx {
+                state.current_index = Some(to_idx);
+            } else if from_idx < curr_idx && to_idx >= curr_idx {
                 // Track moved from before current to at/after current
                 state.current_index = Some(curr_idx - 1);
-            } else if from_index > curr_idx && to_index <= curr_idx {
+            } else if from_idx > curr_idx && to_idx <= curr_idx {
                 // Track moved from after current to at/before current
                 state.current_index = Some(curr_idx + 1);
             }
