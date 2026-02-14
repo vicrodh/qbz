@@ -2,8 +2,8 @@
 //!
 //! This crate provides:
 //! - QueueManager: Track queue management with shuffle/repeat
-//! - Player: Main playback control (TODO: Phase 3b)
-//! - StreamingSource: HTTP audio streaming (TODO: Phase 3b)
+//! - Player: Main playback engine
+//! - StreamingSource: HTTP audio streaming
 //!
 //! # Architecture
 //!
@@ -23,26 +23,26 @@
 //!
 //! # Usage
 //!
-//! ```rust
-//! use qbz_player::QueueManager;
-//! use qbz_models::QueueTrack;
+//! ```rust,ignore
+//! use qbz_player::{Player, QueueManager};
+//! use qbz_audio::{AudioSettings, AudioDiagnostic};
 //!
+//! let player = Player::new(None, AudioSettings::default(), None, AudioDiagnostic::new());
 //! let queue = QueueManager::new();
-//! // queue.add_track(track);
-//! // queue.next();
 //! ```
 
 pub mod queue;
+pub mod player;
 
 // Re-export main types
 pub use queue::QueueManager;
-
-// TODO: Phase 3b - Extract player module
-// The player module has complex dependencies on:
-// - QobuzClient (for streaming URLs)
-// - Audio backend (for playback)
-// - Config system (for audio settings)
-// - Visualizer
-//
-// These need to be abstracted via traits before extraction.
-// For now, the player remains in qbz-nix/src-tauri.
+pub use player::{
+    Player,
+    SharedState,
+    PlaybackState,
+    PlaybackEvent,
+    BufferedMediaSource,
+    BufferWriter,
+    StreamingConfig,
+    IncrementalStreamingSource,
+};

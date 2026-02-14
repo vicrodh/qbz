@@ -8,6 +8,10 @@ description = "Playback engine and queue management for QBZ"
 [dependencies]
 qbz-models = { path = "../qbz-models" }
 qbz-audio = { path = "../qbz-audio" }
+qbz-qobuz = { path = "../qbz-qobuz" }
+
+# Serialization
+serde = { workspace = true }
 
 # Async
 tokio = { workspace = true }
@@ -27,6 +31,8 @@ rand = "0.8"
 # Audio decoding
 symphonia = { workspace = true }
 
-# Vendored audio libraries (will be copied in Phase 3)
-# rodio = { path = "./vendor/rodio", features = ["symphonia-all"] }
-# cpal = { path = "./vendor/cpal" }
+# Vendored audio libraries (same as qbz-audio)
+rodio = { path = "../../src-tauri/vendor/rodio", features = ["symphonia-all"] }
+
+# HTTP client for streaming
+reqwest = { workspace = true }

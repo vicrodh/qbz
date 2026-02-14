@@ -37,6 +37,7 @@ use symphonia::core::probe::Hint;
 use symphonia::default::{get_codecs, get_probe};
 
 use qbz_models::Quality;
+use qbz_qobuz::QobuzClient;
 use qbz_audio::{
     AudioBackendType, AudioDiagnostic, BackendConfig, BackendManager, DiagnosticSource,
     extract_replaygain, calculate_gain_factor, db_to_linear,
