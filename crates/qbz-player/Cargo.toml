@@ -21,6 +21,9 @@ log = { workspace = true }
 # Error handling
 thiserror = { workspace = true }
 
+# Random (for shuffle)
+rand = "0.8"
+
 # Audio decoding
 symphonia = { workspace = true }
 
