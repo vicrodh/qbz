@@ -212,8 +212,16 @@ impl QueueManager {
     /// Clear the queue
     pub fn clear(&self) {
         let mut state = self.state.lock().unwrap();
-        state.tracks.clear();
-        state.current_index = None;
+
+        // A track is currently playing, keep it as the only item left.
+        if let Some(_curr_idx) = state.current_index {
+            state.tracks.truncate(1);
+            state.current_index = Some(0);
+        } else {
+            state.tracks.clear();
+            state.current_index = None;
+        }
+
         state.shuffle_order.clear();
         state.shuffle_position = 0;
         state.history.clear();
