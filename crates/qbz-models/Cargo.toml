@@ -13,6 +13,9 @@ serde_json = { workspace = true }
 # Async
 async-trait = { workspace = true }
 
+# Logging
+log = { workspace = true }
+
 # Error handling
 thiserror = { workspace = true }
 
