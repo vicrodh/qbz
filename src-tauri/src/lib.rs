@@ -2,6 +2,9 @@
 //!
 //! This application uses the Qobuz API but is not certified by Qobuz.
 
+// New multi-crate architecture adapter
+pub mod tauri_adapter;
+
 pub mod api;
 pub mod api_cache;
 pub mod api_server;

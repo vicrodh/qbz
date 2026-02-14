@@ -13,6 +13,13 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# QBZ Crates (extracted core functionality)
+qbz-models = { path = "../crates/qbz-models" }
+qbz-audio = { path = "../crates/qbz-audio" }
+qbz-player = { path = "../crates/qbz-player" }
+qbz-qobuz = { path = "../crates/qbz-qobuz" }
+qbz-core = { path = "../crates/qbz-core" }
+
 # Tauri
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-opener = "2"
@@ -27,6 +34,7 @@ reqwest = { version = "0.12", features = ["json", "cookies", "rustls-tls", "stre
 
 # Async Runtime
 tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
 tokio-stream = { version = "0.1", features = ["sync"] }
 
 # Local API server
