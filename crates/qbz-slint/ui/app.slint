@@ -1,0 +1,308 @@
+// QBZ Slint POC - Main Application
+//
+// This is a minimal UI to test the Slint + qbz-core integration.
+
+import { VerticalBox, HorizontalBox, LineEdit, Button, Slider } from "std-widgets.slint";
+
+// Theme colors matching QBZ dark theme
+global Theme {
+    out property <color> bg-primary: #0f0f0f;
+    out property <color> bg-secondary: #1a1a1a;
+    out property <color> bg-elevated: #252525;
+    out property <color> text-primary: #ffffff;
+    out property <color> text-secondary: #b3b3b3;
+    out property <color> accent-primary: #4285F4;
+    out property <color> error: #ff4444;
+}
+
+export component App inherits Window {
+    title: "QBZ";
+    width: 1200px;
+    height: 800px;
+    background: Theme.bg-primary;
+
+    // ─── State Properties ───────────────────────────────────────────────────
+
+    // View state (0=Login, 1=Home, 2=Search)
+    in-out property <int> current-view: 0;
+    in-out property <bool> is-logged-in: false;
+    in-out property <bool> is-loading: false;
+
+    // Login state
+    in-out property <string> login-error: "";
+
+    // Playback state
+    in-out property <bool> is-playing: false;
+    in-out property <float> position: 0;
+    in-out property <float> volume: 1.0;
+    in-out property <string> position-text: "0:00";
+    in-out property <string> duration-text: "0:00";
+
+    // Current track
+    in-out property <string> current-title: "";
+    in-out property <string> current-artist: "";
+    in-out property <string> current-album: "";
+
+    // Queue state
+    in-out property <int> queue-index: 0;
+    in-out property <bool> shuffle: false;
+    in-out property <int> repeat-mode: 0;
+
+    // ─── Callbacks ──────────────────────────────────────────────────────────
+
+    callback login(string, string);
+    callback play-pause();
+    callback next();
+    callback previous();
+    callback seek(float);
+    callback set-volume(float);
+
+    // ─── Layout ─────────────────────────────────────────────────────────────
+
+    VerticalBox {
+        // Main content area
+        Rectangle {
+            vertical-stretch: 1;
+            background: Theme.bg-primary;
+
+            // Login View
+            if current-view == 0: Rectangle {
+                background: Theme.bg-primary;
+
+                VerticalBox {
+                    alignment: center;
+                    padding: 32px;
+                    spacing: 16px;
+
+                    Text {
+                        text: "QBZ";
+                        color: Theme.text-primary;
+                        font-size: 48px;
+                        font-weight: 700;
+                        horizontal-alignment: center;
+                    }
+
+                    Rectangle { height: 32px; }
+
+                    Rectangle {
+                        width: 360px;
+                        height: 320px;
+                        background: Theme.bg-elevated;
+                        border-radius: 12px;
+
+                        VerticalBox {
+                            padding: 24px;
+                            spacing: 16px;
+
+                            Text {
+                                text: "Sign in to Qobuz";
+                                color: Theme.text-primary;
+                                font-size: 20px;
+                                horizontal-alignment: center;
+                            }
+
+                            email-input := LineEdit {
+                                placeholder-text: "Email";
+                            }
+
+                            password-input := LineEdit {
+                                placeholder-text: "Password";
+                                input-type: password;
+                            }
+
+                            if login-error != "": Text {
+                                text: login-error;
+                                color: Theme.error;
+                                font-size: 13px;
+                                horizontal-alignment: center;
+                            }
+
+                            Button {
+                                text: is-loading ? "Signing in..." : "Sign In";
+                                enabled: !is-loading;
+                                clicked => {
+                                    root.login(email-input.text, password-input.text);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Home View (placeholder)
+            if current-view == 1: Rectangle {
+                background: Theme.bg-primary;
+
+                VerticalBox {
+                    padding: 32px;
+                    spacing: 16px;
+
+                    Text {
+                        text: "Home";
+                        color: Theme.text-primary;
+                        font-size: 32px;
+                        font-weight: 600;
+                    }
+
+                    Text {
+                        text: "Welcome to QBZ Slint POC!";
+                        color: Theme.text-secondary;
+                        font-size: 16px;
+                    }
+
+                    Text {
+                        text: "This is a placeholder. Full implementation coming in Phase 3.";
+                        color: Theme.text-secondary;
+                        font-size: 14px;
+                    }
+                }
+            }
+        }
+
+        // Player Bar (only when logged in)
+        if is-logged-in: Rectangle {
+            height: 80px;
+            background: Theme.bg-elevated;
+
+            HorizontalBox {
+                padding: 16px;
+                spacing: 16px;
+
+                // Track info
+                VerticalBox {
+                    width: 200px;
+                    spacing: 4px;
+
+                    Text {
+                        text: current-title != "" ? current-title : "No track";
+                        color: Theme.text-primary;
+                        font-size: 14px;
+                        overflow: elide;
+                    }
+
+                    Text {
+                        text: current-artist;
+                        color: Theme.text-secondary;
+                        font-size: 12px;
+                        overflow: elide;
+                    }
+                }
+
+                // Playback controls
+                VerticalBox {
+                    horizontal-stretch: 1;
+                    spacing: 8px;
+
+                    HorizontalBox {
+                        alignment: center;
+                        spacing: 16px;
+
+                        // Previous
+                        Rectangle {
+                            width: 32px;
+                            height: 32px;
+
+                            Text {
+                                text: "⏮";
+                                color: Theme.text-primary;
+                                font-size: 18px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            TouchArea {
+                                clicked => { root.previous(); }
+                            }
+                        }
+
+                        // Play/Pause
+                        Rectangle {
+                            width: 40px;
+                            height: 40px;
+                            background: Theme.text-primary;
+                            border-radius: 20px;
+
+                            Text {
+                                text: is-playing ? "⏸" : "▶";
+                                color: Theme.bg-primary;
+                                font-size: 18px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            TouchArea {
+                                clicked => { root.play-pause(); }
+                            }
+                        }
+
+                        // Next
+                        Rectangle {
+                            width: 32px;
+                            height: 32px;
+
+                            Text {
+                                text: "⏭";
+                                color: Theme.text-primary;
+                                font-size: 18px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            TouchArea {
+                                clicked => { root.next(); }
+                            }
+                        }
+                    }
+
+                    // Progress bar
+                    HorizontalBox {
+                        spacing: 8px;
+
+                        Text {
+                            text: position-text;
+                            color: Theme.text-secondary;
+                            font-size: 11px;
+                            width: 40px;
+                        }
+
+                        Slider {
+                            horizontal-stretch: 1;
+                            minimum: 0;
+                            maximum: 1;
+                            value: position;
+                            changed(val) => { root.seek(val); }
+                        }
+
+                        Text {
+                            text: duration-text;
+                            color: Theme.text-secondary;
+                            font-size: 11px;
+                            width: 40px;
+                        }
+                    }
+                }
+
+                // Volume
+                HorizontalBox {
+                    width: 150px;
+                    spacing: 8px;
+
+                    Text {
+                        text: "🔊";
+                        color: Theme.text-secondary;
+                        font-size: 16px;
+                        vertical-alignment: center;
+                    }
+
+                    Slider {
+                        horizontal-stretch: 1;
+                        minimum: 0;
+                        maximum: 1;
+                        value: volume;
+                        changed(val) => { root.set-volume(val); }
+                    }
+                }
+            }
+        }
+    }
+}

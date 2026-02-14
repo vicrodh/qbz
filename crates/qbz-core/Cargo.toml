@@ -1,0 +1,38 @@
+[package]
+name = "qbz-core"
+description = "Frontend-agnostic core library for QBZ music player"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# HTTP
+reqwest = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Audio decoding
+symphonia = { workspace = true }
+
+# Crypto
+md5 = { workspace = true }
+base64 = { workspace = true }
+
+# Audio output - using vendored versions from src-tauri
+# IMPORTANT: Must use symphonia-all to match qbz-nix config (f32 pipeline)
+rodio = { path = "../../src-tauri/vendor/rodio", default-features = false, features = ["symphonia-all"] }
+cpal = { path = "../../src-tauri/vendor/cpal" }
+
+[dev-dependencies]
+tokio-test = "0.4"

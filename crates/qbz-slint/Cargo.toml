@@ -1,0 +1,23 @@
+[package]
+name = "qbz-slint"
+description = "Slint UI POC for QBZ music player"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+# Core library
+qbz-core = { path = "../qbz-core" }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+log = { workspace = true }
+env_logger = { workspace = true }
+
+# UI
+slint = { workspace = true }
+
+[build-dependencies]
+slint-build = "1.9"
