@@ -3,7 +3,7 @@
 mod adapter;
 
 use adapter::SlintAdapter;
-use qbz_core::{Album, QbzCore};
+use qbz_core::{Album, QbzCore, Track};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use std::sync::Arc;
 
@@ -55,6 +55,26 @@ fn album_to_slint(album: &Album) -> AlbumData {
         cover_url: SharedString::from(album.cover_url.clone().unwrap_or_default()),
         hires: album.hires_available,
     }
+}
+
+/// Convert core Track to Slint TrackData
+fn track_to_slint(track: &Track) -> TrackData {
+    TrackData {
+        id: SharedString::from(track.id.to_string()),
+        title: SharedString::from(track.title.clone()),
+        artist: SharedString::from(track.artist.clone()),
+        album: SharedString::from(track.album.clone()),
+        duration: SharedString::from(format_duration(track.duration)),
+        hires: track.hires_available,
+    }
+}
+
+/// Format duration in milliseconds to MM:SS
+fn format_duration(ms: u64) -> String {
+    let secs = ms / 1000;
+    let mins = secs / 60;
+    let secs = secs % 60;
+    format!("{}:{:02}", mins, secs)
 }
 
 /// Load home data (featured albums) and update UI
@@ -199,5 +219,74 @@ fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
     app.on_play_album(move |album_id| {
         log::info!("Play album {} (not implemented yet)", album_id);
         // TODO: Fetch album tracks and start playback
+    });
+
+    // Play track callback
+    app.on_play_track(move |track_id| {
+        log::info!("Play track {} (not implemented yet)", track_id);
+        // TODO: Add track to queue and start playback
+    });
+
+    // Search callback
+    let core_search = core.clone();
+    let app_weak = app.as_weak();
+    app.on_search(move |query| {
+        let query = query.to_string();
+        if query.is_empty() {
+            return;
+        }
+
+        let core = core_search.clone();
+        let app_weak = app_weak.clone();
+
+        // Set loading state
+        if let Some(app) = app_weak.upgrade() {
+            app.set_is_loading(true);
+        }
+
+        tokio::spawn(async move {
+            log::info!("Searching for: {}", query);
+
+            // Search albums and tracks in parallel
+            let (albums_result, tracks_result) = tokio::join!(
+                core.search_albums(&query, 20),
+                core.search_tracks(&query, 30)
+            );
+
+            // Update UI
+            let _ = slint::invoke_from_event_loop(move || {
+                if let Some(app) = app_weak.upgrade() {
+                    app.set_is_loading(false);
+
+                    // Albums
+                    match albums_result {
+                        Ok(albums) => {
+                            log::info!("Found {} albums", albums.len());
+                            let items: Vec<AlbumData> = albums.iter().map(album_to_slint).collect();
+                            let model = ModelRc::new(VecModel::from(items));
+                            app.set_search_albums(model);
+                        }
+                        Err(e) => {
+                            log::error!("Album search failed: {}", e);
+                            app.set_search_albums(ModelRc::new(VecModel::default()));
+                        }
+                    }
+
+                    // Tracks
+                    match tracks_result {
+                        Ok(tracks) => {
+                            log::info!("Found {} tracks", tracks.len());
+                            let items: Vec<TrackData> = tracks.iter().map(track_to_slint).collect();
+                            let model = ModelRc::new(VecModel::from(items));
+                            app.set_search_tracks(model);
+                        }
+                        Err(e) => {
+                            log::error!("Track search failed: {}", e);
+                            app.set_search_tracks(ModelRc::new(VecModel::default()));
+                        }
+                    }
+                }
+            });
+        });
     });
 }
