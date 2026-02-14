@@ -46,4 +46,15 @@ pub use types::{
     PlaylistDuplicateResult, PlaylistGenre, PlaylistOwner, PlaylistWithTrackIds, Quality,
     SearchResults, SearchResultsPage, StreamRestriction, StreamUrl, Track, TracksContainer,
     UserSession,
+    // Discover types
+    DiscoverAlbum, DiscoverAlbumDates, DiscoverAlbumImage, DiscoverArtist, DiscoverAudioInfo,
+    DiscoverContainer, DiscoverContainers, DiscoverData, DiscoverPlaylist, DiscoverPlaylistImage,
+    DiscoverPlaylistsResponse, DiscoverResponse, PlaylistTag, PlaylistTagsResponse, RawPlaylistTag,
+    // Artist page types
+    PageArtistAward, PageArtistBiography, PageArtistImages, PageArtistName,
+    PageArtistPhysicalSupport, PageArtistPlaylist, PageArtistPlaylistImages,
+    PageArtistPlaylistOwner, PageArtistPlaylists, PageArtistPortrait, PageArtistRelease,
+    PageArtistReleaseArtist, PageArtistReleaseContributor, PageArtistReleaseGroup,
+    PageArtistResponse, PageArtistRights, PageArtistSimilar, PageArtistSimilarItem,
+    PageArtistTrack, PageArtistTrackAlbum, ReleasesGridResponse,
 };

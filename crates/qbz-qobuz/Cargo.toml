@@ -10,6 +10,7 @@ qbz-models = { path = "../qbz-models" }
 
 # Async
 tokio = { workspace = true }
+futures-util = { workspace = true }
 
 # HTTP
 reqwest = { workspace = true }
@@ -33,3 +34,4 @@ log = { workspace = true }
 
 # Error handling
 thiserror = { workspace = true }
+anyhow = { workspace = true }
