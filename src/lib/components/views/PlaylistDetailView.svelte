@@ -697,36 +697,89 @@
           // plus a setTimeout(0) yield between groups so the browser can paint.
           if (batches.length > CONCURRENCY) {
             const remaining = batches.slice(CONCURRENCY);
+            const totalExpected = allTrackIds.length;
+            const currentPlaylistId = playlistId; // Capture to detect playlist change
+
             (async () => {
-              for (let g = 0; g < remaining.length; g += CONCURRENCY) {
-                const group = remaining.slice(g, g + CONCURRENCY);
+              const failedBatches: number[][] = [];
 
-                const results = await Promise.all(
-                  group.map(batch =>
-                    invoke<PlaylistTrack[]>('get_tracks_batch', { trackIds: batch })
-                      .catch(err => {
-                        console.warn('[Perf] batch fetch failed:', err);
-                        return [] as PlaylistTrack[];
-                      })
-                  )
-                );
+              try {
+                for (let g = 0; g < remaining.length; g += CONCURRENCY) {
+                  // Check if playlist changed - abort if so
+                  if (playlistId !== currentPlaylistId) {
+                    console.log('[Perf] playlist changed, aborting background load');
+                    return;
+                  }
 
-                // Build new batch of DisplayTracks
-                const currentLen = tracks.length;
-                const newTracks: DisplayTrack[] = [];
-                for (const batchTracks of results) {
-                  for (const apiTrack of batchTracks) {
-                    newTracks.push(mapPlaylistTrack(apiTrack, currentLen + newTracks.length));
+                  const group = remaining.slice(g, g + CONCURRENCY);
+
+                  const results = await Promise.all(
+                    group.map((batch, idx) =>
+                      invoke<PlaylistTrack[]>('get_tracks_batch', { trackIds: batch })
+                        .catch(err => {
+                          console.warn(`[Perf] batch ${g + idx} fetch failed:`, err);
+                          failedBatches.push(batch);
+                          return [] as PlaylistTrack[];
+                        })
+                    )
+                  );
+
+                  // Build new batch of DisplayTracks
+                  const currentLen = tracks.length;
+                  const newTracks: DisplayTrack[] = [];
+                  for (const batchTracks of results) {
+                    for (const apiTrack of batchTracks) {
+                      newTracks.push(mapPlaylistTrack(apiTrack, currentLen + newTracks.length));
+                    }
+                  }
+
+                  // Single reactive assignment: append batch
+                  if (newTracks.length > 0) {
+                    tracks = [...tracks, ...newTracks];
+                    tracksLoadedCount = tracks.length;
+                  }
+                  console.log(`[Perf] loaded ${tracksLoadedCount}/${totalExpected} tracks (+${(performance.now() - _t0).toFixed(1)}ms)`);
+
+                  // Yield to browser — let it paint before next group
+                  await new Promise(r => setTimeout(r, 0));
+                }
+
+                // Retry failed batches once
+                if (failedBatches.length > 0 && playlistId === currentPlaylistId) {
+                  console.log(`[Perf] retrying ${failedBatches.length} failed batches...`);
+                  await new Promise(r => setTimeout(r, 500)); // Small delay before retry
+
+                  for (const batch of failedBatches) {
+                    if (playlistId !== currentPlaylistId) break;
+
+                    try {
+                      const retryResult = await invoke<PlaylistTrack[]>('get_tracks_batch', { trackIds: batch });
+                      if (retryResult.length > 0) {
+                        const currentLen = tracks.length;
+                        const newTracks = retryResult.map((apiTrack, idx) =>
+                          mapPlaylistTrack(apiTrack, currentLen + idx)
+                        );
+                        tracks = [...tracks, ...newTracks];
+                        tracksLoadedCount = tracks.length;
+                        console.log(`[Perf] retry success: now ${tracksLoadedCount}/${totalExpected} tracks`);
+                      }
+                    } catch (retryErr) {
+                      console.error('[Perf] retry failed:', retryErr);
+                    }
                   }
                 }
 
-                // Single reactive assignment: append batch
-                tracks = [...tracks, ...newTracks];
-                tracksLoadedCount = tracks.length;
-                console.log(`[Perf] loaded ${tracksLoadedCount}/${allTrackIds.length} tracks (+${(performance.now() - _t0).toFixed(1)}ms)`);
-
-                // Yield to browser — let it paint before next group
-                await new Promise(r => setTimeout(r, 0));
+                // Final status
+                if (playlistId === currentPlaylistId) {
+                  const missing = totalExpected - tracks.length;
+                  if (missing > 0) {
+                    console.warn(`[Perf] INCOMPLETE: loaded ${tracks.length}/${totalExpected}, missing ${missing} tracks`);
+                  } else {
+                    console.log(`[Perf] COMPLETE: loaded all ${tracks.length} tracks`);
+                  }
+                }
+              } catch (loopErr) {
+                console.error('[Perf] progressive load loop failed:', loopErr);
               }
             })();
           }
