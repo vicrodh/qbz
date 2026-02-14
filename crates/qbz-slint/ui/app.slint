@@ -33,6 +33,17 @@ export struct TrackData {
     hires: bool,
 }
 
+// Queue item (track with index)
+export struct QueueItem {
+    index: int,
+    id: string,
+    title: string,
+    artist: string,
+    album: string,
+    duration: string,
+    hires: bool,
+}
+
 // Album card component
 component AlbumCard inherits Rectangle {
     in property <string> title;
@@ -136,6 +147,116 @@ component SectionHeader inherits Rectangle {
     }
 }
 
+// Queue row with current track indicator and remove button
+component QueueRow inherits Rectangle {
+    in property <int> index;
+    in property <string> title;
+    in property <string> artist;
+    in property <string> duration;
+    in property <bool> hires: false;
+    in property <bool> is-current: false;
+
+    callback clicked();
+    callback remove();
+
+    height: 52px;
+    background: is-current ? Theme.accent-primary.with-alpha(0.2) : (touch.has-hover ? Theme.bg-hover : transparent);
+    border-radius: 4px;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding: 12px;
+        spacing: 12px;
+
+        // Index / playing indicator
+        Rectangle {
+            width: 24px;
+
+            Text {
+                text: is-current ? "▶" : (index + 1);
+                color: is-current ? Theme.accent-primary : Theme.text-secondary;
+                font-size: 13px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // Track info
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 2px;
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Text {
+                    text: title;
+                    color: is-current ? Theme.accent-primary : Theme.text-primary;
+                    font-size: 14px;
+                    font-weight: is-current ? 600 : 400;
+                    overflow: elide;
+                }
+
+                if hires: Rectangle {
+                    width: 36px;
+                    height: 16px;
+                    background: #ff9500;
+                    border-radius: 3px;
+
+                    Text {
+                        text: "Hi-Res";
+                        color: white;
+                        font-size: 9px;
+                        font-weight: 600;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+
+            Text {
+                text: artist;
+                color: Theme.text-secondary;
+                font-size: 12px;
+                overflow: elide;
+            }
+        }
+
+        // Duration
+        Text {
+            text: duration;
+            color: Theme.text-secondary;
+            font-size: 12px;
+            vertical-alignment: center;
+            width: 45px;
+            horizontal-alignment: right;
+        }
+
+        // Remove button
+        Rectangle {
+            width: 28px;
+            height: 28px;
+            background: remove-touch.has-hover ? Theme.error.with-alpha(0.2) : transparent;
+            border-radius: 4px;
+
+            Text {
+                text: "✕";
+                color: remove-touch.has-hover ? Theme.error : Theme.text-secondary;
+                font-size: 14px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            remove-touch := TouchArea {
+                clicked => { root.remove(); }
+            }
+        }
+    }
+}
+
 // Track row for search results
 component TrackRow inherits Rectangle {
     in property <string> title;
@@ -218,7 +339,7 @@ export component App inherits Window {
 
     // ─── State Properties ───────────────────────────────────────────────────
 
-    // View state (0=Login, 1=Home, 2=Search)
+    // View state (0=Login, 1=Home, 2=Search, 3=Queue)
     in-out property <int> current-view: 0;
     in-out property <bool> is-logged-in: false;
     in-out property <bool> is-loading: false;
@@ -238,6 +359,9 @@ export component App inherits Window {
     in-out property <int> search-tab: 0;  // 0=Albums, 1=Tracks
     in-out property <[AlbumData]> search-albums: [];
     in-out property <[TrackData]> search-tracks: [];
+
+    // Queue data
+    in-out property <[QueueItem]> queue-tracks: [];
 
     // Playback state
     in-out property <bool> is-playing: false;
@@ -268,6 +392,9 @@ export component App inherits Window {
     callback previous();
     callback seek(float);
     callback set-volume(float);
+    callback queue-play-index(int);
+    callback queue-remove(int);
+    callback queue-clear();
 
     // ─── Layout ─────────────────────────────────────────────────────────────
 
@@ -322,6 +449,48 @@ export component App inherits Window {
 
                     TouchArea {
                         clicked => { root.current-view = 2; }
+                    }
+                }
+
+                // Queue button
+                Rectangle {
+                    width: 80px;
+                    height: 32px;
+                    background: current-view == 3 ? Theme.accent-primary : transparent;
+                    border-radius: 6px;
+
+                    HorizontalLayout {
+                        alignment: center;
+                        spacing: 4px;
+
+                        Text {
+                            text: "Queue";
+                            color: current-view == 3 ? white : Theme.text-secondary;
+                            font-size: 13px;
+                            font-weight: 500;
+                            vertical-alignment: center;
+                        }
+
+                        // Queue count badge
+                        if queue-tracks.length > 0: Rectangle {
+                            width: 18px;
+                            height: 18px;
+                            background: Theme.accent-primary;
+                            border-radius: 9px;
+
+                            Text {
+                                text: queue-tracks.length;
+                                color: white;
+                                font-size: 10px;
+                                font-weight: 600;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+
+                    TouchArea {
+                        clicked => { root.current-view = 3; }
                     }
                 }
 
@@ -682,6 +851,103 @@ export component App inherits Window {
                             font-size: 14px;
                             horizontal-alignment: center;
                             vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            // Queue View
+            if current-view == 3: Rectangle {
+                background: Theme.bg-primary;
+
+                VerticalLayout {
+                    padding: 32px;
+                    spacing: 16px;
+
+                    // Header
+                    HorizontalLayout {
+                        spacing: 16px;
+
+                        Text {
+                            text: "Queue";
+                            color: Theme.text-primary;
+                            font-size: 28px;
+                            font-weight: 600;
+                            horizontal-stretch: 1;
+                        }
+
+                        // Clear all button
+                        if queue-tracks.length > 0: Rectangle {
+                            width: 100px;
+                            height: 36px;
+                            background: clear-touch.has-hover ? Theme.error.with-alpha(0.2) : transparent;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: Theme.error;
+
+                            Text {
+                                text: "Clear All";
+                                color: Theme.error;
+                                font-size: 13px;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            clear-touch := TouchArea {
+                                clicked => { root.queue-clear(); }
+                            }
+                        }
+                    }
+
+                    // Queue info
+                    if queue-tracks.length > 0: Text {
+                        text: queue-tracks.length + " tracks";
+                        color: Theme.text-secondary;
+                        font-size: 14px;
+                    }
+
+                    // Queue list
+                    if queue-tracks.length > 0: ScrollView {
+                        vertical-stretch: 1;
+
+                        VerticalLayout {
+                            spacing: 2px;
+                            padding-bottom: 16px;
+
+                            for item in queue-tracks: QueueRow {
+                                index: item.index;
+                                title: item.title;
+                                artist: item.artist;
+                                duration: item.duration;
+                                hires: item.hires;
+                                is-current: item.index == queue-index;
+                                clicked => { root.queue-play-index(item.index); }
+                                remove => { root.queue-remove(item.index); }
+                            }
+                        }
+                    }
+
+                    // Empty state
+                    if queue-tracks.length == 0: Rectangle {
+                        vertical-stretch: 1;
+
+                        VerticalLayout {
+                            alignment: center;
+                            spacing: 12px;
+
+                            Text {
+                                text: "Queue is empty";
+                                color: Theme.text-secondary;
+                                font-size: 18px;
+                                horizontal-alignment: center;
+                            }
+
+                            Text {
+                                text: "Play an album or track to add to queue";
+                                color: Theme.text-secondary;
+                                font-size: 14px;
+                                horizontal-alignment: center;
+                            }
                         }
                     }
                 }

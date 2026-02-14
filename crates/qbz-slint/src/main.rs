@@ -227,6 +227,26 @@ fn setup_callbacks(app: &App, core: Arc<QbzCore<SlintAdapter>>) {
         // TODO: Add track to queue and start playback
     });
 
+    // Queue: play specific index
+    app.on_queue_play_index(move |index| {
+        log::info!("Queue play index {} (not implemented yet)", index);
+        // TODO: Jump to index in queue
+    });
+
+    // Queue: remove track at index
+    app.on_queue_remove(move |index| {
+        log::info!("Queue remove index {} (not implemented yet - would go through core)", index);
+        // In real implementation, this would call core.queue_remove(index)
+        // and core would emit QueueChanged event to update UI
+    });
+
+    // Queue: clear all
+    app.on_queue_clear(move || {
+        log::info!("Queue clear (not implemented yet - would go through core)");
+        // In real implementation, this would call core.queue_clear()
+        // and core would emit QueueChanged event to update UI
+    });
+
     // Search callback
     let core_search = core.clone();
     let app_weak = app.as_weak();
