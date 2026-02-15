@@ -19,6 +19,7 @@ use crate::artist_blacklist::BlacklistState;
 use crate::cache::AudioCache;
 use crate::audio::{AlsaPlugin, AudioBackendType};
 use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
+use crate::config::legal_settings::LegalSettingsState;
 use crate::core_bridge::CoreBridgeState;
 use crate::offline_cache::OfflineCacheState;
 use crate::queue::QueueManager;
@@ -26,6 +27,33 @@ use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEv
 use crate::AppState;
 
 // ==================== Helper Functions ====================
+
+/// Check that Qobuz ToS has been accepted before allowing login.
+///
+/// This is the single enforcement point for ToS gate in backend.
+/// All login commands MUST call this before authenticating.
+///
+/// Returns Ok(()) if ToS accepted, Err with specific error code if not.
+fn require_tos_accepted(legal_state: &LegalSettingsState) -> Result<(), (String, String)> {
+    let guard = legal_state.lock().map_err(|e| {
+        ("tos_check_failed".to_string(), format!("Lock error: {}", e))
+    })?;
+
+    let tos_accepted = guard
+        .as_ref()
+        .and_then(|store| store.get_settings().ok())
+        .map(|s| s.qobuz_tos_accepted)
+        .unwrap_or(false);
+
+    if !tos_accepted {
+        return Err((
+            "tos_not_accepted".to_string(),
+            "Qobuz Terms of Service must be accepted before login".to_string(),
+        ));
+    }
+
+    Ok(())
+}
 
 /// Convert quality string from frontend to Quality enum
 fn parse_quality(quality_str: Option<&str>) -> Quality {
@@ -263,7 +291,7 @@ pub async fn runtime_bootstrap(
 /// 1. Extracts bundle tokens from Qobuz
 /// 2. Sets RuntimeManager state to InitializedNoAuth
 ///
-/// Call this first, then let frontend handle ToS check before calling v2_auto_login.
+/// Call this first. ToS gate is enforced in backend by all login commands.
 #[tauri::command]
 pub async fn v2_init_client(
     app: tauri::AppHandle,
@@ -318,16 +346,31 @@ pub struct V2LoginResponse {
 /// 4. Updates RuntimeManager state
 ///
 /// V2 auth is REQUIRED - if it fails, the whole login fails.
+/// ToS acceptance is REQUIRED - checked in backend before any auth attempt.
 #[tauri::command]
 pub async fn v2_auto_login(
     app: tauri::AppHandle,
     runtime: State<'_, RuntimeManagerState>,
     app_state: State<'_, AppState>,
     core_bridge: State<'_, CoreBridgeState>,
+    legal_state: State<'_, LegalSettingsState>,
 ) -> Result<V2LoginResponse, String> {
     let manager = runtime.manager();
 
     log::info!("[V2] v2_auto_login starting...");
+
+    // ToS gate - must be accepted before any login attempt
+    if let Err((error_code, error)) = require_tos_accepted(&legal_state) {
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: None,
+            user_id: None,
+            subscription: None,
+            subscription_valid_until: None,
+            error: Some(error),
+            error_code: Some(error_code),
+        });
+    }
 
     // Load saved credentials
     let creds = match crate::credentials::load_qobuz_credentials() {
@@ -462,6 +505,7 @@ pub async fn v2_auto_login(
 /// 3. Updates RuntimeManager state
 ///
 /// V2 auth is REQUIRED - if it fails, the whole login fails.
+/// ToS acceptance is REQUIRED - checked in backend before any auth attempt.
 #[tauri::command]
 pub async fn v2_manual_login(
     email: String,
@@ -470,10 +514,24 @@ pub async fn v2_manual_login(
     runtime: State<'_, RuntimeManagerState>,
     app_state: State<'_, AppState>,
     core_bridge: State<'_, CoreBridgeState>,
+    legal_state: State<'_, LegalSettingsState>,
 ) -> Result<V2LoginResponse, String> {
     let manager = runtime.manager();
 
     log::info!("[V2] v2_manual_login starting...");
+
+    // ToS gate - must be accepted before any login attempt
+    if let Err((error_code, error)) = require_tos_accepted(&legal_state) {
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: None,
+            user_id: None,
+            subscription: None,
+            subscription_valid_until: None,
+            error: Some(error),
+            error_code: Some(error_code),
+        });
+    }
 
     // Legacy auth
     let client = app_state.client.read().await;
@@ -705,6 +763,7 @@ pub async fn v2_is_logged_in(
 /// Login with email and password (V2 - uses QbzCore)
 ///
 /// This performs the full login flow:
+/// 0. ToS gate (REQUIRED - enforced in backend)
 /// 1. Legacy auth (Qobuz API client)
 /// 2. CoreBridge auth (V2)
 /// 3. Session activation (per-user stores)
@@ -717,8 +776,14 @@ pub async fn v2_login(
     app_state: State<'_, AppState>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
+    legal_state: State<'_, LegalSettingsState>,
 ) -> Result<UserSession, RuntimeError> {
     let manager = runtime.manager();
+
+    // Step 0: ToS gate - must be accepted before any login attempt
+    if let Err((_, error)) = require_tos_accepted(&legal_state) {
+        return Err(RuntimeError::Internal(error));
+    }
 
     // Step 1: Legacy auth
     let session = {
