@@ -339,6 +339,10 @@ pub fn run() {
                 .init(app.handle().clone());
 
             // Initialize CoreBridge (new multi-crate architecture)
+            // Store V2 player state for event loop access
+            let v2_player_state: Arc<tokio::sync::RwLock<Option<qbz_player::SharedState>>> =
+                Arc::new(tokio::sync::RwLock::new(None));
+            let v2_player_state_setter = v2_player_state.clone();
             {
                 let core_bridge_arc = app.state::<core_bridge::CoreBridgeState>().0.clone();
                 let adapter = tauri_adapter::TauriAdapter::new(app.handle().clone());
@@ -346,8 +350,11 @@ pub fn run() {
                     let bridge = core_bridge::CoreBridge::new(adapter).await;
                     match bridge {
                         Ok(b) => {
+                            // Store V2 player state for event loop
+                            let v2_state = b.player().state.clone();
+                            *v2_player_state_setter.write().await = Some(v2_state);
                             *core_bridge_arc.write().await = Some(b);
-                            log::info!("CoreBridge initialized successfully");
+                            log::info!("CoreBridge initialized successfully (V2 player state captured)");
                         }
                         Err(e) => {
                             log::error!("Failed to initialize CoreBridge: {}", e);
@@ -365,17 +372,69 @@ pub fn run() {
 
             // Start background task to emit playback events
             let app_handle = app.handle().clone();
-            let player_state = app.state::<AppState>().player.state.clone();
+            let legacy_player_state = app.state::<AppState>().player.state.clone();
 
             std::thread::spawn(move || {
                 let mut last_position: u64 = 0;
                 let mut last_is_playing: bool = false;
                 let mut last_track_id: u64 = 0;
+                let rt = tokio::runtime::Handle::current();
 
                 loop {
-                    // Check playing/track state first to determine sleep duration
-                    let is_playing = player_state.is_playing();
-                    let track_id = player_state.current_track_id();
+                    // Check V2 player state first (takes priority if active)
+                    // V2 player is accessed via async lock, but we only need to check if it has a track
+                    let v2_state_opt: Option<qbz_player::SharedState> = rt.block_on(async {
+                        v2_player_state.read().await.clone()
+                    });
+
+                    // Determine which player is active (V2 takes priority if it has a track)
+                    let (is_playing, track_id, position, duration, volume, sample_rate, bit_depth, normalization_gain, gapless_ready, gapless_next_track_id) =
+                        if let Some(ref v2_state) = v2_state_opt {
+                            let v2_track_id = v2_state.current_track_id();
+                            if v2_track_id != 0 {
+                                // V2 player is active
+                                (
+                                    v2_state.is_playing(),
+                                    v2_track_id,
+                                    v2_state.current_position(),
+                                    v2_state.duration(),
+                                    v2_state.volume(),
+                                    v2_state.get_sample_rate(),
+                                    v2_state.get_bit_depth(),
+                                    v2_state.get_normalization_gain(),
+                                    v2_state.is_gapless_ready(),
+                                    v2_state.get_gapless_next_track_id(),
+                                )
+                            } else {
+                                // Fallback to legacy player
+                                (
+                                    legacy_player_state.is_playing(),
+                                    legacy_player_state.current_track_id(),
+                                    legacy_player_state.current_position(),
+                                    legacy_player_state.duration(),
+                                    legacy_player_state.volume(),
+                                    legacy_player_state.get_sample_rate(),
+                                    legacy_player_state.get_bit_depth(),
+                                    legacy_player_state.get_normalization_gain(),
+                                    legacy_player_state.is_gapless_ready(),
+                                    legacy_player_state.get_gapless_next_track_id(),
+                                )
+                            }
+                        } else {
+                            // V2 not initialized yet, use legacy
+                            (
+                                legacy_player_state.is_playing(),
+                                legacy_player_state.current_track_id(),
+                                legacy_player_state.current_position(),
+                                legacy_player_state.duration(),
+                                legacy_player_state.volume(),
+                                legacy_player_state.get_sample_rate(),
+                                legacy_player_state.get_bit_depth(),
+                                legacy_player_state.get_normalization_gain(),
+                                legacy_player_state.is_gapless_ready(),
+                                legacy_player_state.get_gapless_next_track_id(),
+                            )
+                        };
 
                     // Adaptive polling:
                     // - fast (500ms) when playing - balances UI responsiveness vs CPU
@@ -390,13 +449,6 @@ pub fn run() {
                     };
                     std::thread::sleep(sleep_duration);
 
-                    // Re-check after sleep (state might have changed)
-                    let is_playing = player_state.is_playing();
-                    let position = player_state.current_position();
-                    let duration = player_state.duration();
-                    let track_id = player_state.current_track_id();
-                    let volume = player_state.volume();
-
                     // Only emit if state changed or position advanced
                     let should_emit = track_id != 0 && (
                         is_playing != last_is_playing
@@ -407,9 +459,7 @@ pub fn run() {
                     let should_update_mpris = should_emit || (track_id == 0 && last_track_id != 0);
 
                     if should_emit {
-                        let sample_rate = player_state.get_sample_rate();
-                        let bit_depth = player_state.get_bit_depth();
-                        // Get queue state for shuffle/repeat
+                        // Get queue state for shuffle/repeat (still from legacy queue)
                         let queue_state = &app_handle.state::<AppState>().queue;
                         let shuffle = queue_state.is_shuffle();
                         let repeat = match queue_state.get_repeat() {
@@ -417,7 +467,7 @@ pub fn run() {
                             queue::RepeatMode::All => "all",
                             queue::RepeatMode::One => "one",
                         };
-                        let normalization_gain = player_state.get_normalization_gain();
+                        // Use values collected from active player (V2 or legacy)
                         let event = player::PlaybackEvent {
                             is_playing,
                             position,
@@ -429,8 +479,8 @@ pub fn run() {
                             shuffle: Some(shuffle),
                             repeat: Some(repeat.to_string()),
                             normalization_gain,
-                            gapless_ready: player_state.is_gapless_ready(),
-                            gapless_next_track_id: player_state.get_gapless_next_track_id(),
+                            gapless_ready,
+                            gapless_next_track_id,
                         };
                         let _ = app_handle.emit("playback:state", &event);
                         api_server::broadcast_playback_event(&app_handle, &event);
