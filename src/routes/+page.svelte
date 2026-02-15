@@ -1630,10 +1630,10 @@
     }
   }
 
-  // Remove a track from the upcoming queue by its position in the upcoming list
+  // Remove a track from the upcoming queue by its position in the upcoming list (V2)
   async function handleRemoveFromQueue(upcomingIndex: number) {
     try {
-      await invoke('remove_upcoming_track', { upcomingIndex });
+      await invoke('v2_remove_upcoming_track', { upcomingIndex });
       await syncQueueState(); // Refresh UI
       showToast($t('toast.removedFromQueue'), 'info');
     } catch (err) {
@@ -1763,7 +1763,7 @@
 
     // Set shuffle mode first
     try {
-      await invoke('set_shuffle', { enabled: true });
+      await invoke('v2_set_shuffle', { enabled: true });
       isShuffle = true;
     } catch (err) {
       console.error('Failed to enable shuffle:', err);
@@ -2381,10 +2381,12 @@
 
         // Restore shuffle/repeat mode
         if (session.shuffle_enabled) {
-          await invoke('set_shuffle', { enabled: true });
+          await invoke('v2_set_shuffle', { enabled: true });
         }
         if (session.repeat_mode !== 'off') {
-          await invoke('set_repeat', { mode: session.repeat_mode });
+          // V2 expects capitalized mode: 'Off' | 'All' | 'One'
+          const v2Mode = session.repeat_mode.charAt(0).toUpperCase() + session.repeat_mode.slice(1);
+          await invoke('v2_set_repeat_mode', { mode: v2Mode });
         }
 
         // Restore volume

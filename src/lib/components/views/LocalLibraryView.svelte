@@ -1943,8 +1943,8 @@
     try {
       console.log('[LocalLibrary Shuffle] Starting shuffle with', albumTracks.length, 'tracks');
 
-      // Enable shuffle mode first
-      await invoke('set_shuffle', { enabled: true });
+      // Enable shuffle mode first (V2)
+      await invoke('v2_set_shuffle', { enabled: true });
 
       // Pick a random track to start with
       const randomIndex = Math.floor(Math.random() * albumTracks.length);
@@ -2124,7 +2124,7 @@
     console.log('[LocalLibrary Queue] Mapped to', queueTracks.length, 'queue tracks');
     console.log('[LocalLibrary Queue] Track IDs:', queueTracks.map(track => track.id));
 
-    await invoke('set_queue', { tracks: queueTracks, startIndex });
+    await invoke('v2_set_queue', { tracks: queueTracks, startIndex });
     onSetLocalQueue?.(tracks.filter(track => track.source !== 'plex').map(track => track.id));
 
     console.log('[LocalLibrary Queue] Queue set successfully');

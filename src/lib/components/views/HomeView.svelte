@@ -620,7 +620,7 @@
     if (continueTracks.length > 0) {
       try {
         const queueTracks = buildContinueQueueTracks(continueTracks);
-        await invoke('set_queue', { tracks: queueTracks, startIndex: trackIndex });
+        await invoke('v2_set_queue', { tracks: queueTracks, startIndex: trackIndex });
       } catch (err) {
         console.error('Failed to set queue:', err);
       }

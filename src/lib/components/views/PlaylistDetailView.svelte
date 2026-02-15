@@ -1473,7 +1473,7 @@
     const allTracks = displayTracks;
     if (allTracks.length === 0) return;
     const { queueTracks, localIds } = buildQueueTracks(allTracks);
-    await invoke('set_queue', { tracks: queueTracks, startIndex });
+    await invoke('v2_set_queue', { tracks: queueTracks, startIndex });
     if (localIds.length > 0) {
       onSetLocalQueue?.(localIds);
     }
@@ -1801,7 +1801,7 @@
   async function handleShuffle() {
     if (tracks.length > 0 && onTrackPlay) {
       try {
-        await invoke('set_shuffle', { enabled: true });
+        await invoke('v2_set_shuffle', { enabled: true });
         await handlePlayAll();
       } catch (err) {
         console.error('Failed to shuffle:', err);
@@ -1827,34 +1827,31 @@
       .filter(trk => trk.isLocal)
       .map(trk => Math.abs(trk.id));
 
-    // Add in reverse order so first track ends up right after current
-    for (let i = playableTracks.length - 1; i >= 0; i--) {
-      const trk = playableTracks[i];
-      try {
-        await invoke('add_to_queue_next', {
-          track: {
-            id: trk.isLocal ? Math.abs(trk.id) : trk.id,
-            title: trk.title,
-            artist: trk.artist || 'Unknown Artist',
-            album: trk.album || playlist?.name || 'Playlist',
-            duration_secs: trk.durationSeconds,
-            artwork_url: trk.albumArt || getPlaylistImage(),
-            hires: trk.hires ?? false,
-            bit_depth: trk.bitDepth ?? null,
-            sample_rate: trk.samplingRate != null ? (trk.isLocal ? trk.samplingRate * 1000 : trk.samplingRate) : null,
-            is_local: trk.isLocal ?? false,
-            album_id: trk.isLocal ? null : (trk.albumId || null),
-            artist_id: trk.isLocal ? null : (trk.artistId ?? null),
-          }
-        });
-      } catch (err) {
-        console.error('Failed to add track next:', err);
-      }
-    }
+    // Build queue tracks for batch add (V2 handles reverse order)
+    const queueTracks = playableTracks.map(trk => ({
+      id: trk.isLocal ? Math.abs(trk.id) : trk.id,
+      title: trk.title,
+      artist: trk.artist || 'Unknown Artist',
+      album: trk.album || playlist?.name || 'Playlist',
+      duration_secs: trk.durationSeconds,
+      artwork_url: trk.albumArt || getPlaylistImage(),
+      hires: trk.hires ?? false,
+      bit_depth: trk.bitDepth ?? null,
+      sample_rate: trk.samplingRate != null ? (trk.isLocal ? trk.samplingRate * 1000 : trk.samplingRate) : null,
+      is_local: trk.isLocal ?? false,
+      album_id: trk.isLocal ? null : (trk.albumId || null),
+      artist_id: trk.isLocal ? null : (trk.artistId ?? null),
+    }));
 
-    // Tell parent about local tracks added to queue
-    if (localIds.length > 0) {
-      onSetLocalQueue?.(localIds);
+    try {
+      await invoke('v2_add_tracks_to_queue_next', { tracks: queueTracks });
+
+      // Tell parent about local tracks added to queue
+      if (localIds.length > 0) {
+        onSetLocalQueue?.(localIds);
+      }
+    } catch (err) {
+      console.error('Failed to add tracks next:', err);
     }
   }
 
@@ -1892,7 +1889,7 @@
       .map(trk => Math.abs(trk.id));
 
     try {
-      await invoke('add_tracks_to_queue', { tracks: queueTracks });
+      await invoke('v2_add_tracks_to_queue', { tracks: queueTracks });
 
       // Tell parent about local tracks added to queue
       if (localIds.length > 0) {

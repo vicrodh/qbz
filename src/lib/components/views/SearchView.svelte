@@ -715,7 +715,7 @@
     if (trackResults && trackResults.items.length > 0) {
       try {
         const queueTracks = buildSearchQueueTracks(trackResults.items);
-        await invoke('set_queue', { tracks: queueTracks, startIndex: trackIndex });
+        await invoke('v2_set_queue', { tracks: queueTracks, startIndex: trackIndex });
       } catch (err) {
         console.error('Failed to set queue:', err);
       }

@@ -851,7 +851,7 @@
         console.log(`[Artist] Context created: "${artist.name}" top tracks, ${trackIds.length} tracks, starting at ${index}`);
         try {
           const queueTracks = buildTopTracksQueue(topTracks);
-          await invoke('set_queue', { tracks: queueTracks, startIndex: index });
+          await invoke('v2_set_queue', { tracks: queueTracks, startIndex: index });
         } catch (err) {
           console.error('Failed to set queue:', err);
         }

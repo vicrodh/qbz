@@ -1082,7 +1082,7 @@
   async function setFavoritesQueue(startIndex: number) {
     if (filteredTracks.length === 0) return;
     const queueTracks = buildFavoritesQueueTracks(filteredTracks);
-    await invoke('set_queue', { tracks: queueTracks, startIndex });
+    await invoke('v2_set_queue', { tracks: queueTracks, startIndex });
   }
 
   async function handleTrackClick(track: FavoriteTrack, index: number) {
@@ -1119,7 +1119,7 @@
       // Shuffle the tracks
       const shuffled = [...filteredTracks].sort(() => Math.random() - 0.5);
       const queueTracks = buildFavoritesQueueTracks(shuffled);
-      await invoke('set_queue', { tracks: queueTracks, startIndex: 0 });
+      await invoke('v2_set_queue', { tracks: queueTracks, startIndex: 0 });
       await setFavoritesContext(shuffled.map(trk => trk.id), 0);
       onTrackPlay(buildDisplayTrack(shuffled[0], 0));
     } catch (err) {
@@ -1132,7 +1132,7 @@
 
     try {
       const queueTracks = buildFavoritesQueueTracks(filteredTracks);
-      await invoke('add_to_queue_next', { tracks: queueTracks });
+      await invoke('v2_add_tracks_to_queue_next', { tracks: queueTracks });
     } catch (err) {
       console.error('Failed to add tracks next:', err);
     }
@@ -1143,7 +1143,7 @@
 
     try {
       const queueTracks = buildFavoritesQueueTracks(filteredTracks);
-      await invoke('add_to_queue', { tracks: queueTracks });
+      await invoke('v2_add_tracks_to_queue', { tracks: queueTracks });
     } catch (err) {
       console.error('Failed to add tracks to queue:', err);
     }

@@ -401,6 +401,17 @@ pub async fn v2_toggle_shuffle(
     Ok(bridge.toggle_shuffle().await)
 }
 
+/// Set shuffle mode directly (V2)
+#[tauri::command]
+pub async fn v2_set_shuffle(
+    enabled: bool,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_shuffle: {}", enabled);
+    app_state.queue.set_shuffle(enabled);
+    Ok(())
+}
+
 /// Clear the queue (V2 - uses QbzCore)
 #[tauri::command]
 pub async fn v2_clear_queue(
@@ -530,6 +541,17 @@ pub async fn v2_remove_from_queue(
     Ok(())
 }
 
+/// Remove a track from the upcoming queue by its position (V2)
+/// (0 = first upcoming track, handles shuffle mode correctly)
+#[tauri::command]
+pub async fn v2_remove_upcoming_track(
+    upcoming_index: usize,
+    app_state: State<'_, AppState>,
+) -> Result<Option<V2QueueTrack>, String> {
+    log::info!("[V2] remove_upcoming_track: upcoming_index {}", upcoming_index);
+    Ok(app_state.queue.remove_upcoming_track(upcoming_index).map(Into::into))
+}
+
 /// Skip to next track in queue (V2)
 #[tauri::command]
 pub async fn v2_next_track(
@@ -559,6 +581,45 @@ pub async fn v2_play_queue_index(
     log::info!("[V2] play_queue_index: {}", index);
     let track = app_state.queue.play_index(index);
     Ok(track.map(Into::into))
+}
+
+/// Move a track within the queue (V2)
+#[tauri::command]
+pub async fn v2_move_queue_track(
+    from_index: usize,
+    to_index: usize,
+    app_state: State<'_, AppState>,
+) -> Result<bool, String> {
+    log::info!("[V2] move_queue_track: {} -> {}", from_index, to_index);
+    Ok(app_state.queue.move_track(from_index, to_index))
+}
+
+/// Add multiple tracks to queue (V2)
+#[tauri::command]
+pub async fn v2_add_tracks_to_queue(
+    tracks: Vec<V2QueueTrack>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("[V2] add_tracks_to_queue: {} tracks", tracks.len());
+    let queue_tracks: Vec<crate::queue::QueueTrack> = tracks.into_iter().map(|t| t.into()).collect();
+    app_state.queue.add_tracks(queue_tracks);
+    Ok(())
+}
+
+/// Add multiple tracks to play next (V2)
+/// Tracks are added in reverse order so they play in the order provided
+#[tauri::command]
+pub async fn v2_add_tracks_to_queue_next(
+    tracks: Vec<V2QueueTrack>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("[V2] add_tracks_to_queue_next: {} tracks", tracks.len());
+    // Add in reverse order so they end up in the correct order
+    for track in tracks.into_iter().rev() {
+        let queue_track: crate::queue::QueueTrack = track.into();
+        app_state.queue.add_track_next(queue_track);
+    }
+    Ok(())
 }
 
 // ==================== Search Commands (V2) ====================
