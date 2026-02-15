@@ -1841,14 +1841,14 @@ pub async fn v2_remove_tracks_from_playlist(
 #[tauri::command]
 pub fn v2_get_audio_settings(
     state: State<'_, AudioSettingsState>,
-) -> Result<AudioSettings, String> {
+) -> Result<AudioSettings, RuntimeError> {
     log::info!("[V2] get_audio_settings");
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.get_settings()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.get_settings().map_err(RuntimeError::Internal)
 }
 
 /// Set audio output device (V2)
@@ -1856,7 +1856,7 @@ pub fn v2_get_audio_settings(
 pub fn v2_set_audio_output_device(
     device: Option<String>,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     let normalized_device = device
         .as_ref()
         .map(|d| crate::audio::normalize_device_id_to_stable(d));
@@ -1867,9 +1867,9 @@ pub fn v2_set_audio_output_device(
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_output_device(normalized_device.as_deref())
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_output_device(normalized_device.as_deref()).map_err(RuntimeError::Internal)
 }
 
 /// Set audio exclusive mode (V2)
@@ -1877,14 +1877,14 @@ pub fn v2_set_audio_output_device(
 pub fn v2_set_audio_exclusive_mode(
     enabled: bool,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_exclusive_mode: {}", enabled);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_exclusive_mode(enabled)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_exclusive_mode(enabled).map_err(RuntimeError::Internal)
 }
 
 /// Set DAC passthrough mode (V2)
@@ -1892,14 +1892,14 @@ pub fn v2_set_audio_exclusive_mode(
 pub fn v2_set_audio_dac_passthrough(
     enabled: bool,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_dac_passthrough: {}", enabled);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_dac_passthrough(enabled)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_dac_passthrough(enabled).map_err(RuntimeError::Internal)
 }
 
 /// Set preferred sample rate (V2)
@@ -1907,14 +1907,14 @@ pub fn v2_set_audio_dac_passthrough(
 pub fn v2_set_audio_sample_rate(
     rate: Option<u32>,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_sample_rate: {:?}", rate);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_sample_rate(rate)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_sample_rate(rate).map_err(RuntimeError::Internal)
 }
 
 /// Set audio backend type (V2)
@@ -1923,14 +1923,14 @@ pub fn v2_set_audio_sample_rate(
 pub fn v2_set_audio_backend_type(
     backendType: Option<AudioBackendType>,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_backend_type: {:?}", backendType);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_backend_type(backendType)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_backend_type(backendType).map_err(RuntimeError::Internal)
 }
 
 /// Set ALSA plugin (V2)
@@ -1938,14 +1938,14 @@ pub fn v2_set_audio_backend_type(
 pub fn v2_set_audio_alsa_plugin(
     plugin: Option<AlsaPlugin>,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_alsa_plugin: {:?}", plugin);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_alsa_plugin(plugin)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_alsa_plugin(plugin).map_err(RuntimeError::Internal)
 }
 
 /// Set gapless playback enabled (V2)
@@ -1953,14 +1953,14 @@ pub fn v2_set_audio_alsa_plugin(
 pub fn v2_set_audio_gapless_enabled(
     enabled: bool,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_gapless_enabled: {}", enabled);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_gapless_enabled(enabled)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_gapless_enabled(enabled).map_err(RuntimeError::Internal)
 }
 
 /// Set normalization enabled (V2)
@@ -1968,14 +1968,14 @@ pub fn v2_set_audio_gapless_enabled(
 pub fn v2_set_audio_normalization_enabled(
     enabled: bool,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_normalization_enabled: {}", enabled);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_normalization_enabled(enabled)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_normalization_enabled(enabled).map_err(RuntimeError::Internal)
 }
 
 /// Set normalization target LUFS (V2)
@@ -1983,14 +1983,14 @@ pub fn v2_set_audio_normalization_enabled(
 pub fn v2_set_audio_normalization_target(
     target: f32,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_normalization_target: {}", target);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_normalization_target_lufs(target)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_normalization_target_lufs(target).map_err(RuntimeError::Internal)
 }
 
 /// Set device max sample rate (V2)
@@ -1998,14 +1998,14 @@ pub fn v2_set_audio_normalization_target(
 pub fn v2_set_audio_device_max_sample_rate(
     rate: Option<u32>,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_device_max_sample_rate: {:?}", rate);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_device_max_sample_rate(rate)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_device_max_sample_rate(rate).map_err(RuntimeError::Internal)
 }
 
 /// Set limit quality to device capability (V2)
@@ -2013,14 +2013,14 @@ pub fn v2_set_audio_device_max_sample_rate(
 pub fn v2_set_audio_limit_quality_to_device(
     enabled: bool,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_limit_quality_to_device: {}", enabled);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_limit_quality_to_device(enabled)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_limit_quality_to_device(enabled).map_err(RuntimeError::Internal)
 }
 
 /// Set streaming only mode (V2)
@@ -2028,28 +2028,28 @@ pub fn v2_set_audio_limit_quality_to_device(
 pub fn v2_set_audio_streaming_only(
     enabled: bool,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_streaming_only: {}", enabled);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_streaming_only(enabled)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_streaming_only(enabled).map_err(RuntimeError::Internal)
 }
 
 /// Reset audio settings to defaults (V2)
 #[tauri::command]
 pub fn v2_reset_audio_settings(
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] reset_audio_settings");
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.reset_all().map(|_| ())
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.reset_all().map(|_| ()).map_err(RuntimeError::Internal)
 }
 
 /// Set stream first track enabled (V2)
@@ -2057,14 +2057,14 @@ pub fn v2_reset_audio_settings(
 pub fn v2_set_audio_stream_first_track(
     enabled: bool,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_stream_first_track: {}", enabled);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_stream_first_track(enabled)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_stream_first_track(enabled).map_err(RuntimeError::Internal)
 }
 
 /// Set stream buffer seconds (V2)
@@ -2072,14 +2072,14 @@ pub fn v2_set_audio_stream_first_track(
 pub fn v2_set_audio_stream_buffer_seconds(
     seconds: u8,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_stream_buffer_seconds: {}", seconds);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_stream_buffer_seconds(seconds)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_stream_buffer_seconds(seconds).map_err(RuntimeError::Internal)
 }
 
 /// Set ALSA hardware volume control (V2)
@@ -2087,14 +2087,14 @@ pub fn v2_set_audio_stream_buffer_seconds(
 pub fn v2_set_audio_alsa_hardware_volume(
     enabled: bool,
     state: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] set_audio_alsa_hardware_volume: {}", enabled);
     let guard = state
         .store
         .lock()
-        .map_err(|e| format!("Lock error: {}", e))?;
-    let store = guard.as_ref().ok_or("No active session - please log in")?;
-    store.set_alsa_hardware_volume(enabled)
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_alsa_hardware_volume(enabled).map_err(RuntimeError::Internal)
 }
 
 // ==================== Extended Playlist Commands (V2) ====================
