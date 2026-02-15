@@ -83,9 +83,10 @@ impl CoreBridge {
         query: &str,
         limit: u32,
         offset: u32,
+        search_type: Option<&str>,
     ) -> Result<SearchResultsPage<Album>, String> {
         self.core
-            .search_albums(query, limit, offset)
+            .search_albums(query, limit, offset, search_type)
             .await
             .map_err(|e| e.to_string())
     }
@@ -96,9 +97,10 @@ impl CoreBridge {
         query: &str,
         limit: u32,
         offset: u32,
+        search_type: Option<&str>,
     ) -> Result<SearchResultsPage<Track>, String> {
         self.core
-            .search_tracks(query, limit, offset)
+            .search_tracks(query, limit, offset, search_type)
             .await
             .map_err(|e| e.to_string())
     }
@@ -109,9 +111,10 @@ impl CoreBridge {
         query: &str,
         limit: u32,
         offset: u32,
+        search_type: Option<&str>,
     ) -> Result<SearchResultsPage<Artist>, String> {
         self.core
-            .search_artists(query, limit, offset)
+            .search_artists(query, limit, offset, search_type)
             .await
             .map_err(|e| e.to_string())
     }

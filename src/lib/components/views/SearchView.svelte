@@ -503,7 +503,7 @@
           loadAllAlbumDownloadStatuses(allResults.albums.items); // fire-and-forget
         }
       } else if (activeTab === 'albums') {
-        const results = await invoke<SearchResults<Album>>('search_albums', {
+        const results = await invoke<SearchResults<Album>>('v2_search_albums', {
           query: searchQuery,
           limit: PAGE_SIZE,
           offset: 0,
@@ -517,7 +517,7 @@
           loadAllAlbumDownloadStatuses(albumResults.items); // fire-and-forget
         }
       } else if (activeTab === 'tracks') {
-        const results = await invoke<SearchResults<Track>>('search_tracks', {
+        const results = await invoke<SearchResults<Track>>('v2_search_tracks', {
           query: searchQuery,
           limit: PAGE_SIZE,
           offset: 0,
@@ -527,7 +527,7 @@
         trackResults = results;
         console.log('Track results:', trackResults);
       } else if (activeTab === 'artists') {
-        const results = await invoke<SearchResults<Artist>>('search_artists', {
+        const results = await invoke<SearchResults<Artist>>('v2_search_artists', {
           query: searchQuery,
           limit: PAGE_SIZE,
           offset: 0,
@@ -569,7 +569,7 @@
     try {
       if (activeTab === 'albums' && albumResults && hasMoreAlbums) {
         const newOffset = albumResults.offset + albumResults.items.length;
-        const moreResults = await invoke<SearchResults<Album>>('search_albums', {
+        const moreResults = await invoke<SearchResults<Album>>('v2_search_albums', {
           query: query.trim(),
           limit: PAGE_SIZE,
           offset: newOffset,
@@ -583,7 +583,7 @@
         loadAllAlbumDownloadStatuses(moreResults.items); // fire-and-forget
       } else if (activeTab === 'tracks' && trackResults && hasMoreTracks) {
         const newOffset = trackResults.offset + trackResults.items.length;
-        const moreResults = await invoke<SearchResults<Track>>('search_tracks', {
+        const moreResults = await invoke<SearchResults<Track>>('v2_search_tracks', {
           query: query.trim(),
           limit: PAGE_SIZE,
           offset: newOffset,
@@ -596,7 +596,7 @@
         };
       } else if (activeTab === 'artists' && artistResults && hasMoreArtists) {
         const newOffset = artistResults.offset + artistResults.items.length;
-        const moreResults = await invoke<SearchResults<Artist>>('search_artists', {
+        const moreResults = await invoke<SearchResults<Artist>>('v2_search_artists', {
           query: query.trim(),
           limit: PAGE_SIZE,
           offset: newOffset,

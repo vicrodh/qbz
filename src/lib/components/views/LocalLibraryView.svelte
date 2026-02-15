@@ -2699,7 +2699,7 @@
     const query = name.trim();
     if (!query) return null;
 
-    const results = await invoke<SearchResults<ArtistSearchResult>>('search_artists', {
+    const results = await invoke<SearchResults<ArtistSearchResult>>('v2_search_artists', {
       query,
       limit: 5,
       offset: 0
@@ -2845,7 +2845,7 @@
 
         try {
           // Only use Qobuz - Discogs causes too many issues with rate limiting
-          const results = await invoke<SearchResults<ArtistSearchResult>>('search_artists', {
+          const results = await invoke<SearchResults<ArtistSearchResult>>('v2_search_artists', {
             query: name.trim(),
             limit: 3,
             offset: 0

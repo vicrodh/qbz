@@ -1061,6 +1061,13 @@ pub fn run() {
             commands_v2::v2_get_album,
             commands_v2::v2_get_track,
             commands_v2::v2_get_artist,
+            // Playback
+            commands_v2::v2_pause_playback,
+            commands_v2::v2_resume_playback,
+            commands_v2::v2_stop_playback,
+            commands_v2::v2_seek,
+            commands_v2::v2_set_volume,
+            commands_v2::v2_get_playback_state,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

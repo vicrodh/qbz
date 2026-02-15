@@ -439,7 +439,7 @@
     for (let i = 0; i < uncachedIds.length; i += BATCH_SIZE) {
       const batch = uncachedIds.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(albumId => invoke<QobuzAlbum>('get_album', { albumId }))
+        batch.map(albumId => invoke<QobuzAlbum>('v2_get_album', { albumId }))
       );
       
       for (const result of results) {
@@ -474,7 +474,7 @@
     for (let i = 0; i < uncachedIds.length; i += BATCH_SIZE) {
       const batch = uncachedIds.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(trackId => invoke<QobuzTrack>('get_track', { trackId }))
+        batch.map(trackId => invoke<QobuzTrack>('v2_get_track', { trackId }))
       );
       
       for (const result of results) {

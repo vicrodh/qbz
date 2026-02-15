@@ -630,7 +630,7 @@
   async function handleAlbumClick(albumId: string) {
     try {
       showToast($t('toast.loadingAlbum'), 'info');
-      const album = await invoke<QobuzAlbum>('get_album', { albumId });
+      const album = await invoke<QobuzAlbum>('v2_get_album', { albumId });
 
       const converted = convertQobuzAlbum(album);
 
@@ -934,7 +934,7 @@
 
   async function fetchAlbumDetail(albumId: string): Promise<AlbumDetail | null> {
     try {
-      const album = await invoke<QobuzAlbum>('get_album', { albumId });
+      const album = await invoke<QobuzAlbum>('v2_get_album', { albumId });
       return convertQobuzAlbum(album);
     } catch (err) {
       console.error('Failed to load album:', err);
@@ -2041,7 +2041,7 @@
 
   async function reDownloadAlbumById(albumId: string) {
     try {
-      const album = await invoke<QobuzAlbum>('get_album', { albumId });
+      const album = await invoke<QobuzAlbum>('v2_get_album', { albumId });
       if (!album || !album.tracks || album.tracks.data.length === 0) {
         showToast($t('toast.failedLoadAlbumRefresh'), 'error');
         return;
@@ -2383,7 +2383,7 @@
 
           // Fetch full track info from Qobuz to get albumId, artistId, and quality
           try {
-            const fullTrack = await invoke<QobuzTrack>('get_track', { trackId: track.id });
+            const fullTrack = await invoke<QobuzTrack>('v2_get_track', { trackId: track.id });
             const artwork = fullTrack.album?.image?.large || fullTrack.album?.image?.thumbnail || track.artwork_url || '';
             const quality = fullTrack.hires_streamable
               ? `${fullTrack.maximum_bit_depth ?? 24}/${fullTrack.maximum_sampling_rate ?? 96}`

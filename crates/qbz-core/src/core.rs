@@ -157,12 +157,13 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         query: &str,
         limit: u32,
         offset: u32,
+        search_type: Option<&str>,
     ) -> Result<SearchResultsPage<Album>, CoreError> {
         let client = self.client.read().await;
         let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
 
         client
-            .search_albums(query, limit, offset, None)
+            .search_albums(query, limit, offset, search_type)
             .await
             .map_err(CoreError::Api)
     }
@@ -173,12 +174,13 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         query: &str,
         limit: u32,
         offset: u32,
+        search_type: Option<&str>,
     ) -> Result<SearchResultsPage<Track>, CoreError> {
         let client = self.client.read().await;
         let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
 
         client
-            .search_tracks(query, limit, offset, None)
+            .search_tracks(query, limit, offset, search_type)
             .await
             .map_err(CoreError::Api)
     }
@@ -189,12 +191,13 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         query: &str,
         limit: u32,
         offset: u32,
+        search_type: Option<&str>,
     ) -> Result<SearchResultsPage<Artist>, CoreError> {
         let client = self.client.read().await;
         let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
 
         client
-            .search_artists(query, limit, offset, None)
+            .search_artists(query, limit, offset, search_type)
             .await
             .map_err(CoreError::Api)
     }

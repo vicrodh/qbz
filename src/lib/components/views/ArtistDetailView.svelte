@@ -633,7 +633,7 @@
     tracksLoading = true;
     try {
       // Search for tracks by artist name
-      const results = await invoke<SearchResults>('search_tracks', {
+      const results = await invoke<SearchResults>('v2_search_tracks', {
         query: artist.name,
         limit: 30,
         offset: 0
@@ -726,7 +726,7 @@
   async function navigateToRelatedArtist(name: string) {
     try {
       // Search for the artist on Qobuz
-      const results = await invoke<{ artists?: { items: QobuzArtist[] } }>('search_artists', {
+      const results = await invoke<{ artists?: { items: QobuzArtist[] } }>('v2_search_artists', {
         query: name,
         limit: 5
       });
