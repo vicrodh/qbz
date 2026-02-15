@@ -35,7 +35,7 @@ use crate::updates::UpdatesState;
 use crate::user_data::UserDataPaths;
 
 /// Helper to init a type-alias state (Arc<Mutex<Option<Store>>>) at a path
-fn init_type_alias_state<S, F>(
+pub fn init_type_alias_state<S, F>(
     state: &Arc<Mutex<Option<S>>>,
     base_dir: &Path,
     constructor: F,

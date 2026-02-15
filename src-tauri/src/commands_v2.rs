@@ -179,12 +179,7 @@ pub async fn runtime_bootstrap(
                     user_id: Some(session.user_id),
                 });
 
-                // Step 3: Activate per-user session
-                // This is done by calling activate_user_session command
-                // For now, we just mark the user_id and let the frontend handle it
-                // In a full implementation, we'd activate here directly
-
-                // Step 4: Authenticate CoreBridge/V2 - REQUIRED per ADR
+                // Step 3: Authenticate CoreBridge/V2 - REQUIRED per ADR
                 if let Some(bridge) = core_bridge.try_get().await {
                     match bridge.login(&creds.email, &creds.password).await {
                         Ok(_) => {
@@ -204,6 +199,14 @@ pub async fn runtime_bootstrap(
                     log::error!("[Runtime] CoreBridge not initialized - cannot complete bootstrap");
                     manager.set_bootstrap_in_progress(false).await;
                     return Err(RuntimeError::V2NotInitialized);
+                }
+
+                // Step 4: Activate per-user session - NOW autocontained in bootstrap
+                // This initializes all per-user stores and sets runtime state
+                if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
+                    log::error!("[Runtime] Session activation failed: {}", e);
+                    // Non-fatal for bootstrap - stores can be initialized later
+                    // But log it prominently
                 }
             }
             Err(e) => {
@@ -638,23 +641,97 @@ pub async fn v2_is_logged_in(
 }
 
 /// Login with email and password (V2 - uses QbzCore)
+///
+/// This performs the full login flow:
+/// 1. Legacy auth (Qobuz API client)
+/// 2. CoreBridge auth (V2)
+/// 3. Session activation (per-user stores)
+/// 4. Runtime state update
 #[tauri::command]
 pub async fn v2_login(
+    app: tauri::AppHandle,
     email: String,
     password: String,
+    app_state: State<'_, AppState>,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<UserSession, String> {
-    let bridge = bridge.get().await;
-    bridge.login(&email, &password).await
+    let manager = runtime.manager();
+
+    // Step 1: Legacy auth
+    let session = {
+        let client = app_state.client.read().await;
+        client.login(&email, &password).await
+            .map_err(|e| e.to_string())?
+    };
+    manager.set_legacy_auth(true, Some(session.user_id)).await;
+    log::info!("[v2_login] Legacy auth successful for user {}", session.user_id);
+
+    // Step 2: CoreBridge auth
+    let bridge_guard = bridge.get().await;
+    bridge_guard.login(&email, &password).await?;
+    manager.set_corebridge_auth(true).await;
+    log::info!("[v2_login] CoreBridge auth successful");
+
+    // Step 3: Activate session
+    crate::session_lifecycle::activate_session(&app, session.user_id).await?;
+    log::info!("[v2_login] Session activated for user {}", session.user_id);
+
+    // Convert api::models::UserSession to qbz_models::UserSession
+    Ok(UserSession {
+        user_auth_token: session.user_auth_token,
+        user_id: session.user_id,
+        email: session.email,
+        display_name: session.display_name,
+        subscription_label: session.subscription_label,
+        subscription_valid_until: session.subscription_valid_until,
+    })
 }
 
 /// Logout current user (V2 - uses QbzCore)
+///
+/// This performs the full logout flow:
+/// 1. Deactivate session (teardown per-user stores)
+/// 2. CoreBridge logout
+/// 3. Legacy logout
+/// 4. Runtime state cleanup
 #[tauri::command]
 pub async fn v2_logout(
+    app: tauri::AppHandle,
+    app_state: State<'_, AppState>,
     bridge: State<'_, CoreBridgeState>,
 ) -> Result<(), String> {
-    let bridge = bridge.get().await;
-    bridge.logout().await
+    log::info!("[v2_logout] Starting logout");
+
+    // Step 1: Deactivate session (teardown stores, clear runtime state)
+    crate::session_lifecycle::deactivate_session(&app).await?;
+    log::info!("[v2_logout] Session deactivated");
+
+    // Step 2: CoreBridge logout
+    let bridge_guard = bridge.get().await;
+    bridge_guard.logout().await?;
+    log::info!("[v2_logout] CoreBridge logged out");
+
+    // Step 3: Legacy logout
+    {
+        let client = app_state.client.read().await;
+        client.logout().await;
+    }
+    log::info!("[v2_logout] Legacy client logged out");
+
+    Ok(())
+}
+
+/// Activate offline-only session (no remote auth required)
+///
+/// This creates a minimal session for offline/local library use.
+/// Uses user_id = 0 as a special "offline user" marker.
+/// Queue commands will work because session_activated is set.
+#[tauri::command]
+pub async fn v2_activate_offline_session(
+    app: tauri::AppHandle,
+) -> Result<(), String> {
+    crate::session_lifecycle::activate_offline_session(&app).await
 }
 
 // ==================== Queue Commands (V2) ====================
@@ -673,7 +750,10 @@ pub async fn v2_get_queue_state(
 pub async fn v2_set_repeat_mode(
     mode: RepeatMode,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     let bridge = bridge.get().await;
     bridge.set_repeat_mode(mode).await;
     Ok(())

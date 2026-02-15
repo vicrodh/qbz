@@ -91,23 +91,16 @@
         return;
       }
 
-      // Check for saved credentials and last user session
+      // Check for saved credentials
       initStatus = 'Checking saved credentials...';
       const hasSavedCreds = await invoke<boolean>('has_saved_credentials');
-      const lastUserId = await invoke<number | null>('get_last_user_id');
 
-      // Restore per-user session before reading ToS or auto-login
-      if (hasSavedCreds && lastUserId) {
-        initStatus = 'Restoring session...';
-        try {
-          await invoke('activate_user_session', { userId: lastUserId });
-          console.log('Restored user session for', lastUserId);
-        } catch (e) {
-          console.warn('Failed to restore user session:', e);
-        }
-      }
+      // NOTE: Session activation removed from here.
+      // Session is now activated in runtime_bootstrap/v2_auto_login AFTER successful auth.
+      // This prevents activating session before login is confirmed.
+      // ToS check will use localStorage fallback if per-user storage isn't available.
 
-      // Load ToS acceptance from Rust (now available after session restore)
+      // Load ToS acceptance (will fallback to localStorage if no session)
       initStatus = 'Loading preferences...';
       await loadTosAcceptance();
 

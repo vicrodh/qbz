@@ -2276,6 +2276,16 @@
   async function handleStartOffline() {
     // Enable manual offline mode and enter app without authentication
     await setManualOffline(true);
+
+    // Activate offline session in backend (initializes minimal stores, sets session_activated=true)
+    // This allows queue commands to work even without remote auth
+    try {
+      await invoke('v2_activate_offline_session');
+    } catch (err) {
+      console.error('[Offline] Failed to activate offline session:', err);
+      // Continue anyway - offline mode should be best-effort
+    }
+
     setLoggedIn({
       userName: 'Offline User',
       userId: 0,

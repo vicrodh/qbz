@@ -7,6 +7,7 @@ pub mod tauri_adapter;
 pub mod core_bridge;
 pub mod commands_v2;
 pub mod runtime;
+pub mod session_lifecycle;
 
 pub mod api;
 pub mod api_cache;
@@ -1102,6 +1103,7 @@ pub fn run() {
             commands_v2::v2_is_logged_in,
             commands_v2::v2_login,
             commands_v2::v2_logout,
+            commands_v2::v2_activate_offline_session,
             commands_v2::v2_init_client,
             commands_v2::v2_auto_login,
             commands_v2::v2_manual_login,
