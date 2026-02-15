@@ -7,7 +7,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_models::{
-    Album, Artist, CoreEvent, FrontendAdapter, QueueState, RepeatMode, Track, UserSession,
+    Album, Artist, CoreEvent, FrontendAdapter, QueueState, RepeatMode, SearchResultsPage, Track,
+    UserSession,
 };
 use qbz_player::QueueManager;
 use qbz_qobuz::QobuzClient;
@@ -156,14 +157,13 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         query: &str,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<Album>, CoreError> {
+    ) -> Result<SearchResultsPage<Album>, CoreError> {
         let client = self.client.read().await;
         let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
 
         client
             .search_albums(query, limit, offset, None)
             .await
-            .map(|r| r.items)
             .map_err(CoreError::Api)
     }
 
@@ -173,14 +173,13 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         query: &str,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<Track>, CoreError> {
+    ) -> Result<SearchResultsPage<Track>, CoreError> {
         let client = self.client.read().await;
         let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
 
         client
             .search_tracks(query, limit, offset, None)
             .await
-            .map(|r| r.items)
             .map_err(CoreError::Api)
     }
 
@@ -190,14 +189,13 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         query: &str,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<Artist>, CoreError> {
+    ) -> Result<SearchResultsPage<Artist>, CoreError> {
         let client = self.client.read().await;
         let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
 
         client
             .search_artists(query, limit, offset, None)
             .await
-            .map(|r| r.items)
             .map_err(CoreError::Api)
     }
 

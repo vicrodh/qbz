@@ -5,7 +5,7 @@
 
 use tauri::State;
 
-use qbz_models::{Album, Artist, QueueState, RepeatMode, Track, UserSession};
+use qbz_models::{Album, Artist, QueueState, RepeatMode, SearchResultsPage, Track, UserSession};
 
 use crate::core_bridge::CoreBridgeState;
 
@@ -90,7 +90,7 @@ pub async fn v2_search_albums(
     limit: u32,
     offset: u32,
     bridge: State<'_, CoreBridgeState>,
-) -> Result<Vec<Album>, String> {
+) -> Result<SearchResultsPage<Album>, String> {
     let bridge = bridge.get().await;
     bridge.search_albums(&query, limit, offset).await
 }
@@ -102,7 +102,7 @@ pub async fn v2_search_tracks(
     limit: u32,
     offset: u32,
     bridge: State<'_, CoreBridgeState>,
-) -> Result<Vec<Track>, String> {
+) -> Result<SearchResultsPage<Track>, String> {
     let bridge = bridge.get().await;
     bridge.search_tracks(&query, limit, offset).await
 }
@@ -114,7 +114,7 @@ pub async fn v2_search_artists(
     limit: u32,
     offset: u32,
     bridge: State<'_, CoreBridgeState>,
-) -> Result<Vec<Artist>, String> {
+) -> Result<SearchResultsPage<Artist>, String> {
     let bridge = bridge.get().await;
     bridge.search_artists(&query, limit, offset).await
 }

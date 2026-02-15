@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_core::QbzCore;
-use qbz_models::{Album, Artist, QueueState, RepeatMode, Track, UserSession};
+use qbz_models::{Album, Artist, QueueState, RepeatMode, SearchResultsPage, Track, UserSession};
 
 use crate::tauri_adapter::TauriAdapter;
 
@@ -83,7 +83,7 @@ impl CoreBridge {
         query: &str,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<Album>, String> {
+    ) -> Result<SearchResultsPage<Album>, String> {
         self.core
             .search_albums(query, limit, offset)
             .await
@@ -96,7 +96,7 @@ impl CoreBridge {
         query: &str,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<Track>, String> {
+    ) -> Result<SearchResultsPage<Track>, String> {
         self.core
             .search_tracks(query, limit, offset)
             .await
@@ -109,7 +109,7 @@ impl CoreBridge {
         query: &str,
         limit: u32,
         offset: u32,
-    ) -> Result<Vec<Artist>, String> {
+    ) -> Result<SearchResultsPage<Artist>, String> {
         self.core
             .search_artists(query, limit, offset)
             .await
