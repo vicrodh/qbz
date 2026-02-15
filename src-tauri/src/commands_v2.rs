@@ -123,30 +123,33 @@ pub async fn v2_search_artists(
 
 /// Get album by ID (V2 - uses QbzCore)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_get_album(
-    album_id: String,
+    albumId: String,
     bridge: State<'_, CoreBridgeState>,
 ) -> Result<Album, String> {
     let bridge = bridge.get().await;
-    bridge.get_album(&album_id).await
+    bridge.get_album(&albumId).await
 }
 
 /// Get track by ID (V2 - uses QbzCore)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_get_track(
-    track_id: u64,
+    trackId: u64,
     bridge: State<'_, CoreBridgeState>,
 ) -> Result<Track, String> {
     let bridge = bridge.get().await;
-    bridge.get_track(track_id).await
+    bridge.get_track(trackId).await
 }
 
 /// Get artist by ID (V2 - uses QbzCore)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_get_artist(
-    artist_id: u64,
+    artistId: u64,
     bridge: State<'_, CoreBridgeState>,
 ) -> Result<Artist, String> {
     let bridge = bridge.get().await;
-    bridge.get_artist(artist_id).await
+    bridge.get_artist(artistId).await
 }
