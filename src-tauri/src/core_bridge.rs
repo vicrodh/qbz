@@ -11,7 +11,11 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_core::QbzCore;
-use qbz_models::{Album, Artist, Playlist, Quality, QueueState, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession};
+use qbz_models::{
+    Album, Artist, DiscoverPlaylistsResponse, DiscoverResponse, GenreInfo, LabelDetail,
+    PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState, RepeatMode, SearchResultsPage,
+    StreamUrl, Track, UserSession,
+};
 use qbz_player::{Player, PlaybackState};
 use qbz_audio::{AudioSettings, AudioDiagnostic, settings::AudioSettingsStore};
 
@@ -237,6 +241,170 @@ impl CoreBridge {
     ) -> Result<(), String> {
         self.core
             .remove_tracks_from_playlist(playlist_id, playlist_track_ids)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Create a new playlist
+    pub async fn create_playlist(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        is_public: bool,
+    ) -> Result<Playlist, String> {
+        self.core
+            .create_playlist(name, description, is_public)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Delete a playlist
+    pub async fn delete_playlist(&self, playlist_id: u64) -> Result<(), String> {
+        self.core
+            .delete_playlist(playlist_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Update a playlist
+    pub async fn update_playlist(
+        &self,
+        playlist_id: u64,
+        name: Option<&str>,
+        description: Option<&str>,
+        is_public: Option<bool>,
+    ) -> Result<Playlist, String> {
+        self.core
+            .update_playlist(playlist_id, name, description, is_public)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Search playlists
+    pub async fn search_playlists(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Playlist>, String> {
+        self.core
+            .search_playlists(query, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    // ==================== Catalog Extended ====================
+
+    /// Get tracks batch by IDs
+    pub async fn get_tracks_batch(&self, track_ids: &[u64]) -> Result<Vec<Track>, String> {
+        self.core
+            .get_tracks_batch(track_ids)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get genres
+    pub async fn get_genres(&self, parent_id: Option<u64>) -> Result<Vec<GenreInfo>, String> {
+        self.core
+            .get_genres(parent_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get discover index
+    pub async fn get_discover_index(
+        &self,
+        genre_ids: Option<Vec<u64>>,
+    ) -> Result<DiscoverResponse, String> {
+        self.core
+            .get_discover_index(genre_ids)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get discover playlists
+    pub async fn get_discover_playlists(
+        &self,
+        tag: Option<String>,
+        genre_ids: Option<Vec<u64>>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<DiscoverPlaylistsResponse, String> {
+        self.core
+            .get_discover_playlists(tag, genre_ids, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get playlist tags
+    pub async fn get_playlist_tags(&self) -> Result<Vec<PlaylistTag>, String> {
+        self.core
+            .get_playlist_tags()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get featured albums
+    pub async fn get_featured_albums(
+        &self,
+        featured_type: &str,
+        limit: u32,
+        offset: u32,
+        genre_id: Option<u64>,
+    ) -> Result<SearchResultsPage<Album>, String> {
+        self.core
+            .get_featured_albums(featured_type, limit, offset, genre_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get artist page (full artist details with albums, tracks, similar)
+    pub async fn get_artist_page(
+        &self,
+        artist_id: u64,
+        sort: Option<&str>,
+    ) -> Result<PageArtistResponse, String> {
+        self.core
+            .get_artist_page(artist_id, sort)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get similar artists
+    pub async fn get_similar_artists(
+        &self,
+        artist_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Artist>, String> {
+        self.core
+            .get_similar_artists(artist_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get artist with albums (for album pagination)
+    pub async fn get_artist_with_albums(
+        &self,
+        artist_id: u64,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Artist, String> {
+        self.core
+            .get_artist_with_albums(artist_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get label details
+    pub async fn get_label(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelDetail, String> {
+        self.core
+            .get_label(label_id, limit, offset)
             .await
             .map_err(|e| e.to_string())
     }

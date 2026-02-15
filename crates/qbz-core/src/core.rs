@@ -7,8 +7,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_models::{
-    Album, Artist, CoreEvent, FrontendAdapter, Playlist, Quality, QueueState, RepeatMode,
-    SearchResultsPage, StreamUrl, Track, UserSession,
+    Album, Artist, CoreEvent, DiscoverPlaylistsResponse, DiscoverResponse, FrontendAdapter,
+    GenreInfo, LabelDetail, PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState,
+    RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{Player, PlaybackState, QueueManager};
 use qbz_qobuz::QobuzClient;
@@ -397,6 +398,207 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
 
         client
             .remove_tracks_from_playlist(playlist_id, playlist_track_ids)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Create a new playlist
+    pub async fn create_playlist(
+        &self,
+        name: &str,
+        description: Option<&str>,
+        is_public: bool,
+    ) -> Result<Playlist, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .create_playlist(name, description, is_public)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Delete a playlist
+    pub async fn delete_playlist(&self, playlist_id: u64) -> Result<(), CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .delete_playlist(playlist_id)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Update a playlist
+    pub async fn update_playlist(
+        &self,
+        playlist_id: u64,
+        name: Option<&str>,
+        description: Option<&str>,
+        is_public: Option<bool>,
+    ) -> Result<Playlist, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .update_playlist(playlist_id, name, description, is_public)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Search playlists
+    pub async fn search_playlists(
+        &self,
+        query: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Playlist>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .search_playlists(query, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get tracks batch by IDs
+    pub async fn get_tracks_batch(&self, track_ids: &[u64]) -> Result<Vec<Track>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_tracks_batch(track_ids)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get genres
+    pub async fn get_genres(&self, parent_id: Option<u64>) -> Result<Vec<GenreInfo>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_genres(parent_id)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get discover index
+    pub async fn get_discover_index(&self, genre_ids: Option<Vec<u64>>) -> Result<DiscoverResponse, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_discover_index(genre_ids)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get discover playlists
+    pub async fn get_discover_playlists(
+        &self,
+        tag: Option<String>,
+        genre_ids: Option<Vec<u64>>,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<DiscoverPlaylistsResponse, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_discover_playlists(tag, genre_ids, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get playlist tags
+    pub async fn get_playlist_tags(&self) -> Result<Vec<PlaylistTag>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_playlist_tags()
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get featured albums
+    pub async fn get_featured_albums(
+        &self,
+        featured_type: &str,
+        limit: u32,
+        offset: u32,
+        genre_id: Option<u64>,
+    ) -> Result<SearchResultsPage<Album>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_featured_albums(featured_type, limit, offset, genre_id)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get artist page (full artist details with albums, tracks, similar)
+    pub async fn get_artist_page(
+        &self,
+        artist_id: u64,
+        sort: Option<&str>,
+    ) -> Result<PageArtistResponse, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_artist_page(artist_id, sort)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get similar artists
+    pub async fn get_similar_artists(
+        &self,
+        artist_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<SearchResultsPage<Artist>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_similar_artists(artist_id, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get artist with albums (for album pagination)
+    pub async fn get_artist_with_albums(
+        &self,
+        artist_id: u64,
+        limit: Option<u32>,
+        offset: Option<u32>,
+    ) -> Result<Artist, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_artist_with_pagination(artist_id, true, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get label details
+    pub async fn get_label(
+        &self,
+        label_id: u64,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelDetail, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_label(label_id, limit, offset)
             .await
             .map_err(CoreError::Api)
     }

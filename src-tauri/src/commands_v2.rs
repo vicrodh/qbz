@@ -9,7 +9,11 @@ use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::sync::RwLock;
 
-use qbz_models::{Album, Artist, Playlist, Quality, QueueState, RepeatMode, SearchResultsPage, Track, UserSession};
+use qbz_models::{
+    Album, Artist, DiscoverPlaylistsResponse, DiscoverResponse, GenreInfo, LabelDetail,
+    PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState, RepeatMode, SearchResultsPage,
+    Track, UserSession,
+};
 
 use crate::artist_blacklist::BlacklistState;
 use crate::cache::AudioCache;
@@ -1969,4 +1973,275 @@ pub fn v2_set_audio_alsa_hardware_volume(
         .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_alsa_hardware_volume(enabled)
+}
+
+// ==================== Extended Playlist Commands (V2) ====================
+
+/// Create a new playlist (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_create_playlist(
+    name: String,
+    description: Option<String>,
+    isPublic: bool,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Playlist, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] create_playlist: {}", name);
+    let bridge = bridge.get().await;
+    bridge.create_playlist(&name, description.as_deref(), isPublic).await
+}
+
+/// Delete a playlist (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_delete_playlist(
+    playlistId: u64,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] delete_playlist: {}", playlistId);
+    let bridge = bridge.get().await;
+    bridge.delete_playlist(playlistId).await
+}
+
+/// Update a playlist (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_update_playlist(
+    playlistId: u64,
+    name: Option<String>,
+    description: Option<String>,
+    isPublic: Option<bool>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Playlist, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] update_playlist: {}", playlistId);
+    let bridge = bridge.get().await;
+    bridge.update_playlist(playlistId, name.as_deref(), description.as_deref(), isPublic).await
+}
+
+/// Search playlists (V2 - uses QbzCore)
+#[tauri::command]
+pub async fn v2_search_playlists(
+    query: String,
+    limit: u32,
+    offset: u32,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<SearchResultsPage<Playlist>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] search_playlists: {}", query);
+    let bridge = bridge.get().await;
+    bridge.search_playlists(&query, limit, offset).await
+}
+
+// ==================== Extended Catalog Commands (V2) ====================
+
+/// Get tracks batch by IDs (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_tracks_batch(
+    trackIds: Vec<u64>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Vec<Track>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] get_tracks_batch: {} tracks", trackIds.len());
+    let bridge = bridge.get().await;
+    bridge.get_tracks_batch(&trackIds).await
+}
+
+/// Get genres (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_genres(
+    parentId: Option<u64>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Vec<GenreInfo>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] get_genres: parent={:?}", parentId);
+    let bridge = bridge.get().await;
+    bridge.get_genres(parentId).await
+}
+
+/// Get discover index (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_discover_index(
+    genreIds: Option<Vec<u64>>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<DiscoverResponse, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] get_discover_index: genres={:?}", genreIds);
+    let bridge = bridge.get().await;
+    bridge.get_discover_index(genreIds).await
+}
+
+/// Get discover playlists (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_discover_playlists(
+    tag: Option<String>,
+    genreIds: Option<Vec<u64>>,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<DiscoverPlaylistsResponse, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] get_discover_playlists: tag={:?}", tag);
+    let bridge = bridge.get().await;
+    bridge.get_discover_playlists(tag, genreIds, limit, offset).await
+}
+
+/// Get playlist tags (V2 - uses QbzCore)
+#[tauri::command]
+pub async fn v2_get_playlist_tags(
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Vec<PlaylistTag>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] get_playlist_tags");
+    let bridge = bridge.get().await;
+    bridge.get_playlist_tags().await
+}
+
+/// Get featured albums (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_featured_albums(
+    featuredType: String,
+    limit: u32,
+    offset: u32,
+    genreId: Option<u64>,
+    bridge: State<'_, CoreBridgeState>,
+    blacklist_state: State<'_, BlacklistState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<SearchResultsPage<Album>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] get_featured_albums: type={}, genre={:?}", featuredType, genreId);
+    let bridge = bridge.get().await;
+    let mut results = bridge.get_featured_albums(&featuredType, limit, offset, genreId).await?;
+
+    // Filter out albums from blacklisted artists
+    let original_count = results.items.len();
+    results.items.retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+
+    let filtered_count = original_count - results.items.len();
+    if filtered_count > 0 {
+        log::debug!("[V2/Blacklist] Filtered {} albums from featured results", filtered_count);
+        results.total = results.total.saturating_sub(filtered_count as u32);
+    }
+
+    Ok(results)
+}
+
+/// Get artist page (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_artist_page(
+    artistId: u64,
+    sort: Option<String>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<PageArtistResponse, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] get_artist_page: {} sort={:?}", artistId, sort);
+    let bridge = bridge.get().await;
+    bridge.get_artist_page(artistId, sort.as_deref()).await
+}
+
+/// Get similar artists (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_similar_artists(
+    artistId: u64,
+    limit: u32,
+    offset: u32,
+    bridge: State<'_, CoreBridgeState>,
+    blacklist_state: State<'_, BlacklistState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<SearchResultsPage<Artist>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] get_similar_artists: {}", artistId);
+    let bridge = bridge.get().await;
+    let mut results = bridge.get_similar_artists(artistId, limit, offset).await?;
+
+    // Filter out blacklisted artists
+    let original_count = results.items.len();
+    results.items.retain(|artist| !blacklist_state.is_blacklisted(artist.id));
+
+    let filtered_count = original_count - results.items.len();
+    if filtered_count > 0 {
+        log::debug!("[V2/Blacklist] Filtered {} similar artists", filtered_count);
+        results.total = results.total.saturating_sub(filtered_count as u32);
+    }
+
+    Ok(results)
+}
+
+/// Get artist with albums (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_artist_with_albums(
+    artistId: u64,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Artist, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] get_artist_with_albums: {} limit={:?} offset={:?}", artistId, limit, offset);
+    let bridge = bridge.get().await;
+    bridge.get_artist_with_albums(artistId, limit, offset).await
+}
+
+/// Get label details (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_label(
+    labelId: u64,
+    limit: u32,
+    offset: u32,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<LabelDetail, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    log::info!("[V2] get_label: {}", labelId);
+    let bridge = bridge.get().await;
+    bridge.get_label(labelId, limit, offset).await
 }
