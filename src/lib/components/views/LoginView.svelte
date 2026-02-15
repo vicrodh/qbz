@@ -125,11 +125,18 @@
         }>('v2_auto_login');
 
         if (response.success) {
+          // Validate that we have a valid user_id - NEVER allow 0
+          if (!response.user_id || response.user_id === 0) {
+            console.error('[LoginView] v2_auto_login returned success but invalid user_id');
+            error = $t('auth.v2AuthFailed');
+            clearTimeoutTimer();
+            return;
+          }
           clearTimeoutTimer();
-          console.log('[LoginView] v2_auto_login successful');
+          console.log('[LoginView] v2_auto_login successful, user_id:', response.user_id);
           onLoginSuccess({
             userName: response.user_name || 'User',
-            userId: response.user_id || 0,
+            userId: response.user_id,
             subscription: response.subscription || 'Active',
             subscriptionValidUntil: response.subscription_valid_until ?? null,
           });
@@ -203,6 +210,14 @@
       console.log('[LoginView] v2_manual_login response:', response);
 
       if (response.success) {
+        // Validate that we have a valid user_id - NEVER allow 0
+        if (!response.user_id || response.user_id === 0) {
+          console.error('[LoginView] v2_manual_login returned success but invalid user_id');
+          error = $t('auth.v2AuthFailed');
+          isLoading = false;
+          return;
+        }
+
         // Save credentials if "Remember me" is checked
         if (rememberMe) {
           try {
@@ -216,7 +231,7 @@
 
         onLoginSuccess({
             userName: response.user_name || 'User',
-            userId: response.user_id || 0,
+            userId: response.user_id,
             subscription: response.subscription || 'Active',
             subscriptionValidUntil: response.subscription_valid_until ?? null,
           });

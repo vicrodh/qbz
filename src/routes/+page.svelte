@@ -2286,35 +2286,35 @@
   }
 
   async function handleLoginSuccess(info: UserInfo) {
-    // Set login state FIRST to immediately switch from LoginView to app
-    // (prevents login form flash during async session activation)
+    // CRITICAL: Validate and activate backend session FIRST, before setting UI login state.
+    // This prevents UI/backend state divergence if activation fails.
+    // (Fix for Issue 1: UI was entering logged-in state before backend session was valid)
+
+    // Validate userId before any session operations
+    if (!info.userId || info.userId <= 0) {
+      console.error('[Session] Invalid userId received:', info.userId, '- cannot activate session');
+      // Don't set login state - session is broken
+      return;
+    }
+
+    // Activate per-user backend state FIRST
+    try {
+      await invoke('activate_user_session', { userId: info.userId });
+    } catch (err) {
+      console.error('[Session] Failed to activate user session:', err);
+      // Don't set login state if activation failed - backend is not ready
+      return;
+    }
+
+    // Backend session confirmed - NOW set UI login state
     setLoggedIn(info);
 
     // Set up per-user localStorage scoping and migrate old keys
-    setStorageUserId(info.userId || null);
-    if (info.userId) {
-      migrateLocalStorage(info.userId);
-    }
+    setStorageUserId(info.userId);
+    migrateLocalStorage(info.userId);
 
     // Re-sync volume from the now-correct user-scoped localStorage key
     await resyncPersistedVolume();
-
-    // Activate per-user backend state (LoginView already did this for auto-login,
-    // but we call again to ensure it's active for manual login too — it's idempotent)
-    // CRITICAL: userId must be a valid positive number for activate_user_session
-    if (info.userId && info.userId > 0) {
-      try {
-        await invoke('activate_user_session', { userId: info.userId });
-      } catch (err) {
-        console.error('[Session] Failed to activate user session:', err);
-        // Don't set sessionReady if activation failed
-        return;
-      }
-    } else {
-      console.error('[Session] Invalid userId received:', info.userId, '- cannot activate session');
-      // Don't set sessionReady - session is broken
-      return;
-    }
 
     // Signal that per-user backend stores are ready — the launch update
     // flow $effect gates on this to avoid reading default preferences

@@ -683,7 +683,10 @@ pub async fn v2_set_repeat_mode(
 #[tauri::command]
 pub async fn v2_toggle_shuffle(
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<bool, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
     let bridge = bridge.get().await;
     Ok(bridge.toggle_shuffle().await)
 }
@@ -693,7 +696,10 @@ pub async fn v2_toggle_shuffle(
 pub async fn v2_set_shuffle(
     enabled: bool,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] set_shuffle: {}", enabled);
     app_state.queue.set_shuffle(enabled);
     Ok(())
@@ -703,7 +709,10 @@ pub async fn v2_set_shuffle(
 #[tauri::command]
 pub async fn v2_clear_queue(
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
     let bridge = bridge.get().await;
     bridge.clear_queue().await;
     Ok(())
@@ -787,7 +796,10 @@ impl From<crate::queue::QueueTrack> for V2QueueTrack {
 pub async fn v2_add_to_queue(
     track: V2QueueTrack,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] add_to_queue: {} - {}", track.id, track.title);
     app_state.queue.add_track(track.into());
     Ok(())
@@ -798,7 +810,10 @@ pub async fn v2_add_to_queue(
 pub async fn v2_add_to_queue_next(
     track: V2QueueTrack,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] add_to_queue_next: {} - {}", track.id, track.title);
     app_state.queue.add_track_next(track.into());
     Ok(())
@@ -810,7 +825,10 @@ pub async fn v2_set_queue(
     tracks: Vec<V2QueueTrack>,
     start_index: usize,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] set_queue: {} tracks, start at {}", tracks.len(), start_index);
     let queue_tracks: Vec<crate::queue::QueueTrack> = tracks.into_iter().map(Into::into).collect();
     app_state.queue.set_queue(queue_tracks, Some(start_index));
@@ -822,7 +840,10 @@ pub async fn v2_set_queue(
 pub async fn v2_remove_from_queue(
     index: usize,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] remove_from_queue: index {}", index);
     app_state.queue.remove_track(index);
     Ok(())
@@ -834,7 +855,10 @@ pub async fn v2_remove_from_queue(
 pub async fn v2_remove_upcoming_track(
     upcoming_index: usize,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] remove_upcoming_track: upcoming_index {}", upcoming_index);
     Ok(app_state.queue.remove_upcoming_track(upcoming_index).map(Into::into))
 }
@@ -843,7 +867,10 @@ pub async fn v2_remove_upcoming_track(
 #[tauri::command]
 pub async fn v2_next_track(
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] next_track");
     let track = app_state.queue.next();
     Ok(track.map(Into::into))
@@ -853,7 +880,10 @@ pub async fn v2_next_track(
 #[tauri::command]
 pub async fn v2_previous_track(
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] previous_track");
     let track = app_state.queue.previous();
     Ok(track.map(Into::into))
@@ -864,7 +894,10 @@ pub async fn v2_previous_track(
 pub async fn v2_play_queue_index(
     index: usize,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] play_queue_index: {}", index);
     let track = app_state.queue.play_index(index);
     Ok(track.map(Into::into))
@@ -876,7 +909,10 @@ pub async fn v2_move_queue_track(
     from_index: usize,
     to_index: usize,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<bool, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] move_queue_track: {} -> {}", from_index, to_index);
     Ok(app_state.queue.move_track(from_index, to_index))
 }
@@ -886,7 +922,10 @@ pub async fn v2_move_queue_track(
 pub async fn v2_add_tracks_to_queue(
     tracks: Vec<V2QueueTrack>,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] add_tracks_to_queue: {} tracks", tracks.len());
     let queue_tracks: Vec<crate::queue::QueueTrack> = tracks.into_iter().map(|t| t.into()).collect();
     app_state.queue.add_tracks(queue_tracks);
@@ -899,7 +938,10 @@ pub async fn v2_add_tracks_to_queue(
 pub async fn v2_add_tracks_to_queue_next(
     tracks: Vec<V2QueueTrack>,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] add_tracks_to_queue_next: {} tracks", tracks.len());
     // Add in reverse order so they end up in the correct order
     for track in tracks.into_iter().rev() {

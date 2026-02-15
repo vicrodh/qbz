@@ -566,9 +566,9 @@ pub fn run() {
         .manage(window_settings_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
+            // NOTE: V1 login/logout/auto_login REMOVED - use v2_login, v2_logout, v2_auto_login
+            // (Issue 6: Mixed V1/V2 auth surface disabled for cleaner architecture)
             commands::init_client,
-            commands::login,
-            commands::logout,
             commands::is_logged_in,
             commands::get_user_info,
             commands::set_api_locale,
@@ -576,7 +576,6 @@ pub fn run() {
             commands::has_saved_credentials,
             commands::save_credentials,
             commands::clear_saved_credentials,
-            commands::auto_login,
             // User session lifecycle
             commands::get_last_user_id,
             commands::activate_user_session,
