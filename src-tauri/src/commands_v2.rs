@@ -746,6 +746,47 @@ pub async fn v2_get_artist(
     bridge.get_artist(artistId).await
 }
 
+// ==================== Favorites Commands (V2) ====================
+
+/// Get favorites (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_favorites(
+    favType: String,
+    limit: u32,
+    offset: u32,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<serde_json::Value, String> {
+    let bridge = bridge.get().await;
+    bridge.get_favorites(&favType, limit, offset).await
+}
+
+/// Add item to favorites (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_add_favorite(
+    favType: String,
+    itemId: String,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<(), String> {
+    log::info!("[V2] add_favorite type={} id={}", favType, itemId);
+    let bridge = bridge.get().await;
+    bridge.add_favorite(&favType, &itemId).await
+}
+
+/// Remove item from favorites (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_remove_favorite(
+    favType: String,
+    itemId: String,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<(), String> {
+    log::info!("[V2] remove_favorite type={} id={}", favType, itemId);
+    let bridge = bridge.get().await;
+    bridge.remove_favorite(&favType, &itemId).await
+}
+
 // ==================== Playback Commands (V2) ====================
 //
 // These commands use CoreBridge.player (qbz-player crate) for playback.

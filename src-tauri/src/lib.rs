@@ -1128,6 +1128,10 @@ pub fn run() {
             commands_v2::v2_get_album,
             commands_v2::v2_get_track,
             commands_v2::v2_get_artist,
+            // Favorites
+            commands_v2::v2_get_favorites,
+            commands_v2::v2_add_favorite,
+            commands_v2::v2_remove_favorite,
             // Playback
             commands_v2::v2_pause_playback,
             commands_v2::v2_resume_playback,

@@ -313,6 +313,46 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         Arc::clone(&self.player)
     }
 
+    // ==================== Favorites ====================
+
+    /// Get favorites (albums, tracks, or artists)
+    pub async fn get_favorites(
+        &self,
+        fav_type: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<serde_json::Value, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_favorites(fav_type, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Add item to favorites
+    pub async fn add_favorite(&self, fav_type: &str, item_id: &str) -> Result<(), CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .add_favorite(fav_type, item_id)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Remove item from favorites
+    pub async fn remove_favorite(&self, fav_type: &str, item_id: &str) -> Result<(), CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .remove_favorite(fav_type, item_id)
+            .await
+            .map_err(CoreError::Api)
+    }
+
     // ==================== Event Emission ====================
 
     /// Emit an event to the frontend adapter

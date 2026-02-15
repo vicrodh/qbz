@@ -141,7 +141,7 @@ export async function toggleAlbumFavorite(albumId: string): Promise<boolean> {
 
   try {
     if (newState) {
-      await invoke('add_favorite', { favType: 'album', itemId: albumId });
+      await invoke('v2_add_favorite', { favType: 'album', itemId: albumId });
       await invoke('cache_favorite_album', { albumId });
       favoriteAlbumIds.add(albumId);
       void logRecoEvent({
@@ -150,7 +150,7 @@ export async function toggleAlbumFavorite(albumId: string): Promise<boolean> {
         albumId
       });
     } else {
-      await invoke('remove_favorite', { favType: 'album', itemId: albumId });
+      await invoke('v2_remove_favorite', { favType: 'album', itemId: albumId });
       await invoke('uncache_favorite_album', { albumId });
       favoriteAlbumIds.delete(albumId);
     }

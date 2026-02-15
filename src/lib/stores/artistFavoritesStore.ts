@@ -141,7 +141,7 @@ export async function toggleArtistFavorite(artistId: number): Promise<boolean> {
 
   try {
     if (newState) {
-      await invoke('add_favorite', { favType: 'artist', itemId: String(artistId) });
+      await invoke('v2_add_favorite', { favType: 'artist', itemId: String(artistId) });
       await invoke('cache_favorite_artist', { artistId });
       favoriteArtistIds.add(artistId);
       void logRecoEvent({
@@ -150,7 +150,7 @@ export async function toggleArtistFavorite(artistId: number): Promise<boolean> {
         artistId
       });
     } else {
-      await invoke('remove_favorite', { favType: 'artist', itemId: String(artistId) });
+      await invoke('v2_remove_favorite', { favType: 'artist', itemId: String(artistId) });
       await invoke('uncache_favorite_artist', { artistId });
       favoriteArtistIds.delete(artistId);
     }

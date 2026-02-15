@@ -168,6 +168,37 @@ impl CoreBridge {
         self.core.get_artist(artist_id).await.map_err(|e| e.to_string())
     }
 
+    // ==================== Favorites ====================
+
+    /// Get favorites (albums, tracks, or artists)
+    pub async fn get_favorites(
+        &self,
+        fav_type: &str,
+        limit: u32,
+        offset: u32,
+    ) -> Result<serde_json::Value, String> {
+        self.core
+            .get_favorites(fav_type, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Add item to favorites
+    pub async fn add_favorite(&self, fav_type: &str, item_id: &str) -> Result<(), String> {
+        self.core
+            .add_favorite(fav_type, item_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Remove item from favorites
+    pub async fn remove_favorite(&self, fav_type: &str, item_id: &str) -> Result<(), String> {
+        self.core
+            .remove_favorite(fav_type, item_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     // ==================== Streaming ====================
 
     /// Get stream URL for a track with quality fallback

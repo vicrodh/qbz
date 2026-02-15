@@ -165,9 +165,9 @@ export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
   notifyListeners();
 
   try {
-    // Call API first - no optimistic update
+    // Call API first - no optimistic update (V2)
     if (newState) {
-      await invoke('add_favorite', { favType: 'track', itemId: String(trackId) });
+      await invoke('v2_add_favorite', { favType: 'track', itemId: String(trackId) });
       // API succeeded - update local cache
       await invoke('cache_favorite_track', { trackId });
       // Update in-memory store
@@ -179,7 +179,7 @@ export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
         trackId
       });
     } else {
-      await invoke('remove_favorite', { favType: 'track', itemId: String(trackId) });
+      await invoke('v2_remove_favorite', { favType: 'track', itemId: String(trackId) });
       // API succeeded - update local cache
       await invoke('uncache_favorite_track', { trackId });
       // Update in-memory store

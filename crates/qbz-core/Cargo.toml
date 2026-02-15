@@ -22,6 +22,9 @@ log = { workspace = true }
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 
+# Serialization
+serde_json = { workspace = true }
+
 [features]
 default = []
 # Tier 2 features (to be added later)

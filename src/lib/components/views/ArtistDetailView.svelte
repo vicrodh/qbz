@@ -486,10 +486,10 @@
 
     try {
       if (wasFavorite) {
-        await invoke('remove_favorite', { favType: 'artist', itemId: String(artist.id) });
+        await invoke('v2_remove_favorite', { favType: 'artist', itemId: String(artist.id) });
         isFavorite = false;
       } else {
-        await invoke('add_favorite', { favType: 'artist', itemId: String(artist.id) });
+        await invoke('v2_add_favorite', { favType: 'artist', itemId: String(artist.id) });
         isFavorite = true;
       }
     } catch (err) {
