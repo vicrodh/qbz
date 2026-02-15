@@ -18,7 +18,7 @@ use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
 use crate::core_bridge::CoreBridgeState;
 use crate::offline_cache::OfflineCacheState;
 use crate::queue::QueueManager;
-use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason};
+use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason, CommandRequirement};
 use crate::AppState;
 
 // ==================== Helper Functions ====================
@@ -917,7 +917,12 @@ pub async fn v2_search_albums(
     searchType: Option<String>,
     bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<SearchResultsPage<Album>, String> {
+    // Runtime contract: require CoreBridge auth for V2 search
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     let bridge = bridge.get().await;
     let mut results = bridge.search_albums(&query, limit, offset, searchType.as_deref()).await?;
 
@@ -944,7 +949,12 @@ pub async fn v2_search_tracks(
     searchType: Option<String>,
     bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<SearchResultsPage<Track>, String> {
+    // Runtime contract: require CoreBridge auth for V2 search
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     let bridge = bridge.get().await;
     let mut results = bridge.search_tracks(&query, limit, offset, searchType.as_deref()).await?;
 
@@ -977,7 +987,12 @@ pub async fn v2_search_artists(
     searchType: Option<String>,
     bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<SearchResultsPage<Artist>, String> {
+    // Runtime contract: require CoreBridge auth for V2 search
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     let bridge = bridge.get().await;
     let mut results = bridge.search_artists(&query, limit, offset, searchType.as_deref()).await?;
 
@@ -1039,7 +1054,12 @@ pub async fn v2_get_favorites(
     limit: u32,
     offset: u32,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<serde_json::Value, String> {
+    // Runtime contract: require CoreBridge auth for V2 favorites
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     let bridge = bridge.get().await;
     bridge.get_favorites(&favType, limit, offset).await
 }
@@ -1051,7 +1071,12 @@ pub async fn v2_add_favorite(
     favType: String,
     itemId: String,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    // Runtime contract: require CoreBridge auth for V2 favorites
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     log::info!("[V2] add_favorite type={} id={}", favType, itemId);
     let bridge = bridge.get().await;
     bridge.add_favorite(&favType, &itemId).await
@@ -1064,7 +1089,12 @@ pub async fn v2_remove_favorite(
     favType: String,
     itemId: String,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    // Runtime contract: require CoreBridge auth for V2 favorites
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     log::info!("[V2] remove_favorite type={} id={}", favType, itemId);
     let bridge = bridge.get().await;
     bridge.remove_favorite(&favType, &itemId).await
@@ -1362,7 +1392,12 @@ pub async fn v2_play_track(
     offline_cache: State<'_, OfflineCacheState>,
     audio_settings: State<'_, AudioSettingsState>,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<V2PlayTrackResult, String> {
+    // Runtime contract: require CoreBridge auth for V2 playback
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     let preferred_quality = parse_quality(quality.as_deref());
 
     // Apply per-device sample rate limit if enabled
@@ -1549,7 +1584,12 @@ pub async fn v2_reinit_audio_device(
 #[tauri::command]
 pub async fn v2_get_user_playlists(
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Vec<Playlist>, String> {
+    // Runtime contract: require CoreBridge auth for V2 playlists
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     log::info!("[V2] get_user_playlists");
     let bridge = bridge.get().await;
     bridge.get_user_playlists().await
@@ -1561,7 +1601,12 @@ pub async fn v2_get_user_playlists(
 pub async fn v2_get_playlist(
     playlistId: u64,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Playlist, String> {
+    // Runtime contract: require CoreBridge auth for V2 playlists
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     log::info!("[V2] get_playlist: {}", playlistId);
     let bridge = bridge.get().await;
     bridge.get_playlist(playlistId).await
@@ -1574,7 +1619,12 @@ pub async fn v2_add_tracks_to_playlist(
     playlistId: u64,
     trackIds: Vec<u64>,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    // Runtime contract: require CoreBridge auth for V2 playlists
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     log::info!("[V2] add_tracks_to_playlist: playlist {} <- {} tracks", playlistId, trackIds.len());
     let bridge = bridge.get().await;
     bridge.add_tracks_to_playlist(playlistId, &trackIds).await
@@ -1589,7 +1639,12 @@ pub async fn v2_remove_tracks_from_playlist(
     playlistTrackIds: Option<Vec<u64>>,
     trackIds: Option<Vec<u64>>,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    // Runtime contract: require CoreBridge auth for V2 playlists
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
     let ptids = playlistTrackIds.unwrap_or_default();
     let tids = trackIds.unwrap_or_default();
     log::info!(
