@@ -110,7 +110,7 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
 #[tauri::command]
 pub async fn runtime_get_status(
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<RuntimeStatus, String> {
+) -> Result<RuntimeStatus, RuntimeError> {
     Ok(runtime.manager().get_status().await)
 }
 
@@ -635,7 +635,7 @@ fn spawn_v2_prefetch(
 #[tauri::command]
 pub async fn v2_is_logged_in(
     bridge: State<'_, CoreBridgeState>,
-) -> Result<bool, String> {
+) -> Result<bool, RuntimeError> {
     let bridge = bridge.get().await;
     Ok(bridge.is_logged_in().await)
 }
@@ -655,26 +655,28 @@ pub async fn v2_login(
     app_state: State<'_, AppState>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<UserSession, String> {
+) -> Result<UserSession, RuntimeError> {
     let manager = runtime.manager();
 
     // Step 1: Legacy auth
     let session = {
         let client = app_state.client.read().await;
         client.login(&email, &password).await
-            .map_err(|e| e.to_string())?
+            .map_err(|e| RuntimeError::Internal(e.to_string()))?
     };
     manager.set_legacy_auth(true, Some(session.user_id)).await;
     log::info!("[v2_login] Legacy auth successful for user {}", session.user_id);
 
     // Step 2: CoreBridge auth
     let bridge_guard = bridge.get().await;
-    bridge_guard.login(&email, &password).await?;
+    bridge_guard.login(&email, &password).await
+        .map_err(RuntimeError::Internal)?;
     manager.set_corebridge_auth(true).await;
     log::info!("[v2_login] CoreBridge auth successful");
 
     // Step 3: Activate session
-    crate::session_lifecycle::activate_session(&app, session.user_id).await?;
+    crate::session_lifecycle::activate_session(&app, session.user_id).await
+        .map_err(RuntimeError::Internal)?;
     log::info!("[v2_login] Session activated for user {}", session.user_id);
 
     // Convert api::models::UserSession to qbz_models::UserSession
@@ -700,16 +702,18 @@ pub async fn v2_logout(
     app: tauri::AppHandle,
     app_state: State<'_, AppState>,
     bridge: State<'_, CoreBridgeState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[v2_logout] Starting logout");
 
     // Step 1: Deactivate session (teardown stores, clear runtime state)
-    crate::session_lifecycle::deactivate_session(&app).await?;
+    crate::session_lifecycle::deactivate_session(&app).await
+        .map_err(RuntimeError::Internal)?;
     log::info!("[v2_logout] Session deactivated");
 
     // Step 2: CoreBridge logout
     let bridge_guard = bridge.get().await;
-    bridge_guard.logout().await?;
+    bridge_guard.logout().await
+        .map_err(RuntimeError::Internal)?;
     log::info!("[v2_logout] CoreBridge logged out");
 
     // Step 3: Legacy logout
@@ -730,8 +734,9 @@ pub async fn v2_logout(
 #[tauri::command]
 pub async fn v2_activate_offline_session(
     app: tauri::AppHandle,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     crate::session_lifecycle::activate_offline_session(&app).await
+        .map_err(RuntimeError::Internal)
 }
 
 // ==================== Queue Commands (V2) ====================
@@ -1029,13 +1034,13 @@ pub async fn v2_search_albums(
     bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<SearchResultsPage<Album>, String> {
+) -> Result<SearchResultsPage<Album>, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 search
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     let bridge = bridge.get().await;
-    let mut results = bridge.search_albums(&query, limit, offset, searchType.as_deref()).await?;
+    let mut results = bridge.search_albums(&query, limit, offset, searchType.as_deref()).await
+        .map_err(RuntimeError::Internal)?;
 
     // Filter out albums from blacklisted artists
     let original_count = results.items.len();
@@ -1061,13 +1066,13 @@ pub async fn v2_search_tracks(
     bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<SearchResultsPage<Track>, String> {
+) -> Result<SearchResultsPage<Track>, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 search
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     let bridge = bridge.get().await;
-    let mut results = bridge.search_tracks(&query, limit, offset, searchType.as_deref()).await?;
+    let mut results = bridge.search_tracks(&query, limit, offset, searchType.as_deref()).await
+        .map_err(RuntimeError::Internal)?;
 
     // Filter out tracks from blacklisted artists
     let original_count = results.items.len();
@@ -1099,13 +1104,13 @@ pub async fn v2_search_artists(
     bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<SearchResultsPage<Artist>, String> {
+) -> Result<SearchResultsPage<Artist>, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 search
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     let bridge = bridge.get().await;
-    let mut results = bridge.search_artists(&query, limit, offset, searchType.as_deref()).await?;
+    let mut results = bridge.search_artists(&query, limit, offset, searchType.as_deref()).await
+        .map_err(RuntimeError::Internal)?;
 
     // Filter out blacklisted artists
     let original_count = results.items.len();
@@ -1129,11 +1134,10 @@ pub async fn v2_get_album(
     albumId: String,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Album, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Album, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
     let bridge = bridge.get().await;
-    bridge.get_album(&albumId).await
+    bridge.get_album(&albumId).await.map_err(RuntimeError::Internal)
 }
 
 /// Get track by ID (V2 - uses QbzCore)
@@ -1143,11 +1147,10 @@ pub async fn v2_get_track(
     trackId: u64,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Track, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Track, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
     let bridge = bridge.get().await;
-    bridge.get_track(trackId).await
+    bridge.get_track(trackId).await.map_err(RuntimeError::Internal)
 }
 
 /// Get artist by ID (V2 - uses QbzCore)
@@ -1157,11 +1160,10 @@ pub async fn v2_get_artist(
     artistId: u64,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Artist, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Artist, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
     let bridge = bridge.get().await;
-    bridge.get_artist(artistId).await
+    bridge.get_artist(artistId).await.map_err(RuntimeError::Internal)
 }
 
 // ==================== Favorites Commands (V2) ====================
@@ -1175,13 +1177,12 @@ pub async fn v2_get_favorites(
     offset: u32,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<serde_json::Value, String> {
+) -> Result<serde_json::Value, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 favorites
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     let bridge = bridge.get().await;
-    bridge.get_favorites(&favType, limit, offset).await
+    bridge.get_favorites(&favType, limit, offset).await.map_err(RuntimeError::Internal)
 }
 
 /// Add item to favorites (V2 - uses QbzCore)
@@ -1192,14 +1193,13 @@ pub async fn v2_add_favorite(
     itemId: String,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 favorites
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] add_favorite type={} id={}", favType, itemId);
     let bridge = bridge.get().await;
-    bridge.add_favorite(&favType, &itemId).await
+    bridge.add_favorite(&favType, &itemId).await.map_err(RuntimeError::Internal)
 }
 
 /// Remove item from favorites (V2 - uses QbzCore)
@@ -1210,14 +1210,13 @@ pub async fn v2_remove_favorite(
     itemId: String,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 favorites
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] remove_favorite type={} id={}", favType, itemId);
     let bridge = bridge.get().await;
-    bridge.remove_favorite(&favType, &itemId).await
+    bridge.remove_favorite(&favType, &itemId).await.map_err(RuntimeError::Internal)
 }
 
 // ==================== Playback Commands (V2) ====================
@@ -1525,10 +1524,9 @@ pub async fn v2_play_track(
     audio_settings: State<'_, AudioSettingsState>,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<V2PlayTrackResult, String> {
+) -> Result<V2PlayTrackResult, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playback
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     let preferred_quality = parse_quality(quality.as_deref());
 
@@ -1537,7 +1535,7 @@ pub async fn v2_play_track(
         let guard = audio_settings
             .store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
+            .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
         if let Some(store) = guard.as_ref() {
             if let Ok(settings) = store.get_settings() {
                 if settings.limit_quality_to_device {
@@ -1561,7 +1559,8 @@ pub async fn v2_play_track(
 
     // Check streaming_only setting
     let streaming_only = {
-        let guard = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let guard = audio_settings.store.lock()
+            .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
         guard.as_ref().and_then(|s| s.get_settings().ok()).map(|s| s.streaming_only).unwrap_or(false)
     };
 
@@ -1593,8 +1592,9 @@ pub async fn v2_play_track(
             if path.exists() {
                 log::info!("[V2/CACHE HIT] Track {} from OFFLINE cache: {:?}", track_id, path);
                 let audio_data = std::fs::read(path)
-                    .map_err(|e| format!("Failed to read cached file: {}", e))?;
-                player.play_data(audio_data, track_id)?;
+                    .map_err(|e| RuntimeError::Internal(format!("Failed to read cached file: {}", e)))?;
+                player.play_data(audio_data, track_id)
+                    .map_err(RuntimeError::Internal)?;
 
                 // Prefetch next tracks in background
                 drop(bridge_guard);
@@ -1609,7 +1609,8 @@ pub async fn v2_play_track(
     let cache = app_state.audio_cache.clone();
     if let Some(cached) = cache.get(track_id) {
         log::info!("[V2/CACHE HIT] Track {} from MEMORY cache ({} bytes)", track_id, cached.size_bytes);
-        player.play_data(cached.data, track_id)?;
+        player.play_data(cached.data, track_id)
+            .map_err(RuntimeError::Internal)?;
 
         // Prefetch next tracks in background
         drop(bridge_guard);
@@ -1622,7 +1623,8 @@ pub async fn v2_play_track(
         if let Some(audio_data) = playback_cache.get(track_id) {
             log::info!("[V2/CACHE HIT] Track {} from DISK cache ({} bytes)", track_id, audio_data.len());
             cache.insert(track_id, audio_data.clone());
-            player.play_data(audio_data, track_id)?;
+            player.play_data(audio_data, track_id)
+                .map_err(RuntimeError::Internal)?;
 
             // Prefetch next tracks in background
             drop(bridge_guard);
@@ -1634,11 +1636,13 @@ pub async fn v2_play_track(
     // Not in any cache - get stream URL from Qobuz via CoreBridge
     log::info!("[V2] Track {} not in cache, fetching from network...", track_id);
 
-    let stream_url = bridge_guard.get_stream_url(track_id, final_quality).await?;
+    let stream_url = bridge_guard.get_stream_url(track_id, final_quality).await
+        .map_err(RuntimeError::Internal)?;
     log::info!("[V2] Got stream URL for track {} (format_id={})", track_id, stream_url.format_id);
 
     // Download the audio
-    let audio_data = download_audio(&stream_url.url).await?;
+    let audio_data = download_audio(&stream_url.url).await
+        .map_err(RuntimeError::Internal)?;
     let data_size = audio_data.len();
 
     // Cache it (unless streaming_only mode)
@@ -1650,7 +1654,8 @@ pub async fn v2_play_track(
     }
 
     // Play it via qbz-player
-    player.play_data(audio_data, track_id)?;
+    player.play_data(audio_data, track_id)
+        .map_err(RuntimeError::Internal)?;
     log::info!("[V2] Playing track {} ({} bytes)", track_id, data_size);
 
     // Prefetch next tracks in background
@@ -1669,7 +1674,7 @@ pub async fn v2_reinit_audio_device(
     device: Option<String>,
     bridge: State<'_, CoreBridgeState>,
     audio_settings: State<'_, AudioSettingsState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] Command: reinit_audio_device {:?}", device);
 
     let bridge_guard = bridge.get().await;
@@ -1707,7 +1712,7 @@ pub async fn v2_reinit_audio_device(
         }
     }
 
-    player.reinit_device(device)
+    player.reinit_device(device).map_err(RuntimeError::Internal)
 }
 
 // ==================== Playlist Commands (V2) ====================
@@ -1717,14 +1722,13 @@ pub async fn v2_reinit_audio_device(
 pub async fn v2_get_user_playlists(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Vec<Playlist>, String> {
+) -> Result<Vec<Playlist>, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playlists
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_user_playlists");
     let bridge = bridge.get().await;
-    bridge.get_user_playlists().await
+    bridge.get_user_playlists().await.map_err(RuntimeError::Internal)
 }
 
 /// Get playlist by ID (V2 - uses QbzCore)
@@ -1734,14 +1738,13 @@ pub async fn v2_get_playlist(
     playlistId: u64,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Playlist, String> {
+) -> Result<Playlist, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playlists
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_playlist: {}", playlistId);
     let bridge = bridge.get().await;
-    bridge.get_playlist(playlistId).await
+    bridge.get_playlist(playlistId).await.map_err(RuntimeError::Internal)
 }
 
 /// Add tracks to playlist (V2 - uses QbzCore)
@@ -1752,14 +1755,13 @@ pub async fn v2_add_tracks_to_playlist(
     trackIds: Vec<u64>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playlists
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] add_tracks_to_playlist: playlist {} <- {} tracks", playlistId, trackIds.len());
     let bridge = bridge.get().await;
-    bridge.add_tracks_to_playlist(playlistId, &trackIds).await
+    bridge.add_tracks_to_playlist(playlistId, &trackIds).await.map_err(RuntimeError::Internal)
 }
 
 /// Remove tracks from playlist (V2 - uses QbzCore)
@@ -1772,10 +1774,9 @@ pub async fn v2_remove_tracks_from_playlist(
     trackIds: Option<Vec<u64>>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playlists
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     let ptids = playlistTrackIds.unwrap_or_default();
     let tids = trackIds.unwrap_or_default();
@@ -1788,12 +1789,12 @@ pub async fn v2_remove_tracks_from_playlist(
 
     // If we have direct playlist_track_ids, use them
     if !ptids.is_empty() {
-        return bridge.remove_tracks_from_playlist(playlistId, &ptids).await;
+        return bridge.remove_tracks_from_playlist(playlistId, &ptids).await.map_err(RuntimeError::Internal);
     }
 
     // Otherwise resolve track_ids → playlist_track_ids via full playlist fetch
     if !tids.is_empty() {
-        let playlist = bridge.get_playlist(playlistId).await?;
+        let playlist = bridge.get_playlist(playlistId).await.map_err(RuntimeError::Internal)?;
 
         let track_id_set: std::collections::HashSet<u64> = tids.into_iter().collect();
         let resolved_ptids: Vec<u64> = playlist
@@ -1808,13 +1809,13 @@ pub async fn v2_remove_tracks_from_playlist(
             .unwrap_or_default();
 
         if resolved_ptids.is_empty() {
-            return Err("Could not resolve any track IDs to playlist track IDs".to_string());
+            return Err(RuntimeError::Internal("Could not resolve any track IDs to playlist track IDs".to_string()));
         }
 
-        return bridge.remove_tracks_from_playlist(playlistId, &resolved_ptids).await;
+        return bridge.remove_tracks_from_playlist(playlistId, &resolved_ptids).await.map_err(RuntimeError::Internal);
     }
 
-    Err("Either playlistTrackIds or trackIds must be provided".to_string())
+    Err(RuntimeError::Internal("Either playlistTrackIds or trackIds must be provided".to_string()))
 }
 
 // ==================== Audio Settings Commands (V2) ====================
@@ -2090,13 +2091,12 @@ pub async fn v2_create_playlist(
     isPublic: bool,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Playlist, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Playlist, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] create_playlist: {}", name);
     let bridge = bridge.get().await;
-    bridge.create_playlist(&name, description.as_deref(), isPublic).await
+    bridge.create_playlist(&name, description.as_deref(), isPublic).await.map_err(RuntimeError::Internal)
 }
 
 /// Delete a playlist (V2 - uses QbzCore)
@@ -2106,13 +2106,12 @@ pub async fn v2_delete_playlist(
     playlistId: u64,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] delete_playlist: {}", playlistId);
     let bridge = bridge.get().await;
-    bridge.delete_playlist(playlistId).await
+    bridge.delete_playlist(playlistId).await.map_err(RuntimeError::Internal)
 }
 
 /// Update a playlist (V2 - uses QbzCore)
@@ -2125,13 +2124,12 @@ pub async fn v2_update_playlist(
     isPublic: Option<bool>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Playlist, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Playlist, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] update_playlist: {}", playlistId);
     let bridge = bridge.get().await;
-    bridge.update_playlist(playlistId, name.as_deref(), description.as_deref(), isPublic).await
+    bridge.update_playlist(playlistId, name.as_deref(), description.as_deref(), isPublic).await.map_err(RuntimeError::Internal)
 }
 
 /// Search playlists (V2 - uses QbzCore)
@@ -2142,13 +2140,12 @@ pub async fn v2_search_playlists(
     offset: u32,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<SearchResultsPage<Playlist>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<SearchResultsPage<Playlist>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] search_playlists: {}", query);
     let bridge = bridge.get().await;
-    bridge.search_playlists(&query, limit, offset).await
+    bridge.search_playlists(&query, limit, offset).await.map_err(RuntimeError::Internal)
 }
 
 // ==================== Extended Catalog Commands (V2) ====================
@@ -2160,13 +2157,12 @@ pub async fn v2_get_tracks_batch(
     trackIds: Vec<u64>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Vec<Track>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Vec<Track>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_tracks_batch: {} tracks", trackIds.len());
     let bridge = bridge.get().await;
-    bridge.get_tracks_batch(&trackIds).await
+    bridge.get_tracks_batch(&trackIds).await.map_err(RuntimeError::Internal)
 }
 
 /// Get genres (V2 - uses QbzCore)
@@ -2176,13 +2172,12 @@ pub async fn v2_get_genres(
     parentId: Option<u64>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Vec<GenreInfo>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Vec<GenreInfo>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_genres: parent={:?}", parentId);
     let bridge = bridge.get().await;
-    bridge.get_genres(parentId).await
+    bridge.get_genres(parentId).await.map_err(RuntimeError::Internal)
 }
 
 /// Get discover index (V2 - uses QbzCore)
@@ -2192,13 +2187,12 @@ pub async fn v2_get_discover_index(
     genreIds: Option<Vec<u64>>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<DiscoverResponse, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<DiscoverResponse, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_discover_index: genres={:?}", genreIds);
     let bridge = bridge.get().await;
-    bridge.get_discover_index(genreIds).await
+    bridge.get_discover_index(genreIds).await.map_err(RuntimeError::Internal)
 }
 
 /// Get discover playlists (V2 - uses QbzCore)
@@ -2211,13 +2205,12 @@ pub async fn v2_get_discover_playlists(
     offset: Option<u32>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<DiscoverPlaylistsResponse, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<DiscoverPlaylistsResponse, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_discover_playlists: tag={:?}", tag);
     let bridge = bridge.get().await;
-    bridge.get_discover_playlists(tag, genreIds, limit, offset).await
+    bridge.get_discover_playlists(tag, genreIds, limit, offset).await.map_err(RuntimeError::Internal)
 }
 
 /// Get playlist tags (V2 - uses QbzCore)
@@ -2225,13 +2218,12 @@ pub async fn v2_get_discover_playlists(
 pub async fn v2_get_playlist_tags(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Vec<PlaylistTag>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Vec<PlaylistTag>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_playlist_tags");
     let bridge = bridge.get().await;
-    bridge.get_playlist_tags().await
+    bridge.get_playlist_tags().await.map_err(RuntimeError::Internal)
 }
 
 /// Get discover albums from a browse endpoint (V2 - uses QbzCore)
@@ -2246,9 +2238,8 @@ pub async fn v2_get_discover_albums(
     bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<DiscoverData<DiscoverAlbum>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<DiscoverData<DiscoverAlbum>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     // Map endpoint type to actual path
     let endpoint = match endpointType.as_str() {
@@ -2258,7 +2249,7 @@ pub async fn v2_get_discover_albums(
         "qobuzissimes" => "/discover/qobuzissims",
         "albumOfTheWeek" => "/discover/albumOfTheWeek",
         "pressAward" => "/discover/pressAward",
-        _ => return Err(format!("Unknown discover endpoint type: {}", endpointType)),
+        _ => return Err(RuntimeError::Internal(format!("Unknown discover endpoint type: {}", endpointType))),
     };
 
     log::info!("[V2] get_discover_albums: type={}", endpointType);
@@ -2268,7 +2259,8 @@ pub async fn v2_get_discover_albums(
         genreIds,
         offset.unwrap_or(0),
         limit.unwrap_or(50),
-    ).await?;
+    ).await
+        .map_err(RuntimeError::Internal)?;
 
     // Filter out albums from blacklisted artists
     let original_count = results.items.len();
@@ -2296,13 +2288,13 @@ pub async fn v2_get_featured_albums(
     bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<SearchResultsPage<Album>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<SearchResultsPage<Album>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_featured_albums: type={}, genre={:?}", featuredType, genreId);
     let bridge = bridge.get().await;
-    let mut results = bridge.get_featured_albums(&featuredType, limit, offset, genreId).await?;
+    let mut results = bridge.get_featured_albums(&featuredType, limit, offset, genreId).await
+        .map_err(RuntimeError::Internal)?;
 
     // Filter out albums from blacklisted artists
     let original_count = results.items.len();
@@ -2325,13 +2317,12 @@ pub async fn v2_get_artist_page(
     sort: Option<String>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<PageArtistResponse, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<PageArtistResponse, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_artist_page: {} sort={:?}", artistId, sort);
     let bridge = bridge.get().await;
-    bridge.get_artist_page(artistId, sort.as_deref()).await
+    bridge.get_artist_page(artistId, sort.as_deref()).await.map_err(RuntimeError::Internal)
 }
 
 /// Get similar artists (V2 - uses QbzCore)
@@ -2344,13 +2335,13 @@ pub async fn v2_get_similar_artists(
     bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<SearchResultsPage<Artist>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<SearchResultsPage<Artist>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_similar_artists: {}", artistId);
     let bridge = bridge.get().await;
-    let mut results = bridge.get_similar_artists(artistId, limit, offset).await?;
+    let mut results = bridge.get_similar_artists(artistId, limit, offset).await
+        .map_err(RuntimeError::Internal)?;
 
     // Filter out blacklisted artists
     let original_count = results.items.len();
@@ -2374,13 +2365,12 @@ pub async fn v2_get_artist_with_albums(
     offset: Option<u32>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Artist, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Artist, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_artist_with_albums: {} limit={:?} offset={:?}", artistId, limit, offset);
     let bridge = bridge.get().await;
-    bridge.get_artist_with_albums(artistId, limit, offset).await
+    bridge.get_artist_with_albums(artistId, limit, offset).await.map_err(RuntimeError::Internal)
 }
 
 /// Get label details (V2 - uses QbzCore)
@@ -2392,13 +2382,12 @@ pub async fn v2_get_label(
     offset: u32,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<LabelDetail, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<LabelDetail, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_label: {}", labelId);
     let bridge = bridge.get().await;
-    bridge.get_label(labelId, limit, offset).await
+    bridge.get_label(labelId, limit, offset).await.map_err(RuntimeError::Internal)
 }
 
 // ==================== Integrations V2 Commands ====================
