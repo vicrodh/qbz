@@ -1,5 +1,23 @@
 //! Queue management module
 //!
+//! # DEPRECATED - LEGACY CODE
+//!
+//! **This module is deprecated and will be removed.**
+//!
+//! Use `qbz-player::QueueManager` instead. The V2 architecture routes queue ops through:
+//! - `CoreBridge` -> `QbzCore` -> `qbz_player::QueueManager`
+//!
+//! This legacy module remains only as emergency fallback during migration.
+//! Do NOT add new functionality here. All new queue code goes to `qbz-player`.
+//!
+//! ## Migration Status
+//! - [x] QueueManager exists in qbz-player
+//! - [x] QbzCore uses qbz_player::QueueManager
+//! - [x] V2 queue commands use CoreBridge
+//! - [ ] Full frontend migration to V2 commands
+//!
+//! ---
+//!
 //! Handles playback queue with:
 //! - Queue manipulation (add, remove, reorder, clear)
 //! - Current track tracking

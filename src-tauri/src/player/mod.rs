@@ -1,5 +1,24 @@
 //! Audio player module
 //!
+//! # DEPRECATED - LEGACY CODE
+//!
+//! **This module is deprecated and will be removed.**
+//!
+//! Use `qbz-player` crate instead. The V2 architecture routes playback through:
+//! - `CoreBridge` -> `QbzCore` -> `qbz_player::Player`
+//!
+//! This legacy module remains only as emergency fallback during migration.
+//! Do NOT add new functionality here. All new playback code goes to `qbz-player`.
+//!
+//! ## Migration Status
+//! - [x] Player struct exists in qbz-player
+//! - [x] CoreBridge creates Player from qbz-player
+//! - [x] V2 playback commands use CoreBridge
+//! - [ ] play_track V2 command (in progress)
+//! - [ ] Full frontend migration to V2 commands
+//!
+//! ---
+//!
 //! Handles audio playback with support for:
 //! - HTTP streaming from Qobuz
 //! - FLAC, MP3 decoding via symphonia
