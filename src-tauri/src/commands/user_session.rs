@@ -11,6 +11,7 @@ use tauri::{Manager, State};
 use crate::api_cache::ApiCacheState;
 use crate::artist_blacklist::BlacklistState;
 use crate::artist_vectors::ArtistVectorStoreState;
+use crate::runtime::RuntimeManagerState;
 use crate::config::{
     audio_settings::AudioSettingsState,
     download_settings::{DownloadSettingsState, DownloadSettingsStore},
@@ -94,6 +95,7 @@ pub async fn activate_user_session(
     lyrics: State<'_, LyricsState>,
     musicbrainz: State<'_, MusicBrainzSharedState>,
     listenbrainz: State<'_, ListenBrainzSharedState>,
+    runtime_manager: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
     log::info!("Activating user session for user_id={}", user_id);
 
@@ -194,6 +196,8 @@ pub async fn activate_user_session(
         }
     });
 
+    // Update runtime state to reflect session activation
+    runtime_manager.manager().set_session_activated(true, user_id).await;
     log::info!("User session activated for user_id={}", user_id);
     Ok(())
 }
@@ -226,6 +230,7 @@ pub async fn deactivate_user_session(
     lyrics: State<'_, LyricsState>,
     musicbrainz: State<'_, MusicBrainzSharedState>,
     listenbrainz: State<'_, ListenBrainzSharedState>,
+    runtime_manager: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
     log::info!("Deactivating user session");
 
@@ -258,6 +263,9 @@ pub async fn deactivate_user_session(
     // Clear the active user and persisted last_user_id
     user_paths.clear_user();
     UserDataPaths::clear_last_user_id();
+
+    // Update runtime state to reflect session deactivation
+    runtime_manager.manager().set_legacy_auth(false, None).await;
 
     log::info!("User session deactivated");
     Ok(())
