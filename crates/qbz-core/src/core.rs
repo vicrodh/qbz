@@ -7,10 +7,10 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_models::{
-    Album, Artist, CoreEvent, FrontendAdapter, QueueState, RepeatMode, SearchResultsPage, Track,
-    UserSession,
+    Album, Artist, CoreEvent, FrontendAdapter, QueueState, RepeatMode,
+    SearchResultsPage, Track, UserSession,
 };
-use qbz_player::QueueManager;
+use qbz_player::{Player, PlaybackState, QueueManager};
 use qbz_qobuz::QobuzClient;
 
 use crate::error::CoreError;
@@ -26,17 +26,23 @@ pub struct QbzCore<A: FrontendAdapter> {
     client: Arc<RwLock<Option<QobuzClient>>>,
     /// Queue manager
     queue: Arc<RwLock<QueueManager>>,
+    /// Audio player
+    player: Arc<Player>,
     /// Whether the core is initialized
     initialized: Arc<RwLock<bool>>,
 }
 
 impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
-    /// Create a new QbzCore instance with the given frontend adapter
-    pub fn new(adapter: A) -> Self {
+    /// Create a new QbzCore instance with the given frontend adapter and player
+    ///
+    /// The Player must be created by the frontend with appropriate audio settings.
+    /// QbzCore orchestrates playback through this player.
+    pub fn new(adapter: A, player: Player) -> Self {
         Self {
             adapter: Arc::new(adapter),
             client: Arc::new(RwLock::new(None)),
             queue: Arc::new(RwLock::new(QueueManager::new())),
+            player: Arc::new(player),
             initialized: Arc::new(RwLock::new(false)),
         }
     }
@@ -227,6 +233,60 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             .get_artist_basic(artist_id)
             .await
             .map_err(CoreError::Api)
+    }
+
+    // ==================== Playback Operations ====================
+
+    /// Pause playback
+    pub fn pause(&self) -> Result<(), CoreError> {
+        self.player
+            .pause()
+            .map_err(|e| CoreError::Playback(e))
+    }
+
+    /// Resume playback
+    pub fn resume(&self) -> Result<(), CoreError> {
+        self.player
+            .resume()
+            .map_err(|e| CoreError::Playback(e))
+    }
+
+    /// Stop playback
+    pub fn stop(&self) -> Result<(), CoreError> {
+        self.player
+            .stop()
+            .map_err(|e| CoreError::Playback(e))
+    }
+
+    /// Seek to position in seconds
+    pub fn seek(&self, position: u64) -> Result<(), CoreError> {
+        self.player
+            .seek(position)
+            .map_err(|e| CoreError::Playback(e))
+    }
+
+    /// Set volume (0.0 - 1.0)
+    pub fn set_volume(&self, volume: f32) -> Result<(), CoreError> {
+        self.player
+            .set_volume(volume)
+            .map_err(|e| CoreError::Playback(e))
+    }
+
+    /// Get current playback state
+    pub fn get_playback_state(&self) -> PlaybackState {
+        let state = &self.player.state;
+        PlaybackState {
+            is_playing: state.is_playing(),
+            position: state.current_position(),
+            duration: state.duration(),
+            track_id: state.current_track_id(),
+            volume: state.volume(),
+        }
+    }
+
+    /// Get the player (for advanced usage)
+    pub fn player(&self) -> Arc<Player> {
+        Arc::clone(&self.player)
     }
 
     // ==================== Event Emission ====================

@@ -3,9 +3,7 @@
 //! These commands use QbzCore via CoreBridge instead of the old AppState.
 //! They coexist with the old commands during migration.
 //!
-//! For playback commands, we use a bridge pattern:
-//! - CoreBridge for Qobuz API (get stream URL)
-//! - AppState.player for actual audio playback (until player moves to qbz-player crate)
+//! Playback flows through CoreBridge -> QbzCore -> Player (qbz-player crate).
 
 use tauri::State;
 
@@ -13,7 +11,6 @@ use qbz_models::{Album, Artist, QueueState, RepeatMode, SearchResultsPage, Track
 
 use crate::artist_blacklist::BlacklistState;
 use crate::core_bridge::CoreBridgeState;
-use crate::AppState;
 
 // ==================== Auth Commands (V2) ====================
 
@@ -213,63 +210,61 @@ pub async fn v2_get_artist(
 
 // ==================== Playback Commands (V2) ====================
 //
-// These commands use AppState.player for actual playback (bridge pattern).
-// Eventually the player should move to qbz-player crate, but for now
-// we keep it in src-tauri and bridge to it.
+// These commands use CoreBridge.player (qbz-player crate) for playback.
+// This is the V2 architecture - playback flows through QbzCore.
 
 /// Pause playback (V2)
 #[tauri::command]
 pub async fn v2_pause_playback(
-    state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
 ) -> Result<(), String> {
-    state.player.pause()
+    let bridge = bridge.get().await;
+    bridge.pause()
 }
 
 /// Resume playback (V2)
 #[tauri::command]
 pub async fn v2_resume_playback(
-    state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
 ) -> Result<(), String> {
-    state.player.resume()
+    let bridge = bridge.get().await;
+    bridge.resume()
 }
 
 /// Stop playback (V2)
 #[tauri::command]
 pub async fn v2_stop_playback(
-    state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
 ) -> Result<(), String> {
-    state.player.stop()
+    let bridge = bridge.get().await;
+    bridge.stop()
 }
 
 /// Seek to position in seconds (V2)
 #[tauri::command]
 pub async fn v2_seek(
     position: u64,
-    state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
 ) -> Result<(), String> {
-    state.player.seek(position)
+    let bridge = bridge.get().await;
+    bridge.seek(position)
 }
 
 /// Set volume (0.0 - 1.0) (V2)
 #[tauri::command]
 pub async fn v2_set_volume(
     volume: f32,
-    state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
 ) -> Result<(), String> {
-    state.player.set_volume(volume)
+    let bridge = bridge.get().await;
+    bridge.set_volume(volume)
 }
 
 /// Get current playback state (V2)
 #[tauri::command]
 pub async fn v2_get_playback_state(
-    state: State<'_, AppState>,
-) -> Result<crate::player::PlaybackState, String> {
-    let player_state = &state.player.state;
-    Ok(crate::player::PlaybackState {
-        is_playing: player_state.is_playing(),
-        position: player_state.current_position(),
-        duration: player_state.duration(),
-        track_id: player_state.current_track_id(),
-        volume: player_state.volume(),
-    })
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<qbz_player::PlaybackState, String> {
+    let bridge = bridge.get().await;
+    Ok(bridge.get_playback_state())
 }

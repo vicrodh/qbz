@@ -3,12 +3,17 @@
 //! Bridges the new QbzCore architecture with the existing Tauri app.
 //! This allows gradual migration - new code uses QbzCore, old code
 //! continues to work until migrated.
+//!
+//! ARCHITECTURE: This bridge owns the Player from qbz-player crate.
+//! V2 commands should use CoreBridge for playback, NOT AppState.
 
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_core::QbzCore;
 use qbz_models::{Album, Artist, QueueState, RepeatMode, SearchResultsPage, Track, UserSession};
+use qbz_player::{Player, PlaybackState};
+use qbz_audio::{AudioSettings, AudioDiagnostic, settings::AudioSettingsStore};
 
 use crate::tauri_adapter::TauriAdapter;
 
@@ -22,8 +27,37 @@ pub struct CoreBridge {
 
 impl CoreBridge {
     /// Create a new CoreBridge with the given TauriAdapter
+    ///
+    /// Loads audio settings from qbz_audio::AudioSettingsStore, creates a Player
+    /// from qbz-player crate, and passes it to QbzCore.
+    /// This is the V2 architecture - playback goes through QbzCore.
     pub async fn new(adapter: TauriAdapter) -> Result<Self, String> {
-        let core = QbzCore::new(adapter);
+        // Load audio settings using qbz_audio store
+        let (device_name, audio_settings) = AudioSettingsStore::new()
+            .ok()
+            .and_then(|store| {
+                store.get_settings().ok().map(|settings| {
+                    (settings.output_device.clone(), settings)
+                })
+            })
+            .unwrap_or_else(|| {
+                log::info!("[CoreBridge] No saved audio settings, using defaults");
+                (None, AudioSettings::default())
+            });
+
+        log::info!(
+            "[CoreBridge] Creating Player with device={:?}, exclusive={}, dac_passthrough={}",
+            device_name,
+            audio_settings.exclusive_mode,
+            audio_settings.dac_passthrough
+        );
+
+        // Create Player from qbz-player crate
+        let diagnostic = AudioDiagnostic::new();
+        let player = Player::new(device_name, audio_settings, None, diagnostic);
+
+        // Create QbzCore with the player
+        let core = QbzCore::new(adapter, player);
         core.init().await.map_err(|e| e.to_string())?;
 
         Ok(Self {
@@ -132,6 +166,43 @@ impl CoreBridge {
     /// Get artist by ID
     pub async fn get_artist(&self, artist_id: u64) -> Result<Artist, String> {
         self.core.get_artist(artist_id).await.map_err(|e| e.to_string())
+    }
+
+    // ==================== Playback Commands ====================
+
+    /// Pause playback
+    pub fn pause(&self) -> Result<(), String> {
+        self.core.pause().map_err(|e| e.to_string())
+    }
+
+    /// Resume playback
+    pub fn resume(&self) -> Result<(), String> {
+        self.core.resume().map_err(|e| e.to_string())
+    }
+
+    /// Stop playback
+    pub fn stop(&self) -> Result<(), String> {
+        self.core.stop().map_err(|e| e.to_string())
+    }
+
+    /// Seek to position in seconds
+    pub fn seek(&self, position: u64) -> Result<(), String> {
+        self.core.seek(position).map_err(|e| e.to_string())
+    }
+
+    /// Set volume (0.0 - 1.0)
+    pub fn set_volume(&self, volume: f32) -> Result<(), String> {
+        self.core.set_volume(volume).map_err(|e| e.to_string())
+    }
+
+    /// Get current playback state
+    pub fn get_playback_state(&self) -> PlaybackState {
+        self.core.get_playback_state()
+    }
+
+    /// Get the player (for advanced usage, e.g. play_track)
+    pub fn player(&self) -> Arc<Player> {
+        self.core.player()
     }
 }
 

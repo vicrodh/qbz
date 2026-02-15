@@ -17,6 +17,9 @@ pub enum CoreError {
     #[error("Player error: {0}")]
     Player(String),
 
+    #[error("Playback error: {0}")]
+    Playback(String),
+
     #[error("Audio error: {0}")]
     Audio(String),
 
