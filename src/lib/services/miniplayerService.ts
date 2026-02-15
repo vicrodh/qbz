@@ -7,7 +7,7 @@
  * Uses localStorage to persist original window state across navigation.
  */
 
-import { getCurrentWindow } from '@tauri-apps/api/window';
+import { getCurrentWindow, PhysicalSize, PhysicalPosition } from '@tauri-apps/api/window';
 import { goto } from '$app/navigation';
 
 // Miniplayer dimensions
@@ -91,13 +91,13 @@ export async function enterMiniplayerMode(): Promise<void> {
 
     // IMPORTANT: Remove minimum size constraint first, then set size
     console.log('[MiniPlayer] Removing min size constraint...');
-    await window.setMinSize({ type: 'Physical', width: MINIPLAYER_WIDTH, height: MINIPLAYER_HEIGHT });
+    await window.setMinSize(new PhysicalSize(MINIPLAYER_WIDTH, MINIPLAYER_HEIGHT));
 
     // Small delay to ensure min size is applied before setting size
     await new Promise(resolve => setTimeout(resolve, 50));
 
     console.log('[MiniPlayer] Setting size to', MINIPLAYER_WIDTH, 'x', MINIPLAYER_HEIGHT);
-    await window.setSize({ type: 'Physical', width: MINIPLAYER_WIDTH, height: MINIPLAYER_HEIGHT });
+    await window.setSize(new PhysicalSize(MINIPLAYER_WIDTH, MINIPLAYER_HEIGHT));
 
     await window.setResizable(true);
     // Note: decorations stay false - app uses custom title bar (CSD)
@@ -132,15 +132,15 @@ export async function exitMiniplayerMode(): Promise<void> {
 
     // Restore minimum size constraint
     console.log('[MiniPlayer] Restoring min size constraint...');
-    await window.setMinSize({ type: 'Physical', width: ORIGINAL_MIN_WIDTH, height: ORIGINAL_MIN_HEIGHT });
+    await window.setMinSize(new PhysicalSize(ORIGINAL_MIN_WIDTH, ORIGINAL_MIN_HEIGHT));
 
     // Restore size
     if (originalState) {
       console.log('[MiniPlayer] Restoring size:', originalState.width, 'x', originalState.height);
-      await window.setSize({ type: 'Physical', width: originalState.width, height: originalState.height });
+      await window.setSize(new PhysicalSize(originalState.width, originalState.height));
 
       console.log('[MiniPlayer] Restoring position:', originalState.x, ',', originalState.y);
-      await window.setPosition({ type: 'Physical', x: originalState.x, y: originalState.y });
+      await window.setPosition(new PhysicalPosition(originalState.x, originalState.y));
 
       if (originalState.maximized) {
         console.log('[MiniPlayer] Restoring maximized state');
@@ -149,7 +149,7 @@ export async function exitMiniplayerMode(): Promise<void> {
     } else {
       // Fallback to default size
       console.log('[MiniPlayer] No original state, using defaults');
-      await window.setSize({ type: 'Physical', width: 1280, height: 800 });
+      await window.setSize(new PhysicalSize(1280, 800));
     }
 
     // Clear saved state

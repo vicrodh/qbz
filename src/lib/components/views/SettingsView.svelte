@@ -305,7 +305,7 @@
   );
 
   // Get section element by id (resolved at call time, not definition time)
-  function getSectionEl(id: string): HTMLElement | undefined {
+  function getSectionEl(id: string): HTMLElement | null {
     switch (id) {
       case 'audio': return audioSection;
       case 'playback': return playbackSection;
@@ -318,7 +318,7 @@
       case 'updates': return updatesSection;
       case 'storage': return storageSection;
       case 'flatpak': return flatpakSection;
-      default: return undefined;
+      default: return null;
     }
   }
 
@@ -1945,6 +1945,7 @@
     streaming_only: boolean;
     limit_quality_to_device: boolean;
     device_max_sample_rate: number | null;
+    gapless_enabled: boolean;
   }
 
   interface BackendInfo {
@@ -2157,7 +2158,7 @@
 
     // Convert description back to device name for storage
     const deviceName = sinkDescriptionToName.get(description);
-    const deviceToStore = description === 'System Default' ? null : deviceName;
+    const deviceToStore = description === 'System Default' ? null : (deviceName ?? null);
 
     // Try to find max sample rate from backendDevices if available
     // This enables quality limiting for PipeWire mode when possible

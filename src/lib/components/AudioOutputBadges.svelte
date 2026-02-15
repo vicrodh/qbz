@@ -311,7 +311,7 @@
               </span>
             </div>
           {/if}
-          {#if settings.dac_passthrough}
+          {#if settings?.dac_passthrough}
             <div class="tooltip-setting" class:warning={dacBadgeState === 'warning'}>
               <span class="setting-icon" class:active={dacBadgeState === 'active'} class:warning={dacBadgeState === 'warning'}>●</span>
               <span class="setting-text">
@@ -332,7 +332,7 @@
               </span>
             </div>
           {/if}
-          {#if settings.exclusive_mode}
+          {#if settings?.exclusive_mode}
             <div class="tooltip-setting">
               <span class="setting-icon" class:active={exclusiveModeActive}>●</span>
               <span class="setting-text">{$t('audioBadges.exclusiveMode')}</span>

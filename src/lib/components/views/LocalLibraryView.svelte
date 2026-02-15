@@ -2,7 +2,7 @@
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { getThumbnailUrl, getCachedThumbnailUrl } from '$lib/services/thumbnailService';
   import { open, ask } from '@tauri-apps/plugin-dialog';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, tick } from 'svelte';
   import {
     HardDrive, Music, Disc3, Mic2, FolderPlus, Trash2, RefreshCw,
     Settings, ArrowLeft, X, Play, AlertCircle, ImageDown, Upload, Search, LayoutGrid, List, Edit3,
@@ -1701,7 +1701,7 @@
         showToast($t('toast.removedMissingFiles', { values: { count: result.removed } }), 'success');
         // Reload library data
         cleanupStatus = 'Refreshing library...';
-        await loadAlbums();
+        await loadLibraryData();
         await loadArtists();
       } else {
         cleanupStatus = `Checked ${result.checked} tracks - all OK`;
@@ -3458,7 +3458,7 @@
           <AlertCircle size={48} />
           <p>{$t('library.failedLoadLibrary')}</p>
           <p class="error-detail">{error}</p>
-          <button class="retry-btn" onclick={loadLibraryData}>{$t('actions.retry')}</button>
+          <button class="retry-btn" onclick={() => loadLibraryData()}>{$t('actions.retry')}</button>
         </div>
       {:else if activeTab === 'albums'}
         {#key activeTab}

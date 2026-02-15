@@ -22,8 +22,7 @@
   let currentArtistPage = $state(0);
   let albumsPerPage = $state(5);
   let artistsPerPage = $state(5);
-  let totalAlbumPages = $derived(allResults ? Math.ceil(allResults.albums.items.length / albumsPerPage) : 0);
-  let totalArtistPages = $derived(allResults ? Math.ceil(allResults.artists.items.length / artistsPerPage) : 0);
+  // NOTE: totalAlbumPages/totalArtistPages are defined after allResults declaration
 
   onMount(async () => {
     console.log('SearchView mounted!');
@@ -351,6 +350,8 @@
   let artistResults = $state<SearchResults<Artist> | null>(cachedState.artistResults ?? null);
   let playlistResults = $state<SearchResults<Playlist> | null>(cachedState.playlistResults ?? null);
   let allResults = $state<SearchAllResults<Album, Track, Artist> | null>(cachedState.allResults ?? null);
+  let totalAlbumPages = $derived(allResults ? Math.ceil(allResults.albums.items.length / albumsPerPage) : 0);
+  let totalArtistPages = $derived(allResults ? Math.ceil(allResults.artists.items.length / artistsPerPage) : 0);
 
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
   let isLoadingMore = $state(false);
@@ -757,14 +758,9 @@
     }
   }
 
-  let canScrollAlbumsLeft = $derived(currentAlbumPage > 0);
-  let canScrollAlbumsRight = $derived(currentAlbumPage < totalAlbumPagesWithViewMore - 1);
-  let canScrollArtistsLeft = $derived(currentArtistPage > 0);
-  let canScrollArtistsRight = $derived(currentArtistPage < totalArtistPagesWithViewMore - 1);
-
   let showAlbumsViewMore = $derived(allResults ? allResults.albums.total > 30 : false);
   let showArtistsViewMore = $derived(allResults ? allResults.artists.total > 12 : false);
-  
+
   let albumsWithViewMore = $derived(() => {
     if (!allResults) return [];
     const albums = [...allResults.albums.items];
@@ -785,6 +781,11 @@
 
   let totalAlbumPagesWithViewMore = $derived(albumsWithViewMore().length > 0 ? Math.ceil(albumsWithViewMore().length / albumsPerPage) : 0);
   let totalArtistPagesWithViewMore = $derived(artistsWithViewMore().length > 0 ? Math.ceil(artistsWithViewMore().length / artistsPerPage) : 0);
+
+  let canScrollAlbumsLeft = $derived(currentAlbumPage > 0);
+  let canScrollAlbumsRight = $derived(currentAlbumPage < totalAlbumPagesWithViewMore - 1);
+  let canScrollArtistsLeft = $derived(currentArtistPage > 0);
+  let canScrollArtistsRight = $derived(currentArtistPage < totalArtistPagesWithViewMore - 1);
   
   let visibleAlbums = $derived(
     albumsWithViewMore().slice(currentAlbumPage * albumsPerPage, (currentAlbumPage + 1) * albumsPerPage)
