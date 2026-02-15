@@ -31,6 +31,10 @@ impl MusicBrainzCache {
         let conn = Connection::open(db_path)
             .map_err(|e| format!("Failed to open MusicBrainz cache: {}", e))?;
 
+        // Enable WAL mode for concurrent read/write (ADR-002)
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to enable WAL mode: {}", e))?;
+
         let cache = Self { conn };
         cache.init_schema()?;
 

@@ -205,8 +205,10 @@ pub async fn runtime_bootstrap(
                 // This initializes all per-user stores and sets runtime state
                 if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
                     log::error!("[Runtime] Session activation failed: {}", e);
-                    // Non-fatal for bootstrap - stores can be initialized later
-                    // But log it prominently
+                    // Non-fatal for bootstrap - user can still use app but some features may not work
+                    // Emit degraded event so frontend knows
+                    let reason = DegradedReason::SessionActivationFailed(e.clone());
+                    let _ = app.emit("runtime:event", RuntimeEvent::RuntimeDegraded { reason });
                 }
             }
             Err(e) => {
@@ -391,6 +393,12 @@ pub async fn v2_auto_login(
         });
     }
 
+    // Activate per-user session (initializes all per-user stores)
+    if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
+        log::error!("[V2] Session activation failed: {}", e);
+        // Non-fatal - consider login successful, stores can be initialized later
+    }
+
     // Emit ready event
     let _ = app.emit("runtime:event", RuntimeEvent::RuntimeReady {
         user_id: session.user_id,
@@ -493,6 +501,12 @@ pub async fn v2_manual_login(
             error: Some("V2 CoreBridge not initialized".to_string()),
             error_code: Some("v2_not_initialized".to_string()),
         });
+    }
+
+    // Activate per-user session (initializes all per-user stores)
+    if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
+        log::error!("[V2] Session activation failed: {}", e);
+        // Non-fatal - consider login successful, stores can be initialized later
     }
 
     // Emit ready event

@@ -47,6 +47,8 @@ pub enum DegradedReason {
     NetworkError(String),
     /// Database/storage issues
     StorageError(String),
+    /// Session activation failed (per-user stores not initialized)
+    SessionActivationFailed(String),
 }
 
 /// Full runtime status returned by runtime_get_status and runtime_bootstrap
@@ -284,11 +286,13 @@ impl RuntimeManager {
                 }
             }
             CommandRequirement::RequiresUserSession => {
-                if !status.client_initialized {
-                    Err(RuntimeError::RuntimeNotInitialized)
-                } else if !status.legacy_auth {
-                    Err(RuntimeError::AuthRequired)
-                } else if !status.session_activated {
+                // RequiresUserSession only checks session_activated, not legacy_auth.
+                // This allows both:
+                // - Online sessions: session_activated=true via activate_session()
+                // - Offline sessions: session_activated=true via activate_offline_session()
+                //
+                // Commands needing Qobuz API should use RequiresAuth or RequiresCoreBridgeAuth.
+                if !status.session_activated {
                     Err(RuntimeError::UserSessionNotActivated)
                 } else {
                     Ok(())

@@ -124,6 +124,9 @@ impl ListenBrainzSharedState {
     }
 
     pub async fn teardown(&self) {
+        // Clear in-memory token to prevent cross-user token leaks
+        self.client.lock().await.disconnect().await;
+        // Close cache DB connection
         let mut guard = self.cache.lock().await;
         *guard = None;
     }
