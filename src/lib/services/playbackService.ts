@@ -764,7 +764,7 @@ export async function flushScrobbleQueue(): Promise<{ sent: number; failed: numb
  */
 export async function checkTrackFavorite(trackId: number): Promise<boolean> {
   try {
-    const response = await invoke<{ tracks?: { items: Array<{ id: number }> } }>('get_favorites', {
+    const response = await invoke<{ tracks?: { items: Array<{ id: number }> } }>('v2_get_favorites', {
       favType: 'tracks',
       limit: 500
     });

@@ -645,7 +645,7 @@
     const collected: any[] = [];
 
     while (page < FAVORITES_MAX_PAGES) {
-      const result = await invoke<any>('get_favorites', {
+      const result = await invoke<any>('v2_get_favorites', {
         favType: type,
         limit: FAVORITES_PAGE_SIZE,
         offset

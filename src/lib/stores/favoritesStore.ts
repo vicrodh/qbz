@@ -114,7 +114,7 @@ export async function syncFromApi(): Promise<void> {
     const limit = 500;
 
     while (true) {
-      const response = await invoke<{ tracks?: { items?: Array<{ id: number }>; total?: number } }>('get_favorites', {
+      const response = await invoke<{ tracks?: { items?: Array<{ id: number }>; total?: number } }>('v2_get_favorites', {
         favType: 'tracks',
         limit,
         offset

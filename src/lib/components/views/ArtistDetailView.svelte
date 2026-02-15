@@ -465,7 +465,7 @@
 
   async function checkFavoriteStatus() {
     try {
-      const response = await invoke<{ artists?: { items: Array<{ id: number }> } }>('get_favorites', {
+      const response = await invoke<{ artists?: { items: Array<{ id: number }> } }>('v2_get_favorites', {
         favType: 'artists',
         limit: 500,
         offset: 0
