@@ -1987,7 +1987,11 @@
    */
   async function reinitAndResume(device: string | null): Promise<void> {
     const wasPlaying = getIsPlaying();
+    // Reinit both legacy and V2 players
     await invoke('reinit_audio_device', { device });
+    await invoke('v2_reinit_audio_device', { device }).catch((e) => {
+      console.debug('[Settings] V2 reinit (non-blocking):', e);
+    });
     if (wasPlaying) {
       // Small delay to let the new stream initialize
       await new Promise(r => setTimeout(r, 150));
@@ -2767,7 +2771,11 @@
     try {
       await invoke('v2_stop_playback');
       await invoke('reset_audio_settings');
+      // Reinit both legacy and V2 players
       await invoke('reinit_audio_device', { device: null });
+      await invoke('v2_reinit_audio_device', { device: null }).catch((e) => {
+        console.debug('[Settings] V2 reinit (non-blocking):', e);
+      });
       // Reset all audio UI state to defaults
       outputDevice = 'System Default';
       exclusiveMode = false;

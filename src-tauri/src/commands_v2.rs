@@ -833,3 +833,53 @@ pub async fn v2_play_track(
 
     Ok(V2PlayTrackResult { format_id: Some(stream_url.format_id) })
 }
+
+// ==================== Audio Device Commands (V2) ====================
+
+/// Reinitialize audio device (V2 - uses CoreBridge.player)
+/// Call this when changing audio settings like exclusive mode or output device
+#[tauri::command]
+pub async fn v2_reinit_audio_device(
+    device: Option<String>,
+    bridge: State<'_, CoreBridgeState>,
+    audio_settings: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] Command: reinit_audio_device {:?}", device);
+
+    let bridge_guard = bridge.get().await;
+    let player = bridge_guard.player();
+
+    // Reload settings from database to ensure Player has latest config
+    if let Ok(guard) = audio_settings.store.lock() {
+        if let Some(store) = guard.as_ref() {
+            if let Ok(fresh_settings) = store.get_settings() {
+                log::info!(
+                    "[V2] Reloading audio settings before reinit (backend_type: {:?})",
+                    fresh_settings.backend_type
+                );
+                // Convert to qbz_audio::AudioSettings
+                let qbz_settings = qbz_audio::AudioSettings {
+                    output_device: fresh_settings.output_device.clone(),
+                    exclusive_mode: fresh_settings.exclusive_mode,
+                    dac_passthrough: fresh_settings.dac_passthrough,
+                    preferred_sample_rate: fresh_settings.preferred_sample_rate,
+                    limit_quality_to_device: fresh_settings.limit_quality_to_device,
+                    device_max_sample_rate: fresh_settings.device_max_sample_rate,
+                    device_sample_rate_limits: fresh_settings.device_sample_rate_limits.clone(),
+                    backend_type: fresh_settings.backend_type.clone(),
+                    alsa_plugin: fresh_settings.alsa_plugin.clone(),
+                    alsa_hardware_volume: false, // Not exposed in legacy UI
+                    stream_first_track: fresh_settings.stream_first_track,
+                    stream_buffer_seconds: fresh_settings.stream_buffer_seconds,
+                    streaming_only: fresh_settings.streaming_only,
+                    normalization_enabled: fresh_settings.normalization_enabled,
+                    normalization_target_lufs: fresh_settings.normalization_target_lufs,
+                    gapless_enabled: fresh_settings.gapless_enabled,
+                };
+                let _ = player.reload_settings(qbz_settings);
+            }
+        }
+    }
+
+    player.reinit_device(device)
+}
