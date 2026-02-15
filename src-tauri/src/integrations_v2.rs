@@ -57,9 +57,14 @@ impl ListenBrainzV2State {
     }
 
     /// Clear credentials on disconnect
+    ///
+    /// This clears both wrapper fields AND resets the internal client to ensure
+    /// no credentials leak across sessions.
     pub async fn clear_credentials(&self) {
         *self.token.lock().await = None;
         *self.user_name.lock().await = None;
+        // Reset internal client to fresh state (clears config with token/user_name)
+        *self.client.lock().await = ListenBrainzClient::new();
     }
 }
 
@@ -110,10 +115,23 @@ impl LastFmV2State {
     }
 
     /// Initialize with saved session key
+    ///
+    /// If `None` is passed, this performs a full session clear to ensure
+    /// no credentials leak across sessions.
     pub async fn init_with_session(&self, session_key: Option<String>) {
-        if let Some(key) = session_key {
-            self.client.lock().await.set_session_key(key);
+        match session_key {
+            Some(key) => self.client.lock().await.set_session_key(key),
+            None => self.clear_session().await,
         }
+    }
+
+    /// Clear session and pending token (full teardown)
+    ///
+    /// This MUST be called on logout/session deactivate to ensure
+    /// no credentials leak to a new session.
+    pub async fn clear_session(&self) {
+        self.client.lock().await.clear_session();
+        *self.pending_token.lock().await = None;
     }
 
     /// Get session key for persistence
