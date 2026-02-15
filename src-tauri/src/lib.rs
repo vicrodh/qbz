@@ -1150,6 +1150,7 @@ pub fn run() {
             commands_v2::v2_get_discover_index,
             commands_v2::v2_get_discover_playlists,
             commands_v2::v2_get_playlist_tags,
+            commands_v2::v2_get_discover_albums,
             commands_v2::v2_get_featured_albums,
             commands_v2::v2_get_artist_page,
             commands_v2::v2_get_similar_artists,

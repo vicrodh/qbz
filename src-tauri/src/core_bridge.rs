@@ -12,9 +12,9 @@ use tokio::sync::RwLock;
 
 use qbz_core::QbzCore;
 use qbz_models::{
-    Album, Artist, DiscoverPlaylistsResponse, DiscoverResponse, GenreInfo, LabelDetail,
-    PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState, RepeatMode, SearchResultsPage,
-    StreamUrl, Track, UserSession,
+    Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
+    GenreInfo, LabelDetail, PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState,
+    RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{Player, PlaybackState};
 use qbz_audio::{AudioSettings, AudioDiagnostic, settings::AudioSettingsStore};
@@ -340,6 +340,20 @@ impl CoreBridge {
     pub async fn get_playlist_tags(&self) -> Result<Vec<PlaylistTag>, String> {
         self.core
             .get_playlist_tags()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get discover albums from a specific browse endpoint
+    pub async fn get_discover_albums(
+        &self,
+        endpoint: &str,
+        genre_ids: Option<Vec<u64>>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<DiscoverData<DiscoverAlbum>, String> {
+        self.core
+            .get_discover_albums(endpoint, genre_ids, offset, limit)
             .await
             .map_err(|e| e.to_string())
     }

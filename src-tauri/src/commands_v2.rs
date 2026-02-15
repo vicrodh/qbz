@@ -10,9 +10,9 @@ use tauri::{Emitter, State};
 use tokio::sync::RwLock;
 
 use qbz_models::{
-    Album, Artist, DiscoverPlaylistsResponse, DiscoverResponse, GenreInfo, LabelDetail,
-    PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState, RepeatMode, SearchResultsPage,
-    Track, UserSession,
+    Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
+    GenreInfo, LabelDetail, PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState,
+    RepeatMode, SearchResultsPage, Track, UserSession,
 };
 
 use crate::artist_blacklist::BlacklistState;
@@ -2128,6 +2128,57 @@ pub async fn v2_get_playlist_tags(
     log::info!("[V2] get_playlist_tags");
     let bridge = bridge.get().await;
     bridge.get_playlist_tags().await
+}
+
+/// Get discover albums from a browse endpoint (V2 - uses QbzCore)
+/// Supports: newReleases, idealDiscography, mostStreamed, qobuzissimes, albumOfTheWeek, pressAward
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_discover_albums(
+    endpointType: String,
+    genreIds: Option<Vec<u64>>,
+    offset: Option<u32>,
+    limit: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    blacklist_state: State<'_, BlacklistState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<DiscoverData<DiscoverAlbum>, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
+
+    // Map endpoint type to actual path
+    let endpoint = match endpointType.as_str() {
+        "newReleases" => "/discover/newReleases",
+        "idealDiscography" => "/discover/idealDiscography",
+        "mostStreamed" => "/discover/mostStreamed",
+        "qobuzissimes" => "/discover/qobuzissims",
+        "albumOfTheWeek" => "/discover/albumOfTheWeek",
+        "pressAward" => "/discover/pressAward",
+        _ => return Err(format!("Unknown discover endpoint type: {}", endpointType)),
+    };
+
+    log::info!("[V2] get_discover_albums: type={}", endpointType);
+    let bridge = bridge.get().await;
+    let mut results = bridge.get_discover_albums(
+        endpoint,
+        genreIds,
+        offset.unwrap_or(0),
+        limit.unwrap_or(50),
+    ).await?;
+
+    // Filter out albums from blacklisted artists
+    let original_count = results.items.len();
+    results.items.retain(|album| {
+        // Check if any of the album's artists are blacklisted
+        !album.artists.iter().any(|artist| blacklist_state.is_blacklisted(artist.id))
+    });
+
+    let filtered_count = original_count - results.items.len();
+    if filtered_count > 0 {
+        log::debug!("[V2/Blacklist] Filtered {} albums from discover results", filtered_count);
+    }
+
+    Ok(results)
 }
 
 /// Get featured albums (V2 - uses QbzCore)

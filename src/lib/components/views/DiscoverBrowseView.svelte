@@ -173,7 +173,7 @@
 
     try {
       const genreIds = getGenreIdsForFetch();
-      const response = await invoke<DiscoverAlbumsResponse>('get_discover_albums', {
+      const response = await invoke<DiscoverAlbumsResponse>('v2_get_discover_albums', {
         endpointType,
         genreIds,
         offset,

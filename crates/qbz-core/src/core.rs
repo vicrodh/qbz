@@ -7,9 +7,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_models::{
-    Album, Artist, CoreEvent, DiscoverPlaylistsResponse, DiscoverResponse, FrontendAdapter,
-    GenreInfo, LabelDetail, PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState,
-    RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
+    Album, Artist, CoreEvent, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
+    DiscoverResponse, FrontendAdapter, GenreInfo, LabelDetail, PageArtistResponse, Playlist,
+    PlaylistTag, Quality, QueueState, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{Player, PlaybackState, QueueManager};
 use qbz_qobuz::QobuzClient;
@@ -519,6 +519,23 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
 
         client
             .get_playlist_tags()
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get discover albums from a specific browse endpoint
+    pub async fn get_discover_albums(
+        &self,
+        endpoint: &str,
+        genre_ids: Option<Vec<u64>>,
+        offset: u32,
+        limit: u32,
+    ) -> Result<DiscoverData<DiscoverAlbum>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_discover_albums(endpoint, genre_ids, offset, limit)
             .await
             .map_err(CoreError::Api)
     }
