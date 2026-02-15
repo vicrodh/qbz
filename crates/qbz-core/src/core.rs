@@ -50,18 +50,25 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
     /// Initialize the core
     ///
     /// This should be called once at startup to set up all subsystems.
+    /// This extracts Qobuz bundle tokens - user must still call login() to authenticate.
     pub async fn init(&self) -> Result<(), CoreError> {
         let mut initialized = self.initialized.write().await;
         if *initialized {
             return Ok(());
         }
 
-        // Initialize Qobuz client (without auth)
+        // Initialize Qobuz client
         let client = QobuzClient::new().map_err(|e| CoreError::Internal(e.to_string()))?;
+
+        // Extract bundle tokens (required before any API calls)
+        client.init().await.map_err(|e| {
+            CoreError::Internal(format!("Failed to extract bundle tokens: {}", e))
+        })?;
+
         *self.client.write().await = Some(client);
 
         *initialized = true;
-        log::info!("QbzCore initialized");
+        log::info!("QbzCore initialized with bundle tokens");
         Ok(())
     }
 
