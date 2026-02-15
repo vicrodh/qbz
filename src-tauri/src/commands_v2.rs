@@ -1017,7 +1017,10 @@ pub async fn v2_search_artists(
 pub async fn v2_get_album(
     albumId: String,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Album, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
     let bridge = bridge.get().await;
     bridge.get_album(&albumId).await
 }
@@ -1028,7 +1031,10 @@ pub async fn v2_get_album(
 pub async fn v2_get_track(
     trackId: u64,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Track, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
     let bridge = bridge.get().await;
     bridge.get_track(trackId).await
 }
@@ -1039,7 +1045,10 @@ pub async fn v2_get_track(
 pub async fn v2_get_artist(
     artistId: u64,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Artist, String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
+        .map_err(|e| e.to_string())?;
     let bridge = bridge.get().await;
     bridge.get_artist(artistId).await
 }
@@ -1110,7 +1119,10 @@ pub async fn v2_remove_favorite(
 pub async fn v2_pause_playback(
     bridge: State<'_, CoreBridgeState>,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] Command: pause_playback");
     app_state.media_controls.set_playback(false);
     let bridge = bridge.get().await;
@@ -1122,7 +1134,10 @@ pub async fn v2_pause_playback(
 pub async fn v2_resume_playback(
     bridge: State<'_, CoreBridgeState>,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] Command: resume_playback");
     app_state.media_controls.set_playback(true);
     let bridge = bridge.get().await;
@@ -1134,7 +1149,10 @@ pub async fn v2_resume_playback(
 pub async fn v2_stop_playback(
     bridge: State<'_, CoreBridgeState>,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] Command: stop_playback");
     app_state.media_controls.set_stopped();
     let bridge = bridge.get().await;
@@ -1147,7 +1165,10 @@ pub async fn v2_seek(
     position: u64,
     bridge: State<'_, CoreBridgeState>,
     app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
+        .map_err(|e| e.to_string())?;
     log::info!("[V2] Command: seek {}", position);
     let bridge_guard = bridge.get().await;
     let result = bridge_guard.seek(position);
@@ -1167,7 +1188,10 @@ pub async fn v2_seek(
 pub async fn v2_set_volume(
     volume: f32,
     bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
+        .map_err(|e| e.to_string())?;
     let bridge = bridge.get().await;
     bridge.set_volume(volume)
 }
