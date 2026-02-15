@@ -55,6 +55,26 @@ fn require_tos_accepted(legal_state: &LegalSettingsState) -> Result<(), (String,
     Ok(())
 }
 
+/// Rollback runtime auth state after a partial login failure.
+///
+/// This MUST be called when:
+/// - Legacy auth succeeded but CoreBridge auth failed
+/// - Legacy + CoreBridge auth succeeded but session activation failed
+///
+/// Ensures runtime_get_status never reports a half-authenticated state.
+async fn rollback_auth_state(
+    manager: &crate::runtime::RuntimeManager,
+    app: &tauri::AppHandle,
+) {
+    log::warn!("[V2] Rolling back auth state after partial login failure");
+    manager.set_legacy_auth(false, None).await;
+    manager.set_corebridge_auth(false).await;
+    let _ = app.emit("runtime:event", RuntimeEvent::AuthChanged {
+        logged_in: false,
+        user_id: None,
+    });
+}
+
 /// Convert quality string from frontend to Quality enum
 fn parse_quality(quality_str: Option<&str>) -> Quality {
     match quality_str {
@@ -438,6 +458,7 @@ pub async fn v2_auto_login(
             }
             Err(e) => {
                 log::error!("[V2] CoreBridge auth failed: {}", e);
+                rollback_auth_state(&manager, &app).await;
                 let _ = app.emit("runtime:event", RuntimeEvent::CoreBridgeAuthFailed {
                     error: e.to_string(),
                 });
@@ -455,6 +476,7 @@ pub async fn v2_auto_login(
         }
     } else {
         log::error!("[V2] CoreBridge not initialized - cannot complete auth");
+        rollback_auth_state(&manager, &app).await;
         return Ok(V2LoginResponse {
             success: false,
             user_name: Some(session.display_name),
@@ -470,6 +492,7 @@ pub async fn v2_auto_login(
     // This is REQUIRED - without it, user has auth but no stores, causing UserSessionNotActivated errors
     if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
         log::error!("[V2] Session activation failed: {}", e);
+        rollback_auth_state(&manager, &app).await;
         return Ok(V2LoginResponse {
             success: false,
             user_name: Some(session.display_name.clone()),
@@ -572,6 +595,7 @@ pub async fn v2_manual_login(
             }
             Err(e) => {
                 log::error!("[V2] CoreBridge auth failed: {}", e);
+                rollback_auth_state(&manager, &app).await;
                 let _ = app.emit("runtime:event", RuntimeEvent::CoreBridgeAuthFailed {
                     error: e.to_string(),
                 });
@@ -589,6 +613,7 @@ pub async fn v2_manual_login(
         }
     } else {
         log::error!("[V2] CoreBridge not initialized - cannot complete auth");
+        rollback_auth_state(&manager, &app).await;
         return Ok(V2LoginResponse {
             success: false,
             user_name: Some(session.display_name),
@@ -604,6 +629,7 @@ pub async fn v2_manual_login(
     // This is REQUIRED - without it, user has auth but no stores, causing UserSessionNotActivated errors
     if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
         log::error!("[V2] Session activation failed: {}", e);
+        rollback_auth_state(&manager, &app).await;
         return Ok(V2LoginResponse {
             success: false,
             user_name: Some(session.display_name.clone()),
@@ -796,14 +822,20 @@ pub async fn v2_login(
 
     // Step 2: CoreBridge auth
     let bridge_guard = bridge.get().await;
-    bridge_guard.login(&email, &password).await
-        .map_err(RuntimeError::Internal)?;
+    if let Err(e) = bridge_guard.login(&email, &password).await {
+        log::error!("[v2_login] CoreBridge auth failed: {}", e);
+        rollback_auth_state(&manager, &app).await;
+        return Err(RuntimeError::Internal(e));
+    }
     manager.set_corebridge_auth(true).await;
     log::info!("[v2_login] CoreBridge auth successful");
 
     // Step 3: Activate session
-    crate::session_lifecycle::activate_session(&app, session.user_id).await
-        .map_err(RuntimeError::Internal)?;
+    if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
+        log::error!("[v2_login] Session activation failed: {}", e);
+        rollback_auth_state(&manager, &app).await;
+        return Err(RuntimeError::Internal(e));
+    }
     log::info!("[v2_login] Session activated for user {}", session.user_id);
 
     // Convert api::models::UserSession to qbz_models::UserSession
