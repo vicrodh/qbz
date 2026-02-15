@@ -80,7 +80,7 @@ export async function restoreLastfmSession(): Promise<void> {
 
     // Restore session if available (proxy handles credentials)
     if (savedSessionKey) {
-      await invoke('lastfm_set_session', { sessionKey: savedSessionKey });
+      await invoke('v2_lastfm_set_session', { sessionKey: savedSessionKey });
       console.log('Last.fm session restored on startup');
     }
   } catch (err) {

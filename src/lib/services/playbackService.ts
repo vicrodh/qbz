@@ -513,7 +513,7 @@ export async function updateListenBrainzNowPlaying(
   // Skip "now playing" update when offline (requires network)
   if (!isOffline) {
     try {
-      await invoke('listenbrainz_now_playing', {
+      await invoke('v2_listenbrainz_now_playing', {
         artist,
         track: title,
         album: album || null,
@@ -543,7 +543,7 @@ export async function updateListenBrainzNowPlaying(
       // If offline, queue the scrobble for later
       if (checkIsOffline()) {
         try {
-          await invoke('listenbrainz_queue_listen', {
+          await invoke('v2_listenbrainz_queue_listen', {
             artist,
             track: title,
             album: album || null,
@@ -562,7 +562,7 @@ export async function updateListenBrainzNowPlaying(
       } else {
         // Online - scrobble immediately
         try {
-          await invoke('listenbrainz_scrobble', {
+          await invoke('v2_listenbrainz_scrobble', {
             artist,
             track: title,
             album: album || null,
@@ -631,7 +631,7 @@ export async function updateLastfmNowPlaying(
   // Skip "now playing" update when offline (requires network)
   if (!isOffline) {
     try {
-      await invoke('lastfm_now_playing', {
+      await invoke('v2_lastfm_now_playing', {
         artist,
         track: title,
         album: album || null
@@ -665,7 +665,7 @@ export async function updateLastfmNowPlaying(
       } else {
         // Online - scrobble immediately
         try {
-          await invoke('lastfm_scrobble', {
+          await invoke('v2_lastfm_scrobble', {
             artist,
             track: title,
             album: album || null,
@@ -726,7 +726,7 @@ export async function flushScrobbleQueue(): Promise<{ sent: number; failed: numb
       }
 
       try {
-        await invoke('lastfm_scrobble', {
+        await invoke('v2_lastfm_scrobble', {
           artist: scrobble.artist,
           track: scrobble.track,
           album: scrobble.album,

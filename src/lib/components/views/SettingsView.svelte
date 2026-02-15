@@ -1021,7 +1021,7 @@
 
       // Restore session if available
       if (savedSessionKey && savedUsername) {
-        await invoke('lastfm_set_session', { sessionKey: savedSessionKey });
+        await invoke('v2_lastfm_set_session', { sessionKey: savedSessionKey });
         lastfmConnected = true;
         lastfmUsername = savedUsername;
       }
@@ -1054,9 +1054,9 @@
         });
       }
 
-      // Get auth URL and token
-      const [token, url] = await invoke<[string, string]>('lastfm_get_auth_url');
-      lastfmAuthToken = token;
+      // Get auth URL (V2 stores token internally)
+      const url = await invoke<string>('v2_lastfm_get_auth_url');
+      lastfmAuthToken = 'pending'; // V2 stores token internally, just mark as pending
 
       // Open browser for authorization using Tauri's native opener
       try {
@@ -1084,9 +1084,8 @@
 
     lastfmConnecting = true;
     try {
-      const session = await invoke<{ name: string; key: string }>('lastfm_authenticate', {
-        token: lastfmAuthToken
-      });
+      // V2 uses internally stored token
+      const session = await invoke<{ name: string; key: string }>('v2_lastfm_complete_auth');
 
       lastfmConnected = true;
       lastfmUsername = session.name;
@@ -1106,7 +1105,7 @@
 
   async function handleLastfmDisconnect() {
     try {
-      await invoke('lastfm_disconnect');
+      await invoke('v2_lastfm_disconnect');
       lastfmConnected = false;
       lastfmUsername = '';
 
@@ -1125,7 +1124,7 @@
 
   async function loadMusicBrainzState() {
     try {
-      musicbrainzEnabled = await invoke<boolean>('musicbrainz_is_enabled');
+      musicbrainzEnabled = await invoke<boolean>('v2_musicbrainz_is_enabled');
     } catch (err) {
       console.error('Failed to load MusicBrainz state:', err);
     }
@@ -1133,7 +1132,7 @@
 
   async function handleMusicBrainzChange(enabled: boolean) {
     try {
-      await invoke('musicbrainz_set_enabled', { enabled });
+      await invoke('v2_musicbrainz_set_enabled', { enabled });
       musicbrainzEnabled = enabled;
     } catch (err) {
       console.error('Failed to update MusicBrainz setting:', err);
@@ -1147,7 +1146,7 @@
         connected: boolean;
         userName: string | null;
         enabled: boolean;
-      }>('listenbrainz_get_status');
+      }>('v2_listenbrainz_get_status');
       listenbrainzConnected = status.connected;
       listenbrainzUsername = status.userName || '';
       listenbrainzEnabled = status.enabled;
@@ -1164,7 +1163,7 @@
 
     listenbrainzConnecting = true;
     try {
-      const userInfo = await invoke<{ user_name: string }>('listenbrainz_connect', {
+      const userInfo = await invoke<{ user_name: string }>('v2_listenbrainz_connect', {
         token: listenbrainzToken.trim()
       });
       listenbrainzConnected = true;
@@ -1181,7 +1180,7 @@
 
   async function handleListenBrainzDisconnect() {
     try {
-      await invoke('listenbrainz_disconnect');
+      await invoke('v2_listenbrainz_disconnect');
       listenbrainzConnected = false;
       listenbrainzUsername = '';
     } catch (err) {
@@ -1191,7 +1190,7 @@
 
   async function handleListenBrainzEnabledChange(enabled: boolean) {
     try {
-      await invoke('listenbrainz_set_enabled', { enabled });
+      await invoke('v2_listenbrainz_set_enabled', { enabled });
       listenbrainzEnabled = enabled;
     } catch (err) {
       console.error('Failed to update ListenBrainz setting:', err);
@@ -1987,11 +1986,8 @@
    */
   async function reinitAndResume(device: string | null): Promise<void> {
     const wasPlaying = getIsPlaying();
-    // Reinit both legacy and V2 players
-    await invoke('reinit_audio_device', { device });
-    await invoke('v2_reinit_audio_device', { device }).catch((e) => {
-      console.debug('[Settings] V2 reinit (non-blocking):', e);
-    });
+    // Reinit audio device (V2 only)
+    await invoke('v2_reinit_audio_device', { device });
     if (wasPlaying) {
       // Small delay to let the new stream initialize
       await new Promise(r => setTimeout(r, 150));
@@ -2771,11 +2767,8 @@
     try {
       await invoke('v2_stop_playback');
       await invoke('reset_audio_settings');
-      // Reinit both legacy and V2 players
-      await invoke('reinit_audio_device', { device: null });
-      await invoke('v2_reinit_audio_device', { device: null }).catch((e) => {
-        console.debug('[Settings] V2 reinit (non-blocking):', e);
-      });
+      // Reinit audio device (V2 only)
+      await invoke('v2_reinit_audio_device', { device: null });
       // Reset all audio UI state to defaults
       outputDevice = 'System Default';
       exclusiveMode = false;
