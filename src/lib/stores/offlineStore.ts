@@ -494,7 +494,7 @@ export async function syncPendingPlaylists(): Promise<void> {
         // Add Qobuz tracks if any
         if (playlist.trackIds.length > 0) {
           console.log(`[Offline] Adding ${playlist.trackIds.length} Qobuz tracks`);
-          await invoke('add_tracks_to_playlist', {
+          await invoke('v2_add_tracks_to_playlist', {
             playlistId: qobuzPlaylistId,
             trackIds: playlist.trackIds
           });

@@ -721,7 +721,7 @@
       const playlists: FavoritePlaylist[] = [];
       for (const id of favoriteIds) {
         try {
-          const playlist = await invoke<FavoritePlaylist>('get_playlist', { playlistId: id });
+          const playlist = await invoke<FavoritePlaylist>('v2_get_playlist', { playlistId: id });
           playlists.push(playlist);
         } catch (err) {
           console.warn(`Failed to load playlist ${id}:`, err);

@@ -457,7 +457,7 @@
         return;
       }
 
-      await invoke('add_tracks_to_playlist', {
+      await invoke('v2_add_tracks_to_playlist', {
         playlistId: selectedPlaylistId!,
         trackIds: tracksToAdd
       });
@@ -548,7 +548,7 @@
             });
           }
         } else {
-          await invoke('add_tracks_to_playlist', {
+          await invoke('v2_add_tracks_to_playlist', {
             playlistId: newPlaylist.id,
             trackIds
           });

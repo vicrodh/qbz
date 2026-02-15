@@ -7,7 +7,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_models::{
-    Album, Artist, CoreEvent, FrontendAdapter, Quality, QueueState, RepeatMode,
+    Album, Artist, CoreEvent, FrontendAdapter, Playlist, Quality, QueueState, RepeatMode,
     SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{Player, PlaybackState, QueueManager};
@@ -349,6 +349,54 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
 
         client
             .remove_favorite(fav_type, item_id)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    // ==================== Playlists ====================
+
+    /// Get user playlists
+    pub async fn get_user_playlists(&self) -> Result<Vec<Playlist>, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client.get_user_playlists().await.map_err(CoreError::Api)
+    }
+
+    /// Get playlist by ID
+    pub async fn get_playlist(&self, playlist_id: u64) -> Result<Playlist, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client.get_playlist(playlist_id).await.map_err(CoreError::Api)
+    }
+
+    /// Add tracks to playlist
+    pub async fn add_tracks_to_playlist(
+        &self,
+        playlist_id: u64,
+        track_ids: &[u64],
+    ) -> Result<(), CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .add_tracks_to_playlist(playlist_id, track_ids)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Remove tracks from playlist
+    pub async fn remove_tracks_from_playlist(
+        &self,
+        playlist_id: u64,
+        playlist_track_ids: &[u64],
+    ) -> Result<(), CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .remove_tracks_from_playlist(playlist_id, playlist_track_ids)
             .await
             .map_err(CoreError::Api)
     }

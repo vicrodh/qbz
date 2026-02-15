@@ -640,7 +640,7 @@
         if (allTrackIds.length <= PROGRESSIVE_THRESHOLD) {
           // --- Small playlist: single get_playlist call, no placeholders ---
           console.log(`[Perf] small playlist (${allTrackIds.length} ≤ ${PROGRESSIVE_THRESHOLD}), using get_playlist`);
-          const fullPlaylist = await invoke<Playlist>('get_playlist', { playlistId });
+          const fullPlaylist = await invoke<Playlist>('v2_get_playlist', { playlistId });
           console.log(`[Perf] get_playlist DONE (+${(performance.now() - _t0).toFixed(1)}ms)`);
 
           // Use images from meta (collage thumbnails) if the full playlist doesn't have them
@@ -1550,7 +1550,7 @@
         notifyParentOfCounts();
       } else if (track.playlistTrackId) {
         // Remove Qobuz track using playlist_track_id (available from full playlist load)
-        await invoke('remove_tracks_from_playlist', {
+        await invoke('v2_remove_tracks_from_playlist', {
           playlistId,
           playlistTrackIds: [track.playlistTrackId]
         });
@@ -1558,7 +1558,7 @@
         notifyParentOfCounts();
       } else {
         // Progressive loading path: no playlist_track_id available, resolve by track ID
-        await invoke('remove_tracks_from_playlist', {
+        await invoke('v2_remove_tracks_from_playlist', {
           playlistId,
           trackIds: [track.id]
         });
@@ -1606,19 +1606,19 @@
 
       // Remove the old track (supports both playlist_track_id and track_id resolution)
       if (trackToReplace.playlistTrackId) {
-        await invoke('remove_tracks_from_playlist', {
+        await invoke('v2_remove_tracks_from_playlist', {
           playlistId,
           playlistTrackIds: [trackToReplace.playlistTrackId]
         });
       } else {
-        await invoke('remove_tracks_from_playlist', {
+        await invoke('v2_remove_tracks_from_playlist', {
           playlistId,
           trackIds: [trackToReplace.id]
         });
       }
 
       // Add the new track
-      await invoke('add_tracks_to_playlist', {
+      await invoke('v2_add_tracks_to_playlist', {
         playlistId,
         trackIds: [newTrack.id]
       });
@@ -1672,7 +1672,7 @@
   async function handleAddSuggestedTrack(suggestedTrack: import('$lib/services/playlistSuggestionsService').SuggestedTrack) {
     try {
       // Add to Qobuz playlist
-      await invoke('add_tracks_to_playlist', {
+      await invoke('v2_add_tracks_to_playlist', {
         playlistId,
         trackIds: [suggestedTrack.track_id]
       });

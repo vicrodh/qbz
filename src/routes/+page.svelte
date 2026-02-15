@@ -1131,7 +1131,7 @@
 
   async function fetchPlaylistData(playlistId: number): Promise<PlaylistData | null> {
     try {
-      const playlist = await invoke<PlaylistData>('get_playlist', { playlistId });
+      const playlist = await invoke<PlaylistData>('v2_get_playlist', { playlistId });
       return playlist;
     } catch (err) {
       console.error('Failed to load playlist:', err);

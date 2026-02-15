@@ -279,7 +279,7 @@
     }
 
     try {
-      const details = await invoke<PlaylistDetails>('get_playlist', { playlistId });
+      const details = await invoke<PlaylistDetails>('v2_get_playlist', { playlistId });
       if (details.tracks?.items) {
         // Extract unique artist names
         const artistNames = new Set<string>();
@@ -1135,7 +1135,7 @@
         console.log(`[Sidebar] Loaded ${userPlaylists.length} pending playlists`);
       } else {
         // Online mode - load from Qobuz
-        const playlists = await invoke<Playlist[]>('get_user_playlists');
+        const playlists = await invoke<Playlist[]>('v2_get_user_playlists');
         userPlaylists = playlists;
       }
     } catch (err) {

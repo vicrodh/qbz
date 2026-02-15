@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tauri::{Emitter, State};
 use tokio::sync::RwLock;
 
-use qbz_models::{Album, Artist, Quality, QueueState, RepeatMode, SearchResultsPage, Track, UserSession};
+use qbz_models::{Album, Artist, Playlist, Quality, QueueState, RepeatMode, SearchResultsPage, Track, UserSession};
 
 use crate::artist_blacklist::BlacklistState;
 use crate::cache::AudioCache;
@@ -1258,4 +1258,91 @@ pub async fn v2_reinit_audio_device(
     }
 
     player.reinit_device(device)
+}
+
+// ==================== Playlist Commands (V2) ====================
+
+/// Get user playlists (V2 - uses QbzCore)
+#[tauri::command]
+pub async fn v2_get_user_playlists(
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<Vec<Playlist>, String> {
+    log::info!("[V2] get_user_playlists");
+    let bridge = bridge.get().await;
+    bridge.get_user_playlists().await
+}
+
+/// Get playlist by ID (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_playlist(
+    playlistId: u64,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<Playlist, String> {
+    log::info!("[V2] get_playlist: {}", playlistId);
+    let bridge = bridge.get().await;
+    bridge.get_playlist(playlistId).await
+}
+
+/// Add tracks to playlist (V2 - uses QbzCore)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_add_tracks_to_playlist(
+    playlistId: u64,
+    trackIds: Vec<u64>,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<(), String> {
+    log::info!("[V2] add_tracks_to_playlist: playlist {} <- {} tracks", playlistId, trackIds.len());
+    let bridge = bridge.get().await;
+    bridge.add_tracks_to_playlist(playlistId, &trackIds).await
+}
+
+/// Remove tracks from playlist (V2 - uses QbzCore)
+/// Accepts either playlistTrackIds (direct) or trackIds (requires resolution)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_remove_tracks_from_playlist(
+    playlistId: u64,
+    playlistTrackIds: Option<Vec<u64>>,
+    trackIds: Option<Vec<u64>>,
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<(), String> {
+    let ptids = playlistTrackIds.unwrap_or_default();
+    let tids = trackIds.unwrap_or_default();
+    log::info!(
+        "[V2] remove_tracks_from_playlist: playlist {} (playlistTrackIds={}, trackIds={})",
+        playlistId, ptids.len(), tids.len()
+    );
+
+    let bridge = bridge.get().await;
+
+    // If we have direct playlist_track_ids, use them
+    if !ptids.is_empty() {
+        return bridge.remove_tracks_from_playlist(playlistId, &ptids).await;
+    }
+
+    // Otherwise resolve track_ids → playlist_track_ids via full playlist fetch
+    if !tids.is_empty() {
+        let playlist = bridge.get_playlist(playlistId).await?;
+
+        let track_id_set: std::collections::HashSet<u64> = tids.into_iter().collect();
+        let resolved_ptids: Vec<u64> = playlist
+            .tracks
+            .map(|tc| {
+                tc.items
+                    .into_iter()
+                    .filter(|track| track_id_set.contains(&track.id))
+                    .filter_map(|track| track.playlist_track_id)
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        if resolved_ptids.is_empty() {
+            return Err("Could not resolve any track IDs to playlist track IDs".to_string());
+        }
+
+        return bridge.remove_tracks_from_playlist(playlistId, &resolved_ptids).await;
+    }
+
+    Err("Either playlistTrackIds or trackIds must be provided".to_string())
 }

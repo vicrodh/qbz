@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_core::QbzCore;
-use qbz_models::{Album, Artist, Quality, QueueState, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession};
+use qbz_models::{Album, Artist, Playlist, Quality, QueueState, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession};
 use qbz_player::{Player, PlaybackState};
 use qbz_audio::{AudioSettings, AudioDiagnostic, settings::AudioSettingsStore};
 
@@ -195,6 +195,48 @@ impl CoreBridge {
     pub async fn remove_favorite(&self, fav_type: &str, item_id: &str) -> Result<(), String> {
         self.core
             .remove_favorite(fav_type, item_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    // ==================== Playlists ====================
+
+    /// Get user playlists
+    pub async fn get_user_playlists(&self) -> Result<Vec<Playlist>, String> {
+        self.core
+            .get_user_playlists()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get playlist by ID
+    pub async fn get_playlist(&self, playlist_id: u64) -> Result<Playlist, String> {
+        self.core
+            .get_playlist(playlist_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Add tracks to playlist
+    pub async fn add_tracks_to_playlist(
+        &self,
+        playlist_id: u64,
+        track_ids: &[u64],
+    ) -> Result<(), String> {
+        self.core
+            .add_tracks_to_playlist(playlist_id, track_ids)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Remove tracks from playlist
+    pub async fn remove_tracks_from_playlist(
+        &self,
+        playlist_id: u64,
+        playlist_track_ids: &[u64],
+    ) -> Result<(), String> {
+        self.core
+            .remove_tracks_from_playlist(playlist_id, playlist_track_ids)
             .await
             .map_err(|e| e.to_string())
     }

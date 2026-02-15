@@ -1132,6 +1132,11 @@ pub fn run() {
             commands_v2::v2_get_favorites,
             commands_v2::v2_add_favorite,
             commands_v2::v2_remove_favorite,
+            // Playlists
+            commands_v2::v2_get_user_playlists,
+            commands_v2::v2_get_playlist,
+            commands_v2::v2_add_tracks_to_playlist,
+            commands_v2::v2_remove_tracks_from_playlist,
             // Playback
             commands_v2::v2_pause_playback,
             commands_v2::v2_resume_playback,
