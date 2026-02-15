@@ -296,16 +296,34 @@ pub async fn auto_login(
                 }
             }
 
-            // Also authenticate V2 CoreBridge client for the new architecture
-            // Use try_get() to gracefully handle case where CoreBridge init is still in progress
+            // V2 CoreBridge authentication - REQUIRED per ADR Runtime Session Contract
+            // If V2 auth fails, return typed failure and do not report full success
             if let Some(bridge) = core_bridge.try_get().await {
                 if let Err(e) = bridge.login(&creds.email, &creds.password).await {
-                    log::warn!("[Auth/Auto] V2 CoreBridge login failed (non-blocking): {}", e);
-                } else {
-                    log::info!("[Auth/Auto] V2 CoreBridge authenticated successfully");
+                    log::error!("[Auth/Auto] V2 CoreBridge login failed: {}", e);
+                    // V2 auth failed - report failure per ADR
+                    return Ok(LoginResponse {
+                        success: false,
+                        user_name: Some(session.display_name.clone()),
+                        user_id: Some(session.user_id),
+                        subscription: Some(session.subscription_label.clone()),
+                        subscription_valid_until: session.subscription_valid_until.clone(),
+                        error: Some(format!("V2 authentication failed: {}", e)),
+                        error_code: Some("v2_auth_failed".to_string()),
+                    });
                 }
+                log::info!("[Auth/Auto] V2 CoreBridge authenticated successfully");
             } else {
-                log::warn!("[Auth/Auto] V2 CoreBridge not yet initialized, skipping V2 auth");
+                log::error!("[Auth/Auto] V2 CoreBridge not initialized - cannot complete auth");
+                return Ok(LoginResponse {
+                    success: false,
+                    user_name: Some(session.display_name.clone()),
+                    user_id: Some(session.user_id),
+                    subscription: Some(session.subscription_label.clone()),
+                    subscription_valid_until: session.subscription_valid_until.clone(),
+                    error: Some("V2 CoreBridge not initialized".to_string()),
+                    error_code: Some("v2_not_initialized".to_string()),
+                });
             }
 
             Ok(LoginResponse {

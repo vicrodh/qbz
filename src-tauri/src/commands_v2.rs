@@ -180,7 +180,7 @@ pub async fn runtime_bootstrap(
                 // For now, we just mark the user_id and let the frontend handle it
                 // In a full implementation, we'd activate here directly
 
-                // Step 4: Authenticate CoreBridge/V2
+                // Step 4: Authenticate CoreBridge/V2 - REQUIRED per ADR
                 if let Some(bridge) = core_bridge.try_get().await {
                     match bridge.login(&creds.email, &creds.password).await {
                         Ok(_) => {
@@ -192,11 +192,14 @@ pub async fn runtime_bootstrap(
                             let _ = app.emit("runtime:event", RuntimeEvent::CoreBridgeAuthFailed {
                                 error: e.to_string(),
                             });
-                            // Don't fail bootstrap - V2 auth failure is recoverable
+                            manager.set_bootstrap_in_progress(false).await;
+                            return Err(RuntimeError::V2AuthFailed(e));
                         }
                     }
                 } else {
-                    log::warn!("[Runtime] CoreBridge not yet initialized, V2 auth deferred");
+                    log::error!("[Runtime] CoreBridge not initialized - cannot complete bootstrap");
+                    manager.set_bootstrap_in_progress(false).await;
+                    return Err(RuntimeError::V2NotInitialized);
                 }
             }
             Err(e) => {

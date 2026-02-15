@@ -100,6 +100,10 @@ pub enum RuntimeError {
     InvalidUserId,
     /// Bootstrap already in progress
     BootstrapInProgress,
+    /// V2 CoreBridge authentication failed
+    V2AuthFailed(String),
+    /// V2 CoreBridge not initialized
+    V2NotInitialized,
     /// Internal error
     Internal(String),
 }
@@ -114,6 +118,8 @@ impl std::fmt::Display for RuntimeError {
             Self::RuntimeDegraded(reason) => write!(f, "Runtime degraded: {:?}", reason),
             Self::InvalidUserId => write!(f, "Invalid user ID"),
             Self::BootstrapInProgress => write!(f, "Bootstrap already in progress"),
+            Self::V2AuthFailed(msg) => write!(f, "V2 authentication failed: {}", msg),
+            Self::V2NotInitialized => write!(f, "V2 CoreBridge not initialized"),
             Self::Internal(msg) => write!(f, "Internal error: {}", msg),
         }
     }
