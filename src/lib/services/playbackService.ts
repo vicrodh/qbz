@@ -323,12 +323,12 @@ export async function playTrack(
 // ============ MPRIS Metadata ============
 
 /**
- * Update system media controls metadata
+ * Update system media controls metadata (V2)
  */
 export async function updateMediaMetadata(metadata: MediaMetadata): Promise<void> {
   try {
     const coverUrl = normalizeCoverUrlForMetadata(metadata.coverUrl);
-    await invoke('set_media_metadata', {
+    await invoke('v2_set_media_metadata', {
       title: metadata.title,
       artist: metadata.artist,
       album: metadata.album,

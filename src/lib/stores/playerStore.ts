@@ -653,7 +653,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
       if (nextId && nextId > 0) {
         gaplessRequestInFlight = true;
         console.log('[Gapless] Backend ready, queueing track', nextId);
-        invoke<boolean>('play_next_gapless', { trackId: nextId })
+        invoke<boolean>('v2_play_next_gapless', { trackId: nextId })
           .then((queued) => {
             if (queued) {
               console.log('[Gapless] Track', nextId, 'queued successfully');

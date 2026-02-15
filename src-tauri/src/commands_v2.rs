@@ -298,7 +298,10 @@ pub async fn v2_get_artist(
 #[tauri::command]
 pub async fn v2_pause_playback(
     bridge: State<'_, CoreBridgeState>,
+    app_state: State<'_, AppState>,
 ) -> Result<(), String> {
+    log::info!("[V2] Command: pause_playback");
+    app_state.media_controls.set_playback(false);
     let bridge = bridge.get().await;
     bridge.pause()
 }
@@ -307,7 +310,10 @@ pub async fn v2_pause_playback(
 #[tauri::command]
 pub async fn v2_resume_playback(
     bridge: State<'_, CoreBridgeState>,
+    app_state: State<'_, AppState>,
 ) -> Result<(), String> {
+    log::info!("[V2] Command: resume_playback");
+    app_state.media_controls.set_playback(true);
     let bridge = bridge.get().await;
     bridge.resume()
 }
@@ -316,7 +322,10 @@ pub async fn v2_resume_playback(
 #[tauri::command]
 pub async fn v2_stop_playback(
     bridge: State<'_, CoreBridgeState>,
+    app_state: State<'_, AppState>,
 ) -> Result<(), String> {
+    log::info!("[V2] Command: stop_playback");
+    app_state.media_controls.set_stopped();
     let bridge = bridge.get().await;
     bridge.stop()
 }
@@ -326,9 +335,20 @@ pub async fn v2_stop_playback(
 pub async fn v2_seek(
     position: u64,
     bridge: State<'_, CoreBridgeState>,
+    app_state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let bridge = bridge.get().await;
-    bridge.seek(position)
+    log::info!("[V2] Command: seek {}", position);
+    let bridge_guard = bridge.get().await;
+    let result = bridge_guard.seek(position);
+
+    // Update MPRIS with new position
+    let playback_state = bridge_guard.get_playback_state();
+    app_state.media_controls.set_playback_with_progress(
+        playback_state.is_playing,
+        position,
+    );
+
+    result
 }
 
 /// Set volume (0.0 - 1.0) (V2)
@@ -341,13 +361,200 @@ pub async fn v2_set_volume(
     bridge.set_volume(volume)
 }
 
-/// Get current playback state (V2)
+/// Get current playback state (V2) - also updates MPRIS progress
 #[tauri::command]
 pub async fn v2_get_playback_state(
     bridge: State<'_, CoreBridgeState>,
+    app_state: State<'_, AppState>,
 ) -> Result<qbz_player::PlaybackState, String> {
     let bridge = bridge.get().await;
-    Ok(bridge.get_playback_state())
+    let playback_state = bridge.get_playback_state();
+
+    // Update MPRIS with current progress (called every ~500ms from frontend)
+    app_state.media_controls.set_playback_with_progress(
+        playback_state.is_playing,
+        playback_state.position,
+    );
+
+    Ok(playback_state)
+}
+
+/// Set media controls metadata (V2 - for MPRIS integration)
+#[tauri::command]
+pub async fn v2_set_media_metadata(
+    title: String,
+    artist: String,
+    album: String,
+    duration_secs: Option<u64>,
+    cover_url: Option<String>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("[V2] Command: set_media_metadata - {} by {}", title, artist);
+    crate::update_media_controls_metadata(
+        &app_state.media_controls,
+        &title,
+        &artist,
+        &album,
+        duration_secs,
+        cover_url,
+    );
+    app_state.media_controls.set_playback_with_progress(true, 0);
+    Ok(())
+}
+
+/// Queue next track for gapless playback (V2 - cache-only, no download)
+/// Returns true if gapless was queued, false if track not cached or ineligible
+#[tauri::command]
+pub async fn v2_play_next_gapless(
+    track_id: u64,
+    bridge: State<'_, CoreBridgeState>,
+    offline_cache: State<'_, OfflineCacheState>,
+    app_state: State<'_, AppState>,
+) -> Result<bool, String> {
+    log::info!("[V2] Command: play_next_gapless for track {}", track_id);
+
+    let bridge_guard = bridge.get().await;
+    let player = bridge_guard.player();
+
+    // Check offline cache (persistent disk cache)
+    {
+        let cached_path = {
+            let db_opt = offline_cache.db.lock().await;
+            if let Some(db) = db_opt.as_ref() {
+                if let Ok(Some(file_path)) = db.get_file_path(track_id) {
+                    Some(file_path)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        };
+        if let Some(file_path) = cached_path {
+            let path = std::path::Path::new(&file_path);
+            if path.exists() {
+                log::info!("[V2/GAPLESS] Track {} from OFFLINE cache", track_id);
+                let audio_data = std::fs::read(path)
+                    .map_err(|e| format!("Failed to read cached file: {}", e))?;
+                player.play_next(audio_data, track_id)?;
+                return Ok(true);
+            }
+        }
+    }
+
+    // Check memory cache (L1)
+    let cache = app_state.audio_cache.clone();
+    if let Some(cached) = cache.get(track_id) {
+        log::info!("[V2/GAPLESS] Track {} from MEMORY cache ({} bytes)", track_id, cached.size_bytes);
+        player.play_next(cached.data, track_id)?;
+        return Ok(true);
+    }
+
+    // Check playback cache (L2 - disk)
+    if let Some(playback_cache) = cache.get_playback_cache() {
+        if let Some(audio_data) = playback_cache.get(track_id) {
+            log::info!("[V2/GAPLESS] Track {} from DISK cache ({} bytes)", track_id, audio_data.len());
+            player.play_next(audio_data, track_id)?;
+            return Ok(true);
+        }
+    }
+
+    log::info!("[V2/GAPLESS] Track {} not in any cache, gapless not possible", track_id);
+    Ok(false)
+}
+
+/// Prefetch a track into the in-memory cache without starting playback (V2)
+#[tauri::command]
+pub async fn v2_prefetch_track(
+    track_id: u64,
+    quality: Option<String>,
+    bridge: State<'_, CoreBridgeState>,
+    offline_cache: State<'_, OfflineCacheState>,
+    audio_settings: State<'_, AudioSettingsState>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    let preferred_quality = parse_quality(quality.as_deref());
+
+    // Apply per-device sample rate limit if enabled
+    let final_quality = {
+        let guard = audio_settings
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        if let Some(store) = guard.as_ref() {
+            if let Ok(settings) = store.get_settings() {
+                if settings.limit_quality_to_device {
+                    let device_id = settings.output_device.as_deref().unwrap_or("default");
+                    let max_rate = settings
+                        .device_sample_rate_limits
+                        .get(device_id)
+                        .copied()
+                        .or(settings.device_max_sample_rate);
+                    limit_quality_for_device(preferred_quality, max_rate)
+                } else {
+                    preferred_quality
+                }
+            } else {
+                preferred_quality
+            }
+        } else {
+            preferred_quality
+        }
+    };
+
+    log::info!(
+        "[V2] Command: prefetch_track {} (quality_str={:?}, parsed={:?}, final={:?})",
+        track_id, quality, preferred_quality, final_quality
+    );
+
+    let cache = app_state.audio_cache.clone();
+
+    if cache.contains(track_id) {
+        log::info!("[V2] Track {} already in memory cache", track_id);
+        return Ok(());
+    }
+
+    if cache.is_fetching(track_id) {
+        log::info!("[V2] Track {} already being fetched", track_id);
+        return Ok(());
+    }
+
+    cache.mark_fetching(track_id);
+    let result = async {
+        // Check persistent offline cache first
+        {
+            let cached_path = {
+                let db_opt = offline_cache.db.lock().await;
+                if let Some(db) = db_opt.as_ref() {
+                    db.get_file_path(track_id).ok().flatten()
+                } else {
+                    None
+                }
+            };
+            if let Some(file_path) = cached_path {
+                let path = std::path::Path::new(&file_path);
+                if path.exists() {
+                    log::info!("[V2] Prefetching track {} from offline cache", track_id);
+                    let audio_data = std::fs::read(path)
+                        .map_err(|e| format!("Failed to read cached file: {}", e))?;
+                    cache.insert(track_id, audio_data);
+                    return Ok(());
+                }
+            }
+        }
+
+        let bridge_guard = bridge.get().await;
+        let stream_url = bridge_guard.get_stream_url(track_id, final_quality).await?;
+        drop(bridge_guard);
+
+        let audio_data = download_audio(&stream_url.url).await?;
+        cache.insert(track_id, audio_data);
+        Ok(())
+    }
+    .await;
+
+    cache.unmark_fetching(track_id);
+    result
 }
 
 /// Result from play_track command with format info
