@@ -1433,7 +1433,7 @@
   async function toggleNormalization() {
     const newState = !normalizationEnabled;
     try {
-      await invoke('set_audio_normalization_enabled', { enabled: newState });
+      await invoke('v2_set_audio_normalization_enabled', { enabled: newState });
       normalizationEnabled = newState;
     } catch (err) {
       console.error('Failed to toggle normalization:', err);

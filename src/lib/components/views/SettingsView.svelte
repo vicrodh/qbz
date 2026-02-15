@@ -2119,7 +2119,7 @@
             console.warn(`[Audio] Saved device '${settings.output_device}' not found in current enumeration. Resetting to System Default.`);
             outputDevice = 'System Default';
             try {
-              await invoke('set_audio_output_device', { device: null });
+              await invoke('v2_set_audio_output_device', { device: null });
               console.log('[Audio] Cleared stale device from database');
             } catch (err) {
               console.error('[Audio] Failed to clear stale device:', err);
@@ -2172,9 +2172,9 @@
 
     try {
       // Save the preference
-      await invoke('set_audio_output_device', { device: deviceToStore });
+      await invoke('v2_set_audio_output_device', { device: deviceToStore });
       // Store device's max sample rate for quality limiting
-      await invoke('set_audio_device_max_sample_rate', { rate: maxSampleRate });
+      await invoke('v2_set_audio_device_max_sample_rate', { rate: maxSampleRate });
 
       // Reinitialize audio with the selected device
       // CRITICAL: Pass the actual CPAL device name, not null
@@ -2190,7 +2190,7 @@
   async function handleExclusiveModeChange(enabled: boolean) {
     exclusiveMode = enabled;
     try {
-      await invoke('set_audio_exclusive_mode', { enabled });
+      await invoke('v2_set_audio_exclusive_mode', { enabled });
 
       // Reinitialize audio with currently selected device
       const deviceName = getCurrentDeviceSinkName();
@@ -2207,12 +2207,12 @@
     // Gapless not compatible with DAC Passthrough
     if (enabled && gaplessPlayback) {
       gaplessPlayback = false;
-      await invoke('set_audio_gapless_enabled', { enabled: false });
+      await invoke('v2_set_audio_gapless_enabled', { enabled: false });
       console.log('[Audio] Disabled gapless playback (not compatible with DAC Passthrough)');
     }
 
     try {
-      await invoke('set_audio_dac_passthrough', { enabled });
+      await invoke('v2_set_audio_dac_passthrough', { enabled });
 
       // Reinitialize audio with currently selected device
       const deviceName = getCurrentDeviceSinkName();
@@ -2235,7 +2235,7 @@
     if (backendName !== 'PipeWire') {
       if (dacPassthrough) {
         dacPassthrough = false;
-        await invoke('set_audio_dac_passthrough', { enabled: false });
+        await invoke('v2_set_audio_dac_passthrough', { enabled: false });
         console.log('[Audio] Disabled DAC Passthrough (only compatible with PipeWire)');
       }
     }
@@ -2244,7 +2244,7 @@
     if (backendName !== 'ALSA Direct') {
       if (exclusiveMode) {
         exclusiveMode = false;
-        await invoke('set_audio_exclusive_mode', { enabled: false });
+        await invoke('v2_set_audio_exclusive_mode', { enabled: false });
         console.log('[Audio] Disabled exclusive mode (only compatible with ALSA Direct)');
       }
     }
@@ -2253,14 +2253,14 @@
     if (backendName === 'ALSA Direct') {
       if (gaplessPlayback) {
         gaplessPlayback = false;
-        await invoke('set_audio_gapless_enabled', { enabled: false });
+        await invoke('v2_set_audio_gapless_enabled', { enabled: false });
         console.log('[Audio] Disabled gapless playback (not compatible with ALSA Direct)');
       }
     }
 
     try {
       // Save backend preference
-      await invoke('set_audio_backend_type', { backendType });
+      await invoke('v2_set_audio_backend_type', { backendType });
       console.log('[Audio] Backend changed:', backendName, '(type:', backendType ?? 'auto', ')');
 
       // Load devices for new backend
@@ -2274,7 +2274,7 @@
 
       // Reset to default device when switching backends (always)
       outputDevice = 'System Default';
-      await invoke('set_audio_output_device', { device: null });
+      await invoke('v2_set_audio_output_device', { device: null });
 
       // Reinitialize audio - recreates stream with new backend.
       // Position and audio data are preserved so the user can resume.
@@ -2292,7 +2292,7 @@
     const plugin = pluginInfo?.plugin ?? null;
 
     try {
-      await invoke('set_audio_alsa_plugin', { plugin });
+      await invoke('v2_set_audio_alsa_plugin', { plugin });
       console.log('[Audio] ALSA plugin changed:', pluginName, '(type:', plugin ?? 'none', ')');
 
       // Reinitialize audio if ALSA backend is active
@@ -2308,7 +2308,7 @@
   async function handleAlsaHardwareVolumeChange(enabled: boolean) {
     alsaHardwareVolume = enabled;
     try {
-      await invoke('set_audio_alsa_hardware_volume', { enabled });
+      await invoke('v2_set_audio_alsa_hardware_volume', { enabled });
       console.log('[Audio] ALSA hardware volume changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change ALSA hardware volume:', err);
@@ -2318,7 +2318,7 @@
   async function handleStreamFirstTrackChange(enabled: boolean) {
     streamFirstTrack = enabled;
     try {
-      await invoke('set_audio_stream_first_track', { enabled });
+      await invoke('v2_set_audio_stream_first_track', { enabled });
       console.log('[Audio] Stream first track changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change stream first track:', err);
@@ -2330,7 +2330,7 @@
     const clamped = Math.max(1, Math.min(10, Math.round(seconds)));
     streamBufferSeconds = clamped;
     try {
-      await invoke('set_audio_stream_buffer_seconds', { seconds: clamped });
+      await invoke('v2_set_audio_stream_buffer_seconds', { seconds: clamped });
       console.log('[Audio] Stream buffer seconds changed:', clamped);
     } catch (err) {
       console.error('[Audio] Failed to change stream buffer seconds:', err);
@@ -2343,12 +2343,12 @@
     // Gapless not compatible with streaming-only
     if (enabled && gaplessPlayback) {
       gaplessPlayback = false;
-      await invoke('set_audio_gapless_enabled', { enabled: false });
+      await invoke('v2_set_audio_gapless_enabled', { enabled: false });
       console.log('[Audio] Disabled gapless playback (not compatible with streaming-only)');
     }
 
     try {
-      await invoke('set_audio_streaming_only', { enabled });
+      await invoke('v2_set_audio_streaming_only', { enabled });
       console.log('[Audio] Streaming-only mode changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change streaming-only mode:', err);
@@ -2358,7 +2358,7 @@
   async function handleLimitQualityToDeviceChange(enabled: boolean) {
     limitQualityToDevice = enabled;
     try {
-      await invoke('set_audio_limit_quality_to_device', { enabled });
+      await invoke('v2_set_audio_limit_quality_to_device', { enabled });
       console.log('[Audio] Limit quality to device changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change limit quality to device:', err);
@@ -2404,9 +2404,9 @@
     }
 
     try {
-      await invoke('set_audio_output_device', { device: deviceId });
+      await invoke('v2_set_audio_output_device', { device: deviceId });
       // Store device's max sample rate for quality limiting
-      await invoke('set_audio_device_max_sample_rate', { rate: maxSampleRate });
+      await invoke('v2_set_audio_device_max_sample_rate', { rate: maxSampleRate });
       // Load per-device sample rate limit for the new device
       await loadDeviceSampleRateLimit(deviceId ?? 'default');
       // Reinitialize audio - position and audio data preserved for resume.
@@ -2420,7 +2420,7 @@
   async function handleGaplessPlaybackChange(enabled: boolean) {
     gaplessPlayback = enabled;
     try {
-      await invoke('set_audio_gapless_enabled', { enabled });
+      await invoke('v2_set_audio_gapless_enabled', { enabled });
       console.log('[Audio] Gapless playback changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change gapless playback:', err);
@@ -2435,7 +2435,7 @@
       dacPassthrough = false;
       console.log('[Audio] Crossfade enabled: disabled DAC passthrough');
       try {
-        await invoke('set_audio_dac_passthrough', { enabled: false });
+        await invoke('v2_set_audio_dac_passthrough', { enabled: false });
 
         // Reinitialize audio with currently selected device
         const deviceName = getCurrentDeviceSinkName();

@@ -1150,6 +1150,24 @@ pub fn run() {
             commands_v2::v2_prefetch_track,
             // Audio device
             commands_v2::v2_reinit_audio_device,
+            // Audio settings
+            commands_v2::v2_get_audio_settings,
+            commands_v2::v2_set_audio_output_device,
+            commands_v2::v2_set_audio_exclusive_mode,
+            commands_v2::v2_set_audio_dac_passthrough,
+            commands_v2::v2_set_audio_sample_rate,
+            commands_v2::v2_set_audio_backend_type,
+            commands_v2::v2_set_audio_alsa_plugin,
+            commands_v2::v2_set_audio_gapless_enabled,
+            commands_v2::v2_set_audio_normalization_enabled,
+            commands_v2::v2_set_audio_normalization_target,
+            commands_v2::v2_set_audio_device_max_sample_rate,
+            commands_v2::v2_set_audio_limit_quality_to_device,
+            commands_v2::v2_set_audio_streaming_only,
+            commands_v2::v2_reset_audio_settings,
+            commands_v2::v2_set_audio_stream_first_track,
+            commands_v2::v2_set_audio_stream_buffer_seconds,
+            commands_v2::v2_set_audio_alsa_hardware_volume,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

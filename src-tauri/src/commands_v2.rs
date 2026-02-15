@@ -13,7 +13,8 @@ use qbz_models::{Album, Artist, Playlist, Quality, QueueState, RepeatMode, Searc
 
 use crate::artist_blacklist::BlacklistState;
 use crate::cache::AudioCache;
-use crate::config::audio_settings::AudioSettingsState;
+use crate::audio::{AlsaPlugin, AudioBackendType};
+use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
 use crate::core_bridge::CoreBridgeState;
 use crate::offline_cache::OfflineCacheState;
 use crate::queue::QueueManager;
@@ -1345,4 +1346,266 @@ pub async fn v2_remove_tracks_from_playlist(
     }
 
     Err("Either playlistTrackIds or trackIds must be provided".to_string())
+}
+
+// ==================== Audio Settings Commands (V2) ====================
+
+/// Get current audio settings (V2)
+#[tauri::command]
+pub fn v2_get_audio_settings(
+    state: State<'_, AudioSettingsState>,
+) -> Result<AudioSettings, String> {
+    log::info!("[V2] get_audio_settings");
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.get_settings()
+}
+
+/// Set audio output device (V2)
+#[tauri::command]
+pub fn v2_set_audio_output_device(
+    device: Option<String>,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    let normalized_device = device
+        .as_ref()
+        .map(|d| crate::audio::normalize_device_id_to_stable(d));
+    log::info!(
+        "[V2] set_audio_output_device {:?} -> {:?} (normalized)",
+        device, normalized_device
+    );
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_output_device(normalized_device.as_deref())
+}
+
+/// Set audio exclusive mode (V2)
+#[tauri::command]
+pub fn v2_set_audio_exclusive_mode(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_exclusive_mode: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_exclusive_mode(enabled)
+}
+
+/// Set DAC passthrough mode (V2)
+#[tauri::command]
+pub fn v2_set_audio_dac_passthrough(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_dac_passthrough: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_dac_passthrough(enabled)
+}
+
+/// Set preferred sample rate (V2)
+#[tauri::command]
+pub fn v2_set_audio_sample_rate(
+    rate: Option<u32>,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_sample_rate: {:?}", rate);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_sample_rate(rate)
+}
+
+/// Set audio backend type (V2)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_set_audio_backend_type(
+    backendType: Option<AudioBackendType>,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_backend_type: {:?}", backendType);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_backend_type(backendType)
+}
+
+/// Set ALSA plugin (V2)
+#[tauri::command]
+pub fn v2_set_audio_alsa_plugin(
+    plugin: Option<AlsaPlugin>,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_alsa_plugin: {:?}", plugin);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_alsa_plugin(plugin)
+}
+
+/// Set gapless playback enabled (V2)
+#[tauri::command]
+pub fn v2_set_audio_gapless_enabled(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_gapless_enabled: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_gapless_enabled(enabled)
+}
+
+/// Set normalization enabled (V2)
+#[tauri::command]
+pub fn v2_set_audio_normalization_enabled(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_normalization_enabled: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_normalization_enabled(enabled)
+}
+
+/// Set normalization target LUFS (V2)
+#[tauri::command]
+pub fn v2_set_audio_normalization_target(
+    target: f32,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_normalization_target: {}", target);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_normalization_target_lufs(target)
+}
+
+/// Set device max sample rate (V2)
+#[tauri::command]
+pub fn v2_set_audio_device_max_sample_rate(
+    rate: Option<u32>,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_device_max_sample_rate: {:?}", rate);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_device_max_sample_rate(rate)
+}
+
+/// Set limit quality to device capability (V2)
+#[tauri::command]
+pub fn v2_set_audio_limit_quality_to_device(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_limit_quality_to_device: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_limit_quality_to_device(enabled)
+}
+
+/// Set streaming only mode (V2)
+#[tauri::command]
+pub fn v2_set_audio_streaming_only(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_streaming_only: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_streaming_only(enabled)
+}
+
+/// Reset audio settings to defaults (V2)
+#[tauri::command]
+pub fn v2_reset_audio_settings(
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] reset_audio_settings");
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.reset_all().map(|_| ())
+}
+
+/// Set stream first track enabled (V2)
+#[tauri::command]
+pub fn v2_set_audio_stream_first_track(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_stream_first_track: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_stream_first_track(enabled)
+}
+
+/// Set stream buffer seconds (V2)
+#[tauri::command]
+pub fn v2_set_audio_stream_buffer_seconds(
+    seconds: u8,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_stream_buffer_seconds: {}", seconds);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_stream_buffer_seconds(seconds)
+}
+
+/// Set ALSA hardware volume control (V2)
+#[tauri::command]
+pub fn v2_set_audio_alsa_hardware_volume(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_audio_alsa_hardware_volume: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_alsa_hardware_volume(enabled)
 }
