@@ -2452,7 +2452,7 @@
 
   async function handleLogout() {
     try {
-      await invoke('logout');
+      await invoke('v2_logout');
       // Clear saved credentials from keyring
       try {
         await invoke('clear_saved_credentials');
