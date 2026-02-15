@@ -9,6 +9,7 @@ use crate::api::error::ApiError;
 use crate::config::SubscriptionStateState;
 use crate::core_bridge::CoreBridgeState;
 use crate::offline_cache::OfflineCacheState;
+use crate::runtime::RuntimeManagerState;
 
 #[derive(serde::Serialize)]
 pub struct LoginResponse {
@@ -79,6 +80,7 @@ pub async fn login(
     cache_state: State<'_, OfflineCacheState>,
     library_state: State<'_, crate::library::commands::LibraryState>,
     core_bridge: State<'_, CoreBridgeState>,
+    runtime_manager: State<'_, RuntimeManagerState>,
 ) -> Result<LoginResponse, String> {
     let client = state.client.read().await;
     let now = now_unix_secs();
@@ -91,22 +93,45 @@ pub async fn login(
                 }
             }
 
-            // Also authenticate V2 CoreBridge client for the new architecture
-            // Use try_get() to gracefully handle case where CoreBridge init is still in progress
+            // Update runtime state - legacy auth succeeded
+            let user_id = session.user_id;
+            runtime_manager.manager().set_legacy_auth(true, Some(user_id)).await;
+
+            // V2 CoreBridge authentication - REQUIRED per ADR Runtime Session Contract
+            // If V2 auth fails, return typed failure and do not report full success
             if let Some(bridge) = core_bridge.try_get().await {
                 if let Err(e) = bridge.login(&email, &password).await {
-                    log::warn!("[Auth] V2 CoreBridge login failed (non-blocking): {}", e);
-                } else {
-                    log::info!("[Auth] V2 CoreBridge authenticated successfully");
+                    log::error!("[Auth] V2 CoreBridge login failed: {}", e);
+                    // V2 auth failed - report failure per ADR
+                    return Ok(LoginResponse {
+                        success: false,
+                        user_name: Some(session.display_name),
+                        user_id: Some(user_id),
+                        subscription: Some(session.subscription_label),
+                        subscription_valid_until: session.subscription_valid_until,
+                        error: Some(format!("V2 authentication failed: {}", e)),
+                        error_code: Some("v2_auth_failed".to_string()),
+                    });
                 }
+                log::info!("[Auth] V2 CoreBridge authenticated successfully");
+                runtime_manager.manager().set_corebridge_auth(true).await;
             } else {
-                log::warn!("[Auth] V2 CoreBridge not yet initialized, skipping V2 auth");
+                log::error!("[Auth] V2 CoreBridge not initialized - cannot complete auth");
+                return Ok(LoginResponse {
+                    success: false,
+                    user_name: Some(session.display_name),
+                    user_id: Some(user_id),
+                    subscription: Some(session.subscription_label),
+                    subscription_valid_until: session.subscription_valid_until,
+                    error: Some("V2 client not initialized".to_string()),
+                    error_code: Some("v2_not_initialized".to_string()),
+                });
             }
 
             Ok(LoginResponse {
                 success: true,
                 user_name: Some(session.display_name),
-                user_id: Some(session.user_id),
+                user_id: Some(user_id),
                 subscription: Some(session.subscription_label),
                 subscription_valid_until: session.subscription_valid_until,
                 error: None,
@@ -167,6 +192,7 @@ pub async fn init_client(state: State<'_, AppState>) -> Result<bool, String> {
 pub async fn logout(
     state: State<'_, AppState>,
     core_bridge: State<'_, CoreBridgeState>,
+    runtime_manager: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
     // Logout from legacy client
     let client = state.client.read().await;
@@ -178,6 +204,9 @@ pub async fn logout(
             log::warn!("[Auth] V2 CoreBridge logout failed: {}", e);
         }
     }
+
+    // Update runtime state - auth cleared
+    runtime_manager.manager().set_legacy_auth(false, None).await;
 
     Ok(())
 }
