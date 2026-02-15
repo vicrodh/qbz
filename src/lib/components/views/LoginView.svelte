@@ -192,6 +192,8 @@
       console.log('Login response:', response);
 
       if (response.success) {
+        // V2 CoreBridge is now authenticated automatically by the backend login command
+
         // Save credentials if "Remember me" is checked
         if (rememberMe) {
           try {

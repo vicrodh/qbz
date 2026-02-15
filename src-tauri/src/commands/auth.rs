@@ -7,6 +7,7 @@ use crate::credentials;
 use crate::AppState;
 use crate::api::error::ApiError;
 use crate::config::SubscriptionStateState;
+use crate::core_bridge::CoreBridgeState;
 use crate::offline_cache::OfflineCacheState;
 
 #[derive(serde::Serialize)]
@@ -77,6 +78,7 @@ pub async fn login(
     subscription_state: State<'_, SubscriptionStateState>,
     cache_state: State<'_, OfflineCacheState>,
     library_state: State<'_, crate::library::commands::LibraryState>,
+    core_bridge: State<'_, CoreBridgeState>,
 ) -> Result<LoginResponse, String> {
     let client = state.client.read().await;
     let now = now_unix_secs();
@@ -88,6 +90,15 @@ pub async fn login(
                     let _ = store.mark_valid(now);
                 }
             }
+
+            // Also authenticate V2 CoreBridge client for the new architecture
+            let bridge = core_bridge.get().await;
+            if let Err(e) = bridge.login(&email, &password).await {
+                log::warn!("[Auth] V2 CoreBridge login failed (non-blocking): {}", e);
+            } else {
+                log::info!("[Auth] V2 CoreBridge authenticated successfully");
+            }
+
             Ok(LoginResponse {
                 success: true,
                 user_name: Some(session.display_name),
@@ -149,9 +160,20 @@ pub async fn init_client(state: State<'_, AppState>) -> Result<bool, String> {
 }
 
 #[tauri::command]
-pub async fn logout(state: State<'_, AppState>) -> Result<(), String> {
+pub async fn logout(
+    state: State<'_, AppState>,
+    core_bridge: State<'_, CoreBridgeState>,
+) -> Result<(), String> {
+    // Logout from legacy client
     let client = state.client.read().await;
     client.logout().await;
+
+    // Also logout from V2 CoreBridge
+    let bridge = core_bridge.get().await;
+    if let Err(e) = bridge.logout().await {
+        log::warn!("[Auth] V2 CoreBridge logout failed: {}", e);
+    }
+
     Ok(())
 }
 
@@ -200,6 +222,7 @@ pub async fn auto_login(
     subscription_state: State<'_, SubscriptionStateState>,
     cache_state: State<'_, OfflineCacheState>,
     library_state: State<'_, crate::library::commands::LibraryState>,
+    core_bridge: State<'_, CoreBridgeState>,
 ) -> Result<LoginResponse, String> {
     // Check for saved credentials
     let creds = match credentials::load_qobuz_credentials() {
@@ -238,6 +261,15 @@ pub async fn auto_login(
                     let _ = store.mark_valid(now);
                 }
             }
+
+            // Also authenticate V2 CoreBridge client for the new architecture
+            let bridge = core_bridge.get().await;
+            if let Err(e) = bridge.login(&creds.email, &creds.password).await {
+                log::warn!("[Auth/Auto] V2 CoreBridge login failed (non-blocking): {}", e);
+            } else {
+                log::info!("[Auth/Auto] V2 CoreBridge authenticated successfully");
+            }
+
             Ok(LoginResponse {
                 success: true,
                 user_name: Some(session.display_name),
