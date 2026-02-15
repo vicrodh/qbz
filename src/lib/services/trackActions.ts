@@ -15,7 +15,7 @@ import {
 import { addTrackToFavorites } from '$lib/services/playbackService';
 import { openPlaylistModal } from '$lib/stores/uiStore';
 import { showToast as storeShowToast, type ToastType } from '$lib/stores/toastStore';
-import type { QobuzTrack, Track, PlaylistTrack, LocalLibraryTrack } from '$lib/types';
+import type { QobuzTrack, Track, PlaylistTrack, LocalLibraryTrack, DisplayTrack } from '$lib/types';
 
 // ============ Toast Integration ============
 
@@ -177,6 +177,31 @@ export async function queueLocalTrackNext(track: LocalLibraryTrack): Promise<voi
 export async function queueLocalTrackLater(track: LocalLibraryTrack): Promise<void> {
   const isPlexTrack = track.source === 'plex';
   await queueTrackLater(buildQueueTrackFromLocalTrack(track), !isPlexTrack);
+}
+
+export function buildQueueTrackFromDisplayTrack(track: DisplayTrack): BackendQueueTrack {
+  return {
+    id: track.id,
+    title: track.title,
+    artist: track.artist || 'Unknown Artist',
+    album: track.album || '',
+    duration_secs: track.durationSeconds,
+    artwork_url: track.albumArt || null,
+    hires: track.hires ?? false,
+    bit_depth: track.bitDepth ?? null,
+    sample_rate: track.samplingRate ?? null,
+    is_local: track.isLocal ?? false,
+    album_id: track.albumId || null,
+    artist_id: track.artistId ?? null
+  };
+}
+
+export async function queueDisplayTrackNext(track: DisplayTrack): Promise<void> {
+  await queueTrackNext(buildQueueTrackFromDisplayTrack(track), track.isLocal ?? false);
+}
+
+export async function queueDisplayTrackLater(track: DisplayTrack): Promise<void> {
+  await queueTrackLater(buildQueueTrackFromDisplayTrack(track), track.isLocal ?? false);
 }
 
 // ============ Favorites ============

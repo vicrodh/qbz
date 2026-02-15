@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { Music, User, Loader2, ArrowRight } from 'lucide-svelte';
+  import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import {
     getHomeCache,
     setHomeCache,
@@ -112,7 +113,7 @@
     onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
     checkTrackDownloaded?: (trackId: number) => boolean;
-    getTrackOfflineCacheStatus?: (trackId: number) => { status: string; progress: number };
+    getTrackOfflineCacheStatus?: (trackId: number) => { status: OfflineCacheStatus; progress: number };
     onPlaylistClick?: (playlistId: number) => void;
     onPlaylistPlay?: (playlistId: number) => void;
     onPlaylistPlayNext?: (playlistId: number) => void;
@@ -1315,7 +1316,7 @@
           <div class="track-list compact">
             {#each continueTracks as track, index (`${track.id}-${downloadStateVersion}`)}
               {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
-              {@const cacheStatus = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none', progress: 0 }}
+              {@const cacheStatus = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
               {@const isTrackDownloaded = cacheStatus.status === 'ready'}
               {@const trackBlacklisted = track.artistId ? isArtistBlacklisted(track.artistId) : false}
               <TrackRow

@@ -311,13 +311,14 @@
   interface Album {
     id: string;
     title: string;
-    artist: { name: string };
+    artist: { id?: number; name: string };
     genre?: { name: string; };
     image: { small?: string; thumbnail?: string; large?: string };
     release_date_original?: string;
     hires_streamable?: boolean;
     maximum_bit_depth?: number;
     maximum_sampling_rate?: number;
+    isViewMore?: boolean; // For "view more" placeholder
   }
 
   interface Track {
@@ -341,6 +342,7 @@
     name: string;
     image?: { small?: string; thumbnail?: string; large?: string };
     albums_count?: number;
+    isViewMore?: boolean; // For "view more" placeholder
   }
 
   const cachedState = getSearchState<Album, Track, Artist>();
@@ -1340,7 +1342,7 @@
                             </button>
                             {#if album.artist?.id}
                               <div class="separator"></div>
-                              <button class="menu-item" onclick={() => { onArtistClick?.(album.artist.id); mostPopularMenuOpen = false; }}>
+                              <button class="menu-item" onclick={() => { onArtistClick?.(album.artist.id!); mostPopularMenuOpen = false; }}>
                                 <User size={14} /> <span>{$t('actions.goToArtist')}</span>
                               </button>
                             {/if}

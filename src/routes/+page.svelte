@@ -35,12 +35,13 @@
   import { setSearchState, triggerSearchFocus } from '$lib/stores/searchState';
 
   // Playback context and preferences
-  import { 
+  import {
     initPlaybackContextStore,
     setPlaybackContext,
     clearPlaybackContext,
     getCurrentContext,
-    requestContextTrackFocus
+    requestContextTrackFocus,
+    type ContextType
   } from '$lib/stores/playbackContextStore';
   import {
     initPlaybackPreferences,
@@ -241,6 +242,8 @@
     queuePlaylistTrackLater,
     queueLocalTrackNext,
     queueLocalTrackLater,
+    queueDisplayTrackNext,
+    queueDisplayTrackLater,
     handleAddToFavorites,
     addToPlaylist,
     shareQobuzTrackLink,
@@ -566,6 +569,9 @@
   let sidebarRef = $state<{
     getPlaylists: () => { id: number; name: string; tracks_count: number }[];
     refreshPlaylists: () => void;
+    refreshPlaylistSettings: () => void;
+    refreshLocalTrackCounts: () => void;
+    updatePlaylistCounts: (playlistId: number, qobuzCount: number, localCount: number) => void;
     focusSearch: () => void;
   } | undefined>(undefined);
 
@@ -801,6 +807,7 @@
       albumResults: null,
       trackResults: null,
       artistResults: null,
+      playlistResults: null,
       allResults: null
     });
     navigateTo('search');
@@ -1337,11 +1344,12 @@
 
     // Build queue from album tracks before playing (filter blacklisted artists)
     if (selectedAlbum?.tracks) {
-      console.log('[Album Queue] Building queue from', selectedAlbum.tracks.length, 'album tracks');
+      const album = selectedAlbum; // Capture for closure
+      console.log('[Album Queue] Building queue from', album.tracks.length, 'album tracks');
 
       // Filter out blacklisted tracks
-      const playableTracks = selectedAlbum.tracks.filter(trk => {
-        const artistId = trk.artistId ?? selectedAlbum.artistId;
+      const playableTracks = album.tracks.filter(trk => {
+        const artistId = trk.artistId ?? album.artistId;
         return !artistId || !isArtistBlacklisted(artistId);
       });
 
@@ -1349,16 +1357,16 @@
       const queueTracks: BackendQueueTrack[] = playableTracks.map(trk => ({
         id: trk.id,
         title: trk.title,
-        artist: trk.artist || selectedAlbum?.artist || 'Unknown Artist',
-        album: selectedAlbum?.title || '',
+        artist: trk.artist || album.artist || 'Unknown Artist',
+        album: album.title || '',
         duration_secs: trk.durationSeconds,
         artwork_url: artwork || null,
         hires: trk.hires ?? false,
         bit_depth: trk.bitDepth ?? null,
         sample_rate: trk.samplingRate ?? null,
         is_local: false,
-        album_id: selectedAlbum?.id,
-        artist_id: trk.artistId ?? selectedAlbum?.artistId
+        album_id: album.id,
+        artist_id: trk.artistId ?? album.artistId
       }));
 
       console.log('[Album Queue] Mapped to', queueTracks.length, 'queue tracks (filtered), startIndex:', trackIndex);
@@ -1721,13 +1729,12 @@
       await handleTrackPlay({
         id: historyTrack.id,
         title: historyTrack.title,
-        artist: historyTrack.artist,
-        album: historyTrack.album,
+        performer: { name: historyTrack.artist },
+        album: { title: historyTrack.album, image: { large: historyTrack.artwork_url || '' } },
         duration: historyTrack.duration_secs,
-        artwork: historyTrack.artwork_url || '',
-        quality: historyTrack.hires ? 'Hi-Res' : 'CD',
-        bitDepth: historyTrack.bit_depth || 16,
-        samplingRate: historyTrack.sample_rate || 44100
+        hires_streamable: historyTrack.hires,
+        maximum_bit_depth: historyTrack.bit_depth ?? undefined,
+        maximum_sampling_rate: historyTrack.sample_rate ?? undefined
       });
     } catch (err) {
       console.error('Failed to play history track:', err);
@@ -1738,9 +1745,10 @@
   // Play all tracks from album (starting from first non-blacklisted track)
   async function handlePlayAllAlbum() {
     if (!selectedAlbum?.tracks?.length) return;
+    const album = selectedAlbum; // Capture for closure
     // Find first non-blacklisted track
-    const firstPlayableTrack = selectedAlbum.tracks.find(trk => {
-      const artistId = trk.artistId ?? selectedAlbum.artistId;
+    const firstPlayableTrack = album.tracks.find(trk => {
+      const artistId = trk.artistId ?? album.artistId;
       return !artistId || !isArtistBlacklisted(artistId);
     });
     if (!firstPlayableTrack) return;
@@ -1750,10 +1758,11 @@
   // Shuffle play all tracks from album
   async function handleShuffleAlbum() {
     if (!selectedAlbum?.tracks?.length) return;
+    const album = selectedAlbum; // Capture for closure
 
     // Filter out blacklisted tracks
-    const playableTracks = selectedAlbum.tracks.filter(trk => {
-      const artistId = trk.artistId ?? selectedAlbum.artistId;
+    const playableTracks = album.tracks.filter(trk => {
+      const artistId = trk.artistId ?? album.artistId;
       return !artistId || !isArtistBlacklisted(artistId);
     });
 
@@ -1783,32 +1792,33 @@
   // Add all album tracks next in queue (after current track)
   async function handleAddAlbumToQueueNext() {
     if (!selectedAlbum?.tracks?.length) return;
+    const album = selectedAlbum; // Capture for closure
 
     // Filter out blacklisted tracks
-    const playableTracks = selectedAlbum.tracks.filter(trk => {
-      const artistId = trk.artistId ?? selectedAlbum.artistId;
+    const playableTracks = album.tracks.filter(trk => {
+      const artistId = trk.artistId ?? album.artistId;
       return !artistId || !isArtistBlacklisted(artistId);
     });
 
     if (playableTracks.length === 0) return;
 
-    const artwork = selectedAlbum.artwork || '';
+    const artwork = album.artwork || '';
     // Add in reverse order so first track ends up right after current
     for (let i = playableTracks.length - 1; i >= 0; i--) {
       const trk = playableTracks[i];
       queueTrackNext({
         id: trk.id,
         title: trk.title,
-        artist: trk.artist || selectedAlbum?.artist || 'Unknown Artist',
-        album: selectedAlbum?.title || '',
+        artist: trk.artist || album.artist || 'Unknown Artist',
+        album: album.title || '',
         duration_secs: trk.durationSeconds,
         artwork_url: artwork || null,
         hires: trk.hires ?? false,
         bit_depth: trk.bitDepth ?? null,
         sample_rate: trk.samplingRate ?? null,
         is_local: false,
-        album_id: selectedAlbum?.id,
-        artist_id: trk.artistId ?? selectedAlbum?.artistId
+        album_id: album.id,
+        artist_id: trk.artistId ?? album.artistId
       });
     }
     showToast($t('toast.playingTracksNext', { values: { count: playableTracks.length } }), 'success');
@@ -1817,29 +1827,30 @@
   // Add all album tracks to end of queue
   async function handleAddAlbumToQueueLater() {
     if (!selectedAlbum?.tracks?.length) return;
+    const album = selectedAlbum; // Capture for closure
 
     // Filter out blacklisted tracks
-    const playableTracks = selectedAlbum.tracks.filter(trk => {
-      const artistId = trk.artistId ?? selectedAlbum.artistId;
+    const playableTracks = album.tracks.filter(trk => {
+      const artistId = trk.artistId ?? album.artistId;
       return !artistId || !isArtistBlacklisted(artistId);
     });
 
     if (playableTracks.length === 0) return;
 
-    const artwork = selectedAlbum.artwork || '';
+    const artwork = album.artwork || '';
     const queueTracks: BackendQueueTrack[] = playableTracks.map(trk => ({
       id: trk.id,
       title: trk.title,
-      artist: trk.artist || selectedAlbum?.artist || 'Unknown Artist',
-      album: selectedAlbum?.title || '',
+      artist: trk.artist || album.artist || 'Unknown Artist',
+      album: album.title || '',
       duration_secs: trk.durationSeconds,
       artwork_url: artwork || null,
       hires: trk.hires ?? false,
       bit_depth: trk.bitDepth ?? null,
       sample_rate: trk.samplingRate ?? null,
       is_local: false,
-      album_id: selectedAlbum?.id,
-      artist_id: trk.artistId ?? selectedAlbum?.artistId
+      album_id: album.id,
+      artist_id: trk.artistId ?? album.artistId
     }));
 
     const success = await addTracksToQueue(queueTracks);
@@ -1945,7 +1956,7 @@
         artist: track.artist || selectedAlbum?.artist || 'Unknown',
         album: 'album' in track ? track.album : selectedAlbum?.title,
         albumId: 'albumId' in track ? track.albumId : selectedAlbum?.id,
-        durationSecs: 'durationSeconds' in track ? track.durationSeconds : track.duration,
+        durationSecs: track.durationSeconds,
         quality: 'quality' in track ? track.quality || '-' : '-',
         bitDepth: 'bitDepth' in track ? track.bitDepth : undefined,
         sampleRate: 'samplingRate' in track ? track.samplingRate : undefined,
@@ -2042,14 +2053,14 @@
   async function reDownloadAlbumById(albumId: string) {
     try {
       const album = await invoke<QobuzAlbum>('v2_get_album', { albumId });
-      if (!album || !album.tracks || album.tracks.data.length === 0) {
+      if (!album || !album.tracks || album.tracks.items.length === 0) {
         showToast($t('toast.failedLoadAlbumRefresh'), 'error');
         return;
       }
 
       showToast($t('toast.refreshingAlbumOffline', { values: { album: album.title } }), 'info');
 
-      for (const track of album.tracks.data) {
+      for (const track of album.tracks.items) {
         try {
           await cacheTrackForOffline({
             id: track.id,
@@ -2058,7 +2069,7 @@
             album: album.title,
             albumId: album.id,
             durationSecs: track.duration,
-            quality: track.hires ? 'Hi-Res' : '-',
+            quality: track.hires_streamable ? 'Hi-Res' : '-',
             bitDepth: track.maximum_bit_depth,
             sampleRate: track.maximum_sampling_rate,
           });
@@ -2078,7 +2089,7 @@
     return getOfflineCacheState(trackId);
   }
 
-  async function handleDisplayTrackDownload(track: PlaylistTrack) {
+  async function handleDisplayTrackDownload(track: DisplayTrack) {
     try {
       const quality = track.bitDepth && track.samplingRate
         ? `${track.bitDepth}bit/${track.samplingRate}kHz`
@@ -2095,6 +2106,41 @@
         quality,
         bitDepth: track.bitDepth,
         sampleRate: track.samplingRate,
+      });
+      showToast($t('toast.preparingTrackOffline', { values: { title: track.title } }), 'info');
+    } catch (err) {
+      console.error('Failed to prepare for offline:', err);
+      showToast($t('toast.failedPrepareOffline'), 'error');
+    }
+  }
+
+  // Handler for SearchView's Track type (different from DisplayTrack)
+  async function handleSearchTrackDownload(track: {
+    id: number;
+    title: string;
+    duration: number;
+    album?: { id?: string; title: string; image?: { small?: string; large?: string } };
+    performer?: { id?: number; name: string };
+    hires_streamable?: boolean;
+    maximum_bit_depth?: number;
+    maximum_sampling_rate?: number;
+  }) {
+    try {
+      const quality = track.maximum_bit_depth && track.maximum_sampling_rate
+        ? `${track.maximum_bit_depth}bit/${track.maximum_sampling_rate}kHz`
+        : track.hires_streamable
+          ? 'Hi-Res'
+          : '-';
+      await cacheTrackForOffline({
+        id: track.id,
+        title: track.title,
+        artist: track.performer?.name || 'Unknown',
+        album: track.album?.title,
+        albumId: track.album?.id,
+        durationSecs: track.duration,
+        quality,
+        bitDepth: track.maximum_bit_depth,
+        sampleRate: track.maximum_sampling_rate,
       });
       showToast($t('toast.preparingTrackOffline', { values: { title: track.title } }), 'info');
     } catch (err) {
@@ -2223,7 +2269,7 @@
     openPlaylistModal('addTrack', trackIds, isLocal);
   }
 
-  function handlePlaylistCreated(playlist?: import('$lib/types').Playlist) {
+  function handlePlaylistCreated(playlist?: { id: number; name: string; tracks_count: number }) {
     const trackCount = playlistModalTrackIds.length;
     const isLocal = playlistModalTracksAreLocal;
 
@@ -2252,11 +2298,19 @@
     openPlaylistImport();
   }
 
-  function handlePlaylistImported(summary: { qobuz_playlist_id?: number | null }) {
+  function handlePlaylistImported(summary: {
+    provider: 'Spotify' | 'AppleMusic' | 'Tidal' | 'Deezer';
+    playlist_name: string;
+    total_tracks: number;
+    matched_tracks: number;
+    skipped_tracks: number;
+    qobuz_playlist_ids: number[];
+    parts_created: number;
+  }) {
     sidebarRef?.refreshPlaylists();
     sidebarRef?.refreshPlaylistSettings();
-    if (summary.qobuz_playlist_id) {
-      selectPlaylist(summary.qobuz_playlist_id);
+    if (summary.qobuz_playlist_ids.length > 0) {
+      selectPlaylist(summary.qobuz_playlist_ids[0]);
     }
   }
 
@@ -3147,8 +3201,8 @@
             {downloadStateVersion}
             onArtistClick={handleArtistClick}
             onTrackPlay={handleDisplayTrackPlay}
-            onTrackPlayNext={queueQobuzTrackNext}
-            onTrackPlayLater={queueQobuzTrackLater}
+            onTrackPlayNext={queueDisplayTrackNext}
+            onTrackPlayLater={queueDisplayTrackLater}
             onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
             onAddAlbumToPlaylist={addAlbumToPlaylistById}
             onTrackShareQobuz={shareQobuzTrackLink}
@@ -3208,8 +3262,8 @@
             onTrackGoToAlbum={handleAlbumClick}
             onTrackGoToArtist={handleArtistClick}
             onTrackShowInfo={showTrackInfo}
-            onTrackDownload={handleDisplayTrackDownload}
-            onTrackReDownload={handleDisplayTrackDownload}
+            onTrackDownload={handleSearchTrackDownload}
+            onTrackReDownload={handleSearchTrackDownload}
             onTrackRemoveDownload={handleTrackRemoveDownload}
             checkTrackDownloaded={checkTrackDownloaded}
             onArtistClick={handleArtistClick}

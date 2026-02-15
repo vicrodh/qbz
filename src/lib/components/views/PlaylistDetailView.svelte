@@ -1634,11 +1634,11 @@
       // Show success message
       showToast($t('playlist.trackReplaced'), 'success');
 
+      console.log(`[Playlist] Track replaced: ${trackToReplace?.title} -> ${newTrack.title} at position ${currentIndex}`);
+
       // Close modal
       replacementModalOpen = false;
       trackToReplace = null;
-
-      console.log(`[Playlist] Track replaced: ${trackToReplace?.title} -> ${newTrack.title} at position ${currentIndex}`);
     } catch (err) {
       console.error('Failed to replace track:', err);
       showToast($t('playlist.trackReplaceFailed'), 'error');

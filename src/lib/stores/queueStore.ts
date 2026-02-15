@@ -16,6 +16,7 @@ export interface QueueTrack {
   artist: string;
   duration: string;
   available?: boolean; // Whether track is available (false when offline without local copy)
+  trackId?: number; // For favorite checking
 }
 
 export interface BackendQueueTrack {
