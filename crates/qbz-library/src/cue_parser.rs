@@ -3,7 +3,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::library::{AudioFormat, AudioProperties, LibraryError, LocalTrack, MetadataExtractor};
+use crate::{AudioFormat, AudioProperties, LibraryError, LocalTrack, MetadataExtractor};
 
 /// Parsed CUE sheet
 #[derive(Debug, Clone)]

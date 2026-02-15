@@ -3,7 +3,7 @@
 use rusqlite::{params, Connection, OptionalExtension};
 use std::path::Path;
 
-use crate::library::{AudioFormat, LibraryError, LocalAlbum, LocalArtist, LocalTrack};
+use crate::{AudioFormat, LibraryError, LocalAlbum, LocalArtist, LocalTrack};
 
 #[derive(Debug, Clone)]
 pub struct AlbumTrackUpdate {
@@ -2726,7 +2726,7 @@ impl LibraryDatabase {
     pub fn get_playlist_local_tracks_with_position(
         &self,
         qobuz_playlist_id: u64,
-    ) -> Result<Vec<crate::library::PlaylistLocalTrack>, LibraryError> {
+    ) -> Result<Vec<crate::PlaylistLocalTrack>, LibraryError> {
         let mut stmt = self
             .conn
             .prepare(
@@ -2745,7 +2745,7 @@ impl LibraryDatabase {
 
         let tracks = stmt
             .query_map(params![qobuz_playlist_id as i64], |row| {
-                Ok(crate::library::PlaylistLocalTrack {
+                Ok(crate::PlaylistLocalTrack {
                     track: LocalTrack {
                         id: row.get(0)?,
                         file_path: row.get(1)?,
@@ -3145,7 +3145,7 @@ impl LibraryDatabase {
     pub fn get_album_settings(
         &self,
         album_group_key: &str,
-    ) -> Result<Option<crate::library::AlbumSettings>, LibraryError> {
+    ) -> Result<Option<crate::AlbumSettings>, LibraryError> {
         let result = self
             .conn
             .query_row(
@@ -3153,7 +3153,7 @@ impl LibraryDatabase {
              FROM album_settings WHERE album_group_key = ?1",
                 params![album_group_key],
                 |row| {
-                    Ok(crate::library::AlbumSettings {
+                    Ok(crate::AlbumSettings {
                         album_group_key: row.get(0)?,
                         hidden: row.get::<_, i32>(1)? != 0,
                         created_at: row.get(2)?,
@@ -3428,12 +3428,12 @@ impl LibraryDatabase {
     pub fn get_artist_image(
         &self,
         artist_name: &str,
-    ) -> Result<Option<crate::library::commands::ArtistImageInfo>, LibraryError> {
+    ) -> Result<Option<crate::ArtistImageInfo>, LibraryError> {
         let result = self.conn.query_row(
             "SELECT artist_name, image_url, source, custom_image_path, canonical_name FROM artist_images WHERE artist_name = ?1",
             params![artist_name],
             |row| {
-                Ok(crate::library::commands::ArtistImageInfo {
+                Ok(crate::ArtistImageInfo {
                     artist_name: row.get(0)?,
                     image_url: row.get(1)?,
                     source: row.get(2)?,

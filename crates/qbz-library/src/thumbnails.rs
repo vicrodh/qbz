@@ -1,10 +1,12 @@
+//! Thumbnail generation for album artwork
+
 use image::imageops::FilterType;
 use image::ImageReader;
 use std::fs;
 use std::io::Cursor;
 use std::path::{Path, PathBuf};
 
-use super::errors::LibraryError;
+use crate::LibraryError;
 
 /// Default thumbnail size (width and height)
 /// 500px is a good balance for UI display while keeping file size reasonable

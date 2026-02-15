@@ -13,7 +13,7 @@ use crate::discogs::DiscogsClient;
 use crate::library::{
     cue_to_tracks, get_artwork_cache_dir, CueParser, LibraryDatabase, LibraryFolder, LibraryScanner, LibraryStats,
     LocalAlbum, LocalArtist, LocalTrack, MetadataExtractor, ScanError, ScanProgress, ScanStatus,
-    thumbnails,
+    thumbnails, ArtistImageInfo,
 };
 use crate::network::{is_network_path, MountKind, NetworkFs};
 
@@ -2360,14 +2360,7 @@ pub async fn library_backfill_downloads(
 
 // === Artist Images Management ===
 
-#[derive(serde::Serialize)]
-pub struct ArtistImageInfo {
-    pub artist_name: String,
-    pub image_url: Option<String>,
-    pub source: Option<String>,
-    pub custom_image_path: Option<String>,
-    pub canonical_name: Option<String>,
-}
+// ArtistImageInfo is now defined in qbz-library, re-exported via crate::library
 
 /// Get cached artist image
 #[tauri::command]

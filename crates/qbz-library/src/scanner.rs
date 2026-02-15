@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
 
-use crate::library::LibraryError;
+use crate::LibraryError;
 
 /// Supported audio file extensions
 const SUPPORTED_AUDIO_EXTENSIONS: &[&str] = &["flac", "m4a", "wav", "aiff", "aif", "ape", "mp3"];

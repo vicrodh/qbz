@@ -8,7 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::library::{LibraryError, LocalTrack};
+use crate::{LibraryError, LocalTrack};
 
 const SIDECAR_FILE_NAME: &str = ".qbz.json";
 
@@ -150,4 +150,3 @@ fn normalize(value: &str) -> Option<String> {
         Some(trimmed.to_string())
     }
 }
-

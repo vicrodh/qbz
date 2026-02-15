@@ -9,10 +9,10 @@ members = [
     "qbz-core",
     "qbz-integrations",
     "qbz-cache",
+    "qbz-library",
 ]
 
 # Tier 2 crates (to be added later)
-# "qbz-library",
 # "qbz-cast",
 
 [workspace.package]

@@ -5,8 +5,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::library::{AudioFormat, AudioProperties, LibraryError, LocalTrack};
-use crate::library::thumbnails::{generate_thumbnail, generate_thumbnail_from_bytes};
+use crate::{AudioFormat, AudioProperties, LibraryError, LocalTrack};
+use crate::thumbnails::{generate_thumbnail, generate_thumbnail_from_bytes};
 
 /// Metadata extractor using lofty
 pub struct MetadataExtractor;
@@ -269,7 +269,7 @@ impl MetadataExtractor {
         // Get audio properties
         let properties = tagged_file.properties();
         let duration_secs = properties.duration().as_secs();
-        let sample_rate = properties.sample_rate().unwrap_or(44100) as f64;  // Convert to f64 for decimal precision
+        let sample_rate = properties.sample_rate().unwrap_or(44100) as f64;
         let bit_depth = properties.bit_depth().map(|b| b as u32);
         let channels = properties.channels().unwrap_or(2) as u8;
 
@@ -403,7 +403,7 @@ impl MetadataExtractor {
         Ok(AudioProperties {
             duration_secs: properties.duration().as_secs(),
             bit_depth: properties.bit_depth().map(|b| b as u32),
-            sample_rate: properties.sample_rate().unwrap_or(44100) as f64,  // Convert to f64
+            sample_rate: properties.sample_rate().unwrap_or(44100) as f64,
             channels: properties.channels().unwrap_or(2) as u8,
         })
     }
@@ -427,18 +427,14 @@ impl MetadataExtractor {
     }
 
     /// Extract and save artwork as thumbnail to cache directory
-    /// Returns path to saved thumbnail or None
-    /// Note: cache_dir parameter is kept for API compatibility but thumbnails go to thumbnails dir
     pub fn extract_artwork(file_path: &Path, _cache_dir: &Path) -> Option<String> {
         let tagged_file = Probe::open(file_path).ok()?.read().ok()?;
         let tag = tagged_file.primary_tag().or_else(|| tagged_file.first_tag())?;
 
         let picture = tag.pictures().first()?;
 
-        // Use file path as cache key for consistent thumbnail naming
         let cache_key = file_path.to_string_lossy().to_string();
 
-        // Generate thumbnail from embedded artwork bytes (resized to 500px)
         match generate_thumbnail_from_bytes(picture.data(), &cache_key) {
             Ok(thumbnail_path) => Some(thumbnail_path.to_string_lossy().to_string()),
             Err(e) => {
@@ -448,15 +444,12 @@ impl MetadataExtractor {
         }
     }
 
-    /// Generate thumbnail from an existing artwork file (e.g., cover.jpg, folder.jpg)
-    /// Returns path to thumbnail or None
-    /// Note: cache_dir parameter is kept for API compatibility but thumbnails go to thumbnails dir
+    /// Generate thumbnail from an existing artwork file
     pub fn cache_artwork_file(artwork_path: &Path, _cache_dir: &Path) -> Option<String> {
         if !artwork_path.is_file() {
             return None;
         }
 
-        // Generate thumbnail (resized to 500px) instead of copying full-size file
         match generate_thumbnail(artwork_path) {
             Ok(thumbnail_path) => Some(thumbnail_path.to_string_lossy().to_string()),
             Err(e) => {
@@ -466,18 +459,7 @@ impl MetadataExtractor {
         }
     }
 
-    /// Simple hash function for generating filenames
-    #[allow(dead_code)]
-    fn simple_hash(s: &str) -> u64 {
-        let mut hash: u64 = 5381;
-        for byte in s.bytes() {
-            hash = hash.wrapping_mul(33).wrapping_add(byte as u64);
-        }
-        hash
-    }
-
-    /// Look for folder artwork by file name heuristics.
-    /// Returns the path if found.
+    /// Look for folder artwork by file name heuristics
     pub fn find_folder_artwork(
         audio_file_path: &Path,
         album_title: Option<&str>,
