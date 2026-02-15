@@ -2332,7 +2332,7 @@
     refreshUpdatePreferences().catch(err => console.debug('[Updates] Prefs refresh deferred:', err));
 
     // Load audio settings (normalization state) now that session is active
-    invoke<{ normalization_enabled: boolean }>('get_audio_settings').then((settings) => {
+    invoke<{ normalization_enabled: boolean }>('v2_get_audio_settings').then((settings) => {
       normalizationEnabled = settings.normalization_enabled;
     }).catch((err) => {
       console.error('[AudioSettings] Failed to load:', err);

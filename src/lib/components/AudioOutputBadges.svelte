@@ -148,7 +148,7 @@
   async function loadStatus() {
     try {
       const [settingsResult, statusResult, sinksResult, alsaResult, hwStatus] = await Promise.all([
-        invoke<AudioSettings>('get_audio_settings'),
+        invoke<AudioSettings>('v2_get_audio_settings'),
         invoke<AudioOutputStatus>('get_audio_output_status'),
         invoke<PipewireSink[]>('get_pipewire_sinks').catch(() => [] as PipewireSink[]),
         invoke<AlsaDevice[]>('get_alsa_devices').catch(() => [] as AlsaDevice[]),

@@ -2082,7 +2082,7 @@
 
   async function loadAudioSettings() {
     try {
-      const settings = await invoke<AudioSettings>('get_audio_settings');
+      const settings = await invoke<AudioSettings>('v2_get_audio_settings');
       // Convert stored device name to description for display
       if (settings.output_device) {
         // Look up the friendly description from the device name

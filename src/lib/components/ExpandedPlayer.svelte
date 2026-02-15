@@ -130,7 +130,7 @@
     async function loadStatus() {
       try {
         const [settings, hwStatus] = await Promise.all([
-          invoke<AudioSettings>('get_audio_settings'),
+          invoke<AudioSettings>('v2_get_audio_settings'),
           invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null)
         ]);
         dacPassthrough = settings.dac_passthrough;
