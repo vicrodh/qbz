@@ -2750,3 +2750,52 @@ pub async fn v2_lastfm_scrobble(
     client.scrobble(&artist, &track, album.as_deref(), timestamp).await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
+
+/// Set Last.fm session key (V2)
+///
+/// Used to restore a previously saved session key.
+#[tauri::command]
+pub async fn v2_lastfm_set_session(
+    session_key: String,
+    state: State<'_, LastFmV2State>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] lastfm_set_session");
+    let mut client = state.client.lock().await;
+    client.set_session_key(session_key);
+    Ok(())
+}
+
+/// Queue a listen for offline submission (V2)
+///
+/// Uses legacy cache for persistence until qbz-integrations has its own cache.
+#[tauri::command]
+pub async fn v2_listenbrainz_queue_listen(
+    artist: String,
+    track: String,
+    album: Option<String>,
+    timestamp: i64,
+    recording_mbid: Option<String>,
+    release_mbid: Option<String>,
+    artist_mbids: Option<Vec<String>>,
+    isrc: Option<String>,
+    duration_ms: Option<u64>,
+    legacy_state: State<'_, crate::listenbrainz::ListenBrainzSharedState>,
+) -> Result<i64, RuntimeError> {
+    log::info!("[V2] listenbrainz_queue_listen: {} - {}", artist, track);
+
+    let cache_guard = legacy_state.cache.lock().await;
+    let cache = cache_guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+
+    cache.queue_listen(
+        timestamp,
+        &artist,
+        &track,
+        album.as_deref(),
+        recording_mbid.as_deref(),
+        release_mbid.as_deref(),
+        artist_mbids.as_deref(),
+        isrc.as_deref(),
+        duration_ms,
+    ).map_err(|e| RuntimeError::Internal(e))
+}

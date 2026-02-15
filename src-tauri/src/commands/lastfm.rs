@@ -1,4 +1,9 @@
 //! Last.fm integration commands
+//!
+//! **DEPRECATED**: Use V2 commands in `commands_v2.rs` instead.
+//! These legacy commands will be removed in a future version.
+
+#![allow(deprecated)]
 
 use tauri::State;
 
@@ -38,6 +43,7 @@ pub async fn lastfm_set_credentials(
 }
 
 /// Check if Last.fm is authenticated
+#[deprecated(since = "1.2.0", note = "Use v2_lastfm_is_authenticated instead")]
 #[tauri::command]
 pub async fn lastfm_is_authenticated(state: State<'_, AppState>) -> Result<bool, String> {
     let client = state.lastfm.lock().await;
@@ -45,6 +51,7 @@ pub async fn lastfm_is_authenticated(state: State<'_, AppState>) -> Result<bool,
 }
 
 /// Get Last.fm authentication token and URL
+#[deprecated(since = "1.2.0", note = "Use v2_lastfm_get_auth_url instead")]
 #[tauri::command]
 pub async fn lastfm_get_auth_url(state: State<'_, AppState>) -> Result<(String, String), String> {
     log::info!("Command: lastfm_get_auth_url");
@@ -55,6 +62,7 @@ pub async fn lastfm_get_auth_url(state: State<'_, AppState>) -> Result<(String, 
 }
 
 /// Complete Last.fm authentication with token
+#[deprecated(since = "1.2.0", note = "Use v2_lastfm_complete_auth instead")]
 #[tauri::command]
 pub async fn lastfm_authenticate(
     token: String,
@@ -66,6 +74,7 @@ pub async fn lastfm_authenticate(
 }
 
 /// Set Last.fm session key (for restoring saved session)
+#[deprecated(since = "1.2.0", note = "Use v2_lastfm_set_session instead")]
 #[tauri::command]
 pub async fn lastfm_set_session(
     session_key: String,
@@ -78,6 +87,7 @@ pub async fn lastfm_set_session(
 }
 
 /// Disconnect from Last.fm
+#[deprecated(since = "1.2.0", note = "Use v2_lastfm_disconnect instead")]
 #[tauri::command]
 pub async fn lastfm_disconnect(state: State<'_, AppState>) -> Result<(), String> {
     log::info!("Command: lastfm_disconnect");
@@ -88,6 +98,7 @@ pub async fn lastfm_disconnect(state: State<'_, AppState>) -> Result<(), String>
 }
 
 /// Scrobble a track to Last.fm
+#[deprecated(since = "1.2.0", note = "Use v2_lastfm_scrobble instead")]
 #[tauri::command]
 pub async fn lastfm_scrobble(
     artist: String,
@@ -104,6 +115,7 @@ pub async fn lastfm_scrobble(
 }
 
 /// Update "now playing" on Last.fm
+#[deprecated(since = "1.2.0", note = "Use v2_lastfm_now_playing instead")]
 #[tauri::command]
 pub async fn lastfm_now_playing(
     artist: String,

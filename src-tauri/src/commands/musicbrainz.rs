@@ -1,6 +1,11 @@
 //! MusicBrainz Tauri commands
 //!
 //! Exposes MusicBrainz entity resolution to the frontend
+//!
+//! **DEPRECATED**: Use V2 commands in `commands_v2.rs` instead.
+//! These legacy commands will be removed in a future version.
+
+#![allow(deprecated)]
 
 use tauri::State;
 
@@ -270,6 +275,7 @@ pub async fn musicbrainz_get_artist_relationships(
 }
 
 /// Check if MusicBrainz integration is enabled
+#[deprecated(since = "1.2.0", note = "Use v2_musicbrainz_is_enabled instead")]
 #[tauri::command]
 pub async fn musicbrainz_is_enabled(
     state: State<'_, MusicBrainzSharedState>,
@@ -278,6 +284,7 @@ pub async fn musicbrainz_is_enabled(
 }
 
 /// Enable or disable MusicBrainz integration
+#[deprecated(since = "1.2.0", note = "Use v2_musicbrainz_set_enabled instead")]
 #[tauri::command]
 pub async fn musicbrainz_set_enabled(
     enabled: bool,

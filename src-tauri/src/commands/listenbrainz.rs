@@ -1,6 +1,11 @@
 //! ListenBrainz Tauri commands
 //!
 //! Exposes ListenBrainz scrobbling to the frontend
+//!
+//! **DEPRECATED**: Use V2 commands in `commands_v2.rs` instead.
+//! These legacy commands will be removed in a future version.
+
+#![allow(deprecated)]
 
 use tauri::State;
 
@@ -9,6 +14,7 @@ use crate::listenbrainz::{
 };
 
 /// Get ListenBrainz connection status
+#[deprecated(since = "1.2.0", note = "Use v2_listenbrainz_get_status instead")]
 #[tauri::command]
 pub async fn listenbrainz_get_status(
     state: State<'_, ListenBrainzSharedState>,
@@ -18,6 +24,7 @@ pub async fn listenbrainz_get_status(
 }
 
 /// Check if ListenBrainz is enabled
+#[deprecated(since = "1.2.0", note = "Use v2_listenbrainz_is_enabled instead")]
 #[tauri::command]
 pub async fn listenbrainz_is_enabled(
     state: State<'_, ListenBrainzSharedState>,
@@ -27,6 +34,7 @@ pub async fn listenbrainz_is_enabled(
 }
 
 /// Enable or disable ListenBrainz integration
+#[deprecated(since = "1.2.0", note = "Use v2_listenbrainz_set_enabled instead")]
 #[tauri::command]
 pub async fn listenbrainz_set_enabled(
     enabled: bool,
@@ -53,6 +61,7 @@ pub async fn listenbrainz_set_enabled(
 }
 
 /// Connect to ListenBrainz with a user token
+#[deprecated(since = "1.2.0", note = "Use v2_listenbrainz_connect instead")]
 #[tauri::command]
 pub async fn listenbrainz_connect(
     token: String,
@@ -77,6 +86,7 @@ pub async fn listenbrainz_connect(
 }
 
 /// Disconnect from ListenBrainz
+#[deprecated(since = "1.2.0", note = "Use v2_listenbrainz_disconnect instead")]
 #[tauri::command]
 pub async fn listenbrainz_disconnect(
     state: State<'_, ListenBrainzSharedState>,
@@ -100,6 +110,7 @@ pub async fn listenbrainz_disconnect(
 }
 
 /// Submit "now playing" to ListenBrainz
+#[deprecated(since = "1.2.0", note = "Use v2_listenbrainz_now_playing instead")]
 #[tauri::command]
 pub async fn listenbrainz_now_playing(
     artist: String,
@@ -130,6 +141,7 @@ pub async fn listenbrainz_now_playing(
 }
 
 /// Submit a scrobble to ListenBrainz
+#[deprecated(since = "1.2.0", note = "Use v2_listenbrainz_scrobble instead")]
 #[tauri::command]
 pub async fn listenbrainz_scrobble(
     artist: String,
@@ -161,6 +173,7 @@ pub async fn listenbrainz_scrobble(
 }
 
 /// Queue a listen for offline submission
+#[deprecated(since = "1.2.0", note = "Use v2_listenbrainz_queue_listen instead")]
 #[tauri::command]
 pub async fn listenbrainz_queue_listen(
     artist: String,

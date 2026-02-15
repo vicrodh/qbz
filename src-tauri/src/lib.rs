@@ -1225,6 +1225,8 @@ pub fn run() {
             commands_v2::v2_lastfm_disconnect,
             commands_v2::v2_lastfm_now_playing,
             commands_v2::v2_lastfm_scrobble,
+            commands_v2::v2_lastfm_set_session,
+            commands_v2::v2_listenbrainz_queue_listen,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

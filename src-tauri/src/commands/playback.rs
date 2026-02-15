@@ -1208,6 +1208,7 @@ pub fn get_audio_output_status(
 
 /// Reinitialize audio device (releases and re-acquires)
 /// Call this when changing audio settings like exclusive mode or output device
+#[deprecated(since = "1.2.0", note = "Use v2_reinit_audio_device instead")]
 #[tauri::command]
 pub fn reinit_audio_device(
     device: Option<String>,
