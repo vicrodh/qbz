@@ -2,7 +2,8 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::cast::airplay::{AirPlayError, DiscoveredAirPlayDevice};
+use crate::airplay::DiscoveredAirPlayDevice;
+use crate::AirPlayError;
 
 /// Metadata for AirPlay playback
 #[derive(Debug, Clone, Serialize, Deserialize)]

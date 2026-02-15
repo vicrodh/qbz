@@ -22,6 +22,7 @@ qbz-core = { path = "../crates/qbz-core" }
 qbz-integrations = { path = "../crates/qbz-integrations" }
 qbz-cache = { path = "../crates/qbz-cache" }
 qbz-library = { path = "../crates/qbz-library" }
+qbz-cast = { path = "../crates/qbz-cast" }
 
 # Tauri
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
@@ -117,11 +118,10 @@ keyring = "3"
 # Clipboard
 tauri-plugin-clipboard-manager = "2"
 
-# Casting (Chromecast, AirPlay, DLNA)
-rust_cast = "0.18.1"
-mdns-sd = "0.11"
-tiny_http = "0.12"
-rupnp = { version = "3", features = ["full_device_spec"] }
+# Casting: qbz-cast crate provides all casting functionality
+# (Chromecast via rust_cast, AirPlay discovery, DLNA via rupnp)
+
+# Async utilities (used across codebase)
 futures-util = "0.3"
 
 # Platform-specific dependencies

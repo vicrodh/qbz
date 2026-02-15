@@ -10,7 +10,7 @@ use rupnp::ssdp::{SearchTarget, URN};
 use serde::Serialize;
 use tokio::task::JoinHandle;
 
-use crate::cast::dlna::DlnaError;
+use crate::DlnaError;
 
 const DISCOVERY_WINDOW_SECS: u64 = 3;
 const DISCOVERY_SLEEP_SECS: u64 = 5;

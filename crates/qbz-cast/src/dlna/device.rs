@@ -5,7 +5,8 @@ use rupnp::{Device, Service};
 use rupnp::http::Uri;
 use rupnp::ssdp::URN;
 
-use crate::cast::dlna::{DiscoveredDlnaDevice, DlnaError};
+use crate::dlna::DiscoveredDlnaDevice;
+use crate::DlnaError;
 
 /// Metadata for DLNA playback
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -119,7 +120,7 @@ impl DlnaConnection {
 
         // Build DIDL-Lite metadata with actual content type
         let didl_metadata = build_didl_metadata(uri, metadata, content_type);
-        
+
         log::info!("DLNA: Loading media URI: {}", uri);
         log::info!("DLNA: Content-Type: {}", content_type);
         log::info!("DLNA: DIDL Metadata:\n{}", didl_metadata);
@@ -332,13 +333,13 @@ fn parse_time_string(time: &str) -> u64 {
     if parts.len() != 3 {
         return 0;
     }
-    
+
     let hours: u64 = parts[0].parse().unwrap_or(0);
     let minutes: u64 = parts[1].parse().unwrap_or(0);
     let seconds: u64 = parts[2].split('.').next()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
-    
+
     hours * 3600 + minutes * 60 + seconds
 }
 

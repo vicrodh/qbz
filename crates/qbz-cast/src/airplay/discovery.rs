@@ -9,7 +9,7 @@ use std::thread::{self, JoinHandle};
 use mdns_sd::{ServiceDaemon, ServiceEvent};
 use serde::Serialize;
 
-use crate::cast::airplay::AirPlayError;
+use crate::AirPlayError;
 
 const SERVICE_RAOP: &str = "_raop._tcp.local.";
 const SERVICE_AIRPLAY: &str = "_airplay._tcp.local.";
