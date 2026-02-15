@@ -740,7 +740,7 @@ pub async fn v2_activate_offline_session(
 #[tauri::command]
 pub async fn v2_get_queue_state(
     bridge: State<'_, CoreBridgeState>,
-) -> Result<QueueState, String> {
+) -> Result<QueueState, RuntimeError> {
     let bridge = bridge.get().await;
     Ok(bridge.get_queue_state().await)
 }
@@ -751,9 +751,8 @@ pub async fn v2_set_repeat_mode(
     mode: RepeatMode,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     let bridge = bridge.get().await;
     bridge.set_repeat_mode(mode).await;
     Ok(())
@@ -764,9 +763,8 @@ pub async fn v2_set_repeat_mode(
 pub async fn v2_toggle_shuffle(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<bool, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<bool, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
     let bridge = bridge.get().await;
     Ok(bridge.toggle_shuffle().await)
 }
@@ -777,9 +775,8 @@ pub async fn v2_set_shuffle(
     enabled: bool,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] set_shuffle: {}", enabled);
     app_state.queue.set_shuffle(enabled);
     Ok(())
@@ -790,9 +787,8 @@ pub async fn v2_set_shuffle(
 pub async fn v2_clear_queue(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
     let bridge = bridge.get().await;
     bridge.clear_queue().await;
     Ok(())
@@ -877,9 +873,8 @@ pub async fn v2_add_to_queue(
     track: V2QueueTrack,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] add_to_queue: {} - {}", track.id, track.title);
     app_state.queue.add_track(track.into());
     Ok(())
@@ -891,9 +886,8 @@ pub async fn v2_add_to_queue_next(
     track: V2QueueTrack,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] add_to_queue_next: {} - {}", track.id, track.title);
     app_state.queue.add_track_next(track.into());
     Ok(())
@@ -906,9 +900,8 @@ pub async fn v2_set_queue(
     start_index: usize,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] set_queue: {} tracks, start at {}", tracks.len(), start_index);
     let queue_tracks: Vec<crate::queue::QueueTrack> = tracks.into_iter().map(Into::into).collect();
     app_state.queue.set_queue(queue_tracks, Some(start_index));
@@ -921,9 +914,8 @@ pub async fn v2_remove_from_queue(
     index: usize,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] remove_from_queue: index {}", index);
     app_state.queue.remove_track(index);
     Ok(())
@@ -936,9 +928,8 @@ pub async fn v2_remove_upcoming_track(
     upcoming_index: usize,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Option<V2QueueTrack>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Option<V2QueueTrack>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] remove_upcoming_track: upcoming_index {}", upcoming_index);
     Ok(app_state.queue.remove_upcoming_track(upcoming_index).map(Into::into))
 }
@@ -948,9 +939,8 @@ pub async fn v2_remove_upcoming_track(
 pub async fn v2_next_track(
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Option<V2QueueTrack>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Option<V2QueueTrack>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] next_track");
     let track = app_state.queue.next();
     Ok(track.map(Into::into))
@@ -961,9 +951,8 @@ pub async fn v2_next_track(
 pub async fn v2_previous_track(
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Option<V2QueueTrack>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Option<V2QueueTrack>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] previous_track");
     let track = app_state.queue.previous();
     Ok(track.map(Into::into))
@@ -975,9 +964,8 @@ pub async fn v2_play_queue_index(
     index: usize,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<Option<V2QueueTrack>, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<Option<V2QueueTrack>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] play_queue_index: {}", index);
     let track = app_state.queue.play_index(index);
     Ok(track.map(Into::into))
@@ -990,9 +978,8 @@ pub async fn v2_move_queue_track(
     to_index: usize,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<bool, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<bool, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] move_queue_track: {} -> {}", from_index, to_index);
     Ok(app_state.queue.move_track(from_index, to_index))
 }
@@ -1003,9 +990,8 @@ pub async fn v2_add_tracks_to_queue(
     tracks: Vec<V2QueueTrack>,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] add_tracks_to_queue: {} tracks", tracks.len());
     let queue_tracks: Vec<crate::queue::QueueTrack> = tracks.into_iter().map(|t| t.into()).collect();
     app_state.queue.add_tracks(queue_tracks);
@@ -1019,9 +1005,8 @@ pub async fn v2_add_tracks_to_queue_next(
     tracks: Vec<V2QueueTrack>,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] add_tracks_to_queue_next: {} tracks", tracks.len());
     // Add in reverse order so they end up in the correct order
     for track in tracks.into_iter().rev() {
@@ -1246,13 +1231,12 @@ pub async fn v2_pause_playback(
     bridge: State<'_, CoreBridgeState>,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
     log::info!("[V2] Command: pause_playback");
     app_state.media_controls.set_playback(false);
     let bridge = bridge.get().await;
-    bridge.pause()
+    bridge.pause().map_err(RuntimeError::Internal)
 }
 
 /// Resume playback (V2)
@@ -1261,13 +1245,12 @@ pub async fn v2_resume_playback(
     bridge: State<'_, CoreBridgeState>,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
     log::info!("[V2] Command: resume_playback");
     app_state.media_controls.set_playback(true);
     let bridge = bridge.get().await;
-    bridge.resume()
+    bridge.resume().map_err(RuntimeError::Internal)
 }
 
 /// Stop playback (V2)
@@ -1276,13 +1259,12 @@ pub async fn v2_stop_playback(
     bridge: State<'_, CoreBridgeState>,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
     log::info!("[V2] Command: stop_playback");
     app_state.media_controls.set_stopped();
     let bridge = bridge.get().await;
-    bridge.stop()
+    bridge.stop().map_err(RuntimeError::Internal)
 }
 
 /// Seek to position in seconds (V2)
@@ -1292,12 +1274,11 @@ pub async fn v2_seek(
     bridge: State<'_, CoreBridgeState>,
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
     log::info!("[V2] Command: seek {}", position);
     let bridge_guard = bridge.get().await;
-    let result = bridge_guard.seek(position);
+    let result = bridge_guard.seek(position).map_err(RuntimeError::Internal);
 
     // Update MPRIS with new position
     let playback_state = bridge_guard.get_playback_state();
@@ -1315,11 +1296,10 @@ pub async fn v2_set_volume(
     volume: f32,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<(), String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
-        .map_err(|e| e.to_string())?;
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
     let bridge = bridge.get().await;
-    bridge.set_volume(volume)
+    bridge.set_volume(volume).map_err(RuntimeError::Internal)
 }
 
 /// Get current playback state (V2) - also updates MPRIS progress
@@ -1327,7 +1307,7 @@ pub async fn v2_set_volume(
 pub async fn v2_get_playback_state(
     bridge: State<'_, CoreBridgeState>,
     app_state: State<'_, AppState>,
-) -> Result<qbz_player::PlaybackState, String> {
+) -> Result<qbz_player::PlaybackState, RuntimeError> {
     let bridge = bridge.get().await;
     let playback_state = bridge.get_playback_state();
 
@@ -1349,7 +1329,7 @@ pub async fn v2_set_media_metadata(
     duration_secs: Option<u64>,
     cover_url: Option<String>,
     app_state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     log::info!("[V2] Command: set_media_metadata - {} by {}", title, artist);
     crate::update_media_controls_metadata(
         &app_state.media_controls,
@@ -1371,7 +1351,7 @@ pub async fn v2_play_next_gapless(
     bridge: State<'_, CoreBridgeState>,
     offline_cache: State<'_, OfflineCacheState>,
     app_state: State<'_, AppState>,
-) -> Result<bool, String> {
+) -> Result<bool, RuntimeError> {
     log::info!("[V2] Command: play_next_gapless for track {}", track_id);
 
     let bridge_guard = bridge.get().await;
@@ -1396,8 +1376,8 @@ pub async fn v2_play_next_gapless(
             if path.exists() {
                 log::info!("[V2/GAPLESS] Track {} from OFFLINE cache", track_id);
                 let audio_data = std::fs::read(path)
-                    .map_err(|e| format!("Failed to read cached file: {}", e))?;
-                player.play_next(audio_data, track_id)?;
+                    .map_err(|e| RuntimeError::Internal(format!("Failed to read cached file: {}", e)))?;
+                player.play_next(audio_data, track_id).map_err(RuntimeError::Internal)?;
                 return Ok(true);
             }
         }
@@ -1407,7 +1387,7 @@ pub async fn v2_play_next_gapless(
     let cache = app_state.audio_cache.clone();
     if let Some(cached) = cache.get(track_id) {
         log::info!("[V2/GAPLESS] Track {} from MEMORY cache ({} bytes)", track_id, cached.size_bytes);
-        player.play_next(cached.data, track_id)?;
+        player.play_next(cached.data, track_id).map_err(RuntimeError::Internal)?;
         return Ok(true);
     }
 
@@ -1415,7 +1395,7 @@ pub async fn v2_play_next_gapless(
     if let Some(playback_cache) = cache.get_playback_cache() {
         if let Some(audio_data) = playback_cache.get(track_id) {
             log::info!("[V2/GAPLESS] Track {} from DISK cache ({} bytes)", track_id, audio_data.len());
-            player.play_next(audio_data, track_id)?;
+            player.play_next(audio_data, track_id).map_err(RuntimeError::Internal)?;
             return Ok(true);
         }
     }
@@ -1433,7 +1413,7 @@ pub async fn v2_prefetch_track(
     offline_cache: State<'_, OfflineCacheState>,
     audio_settings: State<'_, AudioSettingsState>,
     app_state: State<'_, AppState>,
-) -> Result<(), String> {
+) -> Result<(), RuntimeError> {
     let preferred_quality = parse_quality(quality.as_deref());
 
     // Apply per-device sample rate limit if enabled
@@ -1441,7 +1421,7 @@ pub async fn v2_prefetch_track(
         let guard = audio_settings
             .store
             .lock()
-            .map_err(|e| format!("Lock error: {}", e))?;
+            .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
         if let Some(store) = guard.as_ref() {
             if let Ok(settings) = store.get_settings() {
                 if settings.limit_quality_to_device {
@@ -1481,7 +1461,7 @@ pub async fn v2_prefetch_track(
     }
 
     cache.mark_fetching(track_id);
-    let result = async {
+    let result: Result<(), RuntimeError> = async {
         // Check persistent offline cache first
         {
             let cached_path = {
@@ -1497,7 +1477,7 @@ pub async fn v2_prefetch_track(
                 if path.exists() {
                     log::info!("[V2] Prefetching track {} from offline cache", track_id);
                     let audio_data = std::fs::read(path)
-                        .map_err(|e| format!("Failed to read cached file: {}", e))?;
+                        .map_err(|e| RuntimeError::Internal(format!("Failed to read cached file: {}", e)))?;
                     cache.insert(track_id, audio_data);
                     return Ok(());
                 }
@@ -1505,10 +1485,12 @@ pub async fn v2_prefetch_track(
         }
 
         let bridge_guard = bridge.get().await;
-        let stream_url = bridge_guard.get_stream_url(track_id, final_quality).await?;
+        let stream_url = bridge_guard.get_stream_url(track_id, final_quality).await
+            .map_err(RuntimeError::Internal)?;
         drop(bridge_guard);
 
-        let audio_data = download_audio(&stream_url.url).await?;
+        let audio_data = download_audio(&stream_url.url).await
+            .map_err(RuntimeError::Internal)?;
         cache.insert(track_id, audio_data);
         Ok(())
     }
