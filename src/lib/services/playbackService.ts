@@ -138,7 +138,7 @@ export async function playTrack(
       if (!isLocal && !isCasting()) {
         // Stop current playback immediately
         try {
-          await invoke('stop_playback');
+          await invoke('v2_stop_playback');
         } catch {
           // Ignore errors - player might not be playing
         }
@@ -185,9 +185,8 @@ export async function playTrack(
         } else if (isLocal) {
           await invoke('library_play_track', { trackId: track.id });
         } else {
-          const result = await invoke<PlayTrackResult>('play_track', {
+          const result = await invoke<PlayTrackResult>('v2_play_track', {
             trackId: track.id,
-            durationSecs: track.duration,
             quality: getStreamingQuality()
           });
 

@@ -1991,7 +1991,7 @@
     if (wasPlaying) {
       // Small delay to let the new stream initialize
       await new Promise(r => setTimeout(r, 150));
-      await invoke('resume_playback');
+      await invoke('v2_resume_playback');
     }
   }
 
@@ -2765,7 +2765,7 @@
     if (!confirmed) return;
     isResettingAudio = true;
     try {
-      await invoke('stop_playback');
+      await invoke('v2_stop_playback');
       await invoke('reset_audio_settings');
       await invoke('reinit_audio_device', { device: null });
       // Reset all audio UI state to defaults

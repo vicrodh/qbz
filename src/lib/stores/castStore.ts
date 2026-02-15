@@ -135,11 +135,11 @@ export async function connectToDevice(device: CastDevice, protocol: CastProtocol
   if (wasPlaying || currentTrack) {
     console.log('[CastStore] Stopping local playback before cast connection...');
     try {
-      await invoke('stop_playback');
+      await invoke('v2_stop_playback');
       setIsPlaying(false);
     } catch (err) {
       // Ignore errors - player might not be playing
-      console.log('[CastStore] stop_playback returned:', err);
+      console.log('[CastStore] v2_stop_playback returned:', err);
     }
   }
 

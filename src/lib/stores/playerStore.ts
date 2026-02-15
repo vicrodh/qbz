@@ -364,10 +364,9 @@ export async function togglePlay(): Promise<void> {
           const localTrackId = Math.abs(currentTrack.id);
           await invoke('library_play_track', { trackId: localTrackId });
         } else {
-          // Qobuz track - use play_track with duration for seekbar
-          await invoke('play_track', {
+          // Qobuz track - use v2_play_track
+          await invoke('v2_play_track', {
             trackId: currentTrack.id,
-            durationSecs: currentTrack.duration,
             quality: getStreamingQuality()
           });
         }
@@ -376,7 +375,7 @@ export async function togglePlay(): Promise<void> {
         if (savedPosition > 0) {
           setTimeout(async () => {
             try {
-              await invoke('seek', { position: savedPosition });
+              await invoke('v2_seek', { position: savedPosition });
               console.log('[Player] Seeked to restored position:', savedPosition);
             } catch (seekErr) {
               console.error('[Player] Failed to seek to restored position:', seekErr);
@@ -385,10 +384,10 @@ export async function togglePlay(): Promise<void> {
         }
 
       } else {
-        await invoke('resume_playback');
+        await invoke('v2_resume_playback');
       }
     } else {
-      await invoke('pause_playback');
+      await invoke('v2_pause_playback');
     }
   } catch (err) {
     console.error('Failed to toggle playback:', err);
@@ -420,7 +419,7 @@ export async function seek(position: number): Promise<void> {
       return;
     }
 
-    await invoke('seek', { position: Math.floor(clampedPosition) });
+    await invoke('v2_seek', { position: Math.floor(clampedPosition) });
   } catch (err) {
     console.error('Failed to seek:', err);
   }
@@ -435,7 +434,7 @@ export async function resyncPersistedVolume(): Promise<void> {
   volume = persistedVolume;
   notifyListeners();
   try {
-    await invoke('set_volume', { volume: persistedVolume / 100 });
+    await invoke('v2_set_volume', { volume: persistedVolume / 100 });
     console.log('[Player] Resynced volume after login:', persistedVolume);
   } catch {
     console.debug('[Player] Could not resync volume to backend');
@@ -461,7 +460,7 @@ export async function setVolume(newVolume: number): Promise<void> {
     }
 
     // Try to set volume on backend - will fail silently if no track is loaded
-    await invoke('set_volume', { volume: clampedVolume / 100 });
+    await invoke('v2_set_volume', { volume: clampedVolume / 100 });
   } catch (err) {
     // Ignore errors when nothing is playing - volume is saved and will apply on next play
     console.debug('Volume set locally (no active playback):', clampedVolume);
@@ -503,7 +502,7 @@ export async function stop(): Promise<void> {
     if (isCasting()) {
       await castStop();
     } else {
-      await invoke('stop_playback');
+      await invoke('v2_stop_playback');
     }
     isPlaying = false;
     currentTrack = null;
@@ -712,7 +711,7 @@ export async function startPolling(): Promise<void> {
     // the unscoped key. resyncPersistedVolume() is called after login to fix this.
     const persistedVolume = loadPersistedVolume();
     try {
-      await invoke('set_volume', { volume: persistedVolume / 100 });
+      await invoke('v2_set_volume', { volume: persistedVolume / 100 });
       console.log('[Player] Synced persisted volume to backend:', persistedVolume);
     } catch {
       // Backend might not be ready yet, volume will be applied on first interaction
