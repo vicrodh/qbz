@@ -328,7 +328,7 @@
     error = null;
 
     try {
-      await invoke('delete_playlist', { playlistId: playlist.id });
+      await invoke('v2_delete_playlist', { playlistId: playlist.id });
       onDelete?.(playlist.id);
       onClose();
     } catch (err) {

@@ -82,7 +82,7 @@
 
     try {
       const genreIds = getGenreIdsForFetch();
-      const response = await invoke<DiscoverPlaylistsResponse>('get_discover_playlists', {
+      const response = await invoke<DiscoverPlaylistsResponse>('v2_get_discover_playlists', {
         tag: selectedTagSlug,
         genreIds,
         offset,

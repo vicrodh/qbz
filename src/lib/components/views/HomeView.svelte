@@ -668,7 +668,7 @@
     loadingQobuzPlaylists = true;
     
     try {
-      const response = await invoke<DiscoverPlaylistsResponse>('get_discover_playlists', {
+      const response = await invoke<DiscoverPlaylistsResponse>('v2_get_discover_playlists', {
         tag: slug,
         limit: LIMITS.qobuzPlaylists,
         offset: 0
@@ -687,7 +687,7 @@
   async function fetchAllDiscoverData(genreIds: number[]) {
     try {
       const apiGenreIds = genreIds.length > 0 ? genreIds : null;
-      const response = await invoke<DiscoverResponse>('get_discover_index', { genreIds: apiGenreIds });
+      const response = await invoke<DiscoverResponse>('v2_get_discover_index', { genreIds: apiGenreIds });
       const c = response.containers;
 
       // Extract editorial album sections
