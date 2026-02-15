@@ -38,7 +38,7 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     let tray_settings = app.state::<crate::config::tray_settings::TraySettingsState>();
     let remote_control_settings = app.state::<crate::config::remote_control_settings::RemoteControlSettingsState>();
     let allowed_origins = app.state::<crate::config::remote_control_settings::AllowedOriginsState>();
-    let legal_settings = app.state::<crate::config::legal_settings::LegalSettingsState>();
+    // NOTE: legal_settings is GLOBAL - not per-user, not initialized/torn down here
     let updates = app.state::<crate::updates::UpdatesState>();
     let library = app.state::<crate::library::commands::LibraryState>();
     let reco = app.state::<crate::reco_store::RecoState>();
@@ -93,15 +93,14 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     musicbrainz.init_at(&data_dir).await?;
     listenbrainz.init_at(&data_dir).await?;
 
-    // Type-alias states
+    // Type-alias states (per-user settings)
+    // NOTE: LegalSettingsState is GLOBAL (not per-user) - initialized at app startup
     use crate::config::{
         subscription_state::SubscriptionStateStore,
         download_settings::DownloadSettingsStore,
-        legal_settings::LegalSettingsStore,
     };
     crate::commands::user_session::init_type_alias_state(&*subscription_state, &data_dir, SubscriptionStateStore::new_at)?;
     crate::commands::user_session::init_type_alias_state(&*download_settings, &data_dir, DownloadSettingsStore::new_at)?;
-    crate::commands::user_session::init_type_alias_state(&*legal_settings, &data_dir, LegalSettingsStore::new_at)?;
 
     // Cache-dir stores
     offline_cache.init_at(&cache_dir).await?;
@@ -181,7 +180,7 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
     let tray_settings = app.state::<crate::config::tray_settings::TraySettingsState>();
     let remote_control_settings = app.state::<crate::config::remote_control_settings::RemoteControlSettingsState>();
     let allowed_origins = app.state::<crate::config::remote_control_settings::AllowedOriginsState>();
-    let legal_settings = app.state::<crate::config::legal_settings::LegalSettingsState>();
+    // NOTE: legal_settings is GLOBAL - not per-user, not initialized/torn down here
     let updates = app.state::<crate::updates::UpdatesState>();
     let library = app.state::<crate::library::commands::LibraryState>();
     let reco = app.state::<crate::reco_store::RecoState>();
@@ -216,10 +215,10 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
     musicbrainz.teardown().await;
     listenbrainz.teardown().await;
 
-    // Type-alias states
+    // Type-alias states (per-user settings)
+    // NOTE: LegalSettingsState is GLOBAL (not per-user) - NOT torn down here
     crate::commands::user_session::teardown_type_alias_state(&*subscription_state);
     crate::commands::user_session::teardown_type_alias_state(&*download_settings);
-    crate::commands::user_session::teardown_type_alias_state(&*legal_settings);
 
     // Clear the active user and persisted last_user_id
     user_paths.clear_user();

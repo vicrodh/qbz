@@ -253,7 +253,13 @@ pub fn run() {
     let tray_settings_state = config::tray_settings::TraySettingsState::new_empty();
     let remote_control_settings_state = config::remote_control_settings::RemoteControlSettingsState::new_empty();
     let allowed_origins_state = config::remote_control_settings::AllowedOriginsState::new_empty();
-    let legal_settings_state = config::legal_settings::create_empty_legal_settings_state();
+    // LegalSettings is GLOBAL (not per-user) - must be initialized at startup
+    // so ToS acceptance can be checked BEFORE attempting auto-login
+    let legal_settings_state = config::legal_settings::create_legal_settings_state()
+        .unwrap_or_else(|e| {
+            log::warn!("Failed to initialize legal settings: {}. Using empty state.", e);
+            config::legal_settings::create_empty_legal_settings_state()
+        });
     let updates_state = updates::UpdatesState::new_empty()
         .expect("Failed to initialize empty updates state");
     let subscription_state = config::create_empty_subscription_state();

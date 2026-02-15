@@ -6,7 +6,7 @@
 //! Playback flows through CoreBridge -> QbzCore -> Player (qbz-player crate).
 
 use std::sync::Arc;
-use tauri::{Emitter, State};
+use tauri::{Emitter, Manager, State};
 use tokio::sync::RwLock;
 
 use qbz_models::{
@@ -161,7 +161,32 @@ pub async fn runtime_bootstrap(
         }
     }
 
-    // Step 2: Check for saved credentials and attempt auto-login
+    // Step 2: Check ToS acceptance BEFORE attempting auto-login
+    // ToS gate is enforced: if not accepted, skip auto-login entirely
+    let tos_accepted: bool = {
+        let legal_state = app.state::<crate::config::legal_settings::LegalSettingsState>();
+        let guard = legal_state.lock();
+        match guard {
+            Ok(ref g) => {
+                if let Some(store) = g.as_ref() {
+                    store.get_settings().map(|s| s.qobuz_tos_accepted).unwrap_or(false)
+                } else {
+                    false
+                }
+            }
+            Err(_) => false,
+        }
+    };
+
+    if !tos_accepted {
+        log::info!("[Runtime] ToS not accepted, skipping auto-login. User must accept ToS first.");
+        manager.set_bootstrap_in_progress(false).await;
+        let status = manager.get_status().await;
+        log::info!("[Runtime] Bootstrap complete (ToS gate): {:?}", status.state);
+        return Ok(status);
+    }
+
+    // Step 3: Check for saved credentials and attempt auto-login
     let creds = crate::credentials::load_qobuz_credentials();
     let last_user_id = crate::user_data::UserDataPaths::load_last_user_id();
 
@@ -179,7 +204,7 @@ pub async fn runtime_bootstrap(
                     user_id: Some(session.user_id),
                 });
 
-                // Step 3: Authenticate CoreBridge/V2 - REQUIRED per ADR
+                // Step 4: Authenticate CoreBridge/V2 - REQUIRED per ADR
                 if let Some(bridge) = core_bridge.try_get().await {
                     match bridge.login(&creds.email, &creds.password).await {
                         Ok(_) => {
@@ -201,14 +226,19 @@ pub async fn runtime_bootstrap(
                     return Err(RuntimeError::V2NotInitialized);
                 }
 
-                // Step 4: Activate per-user session - NOW autocontained in bootstrap
+                // Step 5: Activate per-user session - REQUIRED (FATAL if fails)
                 // This initializes all per-user stores and sets runtime state
+                // Session activation failure is FATAL per parity with v2_auto_login/v2_manual_login
                 if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
                     log::error!("[Runtime] Session activation failed: {}", e);
-                    // Non-fatal for bootstrap - user can still use app but some features may not work
-                    // Emit degraded event so frontend knows
+                    // Rollback auth state since session is not usable
+                    manager.set_legacy_auth(false, None).await;
+                    manager.set_corebridge_auth(false).await;
                     let reason = DegradedReason::SessionActivationFailed(e.clone());
-                    let _ = app.emit("runtime:event", RuntimeEvent::RuntimeDegraded { reason });
+                    manager.set_degraded(reason.clone()).await;
+                    manager.set_bootstrap_in_progress(false).await;
+                    let _ = app.emit("runtime:event", RuntimeEvent::RuntimeDegraded { reason: reason.clone() });
+                    return Err(RuntimeError::RuntimeDegraded(reason));
                 }
             }
             Err(e) => {
