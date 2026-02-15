@@ -1,6 +1,6 @@
-//! Disk-based playback cache (L2)
+//! L2 Disk Cache - File-based playback cache
 //!
-//! Secondary cache for audio data that was evicted from memory.
+//! Secondary cache for audio data evicted from memory.
 //! Provides faster access than re-downloading from network.
 
 use std::collections::HashMap;
@@ -28,22 +28,32 @@ struct PlaybackCacheState {
 }
 
 /// Disk-based playback cache for evicted tracks
+///
+/// Stores audio data as files on disk with LRU eviction.
+/// Files are named `{track_id}.audio` in the cache directory.
 pub struct PlaybackCache {
     state: Mutex<PlaybackCacheState>,
     /// Cache directory path
     cache_dir: PathBuf,
-    /// Maximum cache size in bytes (default: 500MB)
+    /// Maximum cache size in bytes
     max_size_bytes: u64,
 }
 
 impl PlaybackCache {
-    /// Create a new playback cache
+    /// Create a new playback cache with default location
+    ///
+    /// Default path: `~/.cache/qbz/playback/`
     pub fn new(max_size_bytes: u64) -> Result<Self, String> {
         let cache_dir = dirs::cache_dir()
             .ok_or("Could not determine cache directory")?
             .join("qbz")
             .join("playback");
 
+        Self::with_path(cache_dir, max_size_bytes)
+    }
+
+    /// Create a new playback cache at a specific path
+    pub fn with_path(cache_dir: PathBuf, max_size_bytes: u64) -> Result<Self, String> {
         // Create directory
         fs::create_dir_all(&cache_dir)
             .map_err(|e| format!("Failed to create playback cache directory: {}", e))?;
@@ -284,6 +294,11 @@ impl PlaybackCache {
             current_size_bytes: state.current_size,
             max_size_bytes: self.max_size_bytes,
         }
+    }
+
+    /// Get the cache directory path
+    pub fn cache_dir(&self) -> &PathBuf {
+        &self.cache_dir
     }
 }
 

@@ -20,6 +20,7 @@ qbz-player = { path = "../crates/qbz-player" }
 qbz-qobuz = { path = "../crates/qbz-qobuz" }
 qbz-core = { path = "../crates/qbz-core" }
 qbz-integrations = { path = "../crates/qbz-integrations" }
+qbz-cache = { path = "../crates/qbz-cache" }
 
 # Tauri
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }

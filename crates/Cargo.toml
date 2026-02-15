@@ -8,14 +8,12 @@ members = [
     "qbz-qobuz",
     "qbz-core",
     "qbz-integrations",
+    "qbz-cache",
 ]
 
 # Tier 2 crates (to be added later)
-# "qbz-offlineplayback",
-# "qbz-locallibrary",
+# "qbz-library",
 # "qbz-cast",
-# "qbz-scrobbling",
-# "qbz-plex",
 
 [workspace.package]
 version = "0.1.0"
