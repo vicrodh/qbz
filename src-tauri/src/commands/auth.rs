@@ -92,11 +92,15 @@ pub async fn login(
             }
 
             // Also authenticate V2 CoreBridge client for the new architecture
-            let bridge = core_bridge.get().await;
-            if let Err(e) = bridge.login(&email, &password).await {
-                log::warn!("[Auth] V2 CoreBridge login failed (non-blocking): {}", e);
+            // Use try_get() to gracefully handle case where CoreBridge init is still in progress
+            if let Some(bridge) = core_bridge.try_get().await {
+                if let Err(e) = bridge.login(&email, &password).await {
+                    log::warn!("[Auth] V2 CoreBridge login failed (non-blocking): {}", e);
+                } else {
+                    log::info!("[Auth] V2 CoreBridge authenticated successfully");
+                }
             } else {
-                log::info!("[Auth] V2 CoreBridge authenticated successfully");
+                log::warn!("[Auth] V2 CoreBridge not yet initialized, skipping V2 auth");
             }
 
             Ok(LoginResponse {
@@ -168,10 +172,11 @@ pub async fn logout(
     let client = state.client.read().await;
     client.logout().await;
 
-    // Also logout from V2 CoreBridge
-    let bridge = core_bridge.get().await;
-    if let Err(e) = bridge.logout().await {
-        log::warn!("[Auth] V2 CoreBridge logout failed: {}", e);
+    // Also logout from V2 CoreBridge (if initialized)
+    if let Some(bridge) = core_bridge.try_get().await {
+        if let Err(e) = bridge.logout().await {
+            log::warn!("[Auth] V2 CoreBridge logout failed: {}", e);
+        }
     }
 
     Ok(())
@@ -263,11 +268,15 @@ pub async fn auto_login(
             }
 
             // Also authenticate V2 CoreBridge client for the new architecture
-            let bridge = core_bridge.get().await;
-            if let Err(e) = bridge.login(&creds.email, &creds.password).await {
-                log::warn!("[Auth/Auto] V2 CoreBridge login failed (non-blocking): {}", e);
+            // Use try_get() to gracefully handle case where CoreBridge init is still in progress
+            if let Some(bridge) = core_bridge.try_get().await {
+                if let Err(e) = bridge.login(&creds.email, &creds.password).await {
+                    log::warn!("[Auth/Auto] V2 CoreBridge login failed (non-blocking): {}", e);
+                } else {
+                    log::info!("[Auth/Auto] V2 CoreBridge authenticated successfully");
+                }
             } else {
-                log::info!("[Auth/Auto] V2 CoreBridge authenticated successfully");
+                log::warn!("[Auth/Auto] V2 CoreBridge not yet initialized, skipping V2 auth");
             }
 
             Ok(LoginResponse {

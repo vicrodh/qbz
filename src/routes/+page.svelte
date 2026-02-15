@@ -2301,12 +2301,19 @@
 
     // Activate per-user backend state (LoginView already did this for auto-login,
     // but we call again to ensure it's active for manual login too — it's idempotent)
-    if (info.userId) {
+    // CRITICAL: userId must be a valid positive number for activate_user_session
+    if (info.userId && info.userId > 0) {
       try {
         await invoke('activate_user_session', { userId: info.userId });
       } catch (err) {
         console.error('[Session] Failed to activate user session:', err);
+        // Don't set sessionReady if activation failed
+        return;
       }
+    } else {
+      console.error('[Session] Invalid userId received:', info.userId, '- cannot activate session');
+      // Don't set sessionReady - session is broken
+      return;
     }
 
     // Signal that per-user backend stores are ready — the launch update
@@ -2323,6 +2330,13 @@
     initPlaybackPreferences().catch(err => console.debug('[PlaybackPrefs] Init deferred:', err));
     initBlacklistStore().catch(err => console.debug('[Blacklist] Init deferred:', err));
     refreshUpdatePreferences().catch(err => console.debug('[Updates] Prefs refresh deferred:', err));
+
+    // Load audio settings (normalization state) now that session is active
+    invoke<{ normalization_enabled: boolean }>('get_audio_settings').then((settings) => {
+      normalizationEnabled = settings.normalization_enabled;
+    }).catch((err) => {
+      console.error('[AudioSettings] Failed to load:', err);
+    });
 
     // Load favorites now that login is confirmed (sync with Qobuz)
     loadFavorites();        // Track favorites
@@ -2637,12 +2651,8 @@
       // Ignore storage errors
     }
 
-    // Load normalization enabled state from audio settings
-    invoke<{ normalization_enabled: boolean }>('get_audio_settings').then((settings) => {
-      normalizationEnabled = settings.normalization_enabled;
-    }).catch((err) => {
-      console.error('Failed to load audio settings:', err);
-    });
+    // NOTE: Audio settings are loaded AFTER session is ready (in handleLoginSuccess)
+    // to avoid "No active session" errors from per-user state
 
     // Set up callback for cast disconnect handoff
     setOnAskContinueLocally(async (track, position) => {

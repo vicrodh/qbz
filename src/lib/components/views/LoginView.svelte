@@ -73,7 +73,9 @@
         clearTimeoutTimer();
         const userInfo = await invoke<{ user_name: string; subscription: string; subscription_valid_until?: string | null } | null>('get_user_info');
         const userId = await invoke<number | null>('get_current_user_id');
-        if (userInfo && userId) {
+        // CRITICAL: userId must be a valid positive number, never 0 or null
+        // If we can't get a valid userId, the session is broken and we need to re-login
+        if (userInfo && userId && userId > 0) {
           onLoginSuccess({
             userName: userInfo.user_name,
             userId,
@@ -81,7 +83,9 @@
             subscriptionValidUntil: userInfo.subscription_valid_until ?? null,
           });
         } else {
-          onLoginSuccess({ userName: 'User', userId: userId || 0, subscription: 'Active' });
+          // Session is invalid - don't use userId=0 fallback, show login instead
+          console.warn('[LoginView] Session invalid: userInfo or userId missing/invalid, requiring re-login');
+          // Don't call onLoginSuccess with invalid userId - let the login flow continue
         }
         return;
       }

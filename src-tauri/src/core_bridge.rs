@@ -239,6 +239,22 @@ impl CoreBridgeState {
             |opt| opt.as_ref().expect("CoreBridge not initialized")
         )
     }
+
+    /// Try to get the bridge, returns None if not initialized yet
+    /// Use this for operations that should gracefully handle uninitialized state
+    pub async fn try_get(&self) -> Option<impl std::ops::Deref<Target = CoreBridge> + '_> {
+        let guard = self.0.read().await;
+        if guard.is_some() {
+            Some(tokio::sync::RwLockReadGuard::map(guard, |opt| opt.as_ref().unwrap()))
+        } else {
+            None
+        }
+    }
+
+    /// Check if the bridge is initialized
+    pub async fn is_initialized(&self) -> bool {
+        self.0.read().await.is_some()
+    }
 }
 
 impl Default for CoreBridgeState {
