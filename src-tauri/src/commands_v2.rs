@@ -5,14 +5,18 @@
 //!
 //! Playback flows through CoreBridge -> QbzCore -> Player (qbz-player crate).
 
+use std::sync::Arc;
 use tauri::State;
+use tokio::sync::RwLock;
 
 use qbz_models::{Album, Artist, Quality, QueueState, RepeatMode, SearchResultsPage, Track, UserSession};
 
 use crate::artist_blacklist::BlacklistState;
+use crate::cache::AudioCache;
 use crate::config::audio_settings::AudioSettingsState;
 use crate::core_bridge::CoreBridgeState;
 use crate::offline_cache::OfflineCacheState;
+use crate::queue::QueueManager;
 use crate::AppState;
 
 // ==================== Helper Functions ====================
@@ -91,6 +95,124 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
 
     log::info!("[V2] Downloaded {} bytes", bytes.len());
     Ok(bytes.to_vec())
+}
+
+// ==================== Prefetch (V2) ====================
+
+/// Number of Qobuz tracks to prefetch (not total tracks, just Qobuz)
+const V2_PREFETCH_COUNT: usize = 2;
+
+/// How far ahead to look for tracks to prefetch (to handle mixed playlists)
+const V2_PREFETCH_LOOKAHEAD: usize = 10;
+
+/// Maximum concurrent prefetch downloads
+const V2_MAX_CONCURRENT_PREFETCH: usize = 1;
+
+lazy_static::lazy_static! {
+    /// Semaphore to limit concurrent prefetch operations
+    static ref V2_PREFETCH_SEMAPHORE: tokio::sync::Semaphore =
+        tokio::sync::Semaphore::new(V2_MAX_CONCURRENT_PREFETCH);
+}
+
+/// Spawn background tasks to prefetch upcoming Qobuz tracks (V2)
+fn spawn_v2_prefetch(
+    bridge: Arc<RwLock<Option<crate::core_bridge::CoreBridge>>>,
+    cache: Arc<AudioCache>,
+    queue: &QueueManager,
+    quality: Quality,
+    streaming_only: bool,
+) {
+    // Skip prefetch entirely in streaming_only mode
+    if streaming_only {
+        log::debug!("[V2/PREFETCH] Skipped - streaming_only mode active");
+        return;
+    }
+
+    // Look further ahead to find Qobuz tracks in mixed playlists
+    let upcoming_tracks = queue.peek_upcoming(V2_PREFETCH_LOOKAHEAD);
+
+    if upcoming_tracks.is_empty() {
+        log::debug!("[V2/PREFETCH] No upcoming tracks to prefetch");
+        return;
+    }
+
+    let mut qobuz_prefetched = 0;
+
+    for track in upcoming_tracks {
+        // Stop once we've prefetched enough Qobuz tracks
+        if qobuz_prefetched >= V2_PREFETCH_COUNT {
+            break;
+        }
+
+        let track_id = track.id;
+        let track_title = track.title.clone();
+
+        // Skip local tracks - they don't need prefetching from Qobuz
+        if track.is_local {
+            log::debug!("[V2/PREFETCH] Skipping local track: {} - {}", track_id, track_title);
+            continue;
+        }
+
+        // Check if already cached or being fetched
+        if cache.contains(track_id) {
+            log::debug!("[V2/PREFETCH] Track {} already cached", track_id);
+            qobuz_prefetched += 1;
+            continue;
+        }
+
+        if cache.is_fetching(track_id) {
+            log::debug!("[V2/PREFETCH] Track {} already being fetched", track_id);
+            qobuz_prefetched += 1;
+            continue;
+        }
+
+        // Mark as fetching
+        cache.mark_fetching(track_id);
+        qobuz_prefetched += 1;
+
+        let bridge_clone = bridge.clone();
+        let cache_clone = cache.clone();
+
+        log::info!("[V2/PREFETCH] Prefetching track: {} - {}", track_id, track_title);
+
+        // Spawn background task for each track (with semaphore to limit concurrency)
+        tokio::spawn(async move {
+            // Acquire semaphore permit to limit concurrent prefetches
+            let _permit = match V2_PREFETCH_SEMAPHORE.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    log::warn!("[V2/PREFETCH] Semaphore closed, skipping track {}", track_id);
+                    cache_clone.unmark_fetching(track_id);
+                    return;
+                }
+            };
+
+            let result = async {
+                let bridge_guard = bridge_clone.read().await;
+                let bridge = bridge_guard.as_ref().ok_or("CoreBridge not initialized")?;
+                let stream_url = bridge.get_stream_url(track_id, quality).await?;
+                drop(bridge_guard);
+
+                let data = download_audio(&stream_url.url).await?;
+                Ok::<Vec<u8>, String>(data)
+            }
+            .await;
+
+            match result {
+                Ok(data) => {
+                    // Small delay before cache insertion to avoid potential race with audio thread
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    cache_clone.insert(track_id, data);
+                    log::info!("[V2/PREFETCH] Complete for track {}", track_id);
+                }
+                Err(e) => {
+                    log::warn!("[V2/PREFETCH] Failed for track {}: {}", track_id, e);
+                }
+            }
+
+            cache_clone.unmark_fetching(track_id);
+        });
+    }
 }
 
 // ==================== Auth Commands (V2) ====================
@@ -647,6 +769,10 @@ pub async fn v2_play_track(
                 let audio_data = std::fs::read(path)
                     .map_err(|e| format!("Failed to read cached file: {}", e))?;
                 player.play_data(audio_data, track_id)?;
+
+                // Prefetch next tracks in background
+                drop(bridge_guard);
+                spawn_v2_prefetch(bridge.0.clone(), app_state.audio_cache.clone(), &app_state.queue, final_quality, streaming_only);
                 return Ok(V2PlayTrackResult { format_id: None });
             }
         }
@@ -658,6 +784,10 @@ pub async fn v2_play_track(
     if let Some(cached) = cache.get(track_id) {
         log::info!("[V2/CACHE HIT] Track {} from MEMORY cache ({} bytes)", track_id, cached.size_bytes);
         player.play_data(cached.data, track_id)?;
+
+        // Prefetch next tracks in background
+        drop(bridge_guard);
+        spawn_v2_prefetch(bridge.0.clone(), cache.clone(), &app_state.queue, final_quality, streaming_only);
         return Ok(V2PlayTrackResult { format_id: None });
     }
 
@@ -667,6 +797,10 @@ pub async fn v2_play_track(
             log::info!("[V2/CACHE HIT] Track {} from DISK cache ({} bytes)", track_id, audio_data.len());
             cache.insert(track_id, audio_data.clone());
             player.play_data(audio_data, track_id)?;
+
+            // Prefetch next tracks in background
+            drop(bridge_guard);
+            spawn_v2_prefetch(bridge.0.clone(), cache.clone(), &app_state.queue, final_quality, streaming_only);
             return Ok(V2PlayTrackResult { format_id: None });
         }
     }
@@ -692,6 +826,10 @@ pub async fn v2_play_track(
     // Play it via qbz-player
     player.play_data(audio_data, track_id)?;
     log::info!("[V2] Playing track {} ({} bytes)", track_id, data_size);
+
+    // Prefetch next tracks in background
+    drop(bridge_guard);
+    spawn_v2_prefetch(bridge.0.clone(), cache, &app_state.queue, final_quality, streaming_only);
 
     Ok(V2PlayTrackResult { format_id: Some(stream_url.format_id) })
 }
