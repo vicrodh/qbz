@@ -141,10 +141,10 @@
     if (!currentTrack?.trackId) return;
     try {
       if (currentTrackFavorite) {
-        await invoke('remove_track_from_favorites', { trackId: currentTrack.trackId });
+        await invoke('v2_remove_favorite', { favType: 'tracks', itemId: String(currentTrack.trackId) });
         currentTrackFavorite = false;
       } else {
-        await invoke('add_track_to_favorites', { trackId: currentTrack.trackId });
+        await invoke('v2_add_favorite', { favType: 'tracks', itemId: String(currentTrack.trackId) });
         currentTrackFavorite = true;
       }
     } catch (err) {
