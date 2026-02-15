@@ -64,8 +64,9 @@
         }
       }, LOGIN_TIMEOUT_MS);
 
-      const result = await invoke<boolean>('init_client');
-      console.log('Client initialized:', result);
+      // Phase 1: Initialize client (V2 - extracts bundle tokens)
+      const initResult = await invoke<{ state: string; client_initialized: boolean }>('v2_init_client');
+      console.log('[LoginView] v2_init_client result:', initResult);
 
       // Check if already logged in (in-memory session)
       const loggedIn = await invoke<boolean>('is_logged_in');
@@ -110,6 +111,7 @@
       initStatus = 'Loading preferences...';
       await loadTosAcceptance();
 
+      // Phase 2: Auto-login with V2 (blocking CoreBridge auth)
       if (hasSavedCreds && get(qobuzTosAccepted)) {
         initStatus = 'Logging in...';
         const response = await invoke<{
@@ -120,11 +122,11 @@
           subscription_valid_until?: string | null;
           error?: string;
           error_code?: string;
-        }>('auto_login');
+        }>('v2_auto_login');
 
         if (response.success) {
           clearTimeoutTimer();
-          console.log('Auto-login successful');
+          console.log('[LoginView] v2_auto_login successful');
           onLoginSuccess({
             userName: response.user_name || 'User',
             userId: response.user_id || 0,
@@ -133,9 +135,13 @@
           });
           return;
         } else {
-          console.log('Auto-login failed:', response.error);
+          console.log('[LoginView] v2_auto_login failed:', response.error);
           if (response.error_code === 'ineligible_user') {
             error = $t('auth.ineligibleSubscription');
+          } else if (response.error_code === 'v2_auth_failed') {
+            error = $t('auth.v2AuthFailed');
+          } else if (response.error_code === 'v2_not_initialized') {
+            error = $t('auth.v2NotInitialized');
           }
           // Don't show error, just fall through to manual login
         }
@@ -183,6 +189,7 @@
     error = null;
 
     try {
+      // V2 manual login with blocking CoreBridge auth
       const response = await invoke<{
         success: boolean;
         user_name?: string;
@@ -191,13 +198,11 @@
         subscription_valid_until?: string | null;
         error?: string;
         error_code?: string;
-      }>('login', { email, password });
+      }>('v2_manual_login', { email, password });
 
-      console.log('Login response:', response);
+      console.log('[LoginView] v2_manual_login response:', response);
 
       if (response.success) {
-        // V2 CoreBridge is now authenticated automatically by the backend login command
-
         // Save credentials if "Remember me" is checked
         if (rememberMe) {
           try {
@@ -218,6 +223,10 @@
       } else {
         if (response.error_code === 'ineligible_user') {
           error = $t('auth.ineligibleSubscription');
+        } else if (response.error_code === 'v2_auth_failed') {
+          error = $t('auth.v2AuthFailed');
+        } else if (response.error_code === 'v2_not_initialized') {
+          error = $t('auth.v2NotInitialized');
         } else {
           error = response.error || 'Login failed';
         }

@@ -998,7 +998,9 @@
     "loginError": "Error al iniciar sesión. Verifica tus credenciales.",
     "welcomeBack": "Bienvenido de nuevo",
     "rememberMe": "Recordarme",
-    "ineligibleSubscription": "No hay una suscripción activa. QBZ solo funcionará en modo offline."
+    "ineligibleSubscription": "No hay una suscripción activa. QBZ solo funcionará en modo offline.",
+    "v2AuthFailed": "La autenticación con Qobuz falló. Por favor, inténtalo de nuevo.",
+    "v2NotInitialized": "No se pudo conectar con Qobuz. Por favor, reinicia la aplicación."
   },
   "legal": {
     "brandingLineSuffix": "Esta aplicación usa la API de Qobuz™ pero no está certificada por Qobuz™.",

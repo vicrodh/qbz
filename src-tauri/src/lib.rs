@@ -1103,6 +1103,9 @@ pub fn run() {
             commands_v2::v2_is_logged_in,
             commands_v2::v2_login,
             commands_v2::v2_logout,
+            commands_v2::v2_init_client,
+            commands_v2::v2_auto_login,
+            commands_v2::v2_manual_login,
             // Queue (V2)
             commands_v2::v2_get_queue_state,
             commands_v2::v2_set_repeat_mode,

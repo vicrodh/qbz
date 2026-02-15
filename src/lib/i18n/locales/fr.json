@@ -940,7 +940,9 @@
     "loginError": "Échec de la connexion. Veuillez vérifier vos identifiants.",
     "welcomeBack": "Bon retour",
     "rememberMe": "Se souvenir de moi",
-    "ineligibleSubscription": "Aucun abonnement actif. QBZ fonctionnera uniquement en mode hors ligne."
+    "ineligibleSubscription": "Aucun abonnement actif. QBZ fonctionnera uniquement en mode hors ligne.",
+    "v2AuthFailed": "L'authentification avec Qobuz a échoué. Veuillez réessayer.",
+    "v2NotInitialized": "Impossible de se connecter à Qobuz. Veuillez redémarrer l'application."
   },
   "legal": {
     "brandingLineSuffix": "",

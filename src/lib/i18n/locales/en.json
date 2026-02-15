@@ -998,7 +998,9 @@
     "loginError": "Login failed. Please check your credentials.",
     "welcomeBack": "Welcome back",
     "rememberMe": "Remember me",
-    "ineligibleSubscription": "No active subscription. QBZ will run in offline mode only."
+    "ineligibleSubscription": "No active subscription. QBZ will run in offline mode only.",
+    "v2AuthFailed": "Authentication with Qobuz failed. Please try again.",
+    "v2NotInitialized": "Could not connect to Qobuz. Please restart the app."
   },
   "legal": {
     "brandingLineSuffix": "",
