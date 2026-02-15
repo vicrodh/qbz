@@ -52,6 +52,11 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     let listenbrainz = app.state::<crate::listenbrainz::ListenBrainzSharedState>();
     let runtime_manager = app.state::<RuntimeManagerState>();
 
+    // V2 integration states (from qbz-integrations crate)
+    let listenbrainz_v2 = app.state::<crate::integrations_v2::ListenBrainzV2State>();
+    let musicbrainz_v2 = app.state::<crate::integrations_v2::MusicBrainzV2State>();
+    let lastfm_v2 = app.state::<crate::integrations_v2::LastFmV2State>();
+
     // Set the active user for path resolution
     user_paths.set_user(user_id);
 
@@ -92,6 +97,31 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     offline.init_at(&data_dir)?;
     musicbrainz.init_at(&data_dir).await?;
     listenbrainz.init_at(&data_dir).await?;
+
+    // Sync V2 integration states with credentials from legacy persistence
+    // ListenBrainz V2: get token/user_name/enabled from legacy client
+    {
+        let legacy_client = listenbrainz.client.lock().await;
+        let token = legacy_client.get_token().await;
+        let user_name = legacy_client.get_user_name().await;
+        let enabled = legacy_client.is_enabled().await;
+        drop(legacy_client);
+        listenbrainz_v2.init_with_credentials(token, user_name, enabled).await;
+        log::info!("[SessionLifecycle] ListenBrainz V2 state synced from legacy");
+    }
+
+    // MusicBrainz V2: sync enabled state (use_proxy defaults to true)
+    {
+        let legacy_client = &musicbrainz.client;
+        let enabled = legacy_client.is_enabled().await;
+        musicbrainz_v2.init_with_config(enabled, true).await;
+        log::info!("[SessionLifecycle] MusicBrainz V2 state synced from legacy");
+    }
+
+    // LastFm V2: no legacy state, just reset to clean state
+    // Credentials are loaded separately via LastFm-specific commands
+    lastfm_v2.init_with_session(None).await;
+    log::info!("[SessionLifecycle] LastFm V2 state initialized");
 
     // Type-alias states (per-user settings)
     // NOTE: LegalSettingsState is GLOBAL (not per-user) - initialized at app startup
@@ -194,6 +224,11 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
     let listenbrainz = app.state::<crate::listenbrainz::ListenBrainzSharedState>();
     let runtime_manager = app.state::<RuntimeManagerState>();
 
+    // V2 integration states (from qbz-integrations crate)
+    let listenbrainz_v2 = app.state::<crate::integrations_v2::ListenBrainzV2State>();
+    let musicbrainz_v2 = app.state::<crate::integrations_v2::MusicBrainzV2State>();
+    let lastfm_v2 = app.state::<crate::integrations_v2::LastFmV2State>();
+
     // Teardown all per-user stores (closes DB connections)
     session_store.teardown();
     favorites_cache.teardown()?;
@@ -214,6 +249,12 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
     lyrics.teardown().await;
     musicbrainz.teardown().await;
     listenbrainz.teardown().await;
+
+    // Teardown V2 integration states (clear in-memory credentials)
+    listenbrainz_v2.clear_credentials().await;
+    musicbrainz_v2.init_with_config(true, true).await; // Reset to defaults
+    lastfm_v2.init_with_session(None).await; // Clear session
+    log::info!("[SessionLifecycle] V2 integration states cleared");
 
     // Type-alias states (per-user settings)
     // NOTE: LegalSettingsState is GLOBAL (not per-user) - NOT torn down here
