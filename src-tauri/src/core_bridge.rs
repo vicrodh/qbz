@@ -11,7 +11,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 use qbz_core::QbzCore;
-use qbz_models::{Album, Artist, QueueState, RepeatMode, SearchResultsPage, Track, UserSession};
+use qbz_models::{Album, Artist, Quality, QueueState, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession};
 use qbz_player::{Player, PlaybackState};
 use qbz_audio::{AudioSettings, AudioDiagnostic, settings::AudioSettingsStore};
 
@@ -166,6 +166,17 @@ impl CoreBridge {
     /// Get artist by ID
     pub async fn get_artist(&self, artist_id: u64) -> Result<Artist, String> {
         self.core.get_artist(artist_id).await.map_err(|e| e.to_string())
+    }
+
+    // ==================== Streaming ====================
+
+    /// Get stream URL for a track with quality fallback
+    pub async fn get_stream_url(
+        &self,
+        track_id: u64,
+        quality: Quality,
+    ) -> Result<StreamUrl, String> {
+        self.core.get_stream_url(track_id, quality).await.map_err(|e| e.to_string())
     }
 
     // ==================== Playback Commands ====================
