@@ -45,6 +45,17 @@
     };
   });
 
+  // RuntimeStatus type from backend
+  interface RuntimeStatus {
+    state: string;
+    user_id: number | null;
+    client_initialized: boolean;
+    legacy_auth: boolean;
+    corebridge_auth: boolean;
+    session_activated: boolean;
+    degraded_reason: { code: string; message: string } | null;
+  }
+
   async function initializeClient() {
     try {
       isInitializing = true;
@@ -64,87 +75,52 @@
         }
       }, LOGIN_TIMEOUT_MS);
 
-      // Phase 1: Initialize client (V2 - extracts bundle tokens)
-      const initResult = await invoke<{ state: string; client_initialized: boolean }>('v2_init_client');
-      console.log('[LoginView] v2_init_client result:', initResult);
-
-      // Check if already logged in (in-memory session)
-      const loggedIn = await invoke<boolean>('is_logged_in');
-      if (loggedIn) {
-        clearTimeoutTimer();
-        const userInfo = await invoke<{ user_name: string; subscription: string; subscription_valid_until?: string | null } | null>('get_user_info');
-        const userId = await invoke<number | null>('get_current_user_id');
-        // CRITICAL: userId must be a valid positive number, never 0 or null
-        // If we can't get a valid userId, the session is broken and we need to re-login
-        if (userInfo && userId && userId > 0) {
-          onLoginSuccess({
-            userName: userInfo.user_name,
-            userId,
-            subscription: userInfo.subscription,
-            subscriptionValidUntil: userInfo.subscription_valid_until ?? null,
-          });
-        } else {
-          // Session is invalid - don't use userId=0 fallback, show login instead
-          console.warn('[LoginView] Session invalid: userInfo or userId missing/invalid, requiring re-login');
-          // Don't call onLoginSuccess with invalid userId - let the login flow continue
-        }
-        return;
-      }
-
-      // Check for saved credentials
-      initStatus = 'Checking saved credentials...';
-      const hasSavedCreds = await invoke<boolean>('has_saved_credentials');
-
-      // NOTE: Session activation removed from here.
-      // Session is now activated in runtime_bootstrap/v2_auto_login AFTER successful auth.
-      // This prevents activating session before login is confirmed.
-      // ToS check will use localStorage fallback if per-user storage isn't available.
-
-      // Load ToS acceptance (will fallback to localStorage if no session)
+      // Load ToS acceptance first (uses localStorage fallback before session)
       initStatus = 'Loading preferences...';
       await loadTosAcceptance();
 
-      // Phase 2: Auto-login with V2 (blocking CoreBridge auth)
-      if (hasSavedCreds && get(qobuzTosAccepted)) {
-        initStatus = 'Logging in...';
-        const response = await invoke<{
-          success: boolean;
-          user_name?: string;
-          user_id?: number;
-          subscription?: string;
-          subscription_valid_until?: string | null;
-          error?: string;
-          error_code?: string;
-        }>('v2_auto_login');
+      // Use runtime_bootstrap as the SINGLE SOURCE OF TRUTH for initialization.
+      // It does everything: init client, auto-login if saved creds, activate session.
+      // NO legacy is_logged_in/get_user_info checks - that causes state divergence.
+      initStatus = 'Initializing...';
+      const status = await invoke<RuntimeStatus>('runtime_bootstrap');
+      console.log('[LoginView] runtime_bootstrap result:', status);
 
-        if (response.success) {
-          // Validate that we have a valid user_id - NEVER allow 0
-          if (!response.user_id || response.user_id === 0) {
-            console.error('[LoginView] v2_auto_login returned success but invalid user_id');
-            error = $t('auth.v2AuthFailed');
-            clearTimeoutTimer();
+      // Check if session is fully active (authenticated + session activated)
+      if (status.session_activated && status.user_id && status.user_id > 0) {
+        // Session is valid - need to get user display info
+        // Use v2 command since session is active
+        clearTimeoutTimer();
+        try {
+          const userInfo = await invoke<{ user_name: string; subscription: string; subscription_valid_until?: string | null } | null>('get_user_info');
+          if (userInfo) {
+            console.log('[LoginView] Session restored for user_id:', status.user_id);
+            onLoginSuccess({
+              userName: userInfo.user_name,
+              userId: status.user_id,
+              subscription: userInfo.subscription,
+              subscriptionValidUntil: userInfo.subscription_valid_until ?? null,
+            });
             return;
           }
-          clearTimeoutTimer();
-          console.log('[LoginView] v2_auto_login successful, user_id:', response.user_id);
-          onLoginSuccess({
-            userName: response.user_name || 'User',
-            userId: response.user_id,
-            subscription: response.subscription || 'Active',
-            subscriptionValidUntil: response.subscription_valid_until ?? null,
-          });
-          return;
-        } else {
-          console.log('[LoginView] v2_auto_login failed:', response.error);
-          if (response.error_code === 'ineligible_user') {
-            error = $t('auth.ineligibleSubscription');
-          } else if (response.error_code === 'v2_auth_failed') {
-            error = $t('auth.v2AuthFailed');
-          } else if (response.error_code === 'v2_not_initialized') {
-            error = $t('auth.v2NotInitialized');
-          }
-          // Don't show error, just fall through to manual login
+        } catch (err) {
+          console.warn('[LoginView] Could not get user info, will show login form:', err);
         }
+      }
+
+      // Check for degraded state
+      if (status.degraded_reason) {
+        console.warn('[LoginView] Runtime degraded:', status.degraded_reason);
+        if (status.degraded_reason.code === 'BundleExtractionFailed') {
+          initError = $t('auth.connectionFailed');
+          clearTimeoutTimer();
+          return;
+        }
+      }
+
+      // If client is initialized but no session, show login form
+      if (status.client_initialized && !status.session_activated) {
+        console.log('[LoginView] Client ready, no session - showing login form');
       }
 
       // If we reach here, no auto-login - clear timeout and show login form

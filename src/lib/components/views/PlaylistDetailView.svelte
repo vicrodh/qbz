@@ -340,11 +340,11 @@
 
   // Subscribe to offline status changes and fetch current user ID
   onMount(() => {
-    // Fetch current user ID for ownership check
-    invoke<number | null>('get_current_user_id').then(userId => {
-      currentUserId = userId;
+    // Fetch current user ID for ownership check via runtime contract (not legacy)
+    invoke<{ user_id: number | null }>('runtime_get_status').then(status => {
+      currentUserId = status.user_id;
     }).catch(err => {
-      console.warn('Failed to get current user ID:', err);
+      console.warn('Failed to get current user ID from runtime:', err);
     });
 
     const unsubscribeOffline = subscribeOffline(() => {

@@ -394,9 +394,18 @@ pub async fn v2_auto_login(
     }
 
     // Activate per-user session (initializes all per-user stores)
+    // This is REQUIRED - without it, user has auth but no stores, causing UserSessionNotActivated errors
     if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
         log::error!("[V2] Session activation failed: {}", e);
-        // Non-fatal - consider login successful, stores can be initialized later
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: Some(session.display_name.clone()),
+            user_id: Some(session.user_id),
+            subscription: Some(session.subscription_label.clone()),
+            subscription_valid_until: session.subscription_valid_until.clone(),
+            error: Some(format!("Session activation failed: {}", e)),
+            error_code: Some("session_activation_failed".to_string()),
+        });
     }
 
     // Emit ready event
@@ -504,9 +513,18 @@ pub async fn v2_manual_login(
     }
 
     // Activate per-user session (initializes all per-user stores)
+    // This is REQUIRED - without it, user has auth but no stores, causing UserSessionNotActivated errors
     if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
         log::error!("[V2] Session activation failed: {}", e);
-        // Non-fatal - consider login successful, stores can be initialized later
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: Some(session.display_name.clone()),
+            user_id: Some(session.user_id),
+            subscription: Some(session.subscription_label.clone()),
+            subscription_valid_until: session.subscription_valid_until.clone(),
+            error: Some(format!("Session activation failed: {}", e)),
+            error_code: Some("session_activation_failed".to_string()),
+        });
     }
 
     // Emit ready event

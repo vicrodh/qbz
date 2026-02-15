@@ -2296,27 +2296,17 @@
   }
 
   async function handleLoginSuccess(info: UserInfo) {
-    // CRITICAL: Validate and activate backend session FIRST, before setting UI login state.
-    // This prevents UI/backend state divergence if activation fails.
-    // (Fix for Issue 1: UI was entering logged-in state before backend session was valid)
+    // V2 login commands (v2_auto_login, v2_manual_login) now handle session activation internally.
+    // They return success:false if activation fails, so if we get here, session is already active.
+    // NO legacy activate_user_session call needed - that causes duplicate activation.
 
     // Validate userId before any session operations
     if (!info.userId || info.userId <= 0) {
-      console.error('[Session] Invalid userId received:', info.userId, '- cannot activate session');
-      // Don't set login state - session is broken
+      console.error('[Session] Invalid userId received:', info.userId, '- cannot proceed');
       return;
     }
 
-    // Activate per-user backend state FIRST
-    try {
-      await invoke('activate_user_session', { userId: info.userId });
-    } catch (err) {
-      console.error('[Session] Failed to activate user session:', err);
-      // Don't set login state if activation failed - backend is not ready
-      return;
-    }
-
-    // Backend session confirmed - NOW set UI login state
+    // Backend session already activated by V2 login - set UI login state
     setLoggedIn(info);
 
     // Set up per-user localStorage scoping and migrate old keys
@@ -2462,6 +2452,8 @@
 
   async function handleLogout() {
     try {
+      // v2_logout handles full session deactivation internally via session_lifecycle::deactivate_session()
+      // NO legacy deactivate_user_session call needed - that causes duplicate teardown
       await invoke('v2_logout');
       // Clear saved credentials from keyring
       try {
@@ -2470,13 +2462,6 @@
       } catch (clearErr) {
         console.error('Failed to clear credentials:', clearErr);
         // Don't block logout if clearing fails
-      }
-      // Deactivate per-user backend state (closes DB connections)
-      try {
-        await invoke('deactivate_user_session');
-        console.log('[Session] Per-user session deactivated');
-      } catch (deactivateErr) {
-        console.error('[Session] Failed to deactivate user session:', deactivateErr);
       }
       // Clear per-user localStorage scoping
       setStorageUserId(null);
