@@ -2594,11 +2594,37 @@ pub async fn v2_listenbrainz_now_playing(
     artist: String,
     track: String,
     album: Option<String>,
+    recording_mbid: Option<String>,
+    release_mbid: Option<String>,
+    artist_mbids: Option<Vec<String>>,
+    isrc: Option<String>,
+    duration_ms: Option<u64>,
     state: State<'_, ListenBrainzV2State>,
 ) -> Result<(), RuntimeError> {
     log::debug!("[V2] listenbrainz_now_playing: {} - {}", artist, track);
+
+    // Build additional info if any MusicBrainz data provided
+    let additional_info = if recording_mbid.is_some() || release_mbid.is_some()
+        || artist_mbids.is_some() || isrc.is_some() || duration_ms.is_some()
+    {
+        Some(qbz_integrations::listenbrainz::AdditionalInfo {
+            recording_mbid,
+            release_mbid,
+            artist_mbids,
+            isrc,
+            duration_ms,
+            tracknumber: None,
+            media_player: "QBZ".to_string(),
+            media_player_version: env!("CARGO_PKG_VERSION").to_string(),
+            submission_client: "QBZ".to_string(),
+            submission_client_version: env!("CARGO_PKG_VERSION").to_string(),
+        })
+    } else {
+        None
+    };
+
     let client = state.client.lock().await;
-    client.submit_playing_now(&artist, &track, album.as_deref(), None).await
+    client.submit_playing_now(&artist, &track, album.as_deref(), additional_info).await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
@@ -2609,11 +2635,37 @@ pub async fn v2_listenbrainz_scrobble(
     track: String,
     album: Option<String>,
     timestamp: i64,
+    recording_mbid: Option<String>,
+    release_mbid: Option<String>,
+    artist_mbids: Option<Vec<String>>,
+    isrc: Option<String>,
+    duration_ms: Option<u64>,
     state: State<'_, ListenBrainzV2State>,
 ) -> Result<(), RuntimeError> {
     log::info!("[V2] listenbrainz_scrobble: {} - {}", artist, track);
+
+    // Build additional info if any MusicBrainz data provided
+    let additional_info = if recording_mbid.is_some() || release_mbid.is_some()
+        || artist_mbids.is_some() || isrc.is_some() || duration_ms.is_some()
+    {
+        Some(qbz_integrations::listenbrainz::AdditionalInfo {
+            recording_mbid,
+            release_mbid,
+            artist_mbids,
+            isrc,
+            duration_ms,
+            tracknumber: None,
+            media_player: "QBZ".to_string(),
+            media_player_version: env!("CARGO_PKG_VERSION").to_string(),
+            submission_client: "QBZ".to_string(),
+            submission_client_version: env!("CARGO_PKG_VERSION").to_string(),
+        })
+    } else {
+        None
+    };
+
     let client = state.client.lock().await;
-    client.submit_listen(&artist, &track, album.as_deref(), timestamp, None).await
+    client.submit_listen(&artist, &track, album.as_deref(), timestamp, additional_info).await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
