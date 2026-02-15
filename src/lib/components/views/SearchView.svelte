@@ -24,26 +24,32 @@
   let artistsPerPage = $state(5);
   // NOTE: totalAlbumPages/totalArtistPages are defined after allResults declaration
 
-  onMount(async () => {
+  onMount(() => {
     console.log('SearchView mounted!');
-    await tick();
-    searchInput?.focus();
-    calculateAlbumsPerPage();
-    calculateArtistsPerPage();
 
-    // Restore scroll position
-    requestAnimationFrame(() => {
-      const saved = getSavedScrollPosition('search');
-      if (scrollContainer && saved > 0) {
-        scrollContainer.scrollTop = saved;
+    // Async initialization in IIFE (doesn't block cleanup return)
+    (async () => {
+      await tick();
+      searchInput?.focus();
+      calculateAlbumsPerPage();
+      calculateArtistsPerPage();
+
+      // Restore scroll position
+      requestAnimationFrame(() => {
+        const saved = getSavedScrollPosition('search');
+        if (scrollContainer && saved > 0) {
+          scrollContainer.scrollTop = saved;
+        }
+      });
+
+      // Auto-search if query is pre-filled (e.g., from performer link)
+      if (query.trim().length >= 2 && !allResults && !albumResults && !trackResults && !artistResults) {
+        performSearch();
       }
-    });
-    window.addEventListener('resize', handleResize);
+    })();
 
-    // Auto-search if query is pre-filled (e.g., from performer link)
-    if (query.trim().length >= 2 && !allResults && !albumResults && !trackResults && !artistResults) {
-      performSearch();
-    }
+    // Synchronous subscriptions
+    window.addEventListener('resize', handleResize);
 
     // Subscribe to focus trigger (when user re-clicks Search in sidebar)
     const unsubscribeFocus = subscribeSearchFocus(() => {
