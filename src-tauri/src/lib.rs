@@ -8,6 +8,7 @@ pub mod core_bridge;
 pub mod commands_v2;
 pub mod runtime;
 pub mod session_lifecycle;
+pub mod integrations_v2;
 
 pub mod api;
 pub mod api_cache;
@@ -260,6 +261,11 @@ pub fn run() {
     let artist_vectors_state = artist_vectors::ArtistVectorStoreState::new_empty();
     let blacklist_state = artist_blacklist::BlacklistState::new_empty();
     let listenbrainz_state = listenbrainz::ListenBrainzSharedState::new_empty();
+
+    // V2 integration states (using qbz-integrations crate)
+    let listenbrainz_v2_state = integrations_v2::ListenBrainzV2State::new();
+    let musicbrainz_v2_state = integrations_v2::MusicBrainzV2State::new();
+    let lastfm_v2_state = integrations_v2::LastFmV2State::new();
     let developer_settings_state = config::developer_settings::DeveloperSettingsState::new()
         .unwrap_or_else(|e| {
             log::warn!("Failed to initialize developer settings: {}. Using empty state.", e);
@@ -565,6 +571,10 @@ pub fn run() {
         .manage(developer_settings_state)
         .manage(graphics_settings_state)
         .manage(window_settings_state)
+        // V2 integration states (qbz-integrations crate)
+        .manage(listenbrainz_v2_state)
+        .manage(musicbrainz_v2_state)
+        .manage(lastfm_v2_state)
         .invoke_handler(tauri::generate_handler![
             // Auth commands
             // NOTE: V1 login/logout/auto_login REMOVED - use v2_login, v2_logout, v2_auto_login
@@ -1188,6 +1198,27 @@ pub fn run() {
             commands_v2::v2_set_audio_stream_first_track,
             commands_v2::v2_set_audio_stream_buffer_seconds,
             commands_v2::v2_set_audio_alsa_hardware_volume,
+            // V2 Integrations (qbz-integrations crate)
+            // ListenBrainz V2
+            commands_v2::v2_listenbrainz_get_status,
+            commands_v2::v2_listenbrainz_is_enabled,
+            commands_v2::v2_listenbrainz_set_enabled,
+            commands_v2::v2_listenbrainz_connect,
+            commands_v2::v2_listenbrainz_disconnect,
+            commands_v2::v2_listenbrainz_now_playing,
+            commands_v2::v2_listenbrainz_scrobble,
+            // MusicBrainz V2
+            commands_v2::v2_musicbrainz_is_enabled,
+            commands_v2::v2_musicbrainz_set_enabled,
+            commands_v2::v2_musicbrainz_resolve_track,
+            commands_v2::v2_musicbrainz_resolve_artist,
+            // Last.fm V2
+            commands_v2::v2_lastfm_get_auth_url,
+            commands_v2::v2_lastfm_complete_auth,
+            commands_v2::v2_lastfm_is_authenticated,
+            commands_v2::v2_lastfm_disconnect,
+            commands_v2::v2_lastfm_now_playing,
+            commands_v2::v2_lastfm_scrobble,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

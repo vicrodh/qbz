@@ -2418,3 +2418,237 @@ pub async fn v2_get_label(
     let bridge = bridge.get().await;
     bridge.get_label(labelId, limit, offset).await
 }
+
+// ==================== Integrations V2 Commands ====================
+//
+// These commands use the qbz-integrations crate which is Tauri-independent.
+// They can work without Tauri for TUI/headless clients.
+
+use crate::integrations_v2::{ListenBrainzV2State, MusicBrainzV2State, LastFmV2State};
+
+// --- ListenBrainz V2 ---
+
+/// Get ListenBrainz status (V2)
+#[tauri::command]
+pub async fn v2_listenbrainz_get_status(
+    state: State<'_, ListenBrainzV2State>,
+) -> Result<qbz_integrations::listenbrainz::ListenBrainzStatus, RuntimeError> {
+    log::info!("[V2] listenbrainz_get_status");
+    let client = state.client.lock().await;
+    Ok(client.get_status().await)
+}
+
+/// Check if ListenBrainz is enabled (V2)
+#[tauri::command]
+pub async fn v2_listenbrainz_is_enabled(
+    state: State<'_, ListenBrainzV2State>,
+) -> Result<bool, RuntimeError> {
+    let client = state.client.lock().await;
+    Ok(client.is_enabled().await)
+}
+
+/// Enable or disable ListenBrainz (V2)
+#[tauri::command]
+pub async fn v2_listenbrainz_set_enabled(
+    enabled: bool,
+    state: State<'_, ListenBrainzV2State>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] listenbrainz_set_enabled: {}", enabled);
+    let client = state.client.lock().await;
+    client.set_enabled(enabled).await;
+    Ok(())
+}
+
+/// Connect to ListenBrainz with token (V2)
+#[tauri::command]
+pub async fn v2_listenbrainz_connect(
+    token: String,
+    state: State<'_, ListenBrainzV2State>,
+) -> Result<qbz_integrations::listenbrainz::UserInfo, RuntimeError> {
+    log::info!("[V2] listenbrainz_connect");
+    let client = state.client.lock().await;
+    let user_info = client.set_token(&token).await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))?;
+
+    // Save credentials for persistence
+    drop(client);
+    state.save_credentials(token, user_info.user_name.clone()).await;
+
+    Ok(user_info)
+}
+
+/// Disconnect from ListenBrainz (V2)
+#[tauri::command]
+pub async fn v2_listenbrainz_disconnect(
+    state: State<'_, ListenBrainzV2State>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] listenbrainz_disconnect");
+    let client = state.client.lock().await;
+    client.disconnect().await;
+    drop(client);
+    state.clear_credentials().await;
+    Ok(())
+}
+
+/// Submit now playing to ListenBrainz (V2)
+#[tauri::command]
+pub async fn v2_listenbrainz_now_playing(
+    artist: String,
+    track: String,
+    album: Option<String>,
+    state: State<'_, ListenBrainzV2State>,
+) -> Result<(), RuntimeError> {
+    log::debug!("[V2] listenbrainz_now_playing: {} - {}", artist, track);
+    let client = state.client.lock().await;
+    client.submit_playing_now(&artist, &track, album.as_deref(), None).await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+/// Submit scrobble to ListenBrainz (V2)
+#[tauri::command]
+pub async fn v2_listenbrainz_scrobble(
+    artist: String,
+    track: String,
+    album: Option<String>,
+    timestamp: i64,
+    state: State<'_, ListenBrainzV2State>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] listenbrainz_scrobble: {} - {}", artist, track);
+    let client = state.client.lock().await;
+    client.submit_listen(&artist, &track, album.as_deref(), timestamp, None).await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+// --- MusicBrainz V2 ---
+
+/// Check if MusicBrainz is enabled (V2)
+#[tauri::command]
+pub async fn v2_musicbrainz_is_enabled(
+    state: State<'_, MusicBrainzV2State>,
+) -> Result<bool, RuntimeError> {
+    let client = state.client.lock().await;
+    Ok(client.is_enabled().await)
+}
+
+/// Enable or disable MusicBrainz (V2)
+#[tauri::command]
+pub async fn v2_musicbrainz_set_enabled(
+    enabled: bool,
+    state: State<'_, MusicBrainzV2State>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] musicbrainz_set_enabled: {}", enabled);
+    let client = state.client.lock().await;
+    client.set_enabled(enabled).await;
+    Ok(())
+}
+
+/// Resolve track to MusicBrainz IDs (V2)
+#[tauri::command]
+pub async fn v2_musicbrainz_resolve_track(
+    artist: String,
+    title: String,
+    isrc: Option<String>,
+    state: State<'_, MusicBrainzV2State>,
+) -> Result<Option<qbz_integrations::musicbrainz::ResolvedTrack>, RuntimeError> {
+    log::debug!("[V2] musicbrainz_resolve_track: {} - {}", artist, title);
+    let client = state.client.lock().await;
+    client.resolve_track(&artist, &title, isrc.as_deref()).await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+/// Resolve artist to MusicBrainz ID (V2)
+#[tauri::command]
+pub async fn v2_musicbrainz_resolve_artist(
+    name: String,
+    state: State<'_, MusicBrainzV2State>,
+) -> Result<Option<qbz_integrations::musicbrainz::ResolvedArtist>, RuntimeError> {
+    log::debug!("[V2] musicbrainz_resolve_artist: {}", name);
+    let client = state.client.lock().await;
+    client.resolve_artist(&name).await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+// --- Last.fm V2 ---
+
+/// Get Last.fm auth token and URL (V2)
+#[tauri::command]
+pub async fn v2_lastfm_get_auth_url(
+    state: State<'_, LastFmV2State>,
+) -> Result<String, RuntimeError> {
+    log::info!("[V2] lastfm_get_auth_url");
+    let client = state.client.lock().await;
+    let (token, auth_url) = client.get_token().await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))?;
+
+    // Store pending token for later session retrieval
+    drop(client);
+    state.set_pending_token(token).await;
+
+    Ok(auth_url)
+}
+
+/// Complete Last.fm authentication (V2)
+#[tauri::command]
+pub async fn v2_lastfm_complete_auth(
+    state: State<'_, LastFmV2State>,
+) -> Result<qbz_integrations::LastFmSession, RuntimeError> {
+    log::info!("[V2] lastfm_complete_auth");
+
+    let token = state.take_pending_token().await
+        .ok_or_else(|| RuntimeError::Internal("No pending auth token".to_string()))?;
+
+    let mut client = state.client.lock().await;
+    let session = client.get_session(&token).await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))?;
+
+    Ok(session)
+}
+
+/// Check if Last.fm is authenticated (V2)
+#[tauri::command]
+pub async fn v2_lastfm_is_authenticated(
+    state: State<'_, LastFmV2State>,
+) -> Result<bool, RuntimeError> {
+    let client = state.client.lock().await;
+    Ok(client.is_authenticated())
+}
+
+/// Disconnect from Last.fm (V2)
+#[tauri::command]
+pub async fn v2_lastfm_disconnect(
+    state: State<'_, LastFmV2State>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] lastfm_disconnect");
+    let mut client = state.client.lock().await;
+    client.clear_session();
+    Ok(())
+}
+
+/// Submit now playing to Last.fm (V2)
+#[tauri::command]
+pub async fn v2_lastfm_now_playing(
+    artist: String,
+    track: String,
+    album: Option<String>,
+    state: State<'_, LastFmV2State>,
+) -> Result<(), RuntimeError> {
+    log::debug!("[V2] lastfm_now_playing: {} - {}", artist, track);
+    let client = state.client.lock().await;
+    client.update_now_playing(&artist, &track, album.as_deref()).await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+/// Scrobble to Last.fm (V2)
+#[tauri::command]
+pub async fn v2_lastfm_scrobble(
+    artist: String,
+    track: String,
+    album: Option<String>,
+    timestamp: u64,
+    state: State<'_, LastFmV2State>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] lastfm_scrobble: {} - {}", artist, track);
+    let client = state.client.lock().await;
+    client.scrobble(&artist, &track, album.as_deref(), timestamp).await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
