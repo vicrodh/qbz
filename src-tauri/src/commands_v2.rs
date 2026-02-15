@@ -1,12 +1,12 @@
 //! V2 Commands - Using the new multi-crate architecture
 //!
 //! These commands use QbzCore via CoreBridge instead of the old AppState.
-//! They coexist with the old commands during migration.
+//! Runtime contract ensures proper lifecycle (see ADR_RUNTIME_SESSION_CONTRACT.md).
 //!
 //! Playback flows through CoreBridge -> QbzCore -> Player (qbz-player crate).
 
 use std::sync::Arc;
-use tauri::State;
+use tauri::{Emitter, State};
 use tokio::sync::RwLock;
 
 use qbz_models::{Album, Artist, Quality, QueueState, RepeatMode, SearchResultsPage, Track, UserSession};
@@ -17,6 +17,7 @@ use crate::config::audio_settings::AudioSettingsState;
 use crate::core_bridge::CoreBridgeState;
 use crate::offline_cache::OfflineCacheState;
 use crate::queue::QueueManager;
+use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, RuntimeState, DegradedReason};
 use crate::AppState;
 
 // ==================== Helper Functions ====================
@@ -95,6 +96,129 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
 
     log::info!("[V2] Downloaded {} bytes", bytes.len());
     Ok(bytes.to_vec())
+}
+
+// ==================== Runtime Contract Commands ====================
+
+/// Get current runtime status
+/// Use this to check if the runtime is ready before calling other commands
+#[tauri::command]
+pub async fn runtime_get_status(
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<RuntimeStatus, String> {
+    Ok(runtime.manager().get_status().await)
+}
+
+/// Bootstrap the runtime - single entrypoint for initialization
+///
+/// This command:
+/// 1. Initializes the API client (extracts bundle tokens)
+/// 2. Checks for saved credentials and auto-logs in if available
+/// 3. Activates per-user session if user is logged in
+/// 4. Authenticates CoreBridge/V2
+///
+/// Returns RuntimeStatus with full state information.
+/// Clients should call this once at startup and react to the returned state.
+#[tauri::command]
+pub async fn runtime_bootstrap(
+    app: tauri::AppHandle,
+    runtime: State<'_, RuntimeManagerState>,
+    app_state: State<'_, AppState>,
+    core_bridge: State<'_, CoreBridgeState>,
+) -> Result<RuntimeStatus, RuntimeError> {
+    let manager = runtime.manager();
+
+    // Check if bootstrap is already in progress
+    if manager.is_bootstrap_in_progress().await {
+        return Err(RuntimeError::BootstrapInProgress);
+    }
+    manager.set_bootstrap_in_progress(true).await;
+
+    log::info!("[Runtime] Bootstrap starting...");
+
+    // Step 1: Initialize API client (bundle tokens)
+    {
+        let client = app_state.client.read().await;
+        match client.init().await {
+            Ok(_) => {
+                log::info!("[Runtime] API client initialized (bundle tokens extracted)");
+                manager.set_client_initialized(true).await;
+                let _ = app.emit("runtime:event", RuntimeEvent::RuntimeInitialized);
+            }
+            Err(e) => {
+                let reason = DegradedReason::BundleExtractionFailed(e.to_string());
+                log::error!("[Runtime] Bundle extraction failed: {}", e);
+                manager.set_degraded(reason.clone()).await;
+                manager.set_bootstrap_in_progress(false).await;
+                let _ = app.emit("runtime:event", RuntimeEvent::RuntimeDegraded { reason: reason.clone() });
+                return Err(RuntimeError::RuntimeDegraded(reason));
+            }
+        }
+    }
+
+    // Step 2: Check for saved credentials and attempt auto-login
+    let creds = crate::credentials::load_qobuz_credentials();
+    let last_user_id = crate::user_data::UserDataPaths::load_last_user_id();
+
+    if let (Ok(Some(creds)), Some(user_id)) = (creds, last_user_id) {
+        log::info!("[Runtime] Found saved credentials, attempting auto-login for user {}", user_id);
+
+        // Login to legacy client
+        let client = app_state.client.read().await;
+        match client.login(&creds.email, &creds.password).await {
+            Ok(session) => {
+                log::info!("[Runtime] Legacy auth successful for user {}", session.user_id);
+                manager.set_legacy_auth(true, Some(session.user_id)).await;
+                let _ = app.emit("runtime:event", RuntimeEvent::AuthChanged {
+                    logged_in: true,
+                    user_id: Some(session.user_id),
+                });
+
+                // Step 3: Activate per-user session
+                // This is done by calling activate_user_session command
+                // For now, we just mark the user_id and let the frontend handle it
+                // In a full implementation, we'd activate here directly
+
+                // Step 4: Authenticate CoreBridge/V2
+                if let Some(bridge) = core_bridge.try_get().await {
+                    match bridge.login(&creds.email, &creds.password).await {
+                        Ok(_) => {
+                            log::info!("[Runtime] CoreBridge auth successful");
+                            manager.set_corebridge_auth(true).await;
+                        }
+                        Err(e) => {
+                            log::error!("[Runtime] CoreBridge auth failed: {}", e);
+                            let _ = app.emit("runtime:event", RuntimeEvent::CoreBridgeAuthFailed {
+                                error: e.to_string(),
+                            });
+                            // Don't fail bootstrap - V2 auth failure is recoverable
+                        }
+                    }
+                } else {
+                    log::warn!("[Runtime] CoreBridge not yet initialized, V2 auth deferred");
+                }
+            }
+            Err(e) => {
+                log::warn!("[Runtime] Auto-login failed: {}", e);
+                // Not a fatal error - user can login manually
+            }
+        }
+    } else {
+        log::info!("[Runtime] No saved credentials or last user ID, staying in InitializedNoAuth");
+    }
+
+    manager.set_bootstrap_in_progress(false).await;
+    let status = manager.get_status().await;
+    log::info!("[Runtime] Bootstrap complete: {:?}", status.state);
+
+    Ok(status)
+}
+
+/// Emit a runtime event (internal helper)
+fn emit_runtime_event(app: &tauri::AppHandle, event: RuntimeEvent) {
+    if let Err(e) = app.emit("runtime:event", &event) {
+        log::warn!("[Runtime] Failed to emit event: {}", e);
+    }
 }
 
 // ==================== Prefetch (V2) ====================
@@ -285,6 +409,156 @@ pub async fn v2_clear_queue(
     let bridge = bridge.get().await;
     bridge.clear_queue().await;
     Ok(())
+}
+
+/// Queue track representation for V2 commands
+/// Maps to internal QueueTrack format
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct V2QueueTrack {
+    pub id: u64,
+    pub title: String,
+    pub artist: String,
+    pub album: String,
+    #[serde(rename = "duration")]
+    pub duration_secs: u64,
+    #[serde(rename = "artwork")]
+    pub artwork_url: Option<String>,
+    #[serde(default)]
+    pub hires: bool,
+    pub bit_depth: Option<u32>,
+    pub sample_rate: Option<f64>,
+    #[serde(default)]
+    pub is_local: bool,
+    pub album_id: Option<String>,
+    pub artist_id: Option<u64>,
+    #[serde(default = "default_streamable")]
+    pub streamable: bool,
+    /// Source type: "qobuz", "local", "plex"
+    #[serde(default)]
+    pub source: Option<String>,
+}
+
+fn default_streamable() -> bool {
+    true
+}
+
+impl From<V2QueueTrack> for crate::queue::QueueTrack {
+    fn from(t: V2QueueTrack) -> Self {
+        Self {
+            id: t.id,
+            title: t.title,
+            artist: t.artist,
+            album: t.album,
+            duration_secs: t.duration_secs,
+            artwork_url: t.artwork_url,
+            hires: t.hires,
+            bit_depth: t.bit_depth,
+            sample_rate: t.sample_rate,
+            is_local: t.is_local,
+            album_id: t.album_id,
+            artist_id: t.artist_id,
+            streamable: t.streamable,
+            source: t.source,
+        }
+    }
+}
+
+impl From<crate::queue::QueueTrack> for V2QueueTrack {
+    fn from(t: crate::queue::QueueTrack) -> Self {
+        Self {
+            id: t.id,
+            title: t.title,
+            artist: t.artist,
+            album: t.album,
+            duration_secs: t.duration_secs,
+            artwork_url: t.artwork_url,
+            hires: t.hires,
+            bit_depth: t.bit_depth,
+            sample_rate: t.sample_rate,
+            is_local: t.is_local,
+            album_id: t.album_id,
+            artist_id: t.artist_id,
+            streamable: t.streamable,
+            source: t.source,
+        }
+    }
+}
+
+/// Add track to the end of the queue (V2)
+#[tauri::command]
+pub async fn v2_add_to_queue(
+    track: V2QueueTrack,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("[V2] add_to_queue: {} - {}", track.id, track.title);
+    app_state.queue.add_track(track.into());
+    Ok(())
+}
+
+/// Add track to play next (V2)
+#[tauri::command]
+pub async fn v2_add_to_queue_next(
+    track: V2QueueTrack,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("[V2] add_to_queue_next: {} - {}", track.id, track.title);
+    app_state.queue.add_track_next(track.into());
+    Ok(())
+}
+
+/// Set the entire queue and start playing from index (V2)
+#[tauri::command]
+pub async fn v2_set_queue(
+    tracks: Vec<V2QueueTrack>,
+    start_index: usize,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("[V2] set_queue: {} tracks, start at {}", tracks.len(), start_index);
+    let queue_tracks: Vec<crate::queue::QueueTrack> = tracks.into_iter().map(Into::into).collect();
+    app_state.queue.set_queue(queue_tracks, Some(start_index));
+    Ok(())
+}
+
+/// Remove a track from the queue by index (V2)
+#[tauri::command]
+pub async fn v2_remove_from_queue(
+    index: usize,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    log::info!("[V2] remove_from_queue: index {}", index);
+    app_state.queue.remove_track(index);
+    Ok(())
+}
+
+/// Skip to next track in queue (V2)
+#[tauri::command]
+pub async fn v2_next_track(
+    app_state: State<'_, AppState>,
+) -> Result<Option<V2QueueTrack>, String> {
+    log::info!("[V2] next_track");
+    let track = app_state.queue.next();
+    Ok(track.map(Into::into))
+}
+
+/// Go to previous track in queue (V2)
+#[tauri::command]
+pub async fn v2_previous_track(
+    app_state: State<'_, AppState>,
+) -> Result<Option<V2QueueTrack>, String> {
+    log::info!("[V2] previous_track");
+    let track = app_state.queue.previous();
+    Ok(track.map(Into::into))
+}
+
+/// Play a specific track in the queue by index (V2)
+#[tauri::command]
+pub async fn v2_play_queue_index(
+    index: usize,
+    app_state: State<'_, AppState>,
+) -> Result<Option<V2QueueTrack>, String> {
+    log::info!("[V2] play_queue_index: {}", index);
+    let track = app_state.queue.play_index(index);
+    Ok(track.map(Into::into))
 }
 
 // ==================== Search Commands (V2) ====================

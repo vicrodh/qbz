@@ -6,6 +6,7 @@
 pub mod tauri_adapter;
 pub mod core_bridge;
 pub mod commands_v2;
+pub mod runtime;
 
 pub mod api;
 pub mod api_cache;
@@ -294,6 +295,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState::with_device_and_settings(saved_device, audio_settings))
         .manage(core_bridge::CoreBridgeState::new())
+        .manage(runtime::RuntimeManagerState::new())
         .manage(user_data_paths)
         .setup(move |app| {
             // Create main window programmatically so we can set the correct
@@ -1094,15 +1096,25 @@ pub fn run() {
             logging::get_backend_logs,
             logging::upload_logs_to_paste,
             // V2 commands (new multi-crate architecture)
+            // Runtime contract
+            commands_v2::runtime_get_status,
+            commands_v2::runtime_bootstrap,
             // Auth
             commands_v2::v2_is_logged_in,
             commands_v2::v2_login,
             commands_v2::v2_logout,
-            // Queue
+            // Queue (V2)
             commands_v2::v2_get_queue_state,
             commands_v2::v2_set_repeat_mode,
             commands_v2::v2_toggle_shuffle,
             commands_v2::v2_clear_queue,
+            commands_v2::v2_add_to_queue,
+            commands_v2::v2_add_to_queue_next,
+            commands_v2::v2_set_queue,
+            commands_v2::v2_remove_from_queue,
+            commands_v2::v2_next_track,
+            commands_v2::v2_previous_track,
+            commands_v2::v2_play_queue_index,
             // Search
             commands_v2::v2_search_albums,
             commands_v2::v2_search_tracks,
