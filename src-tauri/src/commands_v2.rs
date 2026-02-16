@@ -12,7 +12,7 @@ use tokio::sync::RwLock;
 use qbz_models::{
     Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
     GenreInfo, LabelDetail, PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState,
-    RepeatMode, SearchResultsPage, Track, UserSession,
+    QueueTrack as CoreQueueTrack, RepeatMode, SearchResultsPage, Track, UserSession,
 };
 
 use crate::artist_blacklist::BlacklistState;
@@ -22,7 +22,6 @@ use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
 use crate::config::legal_settings::LegalSettingsState;
 use crate::core_bridge::CoreBridgeState;
 use crate::offline_cache::OfflineCacheState;
-use crate::queue::QueueManager;
 use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason, CommandRequirement};
 use crate::AppState;
 
@@ -69,6 +68,7 @@ async fn rollback_auth_state(
     log::warn!("[V2] Rolling back auth state after partial login failure");
     manager.set_legacy_auth(false, None).await;
     manager.set_corebridge_auth(false).await;
+    manager.set_session_activated(false, 0).await;
     let _ = app.emit("runtime:event", RuntimeEvent::AuthChanged {
         logged_in: false,
         user_id: None,
@@ -675,10 +675,11 @@ lazy_static::lazy_static! {
 }
 
 /// Spawn background tasks to prefetch upcoming Qobuz tracks (V2)
+/// Takes upcoming tracks directly from CoreBridge (not legacy AppState queue)
 fn spawn_v2_prefetch(
     bridge: Arc<RwLock<Option<crate::core_bridge::CoreBridge>>>,
     cache: Arc<AudioCache>,
-    queue: &QueueManager,
+    upcoming_tracks: Vec<CoreQueueTrack>,
     quality: Quality,
     streaming_only: bool,
 ) {
@@ -688,8 +689,8 @@ fn spawn_v2_prefetch(
         return;
     }
 
-    // Look further ahead to find Qobuz tracks in mixed playlists
-    let upcoming_tracks = queue.peek_upcoming(V2_PREFETCH_LOOKAHEAD);
+    // upcoming_tracks already provided by caller from CoreBridge
+    let upcoming_tracks = upcoming_tracks;
 
     if upcoming_tracks.is_empty() {
         log::debug!("[V2/PREFETCH] No upcoming tracks to prefetch");
@@ -928,21 +929,22 @@ pub async fn v2_toggle_shuffle(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<bool, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     let bridge = bridge.get().await;
     Ok(bridge.toggle_shuffle().await)
 }
 
-/// Set shuffle mode directly (V2)
+/// Set shuffle mode directly (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_set_shuffle(
     enabled: bool,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] set_shuffle: {}", enabled);
-    app_state.queue.set_shuffle(enabled);
+    let bridge = bridge.get().await;
+    bridge.set_shuffle(enabled).await;
     Ok(())
 }
 
@@ -952,7 +954,7 @@ pub async fn v2_clear_queue(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     let bridge = bridge.get().await;
     bridge.clear_queue().await;
     Ok(())
@@ -1031,151 +1033,204 @@ impl From<crate::queue::QueueTrack> for V2QueueTrack {
     }
 }
 
-/// Add track to the end of the queue (V2)
+// V2 queue track <-> qbz_models::QueueTrack (CoreQueueTrack)
+impl From<V2QueueTrack> for CoreQueueTrack {
+    fn from(t: V2QueueTrack) -> Self {
+        Self {
+            id: t.id,
+            title: t.title,
+            artist: t.artist,
+            album: t.album,
+            duration_secs: t.duration_secs,
+            artwork_url: t.artwork_url,
+            hires: t.hires,
+            bit_depth: t.bit_depth,
+            sample_rate: t.sample_rate,
+            is_local: t.is_local,
+            album_id: t.album_id,
+            artist_id: t.artist_id,
+            streamable: t.streamable,
+            source: t.source,
+        }
+    }
+}
+
+impl From<CoreQueueTrack> for V2QueueTrack {
+    fn from(t: CoreQueueTrack) -> Self {
+        Self {
+            id: t.id,
+            title: t.title,
+            artist: t.artist,
+            album: t.album,
+            duration_secs: t.duration_secs,
+            artwork_url: t.artwork_url,
+            hires: t.hires,
+            bit_depth: t.bit_depth,
+            sample_rate: t.sample_rate,
+            is_local: t.is_local,
+            album_id: t.album_id,
+            artist_id: t.artist_id,
+            streamable: t.streamable,
+            source: t.source,
+        }
+    }
+}
+
+/// Add track to the end of the queue (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_add_to_queue(
     track: V2QueueTrack,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] add_to_queue: {} - {}", track.id, track.title);
-    app_state.queue.add_track(track.into());
+    let bridge = bridge.get().await;
+    bridge.add_track(track.into()).await;
     Ok(())
 }
 
-/// Add track to play next (V2)
+/// Add track to play next (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_add_to_queue_next(
     track: V2QueueTrack,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] add_to_queue_next: {} - {}", track.id, track.title);
-    app_state.queue.add_track_next(track.into());
+    let bridge = bridge.get().await;
+    bridge.add_track_next(track.into()).await;
     Ok(())
 }
 
-/// Set the entire queue and start playing from index (V2)
+/// Set the entire queue and start playing from index (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_set_queue(
     tracks: Vec<V2QueueTrack>,
     start_index: usize,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] set_queue: {} tracks, start at {}", tracks.len(), start_index);
-    let queue_tracks: Vec<crate::queue::QueueTrack> = tracks.into_iter().map(Into::into).collect();
-    app_state.queue.set_queue(queue_tracks, Some(start_index));
+    let queue_tracks: Vec<CoreQueueTrack> = tracks.into_iter().map(Into::into).collect();
+    let bridge = bridge.get().await;
+    bridge.set_queue(queue_tracks, Some(start_index)).await;
     Ok(())
 }
 
-/// Remove a track from the queue by index (V2)
+/// Remove a track from the queue by index (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_remove_from_queue(
     index: usize,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] remove_from_queue: index {}", index);
-    app_state.queue.remove_track(index);
+    let bridge = bridge.get().await;
+    bridge.remove_track(index).await;
     Ok(())
 }
 
-/// Remove a track from the upcoming queue by its position (V2)
+/// Remove a track from the upcoming queue by its position (V2 - uses CoreBridge)
 /// (0 = first upcoming track, handles shuffle mode correctly)
 #[tauri::command]
 pub async fn v2_remove_upcoming_track(
     upcoming_index: usize,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] remove_upcoming_track: upcoming_index {}", upcoming_index);
-    Ok(app_state.queue.remove_upcoming_track(upcoming_index).map(Into::into))
+    let bridge = bridge.get().await;
+    Ok(bridge.remove_upcoming_track(upcoming_index).await.map(Into::into))
 }
 
-/// Skip to next track in queue (V2)
+/// Skip to next track in queue (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_next_track(
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] next_track");
-    let track = app_state.queue.next();
+    let bridge = bridge.get().await;
+    let track = bridge.next_track().await;
     Ok(track.map(Into::into))
 }
 
-/// Go to previous track in queue (V2)
+/// Go to previous track in queue (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_previous_track(
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] previous_track");
-    let track = app_state.queue.previous();
+    let bridge = bridge.get().await;
+    let track = bridge.previous_track().await;
     Ok(track.map(Into::into))
 }
 
-/// Play a specific track in the queue by index (V2)
+/// Play a specific track in the queue by index (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_play_queue_index(
     index: usize,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] play_queue_index: {}", index);
-    let track = app_state.queue.play_index(index);
+    let bridge = bridge.get().await;
+    let track = bridge.play_index(index).await;
     Ok(track.map(Into::into))
 }
 
-/// Move a track within the queue (V2)
+/// Move a track within the queue (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_move_queue_track(
     from_index: usize,
     to_index: usize,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<bool, RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] move_queue_track: {} -> {}", from_index, to_index);
-    Ok(app_state.queue.move_track(from_index, to_index))
+    let bridge = bridge.get().await;
+    Ok(bridge.move_track(from_index, to_index).await)
 }
 
-/// Add multiple tracks to queue (V2)
+/// Add multiple tracks to queue (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_add_tracks_to_queue(
     tracks: Vec<V2QueueTrack>,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] add_tracks_to_queue: {} tracks", tracks.len());
-    let queue_tracks: Vec<crate::queue::QueueTrack> = tracks.into_iter().map(|t| t.into()).collect();
-    app_state.queue.add_tracks(queue_tracks);
+    let queue_tracks: Vec<CoreQueueTrack> = tracks.into_iter().map(Into::into).collect();
+    let bridge = bridge.get().await;
+    bridge.add_tracks(queue_tracks).await;
     Ok(())
 }
 
-/// Add multiple tracks to play next (V2)
+/// Add multiple tracks to play next (V2 - uses CoreBridge)
 /// Tracks are added in reverse order so they play in the order provided
 #[tauri::command]
 pub async fn v2_add_tracks_to_queue_next(
     tracks: Vec<V2QueueTrack>,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
     log::info!("[V2] add_tracks_to_queue_next: {} tracks", tracks.len());
+    let bridge = bridge.get().await;
     // Add in reverse order so they end up in the correct order
     for track in tracks.into_iter().rev() {
-        let queue_track: crate::queue::QueueTrack = track.into();
-        app_state.queue.add_track_next(queue_track);
+        bridge.add_track_next(track.into()).await;
     }
     Ok(())
 }
@@ -1755,9 +1810,10 @@ pub async fn v2_play_track(
                 player.play_data(audio_data, track_id)
                     .map_err(RuntimeError::Internal)?;
 
-                // Prefetch next tracks in background
+                // Prefetch next tracks in background (using CoreBridge queue)
+                let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
                 drop(bridge_guard);
-                spawn_v2_prefetch(bridge.0.clone(), app_state.audio_cache.clone(), &app_state.queue, final_quality, streaming_only);
+                spawn_v2_prefetch(bridge.0.clone(), app_state.audio_cache.clone(), upcoming_tracks, final_quality, streaming_only);
                 return Ok(V2PlayTrackResult { format_id: None });
             }
         }
@@ -1771,9 +1827,10 @@ pub async fn v2_play_track(
         player.play_data(cached.data, track_id)
             .map_err(RuntimeError::Internal)?;
 
-        // Prefetch next tracks in background
+        // Prefetch next tracks in background (using CoreBridge queue)
+        let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
         drop(bridge_guard);
-        spawn_v2_prefetch(bridge.0.clone(), cache.clone(), &app_state.queue, final_quality, streaming_only);
+        spawn_v2_prefetch(bridge.0.clone(), cache.clone(), upcoming_tracks, final_quality, streaming_only);
         return Ok(V2PlayTrackResult { format_id: None });
     }
 
@@ -1785,9 +1842,10 @@ pub async fn v2_play_track(
             player.play_data(audio_data, track_id)
                 .map_err(RuntimeError::Internal)?;
 
-            // Prefetch next tracks in background
+            // Prefetch next tracks in background (using CoreBridge queue)
+            let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
             drop(bridge_guard);
-            spawn_v2_prefetch(bridge.0.clone(), cache.clone(), &app_state.queue, final_quality, streaming_only);
+            spawn_v2_prefetch(bridge.0.clone(), cache.clone(), upcoming_tracks, final_quality, streaming_only);
             return Ok(V2PlayTrackResult { format_id: None });
         }
     }
@@ -1817,9 +1875,10 @@ pub async fn v2_play_track(
         .map_err(RuntimeError::Internal)?;
     log::info!("[V2] Playing track {} ({} bytes)", track_id, data_size);
 
-    // Prefetch next tracks in background
+    // Prefetch next tracks in background (using CoreBridge queue)
+    let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
     drop(bridge_guard);
-    spawn_v2_prefetch(bridge.0.clone(), cache, &app_state.queue, final_quality, streaming_only);
+    spawn_v2_prefetch(bridge.0.clone(), cache, upcoming_tracks, final_quality, streaming_only);
 
     Ok(V2PlayTrackResult { format_id: Some(stream_url.format_id) })
 }

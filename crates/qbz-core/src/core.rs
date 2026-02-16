@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 use qbz_models::{
     Album, Artist, CoreEvent, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
     DiscoverResponse, FrontendAdapter, GenreInfo, LabelDetail, PageArtistResponse, Playlist,
-    PlaylistTag, Quality, QueueState, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
+    PlaylistTag, Quality, QueueState, QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{Player, PlaybackState, QueueManager};
 use qbz_qobuz::QobuzClient;
@@ -161,6 +161,120 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
             state: queue.get_state(),
         })
         .await;
+    }
+
+    /// Add a track to the end of the queue
+    pub async fn add_track(&self, track: QueueTrack) {
+        let queue = self.queue.write().await;
+        queue.add_track(track);
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
+    }
+
+    /// Add multiple tracks to the queue
+    pub async fn add_tracks(&self, tracks: Vec<QueueTrack>) {
+        let queue = self.queue.write().await;
+        queue.add_tracks(tracks);
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
+    }
+
+    /// Add a track to play next (after current)
+    pub async fn add_track_next(&self, track: QueueTrack) {
+        let queue = self.queue.write().await;
+        queue.add_track_next(track);
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
+    }
+
+    /// Set the entire queue (replaces existing)
+    pub async fn set_queue(&self, tracks: Vec<QueueTrack>, start_index: Option<usize>) {
+        let queue = self.queue.write().await;
+        queue.set_queue(tracks, start_index);
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
+    }
+
+    /// Remove a track by index
+    pub async fn remove_track(&self, index: usize) -> Option<QueueTrack> {
+        let queue = self.queue.write().await;
+        let removed = queue.remove_track(index);
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
+        removed
+    }
+
+    /// Remove a track from the upcoming list by position
+    pub async fn remove_upcoming_track(&self, upcoming_index: usize) -> Option<QueueTrack> {
+        let queue = self.queue.write().await;
+        let removed = queue.remove_upcoming_track(upcoming_index);
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
+        removed
+    }
+
+    /// Move a track from one position to another
+    pub async fn move_track(&self, from_index: usize, to_index: usize) -> bool {
+        let queue = self.queue.write().await;
+        let success = queue.move_track(from_index, to_index);
+        if success {
+            self.emit(CoreEvent::QueueUpdated {
+                state: queue.get_state(),
+            })
+            .await;
+        }
+        success
+    }
+
+    /// Jump to a specific track by index
+    pub async fn play_index(&self, index: usize) -> Option<QueueTrack> {
+        let queue = self.queue.write().await;
+        let track = queue.play_index(index);
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
+        track
+    }
+
+    /// Advance to next track in queue
+    pub async fn next_track(&self) -> Option<QueueTrack> {
+        let queue = self.queue.write().await;
+        let track = queue.next();
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
+        track
+    }
+
+    /// Go to previous track in queue
+    pub async fn previous_track(&self) -> Option<QueueTrack> {
+        let queue = self.queue.write().await;
+        let track = queue.previous();
+        self.emit(CoreEvent::QueueUpdated {
+            state: queue.get_state(),
+        })
+        .await;
+        track
+    }
+
+    /// Get multiple upcoming tracks without advancing (for prefetching)
+    pub async fn peek_upcoming(&self, count: usize) -> Vec<QueueTrack> {
+        let queue = self.queue.read().await;
+        queue.peek_upcoming(count)
     }
 
     // ==================== Search & Catalog ====================

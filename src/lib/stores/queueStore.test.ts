@@ -134,7 +134,8 @@ describe('queueStore', () => {
         artwork: 'http://art.jpg',
         title: 'Song 1',
         artist: 'Artist',
-        duration: '3:00'
+        duration: '3:00',
+        available: true
       });
       expect(getQueue()[1].duration).toBe('4:00');
       expect(getQueueTotalTracks()).toBe(5);
@@ -179,7 +180,7 @@ describe('queueStore', () => {
 
       expect(result).toEqual({ success: true, enabled: true });
       expect(getIsShuffle()).toBe(true);
-      expect(mockedInvoke).toHaveBeenCalledWith('set_shuffle', { enabled: true });
+      expect(mockedInvoke).toHaveBeenCalledWith('v2_toggle_shuffle');
     });
 
     it('should toggle shuffle off', async () => {

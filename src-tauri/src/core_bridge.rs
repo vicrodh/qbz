@@ -14,7 +14,7 @@ use qbz_core::QbzCore;
 use qbz_models::{
     Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
     GenreInfo, LabelDetail, PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState,
-    RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
+    QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{Player, PlaybackState};
 use qbz_audio::{AudioSettings, AudioDiagnostic, settings::AudioSettingsStore};
@@ -108,9 +108,69 @@ impl CoreBridge {
         self.core.toggle_shuffle().await
     }
 
+    /// Set shuffle mode directly
+    pub async fn set_shuffle(&self, enabled: bool) {
+        self.core.set_shuffle(enabled).await
+    }
+
     /// Clear the queue
     pub async fn clear_queue(&self) {
         self.core.clear_queue().await
+    }
+
+    /// Add a track to the end of the queue
+    pub async fn add_track(&self, track: QueueTrack) {
+        self.core.add_track(track).await
+    }
+
+    /// Add multiple tracks to the queue
+    pub async fn add_tracks(&self, tracks: Vec<QueueTrack>) {
+        self.core.add_tracks(tracks).await
+    }
+
+    /// Add a track to play next (after current)
+    pub async fn add_track_next(&self, track: QueueTrack) {
+        self.core.add_track_next(track).await
+    }
+
+    /// Set the entire queue (replaces existing)
+    pub async fn set_queue(&self, tracks: Vec<QueueTrack>, start_index: Option<usize>) {
+        self.core.set_queue(tracks, start_index).await
+    }
+
+    /// Remove a track by index
+    pub async fn remove_track(&self, index: usize) -> Option<QueueTrack> {
+        self.core.remove_track(index).await
+    }
+
+    /// Remove a track from the upcoming list by position
+    pub async fn remove_upcoming_track(&self, upcoming_index: usize) -> Option<QueueTrack> {
+        self.core.remove_upcoming_track(upcoming_index).await
+    }
+
+    /// Move a track from one position to another
+    pub async fn move_track(&self, from_index: usize, to_index: usize) -> bool {
+        self.core.move_track(from_index, to_index).await
+    }
+
+    /// Jump to a specific track by index
+    pub async fn play_index(&self, index: usize) -> Option<QueueTrack> {
+        self.core.play_index(index).await
+    }
+
+    /// Advance to next track in queue
+    pub async fn next_track(&self) -> Option<QueueTrack> {
+        self.core.next_track().await
+    }
+
+    /// Go to previous track in queue
+    pub async fn previous_track(&self) -> Option<QueueTrack> {
+        self.core.previous_track().await
+    }
+
+    /// Get multiple upcoming tracks without advancing (for prefetching)
+    pub async fn peek_upcoming(&self, count: usize) -> Vec<QueueTrack> {
+        self.core.peek_upcoming(count).await
     }
 
     // ==================== Search & Catalog ====================
