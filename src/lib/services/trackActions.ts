@@ -235,7 +235,7 @@ async function copyToClipboard(text: string, successMessage: string): Promise<vo
 
 export async function shareQobuzTrackLink(trackId: number): Promise<void> {
   try {
-    const url = await invoke<string>('get_qobuz_track_url', { trackId });
+    const url = await invoke<string>('v2_get_qobuz_track_url', { trackId });
     await copyToClipboard(url, 'Qobuz link copied');
   } catch (err) {
     console.error('Failed to get Qobuz link:', err);

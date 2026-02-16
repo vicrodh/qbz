@@ -1407,6 +1407,20 @@ pub fn run() {
             commands_v2::v2_playlist_get_tracks_with_local_copies,
             commands_v2::v2_playlist_import_preview,
             commands_v2::v2_playlist_import_execute,
+            // Library V2
+            commands_v2::v2_library_play_track,
+            commands_v2::v2_library_get_albums,
+            commands_v2::v2_library_get_tracks_by_ids,
+            commands_v2::v2_library_check_folder_accessible,
+            commands_v2::v2_library_set_album_hidden,
+            commands_v2::v2_library_get_scan_progress,
+            commands_v2::v2_library_clear_artwork_cache,
+            commands_v2::v2_library_clear_thumbnails_cache,
+            commands_v2::v2_library_remove_folder,
+            commands_v2::v2_library_set_album_artwork,
+            // Offline V2
+            commands_v2::v2_get_pending_playlists,
+            commands_v2::v2_playlist_get_all_local_track_counts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

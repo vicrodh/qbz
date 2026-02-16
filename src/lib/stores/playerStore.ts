@@ -575,7 +575,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     // Sync queue state when track changes externally (e.g., from remote control)
     syncQueueState().catch(err => console.error('[Player] Failed to sync queue:', err));
     try {
-      const queueTrack = await invoke<QueueTrack | null>('get_current_queue_track');
+      const queueTrack = await invoke<QueueTrack | null>('v2_get_current_queue_track');
       if (queueTrack && queueTrack.id === event.track_id) {
         const rawRate = queueTrack.sample_rate ?? undefined;
         const normalizedRate = rawRate == null

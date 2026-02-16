@@ -4814,3 +4814,123 @@ pub async fn v2_playlist_import_execute(
         .map_err(|e| RuntimeError::Internal(e))
 }
 
+// ============================================================================
+// Library V2 Commands
+// ============================================================================
+
+#[tauri::command]
+pub async fn v2_library_play_track(
+    trackId: i64,
+    libraryState: tauri::State<'_, crate::library::commands::LibraryState>,
+    appState: tauri::State<'_, crate::AppState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] library_play_track {}", trackId);
+    crate::library::commands::library_play_track(trackId, libraryState, appState).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_library_get_albums(
+    includeHidden: Option<bool>,
+    excludeNetworkFolders: Option<bool>,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+    downloadSettingsState: tauri::State<'_, crate::config::DownloadSettingsState>,
+) -> Result<Vec<crate::library::LocalAlbum>, RuntimeError> {
+    log::info!("[V2] library_get_albums");
+    crate::library::commands::library_get_albums(includeHidden, excludeNetworkFolders, state, downloadSettingsState).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_library_get_tracks_by_ids(
+    trackIds: Vec<i64>,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<Vec<crate::library::LocalTrack>, RuntimeError> {
+    log::info!("[V2] library_get_tracks_by_ids count={}", trackIds.len());
+    crate::library::commands::library_get_tracks_by_ids(trackIds, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_library_check_folder_accessible(path: String) -> Result<bool, RuntimeError> {
+    log::info!("[V2] library_check_folder_accessible {}", path);
+    crate::library::commands::library_check_folder_accessible(path).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_library_set_album_hidden(
+    albumId: String,
+    hidden: bool,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] library_set_album_hidden {} hidden={}", albumId, hidden);
+    crate::library::commands::library_set_album_hidden(albumId, hidden, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_library_get_scan_progress(
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<crate::library::ScanProgress, RuntimeError> {
+    crate::library::commands::library_get_scan_progress(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_library_clear_artwork_cache() -> Result<u64, RuntimeError> {
+    log::info!("[V2] library_clear_artwork_cache");
+    crate::library::commands::library_clear_artwork_cache().await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_library_clear_thumbnails_cache() -> Result<u64, RuntimeError> {
+    log::info!("[V2] library_clear_thumbnails_cache");
+    crate::library::commands::library_clear_thumbnails_cache().await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_library_remove_folder(
+    path: String,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] library_remove_folder {}", path);
+    crate::library::commands::library_remove_folder(path, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_library_set_album_artwork(
+    albumId: String,
+    artworkPath: String,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<String, RuntimeError> {
+    log::info!("[V2] library_set_album_artwork {}", albumId);
+    crate::library::commands::library_set_album_artwork(albumId, artworkPath, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// ============================================================================
+// Offline V2 Commands
+// ============================================================================
+
+#[tauri::command]
+pub fn v2_get_pending_playlists(
+    state: tauri::State<'_, crate::offline::OfflineState>,
+) -> Result<Vec<crate::offline::PendingPlaylist>, RuntimeError> {
+    log::info!("[V2] get_pending_playlists");
+    crate::offline::commands::get_pending_playlists(state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_playlist_get_all_local_track_counts(
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<std::collections::HashMap<u64, u32>, RuntimeError> {
+    log::info!("[V2] playlist_get_all_local_track_counts");
+    crate::library::commands::playlist_get_all_local_track_counts(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
