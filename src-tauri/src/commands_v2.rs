@@ -45,7 +45,6 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use crate::{library as legacy_library};
 
 // ==================== Helper Functions ====================
 
@@ -5326,56 +5325,56 @@ pub async fn v2_start_legacy_migration(
 
 #[tauri::command]
 pub async fn v2_library_scan(
-    state: State<'_, legacy_library::commands::LibraryState>,
+    state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    legacy_library::commands::library_scan(state).await
+    crate::library::library_scan_impl(state).await
 }
 
 #[tauri::command]
 pub async fn v2_library_stop_scan(
-    state: State<'_, legacy_library::commands::LibraryState>,
+    state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    legacy_library::commands::library_stop_scan(state).await
+    crate::library::library_stop_scan_impl(state).await
 }
 
 #[tauri::command]
 pub async fn v2_library_scan_folder(
     folder_id: i64,
-    state: State<'_, legacy_library::commands::LibraryState>,
+    state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    legacy_library::commands::library_scan_folder(folder_id, state).await
+    crate::library::library_scan_folder_impl(folder_id, state).await
 }
 
 #[tauri::command]
 pub async fn v2_library_clear(
-    state: State<'_, legacy_library::commands::LibraryState>,
+    state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    legacy_library::commands::library_clear(state).await
+    crate::library::library_clear_impl(state).await
 }
 
 #[tauri::command]
 pub async fn v2_library_update_album_metadata(
-    request: legacy_library::commands::LibraryAlbumMetadataUpdateRequest,
-    state: State<'_, legacy_library::commands::LibraryState>,
+    request: crate::library::LibraryAlbumMetadataUpdateRequest,
+    state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    legacy_library::commands::library_update_album_metadata(request, state).await
+    crate::library::library_update_album_metadata_impl(request, state).await
 }
 
 #[tauri::command]
 pub async fn v2_library_write_album_metadata_to_files(
     app: tauri::AppHandle,
-    request: legacy_library::commands::LibraryAlbumMetadataUpdateRequest,
-    state: State<'_, legacy_library::commands::LibraryState>,
+    request: crate::library::LibraryAlbumMetadataUpdateRequest,
+    state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    legacy_library::commands::library_write_album_metadata_to_files(app, request, state).await
+    crate::library::library_write_album_metadata_to_files_impl(app, request, state).await
 }
 
 #[tauri::command]
 pub async fn v2_library_refresh_album_metadata_from_files(
     album_group_key: String,
-    state: State<'_, legacy_library::commands::LibraryState>,
+    state: State<'_, crate::library::LibraryState>,
 ) -> Result<(), String> {
-    legacy_library::commands::library_refresh_album_metadata_from_files(album_group_key, state).await
+    crate::library::library_refresh_album_metadata_from_files_impl(album_group_key, state).await
 }
 
 #[tauri::command]

@@ -474,7 +474,7 @@ pub async fn library_check_folder_accessible(path: String) -> Result<bool, Strin
 // === Scanning ===
 
 #[tauri::command]
-pub async fn library_scan(state: State<'_, LibraryState>) -> Result<(), String> {
+pub async fn library_scan_impl(state: State<'_, LibraryState>) -> Result<(), String> {
     log::info!("Command: library_scan");
 
     // Get folders to scan
@@ -799,7 +799,7 @@ pub async fn library_get_scan_progress(
 }
 
 #[tauri::command]
-pub async fn library_stop_scan(state: State<'_, LibraryState>) -> Result<(), String> {
+pub async fn library_stop_scan_impl(state: State<'_, LibraryState>) -> Result<(), String> {
     log::info!("Command: library_stop_scan");
     state.scan_cancel.store(true, Ordering::Relaxed);
     Ok(())
@@ -807,7 +807,7 @@ pub async fn library_stop_scan(state: State<'_, LibraryState>) -> Result<(), Str
 
 /// Scan a single folder (by ID)
 #[tauri::command]
-pub async fn library_scan_folder(
+pub async fn library_scan_folder_impl(
     folder_id: i64,
     state: State<'_, LibraryState>,
 ) -> Result<(), String> {
@@ -1169,7 +1169,7 @@ pub async fn library_get_stats(
 }
 
 #[tauri::command]
-pub async fn library_clear(state: State<'_, LibraryState>) -> Result<(), String> {
+pub async fn library_clear_impl(state: State<'_, LibraryState>) -> Result<(), String> {
     log::info!("Command: library_clear");
 
     let guard__ = state.db.lock().await;
@@ -1841,7 +1841,7 @@ pub struct LibraryAlbumMetadataUpdateRequest {
 }
 
 #[tauri::command]
-pub async fn library_update_album_metadata(
+pub async fn library_update_album_metadata_impl(
     request: LibraryAlbumMetadataUpdateRequest,
     state: State<'_, LibraryState>,
 ) -> Result<(), String> {
@@ -1940,7 +1940,7 @@ pub async fn library_update_album_metadata(
 }
 
 #[tauri::command]
-pub async fn library_write_album_metadata_to_files(
+pub async fn library_write_album_metadata_to_files_impl(
     app: tauri::AppHandle,
     request: LibraryAlbumMetadataUpdateRequest,
     state: State<'_, LibraryState>,
@@ -2123,7 +2123,7 @@ pub async fn library_write_album_metadata_to_files(
 }
 
 #[tauri::command]
-pub async fn library_refresh_album_metadata_from_files(
+pub async fn library_refresh_album_metadata_from_files_impl(
     album_group_key: String,
     state: State<'_, LibraryState>,
 ) -> Result<(), String> {
@@ -2866,4 +2866,53 @@ pub async fn move_playlist_to_folder(
     let db = guard__.as_ref().ok_or("No active session - please log in")?;
     db.move_playlist_to_folder(playlist_id, folder_id.as_deref())
         .map_err(|e| e.to_string())
+}
+
+// Shared wrappers to keep legacy command names while exposing non-command impls for V2 usage.
+#[tauri::command]
+pub async fn library_scan(state: State<'_, LibraryState>) -> Result<(), String> {
+    library_scan_impl(state).await
+}
+
+#[tauri::command]
+pub async fn library_stop_scan(state: State<'_, LibraryState>) -> Result<(), String> {
+    library_stop_scan_impl(state).await
+}
+
+#[tauri::command]
+pub async fn library_scan_folder(
+    folder_id: i64,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    library_scan_folder_impl(folder_id, state).await
+}
+
+#[tauri::command]
+pub async fn library_clear(state: State<'_, LibraryState>) -> Result<(), String> {
+    library_clear_impl(state).await
+}
+
+#[tauri::command]
+pub async fn library_update_album_metadata(
+    request: LibraryAlbumMetadataUpdateRequest,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    library_update_album_metadata_impl(request, state).await
+}
+
+#[tauri::command]
+pub async fn library_write_album_metadata_to_files(
+    app: tauri::AppHandle,
+    request: LibraryAlbumMetadataUpdateRequest,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    library_write_album_metadata_to_files_impl(app, request, state).await
+}
+
+#[tauri::command]
+pub async fn library_refresh_album_metadata_from_files(
+    album_group_key: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    library_refresh_album_metadata_from_files_impl(album_group_key, state).await
 }

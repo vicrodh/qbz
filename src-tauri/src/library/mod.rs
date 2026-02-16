@@ -53,6 +53,16 @@ pub mod thumbnails {
 
 // Re-export commands::LibraryState for compatibility
 pub use commands::LibraryState;
+pub use commands::{
+    LibraryAlbumMetadataUpdateRequest,
+    library_scan_impl,
+    library_stop_scan_impl,
+    library_scan_folder_impl,
+    library_clear_impl,
+    library_update_album_metadata_impl,
+    library_write_album_metadata_to_files_impl,
+    library_refresh_album_metadata_from_files_impl,
+};
 
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
