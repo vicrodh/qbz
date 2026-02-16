@@ -636,7 +636,12 @@ pub fn run() {
             commands::get_pipewire_sinks,
             commands::debug_get_cpal_devices,
             commands::set_pipewire_default_sink,
-            commands::reinit_audio_device,
+            // CUT-OFF LEGACY COMMANDS (Phase 1)
+            // Date: 2026-02-16
+            // Policy: keep code, remove invoke exposure.
+            // Rollback: uncomment ONLY the specific command(s) needed for incident recovery.
+            // Permanent delete trigger: when two consecutive releases run V2-only without rollback.
+            // commands::reinit_audio_device,
             commands::get_hardware_audio_status,
             commands::start_bitdepth_capture,
             commands::stop_bitdepth_capture,
@@ -710,14 +715,15 @@ pub fn run() {
             commands::lastfm_has_embedded_credentials,
             commands::lastfm_has_credentials,
             commands::lastfm_set_credentials,
-            commands::lastfm_is_authenticated,
-            commands::lastfm_get_auth_url,
+            // CUT-OFF LEGACY COMMANDS (Phase 1 - Last.fm deprecated surface)
+            // commands::lastfm_is_authenticated,
+            // commands::lastfm_get_auth_url,
             commands::lastfm_open_auth_url,
-            commands::lastfm_authenticate,
-            commands::lastfm_set_session,
-            commands::lastfm_disconnect,
-            commands::lastfm_scrobble,
-            commands::lastfm_now_playing,
+            // commands::lastfm_authenticate,
+            // commands::lastfm_set_session,
+            // commands::lastfm_disconnect,
+            // commands::lastfm_scrobble,
+            // commands::lastfm_now_playing,
             // Share commands
             commands::share_track_songlink,
             commands::share_album_songlink,
@@ -1048,8 +1054,9 @@ pub fn run() {
             commands::musicbrainz_resolve_artist,
             commands::musicbrainz_resolve_release,
             commands::musicbrainz_get_artist_relationships,
-            commands::musicbrainz_is_enabled,
-            commands::musicbrainz_set_enabled,
+            // CUT-OFF LEGACY COMMANDS (Phase 1 - MusicBrainz deprecated toggles)
+            // commands::musicbrainz_is_enabled,
+            // commands::musicbrainz_set_enabled,
             commands::musicbrainz_get_cache_stats,
             commands::musicbrainz_clear_cache,
             commands::musicbrainz_cleanup_cache,
@@ -1057,14 +1064,15 @@ pub fn run() {
             commands::resolve_musician,
             commands::get_musician_appearances,
             // ListenBrainz integration commands
-            commands::listenbrainz_get_status,
-            commands::listenbrainz_is_enabled,
-            commands::listenbrainz_set_enabled,
-            commands::listenbrainz_connect,
-            commands::listenbrainz_disconnect,
-            commands::listenbrainz_now_playing,
-            commands::listenbrainz_scrobble,
-            commands::listenbrainz_queue_listen,
+            // CUT-OFF LEGACY COMMANDS (Phase 1 - ListenBrainz deprecated surface)
+            // commands::listenbrainz_get_status,
+            // commands::listenbrainz_is_enabled,
+            // commands::listenbrainz_set_enabled,
+            // commands::listenbrainz_connect,
+            // commands::listenbrainz_disconnect,
+            // commands::listenbrainz_now_playing,
+            // commands::listenbrainz_scrobble,
+            // commands::listenbrainz_queue_listen,
             commands::listenbrainz_get_queue,
             commands::listenbrainz_get_queue_count,
             commands::listenbrainz_mark_sent,
