@@ -363,12 +363,21 @@ pub async fn runtime_bootstrap(
         return Ok(status);
     }
 
-    // Step 3: Check for saved credentials and attempt auto-login
+    // Step 3: Check for saved credentials and attempt auto-login.
+    // NOTE: user_id hint is optional; credentials are the source of truth.
+    // This keeps bootstrap robust even if last_user_id is missing/corrupt.
     let creds = crate::credentials::load_qobuz_credentials();
-    let last_user_id = crate::user_data::UserDataPaths::load_last_user_id();
+    let last_user_id_hint = crate::user_data::UserDataPaths::load_last_user_id();
 
-    if let (Ok(Some(creds)), Some(user_id)) = (creds, last_user_id) {
-        log::info!("[Runtime] Found saved credentials, attempting auto-login for user {}", user_id);
+    if let Ok(Some(creds)) = creds {
+        if let Some(uid) = last_user_id_hint {
+            log::info!(
+                "[Runtime] Found saved credentials, attempting auto-login (user hint: {})",
+                uid
+            );
+        } else {
+            log::info!("[Runtime] Found saved credentials, attempting auto-login (no user hint)");
+        }
 
         // Login to legacy client
         let client = app_state.client.read().await;
@@ -424,7 +433,7 @@ pub async fn runtime_bootstrap(
             }
         }
     } else {
-        log::info!("[Runtime] No saved credentials or last user ID, staying in InitializedNoAuth");
+        log::info!("[Runtime] No saved credentials, staying in InitializedNoAuth");
     }
 
     manager.set_bootstrap_in_progress(false).await;
@@ -484,6 +493,25 @@ pub struct V2LoginResponse {
     pub subscription_valid_until: Option<String>,
     pub error: Option<String>,
     pub error_code: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct V2UserInfo {
+    pub user_name: String,
+    pub subscription: String,
+    pub subscription_valid_until: Option<String>,
+}
+
+#[tauri::command]
+pub async fn v2_get_user_info(
+    app_state: State<'_, AppState>,
+) -> Result<Option<V2UserInfo>, RuntimeError> {
+    let client = app_state.client.read().await;
+    Ok(client.get_user_info().await.map(|(name, subscription, valid_until)| V2UserInfo {
+        user_name: name,
+        subscription,
+        subscription_valid_until: valid_until,
+    }))
 }
 
 /// Auto-login using saved credentials (Phase 2 of runtime initialization)
@@ -1198,6 +1226,34 @@ pub async fn v2_plex_ping(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_plex_get_track_metadata(
+    baseUrl: String,
+    token: String,
+    ratingKey: String,
+) -> Result<crate::plex::PlexTrack, String> {
+    crate::plex::plex_get_track_metadata(baseUrl, token, ratingKey).await
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_plex_auth_pin_start(
+    clientIdentifier: String,
+) -> Result<crate::plex::PlexPinStartResult, String> {
+    crate::plex::plex_auth_pin_start(clientIdentifier).await
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_plex_auth_pin_check(
+    clientIdentifier: String,
+    pinId: u64,
+    code: Option<String>,
+) -> Result<crate::plex::PlexPinCheckResult, String> {
+    crate::plex::plex_auth_pin_check(clientIdentifier, pinId, code).await
+}
+
+#[tauri::command]
 pub fn v2_set_visualizer_enabled(
     enabled: bool,
     state: State<'_, AppState>,
@@ -1389,6 +1445,11 @@ pub fn v2_plex_cache_save_sections(
 }
 
 #[tauri::command]
+pub fn v2_plex_cache_get_sections() -> Result<Vec<crate::plex::PlexMusicSection>, String> {
+    crate::plex::plex_cache_get_sections()
+}
+
+#[tauri::command]
 pub fn v2_plex_cache_save_tracks(
     server_id: Option<String>,
     section_key: String,
@@ -1400,6 +1461,48 @@ pub fn v2_plex_cache_save_tracks(
 #[tauri::command]
 pub fn v2_plex_cache_clear() -> Result<(), String> {
     crate::plex::plex_cache_clear()
+}
+
+#[tauri::command]
+pub fn v2_plex_cache_get_tracks(
+    sectionKey: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<crate::plex::PlexTrack>, String> {
+    crate::plex::plex_cache_get_tracks(sectionKey, limit)
+}
+
+#[tauri::command]
+pub fn v2_plex_cache_get_albums() -> Result<Vec<crate::plex::PlexCachedAlbum>, String> {
+    crate::plex::plex_cache_get_albums()
+}
+
+#[tauri::command]
+pub fn v2_plex_cache_search_tracks(
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<crate::plex::PlexCachedTrack>, String> {
+    crate::plex::plex_cache_search_tracks(query, limit)
+}
+
+#[tauri::command]
+pub fn v2_plex_cache_get_album_tracks(
+    albumKey: String,
+) -> Result<Vec<crate::plex::PlexCachedTrack>, String> {
+    crate::plex::plex_cache_get_album_tracks(albumKey)
+}
+
+#[tauri::command]
+pub fn v2_plex_cache_update_track_quality(
+    updates: Vec<crate::plex::PlexTrackQualityUpdate>,
+) -> Result<usize, String> {
+    crate::plex::plex_cache_update_track_quality(updates)
+}
+
+#[tauri::command]
+pub fn v2_plex_cache_get_tracks_needing_hydration(
+    limit: Option<u32>,
+) -> Result<Vec<String>, String> {
+    crate::plex::plex_cache_get_tracks_needing_hydration(limit)
 }
 
 // ==================== Casting / Local Library Commands (V2 Native) ====================
@@ -1785,6 +1888,42 @@ pub async fn v2_library_remove_folder(
     db.remove_folder(&path).map_err(|e| e.to_string())?;
     db.delete_tracks_in_folder(&path).map_err(|e| e.to_string())?;
     Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_library_check_folder_accessible(path: String) -> Result<bool, String> {
+    log::info!("[V2] library_check_folder_accessible {}", path);
+
+    let path_ref = std::path::Path::new(&path);
+    if !path_ref.exists() {
+        return Ok(false);
+    }
+
+    // Avoid UI stalls on slow/unresponsive mounts.
+    let path_clone = path.clone();
+    let check_result = tokio::time::timeout(
+        std::time::Duration::from_secs(6),
+        tokio::task::spawn_blocking(move || std::fs::read_dir(std::path::Path::new(&path_clone)).is_ok()),
+    )
+    .await;
+
+    match check_result {
+        Ok(Ok(accessible)) => Ok(accessible),
+        Ok(Err(_)) => {
+            log::warn!("[V2] Failed to spawn blocking task for folder check: {}", path);
+            Ok(false)
+        }
+        Err(_) => {
+            // Mounted-but-slow network shares can timeout but still be usable.
+            let exists = std::path::Path::new(&path).exists();
+            log::warn!(
+                "[V2] Timeout checking folder accessibility: {} (exists={})",
+                path,
+                exists
+            );
+            Ok(exists)
+        }
+    }
 }
 
 #[tauri::command]
