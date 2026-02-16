@@ -14,11 +14,6 @@
     trackId?: number; // For favorite checking
   }
 
-  interface IndexedQueueTrack {
-    track: QueueTrack;
-    originalIndex: number;
-  }
-
   interface Props {
     isOpen: boolean;
     onClose: () => void;
@@ -159,13 +154,12 @@
 
   // Filter tracks based on search
   const filteredTracks = $derived.by(() => {
-    const indexedTracks: IndexedQueueTrack[] = upcomingTracks.map((track, originalIndex) => ({ track, originalIndex }));
-    if (!searchQuery.trim()) return indexedTracks.slice(0, displayCount);
+    if (!searchQuery.trim()) return upcomingTracks.slice(0, displayCount);
     const query = searchQuery.toLowerCase();
-    return indexedTracks
-      .filter(entry =>
-        entry.track.title.toLowerCase().includes(query) ||
-        entry.track.artist.toLowerCase().includes(query)
+    return upcomingTracks
+      .filter(track =>
+        track.title.toLowerCase().includes(query) ||
+        track.artist.toLowerCase().includes(query)
       )
       .slice(0, displayCount);
   });
@@ -355,17 +349,16 @@
               {/if}
             </div>
             <div class="tracks-list">
-              {#each filteredTracks as trackEntry}
-                {@const originalIndex = trackEntry.originalIndex}
-                {@const queueTrack = trackEntry.track}
-                {@const isUnavailable = queueTrack.available === false}
+              {#each filteredTracks as track, index}
+                {@const originalIndex = upcomingTracks.findIndex((queueTrack) => queueTrack.id === track.id)}
+                {@const isUnavailable = track.available === false}
                 <div
                   class="queue-track"
                   class:dragging={draggedIndex === originalIndex}
                   class:drag-over={dragOverIndex === originalIndex && draggedIndex !== originalIndex}
                   class:unavailable={isUnavailable}
                   draggable={canDrag && !isUnavailable}
-                  onclick={() => handleTrackClick(queueTrack)}
+                  onclick={() => handleTrackClick(track)}
                   ondragstart={(e) => handleDragStart(e, originalIndex)}
                   ondragover={(e) => handleDragOver(e, originalIndex)}
                   ondragleave={handleDragLeave}
@@ -376,10 +369,10 @@
                 >
                   <span class="track-number">{originalIndex + 1}</span>
                   <div class="track-info">
-                    <div class="track-title">{queueTrack.title}</div>
-                    <div class="track-artist">{queueTrack.artist}</div>
+                    <div class="track-title">{track.title}</div>
+                    <div class="track-artist">{track.artist}</div>
                   </div>
-                  <span class="track-duration">{queueTrack.duration}</span>
+                  <span class="track-duration">{track.duration}</span>
                   <div class="track-menu-container">
                     <button
                       class="track-menu-btn"
@@ -394,11 +387,11 @@
                           <Trash2 size={14} />
                           <span>{$t('player.removeFromQueue')}</span>
                         </button>
-                        <button class="menu-item" onclick={(e) => handleAddToPlaylist(e, queueTrack.id)}>
+                        <button class="menu-item" onclick={(e) => handleAddToPlaylist(e, track.id)}>
                           <ListPlus size={14} />
                           <span>{$t('actions.addToPlaylist')}</span>
                         </button>
-                        <button class="menu-item" onclick={(e) => handleShowTrackInfo(e, queueTrack.id)}>
+                        <button class="menu-item" onclick={(e) => handleShowTrackInfo(e, track.id)}>
                           <Info size={14} />
                           <span>{$t('player.trackInfo')}</span>
                         </button>
