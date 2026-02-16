@@ -407,7 +407,7 @@
           localTrackPaths = tracks.map(track => track.file_path);
         }
 
-        await invoke('add_tracks_to_pending_playlist', {
+        await invoke('v2_add_tracks_to_pending_playlist', {
           pendingId,
           qobuzTrackIds,
           localTrackPaths

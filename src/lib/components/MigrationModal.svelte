@@ -48,7 +48,7 @@
   async function startMigration() {
     migrating = true;
     try {
-      await invoke('start_legacy_migration');
+      await invoke('v2_start_legacy_migration');
     } catch (error) {
       console.error('Failed to start migration:', error);
       migrating = false;

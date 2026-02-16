@@ -384,7 +384,7 @@ export function hideSidebar(): void {
  */
 export async function clearCache(): Promise<void> {
   try {
-    await invoke('lyrics_clear_cache');
+    await invoke('v2_lyrics_clear_cache');
     console.log('Lyrics cache cleared');
   } catch (err) {
     console.error('Failed to clear lyrics cache:', err);

@@ -33,7 +33,7 @@ export interface HomeSeeds {
 
 export async function logRecoEvent(event: RecoEventInput): Promise<void> {
   try {
-    await invoke('reco_log_event', { event });
+    await invoke('v2_reco_log_event', { event });
   } catch (err) {
     console.debug('Reco event log failed:', err);
   }
@@ -72,7 +72,7 @@ export async function trainScores(options?: {
   maxEvents?: number;
   maxPerType?: number;
 }): Promise<void> {
-  await invoke('reco_train_scores', {
+  await invoke('v2_reco_train_scores', {
     lookbackDays: options?.lookbackDays,
     halfLifeDays: options?.halfLifeDays,
     maxEvents: options?.maxEvents,

@@ -353,13 +353,13 @@
 
     try {
       if (persistence === 'sidecar') {
-        await invoke('library_update_album_metadata', { request: payload });
+        await invoke('v2_library_update_album_metadata', { request: payload });
       } else {
         // Listen for progress events
         unlisten = await listen<{ current: number; total: number }>('library:tag_write_progress', (event) => {
           writeProgress = event.payload;
         });
-        await invoke('library_write_album_metadata_to_files', { request: payload });
+        await invoke('v2_library_write_album_metadata_to_files', { request: payload });
       }
       showToast($t('toast.albumMetadataSaved'), 'success');
       await onSaved();

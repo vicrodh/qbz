@@ -112,7 +112,7 @@
     try {
       // If path was changed, update it first
       if (pathChanged && currentPath !== folder.path) {
-        await invoke('library_update_folder_path', {
+        await invoke('v2_library_update_folder_path', {
           id: folder.id,
           newPath: currentPath
         });

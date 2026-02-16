@@ -214,7 +214,7 @@ export async function setManualOffline(enabled: boolean): Promise<void> {
  */
 export async function setShowPartialPlaylists(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_show_partial_playlists', { enabled });
+    await invoke('v2_set_show_partial_playlists', { enabled });
     settings.showPartialPlaylists = enabled;
     notifyListeners();
   } catch (error) {
@@ -228,7 +228,7 @@ export async function setShowPartialPlaylists(enabled: boolean): Promise<void> {
  */
 export async function setAllowCastWhileOffline(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_allow_cast_while_offline', { enabled });
+    await invoke('v2_set_allow_cast_while_offline', { enabled });
     settings.allowCastWhileOffline = enabled;
     notifyListeners();
   } catch (error) {
@@ -242,7 +242,7 @@ export async function setAllowCastWhileOffline(enabled: boolean): Promise<void> 
  */
 export async function setAllowImmediateScrobbling(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_allow_immediate_scrobbling', { enabled });
+    await invoke('v2_set_allow_immediate_scrobbling', { enabled });
     settings.allowImmediateScrobbling = enabled;
     notifyListeners();
   } catch (error) {
@@ -256,7 +256,7 @@ export async function setAllowImmediateScrobbling(enabled: boolean): Promise<voi
  */
 export async function setAllowAccumulatedScrobbling(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_allow_accumulated_scrobbling', { enabled });
+    await invoke('v2_set_allow_accumulated_scrobbling', { enabled });
     settings.allowAccumulatedScrobbling = enabled;
     notifyListeners();
   } catch (error) {
@@ -270,7 +270,7 @@ export async function setAllowAccumulatedScrobbling(enabled: boolean): Promise<v
  */
 export async function setShowNetworkFoldersInManualOffline(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_show_network_folders_in_manual_offline', { enabled });
+    await invoke('v2_set_show_network_folders_in_manual_offline', { enabled });
     settings.showNetworkFoldersInManualOffline = enabled;
     notifyListeners();
   } catch (error) {
@@ -381,14 +381,14 @@ export async function markPendingPlaylistSynced(
   pendingId: number,
   qobuzPlaylistId: number
 ): Promise<void> {
-  await invoke('mark_pending_playlist_synced', { pendingId, qobuzPlaylistId });
+  await invoke('v2_mark_pending_playlist_synced', { pendingId, qobuzPlaylistId });
 }
 
 /**
  * Delete a pending playlist
  */
 export async function deletePendingPlaylist(pendingId: number): Promise<void> {
-  await invoke('delete_pending_playlist', { pendingId });
+  await invoke('v2_delete_pending_playlist', { pendingId });
 }
 
 // ============ Scrobble Queue ============
@@ -431,7 +431,7 @@ export async function getQueuedScrobbles(limit?: number): Promise<QueuedScrobble
  * Mark scrobbles as sent after successful Last.fm submission
  */
 export async function markScrobblesSent(ids: number[]): Promise<void> {
-  await invoke('mark_scrobbles_sent', { ids });
+  await invoke('v2_mark_scrobbles_sent', { ids });
 }
 
 /**
@@ -485,7 +485,7 @@ export async function syncPendingPlaylists(): Promise<void> {
           console.log(`[Offline] Created playlist on Qobuz with ID: ${qobuzPlaylistId}`);
 
           // Save the Qobuz ID immediately (but keep synced=0 until fully complete)
-          await invoke('update_pending_playlist_qobuz_id', {
+          await invoke('v2_update_pending_playlist_qobuz_id', {
             pendingId: playlist.id,
             qobuzPlaylistId
           });

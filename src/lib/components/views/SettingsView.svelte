@@ -1013,7 +1013,7 @@
       if (savedApiKey && savedApiSecret) {
         lastfmApiKey = savedApiKey;
         lastfmApiSecret = savedApiSecret;
-        await invoke('lastfm_set_credentials', {
+        await invoke('v2_lastfm_set_credentials', {
           apiKey: savedApiKey,
           apiSecret: savedApiSecret
         });
@@ -1048,7 +1048,7 @@
       if (lastfmApiKey && lastfmApiSecret) {
         setUserItem('qbz-lastfm-api-key', lastfmApiKey);
         setUserItem('qbz-lastfm-api-secret', lastfmApiSecret);
-        await invoke('lastfm_set_credentials', {
+        await invoke('v2_lastfm_set_credentials', {
           apiKey: lastfmApiKey,
           apiSecret: lastfmApiSecret
         });
@@ -1060,7 +1060,7 @@
 
       // Open browser for authorization using Tauri's native opener
       try {
-        await invoke('lastfm_open_auth_url', { url });
+        await invoke('v2_lastfm_open_auth_url', { url });
       } catch {
         // Fallback to window.open if native opener fails
         window.open(url, '_blank');
@@ -2623,7 +2623,7 @@
 
   async function handleOpenCacheFolder() {
     try {
-      await invoke('open_offline_cache_folder');
+      await invoke('v2_open_offline_cache_folder');
     } catch (err) {
       console.error('Failed to open cache folder:', err);
       showToast($t('toast.failedOpenCacheFolder'), 'error');
@@ -2661,7 +2661,7 @@
     if (isClearingMusicBrainz) return;
     isClearingMusicBrainz = true;
     try {
-      await invoke('musicbrainz_clear_cache');
+      await invoke('v2_musicbrainz_clear_cache');
       console.log('MusicBrainz cache cleared');
       await loadMusicBrainzCacheStats();
     } catch (err) {
@@ -2673,7 +2673,7 @@
 
   async function loadMusicBrainzCacheStats() {
     try {
-      musicBrainzCacheStats = await invoke('musicbrainz_get_cache_stats');
+      musicBrainzCacheStats = await invoke('v2_musicbrainz_get_cache_stats');
     } catch (err) {
       console.error('Failed to load MusicBrainz cache stats:', err);
       musicBrainzCacheStats = null;
@@ -2705,7 +2705,7 @@
 
   async function loadArtworkCacheStats() {
     try {
-      artworkCacheStats = await invoke('library_get_cache_stats');
+      artworkCacheStats = await invoke('v2_library_get_cache_stats');
     } catch (err) {
       console.error('Failed to load artwork cache stats:', err);
       artworkCacheStats = null;
@@ -2736,7 +2736,7 @@
       await Promise.all([
         invoke('v2_clear_cache'),
         clearLyricsCache(),
-        invoke('musicbrainz_clear_cache'),
+        invoke('v2_musicbrainz_clear_cache'),
         invoke('v2_clear_vector_store'),
         invoke('v2_library_clear_artwork_cache'),
         invoke('v2_library_clear_thumbnails_cache')
@@ -2803,7 +2803,7 @@
     if (!confirmed) return;
     isFactoryResetting = true;
     try {
-      await invoke('factory_reset');
+      await invoke('v2_factory_reset');
       onLogout?.();
     } catch (err) {
       console.error('Factory reset failed:', err);

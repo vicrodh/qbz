@@ -79,7 +79,7 @@ export function clearThumbnailCache(): void {
  * Clear thumbnails on the backend and frontend.
  */
 export async function clearAllThumbnails(): Promise<void> {
-  await invoke('library_clear_thumbnails');
+  await invoke('v2_library_clear_thumbnails_cache');
   thumbnailCache.clear();
 }
 

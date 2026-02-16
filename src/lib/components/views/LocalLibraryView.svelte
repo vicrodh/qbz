@@ -1595,7 +1595,7 @@
   async function handleScanSingleFolder(folderId: number) {
     try {
       scanning = true;
-      await invoke('library_scan_folder', { folderId });
+      await invoke('v2_library_scan_folder', { folderId });
       // Start polling for progress
       const progressInterval = setInterval(async () => {
         scanProgress = await invoke<ScanProgress>('v2_library_get_scan_progress');
@@ -1668,7 +1668,7 @@
     }, 500);
 
     try {
-      await invoke('library_scan');
+      await invoke('v2_library_scan');
     } catch (err) {
       console.error('Scan failed:', err);
       scanning = false;
@@ -1678,7 +1678,7 @@
 
   async function handleStopScan() {
     try {
-      await invoke('library_stop_scan');
+      await invoke('v2_library_stop_scan');
     } catch (err) {
       console.error('Failed to stop scan:', err);
     }
@@ -1762,7 +1762,7 @@
     clearingLibrary = true;
 
     try {
-      await invoke('library_clear');
+      await invoke('v2_library_clear');
       await loadLibraryData();
       albums = [];
       artists = [];
@@ -2243,7 +2243,7 @@
     try {
       refreshingAlbumMetadata = true;
       albumMetadataRefreshed = false;
-      await invoke('library_refresh_album_metadata_from_files', { albumGroupKey: selectedAlbum.id });
+      await invoke('v2_library_refresh_album_metadata_from_files', { albumGroupKey: selectedAlbum.id });
       showToast($t('toast.metadataRefreshed'), 'success');
       albumMetadataRefreshed = true;
       await handleTagEditorSaved();
@@ -2863,7 +2863,7 @@
 
             if (imageUrl) {
               // Cache in database with canonical name
-              await invoke('library_cache_artist_image', {
+              await invoke('v2_library_cache_artist_image', {
                 artistName: name,
                 imageUrl,
                 source: 'qobuz',
@@ -2920,7 +2920,7 @@
       const imagePath = Array.isArray(selected) ? selected[0] : selected;
       
       // Save to database
-      await invoke('library_set_custom_artist_image', {
+      await invoke('v2_library_set_custom_artist_image', {
         artistName,
         customImagePath: imagePath
       });

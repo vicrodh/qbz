@@ -21,6 +21,7 @@ use crate::cache::AudioCache;
 use crate::api_cache::ApiCacheState;
 use crate::audio::{AlsaPlugin, AudioBackendType};
 use crate::cast::{AirPlayMetadata, AirPlayState, CastState, DlnaMetadata, DlnaState, MediaMetadata};
+use crate::{commands as legacy_commands};
 use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
 use crate::config::developer_settings::{DeveloperSettings, DeveloperSettingsState};
 use crate::config::graphics_settings::{GraphicsSettings, GraphicsSettingsState, GraphicsStartupStatus};
@@ -30,10 +31,16 @@ use crate::config::tray_settings::TraySettingsState;
 use crate::config::window_settings::WindowSettingsState;
 use crate::core_bridge::CoreBridgeState;
 use crate::library::{thumbnails, LibraryState, MetadataExtractor, get_artwork_cache_dir};
+use crate::lyrics::LyricsState;
+use crate::musicbrainz::{CacheStats as MusicBrainzCacheStats, MusicBrainzSharedState};
+use crate::offline::OfflineState;
 use crate::offline_cache::OfflineCacheState;
+use crate::{offline_cache as legacy_offline_cache};
 use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
 use crate::queue::QueueTrack;
+use crate::reco_store::{RecoEventInput, RecoState};
 use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason, CommandRequirement};
+use crate::{library as legacy_library};
 use crate::AppState;
 
 // ==================== Helper Functions ====================
@@ -1795,6 +1802,436 @@ pub async fn v2_library_set_album_hidden(
     let guard = state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
     db.set_album_hidden(&album_group_key, hidden)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_delete_playlist_folder(
+    id: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.delete_playlist_folder(&id).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_reorder_playlist_folders(
+    folder_ids: Vec<String>,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.reorder_playlist_folders(&folder_ids)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_move_playlist_to_folder(
+    playlist_id: u64,
+    folder_id: Option<String>,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.move_playlist_to_folder(playlist_id, folder_id.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_lyrics_clear_cache(state: State<'_, LyricsState>) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.clear().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_musicbrainz_get_cache_stats(
+    state: State<'_, MusicBrainzSharedState>,
+) -> Result<MusicBrainzCacheStats, String> {
+    let cache_opt = state.cache.lock().await;
+    let cache = cache_opt.as_ref().ok_or("No active session - please log in")?;
+    cache.get_stats()
+}
+
+#[tauri::command]
+pub async fn v2_musicbrainz_clear_cache(
+    state: State<'_, MusicBrainzSharedState>,
+) -> Result<(), String> {
+    let cache_opt = state.cache.lock().await;
+    let cache = cache_opt.as_ref().ok_or("No active session - please log in")?;
+    cache.clear_all()
+}
+
+#[tauri::command]
+pub fn v2_set_show_partial_playlists(
+    enabled: bool,
+    state: State<'_, OfflineState>,
+) -> Result<(), String> {
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_show_partial_playlists(enabled)
+}
+
+#[tauri::command]
+pub fn v2_set_allow_cast_while_offline(
+    enabled: bool,
+    state: State<'_, OfflineState>,
+) -> Result<(), String> {
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_allow_cast_while_offline(enabled)
+}
+
+#[tauri::command]
+pub fn v2_set_allow_immediate_scrobbling(
+    enabled: bool,
+    state: State<'_, OfflineState>,
+) -> Result<(), String> {
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_allow_immediate_scrobbling(enabled)
+}
+
+#[tauri::command]
+pub fn v2_set_allow_accumulated_scrobbling(
+    enabled: bool,
+    state: State<'_, OfflineState>,
+) -> Result<(), String> {
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_allow_accumulated_scrobbling(enabled)
+}
+
+#[tauri::command]
+pub fn v2_set_show_network_folders_in_manual_offline(
+    enabled: bool,
+    state: State<'_, OfflineState>,
+) -> Result<(), String> {
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.set_show_network_folders_in_manual_offline(enabled)
+}
+
+#[tauri::command]
+pub fn v2_add_tracks_to_pending_playlist(
+    pending_id: i64,
+    qobuz_track_ids: Vec<u64>,
+    local_track_paths: Vec<String>,
+    state: State<'_, OfflineState>,
+) -> Result<(), String> {
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.add_tracks_to_pending_playlist(pending_id, &qobuz_track_ids, &local_track_paths)
+}
+
+#[tauri::command]
+pub fn v2_update_pending_playlist_qobuz_id(
+    pending_id: i64,
+    qobuz_playlist_id: u64,
+    state: State<'_, OfflineState>,
+) -> Result<(), String> {
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.update_qobuz_playlist_id(pending_id, qobuz_playlist_id)
+}
+
+#[tauri::command]
+pub fn v2_mark_pending_playlist_synced(
+    pending_id: i64,
+    qobuz_playlist_id: u64,
+    state: State<'_, OfflineState>,
+) -> Result<(), String> {
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.mark_playlist_synced(pending_id, qobuz_playlist_id)
+}
+
+#[tauri::command]
+pub fn v2_delete_pending_playlist(
+    pending_id: i64,
+    state: State<'_, OfflineState>,
+) -> Result<(), String> {
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.delete_pending_playlist(pending_id)
+}
+
+#[tauri::command]
+pub fn v2_mark_scrobbles_sent(
+    ids: Vec<i64>,
+    state: State<'_, OfflineState>,
+) -> Result<(), String> {
+    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.mark_scrobbles_sent(&ids)
+}
+
+#[tauri::command]
+pub async fn v2_remove_cached_track(
+    track_id: u64,
+    cache_state: State<'_, OfflineCacheState>,
+    library_state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    {
+        let guard = cache_state.db.lock().await;
+        let db = guard.as_ref().ok_or("No active session - please log in")?;
+        if let Some(file_path) = db.delete_track(track_id)? {
+            let path = std::path::Path::new(&file_path);
+            if path.exists() {
+                let _ = std::fs::remove_file(path);
+            }
+        }
+    }
+    let guard = library_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    let _ = db.remove_qobuz_cached_track(track_id);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_set_offline_cache_limit(
+    limit_mb: Option<u64>,
+    cache_state: State<'_, OfflineCacheState>,
+) -> Result<(), String> {
+    let limit_bytes = limit_mb.map(|mb| mb * 1024 * 1024);
+    let mut limit = cache_state.limit_bytes.lock().await;
+    *limit = limit_bytes;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_open_offline_cache_folder(
+    cache_state: State<'_, OfflineCacheState>,
+) -> Result<(), String> {
+    let path = cache_state.cache_dir.read().unwrap().clone();
+    std::fs::create_dir_all(&path).map_err(|e| format!("Failed to create cache directory: {}", e))?;
+    open::that(&path).map_err(|e| format!("Failed to open folder: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_open_album_folder(
+    album_id: String,
+    cache_state: State<'_, OfflineCacheState>,
+) -> Result<(), String> {
+    let guard = cache_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    let tracks = db.get_all_tracks()?;
+    let album_tracks: Vec<_> = tracks
+        .into_iter()
+        .filter(|t| t.album_id.as_deref() == Some(&album_id))
+        .collect();
+    if album_tracks.is_empty() {
+        return Err("No cached tracks found for this album".to_string());
+    }
+    let file_path = db
+        .get_file_path(album_tracks[0].track_id)?
+        .ok_or_else(|| "Track file path not found".to_string())?;
+    let album_dir = std::path::Path::new(&file_path)
+        .parent()
+        .ok_or_else(|| "Could not determine album folder".to_string())?;
+    open::that(album_dir).map_err(|e| format!("Failed to open folder: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_open_track_folder(
+    track_id: u64,
+    cache_state: State<'_, OfflineCacheState>,
+) -> Result<(), String> {
+    let guard = cache_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    let file_path = db
+        .get_file_path(track_id)?
+        .ok_or_else(|| "Track file path not found - track may not be cached".to_string())?;
+    let track_dir = std::path::Path::new(&file_path)
+        .parent()
+        .ok_or_else(|| "Could not determine track folder".to_string())?;
+    open::that(track_dir).map_err(|e| format!("Failed to open folder: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_lastfm_open_auth_url(url: String) -> Result<(), String> {
+    open::that(&url).map_err(|e| format!("Failed to open browser: {}", e))
+}
+
+#[tauri::command]
+pub async fn v2_lastfm_set_credentials(
+    api_key: String,
+    api_secret: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let mut client = state.lastfm.lock().await;
+    client.set_credentials(api_key, api_secret);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_reco_log_event(
+    event: RecoEventInput,
+    state: State<'_, RecoState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.insert_event(&event)
+}
+
+#[tauri::command]
+pub async fn v2_reco_train_scores(
+    lookback_days: Option<i64>,
+    half_life_days: Option<f64>,
+    max_events: Option<u32>,
+    max_per_type: Option<u32>,
+    state: State<'_, RecoState>,
+) -> Result<(), String> {
+    crate::reco_store::commands::reco_train_scores(
+        lookback_days,
+        half_life_days,
+        max_events,
+        max_per_type,
+        state,
+    )
+    .await
+    .map(|_| ())
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct V2LibraryCacheStats {
+    pub artwork_cache_bytes: u64,
+    pub thumbnails_cache_bytes: u64,
+    pub artwork_file_count: usize,
+    pub thumbnail_file_count: usize,
+}
+
+#[tauri::command]
+pub async fn v2_library_get_cache_stats() -> Result<V2LibraryCacheStats, String> {
+    let artwork_dir = get_artwork_cache_dir();
+    let (artwork_bytes, artwork_count) = if artwork_dir.exists() {
+        let mut size = 0u64;
+        let mut count = 0usize;
+        if let Ok(entries) = std::fs::read_dir(&artwork_dir) {
+            for entry in entries.flatten() {
+                if let Ok(meta) = entry.metadata() {
+                    if meta.is_file() {
+                        size += meta.len();
+                        count += 1;
+                    }
+                }
+            }
+        }
+        (size, count)
+    } else {
+        (0, 0)
+    };
+    let thumbnails_bytes = thumbnails::get_cache_size().unwrap_or(0);
+    let thumbnail_count = if let Ok(dir) = thumbnails::get_thumbnails_dir() {
+        std::fs::read_dir(&dir).map(|e| e.count()).unwrap_or(0)
+    } else {
+        0
+    };
+    Ok(V2LibraryCacheStats {
+        artwork_cache_bytes: artwork_bytes,
+        thumbnails_cache_bytes: thumbnails_bytes,
+        artwork_file_count: artwork_count,
+        thumbnail_file_count: thumbnail_count,
+    })
+}
+
+#[tauri::command]
+pub async fn v2_library_update_folder_path(
+    id: i64,
+    new_path: String,
+    state: State<'_, LibraryState>,
+) -> Result<crate::library::LibraryFolder, String> {
+    let path_ref = std::path::Path::new(&new_path);
+    if !path_ref.exists() {
+        return Err("The selected folder does not exist".to_string());
+    }
+    if !path_ref.is_dir() {
+        return Err("The selected path is not a folder".to_string());
+    }
+
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.update_folder_path(id, &new_path).map_err(|e| e.to_string())?;
+
+    let network_info = crate::network::is_network_path(path_ref);
+    if network_info.is_network {
+        let fs_type = network_info.mount_info.as_ref().and_then(|mi| {
+            if let crate::network::MountKind::Network(nfs) = &mi.kind {
+                Some(format!("{:?}", nfs).to_lowercase())
+            } else {
+                None
+            }
+        });
+        if let Some(folder) = db.get_folder_by_id(id).map_err(|e| e.to_string())? {
+            db.update_folder_settings(
+                id,
+                folder.alias.as_deref(),
+                folder.enabled,
+                true,
+                fs_type.as_deref(),
+                false,
+            )
+            .map_err(|e| e.to_string())?;
+        }
+    }
+    db.get_folder_by_id(id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "Folder not found after update".to_string())
+}
+
+#[tauri::command]
+pub async fn v2_library_cache_artist_image(
+    artist_name: String,
+    image_url: String,
+    source: String,
+    canonical_name: Option<String>,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.cache_artist_image_with_canonical(
+        &artist_name,
+        Some(&image_url),
+        &source,
+        None,
+        canonical_name.as_deref(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_library_set_custom_artist_image(
+    artist_name: String,
+    custom_image_path: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let artwork_dir = get_artwork_cache_dir();
+    let source = std::path::Path::new(&custom_image_path);
+    if !source.exists() {
+        return Err(format!("Source image does not exist: {}", custom_image_path));
+    }
+    let extension = source.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+    use md5::{Digest, Md5};
+    let mut hasher = Md5::new();
+    hasher.update(artist_name.as_bytes());
+    let artist_hash = format!("{:x}", hasher.finalize());
+    let filename = format!(
+        "artist_custom_{}_{}.{}",
+        artist_hash,
+        chrono::Utc::now().timestamp(),
+        extension
+    );
+    let dest_path = artwork_dir.join(filename);
+    std::fs::copy(source, &dest_path).map_err(|e| format!("Failed to copy artwork: {}", e))?;
+
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.cache_artist_image(&artist_name, None, "custom", Some(&dest_path.to_string_lossy()))
         .map_err(|e| e.to_string())
 }
 
@@ -4327,4 +4764,188 @@ pub async fn v2_uncache_favorite_artist(
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
     store.remove_favorite_artist(artistId)
         .map_err(|e| RuntimeError::Internal(e))
+}
+
+// ==================== Remaining Legacy-Equivalent V2 Commands ====================
+
+#[tauri::command]
+pub fn v2_show_track_notification(
+    title: String,
+    artist: String,
+    album: String,
+    artwork_url: Option<String>,
+    bit_depth: Option<u32>,
+    sample_rate: Option<f64>,
+) -> Result<(), String> {
+    legacy_commands::notification::show_track_notification(
+        title,
+        artist,
+        album,
+        artwork_url,
+        bit_depth,
+        sample_rate,
+    )
+}
+
+#[tauri::command]
+pub async fn v2_subscribe_playlist(
+    playlist_id: u64,
+    state: State<'_, AppState>,
+    library_state: State<'_, legacy_library::commands::LibraryState>,
+) -> Result<crate::api::models::Playlist, String> {
+    legacy_commands::playlist::subscribe_playlist(playlist_id, state, library_state).await
+}
+
+#[tauri::command]
+pub async fn v2_cache_track_for_offline(
+    track_id: u64,
+    title: String,
+    artist: String,
+    album: Option<String>,
+    album_id: Option<String>,
+    duration_secs: u64,
+    quality: String,
+    bit_depth: Option<u32>,
+    sample_rate: Option<f64>,
+    state: State<'_, AppState>,
+    cache_state: State<'_, OfflineCacheState>,
+    library_state: State<'_, legacy_library::commands::LibraryState>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    legacy_offline_cache::commands::cache_track_for_offline(
+        track_id,
+        title,
+        artist,
+        album,
+        album_id,
+        duration_secs,
+        quality,
+        bit_depth,
+        sample_rate,
+        state,
+        cache_state,
+        library_state,
+        app_handle,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn v2_start_legacy_migration(
+    state: State<'_, AppState>,
+    cache_state: State<'_, OfflineCacheState>,
+    library_state: State<'_, legacy_library::commands::LibraryState>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    legacy_offline_cache::commands::start_legacy_migration(state, cache_state, library_state, app_handle).await
+}
+
+#[tauri::command]
+pub async fn v2_library_scan(
+    state: State<'_, legacy_library::commands::LibraryState>,
+) -> Result<(), String> {
+    legacy_library::commands::library_scan(state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_stop_scan(
+    state: State<'_, legacy_library::commands::LibraryState>,
+) -> Result<(), String> {
+    legacy_library::commands::library_stop_scan(state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_scan_folder(
+    folder_id: i64,
+    state: State<'_, legacy_library::commands::LibraryState>,
+) -> Result<(), String> {
+    legacy_library::commands::library_scan_folder(folder_id, state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_clear(
+    state: State<'_, legacy_library::commands::LibraryState>,
+) -> Result<(), String> {
+    legacy_library::commands::library_clear(state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_update_album_metadata(
+    request: legacy_library::commands::LibraryAlbumMetadataUpdateRequest,
+    state: State<'_, legacy_library::commands::LibraryState>,
+) -> Result<(), String> {
+    legacy_library::commands::library_update_album_metadata(request, state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_write_album_metadata_to_files(
+    app: tauri::AppHandle,
+    request: legacy_library::commands::LibraryAlbumMetadataUpdateRequest,
+    state: State<'_, legacy_library::commands::LibraryState>,
+) -> Result<(), String> {
+    legacy_library::commands::library_write_album_metadata_to_files(app, request, state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_refresh_album_metadata_from_files(
+    album_group_key: String,
+    state: State<'_, legacy_library::commands::LibraryState>,
+) -> Result<(), String> {
+    legacy_library::commands::library_refresh_album_metadata_from_files(album_group_key, state).await
+}
+
+#[tauri::command]
+pub async fn v2_factory_reset(
+    app_state: State<'_, AppState>,
+    user_paths: State<'_, crate::user_data::UserDataPaths>,
+    session_store: State<'_, crate::session_store::SessionStoreState>,
+    favorites_cache: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+    subscription_state: State<'_, crate::config::subscription_state::SubscriptionStateState>,
+    playback_prefs: State<'_, crate::config::playback_preferences::PlaybackPreferencesState>,
+    favorites_prefs: State<'_, crate::config::favorites_preferences::FavoritesPreferencesState>,
+    download_settings: State<'_, crate::config::download_settings::DownloadSettingsState>,
+    audio_settings: State<'_, crate::config::audio_settings::AudioSettingsState>,
+    tray_settings: State<'_, crate::config::tray_settings::TraySettingsState>,
+    remote_control_settings: State<'_, crate::config::remote_control_settings::RemoteControlSettingsState>,
+    allowed_origins: State<'_, crate::config::remote_control_settings::AllowedOriginsState>,
+    legal_settings: State<'_, crate::config::legal_settings::LegalSettingsState>,
+    updates: State<'_, crate::updates::UpdatesState>,
+    library: State<'_, legacy_library::commands::LibraryState>,
+    reco: State<'_, crate::reco_store::RecoState>,
+    api_cache: State<'_, crate::api_cache::ApiCacheState>,
+    artist_vectors: State<'_, crate::artist_vectors::ArtistVectorStoreState>,
+    blacklist: State<'_, crate::artist_blacklist::BlacklistState>,
+    offline: State<'_, crate::offline::OfflineState>,
+    offline_cache: State<'_, crate::offline_cache::OfflineCacheState>,
+    lyrics: State<'_, crate::lyrics::LyricsState>,
+    musicbrainz: State<'_, crate::musicbrainz::MusicBrainzSharedState>,
+    listenbrainz: State<'_, crate::listenbrainz::ListenBrainzSharedState>,
+) -> Result<(), String> {
+    legacy_commands::factory_reset::factory_reset(
+        app_state,
+        user_paths,
+        session_store,
+        favorites_cache,
+        subscription_state,
+        playback_prefs,
+        favorites_prefs,
+        download_settings,
+        audio_settings,
+        tray_settings,
+        remote_control_settings,
+        allowed_origins,
+        legal_settings,
+        updates,
+        library,
+        reco,
+        api_cache,
+        artist_vectors,
+        blacklist,
+        offline,
+        offline_cache,
+        lyrics,
+        musicbrainz,
+        listenbrainz,
+    )
+    .await
 }

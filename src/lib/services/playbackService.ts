@@ -413,7 +413,7 @@ export async function showTrackNotification(
   }
 
   try {
-    await invoke('show_track_notification', {
+    await invoke('v2_show_track_notification', {
       title,
       artist,
       album,

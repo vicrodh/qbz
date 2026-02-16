@@ -1258,7 +1258,7 @@
   async function copyPlaylistToLibraryById(playlistId: number) {
     try {
       showToast($t('toast.copyingToLibrary'), 'info');
-      await invoke('subscribe_playlist', { playlistId });
+      await invoke('v2_subscribe_playlist', { playlistId });
       sidebarRef?.refreshPlaylists();
       showToast($t('toast.playlistCopied'), 'success');
     } catch (err) {
