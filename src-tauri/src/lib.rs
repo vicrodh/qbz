@@ -1281,6 +1281,17 @@ pub fn run() {
             commands_v2::v2_get_blacklist_settings,
             commands_v2::v2_get_blacklist_count,
             commands_v2::v2_set_api_locale,
+            // Playlist Custom V2
+            commands_v2::v2_playlist_set_sort,
+            commands_v2::v2_playlist_set_artwork,
+            commands_v2::v2_playlist_add_local_track,
+            commands_v2::v2_playlist_remove_local_track,
+            commands_v2::v2_playlist_set_hidden,
+            commands_v2::v2_playlist_set_favorite,
+            commands_v2::v2_playlist_reorder,
+            commands_v2::v2_playlist_init_custom_order,
+            commands_v2::v2_playlist_set_custom_order,
+            commands_v2::v2_playlist_move_track,
             // Cache Management V2
             commands_v2::v2_get_cache_stats,
             commands_v2::v2_clear_cache,

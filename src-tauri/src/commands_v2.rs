@@ -3669,3 +3669,130 @@ pub async fn v2_clear_saved_credentials() -> Result<(), RuntimeError> {
     crate::commands::auth::clear_saved_credentials()
         .map_err(|e| RuntimeError::Internal(e))
 }
+
+// ==================== Playlist Custom Commands (V2) ====================
+
+/// Set playlist sort (V2)
+#[tauri::command]
+pub async fn v2_playlist_set_sort(
+    playlistId: u64,
+    sortBy: String,
+    sortOrder: String,
+    state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] playlist_set_sort {} {} {}", playlistId, sortBy, sortOrder);
+    crate::library::commands::playlist_set_sort(playlistId, sortBy, sortOrder, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set playlist artwork (V2)
+#[tauri::command]
+pub async fn v2_playlist_set_artwork(
+    playlistId: u64,
+    artworkPath: Option<String>,
+    state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] playlist_set_artwork {} {:?}", playlistId, artworkPath);
+    crate::library::commands::playlist_set_artwork(playlistId, artworkPath, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Add local track to playlist (V2)
+#[tauri::command]
+pub async fn v2_playlist_add_local_track(
+    playlistId: u64,
+    trackId: i64,
+    position: i32,
+    state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] playlist_add_local_track {} {} pos={}", playlistId, trackId, position);
+    crate::library::commands::playlist_add_local_track(playlistId, trackId, position, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Remove local track from playlist (V2)
+#[tauri::command]
+pub async fn v2_playlist_remove_local_track(
+    playlistId: u64,
+    trackId: i64,
+    state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] playlist_remove_local_track {} {}", playlistId, trackId);
+    crate::library::commands::playlist_remove_local_track(playlistId, trackId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set playlist hidden (V2)
+#[tauri::command]
+pub async fn v2_playlist_set_hidden(
+    playlistId: u64,
+    hidden: bool,
+    state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] playlist_set_hidden {} {}", playlistId, hidden);
+    crate::library::commands::playlist_set_hidden(playlistId, hidden, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set playlist favorite (V2)
+#[tauri::command]
+pub async fn v2_playlist_set_favorite(
+    playlistId: u64,
+    favorite: bool,
+    state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] playlist_set_favorite {} {}", playlistId, favorite);
+    crate::library::commands::playlist_set_favorite(playlistId, favorite, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Reorder playlists (V2) - reorder playlists in sidebar
+#[tauri::command]
+pub async fn v2_playlist_reorder(
+    playlistIds: Vec<u64>,
+    state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] playlist_reorder {} playlists", playlistIds.len());
+    crate::library::commands::playlist_reorder(playlistIds, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Init playlist custom order (V2) - initialize custom track order
+/// trackIds is Vec<(track_id, is_local)>
+#[tauri::command]
+pub async fn v2_playlist_init_custom_order(
+    playlistId: u64,
+    trackIds: Vec<(i64, bool)>,
+    state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] playlist_init_custom_order {} tracks={}", playlistId, trackIds.len());
+    crate::library::commands::playlist_init_custom_order(playlistId, trackIds, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set playlist custom order (V2) - set track positions
+/// orders is Vec<(track_id, is_local, position)>
+#[tauri::command]
+pub async fn v2_playlist_set_custom_order(
+    playlistId: u64,
+    orders: Vec<(i64, bool, i32)>,
+    state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] playlist_set_custom_order {} tracks={}", playlistId, orders.len());
+    crate::library::commands::playlist_set_custom_order(playlistId, orders, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Move track in playlist (V2)
+#[tauri::command]
+pub async fn v2_playlist_move_track(
+    playlistId: u64,
+    trackId: i64,
+    isLocal: bool,
+    newPosition: i32,
+    state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] playlist_move_track {} {} local={} -> {}", playlistId, trackId, isLocal, newPosition);
+    crate::library::commands::playlist_move_track(playlistId, trackId, isLocal, newPosition, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
