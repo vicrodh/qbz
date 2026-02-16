@@ -61,6 +61,19 @@ pub struct PlexPlayResult {
     pub bit_depth: Option<u32>,
 }
 
+#[derive(Debug, Clone)]
+pub struct PlexResolvedMedia {
+    pub rating_key: String,
+    pub playback_id: u64,
+    pub part_key: String,
+    pub part_url: String,
+    pub bytes: Vec<u8>,
+    pub direct_play_confirmed: bool,
+    pub content_type: Option<String>,
+    pub sampling_rate_hz: Option<u32>,
+    pub bit_depth: Option<u32>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlexPinStartResult {
@@ -1342,6 +1355,30 @@ pub async fn plex_play_track(
     rating_key: String,
     app_state: State<'_, AppState>,
 ) -> Result<PlexPlayResult, String> {
+    let resolved = plex_resolve_track_media(base_url, token, rating_key).await?;
+
+    app_state
+        .player
+        .play_data(resolved.bytes.clone(), resolved.playback_id)
+        .map_err(|e| format!("Failed to play Plex track: {}", e))?;
+
+    Ok(PlexPlayResult {
+        rating_key: resolved.rating_key,
+        part_key: resolved.part_key,
+        part_url: resolved.part_url,
+        bytes: resolved.bytes.len(),
+        direct_play_confirmed: resolved.direct_play_confirmed,
+        content_type: resolved.content_type,
+        sampling_rate_hz: resolved.sampling_rate_hz,
+        bit_depth: resolved.bit_depth,
+    })
+}
+
+pub async fn plex_resolve_track_media(
+    base_url: String,
+    token: String,
+    rating_key: String,
+) -> Result<PlexResolvedMedia, String> {
     let client = build_plex_client()?;
     let base = normalize_base_url(&base_url);
 
@@ -1388,16 +1425,12 @@ pub async fn plex_play_track(
         .map_err(|e| format!("Failed to read Plex media bytes: {}", e))?;
 
     let playback_id = playback_track_id(&rating_key);
-    app_state
-        .player
-        .play_data(bytes.to_vec(), playback_id)
-        .map_err(|e| format!("Failed to play Plex track: {}", e))?;
-
-    Ok(PlexPlayResult {
+    Ok(PlexResolvedMedia {
         rating_key,
+        playback_id,
         part_key: part_key.clone(),
         part_url,
-        bytes: bytes.len(),
+        bytes: bytes.to_vec(),
         direct_play_confirmed: is_direct_part_key(&part_key),
         content_type,
         sampling_rate_hz: track.sampling_rate_hz,

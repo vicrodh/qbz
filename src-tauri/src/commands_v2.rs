@@ -2746,9 +2746,30 @@ pub async fn v2_plex_play_track(
     baseUrl: String,
     token: String,
     ratingKey: String,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<PlexPlayResult, String> {
-    crate::plex::plex_play_track(baseUrl, token, ratingKey, app_state).await
+    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
+        .map_err(|e| e.to_string())?;
+
+    let resolved = crate::plex::plex_resolve_track_media(baseUrl, token, ratingKey).await?;
+    let bridge_guard = bridge.get().await;
+    let player = bridge_guard.player();
+
+    player
+        .play_data(resolved.bytes.clone(), resolved.playback_id)
+        .map_err(|e| format!("Failed to play Plex track via V2 player: {}", e))?;
+
+    Ok(PlexPlayResult {
+        rating_key: resolved.rating_key,
+        part_key: resolved.part_key,
+        part_url: resolved.part_url,
+        bytes: resolved.bytes.len(),
+        direct_play_confirmed: resolved.direct_play_confirmed,
+        content_type: resolved.content_type,
+        sampling_rate_hz: resolved.sampling_rate_hz,
+        bit_depth: resolved.bit_depth,
+    })
 }
 
 #[tauri::command]

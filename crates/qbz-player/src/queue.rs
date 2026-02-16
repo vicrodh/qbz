@@ -192,7 +192,17 @@ impl QueueManager {
             }
         }
 
-        Self::regenerate_shuffle_order_internal(&mut state);
+        // Keep history indices aligned with current track list after removal.
+        state.history.retain(|&hist_idx| hist_idx != index);
+        for hist_idx in state.history.iter_mut() {
+            if *hist_idx > index {
+                *hist_idx -= 1;
+            }
+        }
+
+        if state.shuffle {
+            Self::remove_index_from_shuffle_internal(&mut state, index);
+        }
         Some(removed)
     }
 
@@ -239,13 +249,53 @@ impl QueueManager {
             }
         }
 
-        Self::regenerate_shuffle_order_internal(&mut state);
+        // Keep history indices aligned with current track list after removal.
+        state.history.retain(|&hist_idx| hist_idx != actual_index);
+        for hist_idx in state.history.iter_mut() {
+            if *hist_idx > actual_index {
+                *hist_idx -= 1;
+            }
+        }
+
+        if state.shuffle {
+            Self::remove_index_from_shuffle_internal(&mut state, actual_index);
+        }
         Some(removed)
     }
 
     /// Move a track from one position to another
     pub fn move_track(&self, from_index: usize, to_index: usize) -> bool {
         let mut state = self.state.lock().unwrap();
+
+        if state.shuffle {
+            // In shuffle mode, DnD indices come from the visible upcoming list,
+            // so they must be applied to shuffle_order positions (not absolute
+            // track indices in state.tracks).
+            let base_pos = state.current_index.map(|_| state.shuffle_position + 1).unwrap_or(0);
+            let from_pos = base_pos + from_index;
+            let to_pos = base_pos + to_index;
+
+            if from_pos >= state.shuffle_order.len() || to_pos >= state.shuffle_order.len() {
+                return false;
+            }
+
+            if from_pos == to_pos {
+                return true;
+            }
+
+            let moved = state.shuffle_order.remove(from_pos);
+            state.shuffle_order.insert(to_pos, moved);
+
+            if let Some(curr_idx) = state.current_index {
+                if let Some(pos) = state.shuffle_order.iter().position(|&x| x == curr_idx) {
+                    state.shuffle_position = pos;
+                }
+            } else {
+                state.shuffle_position = 0;
+            }
+
+            return true;
+        }
 
         let direction: QueueMoveDirection = if from_index > to_index {
             QueueMoveDirection::Up
@@ -296,7 +346,11 @@ impl QueueManager {
             }
         }
 
-        Self::regenerate_shuffle_order_internal(&mut state);
+        // Keep history aligned after reorder.
+        for hist_idx in state.history.iter_mut() {
+            *hist_idx = Self::remap_index_after_move(*hist_idx, from_idx, to_idx);
+        }
+
         true
     }
 
@@ -518,6 +572,18 @@ impl QueueManager {
 
         if enabled {
             Self::regenerate_shuffle_order_internal(&mut state);
+
+            // Enabling shuffle during active playback must keep current track
+            // as the first item in the shuffled timeline. Otherwise, indices
+            // before current are interpreted as already played.
+            if let Some(curr_idx) = state.current_index {
+                if let Some(pos) = state.shuffle_order.iter().position(|&idx| idx == curr_idx) {
+                    if pos != 0 {
+                        state.shuffle_order.swap(0, pos);
+                    }
+                    state.shuffle_position = 0;
+                }
+            }
         }
     }
 
@@ -610,6 +676,58 @@ impl QueueManager {
 
         if let Some(curr_idx) = state.current_index {
             if let Some(pos) = state.shuffle_order.iter().position(|&x| x == curr_idx) {
+                state.shuffle_position = pos;
+            } else {
+                state.shuffle_position = 0;
+            }
+        } else {
+            state.shuffle_position = 0;
+        }
+    }
+
+    /// Remap an index after remove+insert move operation.
+    fn remap_index_after_move(idx: usize, from_idx: usize, to_idx: usize) -> usize {
+        if idx == from_idx {
+            return to_idx;
+        }
+
+        if from_idx < to_idx {
+            // Moved down: [from+1 ..= to] shift left
+            if idx > from_idx && idx <= to_idx {
+                idx - 1
+            } else {
+                idx
+            }
+        } else {
+            // Moved up: [to .. from-1] shift right
+            if idx >= to_idx && idx < from_idx {
+                idx + 1
+            } else {
+                idx
+            }
+        }
+    }
+
+    /// Remove one absolute track index from shuffle order and rebase remaining indices.
+    fn remove_index_from_shuffle_internal(state: &mut InternalState, removed_idx: usize) {
+        if let Some(pos) = state.shuffle_order.iter().position(|&idx| idx == removed_idx) {
+            state.shuffle_order.remove(pos);
+
+            if pos < state.shuffle_position && state.shuffle_position > 0 {
+                state.shuffle_position -= 1;
+            } else if pos == state.shuffle_position && state.shuffle_position >= state.shuffle_order.len() {
+                state.shuffle_position = state.shuffle_order.len().saturating_sub(1);
+            }
+        }
+
+        for idx in state.shuffle_order.iter_mut() {
+            if *idx > removed_idx {
+                *idx -= 1;
+            }
+        }
+
+        if let Some(curr_idx) = state.current_index {
+            if let Some(pos) = state.shuffle_order.iter().position(|&idx| idx == curr_idx) {
                 state.shuffle_position = pos;
             } else {
                 state.shuffle_position = 0;
@@ -786,5 +904,84 @@ mod tests {
                 .collect::<Vec<u64>>(),
             vec![5, 2, 3, 4]
         );
+    }
+
+    #[test]
+    fn test_move_track_with_shuffle_reorders_shuffle_timeline() {
+        let queue = QueueManager::new();
+        for i in 1..=8 {
+            queue.add_track(create_test_track(i));
+        }
+
+        queue.play_index(0);
+        queue.set_shuffle(true);
+
+        let before_shuffle = {
+            let state = queue.state.lock().unwrap();
+            state.shuffle_order.clone()
+        };
+
+        // With current_index=0 and shuffle_position=0:
+        // upcoming move 2 -> 0 maps to shuffle positions 3 -> 1.
+        assert!(queue.move_track(2, 0));
+
+        let after_shuffle = {
+            let state = queue.state.lock().unwrap();
+            state.shuffle_order.clone()
+        };
+
+        let mut expected = before_shuffle.clone();
+        let moved = expected.remove(3);
+        expected.insert(1, moved);
+
+        assert_eq!(after_shuffle, expected);
+        assert_eq!(after_shuffle.len(), 8);
+    }
+
+    #[test]
+    fn test_remove_track_with_shuffle_preserves_shuffle_order() {
+        let queue = QueueManager::new();
+        for i in 1..=8 {
+            queue.add_track(create_test_track(i));
+        }
+
+        queue.play_index(0);
+        queue.set_shuffle(true);
+
+        let before_shuffle = {
+            let state = queue.state.lock().unwrap();
+            state.shuffle_order.clone()
+        };
+
+        assert!(queue.remove_track(2).is_some());
+
+        let after_shuffle = {
+            let state = queue.state.lock().unwrap();
+            state.shuffle_order.clone()
+        };
+
+        let expected: Vec<usize> = before_shuffle
+            .into_iter()
+            .filter(|&idx| idx != 2)
+            .map(|idx| if idx > 2 { idx - 1 } else { idx })
+            .collect();
+
+        assert_eq!(after_shuffle, expected);
+        assert_eq!(after_shuffle.len(), 7);
+    }
+
+    #[test]
+    fn test_enabling_shuffle_keeps_all_remaining_tracks_upcoming() {
+        let queue = QueueManager::new();
+        for i in 1..=11 {
+            queue.add_track(create_test_track(i));
+        }
+
+        queue.play_index(0);
+        queue.set_shuffle(true);
+
+        let state = queue.get_state();
+        assert_eq!(state.total_tracks, 11);
+        assert_eq!(state.upcoming.len(), 10);
     }
 }
