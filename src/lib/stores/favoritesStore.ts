@@ -221,7 +221,7 @@ export async function removeTrackFavorite(trackId: number): Promise<boolean> {
  */
 export async function syncCache(trackIds: number[]): Promise<void> {
   try {
-    await invoke('sync_cached_favorite_tracks', { trackIds });
+    await invoke('v2_sync_cached_favorite_tracks', { trackIds });
     favoriteTrackIds = new Set(trackIds);
     notifyListeners();
   } catch (err) {
