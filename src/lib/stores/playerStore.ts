@@ -348,7 +348,7 @@ export async function togglePlay(): Promise<void> {
           if (!plexBaseUrl || !plexToken) {
             throw new Error('Missing Plex configuration for session restore');
           }
-          const result = await invoke<PlexPlayTrackResult>('plex_play_track', {
+          const result = await invoke<PlexPlayTrackResult>('v2_plex_play_track', {
             baseUrl: plexBaseUrl,
             token: plexToken,
             ratingKey: String(currentTrack.id)

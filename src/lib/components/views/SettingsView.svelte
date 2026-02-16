@@ -1329,7 +1329,7 @@
     persistPlexConfig();
     try {
       const clientIdentifier = ensurePlexClientId();
-      const pin = await invoke<PlexPinStartResult>('plex_auth_pin_start', { clientIdentifier });
+      const pin = await invoke<PlexPinStartResult>('v2_plex_auth_pin_start', { clientIdentifier });
       plexAuthPinId = pin.pinId;
       plexAuthCode = pin.code;
       plexAuthUrl = pin.authUrl;
@@ -1343,7 +1343,7 @@
       plexAuthPollTimer = setInterval(async () => {
         if (!plexAuthPinId) return;
         try {
-          const check = await invoke<PlexPinCheckResult>('plex_auth_pin_check', {
+          const check = await invoke<PlexPinCheckResult>('v2_plex_auth_pin_check', {
             clientIdentifier,
             pinId: plexAuthPinId,
             code: plexAuthCode || null
@@ -1385,7 +1385,7 @@
 
   function handleOpenPlexAuthUrl() {
     if (!plexAuthUrl) return;
-    invoke('plex_open_auth_url', { url: plexAuthUrl }).catch((error) => {
+    invoke('v2_plex_open_auth_url', { url: plexAuthUrl }).catch((error) => {
       console.error('Failed opening Plex auth URL:', error);
       setPlexError(error);
     });
@@ -1448,7 +1448,7 @@
     removeUserItem(PLEX_CACHE_SERVER_ID_KEY);
 
     try {
-      await invoke('plex_cache_clear');
+      await invoke('v2_plex_cache_clear');
     } catch (error) {
       console.warn('Failed clearing Plex cache:', error);
     }
@@ -1464,7 +1464,7 @@
     if (!confirmed) return;
 
     try {
-      await invoke('plex_cache_clear');
+      await invoke('v2_plex_cache_clear');
       plexTracks = [];
       plexStatusKey = 'settings.integrations.plexStatusCacheCleared';
       plexStatusValues = {};
@@ -1479,7 +1479,7 @@
   async function loadPlexCachedState() {
     if (!plexEnabled) return;
     try {
-      const cachedSections = await invoke<PlexMusicSection[]>('plex_cache_get_sections');
+      const cachedSections = await invoke<PlexMusicSection[]>('v2_plex_cache_get_sections');
       if (Array.isArray(cachedSections) && cachedSections.length > 0) {
         plexSections = cachedSections;
       }
@@ -1489,7 +1489,7 @@
         plexSelectedSectionKeys = persistedSections;
       }
 
-      const cachedTracks = await invoke<PlexTrack[]>('plex_cache_get_tracks', {
+      const cachedTracks = await invoke<PlexTrack[]>('v2_plex_cache_get_tracks', {
         sectionKey: null
       });
       if (Array.isArray(cachedTracks) && cachedTracks.length > 0) {
@@ -1513,7 +1513,7 @@
     plexLastError = '';
     persistPlexConfig();
     try {
-      const info = await invoke<PlexServerInfo>('plex_ping', {
+      const info = await invoke<PlexServerInfo>('v2_plex_ping', {
         baseUrl: plexBaseUrl.trim(),
         token: plexToken.trim()
       });
@@ -1541,10 +1541,10 @@
     plexLastError = '';
     try {
       const serverId = getUserItem(PLEX_CACHE_SERVER_ID_KEY) || null;
-      await invoke('plex_cache_clear');
+      await invoke('v2_plex_cache_clear');
 
       if (plexSections.length > 0) {
-        await invoke<number>('plex_cache_save_sections', {
+        await invoke<number>('v2_plex_cache_save_sections', {
           serverId,
           sections: plexSections
         });
@@ -1560,7 +1560,7 @@
       let totalCount = 0;
       const sectionCounts: Record<string, number> = {};
       for (const sectionKey of plexSelectedSectionKeys) {
-        const sectionTracks = await invoke<PlexTrack[]>('plex_get_section_tracks', {
+        const sectionTracks = await invoke<PlexTrack[]>('v2_plex_get_section_tracks', {
           baseUrl: plexBaseUrl.trim(),
           token: plexToken.trim(),
           sectionKey
@@ -1568,7 +1568,7 @@
         const count = sectionTracks.length;
         sectionCounts[sectionKey] = count;
         totalCount += count;
-        await invoke<number>('plex_cache_save_tracks', {
+        await invoke<number>('v2_plex_cache_save_tracks', {
           serverId,
           sectionKey,
           tracks: sectionTracks
@@ -1576,7 +1576,7 @@
       }
 
       plexSectionTrackCounts = { ...plexSectionTrackCounts, ...sectionCounts };
-      plexTracks = await invoke<PlexTrack[]>('plex_cache_get_tracks', { sectionKey: null });
+      plexTracks = await invoke<PlexTrack[]>('v2_plex_cache_get_tracks', { sectionKey: null });
       plexStatusKey = 'settings.integrations.plexStatusTracksLoaded';
       plexStatusValues = { count: totalCount };
     } catch (error) {
@@ -1593,12 +1593,12 @@
     plexLastError = '';
     persistPlexConfig();
     try {
-      const sections = await invoke<PlexMusicSection[]>('plex_get_music_sections', {
+      const sections = await invoke<PlexMusicSection[]>('v2_plex_get_music_sections', {
         baseUrl: plexBaseUrl.trim(),
         token: plexToken.trim()
       });
       plexSections = sections;
-      await invoke<number>('plex_cache_save_sections', {
+      await invoke<number>('v2_plex_cache_save_sections', {
         serverId: getUserItem(PLEX_CACHE_SERVER_ID_KEY) || null,
         sections
       });

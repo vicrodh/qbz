@@ -168,7 +168,7 @@ export async function playTrack(
           if (!plexBaseUrl || !plexToken) {
             throw new Error('Missing Plex base URL or token');
           }
-          const result = await invoke<PlexPlayTrackResult>('plex_play_track', {
+          const result = await invoke<PlexPlayTrackResult>('v2_plex_play_track', {
             baseUrl: plexBaseUrl,
             token: plexToken,
             ratingKey: String(track.id)

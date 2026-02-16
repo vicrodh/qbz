@@ -1051,7 +1051,7 @@
             excludeNetworkFolders: shouldExcludeNetworkFolders()
           }),
           includePlex
-            ? invoke<PlexCachedAlbum[]>('plex_cache_get_albums').catch(() => [])
+            ? invoke<PlexCachedAlbum[]>('v2_plex_cache_get_albums').catch(() => [])
             : Promise.resolve([])
         ]);
         const allAlbums = [...localAlbums, ...plexAlbumsRaw.map(mapPlexAlbum)];
@@ -1162,21 +1162,21 @@
     plexRepairInProgress = true;
     try {
       const startedAt = performance.now();
-      const sections = await invoke<PlexMusicSection[]>('plex_get_music_sections', {
+      const sections = await invoke<PlexMusicSection[]>('v2_plex_get_music_sections', {
         baseUrl,
         token
       });
-      await invoke('plex_cache_save_sections', { serverId: null, sections });
+      await invoke('v2_plex_cache_save_sections', { serverId: null, sections });
 
       const sectionMetrics = await Promise.all(
         sections.map(async (section) => {
           const sectionStart = performance.now();
-          const sectionTracks = await invoke<PlexTrack[]>('plex_get_section_tracks', {
+          const sectionTracks = await invoke<PlexTrack[]>('v2_plex_get_section_tracks', {
             baseUrl,
             token,
             sectionKey: section.key
           });
-          await invoke('plex_cache_save_tracks', {
+          await invoke('v2_plex_cache_save_tracks', {
             serverId: null,
             sectionKey: section.key,
             tracks: sectionTracks
@@ -1291,7 +1291,7 @@
         }),
         invoke<LibraryStats>('library_get_stats'),
         includePlex
-          ? invoke<PlexCachedAlbum[]>('plex_cache_get_albums').catch(() => [])
+          ? invoke<PlexCachedAlbum[]>('v2_plex_cache_get_albums').catch(() => [])
           : Promise.resolve([])
       ]);
       const fetchMs = performance.now() - fetchStart;
@@ -1411,7 +1411,7 @@
           excludeNetworkFolders: shouldExcludeNetworkFolders()
         }),
         includePlex
-          ? invoke<PlexCachedAlbum[]>('plex_cache_get_albums').catch(() => [])
+          ? invoke<PlexCachedAlbum[]>('v2_plex_cache_get_albums').catch(() => [])
           : Promise.resolve([])
       ]);
 
@@ -1475,7 +1475,7 @@
           excludeNetworkFolders: shouldExcludeNetworkFolders()
         }),
         includePlex
-          ? invoke<PlexCachedTrack[]>('plex_cache_search_tracks', {
+          ? invoke<PlexCachedTrack[]>('v2_plex_cache_search_tracks', {
               query
             }).catch(() => [])
           : Promise.resolve([])
@@ -1965,7 +1965,7 @@
         if (!isPlexLibraryEnabled()) {
           return [];
         }
-        const plexTracks = await invoke<PlexCachedTrack[]>('plex_cache_get_album_tracks', {
+        const plexTracks = await invoke<PlexCachedTrack[]>('v2_plex_cache_get_album_tracks', {
           albumKey: album.id
         });
         const mappedTracks = plexTracks.map(mapPlexTrack);
@@ -2000,7 +2000,7 @@
     const metadataEntries = await Promise.all(
       candidates.map(async (track) => {
         try {
-          const metadata = await invoke<PlexTrackMetadata>('plex_get_track_metadata', {
+          const metadata = await invoke<PlexTrackMetadata>('v2_plex_get_track_metadata', {
             baseUrl,
             token,
             ratingKey: track.file_path
@@ -2028,7 +2028,7 @@
     if (metadataByRatingKey.size === 0) return tracks;
 
     if (qualityUpdates.length > 0) {
-      invoke<number>('plex_cache_update_track_quality', { updates: qualityUpdates }).catch((error) => {
+      invoke<number>('v2_plex_cache_update_track_quality', { updates: qualityUpdates }).catch((error) => {
         console.warn('[LocalLibrary] Failed to persist Plex track quality updates:', error);
       });
     }
@@ -2051,7 +2051,7 @@
       const token = getUserItem('qbz-plex-poc-token') || '';
       if (!baseUrl || !token) return;
 
-      const ratingKeys = await invoke<string[]>('plex_cache_get_tracks_needing_hydration', { limit: 50 });
+      const ratingKeys = await invoke<string[]>('v2_plex_cache_get_tracks_needing_hydration', { limit: 50 });
       if (ratingKeys.length === 0) return;
       console.log('[LocalLibrary] Background hydration: fetching quality for', ratingKeys.length, 'tracks');
 
@@ -2063,7 +2063,7 @@
         const results = await Promise.all(
           batch.map(async (ratingKey) => {
             try {
-              const metadata = await invoke<PlexTrackMetadata>('plex_get_track_metadata', {
+              const metadata = await invoke<PlexTrackMetadata>('v2_plex_get_track_metadata', {
                 baseUrl, token, ratingKey
               });
               return { ratingKey, metadata };
@@ -2086,11 +2086,11 @@
       if (qualityUpdates.length === 0) return;
 
       // Persist hydrated quality to cache
-      await invoke<number>('plex_cache_update_track_quality', { updates: qualityUpdates });
+      await invoke<number>('v2_plex_cache_update_track_quality', { updates: qualityUpdates });
       console.log('[LocalLibrary] Background hydration: persisted quality for', qualityUpdates.length, 'tracks');
 
       // Refresh album list to show updated quality badges
-      const plexAlbumsRaw = await invoke<PlexCachedAlbum[]>('plex_cache_get_albums').catch(() => []);
+      const plexAlbumsRaw = await invoke<PlexCachedAlbum[]>('v2_plex_cache_get_albums').catch(() => []);
       if (plexAlbumsRaw.length > 0) {
         const plexAlbums = plexAlbumsRaw.map(mapPlexAlbum);
         const localOnly = albums.filter(a => a.source !== 'plex');
