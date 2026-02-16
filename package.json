@@ -9,6 +9,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
+    "check:v2-backend-purity": "bash ./scripts/check-v2-backend-purity.sh",
+    "check:v2-frontend-invokes": "python3 ./scripts/audit-frontend-invokes.py",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "check:no-t-shadow": "bash ./scripts/check-no-t-shadow.sh",
     "test": "vitest",
