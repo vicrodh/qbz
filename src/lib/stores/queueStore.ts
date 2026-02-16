@@ -233,6 +233,7 @@ export async function toggleShuffle(): Promise<{ success: boolean; enabled: bool
 
   try {
     await invoke('v2_toggle_shuffle');
+    await syncQueueState();
     return { success: true, enabled: newState };
   } catch (err) {
     console.error('Failed to set shuffle:', err);
@@ -460,6 +461,8 @@ export async function startQueueEventListener(): Promise<void> {
       isShuffle = event.payload.shuffle;
       repeatMode = event.payload.repeat.toLowerCase() as RepeatMode;
       notifyListeners();
+      // Queue ordering may have changed (e.g. shuffle toggled remotely).
+      syncQueueState().catch(err => console.error('[Queue] Failed to sync queue after queue:state event:', err));
     });
     console.log('[Queue] Started listening for queue state events');
   } catch (err) {

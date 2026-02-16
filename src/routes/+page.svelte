@@ -1453,7 +1453,8 @@
   function openAddToPlaylistModal() {
     if (!currentTrack) return;
     userPlaylists = sidebarRef?.getPlaylists() ?? [];
-    openPlaylistModal('addTrack', [currentTrack.id]);
+    const isLocal = currentTrack.isLocal === true || isLocalTrack(currentTrack.id);
+    openPlaylistModal('addTrack', [currentTrack.id], isLocal);
   }
 
   // Skip track handlers - wired to backend queue via queueStore
@@ -1656,7 +1657,8 @@
     const numericId = parseInt(trackId, 10);
     if (isNaN(numericId)) return;
     userPlaylists = sidebarRef?.getPlaylists() ?? [];
-    openPlaylistModal('addTrack', [numericId]);
+    const isLocal = isLocalTrack(numericId);
+    openPlaylistModal('addTrack', [numericId], isLocal);
   }
 
   // Show track info for a queue track
@@ -2904,9 +2906,31 @@
     // Set up resume-from-stop callback: re-play the queue's current track
     setOnResumeFromStop(async () => {
       const queueState = await getBackendQueueState();
-      if (queueState?.current_track && queueState.current_index !== null) {
+      if (!queueState) return;
+
+      // Normal case: current track already selected in queue, replay it.
+      if (queueState.current_track && queueState.current_index !== null) {
         console.log('[Player] Resuming from stop, replaying queue index:', queueState.current_index);
         await playQueueTrack(queueState.current_track);
+        return;
+      }
+
+      // Empty chamber case: queue exists but no current track selected yet.
+      if (queueState.current_index === null && queueState.upcoming.length > 0) {
+        const firstUpcoming = queueState.upcoming[0];
+        const firstTrack = await playQueueIndex(0);
+
+        // Preferred path: bind queue index first, then play selected track.
+        if (firstTrack) {
+          console.log('[Player] Resuming from stop, starting queue from index 0');
+          await playQueueTrack(firstTrack);
+          return;
+        }
+
+        // Defensive fallback: if play_index fails, play first upcoming directly.
+        // This guarantees user-visible playback instead of silent no-op.
+        console.warn('[Player] playQueueIndex(0) failed, falling back to first upcoming track');
+        await playQueueTrack(firstUpcoming);
       }
     });
 
@@ -3101,8 +3125,11 @@
   async function updateQueueCounts() {
     const state = await getBackendQueueState();
     if (state) {
-      // Calculate remaining tracks: total - current_index - 1 (for current track)
-      if (state.current_index !== null && state.total_tracks > 0) {
+      // In shuffle mode current_index is an absolute index in original order,
+      // not a playback-position counter, so remaining is "all except current".
+      if (state.shuffle && state.current_track && state.total_tracks > 0) {
+        queueRemainingTracks = state.total_tracks - 1;
+      } else if (state.current_index !== null && state.total_tracks > 0) {
         queueRemainingTracks = state.total_tracks - state.current_index - 1;
       } else {
         queueRemainingTracks = state.total_tracks;
