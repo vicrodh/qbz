@@ -962,15 +962,14 @@ pub async fn v2_clear_queue(
 
 /// Queue track representation for V2 commands
 /// Maps to internal QueueTrack format
+/// Field names match frontend BackendQueueTrack interface exactly
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct V2QueueTrack {
     pub id: u64,
     pub title: String,
     pub artist: String,
     pub album: String,
-    #[serde(rename = "duration")]
     pub duration_secs: u64,
-    #[serde(rename = "artwork")]
     pub artwork_url: Option<String>,
     #[serde(default)]
     pub hires: bool,
