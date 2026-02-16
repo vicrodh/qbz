@@ -4208,3 +4208,268 @@ pub async fn v2_airplay_set_volume(
     crate::cast::airplay::commands::airplay_set_volume(volume, state).await
         .map_err(|e| RuntimeError::Internal(e))
 }
+
+// ============================================================================
+// Audio Backends V2 Commands
+// ============================================================================
+
+/// Get available audio backends (V2)
+#[tauri::command]
+pub fn v2_get_available_backends() -> Result<Vec<crate::commands::audio_backends::BackendInfo>, RuntimeError> {
+    log::info!("[V2] get_available_backends");
+    crate::commands::audio_backends::get_available_backends()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get devices for a specific backend (V2)
+#[tauri::command]
+pub fn v2_get_devices_for_backend(
+    backendType: crate::audio::AudioBackendType,
+) -> Result<Vec<crate::audio::AudioDevice>, RuntimeError> {
+    log::info!("[V2] get_devices_for_backend {:?}", backendType);
+    crate::commands::audio_backends::get_devices_for_backend(backendType)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get ALSA plugins (V2)
+#[tauri::command]
+pub fn v2_get_alsa_plugins() -> Result<Vec<crate::commands::audio_backends::AlsaPluginInfo>, RuntimeError> {
+    log::info!("[V2] get_alsa_plugins");
+    crate::commands::audio_backends::get_alsa_plugins()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Check if ALSA utils are installed (V2)
+#[tauri::command]
+pub fn v2_check_alsa_utils_installed() -> bool {
+    crate::commands::audio_backends::check_alsa_utils_installed()
+}
+
+/// Get default device name for backend (V2)
+#[tauri::command]
+pub fn v2_get_default_device_name(
+    backendType: crate::audio::AudioBackendType,
+) -> Option<String> {
+    log::info!("[V2] get_default_device_name {:?}", backendType);
+    crate::commands::audio_backends::get_default_device_name(backendType)
+}
+
+/// Get Linux distro info (V2)
+#[tauri::command]
+pub fn v2_get_linux_distro() -> crate::commands::audio_backends::LinuxDistroInfo {
+    log::info!("[V2] get_linux_distro");
+    crate::commands::audio_backends::get_linux_distro()
+}
+
+/// Query DAC capabilities (V2)
+#[tauri::command]
+pub fn v2_query_dac_capabilities(
+    nodeName: String,
+) -> crate::commands::audio_backends::DacCapabilities {
+    log::info!("[V2] query_dac_capabilities {}", nodeName);
+    crate::commands::audio_backends::query_dac_capabilities(nodeName)
+}
+
+// ============================================================================
+// Audio Diagnostics V2 Commands
+// ============================================================================
+
+/// Get hardware audio status (V2)
+#[tauri::command]
+pub fn v2_get_hardware_audio_status() -> Result<crate::commands::audio_diagnostics::HardwareAudioStatus, RuntimeError> {
+    log::info!("[V2] get_hardware_audio_status");
+    crate::commands::audio_diagnostics::get_hardware_audio_status()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Start bit-depth capture (V2)
+#[tauri::command]
+pub fn v2_start_bitdepth_capture(
+    app: tauri::AppHandle,
+) -> Result<String, RuntimeError> {
+    log::info!("[V2] start_bitdepth_capture");
+    crate::commands::audio_diagnostics::start_bitdepth_capture(app)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Stop bit-depth capture and analyze (V2)
+#[tauri::command]
+pub fn v2_stop_bitdepth_capture(
+    app: tauri::AppHandle,
+) -> Result<crate::audio::BitDepthResult, RuntimeError> {
+    log::info!("[V2] stop_bitdepth_capture");
+    crate::commands::audio_diagnostics::stop_bitdepth_capture(app)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// ============================================================================
+// Radio V2 Commands
+// ============================================================================
+
+/// Create artist radio (V2)
+#[tauri::command]
+pub async fn v2_create_artist_radio(
+    artistId: u64,
+    artistName: String,
+    state: State<'_, crate::AppState>,
+    blacklistState: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<String, RuntimeError> {
+    log::info!("[V2] create_artist_radio {} {}", artistId, artistName);
+    crate::commands::radio::create_artist_radio(artistId, artistName, state, blacklistState).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Create track radio (V2)
+#[tauri::command]
+pub async fn v2_create_track_radio(
+    trackId: u64,
+    trackName: String,
+    artistId: u64,
+    state: State<'_, crate::AppState>,
+    blacklistState: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<String, RuntimeError> {
+    log::info!("[V2] create_track_radio {} {} {}", trackId, trackName, artistId);
+    crate::commands::radio::create_track_radio(trackId, trackName, artistId, state, blacklistState).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Refill radio queue (V2)
+#[tauri::command]
+pub async fn v2_refill_radio_queue(
+    sessionId: String,
+    state: State<'_, crate::AppState>,
+    blacklistState: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<u32, RuntimeError> {
+    log::info!("[V2] refill_radio_queue {}", sessionId);
+    crate::commands::radio::refill_radio_queue(sessionId, state, blacklistState).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get queue remaining count (V2)
+#[tauri::command]
+pub fn v2_get_queue_remaining(
+    state: State<'_, crate::AppState>,
+) -> u32 {
+    crate::commands::radio::get_queue_remaining(state)
+}
+
+/// Create infinite radio from recent tracks (V2)
+#[tauri::command]
+pub async fn v2_create_infinite_radio(
+    recentTrackIds: Vec<u64>,
+    state: State<'_, crate::AppState>,
+    blacklistState: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<String, RuntimeError> {
+    log::info!("[V2] create_infinite_radio {:?}", recentTrackIds);
+    crate::commands::radio::create_infinite_radio(recentTrackIds, state, blacklistState).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// ============================================================================
+// Share V2 Commands
+// ============================================================================
+
+/// Get Qobuz track URL (V2)
+#[tauri::command]
+pub fn v2_get_qobuz_track_url(trackId: u64) -> String {
+    crate::commands::share::get_qobuz_track_url(trackId)
+}
+
+/// Get Qobuz album URL (V2)
+#[tauri::command]
+pub fn v2_get_qobuz_album_url(albumId: String) -> String {
+    crate::commands::share::get_qobuz_album_url(albumId)
+}
+
+/// Get Qobuz artist URL (V2)
+#[tauri::command]
+pub fn v2_get_qobuz_artist_url(artistId: u64) -> String {
+    crate::commands::share::get_qobuz_artist_url(artistId)
+}
+
+// ============================================================================
+// Visualizer V2 Commands
+// ============================================================================
+
+/// Check if visualizer is enabled (V2)
+#[tauri::command]
+pub fn v2_is_visualizer_enabled(
+    state: State<'_, crate::AppState>,
+) -> bool {
+    crate::commands::visualizer::is_visualizer_enabled(state)
+}
+
+// ============================================================================
+// Queue V2 Additional Commands
+// ============================================================================
+
+/// Get current queue track (V2)
+#[tauri::command]
+pub fn v2_get_current_queue_track(
+    state: State<'_, crate::AppState>,
+) -> Result<Option<crate::queue::QueueTrack>, RuntimeError> {
+    crate::commands::queue::get_current_queue_track(state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Peek next track (V2)
+#[tauri::command]
+pub fn v2_peek_next_track(
+    state: State<'_, crate::AppState>,
+) -> Result<Option<crate::queue::QueueTrack>, RuntimeError> {
+    crate::commands::queue::peek_next_track(state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get shuffle state (V2)
+#[tauri::command]
+pub fn v2_get_shuffle(
+    state: State<'_, crate::AppState>,
+) -> Result<bool, RuntimeError> {
+    crate::commands::queue::get_shuffle(state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get repeat mode (V2)
+#[tauri::command]
+pub fn v2_get_repeat(
+    state: State<'_, crate::AppState>,
+) -> Result<String, RuntimeError> {
+    crate::commands::queue::get_repeat(state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// ============================================================================
+// Playlist Additional V2 Commands
+// ============================================================================
+
+/// Get current user ID (V2)
+#[tauri::command]
+pub async fn v2_get_current_user_id(
+    state: State<'_, crate::AppState>,
+) -> Result<Option<u64>, RuntimeError> {
+    crate::commands::playlist::get_current_user_id(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// ============================================================================
+// Auth V2 Additional Commands
+// ============================================================================
+
+/// Has saved credentials (V2)
+#[tauri::command]
+pub fn v2_has_saved_credentials() -> bool {
+    crate::commands::auth::has_saved_credentials()
+}
+
+/// Save credentials (V2)
+#[tauri::command]
+pub fn v2_save_credentials(
+    email: String,
+    password: String,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] save_credentials");
+    crate::commands::auth::save_credentials(email, password)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+

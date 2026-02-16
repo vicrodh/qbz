@@ -1332,6 +1332,40 @@ pub fn run() {
             commands_v2::v2_airplay_pause,
             commands_v2::v2_airplay_stop,
             commands_v2::v2_airplay_set_volume,
+            // Audio Backends V2
+            commands_v2::v2_get_available_backends,
+            commands_v2::v2_get_devices_for_backend,
+            commands_v2::v2_get_alsa_plugins,
+            commands_v2::v2_check_alsa_utils_installed,
+            commands_v2::v2_get_default_device_name,
+            commands_v2::v2_get_linux_distro,
+            commands_v2::v2_query_dac_capabilities,
+            // Audio Diagnostics V2
+            commands_v2::v2_get_hardware_audio_status,
+            commands_v2::v2_start_bitdepth_capture,
+            commands_v2::v2_stop_bitdepth_capture,
+            // Radio V2
+            commands_v2::v2_create_artist_radio,
+            commands_v2::v2_create_track_radio,
+            commands_v2::v2_refill_radio_queue,
+            commands_v2::v2_get_queue_remaining,
+            commands_v2::v2_create_infinite_radio,
+            // Share V2
+            commands_v2::v2_get_qobuz_track_url,
+            commands_v2::v2_get_qobuz_album_url,
+            commands_v2::v2_get_qobuz_artist_url,
+            // Visualizer V2
+            commands_v2::v2_is_visualizer_enabled,
+            // Queue Additional V2
+            commands_v2::v2_get_current_queue_track,
+            commands_v2::v2_peek_next_track,
+            commands_v2::v2_get_shuffle,
+            commands_v2::v2_get_repeat,
+            // Playlist Additional V2
+            commands_v2::v2_get_current_user_id,
+            // Auth Additional V2
+            commands_v2::v2_has_saved_credentials,
+            commands_v2::v2_save_credentials,
             // Cache Management V2
             commands_v2::v2_get_cache_stats,
             commands_v2::v2_clear_cache,
