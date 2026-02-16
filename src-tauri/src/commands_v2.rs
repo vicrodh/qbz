@@ -21,7 +21,6 @@ use crate::cache::AudioCache;
 use crate::api_cache::ApiCacheState;
 use crate::audio::{AlsaPlugin, AudioBackendType};
 use crate::cast::{AirPlayMetadata, AirPlayState, CastState, DlnaMetadata, DlnaState, MediaMetadata};
-use crate::{commands as legacy_commands};
 use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
 use crate::config::developer_settings::{DeveloperSettings, DeveloperSettingsState};
 use crate::config::graphics_settings::{GraphicsSettings, GraphicsSettingsState, GraphicsStartupStatus};
@@ -35,13 +34,18 @@ use crate::lyrics::LyricsState;
 use crate::musicbrainz::{CacheStats as MusicBrainzCacheStats, MusicBrainzSharedState};
 use crate::offline::OfflineState;
 use crate::offline_cache::OfflineCacheState;
-use crate::{offline_cache as legacy_offline_cache};
 use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
 use crate::queue::QueueTrack;
 use crate::reco_store::{RecoEventInput, RecoState};
 use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason, CommandRequirement};
-use crate::{library as legacy_library};
 use crate::AppState;
+use md5::{Digest, Md5};
+use notify_rust::Notification;
+use std::fs;
+use std::io::Write;
+use std::path::PathBuf;
+use std::sync::Mutex;
+use crate::{library as legacy_library};
 
 // ==================== Helper Functions ====================
 
@@ -167,6 +171,93 @@ async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
 
     log::info!("[V2] Downloaded {} bytes", bytes.len());
     Ok(bytes.to_vec())
+}
+
+fn v2_teardown_type_alias_state<S>(state: &Arc<Mutex<Option<S>>>) {
+    if let Ok(mut guard) = state.lock() {
+        *guard = None;
+    }
+}
+
+fn v2_get_notification_artwork_cache_dir() -> Result<PathBuf, String> {
+    let cache_dir = dirs::cache_dir()
+        .ok_or_else(|| "Could not find cache directory".to_string())?
+        .join("qbz")
+        .join("artwork");
+
+    fs::create_dir_all(&cache_dir)
+        .map_err(|e| format!("Failed to create artwork cache dir: {}", e))?;
+    Ok(cache_dir)
+}
+
+fn v2_resolve_local_artwork(url: &str) -> Option<PathBuf> {
+    if let Some(path) = url.strip_prefix("file://") {
+        return Some(PathBuf::from(path));
+    }
+    if let Some(path) = url.strip_prefix("asset://localhost/") {
+        let decoded = urlencoding::decode(path).ok()?;
+        return Some(PathBuf::from(decoded.into_owned()));
+    }
+    None
+}
+
+fn v2_cache_notification_artwork(url: &str) -> Result<PathBuf, String> {
+    if let Some(local_path) = v2_resolve_local_artwork(url) {
+        if local_path.exists() {
+            return Ok(local_path);
+        }
+    }
+
+    let mut hasher = Md5::new();
+    hasher.update(url.as_bytes());
+    let hash = format!("{:x}", hasher.finalize());
+    let cache_dir = v2_get_notification_artwork_cache_dir()?;
+    let cache_path = cache_dir.join(format!("{}.jpg", hash));
+    if cache_path.exists() {
+        return Ok(cache_path);
+    }
+
+    let response = reqwest::blocking::Client::new()
+        .get(url)
+        .timeout(std::time::Duration::from_secs(5))
+        .send()
+        .map_err(|e| format!("Failed to download artwork: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Failed to download artwork: HTTP {}", response.status()));
+    }
+
+    let bytes = response
+        .bytes()
+        .map_err(|e| format!("Failed to read artwork bytes: {}", e))?;
+
+    let mut file = fs::File::create(&cache_path)
+        .map_err(|e| format!("Failed to create artwork cache file: {}", e))?;
+    file.write_all(&bytes)
+        .map_err(|e| format!("Failed to write artwork cache: {}", e))?;
+    Ok(cache_path)
+}
+
+fn v2_format_notification_quality(bit_depth: Option<u32>, sample_rate: Option<f64>) -> String {
+    match (bit_depth, sample_rate) {
+        (Some(bits), Some(rate)) if bits >= 24 || rate > 48.0 => {
+            let rate_str = if rate.fract() == 0.0 {
+                format!("{}", rate as u32)
+            } else {
+                format!("{}", rate)
+            };
+            format!("Hi-Res - {}-bit/{}kHz", bits, rate_str)
+        }
+        (Some(bits), Some(rate)) => {
+            let rate_str = if rate.fract() == 0.0 {
+                format!("{}", rate as u32)
+            } else {
+                format!("{}", rate)
+            };
+            format!("CD Quality - {}-bit/{}kHz", bits, rate_str)
+        }
+        _ => String::new(),
+    }
 }
 
 // ==================== Runtime Contract Commands ====================
@@ -2086,15 +2177,138 @@ pub async fn v2_reco_train_scores(
     max_per_type: Option<u32>,
     state: State<'_, RecoState>,
 ) -> Result<(), String> {
-    crate::reco_store::commands::reco_train_scores(
-        lookback_days,
-        half_life_days,
-        max_events,
-        max_per_type,
-        state,
-    )
-    .await
-    .map(|_| ())
+    use std::collections::HashMap;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    let lookback_days = lookback_days.unwrap_or(90);
+    let half_life_days = half_life_days.unwrap_or(21.0);
+    let max_events = max_events.unwrap_or(5000);
+    let max_per_type = max_per_type.unwrap_or(200);
+
+    let now_ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let since_ts = now_ts.saturating_sub(lookback_days * 86_400);
+
+    let mut guard = state.db.lock().await;
+    let db = guard.as_mut().ok_or("No active session - please log in")?;
+    let events = db.get_events_since(since_ts, Some(max_events))?;
+
+    let decay_factor = |age_secs: i64| -> f64 {
+        if half_life_days <= 0.0 {
+            return 1.0;
+        }
+        let half_life_secs = half_life_days * 86_400.0;
+        let exponent = age_secs as f64 / half_life_secs;
+        0.5_f64.powf(exponent)
+    };
+
+    let event_weight = |event_type: &str| -> f64 {
+        match event_type {
+            "play" => 1.0,
+            "favorite" => 3.0,
+            "playlist_add" => 1.2,
+            _ => 1.0,
+        }
+    };
+
+    let item_weight = |item_type: &str, primary: bool| -> f64 {
+        if primary {
+            return 1.0;
+        }
+        match item_type {
+            "album" => 0.7,
+            "artist" => 0.5,
+            "track" => 0.85,
+            _ => 0.6,
+        }
+    };
+
+    let build_scores = |favorites_only: bool| {
+        let mut tracks: HashMap<u64, f64> = HashMap::new();
+        let mut albums: HashMap<String, f64> = HashMap::new();
+        let mut artists: HashMap<u64, f64> = HashMap::new();
+
+        for event in &events {
+            if favorites_only && event.event_type != "favorite" {
+                continue;
+            }
+
+            let age_secs = (now_ts - event.created_at).max(0);
+            let base_weight = event_weight(&event.event_type) * decay_factor(age_secs);
+
+            if let Some(track_id) = event.track_id {
+                let weight = base_weight * item_weight("track", event.item_type == "track");
+                *tracks.entry(track_id).or_insert(0.0) += weight;
+            }
+            if let Some(album_id) = event.album_id.as_ref() {
+                let weight = base_weight * item_weight("album", event.item_type == "album");
+                *albums.entry(album_id.clone()).or_insert(0.0) += weight;
+            }
+            if let Some(artist_id) = event.artist_id {
+                let weight = base_weight * item_weight("artist", event.item_type == "artist");
+                *artists.entry(artist_id).or_insert(0.0) += weight;
+            }
+        }
+
+        (tracks, albums, artists)
+    };
+
+    let build_track_entries = |scores: HashMap<u64, f64>| {
+        let mut entries: Vec<(u64, f64)> = scores.into_iter().collect();
+        entries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        entries
+            .into_iter()
+            .take(max_per_type as usize)
+            .map(|(track_id, score)| crate::reco_store::db::RecoScoreEntry {
+                track_id: Some(track_id),
+                album_id: None,
+                artist_id: None,
+                score,
+            })
+            .collect::<Vec<_>>()
+    };
+    let build_album_entries = |scores: HashMap<String, f64>| {
+        let mut entries: Vec<(String, f64)> = scores.into_iter().collect();
+        entries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        entries
+            .into_iter()
+            .take(max_per_type as usize)
+            .map(|(album_id, score)| crate::reco_store::db::RecoScoreEntry {
+                track_id: None,
+                album_id: Some(album_id),
+                artist_id: None,
+                score,
+            })
+            .collect::<Vec<_>>()
+    };
+    let build_artist_entries = |scores: HashMap<u64, f64>| {
+        let mut entries: Vec<(u64, f64)> = scores.into_iter().collect();
+        entries.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+        entries
+            .into_iter()
+            .take(max_per_type as usize)
+            .map(|(artist_id, score)| crate::reco_store::db::RecoScoreEntry {
+                track_id: None,
+                album_id: None,
+                artist_id: Some(artist_id),
+                score,
+            })
+            .collect::<Vec<_>>()
+    };
+
+    let (all_tracks, all_albums, all_artists) = build_scores(false);
+    let (fav_tracks, fav_albums, fav_artists) = build_scores(true);
+
+    db.replace_scores("all", "track", &build_track_entries(all_tracks))?;
+    db.replace_scores("all", "album", &build_album_entries(all_albums))?;
+    db.replace_scores("all", "artist", &build_artist_entries(all_artists))?;
+    db.replace_scores("favorite", "track", &build_track_entries(fav_tracks))?;
+    db.replace_scores("favorite", "album", &build_album_entries(fav_albums))?;
+    db.replace_scores("favorite", "artist", &build_artist_entries(fav_artists))?;
+
+    Ok(())
 }
 
 #[derive(Debug, Clone, serde::Serialize)]
@@ -4777,23 +4991,96 @@ pub fn v2_show_track_notification(
     bit_depth: Option<u32>,
     sample_rate: Option<f64>,
 ) -> Result<(), String> {
-    legacy_commands::notification::show_track_notification(
-        title,
-        artist,
-        album,
-        artwork_url,
-        bit_depth,
-        sample_rate,
-    )
+    log::info!("Command: v2_show_track_notification - {} by {}", title, artist);
+
+    let mut lines = Vec::new();
+    let mut line1_parts = Vec::new();
+    if !artist.is_empty() {
+        line1_parts.push(artist.clone());
+    }
+    if !album.is_empty() {
+        line1_parts.push(album.clone());
+    }
+    if !line1_parts.is_empty() {
+        lines.push(line1_parts.join(" • "));
+    }
+
+    let quality = v2_format_notification_quality(bit_depth, sample_rate);
+    if !quality.is_empty() {
+        lines.push(quality);
+    }
+
+    let mut notification = Notification::new();
+    notification.summary(&title).body(&lines.join("\n")).appname("QBZ").timeout(4000);
+
+    if let Some(url) = artwork_url {
+        if let Ok(path) = v2_cache_notification_artwork(&url) {
+            if let Some(path_str) = path.to_str() {
+                notification.image_path(path_str);
+            }
+        }
+    }
+
+    if let Err(e) = notification.show() {
+        log::warn!("Could not show notification (notification system may be unavailable): {}", e);
+    }
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn v2_subscribe_playlist(
     playlist_id: u64,
     state: State<'_, AppState>,
-    library_state: State<'_, legacy_library::commands::LibraryState>,
+    library_state: State<'_, crate::library::LibraryState>,
 ) -> Result<crate::api::models::Playlist, String> {
-    legacy_commands::playlist::subscribe_playlist(playlist_id, state, library_state).await
+    log::info!("Command: v2_subscribe_playlist {}", playlist_id);
+    let client = state.client.read().await;
+
+    let source = client
+        .get_playlist(playlist_id)
+        .await
+        .map_err(|e| format!("Failed to get source playlist: {}", e))?;
+
+    let track_ids: Vec<u64> = source
+        .tracks
+        .as_ref()
+        .map(|t| t.items.iter().map(|track| track.id).collect())
+        .unwrap_or_default();
+    if track_ids.is_empty() {
+        return Err("Source playlist has no tracks to copy".to_string());
+    }
+
+    let attribution = format!("\n\n---\nOriginally curated by {} on Qobuz", source.owner.name);
+    let new_description = match source.description {
+        Some(ref desc) if !desc.is_empty() => Some(format!("{}{}", desc, attribution)),
+        _ => Some(attribution.trim_start().to_string()),
+    };
+
+    let new_playlist = client
+        .create_playlist(&source.name, new_description.as_deref(), false)
+        .await
+        .map_err(|e| format!("Failed to create new playlist: {}", e))?;
+
+    client
+        .add_tracks_to_playlist(new_playlist.id, &track_ids)
+        .await
+        .map_err(|e| format!("Failed to add tracks to new playlist: {}", e))?;
+
+    if let Some(ref images) = source.images {
+        if let Some(image_url) = images.first() {
+            let db_guard = library_state.db.lock().await;
+            if let Some(ref db) = *db_guard {
+                if let Err(e) = db.update_playlist_artwork(new_playlist.id, Some(image_url)) {
+                    log::warn!("Failed to save original playlist artwork: {}", e);
+                }
+            }
+        }
+    }
+
+    client
+        .get_playlist(new_playlist.id)
+        .await
+        .map_err(|e| format!("Failed to fetch created playlist: {}", e))
 }
 
 #[tauri::command]
@@ -4809,10 +5096,12 @@ pub async fn v2_cache_track_for_offline(
     sample_rate: Option<f64>,
     state: State<'_, AppState>,
     cache_state: State<'_, OfflineCacheState>,
-    library_state: State<'_, legacy_library::commands::LibraryState>,
+    library_state: State<'_, crate::library::LibraryState>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    legacy_offline_cache::commands::cache_track_for_offline(
+    log::info!("Command: v2_cache_track_for_offline {} - {} by {}", track_id, title, artist);
+
+    let track_info = crate::offline_cache::TrackCacheInfo {
         track_id,
         title,
         artist,
@@ -4822,22 +5111,217 @@ pub async fn v2_cache_track_for_offline(
         quality,
         bit_depth,
         sample_rate,
-        state,
-        cache_state,
-        library_state,
-        app_handle,
-    )
-    .await
+    };
+
+    let file_path = cache_state.track_file_path(track_id, "flac");
+    let file_path_str = file_path.to_string_lossy().to_string();
+    {
+        let guard = cache_state.db.lock().await;
+        let db = guard.as_ref().ok_or("No active session - please log in")?;
+        db.insert_track(&track_info, &file_path_str)?;
+    }
+
+    let client = state.client.clone();
+    let fetcher = cache_state.fetcher.clone();
+    let db = cache_state.db.clone();
+    let offline_root = cache_state.get_cache_path();
+    let library_db = library_state.db.clone();
+    let app = app_handle.clone();
+    let semaphore = cache_state.cache_semaphore.clone();
+
+    tokio::spawn(async move {
+        let _permit = match semaphore.acquire_owned().await {
+            Ok(permit) => permit,
+            Err(err) => {
+                log::error!("Failed to acquire cache slot for track {}: {}", track_id, err);
+                if let Some(db_guard) = db.lock().await.as_ref() {
+                    let _ = db_guard.update_status(
+                        track_id,
+                        crate::offline_cache::OfflineCacheStatus::Failed,
+                        Some("Failed to start caching"),
+                    );
+                }
+                let _ = app.emit("offline:caching_failed", serde_json::json!({
+                    "trackId": track_id,
+                    "error": "Failed to acquire cache slot"
+                }));
+                return;
+            }
+        };
+
+        if let Some(db_guard) = db.lock().await.as_ref() {
+            let _ = db_guard.update_status(track_id, crate::offline_cache::OfflineCacheStatus::Downloading, None);
+        }
+        let _ = app.emit("offline:caching_started", serde_json::json!({ "trackId": track_id }));
+
+        let stream_url = {
+            let client_guard = client.read().await;
+            client_guard
+                .get_stream_url_with_fallback(track_id, crate::api::models::Quality::UltraHiRes)
+                .await
+        };
+
+        let url = match stream_url {
+            Ok(s) => s.url,
+            Err(e) => {
+                log::error!("Failed to get stream URL for track {}: {}", track_id, e);
+                if let Some(db_guard) = db.lock().await.as_ref() {
+                    let _ = db_guard.update_status(
+                        track_id,
+                        crate::offline_cache::OfflineCacheStatus::Failed,
+                        Some(&format!("Failed to get stream URL: {}", e)),
+                    );
+                }
+                let _ = app.emit("offline:caching_failed", serde_json::json!({
+                    "trackId": track_id,
+                    "error": e.to_string()
+                }));
+                return;
+            }
+        };
+
+        match fetcher.fetch_to_file(&url, &file_path, track_id, Some(&app)).await {
+            Ok(size) => {
+                log::info!("Caching complete for track {}: {} bytes", track_id, size);
+                if let Some(db_guard) = db.lock().await.as_ref() {
+                    let _ = db_guard.mark_complete(track_id, size);
+                }
+                let _ = app.emit("offline:caching_completed", serde_json::json!({
+                    "trackId": track_id,
+                    "size": size
+                }));
+
+                // Post-processing kept in V2 to avoid command->command delegation.
+                let file_path_str = file_path.to_string_lossy().to_string();
+                let qobuz_client = client.read().await;
+                let metadata = match crate::offline_cache::metadata::fetch_complete_metadata(track_id, &*qobuz_client).await {
+                    Ok(m) => m,
+                    Err(e) => {
+                        log::warn!("Post-processing metadata fetch failed for {}: {}", track_id, e);
+                        return;
+                    }
+                };
+
+                if let Err(e) = crate::offline_cache::metadata::write_flac_tags(&file_path_str, &metadata) {
+                    log::warn!("Failed to write tags for {}: {}", track_id, e);
+                }
+                if let Some(artwork_url) = &metadata.artwork_url {
+                    if let Err(e) = crate::offline_cache::metadata::embed_artwork(&file_path_str, artwork_url).await {
+                        log::warn!("Failed to embed artwork for {}: {}", track_id, e);
+                    }
+                }
+
+                let new_path = match crate::offline_cache::metadata::organize_cached_file(
+                    track_id,
+                    &file_path_str,
+                    &offline_root,
+                    &metadata,
+                ) {
+                    Ok(p) => p,
+                    Err(e) => {
+                        log::warn!("Failed to organize cached file {}: {}", track_id, e);
+                        return;
+                    }
+                };
+
+                if let Some(artwork_url) = &metadata.artwork_url {
+                    if let Some(parent_dir) = std::path::Path::new(&new_path).parent() {
+                        let _ = crate::offline_cache::metadata::save_album_artwork(parent_dir, artwork_url).await;
+                    }
+                }
+
+                let (bit_depth_detected, sample_rate_detected) = match lofty::read_from_path(&new_path) {
+                    Ok(tagged_file) => {
+                        use lofty::AudioFile;
+                        let properties = tagged_file.properties();
+                        (
+                            properties.bit_depth().map(|bd| bd as u32),
+                            properties.sample_rate().map(|sr| sr as f64),
+                        )
+                    }
+                    Err(_) => (None, None),
+                };
+
+                let album_artist = metadata.album_artist.as_ref().unwrap_or(&metadata.artist);
+                let album_group_key = format!("{}|{}", metadata.album, album_artist);
+                let lib_opt = library_db.lock().await;
+                if let Some(lib_guard) = lib_opt.as_ref() {
+                    let _ = lib_guard.insert_qobuz_cached_track_with_grouping(
+                        track_id,
+                        &metadata.title,
+                        &metadata.artist,
+                        Some(&metadata.album),
+                        metadata.album_artist.as_deref(),
+                        metadata.track_number,
+                        metadata.disc_number,
+                        metadata.year,
+                        metadata.duration_secs,
+                        &new_path,
+                        &album_group_key,
+                        &metadata.album,
+                        bit_depth_detected,
+                        sample_rate_detected,
+                        None,
+                    );
+                }
+
+                if let Some(db_guard) = db.lock().await.as_ref() {
+                    let _ = db_guard.update_file_path(track_id, &new_path);
+                }
+
+                let _ = app.emit("offline:caching_processed", serde_json::json!({
+                    "trackId": track_id,
+                    "path": new_path
+                }));
+            }
+            Err(e) => {
+                log::error!("Caching failed for track {}: {}", track_id, e);
+                if let Some(db_guard) = db.lock().await.as_ref() {
+                    let _ = db_guard.update_status(track_id, crate::offline_cache::OfflineCacheStatus::Failed, Some(&e));
+                }
+                let _ = app.emit("offline:caching_failed", serde_json::json!({
+                    "trackId": track_id,
+                    "error": e
+                }));
+            }
+        }
+    });
+
+    Ok(())
 }
 
 #[tauri::command]
 pub async fn v2_start_legacy_migration(
     state: State<'_, AppState>,
     cache_state: State<'_, OfflineCacheState>,
-    library_state: State<'_, legacy_library::commands::LibraryState>,
+    library_state: State<'_, crate::library::LibraryState>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    legacy_offline_cache::commands::start_legacy_migration(state, cache_state, library_state, app_handle).await
+    log::info!("Command: v2_start_legacy_migration");
+    let tracks_dir = cache_state.cache_dir.read().unwrap().join("tracks");
+    let track_ids = crate::offline_cache::detect_legacy_cached_files(&tracks_dir)?;
+
+    if track_ids.is_empty() {
+        return Err("No legacy cached files found".to_string());
+    }
+
+    let offline_root = cache_state.get_cache_path();
+    let qobuz_client = state.client.clone();
+    let library_db = library_state.db.clone();
+    let app_complete = app_handle.clone();
+
+    tokio::spawn(async move {
+        let status = crate::offline_cache::migrate_legacy_cached_files(
+            track_ids,
+            tracks_dir,
+            offline_root,
+            qobuz_client,
+            library_db,
+        )
+        .await;
+        let _ = app_complete.emit("migration:complete", status);
+    });
+    Ok(())
 }
 
 #[tauri::command]
@@ -4910,7 +5394,7 @@ pub async fn v2_factory_reset(
     allowed_origins: State<'_, crate::config::remote_control_settings::AllowedOriginsState>,
     legal_settings: State<'_, crate::config::legal_settings::LegalSettingsState>,
     updates: State<'_, crate::updates::UpdatesState>,
-    library: State<'_, legacy_library::commands::LibraryState>,
+    library: State<'_, crate::library::LibraryState>,
     reco: State<'_, crate::reco_store::RecoState>,
     api_cache: State<'_, crate::api_cache::ApiCacheState>,
     artist_vectors: State<'_, crate::artist_vectors::ArtistVectorStoreState>,
@@ -4921,33 +5405,59 @@ pub async fn v2_factory_reset(
     musicbrainz: State<'_, crate::musicbrainz::MusicBrainzSharedState>,
     listenbrainz: State<'_, crate::listenbrainz::ListenBrainzSharedState>,
 ) -> Result<(), String> {
-    legacy_commands::factory_reset::factory_reset(
-        app_state,
-        user_paths,
-        session_store,
-        favorites_cache,
-        subscription_state,
-        playback_prefs,
-        favorites_prefs,
-        download_settings,
-        audio_settings,
-        tray_settings,
-        remote_control_settings,
-        allowed_origins,
-        legal_settings,
-        updates,
-        library,
-        reco,
-        api_cache,
-        artist_vectors,
-        blacklist,
-        offline,
-        offline_cache,
-        lyrics,
-        musicbrainz,
-        listenbrainz,
-    )
-    .await
+    log::warn!("FACTORY RESET: Starting - all application data will be deleted");
+
+    let _ = app_state.player.stop();
+    app_state.media_controls.set_stopped();
+
+    session_store.teardown();
+    let _ = favorites_cache.teardown();
+    let _ = playback_prefs.teardown();
+    let _ = favorites_prefs.teardown();
+    let _ = audio_settings.teardown();
+    let _ = tray_settings.teardown();
+    let _ = remote_control_settings.teardown();
+    let _ = allowed_origins.teardown();
+    updates.teardown();
+    library.teardown().await;
+    reco.teardown().await;
+    api_cache.teardown().await;
+    artist_vectors.teardown().await;
+    blacklist.teardown();
+    offline.teardown();
+    offline_cache.teardown().await;
+    lyrics.teardown().await;
+    musicbrainz.teardown().await;
+    listenbrainz.teardown().await;
+    v2_teardown_type_alias_state(&*subscription_state);
+    v2_teardown_type_alias_state(&*download_settings);
+    v2_teardown_type_alias_state(&*legal_settings);
+
+    user_paths.clear_user();
+    crate::user_data::UserDataPaths::clear_last_user_id();
+
+    if let Err(e) = crate::credentials::clear_qobuz_credentials() {
+        log::error!("FACTORY RESET: Failed to clear credentials: {}", e);
+    }
+
+    if let Ok(data_dir) = crate::user_data::UserDataPaths::global_data_dir() {
+        if data_dir.exists() {
+            let _ = std::fs::remove_dir_all(&data_dir);
+        }
+    }
+    if let Ok(cache_dir) = crate::user_data::UserDataPaths::global_cache_dir() {
+        if cache_dir.exists() {
+            let _ = std::fs::remove_dir_all(&cache_dir);
+        }
+    }
+    if let Some(config_dir) = dirs::config_dir().map(|d| d.join("qbz")) {
+        if config_dir.exists() {
+            let _ = std::fs::remove_dir_all(&config_dir);
+        }
+    }
+
+    log::warn!("FACTORY RESET: Complete - all application data deleted");
+    Ok(())
 }
 
 #[tauri::command]
