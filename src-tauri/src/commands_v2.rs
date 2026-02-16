@@ -2941,3 +2941,321 @@ pub async fn v2_listenbrainz_queue_listen(
         duration_ms,
     ).map_err(|e| RuntimeError::Internal(e))
 }
+
+// ==================== Playback Context Commands (V2) ====================
+
+/// Get current playback context (V2)
+#[tauri::command]
+pub async fn v2_get_playback_context(
+    app_state: State<'_, AppState>,
+) -> Result<Option<crate::playback_context::PlaybackContext>, RuntimeError> {
+    Ok(app_state.context.get_context())
+}
+
+/// Set playback context (V2)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_set_playback_context(
+    contextType: String,
+    id: String,
+    label: String,
+    source: String,
+    trackIds: Vec<u64>,
+    startPosition: usize,
+    app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<(), RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+
+    use crate::playback_context::{PlaybackContext, ContextType, ContentSource};
+
+    let ctx_type = match contextType.as_str() {
+        "album" => ContextType::Album,
+        "playlist" => ContextType::Playlist,
+        "artist_top" => ContextType::ArtistTop,
+        "home_list" => ContextType::HomeList,
+        "favorites" => ContextType::Favorites,
+        "local_library" => ContextType::LocalLibrary,
+        "radio" => ContextType::Radio,
+        "search" => ContextType::Search,
+        _ => return Err(RuntimeError::Internal(format!("Invalid context type: {}", contextType))),
+    };
+
+    let content_source = match source.as_str() {
+        "qobuz" => ContentSource::Qobuz,
+        "local" => ContentSource::Local,
+        "plex" => ContentSource::Plex,
+        _ => return Err(RuntimeError::Internal(format!("Invalid source: {}", source))),
+    };
+
+    let context = PlaybackContext::new(
+        ctx_type,
+        id,
+        label,
+        content_source,
+        trackIds,
+        startPosition,
+    );
+
+    app_state.context.set_context(context);
+    log::info!("[V2] set_playback_context: type={}", contextType);
+    Ok(())
+}
+
+/// Clear playback context (V2)
+#[tauri::command]
+pub async fn v2_clear_playback_context(
+    app_state: State<'_, AppState>,
+) -> Result<(), RuntimeError> {
+    app_state.context.clear_context();
+    log::info!("[V2] clear_playback_context");
+    Ok(())
+}
+
+/// Check if playback context is active (V2)
+#[tauri::command]
+pub async fn v2_has_playback_context(
+    app_state: State<'_, AppState>,
+) -> Result<bool, RuntimeError> {
+    Ok(app_state.context.has_context())
+}
+
+// ==================== Session Persistence Commands (V2) ====================
+
+/// Save session position (V2)
+#[tauri::command]
+pub async fn v2_save_session_position(
+    positionSecs: u64,
+    session_state: State<'_, crate::session_store::SessionStoreState>,
+) -> Result<(), RuntimeError> {
+    let guard = session_state.store.lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.save_position(positionSecs)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Save session volume (V2)
+#[tauri::command]
+pub async fn v2_save_session_volume(
+    volume: f32,
+    session_state: State<'_, crate::session_store::SessionStoreState>,
+) -> Result<(), RuntimeError> {
+    let guard = session_state.store.lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.save_volume(volume)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Save session playback mode (V2)
+#[tauri::command]
+pub async fn v2_save_session_playback_mode(
+    shuffle: bool,
+    repeatMode: String,
+    session_state: State<'_, crate::session_store::SessionStoreState>,
+) -> Result<(), RuntimeError> {
+    let guard = session_state.store.lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.save_playback_mode(shuffle, &repeatMode)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Clear session (V2)
+#[tauri::command]
+pub async fn v2_clear_session(
+    session_state: State<'_, crate::session_store::SessionStoreState>,
+) -> Result<(), RuntimeError> {
+    let guard = session_state.store.lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.clear_session()
+        .map_err(|e| RuntimeError::Internal(e))?;
+    log::info!("[V2] clear_session");
+    Ok(())
+}
+
+// ==================== Favorites Cache Commands (V2) ====================
+
+/// Get cached favorite tracks (V2)
+#[tauri::command]
+pub async fn v2_get_cached_favorite_tracks(
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<Vec<i64>, RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.get_favorite_track_ids()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Sync cached favorite tracks (V2)
+#[tauri::command]
+pub async fn v2_sync_cached_favorite_tracks(
+    trackIds: Vec<i64>,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.sync_favorite_tracks(&trackIds)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Cache a favorite track (V2)
+#[tauri::command]
+pub async fn v2_cache_favorite_track(
+    trackId: i64,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.add_favorite_track(trackId)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Uncache a favorite track (V2)
+#[tauri::command]
+pub async fn v2_uncache_favorite_track(
+    trackId: i64,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.remove_favorite_track(trackId)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Clear favorites cache (V2)
+#[tauri::command]
+pub async fn v2_clear_favorites_cache(
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.clear_all()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get cached favorite albums (V2)
+#[tauri::command]
+pub async fn v2_get_cached_favorite_albums(
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<Vec<String>, RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.get_favorite_album_ids()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Sync cached favorite albums (V2)
+#[tauri::command]
+pub async fn v2_sync_cached_favorite_albums(
+    albumIds: Vec<String>,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.sync_favorite_albums(&albumIds)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Cache a favorite album (V2)
+#[tauri::command]
+pub async fn v2_cache_favorite_album(
+    albumId: String,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.add_favorite_album(&albumId)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Uncache a favorite album (V2)
+#[tauri::command]
+pub async fn v2_uncache_favorite_album(
+    albumId: String,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.remove_favorite_album(&albumId)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get cached favorite artists (V2)
+#[tauri::command]
+pub async fn v2_get_cached_favorite_artists(
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<Vec<i64>, RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.get_favorite_artist_ids()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Sync cached favorite artists (V2)
+#[tauri::command]
+pub async fn v2_sync_cached_favorite_artists(
+    artistIds: Vec<i64>,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.sync_favorite_artists(&artistIds)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Cache a favorite artist (V2)
+#[tauri::command]
+pub async fn v2_cache_favorite_artist(
+    artistId: i64,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.add_favorite_artist(artistId)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Uncache a favorite artist (V2)
+#[tauri::command]
+pub async fn v2_uncache_favorite_artist(
+    artistId: i64,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+) -> Result<(), RuntimeError> {
+    let guard = cache_state.store.lock()
+        .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.remove_favorite_artist(artistId)
+        .map_err(|e| RuntimeError::Internal(e))
+}

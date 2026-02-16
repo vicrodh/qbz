@@ -1227,6 +1227,30 @@ pub fn run() {
             commands_v2::v2_lastfm_scrobble,
             commands_v2::v2_lastfm_set_session,
             commands_v2::v2_listenbrainz_queue_listen,
+            // Playback Context V2
+            commands_v2::v2_get_playback_context,
+            commands_v2::v2_set_playback_context,
+            commands_v2::v2_clear_playback_context,
+            commands_v2::v2_has_playback_context,
+            // Session Persistence V2
+            commands_v2::v2_save_session_position,
+            commands_v2::v2_save_session_volume,
+            commands_v2::v2_save_session_playback_mode,
+            commands_v2::v2_clear_session,
+            // Favorites Cache V2
+            commands_v2::v2_get_cached_favorite_tracks,
+            commands_v2::v2_sync_cached_favorite_tracks,
+            commands_v2::v2_cache_favorite_track,
+            commands_v2::v2_uncache_favorite_track,
+            commands_v2::v2_clear_favorites_cache,
+            commands_v2::v2_get_cached_favorite_albums,
+            commands_v2::v2_sync_cached_favorite_albums,
+            commands_v2::v2_cache_favorite_album,
+            commands_v2::v2_uncache_favorite_album,
+            commands_v2::v2_get_cached_favorite_artists,
+            commands_v2::v2_sync_cached_favorite_artists,
+            commands_v2::v2_cache_favorite_artist,
+            commands_v2::v2_uncache_favorite_artist,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
