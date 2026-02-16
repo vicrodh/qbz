@@ -92,7 +92,7 @@
         // Use v2 command since session is active
         clearTimeoutTimer();
         try {
-          const userInfo = await invoke<{ user_name: string; subscription: string; subscription_valid_until?: string | null } | null>('get_user_info');
+          const userInfo = await invoke<{ user_name: string; subscription: string; subscription_valid_until?: string | null } | null>('v2_get_user_info');
           if (userInfo) {
             console.log('[LoginView] Session restored for user_id:', status.user_id);
             onLoginSuccess({

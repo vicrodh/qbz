@@ -764,7 +764,8 @@ export async function checkTrackFavorite(trackId: number): Promise<boolean> {
   try {
     const response = await invoke<{ tracks?: { items: Array<{ id: number }> } }>('v2_get_favorites', {
       favType: 'tracks',
-      limit: 500
+      limit: 500,
+      offset: 0
     });
     if (response.tracks?.items) {
       return response.tracks.items.some(item => item.id === trackId);
