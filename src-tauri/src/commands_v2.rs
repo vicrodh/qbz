@@ -16,10 +16,17 @@ use qbz_models::{
 };
 
 use crate::artist_blacklist::BlacklistState;
+use crate::artist_vectors::ArtistVectorStoreState;
 use crate::cache::AudioCache;
+use crate::api_cache::ApiCacheState;
 use crate::audio::{AlsaPlugin, AudioBackendType};
 use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
+use crate::config::developer_settings::{DeveloperSettings, DeveloperSettingsState};
+use crate::config::graphics_settings::{GraphicsSettings, GraphicsSettingsState, GraphicsStartupStatus};
 use crate::config::legal_settings::LegalSettingsState;
+use crate::config::playback_preferences::{AutoplayMode, PlaybackPreferencesState};
+use crate::config::tray_settings::TraySettingsState;
+use crate::config::window_settings::WindowSettingsState;
 use crate::core_bridge::CoreBridgeState;
 use crate::offline_cache::OfflineCacheState;
 use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason, CommandRequirement};
@@ -897,6 +904,271 @@ pub async fn v2_activate_offline_session(
 ) -> Result<(), RuntimeError> {
     crate::session_lifecycle::activate_offline_session(&app).await
         .map_err(RuntimeError::Internal)
+}
+
+// ==================== UX / Settings Commands (V2 Native) ====================
+
+#[tauri::command]
+pub async fn v2_set_api_locale(
+    locale: String,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    let client = state.client.read().await;
+    client.set_locale(locale).await;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn v2_set_use_system_titlebar(
+    value: bool,
+    state: State<'_, WindowSettingsState>,
+) -> Result<(), String> {
+    state.set_use_system_titlebar(value)
+}
+
+#[tauri::command]
+pub fn v2_set_enable_tray(
+    value: bool,
+    state: State<'_, TraySettingsState>,
+) -> Result<(), String> {
+    state.set_enable_tray(value)
+}
+
+#[tauri::command]
+pub fn v2_set_minimize_to_tray(
+    value: bool,
+    state: State<'_, TraySettingsState>,
+) -> Result<(), String> {
+    state.set_minimize_to_tray(value)
+}
+
+#[tauri::command]
+pub fn v2_set_close_to_tray(
+    value: bool,
+    state: State<'_, TraySettingsState>,
+) -> Result<(), String> {
+    state.set_close_to_tray(value)
+}
+
+#[tauri::command]
+pub fn v2_set_autoplay_mode(
+    mode: AutoplayMode,
+    state: State<'_, PlaybackPreferencesState>,
+) -> Result<(), String> {
+    state.set_autoplay_mode(mode)
+}
+
+#[tauri::command]
+pub fn v2_set_show_context_icon(
+    show: bool,
+    state: State<'_, PlaybackPreferencesState>,
+) -> Result<(), String> {
+    state.set_show_context_icon(show)
+}
+
+#[tauri::command]
+pub fn v2_set_visualizer_enabled(
+    enabled: bool,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
+    state.visualizer.set_enabled(enabled);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn v2_get_developer_settings(
+    state: State<'_, DeveloperSettingsState>,
+) -> Result<DeveloperSettings, String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Developer settings store not initialized")?;
+    store.get_settings()
+}
+
+#[tauri::command]
+pub fn v2_set_developer_force_dmabuf(
+    enabled: bool,
+    state: State<'_, DeveloperSettingsState>,
+) -> Result<(), String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Developer settings store not initialized")?;
+    store.set_force_dmabuf(enabled)
+}
+
+#[tauri::command]
+pub fn v2_get_graphics_settings(
+    state: State<'_, GraphicsSettingsState>,
+) -> Result<GraphicsSettings, String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Graphics settings store not initialized")?;
+    store.get_settings()
+}
+
+#[tauri::command]
+pub fn v2_get_graphics_startup_status() -> GraphicsStartupStatus {
+    crate::config::graphics_settings::get_graphics_startup_status()
+}
+
+#[tauri::command]
+pub fn v2_set_hardware_acceleration(
+    enabled: bool,
+    state: State<'_, GraphicsSettingsState>,
+) -> Result<(), String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Graphics settings store not initialized")?;
+    store.set_hardware_acceleration(enabled)
+}
+
+#[tauri::command]
+pub fn v2_set_gdk_scale(
+    value: Option<String>,
+    state: State<'_, GraphicsSettingsState>,
+) -> Result<(), String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Graphics settings store not initialized")?;
+    store.set_gdk_scale(value)
+}
+
+#[tauri::command]
+pub fn v2_set_gdk_dpi_scale(
+    value: Option<String>,
+    state: State<'_, GraphicsSettingsState>,
+) -> Result<(), String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Graphics settings store not initialized")?;
+    store.set_gdk_dpi_scale(value)
+}
+
+#[tauri::command]
+pub fn v2_clear_cache(state: State<'_, AppState>) -> Result<(), String> {
+    state.audio_cache.clear();
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_clear_artist_cache(
+    cache_state: State<'_, ApiCacheState>,
+) -> Result<usize, String> {
+    let guard = cache_state.cache.lock().await;
+    let cache = guard.as_ref().ok_or("No active session - please log in")?;
+    cache.clear_all_artists()
+}
+
+#[tauri::command]
+pub async fn v2_get_vector_store_stats(
+    store_state: State<'_, ArtistVectorStoreState>,
+) -> Result<crate::artist_vectors::StoreStats, String> {
+    let guard = store_state.store.lock().await;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.get_stats()
+}
+
+#[tauri::command]
+pub async fn v2_clear_vector_store(
+    store_state: State<'_, ArtistVectorStoreState>,
+) -> Result<usize, String> {
+    let mut guard = store_state.store.lock().await;
+    let store = guard.as_mut().ok_or("No active session - please log in")?;
+    store.clear_all()
+}
+
+#[tauri::command]
+pub fn v2_add_to_artist_blacklist(
+    artist_id: u64,
+    artist_name: String,
+    notes: Option<String>,
+    state: State<'_, BlacklistState>,
+) -> Result<(), String> {
+    state.add(artist_id, &artist_name, notes.as_deref())
+}
+
+#[tauri::command]
+pub fn v2_remove_from_artist_blacklist(
+    artist_id: u64,
+    state: State<'_, BlacklistState>,
+) -> Result<(), String> {
+    state.remove(artist_id)
+}
+
+#[tauri::command]
+pub fn v2_set_blacklist_enabled(
+    enabled: bool,
+    state: State<'_, BlacklistState>,
+) -> Result<(), String> {
+    state.set_enabled(enabled)
+}
+
+#[tauri::command]
+pub fn v2_clear_artist_blacklist(
+    state: State<'_, BlacklistState>,
+) -> Result<(), String> {
+    state.clear_all()
+}
+
+#[tauri::command]
+pub fn v2_save_credentials(email: String, password: String) -> Result<(), String> {
+    crate::credentials::save_qobuz_credentials(&email, &password)
+}
+
+#[tauri::command]
+pub fn v2_clear_saved_credentials() -> Result<(), String> {
+    crate::credentials::clear_qobuz_credentials()
+}
+
+#[tauri::command]
+pub async fn v2_plex_open_auth_url(url: String) -> Result<(), String> {
+    crate::plex::plex_open_auth_url(url).await
+}
+
+#[tauri::command]
+pub fn v2_plex_cache_save_sections(
+    server_id: Option<String>,
+    sections: Vec<crate::plex::PlexMusicSection>,
+) -> Result<usize, String> {
+    crate::plex::plex_cache_save_sections(server_id, sections)
+}
+
+#[tauri::command]
+pub fn v2_plex_cache_save_tracks(
+    server_id: Option<String>,
+    section_key: String,
+    tracks: Vec<crate::plex::PlexTrack>,
+) -> Result<usize, String> {
+    crate::plex::plex_cache_save_tracks(server_id, section_key, tracks)
+}
+
+#[tauri::command]
+pub fn v2_plex_cache_clear() -> Result<(), String> {
+    crate::plex::plex_cache_clear()
 }
 
 // ==================== Queue Commands (V2) ====================
