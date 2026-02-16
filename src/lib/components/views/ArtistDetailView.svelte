@@ -537,7 +537,7 @@
       await new Promise(resolve => setTimeout(resolve, 800));
 
       radioLoadingMessage = 'Fetching similar artists';
-      const sessionId = await invoke<string>('create_artist_radio', {
+      const sessionId = await invoke<string>('v2_create_artist_radio', {
         artistId: artist.id,
         artistName: artist.name
       });
@@ -591,7 +591,7 @@
       const trackName = track.title;
       const trackArtistId = track.performer?.id || artist.id;
 
-      const sessionId = await invoke<string>('create_track_radio', {
+      const sessionId = await invoke<string>('v2_create_track_radio', {
         trackId: track.id,
         trackName,
         artistId: trackArtistId
@@ -652,7 +652,7 @@
   async function loadSimilarArtists() {
     similarArtistsLoading = true;
     try {
-      const results = await invoke<SimilarArtistsPage>('get_similar_artists', {
+      const results = await invoke<SimilarArtistsPage>('v2_get_similar_artists', {
         artistId: artist.id,
         limit: 5,
         offset: 0
@@ -678,7 +678,7 @@
 
     try {
       // Check if MusicBrainz is enabled
-      const enabled = await invoke<boolean>('musicbrainz_is_enabled');
+      const enabled = await invoke<boolean>('v2_musicbrainz_is_enabled');
       if (!enabled) {
         mbAvailable = false;
         mbRelationshipsLoading = false;

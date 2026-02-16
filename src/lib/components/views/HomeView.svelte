@@ -745,7 +745,7 @@
 
       // Fetch localized playlist tags from dedicated endpoint
       if (playlistTags.length === 0) {
-        invoke<PlaylistTag[]>('get_playlist_tags')
+        invoke<PlaylistTag[]>('v2_get_playlist_tags')
           .then(tags => { playlistTags = tags; })
           .catch(err => console.error('Failed to fetch playlist tags:', err));
       }

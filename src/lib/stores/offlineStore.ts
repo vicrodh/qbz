@@ -475,7 +475,7 @@ export async function syncPendingPlaylists(): Promise<void> {
           console.log(`[Offline] Using existing Qobuz playlist ID: ${qobuzPlaylistId}`);
         } else {
           // Create playlist on Qobuz
-          const createdPlaylist = await invoke<{ id: number }>('create_playlist', {
+          const createdPlaylist = await invoke<{ id: number }>('v2_create_playlist', {
             name: playlist.name,
             description: playlist.description,
             isPublic: playlist.isPublic
@@ -555,7 +555,7 @@ export async function syncPendingPlaylists(): Promise<void> {
                 position: position
               });
 
-              await invoke('playlist_add_local_track', {
+              await invoke('v2_playlist_add_local_track', {
                 playlistId: qobuzPlaylistId,
                 localTrackId: localTrackId,
                 position: position

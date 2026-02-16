@@ -131,7 +131,7 @@
       try {
         const [settings, hwStatus] = await Promise.all([
           invoke<AudioSettings>('v2_get_audio_settings'),
-          invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null)
+          invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null)
         ]);
         dacPassthrough = settings.dac_passthrough;
         hardwareSampleRate = hwStatus?.hardware_sample_rate ?? null;

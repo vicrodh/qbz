@@ -116,7 +116,7 @@
     dacCapabilities = null;
 
     try {
-      const caps = await invoke<DacCapabilities>('query_dac_capabilities', {
+      const caps = await invoke<DacCapabilities>('v2_query_dac_capabilities', {
         nodeName: dacNodeName
       });
       dacCapabilities = caps;

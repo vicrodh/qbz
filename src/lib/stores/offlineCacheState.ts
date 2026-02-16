@@ -208,7 +208,7 @@ export async function getOfflineCacheStats(): Promise<OfflineCacheStats> {
 
 // Clear all offline cache
 export async function clearOfflineCache(): Promise<void> {
-  await invoke('clear_offline_cache');
+  await invoke('v2_clear_offline_cache');
   offlineCacheStates.clear();
   notifyListeners();
 }

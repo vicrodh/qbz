@@ -457,7 +457,7 @@ interface MusicBrainzTrackData {
  */
 async function getListenBrainzStatus(): Promise<ListenBrainzStatus | null> {
   try {
-    return await invoke<ListenBrainzStatus>('listenbrainz_get_status');
+    return await invoke<ListenBrainzStatus>('v2_listenbrainz_get_status');
   } catch {
     return null;
   }
@@ -472,7 +472,7 @@ async function resolveMusicBrainzTrack(
   isrc?: string
 ): Promise<MusicBrainzTrackData | null> {
   try {
-    const result = await invoke<MusicBrainzTrackData>('musicbrainz_resolve_track', {
+    const result = await invoke<MusicBrainzTrackData>('v2_musicbrainz_resolve_track', {
       isrc: isrc || null,
       title,
       artist

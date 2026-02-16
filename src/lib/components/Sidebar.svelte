@@ -906,7 +906,7 @@
 
   async function loadFavoritesPreferences() {
     try {
-      const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      const prefs = await invoke<FavoritesPreferences>('v2_get_favorites_preferences');
       // Filter out 'playlists' from tab order for sidebar display
       favoritesTabOrder = (prefs.tab_order || ['tracks', 'albums', 'artists']).filter(tab => tab !== 'playlists');
     } catch (err) {
@@ -1147,7 +1147,7 @@
 
   async function loadPlaylistSettings() {
     try {
-      const settings = await invoke<PlaylistSettings[]>('playlist_get_all_settings');
+      const settings = await invoke<PlaylistSettings[]>('v2_playlist_get_all_settings');
       const map = new Map<number, PlaylistSettings>();
       for (const s of settings) {
         map.set(s.qobuz_playlist_id, s);

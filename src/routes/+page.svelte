@@ -609,7 +609,7 @@
 
   async function loadFavoritesDefaultTab(): Promise<void> {
     try {
-      const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      const prefs = await invoke<FavoritesPreferences>('v2_get_favorites_preferences');
       favoritesDefaultTab = getDefaultFavoritesTab(prefs.tab_order);
     } catch (err) {
       console.error('Failed to load favorites preferences:', err);
@@ -668,7 +668,7 @@
    */
   async function fetchAlbumArtistAlbums(artistId: number) {
     try {
-      const response = await invoke<PageArtistResponse>('get_artist_page', { artistId });
+      const response = await invoke<PageArtistResponse>('v2_get_artist_page', { artistId });
       const artistDetail = convertPageArtist(response);
 
       // Combine studio albums and live albums, limit to 16
@@ -721,7 +721,7 @@
   async function handleArtistClick(artistId: number) {
     try {
       showToast($t('toast.loadingArtist'), 'info');
-      const response = await invoke<PageArtistResponse>('get_artist_page', { artistId });
+      const response = await invoke<PageArtistResponse>('v2_get_artist_page', { artistId });
       console.log('Artist page:', response);
 
       selectedArtist = convertPageArtist(response);
@@ -1275,7 +1275,7 @@
 
   async function removePlaylistFavoriteById(playlistId: number) {
     try {
-      await invoke('playlist_set_favorite', { playlistId, favorite: false });
+      await invoke('v2_playlist_set_favorite', { playlistId, favorite: false });
       showToast($t('toast.playlistRemovedFavorites'), 'success');
       sidebarRef?.refreshPlaylists();
       sidebarRef?.refreshPlaylistSettings();
@@ -1515,7 +1515,7 @@
 
     // Check if Qobuz track has a local copy
     try {
-      const localIds = await invoke<number[]>('playlist_get_tracks_with_local_copies', {
+      const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
         trackIds: [track.id]
       });
       return localIds.includes(track.id);
@@ -2511,7 +2511,7 @@
       await invoke('v2_logout');
       // Clear saved credentials from keyring
       try {
-        await invoke('clear_saved_credentials');
+        await invoke('v2_clear_saved_credentials');
         console.log('Credentials cleared from keyring');
       } catch (clearErr) {
         console.error('Failed to clear credentials:', clearErr);

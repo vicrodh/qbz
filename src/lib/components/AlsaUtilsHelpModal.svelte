@@ -25,8 +25,8 @@
     isLoading = true;
     try {
       const [installed, distro] = await Promise.all([
-        invoke<boolean>('check_alsa_utils_installed'),
-        invoke<LinuxDistroInfo>('get_linux_distro')
+        invoke<boolean>('v2_check_alsa_utils_installed'),
+        invoke<LinuxDistroInfo>('v2_get_linux_distro')
       ]);
       isInstalled = installed;
       distroInfo = distro;

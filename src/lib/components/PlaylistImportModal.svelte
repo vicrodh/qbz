@@ -170,7 +170,7 @@
 
     try {
       pushLog('Checking playlist link...');
-      const result = await invoke<ImportPlaylist>('playlist_import_preview', { url });
+      const result = await invoke<ImportPlaylist>('v2_playlist_import_preview', { url });
       preview = result;
       previewUrl = url.trim();
       customName = result.name;
@@ -245,7 +245,7 @@
       });
 
       const nameOverride = customName.trim() !== preview.name ? customName.trim() || null : null;
-      const result = await invoke<ImportSummary>('playlist_import_execute', {
+      const result = await invoke<ImportSummary>('v2_playlist_import_execute', {
         url: previewUrl,
         nameOverride,
         isPublic: false

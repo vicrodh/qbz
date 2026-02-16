@@ -36,7 +36,7 @@ function notifyListeners(): void {
  * Get current playback preferences
  */
 export async function getPlaybackPreferences(): Promise<PlaybackPreferences> {
-  const prefs = await invoke<PlaybackPreferences>('get_playback_preferences');
+  const prefs = await invoke<PlaybackPreferences>('v2_get_playback_preferences');
   preferences = prefs;
   notifyListeners();
   return prefs;
@@ -46,7 +46,7 @@ export async function getPlaybackPreferences(): Promise<PlaybackPreferences> {
  * Set autoplay mode
  */
 export async function setAutoplayMode(mode: AutoplayMode): Promise<void> {
-  await invoke('set_autoplay_mode', { mode });
+  await invoke('v2_set_autoplay_mode', { mode });
   preferences.autoplay_mode = mode;
   notifyListeners();
 }
@@ -55,7 +55,7 @@ export async function setAutoplayMode(mode: AutoplayMode): Promise<void> {
  * Set whether to show context icon in player
  */
 export async function setShowContextIcon(show: boolean): Promise<void> {
-  await invoke('set_show_context_icon', { show });
+  await invoke('v2_set_show_context_icon', { show });
   preferences.show_context_icon = show;
   notifyListeners();
 }

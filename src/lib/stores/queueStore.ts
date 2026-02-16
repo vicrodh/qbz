@@ -158,7 +158,7 @@ export async function updateLocalCopiesSet(): Promise<void> {
       return;
     }
 
-    const localIds = await invoke<number[]>('playlist_get_tracks_with_local_copies', {
+    const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
       trackIds
     });
     tracksWithLocalCopies = new Set(localIds);
@@ -194,7 +194,7 @@ export async function syncQueueState(): Promise<void> {
     let localCopies = new Set<number>();
     if (isOfflineMode && trackIds.length > 0) {
       try {
-        const localIds = await invoke<number[]>('playlist_get_tracks_with_local_copies', {
+        const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
           trackIds
         });
         localCopies = new Set(localIds);

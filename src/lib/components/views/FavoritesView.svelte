@@ -571,7 +571,7 @@
 
   async function loadFavoritesPreferences() {
     try {
-      const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      const prefs = await invoke<FavoritesPreferences>('v2_get_favorites_preferences');
       favoritesPreferences = {
         ...prefs,
         tab_order: normalizeFavoritesTabOrder(prefs.tab_order)
@@ -712,7 +712,7 @@
     error = null;
     try {
       // Get IDs of favorited playlists from local DB
-      const favoriteIds = await invoke<number[]>('playlist_get_favorites');
+      const favoriteIds = await invoke<number[]>('v2_playlist_get_favorites');
       if (favoriteIds.length === 0) {
         favoritePlaylists = [];
         return;

@@ -209,7 +209,7 @@
 
     loadingRadio = true;
     try {
-      await invoke('create_track_radio', {
+      await invoke('v2_create_track_radio', {
         trackId,
         trackName: trackName || 'Unknown Track',
         artistId

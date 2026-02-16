@@ -365,8 +365,8 @@
         const [playlistsResult, pendingPlaylistsResult, settingsResult, statsResult, localCountsResult] = await Promise.all([
           invoke<Playlist[]>('v2_get_user_playlists'),
           invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists'),
-          invoke<PlaylistSettings[]>('playlist_get_all_settings'),
-          invoke<PlaylistStats[]>('playlist_get_all_stats'),
+          invoke<PlaylistSettings[]>('v2_playlist_get_all_settings'),
+          invoke<PlaylistStats[]>('v2_playlist_get_all_stats'),
           invoke<Record<string, number>>('playlist_get_all_local_track_counts')
         ]);
 
@@ -423,8 +423,8 @@
         // Online mode: Load only regular playlists
         const [playlistsResult, settingsResult, statsResult, localCountsResult] = await Promise.all([
           invoke<Playlist[]>('v2_get_user_playlists'),
-          invoke<PlaylistSettings[]>('playlist_get_all_settings'),
-          invoke<PlaylistStats[]>('playlist_get_all_stats'),
+          invoke<PlaylistSettings[]>('v2_playlist_get_all_settings'),
+          invoke<PlaylistStats[]>('v2_playlist_get_all_stats'),
           invoke<Record<string, number>>('playlist_get_all_local_track_counts')
         ]);
 
@@ -503,7 +503,7 @@
     const current = playlistSettings.get(playlist.id);
     const newHidden = !current?.hidden;
     try {
-      await invoke('playlist_set_hidden', { playlistId: playlist.id, hidden: newHidden });
+      await invoke('v2_playlist_set_hidden', { playlistId: playlist.id, hidden: newHidden });
       const updated = new Map(playlistSettings);
       updated.set(playlist.id, { ...current, qobuz_playlist_id: playlist.id, hidden: newHidden, position: current?.position ?? 0 });
       playlistSettings = updated;
@@ -517,7 +517,7 @@
     const current = playlistSettings.get(playlist.id);
     const newFavorite = !current?.is_favorite;
     try {
-      await invoke('playlist_set_favorite', { playlistId: playlist.id, favorite: newFavorite });
+      await invoke('v2_playlist_set_favorite', { playlistId: playlist.id, favorite: newFavorite });
       const updated = new Map(playlistSettings);
       updated.set(playlist.id, { ...current, qobuz_playlist_id: playlist.id, is_favorite: newFavorite, hidden: current?.hidden ?? false, position: current?.position ?? 0 });
       playlistSettings = updated;
@@ -613,7 +613,7 @@
   // Helper to save playlist order
   async function savePlaylistOrder(newOrder: number[]) {
     try {
-      await invoke('playlist_reorder', { playlistIds: newOrder });
+      await invoke('v2_playlist_reorder', { playlistIds: newOrder });
       // Update local settings
       const updated = new Map(playlistSettings);
       newOrder.forEach((id, index) => {

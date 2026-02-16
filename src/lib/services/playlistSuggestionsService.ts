@@ -146,7 +146,7 @@ export async function getPlaylistSuggestionsV2(
  * Get vector store statistics (for debugging)
  */
 export async function getVectorStoreStats(): Promise<VectorStoreStats> {
-  return invoke<VectorStoreStats>('get_vector_store_stats');
+  return invoke<VectorStoreStats>('v2_get_vector_store_stats');
 }
 
 /**

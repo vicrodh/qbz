@@ -152,7 +152,7 @@
         invoke<AudioOutputStatus>('get_audio_output_status'),
         invoke<PipewireSink[]>('get_pipewire_sinks').catch(() => [] as PipewireSink[]),
         invoke<AlsaDevice[]>('get_alsa_devices').catch(() => [] as AlsaDevice[]),
-        invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null)
+        invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null)
       ]);
       settings = settingsResult;
       outputStatus = statusResult;
@@ -192,7 +192,7 @@
       // Only poll if using bit-perfect modes AND not casting
       if (!castConnected && (settings?.dac_passthrough || settings?.backend_type === 'Alsa')) {
         try {
-          hardwareStatus = await invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null);
+          hardwareStatus = await invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null);
         } catch (err) {
           // Silently fail - don't spam console
         }

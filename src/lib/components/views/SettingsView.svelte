@@ -918,7 +918,7 @@
     checkLegacyCachedFiles();
 
     // Load developer settings
-    invoke('get_developer_settings').then((settings: any) => {
+    invoke('v2_get_developer_settings').then((settings: any) => {
       forceDmabuf = settings.force_dmabuf;
     }).catch(() => {});
 
@@ -926,7 +926,7 @@
     verboseLogCapture = isVerboseCaptureEnabled();
 
     // Load graphics settings
-    invoke('get_graphics_settings').then((settings: any) => {
+    invoke('v2_get_graphics_settings').then((settings: any) => {
       forceX11 = settings.force_x11;
       gdkScale = settings.gdk_scale || '';
       gdkDpiScale = settings.gdk_dpi_scale || '';
@@ -934,7 +934,7 @@
     }).catch(() => {});
 
     // Load graphics startup status (for fallback warning)
-    invoke('get_graphics_startup_status').then((status: any) => {
+    invoke('v2_get_graphics_startup_status').then((status: any) => {
       graphicsUsingFallback = status.using_fallback;
       graphicsIsWayland = status.is_wayland;
       graphicsHasNvidia = status.has_nvidia;
@@ -1816,7 +1816,7 @@
     // Important for users with hardware sample rate limitations
     if (previousQuality !== quality) {
       try {
-        await invoke('clear_cache');
+        await invoke('v2_clear_cache');
         await loadCacheStats();
         showToast($t('settings.audio.qualityChangedCacheCleared'), 'success');
       } catch (err) {
@@ -1910,7 +1910,7 @@
       await setLocale(localeCode);
       // Clear artist cache to force refetch in new language
       try {
-        await invoke('clear_artist_cache');
+        await invoke('v2_clear_artist_cache');
         console.log('Artist cache cleared after language change');
       } catch (error) {
         console.error('Failed to clear artist cache:', error);
@@ -1924,7 +1924,7 @@
       localStorage.removeItem('qbz-locale');
       // Also clear artist cache
       try {
-        await invoke('clear_artist_cache');
+        await invoke('v2_clear_artist_cache');
         console.log('Artist cache cleared after language change');
       } catch (error) {
         console.error('Failed to clear artist cache:', error);
@@ -2003,7 +2003,7 @@
       pipewireSinks = sinks;
 
       // Load hardware audio status
-      const hwStatus = await invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null);
+      const hwStatus = await invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null);
       hardwareStatus = hwStatus;
 
       console.log('[Audio] PipeWire sinks:', sinks.map(s => ({ name: s.name, desc: s.description })));
@@ -2015,7 +2015,7 @@
 
   async function loadBackends() {
     try {
-      const backends = await invoke<BackendInfo[]>('get_available_backends');
+      const backends = await invoke<BackendInfo[]>('v2_get_available_backends');
       availableBackends = backends;
       console.log('[Audio] Available backends:', backends);
     } catch (err) {
@@ -2025,7 +2025,7 @@
 
   async function loadAlsaPlugins() {
     try {
-      const plugins = await invoke<AlsaPluginInfo[]>('get_alsa_plugins');
+      const plugins = await invoke<AlsaPluginInfo[]>('v2_get_alsa_plugins');
       alsaPlugins = plugins;
       console.log('[Audio] ALSA plugins:', plugins);
     } catch (err) {
@@ -2036,13 +2036,13 @@
   async function loadBackendDevices(backendType: 'PipeWire' | 'Alsa' | 'Pulse') {
     isLoadingDevices = true;
     try {
-      const devices = await invoke<AudioDevice[]>('get_devices_for_backend', { backendType });
+      const devices = await invoke<AudioDevice[]>('v2_get_devices_for_backend', { backendType });
       backendDevices = devices;
       console.log(`[Audio] Devices for ${backendType}:`, devices);
 
       // Fetch the name of the current default device for this backend
       try {
-        const name = await invoke<string | null>('get_default_device_name', { backendType });
+        const name = await invoke<string | null>('v2_get_default_device_name', { backendType });
         defaultDeviceName = name;
       } catch {
         defaultDeviceName = null;
@@ -2445,7 +2445,7 @@
 
   async function loadCacheStats() {
     try {
-      cacheStats = await invoke<CacheStats>('get_cache_stats');
+      cacheStats = await invoke<CacheStats>('v2_get_cache_stats');
     } catch (err) {
       console.error('Failed to load cache stats:', err);
     }
@@ -2500,7 +2500,7 @@
 
   async function loadTraySettings() {
     try {
-      const settings = await invoke<TraySettings>('get_tray_settings');
+      const settings = await invoke<TraySettings>('v2_get_tray_settings');
       enableTray = settings.enable_tray;
       minimizeToTray = settings.minimize_to_tray;
       closeToTray = settings.close_to_tray;
@@ -2511,7 +2511,7 @@
 
   async function handleEnableTrayChange(value: boolean) {
     try {
-      await invoke('set_enable_tray', { value });
+      await invoke('v2_set_enable_tray', { value });
       enableTray = value;
       showToast($t('settings.appearance.tray.enableTrayDesc'), 'info');
     } catch (err) {
@@ -2522,7 +2522,7 @@
 
   async function handleMinimizeToTrayChange(value: boolean) {
     try {
-      await invoke('set_minimize_to_tray', { value });
+      await invoke('v2_set_minimize_to_tray', { value });
       minimizeToTray = value;
     } catch (err) {
       console.error('Failed to set minimize to tray:', err);
@@ -2532,7 +2532,7 @@
 
   async function handleCloseToTrayChange(value: boolean) {
     try {
-      await invoke('set_close_to_tray', { value });
+      await invoke('v2_set_close_to_tray', { value });
       closeToTray = value;
     } catch (err) {
       console.error('Failed to set close to tray:', err);
@@ -2634,7 +2634,7 @@
     if (isClearing) return;
     isClearing = true;
     try {
-      await invoke('clear_cache');
+      await invoke('v2_clear_cache');
       await loadCacheStats();
     } catch (err) {
       console.error('Failed to clear cache:', err);
@@ -2682,7 +2682,7 @@
 
   async function loadVectorStoreStats() {
     try {
-      vectorStoreStats = await invoke('get_vector_store_stats');
+      vectorStoreStats = await invoke('v2_get_vector_store_stats');
     } catch (err) {
       console.error('Failed to load vector store stats:', err);
       vectorStoreStats = null;
@@ -2693,7 +2693,7 @@
     if (isClearingVectorStore) return;
     isClearingVectorStore = true;
     try {
-      await invoke('clear_vector_store');
+      await invoke('v2_clear_vector_store');
       console.log('Artist vector store cleared');
       await loadVectorStoreStats();
     } catch (err) {
@@ -2734,10 +2734,10 @@
     try {
       // Clear all caches in parallel
       await Promise.all([
-        invoke('clear_cache'),
+        invoke('v2_clear_cache'),
         clearLyricsCache(),
         invoke('musicbrainz_clear_cache'),
-        invoke('clear_vector_store'),
+        invoke('v2_clear_vector_store'),
         invoke('library_clear_artwork_cache'),
         invoke('library_clear_thumbnails_cache')
       ]);
@@ -2767,7 +2767,7 @@
     isResettingAudio = true;
     try {
       await invoke('v2_stop_playback');
-      await invoke('reset_audio_settings');
+      await invoke('v2_reset_audio_settings');
       // Reinit audio device (V2 only)
       await invoke('v2_reinit_audio_device', { device: null });
       // Reset all audio UI state to defaults
@@ -2826,7 +2826,7 @@
   async function handleGdkScaleChange() {
     try {
       const value = gdkScale.trim() || null;
-      await invoke('set_gdk_scale', { value });
+      await invoke('v2_set_gdk_scale', { value });
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {
       console.error('Failed to set gdk_scale:', err);
@@ -2837,7 +2837,7 @@
   async function handleGdkDpiScaleChange() {
     try {
       const value = gdkDpiScale.trim() || null;
-      await invoke('set_gdk_dpi_scale', { value });
+      await invoke('v2_set_gdk_dpi_scale', { value });
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {
       console.error('Failed to set gdk_dpi_scale:', err);
@@ -2847,7 +2847,7 @@
 
   async function handleHardwareAccelerationChange(enabled: boolean) {
     try {
-      await invoke('set_hardware_acceleration', { enabled });
+      await invoke('v2_set_hardware_acceleration', { enabled });
       hardwareAcceleration = enabled;
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {
@@ -2858,7 +2858,7 @@
 
   async function handleForceDmabufChange(enabled: boolean) {
     try {
-      await invoke('set_developer_force_dmabuf', { enabled });
+      await invoke('v2_set_developer_force_dmabuf', { enabled });
       forceDmabuf = enabled;
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {

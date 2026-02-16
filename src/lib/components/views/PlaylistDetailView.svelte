@@ -439,7 +439,7 @@
         return;
       }
 
-      const localIds = await invoke<number[]>('playlist_get_tracks_with_local_copies', {
+      const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
         trackIds: qobuzTrackIds
       });
       tracksWithLocalCopies = new Set(localIds);
@@ -526,7 +526,7 @@
         }
       } else {
         // Regular playlist - use existing command
-        const result = await invoke<PlaylistLocalTrack[]>('playlist_get_local_tracks_with_position', { playlistId });
+        const result = await invoke<PlaylistLocalTrack[]>('v2_playlist_get_local_tracks_with_position', { playlistId });
         localTracks = result;
         localTracksMap = new Map(result.map(trk => [trk.id, trk]));
       }
@@ -671,7 +671,7 @@
           const firstGroup = batches.slice(0, CONCURRENCY);
           const firstResults = await Promise.all(
             firstGroup.map(batch =>
-              invoke<PlaylistTrack[]>('get_tracks_batch', { trackIds: batch })
+              invoke<PlaylistTrack[]>('v2_get_tracks_batch', { trackIds: batch })
                 .catch(err => {
                   console.warn('[Perf] batch fetch failed:', err);
                   return [] as PlaylistTrack[];
@@ -715,7 +715,7 @@
 
                   const results = await Promise.all(
                     group.map((batch, idx) =>
-                      invoke<PlaylistTrack[]>('get_tracks_batch', { trackIds: batch })
+                      invoke<PlaylistTrack[]>('v2_get_tracks_batch', { trackIds: batch })
                         .catch(err => {
                           console.warn(`[Perf] batch ${g + idx} fetch failed:`, err);
                           failedBatches.push(batch);
@@ -753,7 +753,7 @@
                     if (playlistId !== currentPlaylistId) break;
 
                     try {
-                      const retryResult = await invoke<PlaylistTrack[]>('get_tracks_batch', { trackIds: batch });
+                      const retryResult = await invoke<PlaylistTrack[]>('v2_get_tracks_batch', { trackIds: batch });
                       if (retryResult.length > 0) {
                         const currentLen = tracks.length;
                         const newTracks = retryResult.map((apiTrack, idx) =>
@@ -827,7 +827,7 @@
     }
 
     try {
-      const settings = await invoke<PlaylistSettings | null>('playlist_get_settings', { playlistId });
+      const settings = await invoke<PlaylistSettings | null>('v2_playlist_get_settings', { playlistId });
       playlistSettings = settings;
       if (settings) {
         sortBy = (settings.sort_by as SortField) || 'default';
@@ -857,7 +857,7 @@
     }
 
     try {
-      const stats = await invoke<PlaylistStats | null>('playlist_get_stats', { playlistId });
+      const stats = await invoke<PlaylistStats | null>('v2_playlist_get_stats', { playlistId });
       playlistStats = stats;
     } catch (err) {
       console.error('Failed to load playlist stats:', err);
@@ -870,7 +870,7 @@
     const newValue = !isFavorite;
     isFavorite = newValue; // Optimistic update
     try {
-      await invoke('playlist_set_favorite', { playlistId, favorite: newValue });
+      await invoke('v2_playlist_set_favorite', { playlistId, favorite: newValue });
     } catch (err) {
       console.error('Failed to toggle favorite:', err);
       isFavorite = !newValue; // Revert on error
@@ -916,7 +916,7 @@
     }
 
     try {
-      await invoke('playlist_set_sort', { playlistId, sortBy, sortOrder });
+      await invoke('v2_playlist_set_sort', { playlistId, sortBy, sortOrder });
     } catch (err) {
       console.error('Failed to save sort settings:', err);
     }
@@ -929,11 +929,11 @@
     customOrderLoading = true;
     try {
       // Check if custom order exists
-      const hasOrder = await invoke<boolean>('playlist_has_custom_order', { playlistId });
+      const hasOrder = await invoke<boolean>('v2_playlist_has_custom_order', { playlistId });
 
       if (hasOrder) {
         // Load existing custom order
-        const orders = await invoke<[number, boolean, number][]>('playlist_get_custom_order', { playlistId });
+        const orders = await invoke<[number, boolean, number][]>('v2_playlist_get_custom_order', { playlistId });
         const newMap = new Map<string, number>();
         for (const [trackId, isLocal, position] of orders) {
           newMap.set(`${trackId}:${isLocal}`, position);
@@ -976,7 +976,7 @@
 
     // Save to backend
     try {
-      await invoke('playlist_init_custom_order', { playlistId, trackIds });
+      await invoke('v2_playlist_init_custom_order', { playlistId, trackIds });
 
       // Update local state
       const newMap = new Map<string, number>();
@@ -1018,7 +1018,7 @@
 
     // Persist to backend
     try {
-      await invoke('playlist_move_track', {
+      await invoke('v2_playlist_move_track', {
         playlistId,
         trackId: Math.abs(trackId),
         isLocal,
@@ -1153,7 +1153,7 @@
     // Save new order
     const orders: [number, boolean, number][] = currentOrder.map((item, pos) => [item.id, item.isLocal, pos]);
     try {
-      await invoke('playlist_set_custom_order', { playlistId, orders });
+      await invoke('v2_playlist_set_custom_order', { playlistId, orders });
       // Update local map
       const newMap = new Map<string, number>();
       orders.forEach(([id, isLocal, pos]) => {
@@ -1196,7 +1196,7 @@
     // Save new order
     const orders: [number, boolean, number][] = currentOrder.map((item, pos) => [item.id, item.isLocal, pos]);
     try {
-      await invoke('playlist_set_custom_order', { playlistId, orders });
+      await invoke('v2_playlist_set_custom_order', { playlistId, orders });
       // Update local map
       const newMap = new Map<string, number>();
       orders.forEach(([id, isLocal, pos]) => {
@@ -1216,7 +1216,7 @@
       });
       if (selected && typeof selected === 'string') {
         customArtworkPath = selected;
-        await invoke('playlist_set_artwork', { playlistId, artworkPath: selected });
+        await invoke('v2_playlist_set_artwork', { playlistId, artworkPath: selected });
       }
     } catch (err) {
       console.error('Failed to select artwork:', err);
@@ -1226,7 +1226,7 @@
   async function clearCustomArtwork() {
     customArtworkPath = null;
     try {
-      await invoke('playlist_set_artwork', { playlistId, artworkPath: null });
+      await invoke('v2_playlist_set_artwork', { playlistId, artworkPath: null });
     } catch (err) {
       console.error('Failed to clear artwork:', err);
     }
@@ -1545,7 +1545,7 @@
     try {
       if (track.isLocal && track.localTrackId) {
         // Remove local track
-        await invoke('playlist_remove_local_track', { playlistId, localTrackId: track.localTrackId });
+        await invoke('v2_playlist_remove_local_track', { playlistId, localTrackId: track.localTrackId });
         await loadLocalTracks();
         notifyParentOfCounts();
       } else if (track.playlistTrackId) {
@@ -1777,7 +1777,7 @@
       }
 
       // Increment play count
-      const stats = await invoke<PlaylistStats>('playlist_increment_play_count', { playlistId });
+      const stats = await invoke<PlaylistStats>('v2_playlist_increment_play_count', { playlistId });
       playlistStats = stats;
     } catch (err) {
       console.error('Failed to set queue:', err);

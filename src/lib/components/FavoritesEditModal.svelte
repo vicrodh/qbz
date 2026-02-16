@@ -147,7 +147,7 @@
         tab_order: tabOrder,
       };
 
-      const saved = await invoke<FavoritesPreferences>('save_favorites_preferences', { prefs });
+      const saved = await invoke<FavoritesPreferences>('v2_save_favorites_preferences', { prefs });
       onSave(saved);
       onClose();
     } catch (err) {

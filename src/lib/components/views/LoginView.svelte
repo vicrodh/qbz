@@ -190,7 +190,7 @@
         // Save credentials if "Remember me" is checked
         if (rememberMe) {
           try {
-            await invoke('save_credentials', { email, password });
+            await invoke('v2_save_credentials', { email, password });
             console.log('Credentials saved to keyring');
           } catch (saveErr) {
             console.error('Failed to save credentials:', saveErr);

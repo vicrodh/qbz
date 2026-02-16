@@ -18,7 +18,7 @@ export function initI18n() {
 
   // Set the API locale to match
   if (browser) {
-    invoke('set_api_locale', { locale: initialLocale }).catch((err) => {
+    invoke('v2_set_api_locale', { locale: initialLocale }).catch((err) => {
       console.warn('Failed to set API locale:', err);
     });
   }
@@ -36,7 +36,7 @@ export async function setLocale(newLocale: string) {
     localStorage.setItem('qbz-locale', newLocale);
     // Also update the API client locale
     try {
-      await invoke('set_api_locale', { locale: newLocale });
+      await invoke('v2_set_api_locale', { locale: newLocale });
     } catch (err) {
       console.warn('Failed to update API locale:', err);
     }

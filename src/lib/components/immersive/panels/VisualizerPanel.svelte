@@ -122,7 +122,7 @@
 
     // Enable backend
     try {
-      await invoke('set_visualizer_enabled', { enabled: true });
+      await invoke('v2_set_visualizer_enabled', { enabled: true });
       console.log('[Visualizer] Backend enabled');
     } catch (e) {
       console.error('[Visualizer] Failed to enable backend:', e);
@@ -228,7 +228,7 @@
     }
 
     try {
-      await invoke('set_visualizer_enabled', { enabled: false });
+      await invoke('v2_set_visualizer_enabled', { enabled: false });
       console.log('[Visualizer] Backend disabled');
     } catch (e) {
       console.error('[Visualizer] Failed to disable backend:', e);

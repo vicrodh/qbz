@@ -109,7 +109,7 @@
 
   async function fetchTags() {
     try {
-      const result = await invoke<PlaylistTag[]>('get_playlist_tags');
+      const result = await invoke<PlaylistTag[]>('v2_get_playlist_tags');
       tags = result;
     } catch (err) {
       console.error('Failed to fetch playlist tags:', err);

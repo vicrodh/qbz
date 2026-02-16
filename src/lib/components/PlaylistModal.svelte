@@ -259,7 +259,7 @@
         onClose();
       } else {
         // Create playlist normally via API
-        const newPlaylist = await invoke<Playlist>('create_playlist', {
+        const newPlaylist = await invoke<Playlist>('v2_create_playlist', {
           name: name.trim(),
           description: description.trim() || null,
           isPublic
@@ -293,7 +293,7 @@
 
     try {
       // Update playlist on Qobuz
-      const updatedPlaylist = await invoke<Playlist>('update_playlist', {
+      const updatedPlaylist = await invoke<Playlist>('v2_update_playlist', {
         playlistId: playlist.id,
         name: name.trim(),
         description: description.trim() || null,
@@ -301,7 +301,7 @@
       });
 
       // Update hidden status locally
-      await invoke('playlist_set_hidden', {
+      await invoke('v2_playlist_set_hidden', {
         playlistId: playlist.id,
         hidden
       });
@@ -422,7 +422,7 @@
 
         // Add local tracks at the end
         for (let i = 0; i < trackIds.length; i++) {
-          await invoke('playlist_add_local_track', {
+          await invoke('v2_playlist_add_local_track', {
             playlistId: selectedPlaylistId,
             localTrackId: trackIds[i],
             position: startPosition + i
@@ -530,7 +530,7 @@
       }
 
       // Online mode - create the playlist first
-      const newPlaylist = await invoke<Playlist>('create_playlist', {
+      const newPlaylist = await invoke<Playlist>('v2_create_playlist', {
         name: name.trim(),
         description: description.trim() || null,
         isPublic: false
@@ -541,7 +541,7 @@
         if (isLocalTracks) {
           // Add local tracks one by one
           for (let i = 0; i < trackIds.length; i++) {
-            await invoke('playlist_add_local_track', {
+            await invoke('v2_playlist_add_local_track', {
               playlistId: newPlaylist.id,
               localTrackId: trackIds[i],
               position: i
