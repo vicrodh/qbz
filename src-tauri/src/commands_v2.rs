@@ -20,6 +20,7 @@ use crate::artist_vectors::ArtistVectorStoreState;
 use crate::cache::AudioCache;
 use crate::api_cache::ApiCacheState;
 use crate::audio::{AlsaPlugin, AudioBackendType};
+use crate::cast::{AirPlayMetadata, AirPlayState, CastState, DlnaMetadata, DlnaState, MediaMetadata};
 use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
 use crate::config::developer_settings::{DeveloperSettings, DeveloperSettingsState};
 use crate::config::graphics_settings::{GraphicsSettings, GraphicsSettingsState, GraphicsStartupStatus};
@@ -28,7 +29,10 @@ use crate::config::playback_preferences::{AutoplayMode, PlaybackPreferencesState
 use crate::config::tray_settings::TraySettingsState;
 use crate::config::window_settings::WindowSettingsState;
 use crate::core_bridge::CoreBridgeState;
+use crate::library::{thumbnails, LibraryState, MetadataExtractor, get_artwork_cache_dir};
 use crate::offline_cache::OfflineCacheState;
+use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
+use crate::queue::QueueTrack;
 use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason, CommandRequirement};
 use crate::AppState;
 
@@ -1169,6 +1173,753 @@ pub fn v2_plex_cache_save_tracks(
 #[tauri::command]
 pub fn v2_plex_cache_clear() -> Result<(), String> {
     crate::plex::plex_cache_clear()
+}
+
+// ==================== Casting / Local Library Commands (V2 Native) ====================
+
+#[tauri::command]
+pub async fn v2_cast_start_discovery(state: State<'_, CastState>) -> Result<(), String> {
+    let mut discovery = state.discovery.lock().await;
+    discovery.start_discovery().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_cast_stop_discovery(state: State<'_, CastState>) -> Result<(), String> {
+    let mut discovery = state.discovery.lock().await;
+    discovery.stop_discovery().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_cast_connect(device_id: String, state: State<'_, CastState>) -> Result<(), String> {
+    let device = {
+        let discovery = state.discovery.lock().await;
+        discovery
+            .get_device(&device_id)
+            .ok_or_else(|| format!("Device not found: {}", device_id))?
+    };
+    state
+        .chromecast
+        .connect(device.ip.clone(), device.port)
+        .map_err(|e| e.to_string())?;
+    let mut connected = state.connected_device_ip.lock().await;
+    *connected = Some(device.ip);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_cast_disconnect(state: State<'_, CastState>) -> Result<(), String> {
+    state.chromecast.disconnect().map_err(|e| e.to_string())?;
+    let mut connected = state.connected_device_ip.lock().await;
+    *connected = None;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_cast_play_track(
+    track_id: u64,
+    metadata: MediaMetadata,
+    cast_state: State<'_, CastState>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    let stream_url = {
+        let client = app_state.client.read().await;
+        client
+            .get_stream_url_with_fallback(track_id, crate::api::models::Quality::HiRes)
+            .await
+            .map_err(|e| format!("Failed to get stream URL: {}", e))?
+    };
+
+    let content_type = stream_url.mime_type.clone();
+    let cache = app_state.audio_cache.clone();
+    let audio_data = if let Some(cached) = cache.get(track_id) {
+        cached.data
+    } else {
+        let data = download_audio(&stream_url.url).await?;
+        cache.insert(track_id, data.clone());
+        data
+    };
+
+    let target_ip = {
+        let connected = cast_state.connected_device_ip.lock().await;
+        connected.clone()
+    };
+
+    cast_state
+        .get_or_create_media_server()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let url = {
+        let mut server_guard = cast_state.media_server.lock().await;
+        let server = server_guard.as_mut().ok_or("Media server not initialized")?;
+        server.register_audio(track_id, audio_data, &content_type);
+        match target_ip.as_deref() {
+            Some(ip) => server.get_audio_url_for_target(track_id, ip),
+            None => server.get_audio_url(track_id),
+        }
+        .ok_or_else(|| "Failed to build media URL".to_string())?
+    };
+
+    cast_state
+        .chromecast
+        .load_media(url, content_type, metadata)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_cast_play(state: State<'_, CastState>) -> Result<(), String> {
+    state.chromecast.play().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_cast_pause(state: State<'_, CastState>) -> Result<(), String> {
+    state.chromecast.pause().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_cast_stop(state: State<'_, CastState>) -> Result<(), String> {
+    state.chromecast.stop().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_cast_seek(position_secs: f64, state: State<'_, CastState>) -> Result<(), String> {
+    state.chromecast.seek(position_secs).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_cast_set_volume(volume: f32, state: State<'_, CastState>) -> Result<(), String> {
+    state.chromecast.set_volume(volume).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_start_discovery(state: State<'_, DlnaState>) -> Result<(), String> {
+    let mut discovery = state.discovery.lock().await;
+    discovery.start_discovery().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_stop_discovery(state: State<'_, DlnaState>) -> Result<(), String> {
+    let mut discovery = state.discovery.lock().await;
+    discovery.stop_discovery().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_connect(device_id: String, state: State<'_, DlnaState>) -> Result<(), String> {
+    let device = {
+        let discovery = state.discovery.lock().await;
+        discovery
+            .get_device(&device_id)
+            .ok_or_else(|| format!("Device not found: {}", device_id))?
+    };
+    let connection = crate::cast::DlnaConnection::connect(device)
+        .await
+        .map_err(|e| e.to_string())?;
+    let mut state_connection = state.connection.lock().await;
+    *state_connection = Some(connection);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_disconnect(state: State<'_, DlnaState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    if let Some(conn) = connection.as_mut() {
+        conn.disconnect().map_err(|e| e.to_string())?;
+    }
+    *connection = None;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_play_track(
+    track_id: u64,
+    metadata: DlnaMetadata,
+    dlna_state: State<'_, DlnaState>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    let stream_url = {
+        let client = app_state.client.read().await;
+        client
+            .get_stream_url_with_fallback(track_id, crate::api::models::Quality::HiRes)
+            .await
+            .map_err(|e| format!("Failed to get stream URL: {}", e))?
+    };
+
+    let content_type = stream_url.mime_type.clone();
+    let cache = app_state.audio_cache.clone();
+    let audio_data = if let Some(cached) = cache.get(track_id) {
+        cached.data
+    } else {
+        let data = download_audio(&stream_url.url).await?;
+        cache.insert(track_id, data.clone());
+        data
+    };
+
+    let target_ip = {
+        let connection = dlna_state.connection.lock().await;
+        connection.as_ref().map(|conn| conn.device_ip().to_string())
+    };
+
+    dlna_state
+        .ensure_media_server()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let url = {
+        let mut server_guard = dlna_state.media_server.lock().await;
+        let server = server_guard.as_mut().ok_or("Media server not initialized")?;
+        server.register_audio(track_id, audio_data, &content_type);
+        match target_ip.as_deref() {
+            Some(ip) => server.get_audio_url_for_target(track_id, ip),
+            None => server.get_audio_url(track_id),
+        }
+        .ok_or_else(|| "Failed to build media URL".to_string())?
+    };
+
+    {
+        let mut connection = dlna_state.connection.lock().await;
+        let conn = connection.as_mut().ok_or("Not connected")?;
+        conn.load_media(&url, &metadata, &content_type)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    {
+        let mut connection = dlna_state.connection.lock().await;
+        let conn = connection.as_mut().ok_or("Not connected")?;
+        conn.play().await.map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_play(state: State<'_, DlnaState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    let conn = connection.as_mut().ok_or("Not connected")?;
+    conn.play().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_pause(state: State<'_, DlnaState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    let conn = connection.as_mut().ok_or("Not connected")?;
+    conn.pause().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_stop(state: State<'_, DlnaState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    let conn = connection.as_mut().ok_or("Not connected")?;
+    conn.stop().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_seek(position_secs: u64, state: State<'_, DlnaState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    let conn = connection.as_mut().ok_or("Not connected")?;
+    conn.seek(position_secs).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_set_volume(volume: f32, state: State<'_, DlnaState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    let conn = connection.as_mut().ok_or("Not connected")?;
+    conn.set_volume(volume).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_airplay_start_discovery(state: State<'_, AirPlayState>) -> Result<(), String> {
+    let mut discovery = state.discovery.lock().await;
+    discovery.start_discovery().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_airplay_stop_discovery(state: State<'_, AirPlayState>) -> Result<(), String> {
+    let mut discovery = state.discovery.lock().await;
+    discovery.stop_discovery().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_airplay_connect(
+    device_id: String,
+    state: State<'_, AirPlayState>,
+) -> Result<(), String> {
+    let device = {
+        let discovery = state.discovery.lock().await;
+        discovery
+            .get_device(&device_id)
+            .ok_or_else(|| format!("Device not found: {}", device_id))?
+    };
+    let connection = crate::cast::AirPlayConnection::connect(device).map_err(|e| e.to_string())?;
+    let mut state_connection = state.connection.lock().await;
+    *state_connection = Some(connection);
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_airplay_disconnect(state: State<'_, AirPlayState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    if let Some(conn) = connection.as_mut() {
+        conn.disconnect().map_err(|e| e.to_string())?;
+    }
+    *connection = None;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_airplay_load_media(
+    metadata: AirPlayMetadata,
+    state: State<'_, AirPlayState>,
+) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    let conn = connection.as_mut().ok_or("Not connected")?;
+    conn.load_media(metadata).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_airplay_play(state: State<'_, AirPlayState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    let conn = connection.as_mut().ok_or("Not connected")?;
+    conn.play().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_airplay_pause(state: State<'_, AirPlayState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    let conn = connection.as_mut().ok_or("Not connected")?;
+    conn.pause().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_airplay_stop(state: State<'_, AirPlayState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    let conn = connection.as_mut().ok_or("Not connected")?;
+    conn.stop().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_airplay_set_volume(volume: f32, state: State<'_, AirPlayState>) -> Result<(), String> {
+    let mut connection = state.connection.lock().await;
+    let conn = connection.as_mut().ok_or("Not connected")?;
+    conn.set_volume(volume).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_clear_offline_cache(
+    cache_state: State<'_, OfflineCacheState>,
+    library_state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let paths = {
+        let guard = cache_state.db.lock().await;
+        let db = guard.as_ref().ok_or("No active session - please log in")?;
+        db.clear_all()?
+    };
+    for path in paths {
+        let p = std::path::Path::new(&path);
+        if p.exists() {
+            let _ = std::fs::remove_file(p);
+        }
+    }
+
+    let cache_dir = cache_state.cache_dir.read().unwrap().clone();
+    let tracks_dir = cache_dir.join("tracks");
+    if tracks_dir.exists() {
+        if let Ok(entries) = std::fs::read_dir(&tracks_dir) {
+            for entry in entries.flatten() {
+                let _ = std::fs::remove_file(entry.path());
+            }
+        }
+    }
+
+    if let Ok(entries) = std::fs::read_dir(&cache_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+                if name != "tracks" && !name.ends_with(".db") && !name.ends_with(".db-journal") {
+                    let _ = std::fs::remove_dir_all(&path);
+                }
+            }
+        }
+    }
+
+    let guard = library_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.remove_all_qobuz_cached_tracks()
+        .map_err(|e| format!("Failed to remove cached tracks from library: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_library_remove_folder(
+    path: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.remove_folder(&path).map_err(|e| e.to_string())?;
+    db.delete_tracks_in_folder(&path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_library_clear_artwork_cache() -> Result<u64, String> {
+    let artwork_dir = get_artwork_cache_dir();
+    if !artwork_dir.exists() {
+        return Ok(0);
+    }
+    let mut cleared = 0u64;
+    if let Ok(entries) = std::fs::read_dir(&artwork_dir) {
+        for entry in entries.flatten() {
+            if let Ok(meta) = entry.metadata() {
+                if meta.is_file() {
+                    cleared += meta.len();
+                    let _ = std::fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+    Ok(cleared)
+}
+
+#[tauri::command]
+pub async fn v2_library_clear_thumbnails_cache() -> Result<u64, String> {
+    let size_before = thumbnails::get_cache_size().unwrap_or(0);
+    thumbnails::clear_thumbnails().map_err(|e| e.to_string())?;
+    Ok(size_before)
+}
+
+#[tauri::command]
+pub async fn v2_library_play_track(
+    track_id: i64,
+    library_state: State<'_, LibraryState>,
+    app_state: State<'_, AppState>,
+) -> Result<(), String> {
+    let track = {
+        let guard = library_state.db.lock().await;
+        let db = guard.as_ref().ok_or("No active session - please log in")?;
+        db.get_track(track_id)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "Track not found".to_string())?
+    };
+    let file_path = std::path::Path::new(&track.file_path);
+    if !file_path.exists() {
+        return Err(format!("File not found: {}", track.file_path));
+    }
+    let audio_data = std::fs::read(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+    app_state
+        .player
+        .play_data(audio_data, track_id as u64)
+        .map_err(|e| format!("Failed to play: {}", e))?;
+    if let Some(start_secs) = track.cue_start_secs {
+        let start_pos = start_secs as u64;
+        if start_pos > 0 {
+            tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+            app_state
+                .player
+                .seek(start_pos)
+                .map_err(|e| format!("Failed to seek: {}", e))?;
+        }
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_set_sort(
+    playlist_id: u64,
+    sort_by: String,
+    sort_order: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.update_playlist_sort(playlist_id, &sort_by, &sort_order)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_set_artwork(
+    playlist_id: u64,
+    artwork_path: Option<String>,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let final_path = if let Some(source_path) = artwork_path {
+        let artwork_dir = get_artwork_cache_dir();
+        let source = std::path::Path::new(&source_path);
+        if !source.exists() {
+            return Err(format!("Source image does not exist: {}", source_path));
+        }
+        let extension = source.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+        let filename = format!(
+            "playlist_{}_{}.{}",
+            playlist_id,
+            chrono::Utc::now().timestamp(),
+            extension
+        );
+        let dest_path = artwork_dir.join(filename);
+        std::fs::copy(source, &dest_path).map_err(|e| format!("Failed to copy artwork: {}", e))?;
+        Some(dest_path.to_string_lossy().to_string())
+    } else {
+        None
+    };
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.update_playlist_artwork(playlist_id, final_path.as_deref())
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_add_local_track(
+    playlist_id: u64,
+    local_track_id: i64,
+    position: i32,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.add_local_track_to_playlist(playlist_id, local_track_id, position)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_remove_local_track(
+    playlist_id: u64,
+    local_track_id: i64,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.remove_local_track_from_playlist(playlist_id, local_track_id)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_set_hidden(
+    playlist_id: u64,
+    hidden: bool,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.set_playlist_hidden(playlist_id, hidden)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_set_favorite(
+    playlist_id: u64,
+    favorite: bool,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.set_playlist_favorite(playlist_id, favorite)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_reorder(
+    playlist_ids: Vec<u64>,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.reorder_playlists(&playlist_ids).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_init_custom_order(
+    playlist_id: u64,
+    track_ids: Vec<(i64, bool)>,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.init_playlist_custom_order(playlist_id, &track_ids)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_set_custom_order(
+    playlist_id: u64,
+    orders: Vec<(i64, bool, i32)>,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.set_playlist_custom_order(playlist_id, &orders)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_move_track(
+    playlist_id: u64,
+    track_id: i64,
+    is_local: bool,
+    new_position: i32,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.move_playlist_track(playlist_id, track_id, is_local, new_position)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_library_set_album_artwork(
+    album_group_key: String,
+    artwork_path: String,
+    state: State<'_, LibraryState>,
+) -> Result<String, String> {
+    if album_group_key.is_empty() {
+        return Err("Album group key is required".to_string());
+    }
+    let source_path = std::path::Path::new(&artwork_path);
+    if !source_path.is_file() {
+        return Err("Artwork file not found".to_string());
+    }
+    let artwork_cache = get_artwork_cache_dir();
+    let cached_path = MetadataExtractor::cache_artwork_file(source_path, &artwork_cache)
+        .ok_or_else(|| "Failed to cache artwork file".to_string())?;
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.update_album_group_artwork(&album_group_key, &cached_path)
+        .map_err(|e| e.to_string())?;
+    Ok(cached_path)
+}
+
+#[tauri::command]
+pub async fn v2_library_set_album_hidden(
+    album_group_key: String,
+    hidden: bool,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.set_album_hidden(&album_group_key, hidden)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_create_track_radio(
+    track_id: u64,
+    track_name: String,
+    artist_id: u64,
+    state: State<'_, AppState>,
+    blacklist_state: State<'_, BlacklistState>,
+) -> Result<String, String> {
+    let client = state.client.read().await.clone();
+
+    let session_id = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+        let builder = crate::radio_engine::RadioPoolBuilder::new(
+            &radio_db,
+            &client,
+            crate::radio_engine::BuildRadioOptions::default(),
+        );
+        let rt = tokio::runtime::Handle::current();
+        let session = rt.block_on(builder.create_track_radio(track_id, artist_id))?;
+        Ok(session.id)
+    })
+    .await
+    .map_err(|e| format!("Radio task failed: {}", e))??;
+
+    let client = state.client.read().await;
+    let track_ids = tokio::task::spawn_blocking({
+        let session_id = session_id.clone();
+        let seed_track_id = track_id;
+        move || -> Result<Vec<u64>, String> {
+            let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+            let radio_engine = crate::radio_engine::RadioEngine::new(radio_db);
+            let mut tracks_with_source = Vec::new();
+            for _ in 0..60 {
+                match radio_engine.next_track(&session_id) {
+                    Ok(radio_track) => {
+                        tracks_with_source.push((radio_track.track_id, radio_track.source.clone()));
+                    }
+                    Err(_) => break,
+                }
+            }
+            if let Some(seed_idx) = tracks_with_source
+                .iter()
+                .position(|(id, source)| *id == seed_track_id && source == "seed_track")
+            {
+                if seed_idx != 0 {
+                    tracks_with_source.swap(0, seed_idx);
+                }
+            }
+            Ok(tracks_with_source
+                .into_iter()
+                .take(50)
+                .map(|(id, _)| id)
+                .collect())
+        }
+    })
+    .await
+    .map_err(|e| format!("Track generation task failed: {}", e))??;
+
+    let mut tracks = Vec::new();
+    for next_track_id in track_ids {
+        if let Ok(track) = client.get_track(next_track_id).await {
+            if let Some(ref performer) = track.performer {
+                if blacklist_state.is_blacklisted(performer.id) {
+                    continue;
+                }
+            }
+            tracks.push(track);
+        }
+    }
+
+    if tracks.is_empty() {
+        return Err("Failed to generate any radio tracks".to_string());
+    }
+
+    let queue_tracks: Vec<QueueTrack> = tracks.iter().map(track_to_queue_track_from_api).collect();
+    state.queue.set_queue(queue_tracks, Some(0));
+
+    let queue_track_ids: Vec<u64> = tracks.iter().map(|t| t.id).collect();
+    let context = PlaybackContext::new(
+        ContextType::Radio,
+        session_id.clone(),
+        track_name,
+        ContentSource::Qobuz,
+        queue_track_ids,
+        0,
+    );
+    state.context.set_context(context);
+
+    Ok(session_id)
+}
+
+fn track_to_queue_track_from_api(track: &crate::api::Track) -> QueueTrack {
+    let artwork_url = track.album.as_ref().and_then(|a| a.image.large.clone());
+    let artist = track
+        .performer
+        .as_ref()
+        .map(|p| p.name.clone())
+        .unwrap_or_else(|| "Unknown Artist".to_string());
+    let album = track
+        .album
+        .as_ref()
+        .map(|a| a.title.clone())
+        .unwrap_or_else(|| "Unknown Album".to_string());
+    let album_id = track.album.as_ref().map(|a| a.id.clone());
+    let artist_id = track.performer.as_ref().map(|p| p.id);
+
+    QueueTrack {
+        id: track.id,
+        title: track.title.clone(),
+        artist,
+        album,
+        duration_secs: track.duration as u64,
+        artwork_url,
+        hires: track.hires,
+        bit_depth: track.maximum_bit_depth,
+        sample_rate: track.maximum_sampling_rate,
+        is_local: false,
+        album_id,
+        artist_id,
+        streamable: track.streamable,
+        source: Some("qobuz".to_string()),
+    }
 }
 
 // ==================== Queue Commands (V2) ====================
