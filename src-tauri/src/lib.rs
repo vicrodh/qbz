@@ -1393,6 +1393,20 @@ pub fn run() {
             commands_v2::v2_plex_cache_get_tracks_needing_hydration,
             commands_v2::v2_plex_cache_clear,
             commands_v2::v2_plex_play_track,
+            // Playlist Additional V2
+            commands_v2::v2_playlist_get_settings,
+            commands_v2::v2_playlist_get_all_settings,
+            commands_v2::v2_playlist_get_stats,
+            commands_v2::v2_playlist_get_all_stats,
+            commands_v2::v2_playlist_increment_play_count,
+            commands_v2::v2_playlist_get_favorites,
+            commands_v2::v2_playlist_get_local_tracks,
+            commands_v2::v2_playlist_get_local_tracks_with_position,
+            commands_v2::v2_playlist_get_custom_order,
+            commands_v2::v2_playlist_has_custom_order,
+            commands_v2::v2_playlist_get_tracks_with_local_copies,
+            commands_v2::v2_playlist_import_preview,
+            commands_v2::v2_playlist_import_execute,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

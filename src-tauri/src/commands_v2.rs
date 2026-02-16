@@ -4668,3 +4668,149 @@ pub async fn v2_plex_play_track(
         .map_err(|e| RuntimeError::Internal(e))
 }
 
+// ============================================================================
+// Playlist Additional V2 Commands
+// ============================================================================
+
+/// Get playlist settings (V2)
+#[tauri::command]
+pub async fn v2_playlist_get_settings(
+    playlistId: u64,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<Option<crate::library::PlaylistSettings>, RuntimeError> {
+    log::info!("[V2] playlist_get_settings {}", playlistId);
+    crate::library::commands::playlist_get_settings(playlistId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get all playlist settings (V2)
+#[tauri::command]
+pub async fn v2_playlist_get_all_settings(
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<Vec<crate::library::PlaylistSettings>, RuntimeError> {
+    log::info!("[V2] playlist_get_all_settings");
+    crate::library::commands::playlist_get_all_settings(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get playlist stats (V2)
+#[tauri::command]
+pub async fn v2_playlist_get_stats(
+    playlistId: u64,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<Option<crate::library::PlaylistStats>, RuntimeError> {
+    log::info!("[V2] playlist_get_stats {}", playlistId);
+    crate::library::commands::playlist_get_stats(playlistId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get all playlist stats (V2)
+#[tauri::command]
+pub async fn v2_playlist_get_all_stats(
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<Vec<crate::library::PlaylistStats>, RuntimeError> {
+    log::info!("[V2] playlist_get_all_stats");
+    crate::library::commands::playlist_get_all_stats(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Increment playlist play count (V2)
+#[tauri::command]
+pub async fn v2_playlist_increment_play_count(
+    playlistId: u64,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<crate::library::PlaylistStats, RuntimeError> {
+    log::info!("[V2] playlist_increment_play_count {}", playlistId);
+    crate::library::commands::playlist_increment_play_count(playlistId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get favorite playlist IDs (V2)
+#[tauri::command]
+pub async fn v2_playlist_get_favorites(
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<Vec<u64>, RuntimeError> {
+    log::info!("[V2] playlist_get_favorites");
+    crate::library::commands::playlist_get_favorites(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get local tracks in playlist (V2)
+#[tauri::command]
+pub async fn v2_playlist_get_local_tracks(
+    playlistId: u64,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<Vec<crate::library::LocalTrack>, RuntimeError> {
+    log::info!("[V2] playlist_get_local_tracks {}", playlistId);
+    crate::library::commands::playlist_get_local_tracks(playlistId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get local tracks in playlist with positions (V2)
+#[tauri::command]
+pub async fn v2_playlist_get_local_tracks_with_position(
+    playlistId: u64,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<Vec<crate::library::PlaylistLocalTrack>, RuntimeError> {
+    log::info!("[V2] playlist_get_local_tracks_with_position {}", playlistId);
+    crate::library::commands::playlist_get_local_tracks_with_position(playlistId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get playlist custom order (V2)
+#[tauri::command]
+pub async fn v2_playlist_get_custom_order(
+    playlistId: u64,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<Vec<(i64, bool, i32)>, RuntimeError> {
+    log::info!("[V2] playlist_get_custom_order {}", playlistId);
+    crate::library::commands::playlist_get_custom_order(playlistId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Check if playlist has custom order (V2)
+#[tauri::command]
+pub async fn v2_playlist_has_custom_order(
+    playlistId: u64,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<bool, RuntimeError> {
+    log::info!("[V2] playlist_has_custom_order {}", playlistId);
+    crate::library::commands::playlist_has_custom_order(playlistId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get tracks with local copies (V2)
+#[tauri::command]
+pub async fn v2_playlist_get_tracks_with_local_copies(
+    trackIds: Vec<u64>,
+    state: tauri::State<'_, crate::library::commands::LibraryState>,
+) -> Result<Vec<u64>, RuntimeError> {
+    log::info!("[V2] playlist_get_tracks_with_local_copies count={}", trackIds.len());
+    crate::library::commands::playlist_get_tracks_with_local_copies(trackIds, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Playlist import preview (V2)
+#[tauri::command]
+pub async fn v2_playlist_import_preview(
+    url: String,
+) -> Result<crate::playlist_import::ImportPlaylist, RuntimeError> {
+    log::info!("[V2] playlist_import_preview {}", url);
+    crate::commands::playlist_import::playlist_import_preview(url).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Playlist import execute (V2)
+#[tauri::command]
+pub async fn v2_playlist_import_execute(
+    app: tauri::AppHandle,
+    url: String,
+    nameOverride: Option<String>,
+    isPublic: Option<bool>,
+    state: tauri::State<'_, crate::AppState>,
+) -> Result<crate::playlist_import::ImportSummary, RuntimeError> {
+    log::info!("[V2] playlist_import_execute {}", url);
+    crate::commands::playlist_import::playlist_import_execute(app, url, nameOverride, isPublic, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
