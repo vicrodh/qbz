@@ -3305,3 +3305,288 @@ pub async fn v2_uncache_favorite_artist(
     store.remove_favorite_artist(artistId)
         .map_err(|e| RuntimeError::Internal(e))
 }
+
+// ==================== Settings Commands (V2) ====================
+
+// -- Tray Settings --
+
+/// Get tray settings (V2)
+#[tauri::command]
+pub async fn v2_get_tray_settings(
+    state: State<'_, crate::config::tray_settings::TraySettingsState>,
+) -> Result<crate::config::tray_settings::TraySettings, RuntimeError> {
+    state.get_settings().map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set enable tray (V2)
+#[tauri::command]
+pub async fn v2_set_enable_tray(
+    value: bool,
+    state: State<'_, crate::config::tray_settings::TraySettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting enable_tray to {} (restart required)", value);
+    state.set_enable_tray(value).map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set minimize to tray (V2)
+#[tauri::command]
+pub async fn v2_set_minimize_to_tray(
+    value: bool,
+    state: State<'_, crate::config::tray_settings::TraySettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting minimize_to_tray to {}", value);
+    state.set_minimize_to_tray(value).map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set close to tray (V2)
+#[tauri::command]
+pub async fn v2_set_close_to_tray(
+    value: bool,
+    state: State<'_, crate::config::tray_settings::TraySettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting close_to_tray to {}", value);
+    state.set_close_to_tray(value).map_err(|e| RuntimeError::Internal(e))
+}
+
+// -- Graphics Settings --
+
+/// Get graphics settings (V2)
+#[tauri::command]
+pub async fn v2_get_graphics_settings(
+    state: State<'_, crate::config::graphics_settings::GraphicsSettingsState>,
+) -> Result<crate::config::graphics_settings::GraphicsSettings, RuntimeError> {
+    crate::config::graphics_settings::get_graphics_settings(state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set hardware acceleration (V2)
+#[tauri::command]
+pub async fn v2_set_hardware_acceleration(
+    enabled: bool,
+    state: State<'_, crate::config::graphics_settings::GraphicsSettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting hardware_acceleration to {}", enabled);
+    crate::config::graphics_settings::set_hardware_acceleration(state, enabled)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set GDK scale (V2)
+#[tauri::command]
+pub async fn v2_set_gdk_scale(
+    scale: Option<String>,
+    state: State<'_, crate::config::graphics_settings::GraphicsSettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting gdk_scale to {:?}", scale);
+    crate::config::graphics_settings::set_gdk_scale(state, scale)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set GDK DPI scale (V2)
+#[tauri::command]
+pub async fn v2_set_gdk_dpi_scale(
+    scale: Option<String>,
+    state: State<'_, crate::config::graphics_settings::GraphicsSettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting gdk_dpi_scale to {:?}", scale);
+    crate::config::graphics_settings::set_gdk_dpi_scale(state, scale)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get graphics startup status (V2)
+#[tauri::command]
+pub async fn v2_get_graphics_startup_status() -> Result<crate::config::graphics_settings::GraphicsStartupStatus, RuntimeError> {
+    Ok(crate::config::graphics_settings::get_graphics_startup_status())
+}
+
+// -- Window Settings --
+
+/// Get window settings (V2)
+#[tauri::command]
+pub async fn v2_get_window_settings(
+    state: State<'_, crate::config::window_settings::WindowSettingsState>,
+) -> Result<crate::config::window_settings::WindowSettings, RuntimeError> {
+    crate::config::window_settings::get_window_settings(state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set use system titlebar (V2)
+#[tauri::command]
+pub async fn v2_set_use_system_titlebar(
+    value: bool,
+    state: State<'_, crate::config::window_settings::WindowSettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting use_system_titlebar to {}", value);
+    crate::config::window_settings::set_use_system_titlebar(value, state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// -- Developer Settings --
+
+/// Get developer settings (V2)
+#[tauri::command]
+pub async fn v2_get_developer_settings(
+    state: State<'_, crate::config::developer_settings::DeveloperSettingsState>,
+) -> Result<crate::config::developer_settings::DeveloperSettings, RuntimeError> {
+    crate::config::developer_settings::get_developer_settings(state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set developer force DMABuf (V2)
+#[tauri::command]
+pub async fn v2_set_developer_force_dmabuf(
+    value: bool,
+    state: State<'_, crate::config::developer_settings::DeveloperSettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting force_dmabuf to {}", value);
+    crate::config::developer_settings::set_developer_force_dmabuf(state, value)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// -- Playback Preferences --
+
+/// Get playback preferences (V2)
+#[tauri::command]
+pub async fn v2_get_playback_preferences(
+    state: State<'_, crate::config::playback_preferences::PlaybackPreferencesState>,
+) -> Result<crate::config::playback_preferences::PlaybackPreferences, RuntimeError> {
+    crate::config::playback_preferences::get_playback_preferences(state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set autoplay mode (V2)
+#[tauri::command]
+pub async fn v2_set_autoplay_mode(
+    mode: String,
+    state: State<'_, crate::config::playback_preferences::PlaybackPreferencesState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting autoplay_mode to {}", mode);
+    crate::config::playback_preferences::set_autoplay_mode(mode, state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set show context icon (V2)
+#[tauri::command]
+pub async fn v2_set_show_context_icon(
+    value: bool,
+    state: State<'_, crate::config::playback_preferences::PlaybackPreferencesState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting show_context_icon to {}", value);
+    crate::config::playback_preferences::set_show_context_icon(value, state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// -- Favorites Preferences --
+
+/// Get favorites preferences (V2)
+#[tauri::command]
+pub async fn v2_get_favorites_preferences(
+    state: State<'_, crate::config::favorites_preferences::FavoritesPreferencesState>,
+) -> Result<crate::config::favorites_preferences::FavoritesPreferences, RuntimeError> {
+    crate::config::favorites_preferences::get_favorites_preferences(state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Save favorites preferences (V2)
+#[tauri::command]
+pub async fn v2_save_favorites_preferences(
+    prefs: crate::config::favorites_preferences::FavoritesPreferences,
+    state: State<'_, crate::config::favorites_preferences::FavoritesPreferencesState>,
+) -> Result<crate::config::favorites_preferences::FavoritesPreferences, RuntimeError> {
+    log::info!("[V2] Saving favorites preferences");
+    crate::config::favorites_preferences::save_favorites_preferences(prefs, state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// -- Visualizer --
+
+/// Set visualizer enabled (V2)
+#[tauri::command]
+pub async fn v2_set_visualizer_enabled(
+    enabled: bool,
+    app_state: State<'_, AppState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting visualizer_enabled to {}", enabled);
+    crate::commands::visualizer::set_visualizer_enabled(enabled, app_state)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// -- Blacklist --
+
+/// Get artist blacklist (V2)
+#[tauri::command]
+pub async fn v2_get_artist_blacklist(
+    state: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<Vec<crate::artist_blacklist::BlacklistedArtist>, RuntimeError> {
+    state.get_all().map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Add to artist blacklist (V2)
+#[tauri::command]
+pub async fn v2_add_to_artist_blacklist(
+    artistId: u64,
+    artistName: String,
+    notes: Option<String>,
+    state: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Adding artist {} to blacklist", artistId);
+    state.add(artistId, &artistName, notes.as_deref())
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Remove from artist blacklist (V2)
+#[tauri::command]
+pub async fn v2_remove_from_artist_blacklist(
+    artistId: u64,
+    state: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Removing artist {} from blacklist", artistId);
+    state.remove(artistId).map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Clear artist blacklist (V2)
+#[tauri::command]
+pub async fn v2_clear_artist_blacklist(
+    state: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Clearing artist blacklist");
+    state.clear_all().map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set blacklist enabled (V2)
+#[tauri::command]
+pub async fn v2_set_blacklist_enabled(
+    enabled: bool,
+    state: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting blacklist_enabled to {}", enabled);
+    state.set_enabled(enabled).map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get blacklist settings (V2)
+#[tauri::command]
+pub async fn v2_get_blacklist_settings(
+    state: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<crate::artist_blacklist::BlacklistSettings, RuntimeError> {
+    state.get_settings().map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get blacklist count (V2)
+#[tauri::command]
+pub async fn v2_get_blacklist_count(
+    state: State<'_, crate::artist_blacklist::BlacklistState>,
+) -> Result<usize, RuntimeError> {
+    Ok(state.count())
+}
+
+// -- API Locale --
+
+/// Set API locale (V2)
+#[tauri::command]
+pub async fn v2_set_api_locale(
+    locale: String,
+    app_state: State<'_, AppState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] Setting API locale to {}", locale);
+    crate::commands::auth::set_api_locale(locale, app_state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
