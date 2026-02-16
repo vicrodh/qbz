@@ -87,6 +87,10 @@ impl UserDataPaths {
     /// can be restored on next app launch (when "remember me" is active).
     pub fn save_last_user_id(user_id: u64) -> Result<(), String> {
         let path = Self::last_user_id_path()?;
+        if let Some(dir) = path.parent() {
+            std::fs::create_dir_all(dir)
+                .map_err(|e| format!("Failed to create global data directory: {}", e))?;
+        }
         std::fs::write(&path, user_id.to_string())
             .map_err(|e| format!("Failed to save last user id: {}", e))?;
         log::info!("Saved last_user_id={} to {:?}", user_id, path);
