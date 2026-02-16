@@ -550,6 +550,11 @@ export function setOnGaplessTransition(callback: (trackId: number) => Promise<vo
  * Handle playback event from backend
  */
 async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
+  const prevTrackId = currentTrack?.id ?? 0;
+  const prevDuration = duration;
+  const prevPosition = currentTime;
+  const prevWasPlaying = isPlaying;
+
   // Gapless transition: backend changed track_id because gapless playback advanced
   // Handle this BEFORE the external track change handler to prevent stale queue lookups
   const isGaplessTransition = event.track_id !== 0
@@ -617,6 +622,34 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
 
   if (!currentTrack) {
     console.log('[Player] No current track, ignoring event');
+    return;
+  }
+
+  // Fallback end-of-track detection:
+  // some backend paths can emit a terminal stop with track_id=0 instead of
+  // a final same-track frame at duration. Treat as natural end only when
+  // previous progress was already at the tail and playback was active.
+  if (
+    event.track_id === 0 &&
+    prevTrackId !== 0 &&
+    prevDuration > 0 &&
+    prevPosition >= prevDuration - 2 &&
+    !event.is_playing &&
+    prevWasPlaying &&
+    !isAdvancingTrack &&
+    !queueEnded &&
+    onTrackEnded
+  ) {
+    console.log('[Player] Track ended (fallback), advancing to next...');
+    isAdvancingTrack = true;
+
+    try {
+      await onTrackEnded();
+    } catch (err) {
+      console.error('[Player] Failed fallback auto-advance:', err);
+    } finally {
+      isAdvancingTrack = false;
+    }
     return;
   }
 

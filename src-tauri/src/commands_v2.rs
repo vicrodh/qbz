@@ -17,24 +17,28 @@ use qbz_models::{
 
 use crate::artist_blacklist::BlacklistState;
 use crate::artist_vectors::ArtistVectorStoreState;
-use crate::cache::AudioCache;
+use crate::cache::{AudioCache, CacheStats};
 use crate::api_cache::ApiCacheState;
-use crate::audio::{AlsaPlugin, AudioBackendType};
+use crate::audio::{AlsaPlugin, AudioBackendType, AudioDevice, BackendManager};
 use crate::cast::{AirPlayMetadata, AirPlayState, CastState, DlnaMetadata, DlnaState, MediaMetadata};
 use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
 use crate::config::developer_settings::{DeveloperSettings, DeveloperSettingsState};
+use crate::config::download_settings::DownloadSettingsState;
+use crate::config::favorites_preferences::FavoritesPreferences;
 use crate::config::graphics_settings::{GraphicsSettings, GraphicsSettingsState, GraphicsStartupStatus};
 use crate::config::legal_settings::LegalSettingsState;
-use crate::config::playback_preferences::{AutoplayMode, PlaybackPreferencesState};
+use crate::config::playback_preferences::{AutoplayMode, PlaybackPreferences, PlaybackPreferencesState};
+use crate::config::tray_settings::TraySettings;
 use crate::config::tray_settings::TraySettingsState;
 use crate::config::window_settings::WindowSettingsState;
 use crate::core_bridge::CoreBridgeState;
-use crate::library::{thumbnails, LibraryState, MetadataExtractor, get_artwork_cache_dir};
+use crate::library::{thumbnails, LibraryState, LocalAlbum, MetadataExtractor, PlaylistLocalTrack, PlaylistSettings, PlaylistStats, get_artwork_cache_dir};
 use crate::lyrics::LyricsState;
 use crate::musicbrainz::{CacheStats as MusicBrainzCacheStats, MusicBrainzSharedState};
 use crate::offline::OfflineState;
 use crate::offline_cache::OfflineCacheState;
 use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
+use crate::plex::{PlexMusicSection, PlexPlayResult, PlexServerInfo, PlexTrack};
 use crate::queue::QueueTrack;
 use crate::reco_store::{RecoEventInput, RecoState};
 use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason, CommandRequirement};
@@ -47,6 +51,23 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 // ==================== Helper Functions ====================
+
+/// Backend information for UI display
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct BackendInfo {
+    pub backend_type: AudioBackendType,
+    pub name: String,
+    pub description: String,
+    pub is_available: bool,
+}
+
+/// ALSA plugin information for UI display
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct AlsaPluginInfo {
+    pub plugin: AlsaPlugin,
+    pub name: String,
+    pub description: String,
+}
 
 /// Check that Qobuz ToS has been accepted before allowing login.
 ///
@@ -1032,7 +1053,13 @@ pub fn v2_set_enable_tray(
     value: bool,
     state: State<'_, TraySettingsState>,
 ) -> Result<(), String> {
-    state.set_enable_tray(value)
+    state.set_enable_tray(value)?;
+    // Mirror to global startup store so tray visibility on next launch
+    // is consistent even before session activation/runtime bootstrap.
+    if let Ok(global_store) = crate::config::tray_settings::TraySettingsStore::new() {
+        let _ = global_store.set_enable_tray(value);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -1065,6 +1092,109 @@ pub fn v2_set_show_context_icon(
     state: State<'_, PlaybackPreferencesState>,
 ) -> Result<(), String> {
     state.set_show_context_icon(show)
+}
+
+#[tauri::command]
+pub fn v2_get_playback_preferences(
+    state: State<'_, PlaybackPreferencesState>,
+) -> Result<PlaybackPreferences, String> {
+    state.get_preferences()
+}
+
+#[tauri::command]
+pub fn v2_get_tray_settings(
+    state: State<'_, TraySettingsState>,
+) -> Result<TraySettings, String> {
+    state.get_settings()
+}
+
+#[tauri::command]
+pub fn v2_get_favorites_preferences(
+    state: State<'_, crate::config::favorites_preferences::FavoritesPreferencesState>,
+) -> Result<FavoritesPreferences, String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|_| "Failed to lock favorites preferences store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.get_preferences()
+}
+
+#[tauri::command]
+pub fn v2_get_cache_stats(state: State<'_, AppState>) -> CacheStats {
+    state.audio_cache.stats()
+}
+
+#[tauri::command]
+pub fn v2_get_available_backends() -> Result<Vec<BackendInfo>, String> {
+    log::info!("Command: v2_get_available_backends");
+
+    let backends = BackendManager::available_backends();
+    let backend_infos: Vec<BackendInfo> = backends
+        .into_iter()
+        .map(|backend_type| {
+            let backend = BackendManager::create_backend(backend_type);
+            let (is_available, description) = match backend {
+                Ok(b) => (b.is_available(), b.description().to_string()),
+                Err(_) => (false, "Not available".to_string()),
+            };
+
+            let name = match backend_type {
+                AudioBackendType::PipeWire => "PipeWire",
+                AudioBackendType::Alsa => "ALSA Direct",
+                AudioBackendType::Pulse => "PulseAudio",
+            };
+
+            BackendInfo {
+                backend_type,
+                name: name.to_string(),
+                description,
+                is_available,
+            }
+        })
+        .collect();
+
+    Ok(backend_infos)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_get_devices_for_backend(
+    backendType: AudioBackendType,
+) -> Result<Vec<AudioDevice>, String> {
+    log::info!("Command: v2_get_devices_for_backend({:?})", backendType);
+    let backend = BackendManager::create_backend(backendType)?;
+    backend.enumerate_devices()
+}
+
+#[tauri::command]
+pub fn v2_get_alsa_plugins() -> Result<Vec<AlsaPluginInfo>, String> {
+    Ok(vec![
+        AlsaPluginInfo {
+            plugin: AlsaPlugin::Hw,
+            name: "hw (Direct Hardware)".to_string(),
+            description: "Bit-perfect, exclusive access, blocks device for other apps".to_string(),
+        },
+        AlsaPluginInfo {
+            plugin: AlsaPlugin::PlugHw,
+            name: "plughw (Plugin Hardware)".to_string(),
+            description: "Automatic format conversion, still relatively direct".to_string(),
+        },
+        AlsaPluginInfo {
+            plugin: AlsaPlugin::Pcm,
+            name: "pcm (Default)".to_string(),
+            description: "Generic ALSA device, most compatible".to_string(),
+        },
+    ])
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_plex_ping(
+    baseUrl: String,
+    token: String,
+) -> Result<PlexServerInfo, String> {
+    crate::plex::plex_ping(baseUrl, token).await
 }
 
 #[tauri::command]
@@ -1688,8 +1818,15 @@ pub async fn v2_library_clear_thumbnails_cache() -> Result<u64, String> {
 pub async fn v2_library_play_track(
     track_id: i64,
     library_state: State<'_, LibraryState>,
-    app_state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), String> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await
+        .map_err(|e| e.to_string())?;
+
     let track = {
         let guard = library_state.db.lock().await;
         let db = guard.as_ref().ok_or("No active session - please log in")?;
@@ -1702,16 +1839,17 @@ pub async fn v2_library_play_track(
         return Err(format!("File not found: {}", track.file_path));
     }
     let audio_data = std::fs::read(file_path).map_err(|e| format!("Failed to read file: {}", e))?;
-    app_state
-        .player
+    let bridge = bridge.get().await;
+    bridge
+        .player()
         .play_data(audio_data, track_id as u64)
         .map_err(|e| format!("Failed to play: {}", e))?;
     if let Some(start_secs) = track.cue_start_secs {
         let start_pos = start_secs as u64;
         if start_pos > 0 {
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-            app_state
-                .player
+            bridge
+                .player()
                 .seek(start_pos)
                 .map_err(|e| format!("Failed to seek: {}", e))?;
         }
@@ -2351,6 +2489,127 @@ pub async fn v2_library_get_cache_stats() -> Result<V2LibraryCacheStats, String>
         artwork_file_count: artwork_count,
         thumbnail_file_count: thumbnail_count,
     })
+}
+
+#[tauri::command]
+pub async fn v2_playlist_get_all_settings(
+    state: State<'_, LibraryState>,
+) -> Result<Vec<PlaylistSettings>, String> {
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.get_all_playlist_settings().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_get_favorites(
+    state: State<'_, LibraryState>,
+) -> Result<Vec<u64>, String> {
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.get_favorite_playlist_ids().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_get_local_tracks_with_position(
+    playlistId: u64,
+    state: State<'_, LibraryState>,
+) -> Result<Vec<PlaylistLocalTrack>, String> {
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.get_playlist_local_tracks_with_position(playlistId)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_get_settings(
+    playlistId: u64,
+    state: State<'_, LibraryState>,
+) -> Result<Option<PlaylistSettings>, String> {
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.get_playlist_settings(playlistId).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_get_stats(
+    playlistId: u64,
+    state: State<'_, LibraryState>,
+) -> Result<Option<PlaylistStats>, String> {
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.get_playlist_stats(playlistId).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_increment_play_count(
+    playlistId: u64,
+    state: State<'_, LibraryState>,
+) -> Result<PlaylistStats, String> {
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.increment_playlist_play_count(playlistId)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_library_get_albums(
+    include_hidden: Option<bool>,
+    exclude_network_folders: Option<bool>,
+    state: State<'_, LibraryState>,
+    download_settings_state: State<'_, DownloadSettingsState>,
+) -> Result<Vec<LocalAlbum>, String> {
+    let include_qobuz = download_settings_state
+        .lock()
+        .map_err(|e| format!("Failed to lock download settings: {}", e))?
+        .as_ref()
+        .and_then(|s| s.get_settings().ok())
+        .map(|s| s.show_in_library)
+        .unwrap_or(false);
+
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+
+    db.get_albums_with_full_filter(
+        include_hidden.unwrap_or(false),
+        include_qobuz,
+        exclude_network_folders.unwrap_or(false),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_plex_get_music_sections(
+    baseUrl: String,
+    token: String,
+) -> Result<Vec<PlexMusicSection>, String> {
+    crate::plex::plex_get_music_sections(baseUrl, token).await
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_plex_get_section_tracks(
+    baseUrl: String,
+    token: String,
+    sectionKey: String,
+    limit: Option<u32>,
+) -> Result<Vec<PlexTrack>, String> {
+    crate::plex::plex_get_section_tracks(baseUrl, token, sectionKey, limit).await
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_plex_play_track(
+    baseUrl: String,
+    token: String,
+    ratingKey: String,
+    app_state: State<'_, AppState>,
+) -> Result<PlexPlayResult, String> {
+    crate::plex::plex_play_track(baseUrl, token, ratingKey, app_state).await
 }
 
 #[tauri::command]
@@ -3059,8 +3318,8 @@ pub async fn v2_get_artist(
 #[allow(non_snake_case)]
 pub async fn v2_get_favorites(
     favType: String,
-    limit: u32,
-    offset: u32,
+    limit: Option<u32>,
+    offset: Option<u32>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<serde_json::Value, RuntimeError> {
@@ -3068,7 +3327,12 @@ pub async fn v2_get_favorites(
     runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     let bridge = bridge.get().await;
-    bridge.get_favorites(&favType, limit, offset).await.map_err(RuntimeError::Internal)
+    let resolved_limit = limit.unwrap_or(500);
+    let resolved_offset = offset.unwrap_or(0);
+    bridge
+        .get_favorites(&favType, resolved_limit, resolved_offset)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Add item to favorites (V2 - uses QbzCore)

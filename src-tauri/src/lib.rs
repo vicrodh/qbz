@@ -199,10 +199,29 @@ pub fn run() {
         audio_settings.preferred_sample_rate
     );
 
-    // Read tray settings from flat path once for tray initialization.
-    let tray_settings = config::tray_settings::TraySettingsStore::new()
-        .and_then(|store| store.get_settings())
-        .unwrap_or_default();
+    // Read tray settings for startup tray initialization.
+    // Prefer last active user-scoped settings, then fallback to global flat path.
+    let tray_settings = if let Some(last_uid) = user_data::UserDataPaths::load_last_user_id() {
+        let user_settings = dirs::data_dir()
+            .map(|d| d.join("qbz").join("users").join(last_uid.to_string()))
+            .and_then(|user_dir| {
+                config::tray_settings::TraySettingsStore::new_at(&user_dir)
+                    .and_then(|store| store.get_settings())
+                    .ok()
+            });
+        if let Some(settings) = user_settings {
+            log::info!("Loaded tray settings from last active user {}", last_uid);
+            settings
+        } else {
+            config::tray_settings::TraySettingsStore::new()
+                .and_then(|store| store.get_settings())
+                .unwrap_or_default()
+        }
+    } else {
+        config::tray_settings::TraySettingsStore::new()
+            .and_then(|store| store.get_settings())
+            .unwrap_or_default()
+    };
     log::info!(
         "Tray settings: enable={}, minimize_to_tray={}, close_to_tray={}",
         tray_settings.enable_tray,
@@ -361,8 +380,14 @@ pub fn run() {
             {
                 let core_bridge_arc = app.state::<core_bridge::CoreBridgeState>().0.clone();
                 let adapter = tauri_adapter::TauriAdapter::new(app.handle().clone());
+                let v1_viz_tap = app.state::<AppState>().visualizer.get_tap();
+                let v2_viz_tap = qbz_audio::VisualizerTap {
+                    ring_buffer: v1_viz_tap.ring_buffer.clone(),
+                    enabled: v1_viz_tap.enabled.clone(),
+                    sample_rate: v1_viz_tap.sample_rate.clone(),
+                };
                 tauri::async_runtime::spawn(async move {
-                    let bridge = core_bridge::CoreBridge::new(adapter).await;
+                    let bridge = core_bridge::CoreBridge::new(adapter, Some(v2_viz_tap)).await;
                     match bridge {
                         Ok(b) => {
                             // Store V2 player state for event loop
@@ -389,18 +414,15 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let legacy_player_state = app.state::<AppState>().player.state.clone();
 
-            std::thread::spawn(move || {
+            tauri::async_runtime::spawn(async move {
                 let mut last_position: u64 = 0;
                 let mut last_is_playing: bool = false;
                 let mut last_track_id: u64 = 0;
-                let rt = tokio::runtime::Handle::current();
 
                 loop {
                     // Check V2 player state first (takes priority if active)
-                    // V2 player is accessed via async lock, but we only need to check if it has a track
-                    let v2_state_opt: Option<qbz_player::SharedState> = rt.block_on(async {
-                        v2_player_state.read().await.clone()
-                    });
+                    // V2 player is accessed via async lock, but we only need a clone
+                    let v2_state_opt: Option<qbz_player::SharedState> = v2_player_state.read().await.clone();
 
                     // Determine which player is active (V2 takes priority if it has a track)
                     let (is_playing, track_id, position, duration, volume, sample_rate, bit_depth, normalization_gain, gapless_ready, gapless_next_track_id) =
@@ -452,17 +474,17 @@ pub fn run() {
                         };
 
                     // Adaptive polling:
-                    // - fast (500ms) when playing - balances UI responsiveness vs CPU
+                    // - fast (250ms) when playing - improves seekbar/lyrics sync
                     // - slow (1000ms) when paused/stopped with a track loaded
                     // - very slow (5000ms) when no track is loaded (idle)
                     let sleep_duration = if is_playing {
-                        std::time::Duration::from_millis(500)
+                        std::time::Duration::from_millis(250)
                     } else if track_id == 0 {
                         std::time::Duration::from_millis(5000)
                     } else {
                         std::time::Duration::from_millis(1000)
                     };
-                    std::thread::sleep(sleep_duration);
+                    tokio::time::sleep(sleep_duration).await;
 
                     // Only emit if state changed or position advanced
                     let should_emit = track_id != 0 && (
@@ -1146,8 +1168,19 @@ pub fn run() {
             commands_v2::v2_set_enable_tray,
             commands_v2::v2_set_minimize_to_tray,
             commands_v2::v2_set_close_to_tray,
+            commands_v2::v2_get_tray_settings,
             commands_v2::v2_set_autoplay_mode,
             commands_v2::v2_set_show_context_icon,
+            commands_v2::v2_get_playback_preferences,
+            commands_v2::v2_get_favorites_preferences,
+            commands_v2::v2_get_cache_stats,
+            commands_v2::v2_get_available_backends,
+            commands_v2::v2_get_devices_for_backend,
+            commands_v2::v2_get_alsa_plugins,
+            commands_v2::v2_plex_ping,
+            commands_v2::v2_plex_get_music_sections,
+            commands_v2::v2_plex_get_section_tracks,
+            commands_v2::v2_plex_play_track,
             commands_v2::v2_set_visualizer_enabled,
             commands_v2::v2_get_developer_settings,
             commands_v2::v2_set_developer_force_dmabuf,
@@ -1204,6 +1237,12 @@ pub fn run() {
             commands_v2::v2_library_play_track,
             commands_v2::v2_playlist_set_sort,
             commands_v2::v2_playlist_set_artwork,
+            commands_v2::v2_playlist_get_all_settings,
+            commands_v2::v2_playlist_get_favorites,
+            commands_v2::v2_playlist_get_local_tracks_with_position,
+            commands_v2::v2_playlist_get_settings,
+            commands_v2::v2_playlist_get_stats,
+            commands_v2::v2_playlist_increment_play_count,
             commands_v2::v2_playlist_add_local_track,
             commands_v2::v2_playlist_remove_local_track,
             commands_v2::v2_playlist_set_hidden,
@@ -1241,6 +1280,7 @@ pub fn run() {
             commands_v2::v2_reco_log_event,
             commands_v2::v2_reco_train_scores,
             commands_v2::v2_library_get_cache_stats,
+            commands_v2::v2_library_get_albums,
             commands_v2::v2_library_update_folder_path,
             commands_v2::v2_library_cache_artist_image,
             commands_v2::v2_library_set_custom_artist_image,

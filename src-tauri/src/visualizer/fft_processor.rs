@@ -12,8 +12,7 @@ use spectrum_analyzer::scaling::divide_by_N_sqrt;
 use spectrum_analyzer::windows::hann_window;
 use tauri::{AppHandle, Emitter};
 
-use super::ring_buffer::RingBuffer;
-use super::{NUM_BARS, FFT_SIZE, TARGET_FPS};
+use super::{NUM_BARS, FFT_SIZE, TARGET_FPS, RingBuffer};
 
 /// Shared state for the visualizer thread
 pub struct VisualizerState {

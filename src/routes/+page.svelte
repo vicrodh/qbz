@@ -224,6 +224,7 @@
     playTrack,
     checkTrackFavorite,
     toggleTrackFavorite,
+    loadSystemNotificationsPreference,
     showTrackNotification,
     updateLastfmNowPlaying,
     cleanup as cleanupPlayback
@@ -2366,6 +2367,7 @@
     // Set up per-user localStorage scoping and migrate old keys
     setStorageUserId(info.userId);
     migrateLocalStorage(info.userId);
+    loadSystemNotificationsPreference();
 
     // Re-sync volume from the now-correct user-scoped localStorage key
     await resyncPersistedVolume();

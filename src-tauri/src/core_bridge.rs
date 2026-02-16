@@ -17,7 +17,7 @@ use qbz_models::{
     QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{Player, PlaybackState};
-use qbz_audio::{AudioSettings, AudioDiagnostic, settings::AudioSettingsStore};
+use qbz_audio::{AudioSettings, AudioDiagnostic, VisualizerTap, settings::AudioSettingsStore};
 
 use crate::tauri_adapter::TauriAdapter;
 
@@ -35,7 +35,7 @@ impl CoreBridge {
     /// Loads audio settings from qbz_audio::AudioSettingsStore, creates a Player
     /// from qbz-player crate, and passes it to QbzCore.
     /// This is the V2 architecture - playback goes through QbzCore.
-    pub async fn new(adapter: TauriAdapter) -> Result<Self, String> {
+    pub async fn new(adapter: TauriAdapter, visualizer_tap: Option<VisualizerTap>) -> Result<Self, String> {
         // Load audio settings using qbz_audio store
         let (device_name, audio_settings) = AudioSettingsStore::new()
             .ok()
@@ -58,7 +58,7 @@ impl CoreBridge {
 
         // Create Player from qbz-player crate
         let diagnostic = AudioDiagnostic::new();
-        let player = Player::new(device_name, audio_settings, None, diagnostic);
+        let player = Player::new(device_name, audio_settings, visualizer_tap, diagnostic);
 
         // Create QbzCore with the player
         let core = QbzCore::new(adapter, player);
@@ -542,7 +542,7 @@ impl CoreBridgeState {
 
     /// Initialize the core bridge with the app handle
     pub async fn init(&self, adapter: TauriAdapter) -> Result<(), String> {
-        let bridge = CoreBridge::new(adapter).await?;
+        let bridge = CoreBridge::new(adapter, None).await?;
         *self.0.write().await = Some(bridge);
         Ok(())
     }

@@ -164,7 +164,8 @@ impl QueueManager {
 
         state.shuffle_order.clear();
         state.shuffle_position = 0;
-        state.history.clear();
+        // Keep playback history when clearing queue.
+        // UX expectation: "Clear queue" only affects current/upcoming queue items.
     }
 
     /// Remove a track by index
@@ -674,6 +675,27 @@ mod tests {
         assert_eq!(state.current_track.unwrap().id, 123);
         assert!(state.upcoming.is_empty());
         assert_eq!(state.total_tracks, 1);
+    }
+
+    #[test]
+    fn test_clear_preserves_history() {
+        let queue = QueueManager::new();
+
+        queue.add_track(create_test_track(123));
+        queue.add_track(create_test_track(124));
+        queue.add_track(create_test_track(125));
+        queue.play_index(0);
+        queue.next(); // push 123 into history, current becomes 124
+
+        let before = queue.get_state();
+        assert_eq!(before.history.len(), 1);
+        assert_eq!(before.history[0].id, 123);
+
+        queue.clear();
+
+        let after = queue.get_state();
+        assert_eq!(after.history.len(), 1);
+        assert_eq!(after.history[0].id, 123);
     }
 
     #[test]

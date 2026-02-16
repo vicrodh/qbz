@@ -449,10 +449,11 @@ pub async fn library_check_folder_accessible(path: String) -> Result<bool, Strin
         return Ok(false);
     }
 
-    // Try to read the directory with a timeout to avoid hanging on network paths
+    // Try to read the directory with a timeout to avoid hanging on network paths.
+    // Network shares can be slow to answer, so use a less aggressive timeout.
     let path_clone = path.clone();
     let check_result = tokio::time::timeout(
-        std::time::Duration::from_secs(2),
+        std::time::Duration::from_secs(6),
         tokio::task::spawn_blocking(move || {
             std::fs::read_dir(Path::new(&path_clone)).is_ok()
         })
@@ -465,8 +466,14 @@ pub async fn library_check_folder_accessible(path: String) -> Result<bool, Strin
             Ok(false)
         },
         Err(_) => {
-            log::warn!("Timeout checking folder accessibility (likely unreachable network path): {}", path);
-            Ok(false)
+            // If the folder still exists, treat it as accessible to avoid false negatives
+            // in mounted-but-slow network shares.
+            let exists = Path::new(&path).exists();
+            log::warn!(
+                "Timeout checking folder accessibility: {} (exists={})",
+                path, exists
+            );
+            Ok(exists)
         }
     }
 }

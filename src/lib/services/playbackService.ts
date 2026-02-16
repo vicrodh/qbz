@@ -132,21 +132,19 @@ export async function playTrack(
       console.log('[Gapless] Transition mode — skipping stop/play, updating metadata only');
       setIsPlaying(true);
     } else {
-      // For Qobuz tracks: stop current playback immediately and show buffering
-      // This prevents the previous track from continuing while we download
-      // Local tracks load instantly so they don't need this
-      if (!isLocal && !isCasting()) {
+      // Always stop local playback engine before starting a new local track.
+      // This prevents overlap when switching source types (qobuz/local/plex).
+      if (!isCasting()) {
         // Stop current playback immediately
         try {
           await invoke('v2_stop_playback');
         } catch {
           // Ignore errors - player might not be playing
         }
-        // Show buffering indicator
-        if (showLoadingToast) {
-          showToast(track.title, 'buffering');
-        }
-      } else if (showLoadingToast && !isLocal) {
+      }
+
+      // Show buffering indicator for network-backed playback.
+      if (showLoadingToast && !isLocal) {
         showToast(track.title, 'buffering');
       }
 

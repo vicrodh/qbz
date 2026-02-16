@@ -242,7 +242,8 @@ impl QueueManager {
 
         state.shuffle_order.clear();
         state.shuffle_position = 0;
-        state.history.clear();
+        // Keep playback history when clearing queue.
+        // UX expectation: "Clear queue" only affects current/upcoming queue items.
     }
 
     /// Remove a track by index

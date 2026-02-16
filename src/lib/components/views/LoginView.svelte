@@ -187,7 +187,7 @@
           return;
         }
 
-        // Save credentials if "Remember me" is checked
+        // Persist credential preference explicitly on each successful login
         if (rememberMe) {
           try {
             await invoke('v2_save_credentials', { email, password });
@@ -195,6 +195,13 @@
           } catch (saveErr) {
             console.error('Failed to save credentials:', saveErr);
             // Don't block login if saving fails
+          }
+        } else {
+          try {
+            await invoke('v2_clear_saved_credentials');
+            console.log('Saved credentials cleared (remember me disabled)');
+          } catch (clearErr) {
+            console.error('Failed to clear saved credentials:', clearErr);
           }
         }
 
