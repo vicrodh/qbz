@@ -4473,3 +4473,198 @@ pub fn v2_save_credentials(
         .map_err(|e| RuntimeError::Internal(e))
 }
 
+// ============================================================================
+// Plex V2 Commands
+// ============================================================================
+
+/// Plex ping (V2)
+#[tauri::command]
+pub async fn v2_plex_ping(
+    baseUrl: String,
+    token: String,
+) -> Result<crate::plex::PlexServerInfo, RuntimeError> {
+    log::info!("[V2] plex_ping");
+    crate::plex::plex_ping(baseUrl, token).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex get music sections (V2)
+#[tauri::command]
+pub async fn v2_plex_get_music_sections(
+    baseUrl: String,
+    token: String,
+) -> Result<Vec<crate::plex::PlexMusicSection>, RuntimeError> {
+    log::info!("[V2] plex_get_music_sections");
+    crate::plex::plex_get_music_sections(baseUrl, token).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex get section tracks (V2)
+#[tauri::command]
+pub async fn v2_plex_get_section_tracks(
+    baseUrl: String,
+    token: String,
+    sectionKey: String,
+    limit: Option<u32>,
+) -> Result<Vec<crate::plex::PlexTrack>, RuntimeError> {
+    log::info!("[V2] plex_get_section_tracks section={}", sectionKey);
+    crate::plex::plex_get_section_tracks(baseUrl, token, sectionKey, limit).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex get track metadata (V2)
+#[tauri::command]
+pub async fn v2_plex_get_track_metadata(
+    baseUrl: String,
+    token: String,
+    ratingKey: String,
+) -> Result<crate::plex::PlexTrack, RuntimeError> {
+    log::info!("[V2] plex_get_track_metadata rating_key={}", ratingKey);
+    crate::plex::plex_get_track_metadata(baseUrl, token, ratingKey).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex auth pin start (V2)
+#[tauri::command]
+pub async fn v2_plex_auth_pin_start(
+    clientIdentifier: String,
+) -> Result<crate::plex::PlexPinStartResult, RuntimeError> {
+    log::info!("[V2] plex_auth_pin_start");
+    crate::plex::plex_auth_pin_start(clientIdentifier).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex auth pin check (V2)
+#[tauri::command]
+pub async fn v2_plex_auth_pin_check(
+    clientIdentifier: String,
+    pinId: u64,
+    code: Option<String>,
+) -> Result<crate::plex::PlexPinCheckResult, RuntimeError> {
+    log::info!("[V2] plex_auth_pin_check pin_id={}", pinId);
+    crate::plex::plex_auth_pin_check(clientIdentifier, pinId, code).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex open auth URL (V2)
+#[tauri::command]
+pub async fn v2_plex_open_auth_url(
+    url: String,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] plex_open_auth_url");
+    crate::plex::plex_open_auth_url(url).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex cache get sections (V2)
+#[tauri::command]
+pub fn v2_plex_cache_get_sections() -> Result<Vec<crate::plex::PlexMusicSection>, RuntimeError> {
+    log::info!("[V2] plex_cache_get_sections");
+    crate::plex::plex_cache_get_sections()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex cache save sections (V2)
+#[tauri::command]
+pub fn v2_plex_cache_save_sections(
+    serverId: Option<String>,
+    sections: Vec<crate::plex::PlexMusicSection>,
+) -> Result<usize, RuntimeError> {
+    log::info!("[V2] plex_cache_save_sections count={}", sections.len());
+    crate::plex::plex_cache_save_sections(serverId, sections)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex cache get tracks (V2)
+#[tauri::command]
+pub fn v2_plex_cache_get_tracks(
+    sectionKey: Option<String>,
+    limit: Option<u32>,
+) -> Result<Vec<crate::plex::PlexTrack>, RuntimeError> {
+    log::info!("[V2] plex_cache_get_tracks section={:?}", sectionKey);
+    crate::plex::plex_cache_get_tracks(sectionKey, limit)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex cache get albums (V2)
+#[tauri::command]
+pub fn v2_plex_cache_get_albums() -> Result<Vec<crate::plex::PlexCachedAlbum>, RuntimeError> {
+    log::info!("[V2] plex_cache_get_albums");
+    crate::plex::plex_cache_get_albums()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex cache get album tracks (V2)
+#[tauri::command]
+pub fn v2_plex_cache_get_album_tracks(
+    albumKey: String,
+) -> Result<Vec<crate::plex::PlexCachedTrack>, RuntimeError> {
+    log::info!("[V2] plex_cache_get_album_tracks album={}", albumKey);
+    crate::plex::plex_cache_get_album_tracks(albumKey)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex cache search tracks (V2)
+#[tauri::command]
+pub fn v2_plex_cache_search_tracks(
+    query: String,
+    limit: Option<u32>,
+) -> Result<Vec<crate::plex::PlexCachedTrack>, RuntimeError> {
+    log::info!("[V2] plex_cache_search_tracks query={}", query);
+    crate::plex::plex_cache_search_tracks(query, limit)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex cache save tracks (V2)
+#[tauri::command]
+pub fn v2_plex_cache_save_tracks(
+    serverId: Option<String>,
+    sectionKey: String,
+    tracks: Vec<crate::plex::PlexTrack>,
+) -> Result<usize, RuntimeError> {
+    log::info!("[V2] plex_cache_save_tracks section={} count={}", sectionKey, tracks.len());
+    crate::plex::plex_cache_save_tracks(serverId, sectionKey, tracks)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex cache update track quality (V2)
+#[tauri::command]
+pub fn v2_plex_cache_update_track_quality(
+    updates: Vec<crate::plex::PlexTrackQualityUpdate>,
+) -> Result<usize, RuntimeError> {
+    log::info!("[V2] plex_cache_update_track_quality count={}", updates.len());
+    crate::plex::plex_cache_update_track_quality(updates)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex cache get tracks needing hydration (V2)
+#[tauri::command]
+pub fn v2_plex_cache_get_tracks_needing_hydration(
+    limit: Option<u32>,
+) -> Result<Vec<String>, RuntimeError> {
+    log::info!("[V2] plex_cache_get_tracks_needing_hydration");
+    crate::plex::plex_cache_get_tracks_needing_hydration(limit)
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex cache clear (V2)
+#[tauri::command]
+pub fn v2_plex_cache_clear() -> Result<(), RuntimeError> {
+    log::info!("[V2] plex_cache_clear");
+    crate::plex::plex_cache_clear()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Plex play track (V2)
+#[tauri::command]
+pub async fn v2_plex_play_track(
+    baseUrl: String,
+    token: String,
+    ratingKey: String,
+    appState: tauri::State<'_, crate::AppState>,
+) -> Result<crate::plex::PlexPlayResult, RuntimeError> {
+    log::info!("[V2] plex_play_track rating_key={}", ratingKey);
+    crate::plex::plex_play_track(baseUrl, token, ratingKey, appState).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+

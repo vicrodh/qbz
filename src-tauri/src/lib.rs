@@ -1374,6 +1374,25 @@ pub fn run() {
             commands_v2::v2_get_vector_store_stats,
             commands_v2::v2_clear_offline_cache,
             commands_v2::v2_clear_saved_credentials,
+            // Plex V2
+            commands_v2::v2_plex_ping,
+            commands_v2::v2_plex_get_music_sections,
+            commands_v2::v2_plex_get_section_tracks,
+            commands_v2::v2_plex_get_track_metadata,
+            commands_v2::v2_plex_auth_pin_start,
+            commands_v2::v2_plex_auth_pin_check,
+            commands_v2::v2_plex_open_auth_url,
+            commands_v2::v2_plex_cache_get_sections,
+            commands_v2::v2_plex_cache_save_sections,
+            commands_v2::v2_plex_cache_get_tracks,
+            commands_v2::v2_plex_cache_get_albums,
+            commands_v2::v2_plex_cache_get_album_tracks,
+            commands_v2::v2_plex_cache_search_tracks,
+            commands_v2::v2_plex_cache_save_tracks,
+            commands_v2::v2_plex_cache_update_track_quality,
+            commands_v2::v2_plex_cache_get_tracks_needing_hydration,
+            commands_v2::v2_plex_cache_clear,
+            commands_v2::v2_plex_play_track,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
