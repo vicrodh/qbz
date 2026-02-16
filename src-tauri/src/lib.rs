@@ -147,13 +147,6 @@ pub fn update_media_controls_metadata(
     media_controls.set_metadata(&track_info);
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-#[tauri::command]
-fn restart_app(app: tauri::AppHandle) {
-    log::info!("App restart requested by user");
-    app.restart();
-}
-
 pub fn run() {
     // Load .env file if present (for development)
     // Silently ignore if not found (production builds use compile-time env vars)
@@ -242,19 +235,11 @@ pub fn run() {
     // Initialize casting state (Chromecast, DLNA) — device-level, not per-user
     let cast_state = cast::CastState::new()
         .expect("Failed to initialize Chromecast state");
-    let dlna_state = cast::dlna::commands::DlnaState::new(cast_state.media_server.clone())
+    let dlna_state = cast::DlnaState::new(cast_state.media_server.clone())
         .expect("Failed to initialize DLNA state");
 
     // Initialize API server state for remote control (device-level)
     let api_server_state = api_server::ApiServerState::new();
-
-    // Initialize remote metadata state (device-level, uses its own MusicBrainz instance)
-    let remote_metadata_state = commands::RemoteMetadataSharedState {
-        inner: Arc::new(Mutex::new(library::remote_metadata::RemoteMetadataState::new(
-            Some(Arc::new(musicbrainz::MusicBrainzSharedState::new()
-                .expect("Failed to initialize MusicBrainz for remote metadata")))
-        ))),
-    };
 
     // ── Phase 2: Per-user states (empty until activate_user_session) ──
     let library_state = library::init_library_state_empty();
@@ -593,7 +578,6 @@ pub fn run() {
         .manage(updates_state)
         .manage(musicbrainz_state)
         .manage(listenbrainz_state)
-        .manage(remote_metadata_state)
         .manage(artist_vectors_state)
         .manage(blacklist_state)
         .manage(developer_settings_state)
