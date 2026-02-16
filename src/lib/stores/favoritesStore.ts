@@ -75,7 +75,7 @@ export async function loadFavorites(): Promise<void> {
   try {
     // Step 1: Load from local cache for instant UI (if available)
     try {
-      const cachedIds = await invoke<number[]>('get_cached_favorite_tracks');
+      const cachedIds = await invoke<number[]>('v2_get_cached_favorite_tracks');
       if (cachedIds.length > 0) {
         favoriteTrackIds = new Set(cachedIds);
         isLoaded = true;
@@ -132,7 +132,7 @@ export async function syncFromApi(): Promise<void> {
     }
 
     // Sync to local cache
-    await invoke('sync_cached_favorite_tracks', { trackIds: allTrackIds });
+    await invoke('v2_sync_cached_favorite_tracks', { trackIds: allTrackIds });
 
     // Update in-memory store
     favoriteTrackIds = new Set(allTrackIds);
@@ -169,7 +169,7 @@ export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
     if (newState) {
       await invoke('v2_add_favorite', { favType: 'track', itemId: String(trackId) });
       // API succeeded - update local cache
-      await invoke('cache_favorite_track', { trackId });
+      await invoke('v2_cache_favorite_track', { trackId });
       // Update in-memory store
       favoriteTrackIds.add(trackId);
       // Log for recommendations
@@ -181,7 +181,7 @@ export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
     } else {
       await invoke('v2_remove_favorite', { favType: 'track', itemId: String(trackId) });
       // API succeeded - update local cache
-      await invoke('uncache_favorite_track', { trackId });
+      await invoke('v2_uncache_favorite_track', { trackId });
       // Update in-memory store
       favoriteTrackIds.delete(trackId);
     }
@@ -234,7 +234,7 @@ export async function syncCache(trackIds: number[]): Promise<void> {
  */
 export async function reset(): Promise<void> {
   try {
-    await invoke('clear_favorites_cache');
+    await invoke('v2_clear_favorites_cache');
   } catch (err) {
     console.debug('[Favorites] Failed to clear cache:', err);
   }
@@ -250,7 +250,7 @@ export function markAsFavorite(trackId: number): void {
   if (!favoriteTrackIds.has(trackId)) {
     favoriteTrackIds.add(trackId);
     // Also update cache
-    invoke('cache_favorite_track', { trackId }).catch(() => {});
+    invoke('v2_cache_favorite_track', { trackId }).catch(() => {});
     notifyListeners();
   }
 }
@@ -259,7 +259,7 @@ export function unmarkAsFavorite(trackId: number): void {
   if (favoriteTrackIds.has(trackId)) {
     favoriteTrackIds.delete(trackId);
     // Also update cache
-    invoke('uncache_favorite_track', { trackId }).catch(() => {});
+    invoke('v2_uncache_favorite_track', { trackId }).catch(() => {});
     notifyListeners();
   }
 }

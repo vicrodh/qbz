@@ -46,7 +46,7 @@ export async function saveSessionState(
   wasPlaying: boolean
 ): Promise<void> {
   try {
-    await invoke('save_session_state', {
+    await invoke('v2_save_session_state', {
       queueTracks,
       currentIndex,
       currentPositionSecs,
@@ -66,7 +66,7 @@ export async function saveSessionState(
  */
 export async function loadSessionState(): Promise<PersistedSession | null> {
   try {
-    const session = await invoke<PersistedSession>('load_session_state');
+    const session = await invoke<PersistedSession>('v2_load_session_state');
     console.log('[Session] State loaded:', {
       tracks: session.queue_tracks.length,
       currentIndex: session.current_index,
@@ -85,7 +85,7 @@ export async function loadSessionState(): Promise<PersistedSession | null> {
  */
 export async function saveSessionPosition(positionSecs: number): Promise<void> {
   try {
-    await invoke('save_session_position', { positionSecs });
+    await invoke('v2_save_session_position', { positionSecs });
   } catch (err) {
     console.error('[Session] Failed to save position:', err);
   }
@@ -96,7 +96,7 @@ export async function saveSessionPosition(positionSecs: number): Promise<void> {
  */
 export async function saveSessionVolume(volume: number): Promise<void> {
   try {
-    await invoke('save_session_volume', { volume });
+    await invoke('v2_save_session_volume', { volume });
   } catch (err) {
     console.error('[Session] Failed to save volume:', err);
   }
@@ -110,7 +110,7 @@ export async function saveSessionPlaybackMode(
   repeatMode: string
 ): Promise<void> {
   try {
-    await invoke('save_session_playback_mode', { shuffle, repeatMode });
+    await invoke('v2_save_session_playback_mode', { shuffle, repeatMode });
   } catch (err) {
     console.error('[Session] Failed to save playback mode:', err);
   }
@@ -121,7 +121,7 @@ export async function saveSessionPlaybackMode(
  */
 export async function clearSession(): Promise<void> {
   try {
-    await invoke('clear_session');
+    await invoke('v2_clear_session');
     console.log('[Session] Session cleared');
   } catch (err) {
     console.error('[Session] Failed to clear session:', err);

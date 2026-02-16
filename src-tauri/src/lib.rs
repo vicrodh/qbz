@@ -1233,6 +1233,8 @@ pub fn run() {
             commands_v2::v2_clear_playback_context,
             commands_v2::v2_has_playback_context,
             // Session Persistence V2
+            commands_v2::v2_save_session_state,
+            commands_v2::v2_load_session_state,
             commands_v2::v2_save_session_position,
             commands_v2::v2_save_session_volume,
             commands_v2::v2_save_session_playback_mode,

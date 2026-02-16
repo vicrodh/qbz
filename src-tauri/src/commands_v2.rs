@@ -3065,6 +3065,52 @@ pub async fn v2_save_session_playback_mode(
         .map_err(|e| RuntimeError::Internal(e))
 }
 
+/// Save session state - full state (V2)
+#[tauri::command]
+pub async fn v2_save_session_state(
+    queueTracks: Vec<crate::session_store::PersistedQueueTrack>,
+    currentIndex: Option<usize>,
+    currentPositionSecs: u64,
+    volume: f32,
+    shuffleEnabled: bool,
+    repeatMode: String,
+    wasPlaying: bool,
+    session_state: State<'_, crate::session_store::SessionStoreState>,
+) -> Result<(), RuntimeError> {
+    let session = crate::session_store::PersistedSession {
+        queue_tracks: queueTracks,
+        current_index: currentIndex,
+        current_position_secs: currentPositionSecs,
+        volume,
+        shuffle_enabled: shuffleEnabled,
+        repeat_mode: repeatMode,
+        was_playing: wasPlaying,
+        saved_at: 0, // Will be set by save_session
+    };
+
+    let guard = session_state.store.lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.save_session(&session)
+        .map_err(|e| RuntimeError::Internal(e))?;
+    log::debug!("[V2] save_session_state: index={:?} pos={}", currentIndex, currentPositionSecs);
+    Ok(())
+}
+
+/// Load session state (V2)
+#[tauri::command]
+pub async fn v2_load_session_state(
+    session_state: State<'_, crate::session_store::SessionStoreState>,
+) -> Result<crate::session_store::PersistedSession, RuntimeError> {
+    let guard = session_state.store.lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.load_session()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
 /// Clear session (V2)
 #[tauri::command]
 pub async fn v2_clear_session(

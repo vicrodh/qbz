@@ -48,7 +48,7 @@ export async function setPlaybackContext(
 ): Promise<void> {
   console.log('[PlaybackContext] Setting context:', { contextType, id, label, trackIds: trackIds.length, startPosition });
   
-  await invoke('set_playback_context', {
+  await invoke('v2_set_playback_context', {
     contextType,
     id,
     label,
@@ -76,7 +76,7 @@ export async function setPlaybackContext(
  */
 export async function clearPlaybackContext(): Promise<void> {
   console.log('[PlaybackContext] Clearing context');
-  await invoke('clear_playback_context');
+  await invoke('v2_clear_playback_context');
   currentContext = null;
   console.log('[PlaybackContext] Context cleared, notifying listeners');
   notifyListeners();
@@ -86,7 +86,7 @@ export async function clearPlaybackContext(): Promise<void> {
  * Get the current playback context
  */
 export async function getPlaybackContext(): Promise<PlaybackContext | null> {
-  const context = await invoke<PlaybackContext | null>('get_playback_context');
+  const context = await invoke<PlaybackContext | null>('v2_get_playback_context');
   currentContext = context;
   notifyListeners();
   return context;
@@ -96,7 +96,7 @@ export async function getPlaybackContext(): Promise<PlaybackContext | null> {
  * Check if a context is active
  */
 export async function hasPlaybackContext(): Promise<boolean> {
-  return await invoke<boolean>('has_playback_context');
+  return await invoke<boolean>('v2_has_playback_context');
 }
 
 /**

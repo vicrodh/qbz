@@ -56,7 +56,7 @@ export async function loadAlbumFavorites(): Promise<void> {
   try {
     // Step 1: Load from local cache for instant UI
     try {
-      const cachedIds = await invoke<string[]>('get_cached_favorite_albums');
+      const cachedIds = await invoke<string[]>('v2_get_cached_favorite_albums');
       if (cachedIds.length > 0) {
         favoriteAlbumIds = new Set(cachedIds);
         isLoaded = true;
@@ -109,7 +109,7 @@ export async function syncFromApi(): Promise<void> {
     }
 
     // Sync to local cache
-    await invoke('sync_cached_favorite_albums', { albumIds: allAlbumIds });
+    await invoke('v2_sync_cached_favorite_albums', { albumIds: allAlbumIds });
 
     // Update in-memory store
     favoriteAlbumIds = new Set(allAlbumIds);
@@ -142,7 +142,7 @@ export async function toggleAlbumFavorite(albumId: string): Promise<boolean> {
   try {
     if (newState) {
       await invoke('v2_add_favorite', { favType: 'album', itemId: albumId });
-      await invoke('cache_favorite_album', { albumId });
+      await invoke('v2_cache_favorite_album', { albumId });
       favoriteAlbumIds.add(albumId);
       void logRecoEvent({
         eventType: 'favorite',
@@ -151,7 +151,7 @@ export async function toggleAlbumFavorite(albumId: string): Promise<boolean> {
       });
     } else {
       await invoke('v2_remove_favorite', { favType: 'album', itemId: albumId });
-      await invoke('uncache_favorite_album', { albumId });
+      await invoke('v2_uncache_favorite_album', { albumId });
       favoriteAlbumIds.delete(albumId);
     }
     return newState;
@@ -170,7 +170,7 @@ export async function toggleAlbumFavorite(albumId: string): Promise<boolean> {
  */
 export async function syncCache(albumIds: string[]): Promise<void> {
   try {
-    await invoke('sync_cached_favorite_albums', { albumIds });
+    await invoke('v2_sync_cached_favorite_albums', { albumIds });
     favoriteAlbumIds = new Set(albumIds);
     notifyListeners();
   } catch (err) {
@@ -181,7 +181,7 @@ export async function syncCache(albumIds: string[]): Promise<void> {
 export function markAsFavorite(albumId: string): void {
   if (!favoriteAlbumIds.has(albumId)) {
     favoriteAlbumIds.add(albumId);
-    invoke('cache_favorite_album', { albumId }).catch(() => {});
+    invoke('v2_cache_favorite_album', { albumId }).catch(() => {});
     notifyListeners();
   }
 }
@@ -189,7 +189,7 @@ export function markAsFavorite(albumId: string): void {
 export function unmarkAsFavorite(albumId: string): void {
   if (favoriteAlbumIds.has(albumId)) {
     favoriteAlbumIds.delete(albumId);
-    invoke('uncache_favorite_album', { albumId }).catch(() => {});
+    invoke('v2_uncache_favorite_album', { albumId }).catch(() => {});
     notifyListeners();
   }
 }
