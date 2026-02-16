@@ -3590,3 +3590,82 @@ pub async fn v2_set_api_locale(
     crate::commands::auth::set_api_locale(locale, app_state).await
         .map_err(|e| RuntimeError::Internal(e))
 }
+
+// ==================== Cache Management Commands (V2) ====================
+
+/// Get cache stats (V2)
+#[tauri::command]
+pub async fn v2_get_cache_stats(
+    app_state: State<'_, AppState>,
+) -> Result<crate::cache::CacheStats, RuntimeError> {
+    log::info!("[V2] get_cache_stats");
+    Ok(app_state.audio_cache.stats())
+}
+
+/// Clear audio cache (V2)
+#[tauri::command]
+pub async fn v2_clear_cache(
+    app_state: State<'_, AppState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] clear_cache");
+    app_state.audio_cache.clear();
+    Ok(())
+}
+
+/// Clear artist cache (V2)
+#[tauri::command]
+pub async fn v2_clear_artist_cache(
+    cache_state: State<'_, crate::api_cache::ApiCacheState>,
+) -> Result<usize, RuntimeError> {
+    log::info!("[V2] clear_artist_cache");
+    let guard = cache_state.cache.lock().await;
+    let cache = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    cache.clear_all_artists()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Clear vector store (V2)
+#[tauri::command]
+pub async fn v2_clear_vector_store(
+    store_state: State<'_, crate::artist_vectors::ArtistVectorStoreState>,
+) -> Result<usize, RuntimeError> {
+    log::info!("[V2] clear_vector_store");
+    let mut guard = store_state.store.lock().await;
+    let store = guard.as_mut()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.clear_all()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get vector store stats (V2)
+#[tauri::command]
+pub async fn v2_get_vector_store_stats(
+    store_state: State<'_, crate::artist_vectors::ArtistVectorStoreState>,
+) -> Result<crate::artist_vectors::StoreStats, RuntimeError> {
+    log::info!("[V2] get_vector_store_stats");
+    let guard = store_state.store.lock().await;
+    let store = guard.as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
+    store.get_stats()
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Clear offline cache (V2)
+#[tauri::command]
+pub async fn v2_clear_offline_cache(
+    cache_state: State<'_, crate::offline_cache::OfflineCacheState>,
+    library_state: State<'_, crate::library::commands::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] clear_offline_cache");
+    crate::offline_cache::commands::clear_offline_cache(cache_state, library_state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Clear saved credentials (V2)
+#[tauri::command]
+pub async fn v2_clear_saved_credentials() -> Result<(), RuntimeError> {
+    log::info!("[V2] clear_saved_credentials");
+    crate::commands::auth::clear_saved_credentials()
+        .map_err(|e| RuntimeError::Internal(e))
+}

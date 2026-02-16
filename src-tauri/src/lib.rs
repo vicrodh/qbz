@@ -1281,6 +1281,14 @@ pub fn run() {
             commands_v2::v2_get_blacklist_settings,
             commands_v2::v2_get_blacklist_count,
             commands_v2::v2_set_api_locale,
+            // Cache Management V2
+            commands_v2::v2_get_cache_stats,
+            commands_v2::v2_clear_cache,
+            commands_v2::v2_clear_artist_cache,
+            commands_v2::v2_clear_vector_store,
+            commands_v2::v2_get_vector_store_stats,
+            commands_v2::v2_clear_offline_cache,
+            commands_v2::v2_clear_saved_credentials,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
