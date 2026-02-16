@@ -3796,3 +3796,415 @@ pub async fn v2_playlist_move_track(
     crate::library::commands::playlist_move_track(playlistId, trackId, isLocal, newPosition, state).await
         .map_err(|e| RuntimeError::Internal(e))
 }
+
+// ============================================================================
+// Cast / DLNA / AirPlay V2 Commands
+// ============================================================================
+
+// === Chromecast V2 ===
+
+/// Start Chromecast discovery (V2)
+#[tauri::command]
+pub async fn v2_cast_start_discovery(
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_start_discovery");
+    crate::cast::commands::cast_start_discovery(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Stop Chromecast discovery (V2)
+#[tauri::command]
+pub async fn v2_cast_stop_discovery(
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_stop_discovery");
+    crate::cast::commands::cast_stop_discovery(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get discovered Chromecast devices (V2)
+#[tauri::command]
+pub async fn v2_cast_get_devices(
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<Vec<crate::cast::DiscoveredDevice>, RuntimeError> {
+    log::info!("[V2] cast_get_devices");
+    crate::cast::commands::cast_get_devices(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Connect to Chromecast device (V2)
+#[tauri::command]
+pub async fn v2_cast_connect(
+    deviceId: String,
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_connect {}", deviceId);
+    crate::cast::commands::cast_connect(deviceId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Disconnect from Chromecast (V2)
+#[tauri::command]
+pub async fn v2_cast_disconnect(
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_disconnect");
+    crate::cast::commands::cast_disconnect(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get Chromecast status (V2)
+#[tauri::command]
+pub async fn v2_cast_get_status(
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<crate::cast::CastStatus, RuntimeError> {
+    crate::cast::commands::cast_get_status(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get Chromecast position (V2)
+#[tauri::command]
+pub async fn v2_cast_get_position(
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<crate::cast::CastPositionInfo, RuntimeError> {
+    crate::cast::commands::cast_get_position(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Play track on Chromecast (V2)
+#[tauri::command]
+pub async fn v2_cast_play_track(
+    trackId: u64,
+    metadata: crate::cast::MediaMetadata,
+    state: State<'_, crate::cast::commands::CastState>,
+    appState: State<'_, crate::AppState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_play_track {}", trackId);
+    crate::cast::commands::cast_play_track(trackId, metadata, state, appState).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Play local track on Chromecast (V2)
+#[tauri::command]
+pub async fn v2_cast_play_local_track(
+    trackId: i64,
+    state: State<'_, crate::cast::commands::CastState>,
+    libraryState: State<'_, crate::library::LibraryState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_play_local_track {}", trackId);
+    crate::cast::commands::cast_play_local_track(trackId, state, libraryState).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Play on Chromecast (V2)
+#[tauri::command]
+pub async fn v2_cast_play(
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_play");
+    crate::cast::commands::cast_play(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Pause Chromecast (V2)
+#[tauri::command]
+pub async fn v2_cast_pause(
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_pause");
+    crate::cast::commands::cast_pause(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Stop Chromecast (V2)
+#[tauri::command]
+pub async fn v2_cast_stop(
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_stop");
+    crate::cast::commands::cast_stop(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Seek on Chromecast (V2)
+#[tauri::command]
+pub async fn v2_cast_seek(
+    positionSecs: f64,
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_seek {}", positionSecs);
+    crate::cast::commands::cast_seek(positionSecs, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set Chromecast volume (V2)
+#[tauri::command]
+pub async fn v2_cast_set_volume(
+    volume: f32,
+    state: State<'_, crate::cast::commands::CastState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] cast_set_volume {}", volume);
+    crate::cast::commands::cast_set_volume(volume, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// === DLNA V2 ===
+
+/// Start DLNA discovery (V2)
+#[tauri::command]
+pub async fn v2_dlna_start_discovery(
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] dlna_start_discovery");
+    crate::cast::dlna::commands::dlna_start_discovery(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Stop DLNA discovery (V2)
+#[tauri::command]
+pub async fn v2_dlna_stop_discovery(
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] dlna_stop_discovery");
+    crate::cast::dlna::commands::dlna_stop_discovery(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get discovered DLNA devices (V2)
+#[tauri::command]
+pub async fn v2_dlna_get_devices(
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<Vec<crate::cast::dlna::DiscoveredDlnaDevice>, RuntimeError> {
+    log::info!("[V2] dlna_get_devices");
+    crate::cast::dlna::commands::dlna_get_devices(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Connect to DLNA device (V2)
+#[tauri::command]
+pub async fn v2_dlna_connect(
+    deviceId: String,
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] dlna_connect {}", deviceId);
+    crate::cast::dlna::commands::dlna_connect(deviceId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Disconnect from DLNA device (V2)
+#[tauri::command]
+pub async fn v2_dlna_disconnect(
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] dlna_disconnect");
+    crate::cast::dlna::commands::dlna_disconnect(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get DLNA status (V2)
+#[tauri::command]
+pub async fn v2_dlna_get_status(
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<crate::cast::dlna::DlnaStatus, RuntimeError> {
+    crate::cast::dlna::commands::dlna_get_status(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get DLNA position (V2)
+#[tauri::command]
+pub async fn v2_dlna_get_position(
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<crate::cast::dlna::DlnaPositionInfo, RuntimeError> {
+    crate::cast::dlna::commands::dlna_get_position(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Play track on DLNA device (V2)
+#[tauri::command]
+pub async fn v2_dlna_play_track(
+    trackId: u64,
+    metadata: crate::cast::dlna::DlnaMetadata,
+    dlnaState: State<'_, crate::cast::dlna::commands::DlnaState>,
+    appState: State<'_, crate::AppState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] dlna_play_track {}", trackId);
+    crate::cast::dlna::commands::dlna_play_track(trackId, metadata, dlnaState, appState).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Load media on DLNA (stub) (V2)
+#[tauri::command]
+pub async fn v2_dlna_load_media(
+    metadata: crate::cast::dlna::DlnaMetadata,
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<(), RuntimeError> {
+    crate::cast::dlna::commands::dlna_load_media(metadata, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Play on DLNA (V2)
+#[tauri::command]
+pub async fn v2_dlna_play(
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] dlna_play");
+    crate::cast::dlna::commands::dlna_play(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Pause DLNA (V2)
+#[tauri::command]
+pub async fn v2_dlna_pause(
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] dlna_pause");
+    crate::cast::dlna::commands::dlna_pause(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Stop DLNA (V2)
+#[tauri::command]
+pub async fn v2_dlna_stop(
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] dlna_stop");
+    crate::cast::dlna::commands::dlna_stop(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Seek DLNA (V2)
+#[tauri::command]
+pub async fn v2_dlna_seek(
+    positionSecs: u64,
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] dlna_seek {}", positionSecs);
+    crate::cast::dlna::commands::dlna_seek(positionSecs, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set DLNA volume (V2)
+#[tauri::command]
+pub async fn v2_dlna_set_volume(
+    volume: f32,
+    state: State<'_, crate::cast::dlna::commands::DlnaState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] dlna_set_volume {}", volume);
+    crate::cast::dlna::commands::dlna_set_volume(volume, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+// === AirPlay V2 ===
+
+/// Start AirPlay discovery (V2)
+#[tauri::command]
+pub async fn v2_airplay_start_discovery(
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] airplay_start_discovery");
+    crate::cast::airplay::commands::airplay_start_discovery(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Stop AirPlay discovery (V2)
+#[tauri::command]
+pub async fn v2_airplay_stop_discovery(
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] airplay_stop_discovery");
+    crate::cast::airplay::commands::airplay_stop_discovery(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get discovered AirPlay devices (V2)
+#[tauri::command]
+pub async fn v2_airplay_get_devices(
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<Vec<crate::cast::airplay::DiscoveredAirPlayDevice>, RuntimeError> {
+    log::info!("[V2] airplay_get_devices");
+    crate::cast::airplay::commands::airplay_get_devices(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Connect to AirPlay device (V2)
+#[tauri::command]
+pub async fn v2_airplay_connect(
+    deviceId: String,
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] airplay_connect {}", deviceId);
+    crate::cast::airplay::commands::airplay_connect(deviceId, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Disconnect from AirPlay device (V2)
+#[tauri::command]
+pub async fn v2_airplay_disconnect(
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] airplay_disconnect");
+    crate::cast::airplay::commands::airplay_disconnect(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Get AirPlay status (V2)
+#[tauri::command]
+pub async fn v2_airplay_get_status(
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<crate::cast::airplay::AirPlayStatus, RuntimeError> {
+    crate::cast::airplay::commands::airplay_get_status(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Load media on AirPlay (V2)
+#[tauri::command]
+pub async fn v2_airplay_load_media(
+    metadata: crate::cast::airplay::AirPlayMetadata,
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] airplay_load_media");
+    crate::cast::airplay::commands::airplay_load_media(metadata, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Play on AirPlay (V2)
+#[tauri::command]
+pub async fn v2_airplay_play(
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] airplay_play");
+    crate::cast::airplay::commands::airplay_play(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Pause AirPlay (V2)
+#[tauri::command]
+pub async fn v2_airplay_pause(
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] airplay_pause");
+    crate::cast::airplay::commands::airplay_pause(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Stop AirPlay (V2)
+#[tauri::command]
+pub async fn v2_airplay_stop(
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] airplay_stop");
+    crate::cast::airplay::commands::airplay_stop(state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Set AirPlay volume (V2)
+#[tauri::command]
+pub async fn v2_airplay_set_volume(
+    volume: f32,
+    state: State<'_, crate::cast::airplay::commands::AirPlayState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] airplay_set_volume {}", volume);
+    crate::cast::airplay::commands::airplay_set_volume(volume, state).await
+        .map_err(|e| RuntimeError::Internal(e))
+}
