@@ -85,7 +85,7 @@
   // Load local track counts
   async function loadLocalTrackCounts() {
     try {
-      const counts = await invoke<Record<string, number>>('playlist_get_all_local_track_counts');
+      const counts = await invoke<Record<string, number>>('v2_playlist_get_all_local_track_counts');
       const map = new Map<number, number>();
       for (const [id, count] of Object.entries(counts)) {
         map.set(Number(id), count);
@@ -401,7 +401,7 @@
         let localTrackPaths: string[] = [];
         if (isLocalTracks && trackIds.length > 0) {
           // Fetch tracks to get their file paths
-          const tracks = await invoke<Array<{ id: number; file_path: string }>>('library_get_tracks_by_ids', {
+          const tracks = await invoke<Array<{ id: number; file_path: string }>>('v2_library_get_tracks_by_ids', {
             trackIds
           });
           localTrackPaths = tracks.map(track => track.file_path);
@@ -502,7 +502,7 @@
         let localTrackPaths: string[] = [];
         if (isLocalTracks && trackIds.length > 0) {
           // Fetch tracks to get their file paths
-          const tracks = await invoke<Array<{ id: number; file_path: string }>>('library_get_tracks_by_ids', {
+          const tracks = await invoke<Array<{ id: number; file_path: string }>>('v2_library_get_tracks_by_ids', {
             trackIds
           });
           localTrackPaths = tracks.map(track => track.file_path);

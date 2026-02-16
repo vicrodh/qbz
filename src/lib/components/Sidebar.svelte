@@ -1099,7 +1099,7 @@
       if (isOffline) {
         // In offline mode, show only pending playlists (created offline)
         console.log('[Sidebar] Loading pending playlists in offline mode');
-        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists');
+        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('v2_get_pending_playlists');
 
         // Store pending playlists metadata and populate localTrackCounts
         const newPendingMap = new Map<number, import('$lib/stores/offlineStore').PendingPlaylist>();
@@ -1161,7 +1161,7 @@
 
   async function loadLocalTrackCounts() {
     try {
-      const counts = await invoke<Record<string, number>>('playlist_get_all_local_track_counts');
+      const counts = await invoke<Record<string, number>>('v2_playlist_get_all_local_track_counts');
       const map = new Map<number, number>();
       for (const [id, count] of Object.entries(counts)) {
         map.set(Number(id), count);

@@ -1046,7 +1046,7 @@
       if (!album) {
         const includePlex = isPlexLibraryEnabled();
         const [localAlbums, plexAlbumsRaw] = await Promise.all([
-          invoke<LocalAlbum[]>('library_get_albums', {
+          invoke<LocalAlbum[]>('v2_library_get_albums', {
             includeHidden: false,
             excludeNetworkFolders: shouldExcludeNetworkFolders()
           }),
@@ -1285,7 +1285,7 @@
       const fetchStart = performance.now();
       const includePlex = isPlexLibraryEnabled();
       const [albumsResult, statsResult, plexAlbumsRaw] = await Promise.all([
-        invoke<LocalAlbum[]>('library_get_albums', {
+        invoke<LocalAlbum[]>('v2_library_get_albums', {
           includeHidden: false,
           excludeNetworkFolders: excludeNetwork
         }),
@@ -1390,7 +1390,7 @@
 
   async function checkFolderAccessibility(folder: LibraryFolder) {
     try {
-      const accessible = await invoke<boolean>('library_check_folder_accessible', { path: folder.path });
+      const accessible = await invoke<boolean>('v2_library_check_folder_accessible', { path: folder.path });
       folderAccessibility.set(folder.id, accessible);
       folderAccessibility = new Map(folderAccessibility);
     } catch (err) {
@@ -1553,7 +1553,7 @@
     }
 
     try {
-      await invoke('library_remove_folder', { path: folder.path });
+      await invoke('v2_library_remove_folder', { path: folder.path });
       selectedFolders.delete(folder.id);
       selectedFolders = new Set(selectedFolders);
       await loadFolders();
@@ -1598,7 +1598,7 @@
       await invoke('library_scan_folder', { folderId });
       // Start polling for progress
       const progressInterval = setInterval(async () => {
-        scanProgress = await invoke<ScanProgress>('library_get_scan_progress');
+        scanProgress = await invoke<ScanProgress>('v2_library_get_scan_progress');
         if (scanProgress.status === 'Complete' || scanProgress.status === 'Cancelled' || scanProgress.status === 'Error') {
           clearInterval(progressInterval);
           scanning = false;
@@ -1623,7 +1623,7 @@
       for (const folderId of selectedFolders) {
         const folder = folders.find(f => f.id === folderId);
         if (folder) {
-          await invoke('library_remove_folder', { path: folder.path });
+          await invoke('v2_library_remove_folder', { path: folder.path });
         }
       }
       selectedFolders.clear();
@@ -1654,7 +1654,7 @@
     // Start polling for progress
     const pollInterval = setInterval(async () => {
       try {
-        scanProgress = await invoke<ScanProgress>('library_get_scan_progress');
+        scanProgress = await invoke<ScanProgress>('v2_library_get_scan_progress');
         if (scanProgress.status === 'Complete' || scanProgress.status === 'Cancelled' || scanProgress.status === 'Error') {
           clearInterval(pollInterval);
           scanning = false;
@@ -1826,7 +1826,7 @@
 
       if (!selected || typeof selected !== 'string') return;
 
-      const cachedPath = await invoke<string>('library_set_album_artwork', {
+      const cachedPath = await invoke<string>('v2_library_set_album_artwork', {
         albumGroupKey: selectedAlbum.id,
         artworkPath: selected
       });
@@ -1917,7 +1917,7 @@
       if (onTrackPlay) {
         await Promise.resolve(onTrackPlay(track));
       } else if (trackSource === 'local') {
-        await invoke('library_play_track', { trackId: track.id });
+        await invoke('v2_library_play_track', { trackId: track.id });
       } else {
         throw new Error('Plex playback handler not available');
       }
@@ -2161,7 +2161,7 @@
 
   async function handleHideAlbum(album: LocalAlbum) {
     try {
-      await invoke('library_set_album_hidden', { albumGroupKey: album.id, hidden: true });
+      await invoke('v2_library_set_album_hidden', { albumGroupKey: album.id, hidden: true });
       await loadLibraryData();
     } catch (err) {
       console.error('Failed to hide album:', err);
@@ -2171,7 +2171,7 @@
 
   async function handleShowAlbum(album: LocalAlbum) {
     try {
-      await invoke('library_set_album_hidden', { albumGroupKey: album.id, hidden: false });
+      await invoke('v2_library_set_album_hidden', { albumGroupKey: album.id, hidden: false });
       await loadHiddenAlbums();
       await loadLibraryData();
     } catch (err) {
@@ -2182,7 +2182,7 @@
 
   async function loadHiddenAlbums() {
     try {
-      hiddenAlbums = await invoke<LocalAlbum[]>('library_get_albums', {
+      hiddenAlbums = await invoke<LocalAlbum[]>('v2_library_get_albums', {
         includeHidden: true,
         excludeNetworkFolders: shouldExcludeNetworkFolders()
       });
@@ -2327,7 +2327,7 @@
 
         console.log('Downloaded to:', localPath);
 
-        await invoke('library_set_album_artwork', {
+        await invoke('v2_library_set_album_artwork', {
           albumGroupKey: selectedAlbum.id,
           artworkPath: localPath
         });
@@ -2336,7 +2336,7 @@
         applyAlbumArtworkUpdate(selectedAlbum.id, localPath);
       }
 
-      await invoke('library_set_album_hidden', {
+      await invoke('v2_library_set_album_hidden', {
         albumGroupKey: selectedAlbum.id,
         hidden: editingAlbumHidden
       });

@@ -364,7 +364,7 @@ export async function createPendingPlaylist(
  * Get all playlists pending sync
  */
 export async function getPendingPlaylists(): Promise<PendingPlaylist[]> {
-  return invoke<PendingPlaylist[]>('get_pending_playlists');
+  return invoke<PendingPlaylist[]>('v2_get_pending_playlists');
 }
 
 /**

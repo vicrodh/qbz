@@ -94,7 +94,7 @@
 
     checkingAccessibility = true;
     try {
-      accessible = await invoke<boolean>('library_check_folder_accessible', { path: folder.path });
+      accessible = await invoke<boolean>('v2_library_check_folder_accessible', { path: folder.path });
     } catch (err) {
       console.error('Failed to check folder accessibility:', err);
       accessible = false;
@@ -151,7 +151,7 @@
         // Re-check accessibility for the new path
         checkingAccessibility = true;
         try {
-          accessible = await invoke<boolean>('library_check_folder_accessible', { path: currentPath });
+          accessible = await invoke<boolean>('v2_library_check_folder_accessible', { path: currentPath });
         } catch (err) {
           accessible = false;
         } finally {

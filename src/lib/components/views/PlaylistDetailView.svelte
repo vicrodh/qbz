@@ -505,12 +505,12 @@
       if (playlistId < 0) {
         // For pending playlists, load local tracks from the pending playlist data
         const pendingId = -playlistId;
-        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists');
+        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('v2_get_pending_playlists');
         const pending = pendingPlaylists.find(p => p.id === pendingId);
 
         if (pending && pending.localTrackIds.length > 0) {
           // Load the actual local track data
-          const localTrackData = await invoke<LocalLibraryTrack[]>('library_get_tracks_by_ids', {
+          const localTrackData = await invoke<LocalLibraryTrack[]>('v2_library_get_tracks_by_ids', {
             trackIds: pending.localTrackIds
           });
 
@@ -581,7 +581,7 @@
       if (playlistId < 0) {
         // === Pending (offline) playlist ===
         const pendingId = -playlistId;
-        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists');
+        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('v2_get_pending_playlists');
         const pending = pendingPlaylists.find(p => p.id === pendingId);
 
         if (!pending) {

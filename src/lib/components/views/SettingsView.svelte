@@ -2717,8 +2717,8 @@
     isClearingArtwork = true;
     try {
       // Clear both legacy artwork cache and new thumbnails cache
-      await invoke('library_clear_artwork_cache');
-      await invoke('library_clear_thumbnails_cache');
+      await invoke('v2_library_clear_artwork_cache');
+      await invoke('v2_library_clear_thumbnails_cache');
       console.log('Artwork caches cleared');
       await loadArtworkCacheStats();
     } catch (err) {
@@ -2738,8 +2738,8 @@
         clearLyricsCache(),
         invoke('musicbrainz_clear_cache'),
         invoke('v2_clear_vector_store'),
-        invoke('library_clear_artwork_cache'),
-        invoke('library_clear_thumbnails_cache')
+        invoke('v2_library_clear_artwork_cache'),
+        invoke('v2_library_clear_thumbnails_cache')
       ]);
       console.log('All caches cleared');
       // Reload all stats

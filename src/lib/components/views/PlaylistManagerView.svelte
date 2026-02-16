@@ -364,10 +364,10 @@
         // Offline mode: Load both regular playlists AND pending playlists
         const [playlistsResult, pendingPlaylistsResult, settingsResult, statsResult, localCountsResult] = await Promise.all([
           invoke<Playlist[]>('v2_get_user_playlists'),
-          invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists'),
+          invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('v2_get_pending_playlists'),
           invoke<PlaylistSettings[]>('v2_playlist_get_all_settings'),
           invoke<PlaylistStats[]>('v2_playlist_get_all_stats'),
-          invoke<Record<string, number>>('playlist_get_all_local_track_counts')
+          invoke<Record<string, number>>('v2_playlist_get_all_local_track_counts')
         ]);
 
         // Process regular playlists
@@ -425,7 +425,7 @@
           invoke<Playlist[]>('v2_get_user_playlists'),
           invoke<PlaylistSettings[]>('v2_playlist_get_all_settings'),
           invoke<PlaylistStats[]>('v2_playlist_get_all_stats'),
-          invoke<Record<string, number>>('playlist_get_all_local_track_counts')
+          invoke<Record<string, number>>('v2_playlist_get_all_local_track_counts')
         ]);
 
         playlists = playlistsResult;

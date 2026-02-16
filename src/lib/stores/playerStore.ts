@@ -362,7 +362,7 @@ export async function togglePlay(): Promise<void> {
         } else if (currentTrack.isLocal || currentTrack.id < 0) {
           // Local filesystem track
           const localTrackId = Math.abs(currentTrack.id);
-          await invoke('library_play_track', { trackId: localTrackId });
+          await invoke('v2_library_play_track', { trackId: localTrackId });
         } else {
           // Qobuz track - use v2_play_track
           await invoke('v2_play_track', {

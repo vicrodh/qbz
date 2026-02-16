@@ -183,7 +183,7 @@ export async function playTrack(
           }
           setCurrentTrack(track);
         } else if (isLocal) {
-          await invoke('library_play_track', { trackId: track.id });
+          await invoke('v2_library_play_track', { trackId: track.id });
         } else {
           const result = await invoke<PlayTrackResult>('v2_play_track', {
             trackId: track.id,
