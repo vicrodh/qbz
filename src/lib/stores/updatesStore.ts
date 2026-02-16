@@ -100,7 +100,7 @@ export async function refreshUpdatePreferences(): Promise<void> {
 
 export async function setCheckOnLaunch(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_update_check_on_launch', { enabled });
+    await invoke('v2_set_update_check_on_launch', { enabled });
     preferences.checkOnLaunch = enabled;
     notify();
   } catch (error) {
@@ -111,7 +111,7 @@ export async function setCheckOnLaunch(enabled: boolean): Promise<void> {
 
 export async function setShowWhatsNewOnLaunch(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_show_whats_new_on_launch', { enabled });
+    await invoke('v2_set_show_whats_new_on_launch', { enabled });
     preferences.showWhatsNewOnLaunch = enabled;
     notify();
   } catch (error) {
@@ -139,11 +139,11 @@ export async function fetchReleaseForVersion(version: string): Promise<ReleaseIn
 }
 
 export async function acknowledgeRelease(version: string): Promise<void> {
-  await invoke('acknowledge_release', { version });
+  await invoke('v2_acknowledge_release', { version });
 }
 
 export async function ignoreRelease(version: string): Promise<void> {
-  await invoke('ignore_release', { version });
+  await invoke('v2_ignore_release', { version });
 }
 
 export async function hasWhatsNewBeenShown(version: string): Promise<boolean> {
@@ -157,7 +157,7 @@ export async function hasWhatsNewBeenShown(version: string): Promise<boolean> {
 
 export async function markWhatsNewShown(version: string): Promise<void> {
   try {
-    await invoke('mark_whats_new_shown', { version });
+    await invoke('v2_mark_whats_new_shown', { version });
   } catch (error) {
     console.debug('[Updates] Failed to mark whats_new_shown:', version, error);
   }

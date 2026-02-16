@@ -119,7 +119,7 @@ export async function setUseSystemTitleBar(value: boolean): Promise<void> {
   }
   try {
     await invoke('v2_set_use_system_titlebar', { value });
-    await invoke('restart_app');
+    await invoke('v2_restart_app');
   } catch (e) {
     console.error('[TitleBarStore] Failed to apply system titlebar change:', e);
   }

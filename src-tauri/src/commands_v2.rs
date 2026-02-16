@@ -4949,3 +4949,99 @@ pub async fn v2_factory_reset(
     )
     .await
 }
+
+#[tauri::command]
+pub fn v2_set_qobuz_tos_accepted(
+    state: State<'_, crate::config::legal_settings::LegalSettingsState>,
+    accepted: bool,
+) -> Result<(), String> {
+    crate::config::legal_settings::set_qobuz_tos_accepted(state, accepted)
+}
+
+#[tauri::command]
+pub fn v2_set_update_check_on_launch(
+    enabled: bool,
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<(), String> {
+    crate::updates::set_update_check_on_launch(enabled, state)
+}
+
+#[tauri::command]
+pub fn v2_set_show_whats_new_on_launch(
+    enabled: bool,
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<(), String> {
+    crate::updates::set_show_whats_new_on_launch(enabled, state)
+}
+
+#[tauri::command]
+pub fn v2_acknowledge_release(
+    version: String,
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<(), String> {
+    crate::updates::acknowledge_release(version, state)
+}
+
+#[tauri::command]
+pub fn v2_ignore_release(
+    version: String,
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<(), String> {
+    crate::updates::ignore_release(version, state)
+}
+
+#[tauri::command]
+pub fn v2_mark_whats_new_shown(
+    version: String,
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<(), String> {
+    crate::updates::mark_whats_new_shown(version, state)
+}
+
+#[tauri::command]
+pub fn v2_mark_flatpak_welcome_shown(
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<(), String> {
+    crate::updates::mark_flatpak_welcome_shown(state)
+}
+
+#[tauri::command]
+pub fn v2_get_backend_logs() -> Vec<String> {
+    crate::logging::get_backend_logs()
+}
+
+#[tauri::command]
+pub async fn v2_upload_logs_to_paste(content: String) -> Result<String, String> {
+    crate::logging::upload_logs_to_paste(content).await
+}
+
+#[tauri::command]
+pub fn v2_set_show_downloads_in_library(
+    show: bool,
+    state: State<'_, crate::config::download_settings::DownloadSettingsState>,
+) -> Result<(), String> {
+    crate::config::download_settings::set_show_downloads_in_library(show, state)
+}
+
+#[tauri::command]
+pub fn v2_set_device_sample_rate_limit(
+    state: State<'_, crate::config::audio_settings::AudioSettingsState>,
+    device_id: String,
+    rate: Option<u32>,
+) -> Result<(), String> {
+    crate::config::audio_settings::set_device_sample_rate_limit(state, device_id, rate)
+}
+
+#[tauri::command]
+pub fn v2_set_force_x11(
+    state: State<'_, crate::config::graphics_settings::GraphicsSettingsState>,
+    enabled: bool,
+) -> Result<(), String> {
+    crate::config::graphics_settings::set_force_x11(state, enabled)
+}
+
+#[tauri::command]
+pub fn v2_restart_app(app: tauri::AppHandle) {
+    log::info!("[V2] App restart requested by user");
+    app.restart();
+}

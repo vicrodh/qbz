@@ -1797,7 +1797,7 @@
 
   async function handleShowDownloadsChange(enabled: boolean) {
     try {
-      await invoke('set_show_downloads_in_library', { show: enabled });
+      await invoke('v2_set_show_downloads_in_library', { show: enabled });
       showQobuzDownloadsInLibrary = enabled;
       // Notify LocalLibraryView to refresh
       notifyDownloadSettingsChanged();
@@ -2369,7 +2369,7 @@
     const deviceId = outputDevice === 'System Default' ? 'default' : device?.id ?? 'default';
 
     try {
-      await invoke('set_device_sample_rate_limit', { deviceId, rate });
+      await invoke('v2_set_device_sample_rate_limit', { deviceId, rate });
       console.log('[Audio] Device max sample rate changed:', deviceId, rate);
     } catch (err) {
       console.error('[Audio] Failed to change device max sample rate:', err);
@@ -2814,7 +2814,7 @@
 
   async function handleForceX11Change(enabled: boolean) {
     try {
-      await invoke('set_force_x11', { enabled });
+      await invoke('v2_set_force_x11', { enabled });
       forceX11 = enabled;
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {

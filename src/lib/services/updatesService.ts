@@ -154,7 +154,7 @@ async function shouldShowFlatpakWelcome(): Promise<boolean> {
  */
 export async function markFlatpakWelcomeShown(): Promise<void> {
   try {
-    await invoke('mark_flatpak_welcome_shown');
+    await invoke('v2_mark_flatpak_welcome_shown');
   } catch (error) {
     console.debug('[Updates] Failed to mark flatpak welcome shown:', error);
   }
