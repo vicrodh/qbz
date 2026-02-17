@@ -1248,6 +1248,62 @@ pub fn v2_resolve_qobuz_link(url: String) -> Result<qbz_qobuz::ResolvedLink, Run
     qbz_qobuz::resolve_link(&url).map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
+/// Check if QBZ is the default handler for qobuzapp:// links.
+#[tauri::command]
+pub fn v2_check_qobuzapp_handler() -> Result<bool, RuntimeError> {
+    let output = std::process::Command::new("xdg-mime")
+        .args(["query", "default", "x-scheme-handler/qobuzapp"])
+        .output()
+        .map_err(|e| RuntimeError::Internal(format!("Failed to run xdg-mime: {}", e)))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(stdout.trim().contains("com.blitzfc.qbz"))
+}
+
+/// Register QBZ as the default handler for qobuzapp:// links.
+#[tauri::command]
+pub fn v2_register_qobuzapp_handler() -> Result<bool, RuntimeError> {
+    let status = std::process::Command::new("xdg-mime")
+        .args(["default", "com.blitzfc.qbz.desktop", "x-scheme-handler/qobuzapp"])
+        .status()
+        .map_err(|e| RuntimeError::Internal(format!("Failed to run xdg-mime: {}", e)))?;
+
+    Ok(status.success())
+}
+
+/// Remove QBZ as the default handler for qobuzapp:// links.
+#[tauri::command]
+pub fn v2_deregister_qobuzapp_handler() -> Result<bool, RuntimeError> {
+    let mimeapps = dirs::config_dir()
+        .ok_or_else(|| RuntimeError::Internal("No config dir found".to_string()))?
+        .join("mimeapps.list");
+
+    if !mimeapps.exists() {
+        return Ok(true); // Nothing to remove
+    }
+
+    let content = std::fs::read_to_string(&mimeapps)
+        .map_err(|e| RuntimeError::Internal(format!("Failed to read mimeapps.list: {}", e)))?;
+
+    let filtered: String = content
+        .lines()
+        .filter(|line| !line.starts_with("x-scheme-handler/qobuzapp="))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    // Preserve trailing newline if original had one
+    let filtered = if content.ends_with('\n') && !filtered.ends_with('\n') {
+        format!("{}\n", filtered)
+    } else {
+        filtered
+    };
+
+    std::fs::write(&mimeapps, filtered)
+        .map_err(|e| RuntimeError::Internal(format!("Failed to write mimeapps.list: {}", e)))?;
+
+    Ok(true)
+}
+
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn v2_plex_ping(
