@@ -6549,7 +6549,6 @@ pub async fn v2_cache_track_for_offline(
     sample_rate: Option<f64>,
     state: State<'_, AppState>,
     cache_state: State<'_, OfflineCacheState>,
-    library_state: State<'_, crate::library::LibraryState>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     log::info!("Command: v2_cache_track_for_offline {} - {} by {}", track_id, title, artist);
@@ -6581,7 +6580,7 @@ pub async fn v2_cache_track_for_offline(
         cache_state.fetcher.clone(),
         cache_state.db.clone(),
         cache_state.get_cache_path(),
-        library_state.db.clone(),
+        cache_state.library_db.clone(),
         app_handle.clone(),
         cache_state.cache_semaphore.clone(),
     );
@@ -6608,7 +6607,6 @@ pub async fn v2_cache_tracks_batch_for_offline(
     tracks: Vec<BatchTrackInfo>,
     state: State<'_, AppState>,
     cache_state: State<'_, OfflineCacheState>,
-    library_state: State<'_, crate::library::LibraryState>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
     log::info!("Command: v2_cache_tracks_batch_for_offline ({} tracks)", tracks.len());
@@ -6652,7 +6650,7 @@ pub async fn v2_cache_tracks_batch_for_offline(
             cache_state.fetcher.clone(),
             cache_state.db.clone(),
             cache_state.get_cache_path(),
-            library_state.db.clone(),
+            cache_state.library_db.clone(),
             app_handle.clone(),
             cache_state.cache_semaphore.clone(),
         );

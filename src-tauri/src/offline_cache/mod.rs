@@ -135,6 +135,9 @@ pub struct OfflineCacheState {
     /// Cache limit in bytes (None = unlimited)
     pub limit_bytes: Arc<Mutex<Option<u64>>>,
     pub cache_semaphore: Arc<Semaphore>,
+    /// Separate library DB connection for download post-processing writes.
+    /// This avoids contending with the main library DB mutex used by UI queries.
+    pub library_db: Arc<Mutex<Option<qbz_library::LibraryDatabase>>>,
 }
 
 impl OfflineCacheState {
@@ -165,6 +168,7 @@ impl OfflineCacheState {
             cache_dir: Arc::new(RwLock::new(cache_dir.clone())),
             limit_bytes: Arc::new(Mutex::new(default_limit)),
             cache_semaphore: Arc::new(Semaphore::new(3)),
+            library_db: Arc::new(Mutex::new(None)),
         };
 
         log::info!("Offline cache initialized at: {:?}", cache_dir);
@@ -183,6 +187,7 @@ impl OfflineCacheState {
             cache_dir: Arc::new(RwLock::new(cache_dir)),
             limit_bytes: Arc::new(Mutex::new(Some(2 * 1024 * 1024 * 1024u64))),
             cache_semaphore: Arc::new(Semaphore::new(3)),
+            library_db: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -206,7 +211,24 @@ impl OfflineCacheState {
         Ok(())
     }
 
+    /// Open a separate library DB connection for download post-processing.
+    /// Must be called after library.init_at() so the schema exists.
+    pub async fn init_library_connection(&self, data_dir: &std::path::Path) -> Result<(), String> {
+        let db_path = data_dir.join("library.db");
+        let lib_db = qbz_library::LibraryDatabase::open(&db_path)
+            .map_err(|e| format!("Failed to open download library connection: {}", e))?;
+        let mut guard = self.library_db.lock().await;
+        *guard = Some(lib_db);
+        log::info!("Offline cache: separate library DB connection opened at {:?}", db_path);
+        Ok(())
+    }
+
     pub async fn teardown(&self) {
+        // Close library connection first (before main teardown)
+        {
+            let mut lib_guard = self.library_db.lock().await;
+            *lib_guard = None;
+        }
         let mut guard = self.db.lock().await;
         *guard = None;
     }

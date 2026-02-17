@@ -134,6 +134,7 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
 
     // Cache-dir stores
     offline_cache.init_at(&cache_dir).await?;
+    offline_cache.init_library_connection(&data_dir).await?;
     lyrics.init_at(&cache_dir).await?;
 
     // Run deferred subscription purge check
@@ -313,6 +314,7 @@ pub async fn activate_offline_session(app: &tauri::AppHandle) -> Result<(), Stri
     library.init_at(&data_dir).await?;
     offline.init_at(&data_dir)?;
     offline_cache.init_at(&cache_dir).await?;
+    offline_cache.init_library_connection(&data_dir).await?;
     audio_settings.init_at(&data_dir)?;
     playback_prefs.init_at(&data_dir)?;
 
