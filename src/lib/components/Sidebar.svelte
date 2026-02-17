@@ -1819,7 +1819,7 @@
     flex-shrink: 0;
     background-color: var(--bg-secondary, #1a1a1a);
     position: relative;
-    z-index: 3;
+    z-index: 2000;
     display: flex;
     flex-direction: column;
     height: calc(100vh - 136px); /* 104px NowPlayingBar + 32px TitleBar */
@@ -2202,7 +2202,7 @@
     min-width: 180px;
     max-width: 260px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 10001;
+    z-index: 120001;
   }
 
   .folder-popover-header {
@@ -2281,7 +2281,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10000;
+    z-index: 120000;
   }
 
   .modal-content {
@@ -2387,7 +2387,7 @@
     border-radius: 8px;
     padding: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 10000;
+    z-index: 120000;
     max-height: 260px;
     overflow-y: auto;
     scrollbar-width: thin;
@@ -2468,7 +2468,7 @@
     border-radius: 8px;
     padding: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 10001;
+    z-index: 120001;
   }
 
   .submenu .menu-item {
@@ -2484,7 +2484,7 @@
     padding: 6px;
     min-width: 180px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 10002;
+    z-index: 120002;
   }
 
   .context-menu.has-search {
@@ -2684,7 +2684,7 @@
   /* Favorites Popover (collapsed sidebar) */
   .favorites-popover {
     position: fixed;
-    z-index: 9999;
+    z-index: 120000;
     background: var(--bg-secondary);
     border: 1px solid var(--border-subtle);
     border-radius: 8px;
