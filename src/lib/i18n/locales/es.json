@@ -845,7 +845,10 @@
       "plexClearCacheConfirmDesc": "Esto elimina las secciones/pistas de Plex almacenadas localmente en QBZ. Tu token de Plex seguirá conectado.",
       "plexClearCacheConfirmOk": "Limpiar caché",
       "plexNoTracksLoaded": "Aún no se cargaron pistas.",
-      "plexTrackMeta": "{artist} - {album} - {rate} Hz / {bits}-bit"
+      "plexTrackMeta": "{artist} - {album} - {rate} Hz / {bits}-bit",
+      "qobuzLinkHandler": "Manejador de enlaces Qobuz",
+      "qobuzLinkHandlerDesc": "Registrar QBZ como la app predeterminada para enlaces qobuzapp:// desde el navegador.",
+      "qobuzLinkHandlerError": "Error al actualizar el registro del manejador de enlaces."
     },
     "storage": {
       "title": "Almacenamiento",
@@ -1583,5 +1586,12 @@
     "addingPhase": "Agregando tracks a la playlist...",
     "addingProgress": "Agregando tracks: {current} / {total}",
     "partsCreated": "Dividida en {count} playlists (limite de 2000 tracks en Qobuz)"
+  },
+  "linkResolver": {
+    "title": "Abrir enlace de Qobuz",
+    "placeholder": "Pega un enlace de Qobuz (album, track, artista, playlist)...",
+    "go": "Ir",
+    "resolving": "Resolviendo...",
+    "invalidLink": "Enlace de Qobuz invalido o no soportado."
   }
 }

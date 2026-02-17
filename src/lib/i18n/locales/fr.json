@@ -812,7 +812,10 @@
       "plexClearCacheRowLabel": "Effacer le cache Plex dans QBZ",
       "plexClearCacheRowHelp": "Recommandé si vous remarquez des incohérences dans la bibliothèque.",
       "plexClearButton": "Effacer",
-      "plexStatusCacheLoaded": "{count} pistes en cache chargées. Actualisation depuis Plex en arrière-plan."
+      "plexStatusCacheLoaded": "{count} pistes en cache chargées. Actualisation depuis Plex en arrière-plan.",
+      "qobuzLinkHandler": "Gestionnaire de liens Qobuz",
+      "qobuzLinkHandlerDesc": "Enregistrer QBZ comme application par defaut pour les liens qobuzapp:// depuis le navigateur.",
+      "qobuzLinkHandlerError": "Erreur lors de la mise a jour de l'enregistrement du gestionnaire de liens."
     },
     "storage": {
       "title": "Stockage",
@@ -1390,5 +1393,12 @@
     "addingPhase": "Ajout des titres a la playlist...",
     "addingProgress": "Ajout des titres : {current} / {total}",
     "partsCreated": "Divisee en {count} playlists (limite Qobuz : 2000 titres)"
+  },
+  "linkResolver": {
+    "title": "Ouvrir un lien Qobuz",
+    "placeholder": "Collez un lien Qobuz (album, piste, artiste, playlist)...",
+    "go": "Aller",
+    "resolving": "Resolution...",
+    "invalidLink": "Lien Qobuz invalide ou non pris en charge."
   }
 }

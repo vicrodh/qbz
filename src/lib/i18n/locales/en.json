@@ -845,7 +845,10 @@
       "plexClearCacheConfirmDesc": "This removes locally cached Plex sections/tracks in QBZ. Your Plex token remains connected.",
       "plexClearCacheConfirmOk": "Clear cache",
       "plexNoTracksLoaded": "No tracks loaded yet.",
-      "plexTrackMeta": "{artist} - {album} - {rate} Hz / {bits}-bit"
+      "plexTrackMeta": "{artist} - {album} - {rate} Hz / {bits}-bit",
+      "qobuzLinkHandler": "Qobuz Link Handler",
+      "qobuzLinkHandlerDesc": "Register QBZ as the default app for qobuzapp:// links from your browser.",
+      "qobuzLinkHandlerError": "Failed to update link handler registration."
     },
     "storage": {
       "title": "Storage",
@@ -1583,5 +1586,12 @@
     "addingPhase": "Adding tracks to playlist...",
     "addingProgress": "Adding tracks: {current} / {total}",
     "partsCreated": "Split into {count} playlists (Qobuz 2000-track limit)"
+  },
+  "linkResolver": {
+    "title": "Open Qobuz Link",
+    "placeholder": "Paste a Qobuz link (album, track, artist, playlist)...",
+    "go": "Go",
+    "resolving": "Resolving...",
+    "invalidLink": "Invalid or unsupported Qobuz link."
   }
 }
