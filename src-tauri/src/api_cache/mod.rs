@@ -72,6 +72,8 @@ impl ApiCache {
     pub fn new(path: &Path) -> Result<Self, String> {
         let conn = Connection::open(path)
             .map_err(|e| format!("Failed to open API cache database: {}", e))?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")
+            .map_err(|e| format!("Failed to set WAL mode on API cache: {}", e))?;
         let cache = Self { conn };
         cache.init()?;
         Ok(cache)
