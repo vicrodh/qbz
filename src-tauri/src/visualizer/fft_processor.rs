@@ -7,6 +7,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::time::{Duration, Instant};
 
+use qbz_audio::SpectralAnalyzer;
 use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
 use spectrum_analyzer::scaling::divide_by_N_sqrt;
 use spectrum_analyzer::windows::hann_window;
@@ -35,6 +36,9 @@ pub fn start_visualizer_thread(state: VisualizerState, app_handle: AppHandle) {
 
 /// Number of energy bands for the Energy Bands visualizer
 const NUM_ENERGY_BANDS: usize = 5;
+const NUM_SPECTRAL_BANDS: usize = 190;
+const SPECTRAL_UPDATE_RATE_HZ: u32 = 58;
+const SPECTRAL_SMOOTHING: f32 = 0.80;
 
 /// Energy band frequency ranges (Hz):
 /// Sub-bass (20-60), Bass (60-250), Mids (250-2k), Presence (2k-6k), Air (6k-20k)
@@ -61,6 +65,14 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
     // Energy bands state
     let mut energy_bands = [0.0f32; NUM_ENERGY_BANDS];
     let mut smoothed_energy = [0.0f32; NUM_ENERGY_BANDS];
+    let mut spectral_analyzer = SpectralAnalyzer::new(
+        state.sample_rate.load(Ordering::Relaxed),
+        FFT_SIZE,
+        NUM_SPECTRAL_BANDS,
+        SPECTRAL_UPDATE_RATE_HZ,
+        SPECTRAL_SMOOTHING,
+    );
+    let mut spectral_bytes = vec![0u8; NUM_SPECTRAL_BANDS * std::mem::size_of::<f32>()];
 
     // Transient detection state
     let mut prev_rms = 0.0f32;
@@ -81,6 +93,16 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
 
             // Get samples from ring buffer
             state.ring_buffer.snapshot(&mut samples);
+
+            // Emit compact, progressive spectrogram bands for Spectral Ribbon.
+            if spectral_analyzer.process_audio_frame(&samples, sample_rate) {
+                let spectral = spectral_analyzer.get_latest_bands();
+                for (idx, value) in spectral.iter().enumerate() {
+                    let offset = idx * 4;
+                    spectral_bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+                }
+                let _ = app_handle.emit("viz:spectral", spectral_bytes.clone());
+            }
 
             // Apply Hann window to reduce spectral leakage
             let window = hann_window(&samples);

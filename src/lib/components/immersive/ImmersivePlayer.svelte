@@ -13,6 +13,7 @@
   import StaticPanel from './panels/StaticPanel.svelte';
   import VisualizerPanel from './panels/VisualizerPanel.svelte';
   import OscilloscopePanel from './panels/OscilloscopePanel.svelte';
+  import SpectralRibbon from './panels/SpectralRibbon.svelte';
   import EnergyBandsPanel from './panels/EnergyBandsPanel.svelte';
   import LissajousPanel from './panels/LissajousPanel.svelte';
   import TransientPulsePanel from './panels/TransientPulsePanel.svelte';
@@ -152,7 +153,7 @@
   const AUTO_HIDE_DELAY = 4000;
 
   // Immersive view persistence
-  type ImmersiveViewKey = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
+  type ImmersiveViewKey = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'spectral-ribbon' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
 
   function applyStoredView(key: ImmersiveViewKey) {
     if (key.startsWith('split-')) {
@@ -306,7 +307,7 @@
         if (viewMode === 'focus') activeFocusTab = 'static';
         break;
       case '3':
-        if (viewMode === 'focus') activeFocusTab = 'visualizer';
+        if (viewMode === 'focus') activeFocusTab = 'spectral-ribbon';
         break;
       case '4':
         if (viewMode === 'focus') activeFocusTab = 'oscilloscope';
@@ -329,6 +330,10 @@
       case '0':
         if (viewMode === 'focus') activeFocusTab = 'queue-focus';
         break;
+      case 'r':
+      case 'R':
+        if (viewMode === 'focus') activeFocusTab = 'spectral-ribbon';
+        break;
     }
     saveLastUsedView();
     resetHideTimer();
@@ -337,6 +342,11 @@
   // Setup event listeners when open
   $effect(() => {
     if (isOpen) {
+      const prevHtmlOverflow = document.documentElement.style.overflow;
+      const prevBodyOverflow = document.body.style.overflow;
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+
       restoreView();
       resetHideTimer();
       checkWindowState();
@@ -348,6 +358,12 @@
       return () => {
         document.removeEventListener('keydown', handleKeydown);
         if (hideTimeout) clearTimeout(hideTimeout);
+        document.documentElement.style.overflow = prevHtmlOverflow;
+        document.body.style.overflow = prevBodyOverflow;
+        // Safety reset: avoid residual document scroll offset clipping the custom title bar.
+        if (window.scrollY > 0) {
+          window.scrollTo(0, 0);
+        }
         // Re-enable progress tracking when leaving immersive
         setProgressTrackingEnabled(true);
       };
@@ -372,7 +388,7 @@
     tabindex="-1"
   >
     <!-- Background (skip for canvas-based visualizers that render their own black background) -->
-    {#if activeFocusTab !== 'visualizer' && activeFocusTab !== 'oscilloscope' && activeFocusTab !== 'energy-bands' && activeFocusTab !== 'lissajous' && activeFocusTab !== 'transient-pulse'}
+    {#if activeFocusTab !== 'visualizer' && activeFocusTab !== 'oscilloscope' && activeFocusTab !== 'spectral-ribbon' && activeFocusTab !== 'energy-bands' && activeFocusTab !== 'lissajous' && activeFocusTab !== 'transient-pulse'}
       <ImmersiveBackground {artwork} />
     {/if}
 
@@ -451,6 +467,23 @@
         <!-- Oscilloscope: Stereo L/R waveforms -->
         <OscilloscopePanel
           enabled={true}
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+          {originalBitDepth}
+          {originalSamplingRate}
+          {format}
+        />
+      {:else if activeFocusTab === 'spectral-ribbon'}
+        <SpectralRibbon
+          enabled={true}
+          {isPlaying}
+          currentTime={currentTime}
+          {duration}
           {artwork}
           {trackTitle}
           {artist}

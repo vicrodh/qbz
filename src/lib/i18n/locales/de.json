@@ -690,7 +690,18 @@
         "envVarForceX11": "XWayland-Backend erzwingen",
         "envVarSoftwareRender": "Software-Rendering erzwingen (Mesa llvmpipe)",
         "envVarForceDmabuf": "DMA-BUF-Renderer erzwingen (kann abstuerzen)",
-        "envVarDisableDmabuf": "DMA-BUF-Renderer deaktivieren"
+        "envVarDisableDmabuf": "DMA-BUF-Renderer deaktivieren",
+        "profiles": {
+          "title": "Rendering-Profile",
+          "helpText": "Schnelle Presets für Multi-Monitor- und gemischte DPI-Setups. Profil anwenden und QBZ neu starten.",
+          "nativeWaylandLabel": "Natives Wayland (schärfste Darstellung)",
+          "nativeWaylandDesc": "Verwendet natives Wayland-Rendering. Beste Textschärfe, kann auf manchen GPU/Compositor-Kombinationen schwerer laufen.",
+          "x11BalancedLabel": "Xwayland ausgewogen",
+          "x11BalancedDesc": "Erzwingt Xwayland mit GDK_SCALE=1 und GDK_DPI_SCALE=1.1 für einen guten Kompromiss aus Größe und Schärfe.",
+          "x11PerformanceLabel": "Xwayland Leistung",
+          "x11PerformanceDesc": "Erzwingt Xwayland mit neutraler Skalierung (1.0/1.0). Beste Leistung und weniger Unschärfe auf externen Monitoren.",
+          "applied": "Profil angewendet: {profile}. QBZ neu starten, damit es wirksam wird."
+        }
       }
     },
     "library": {

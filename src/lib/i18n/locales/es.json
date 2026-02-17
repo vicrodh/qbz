@@ -707,7 +707,18 @@
         "envVarForceX11": "Forzar backend XWayland",
         "envVarSoftwareRender": "Forzar renderizado por software (Mesa llvmpipe)",
         "envVarForceDmabuf": "Forzar DMA-BUF activo (puede crashear)",
-        "envVarDisableDmabuf": "Forzar DMA-BUF desactivado"
+        "envVarDisableDmabuf": "Forzar DMA-BUF desactivado",
+        "profiles": {
+          "title": "Perfiles de renderizado",
+          "helpText": "Presets rápidos para configuraciones multi-monitor y DPI mixto. Aplica uno y reinicia QBZ.",
+          "nativeWaylandLabel": "Wayland nativo (más nítido)",
+          "nativeWaylandDesc": "Usa renderizado Wayland nativo. Mejor nitidez de texto, puede ser más pesado en algunas combinaciones GPU/compositor.",
+          "x11BalancedLabel": "Xwayland balanceado",
+          "x11BalancedDesc": "Fuerza Xwayland con GDK_SCALE=1 y GDK_DPI_SCALE=1.1 para balancear tamaño y nitidez.",
+          "x11PerformanceLabel": "Xwayland rendimiento",
+          "x11PerformanceDesc": "Fuerza Xwayland con escala neutra (1.0/1.0). Mejor rendimiento y menos blur en monitores externos.",
+          "applied": "Perfil aplicado: {profile}. Reinicia QBZ para que surta efecto."
+        }
       }
     },
     "library": {

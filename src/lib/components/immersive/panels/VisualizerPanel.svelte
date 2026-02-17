@@ -39,6 +39,11 @@
   let isInitialized = false;
 
   const NUM_BARS = 16; // Backend sends 16, we mirror for 32 visual bars
+  const EXCLUDED_BINS = new Set([1, NUM_BARS - 1]); // Requested: hide [1] and [n-1]
+  const ACTIVE_BIN_INDICES = Array.from({ length: NUM_BARS }, (_, idx) => idx).filter(
+    (idx) => !EXCLUDED_BINS.has(idx)
+  );
+  const ACTIVE_BINS = ACTIVE_BIN_INDICES.length;
   const frequencyData = new Float32Array(NUM_BARS);
   const smoothedData = new Float32Array(NUM_BARS);
 
@@ -177,7 +182,7 @@
     ctx.fillRect(0, 0, width, height);
 
     // Bar visualization with cubes - mirrored from center
-    const visualBars = NUM_BARS * 2; // 16 real + 16 mirrored = 32 visual
+    const visualBars = ACTIVE_BINS * 2; // Skip edge bins [0] and [n-1]
     const barGap = 4;
     const totalBarWidth = width / visualBars;
     const barWidth = totalBarWidth - barGap;
@@ -188,8 +193,9 @@
     const centerX = width / 2;
 
     // Draw bars from edges inward (mirrored, bass at edges)
-    for (let i = 0; i < NUM_BARS; i++) {
-      const amplitude = frequencyData[i];
+    for (let i = 0; i < ACTIVE_BINS; i++) {
+      const sourceIdx = ACTIVE_BIN_INDICES[i];
+      const amplitude = frequencyData[sourceIdx];
       const barHeight = amplitude * maxBarHeight;
       const numCubes = Math.floor(barHeight / (cubeHeight + cubeGap));
 

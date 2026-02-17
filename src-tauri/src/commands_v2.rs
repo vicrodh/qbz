@@ -5351,13 +5351,47 @@ pub async fn v2_get_genres(
 pub async fn v2_get_discover_index(
     genreIds: Option<Vec<u64>>,
     bridge: State<'_, CoreBridgeState>,
+    blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<DiscoverResponse, RuntimeError> {
     runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
 
     log::info!("[V2] get_discover_index: genres={:?}", genreIds);
     let bridge = bridge.get().await;
-    bridge.get_discover_index(genreIds).await.map_err(RuntimeError::Internal)
+    let mut response = bridge
+        .get_discover_index(genreIds)
+        .await
+        .map_err(RuntimeError::Internal)?;
+
+    let mut filtered_count: usize = 0;
+    let mut filter_container = |container: &mut Option<qbz_models::DiscoverContainer<DiscoverAlbum>>| {
+        if let Some(section) = container.as_mut() {
+            let before = section.data.items.len();
+            section.data.items.retain(|album| {
+                !album
+                    .artists
+                    .iter()
+                    .any(|artist| blacklist_state.is_blacklisted(artist.id))
+            });
+            filtered_count += before.saturating_sub(section.data.items.len());
+        }
+    };
+
+    filter_container(&mut response.containers.ideal_discography);
+    filter_container(&mut response.containers.new_releases);
+    filter_container(&mut response.containers.qobuzissims);
+    filter_container(&mut response.containers.most_streamed);
+    filter_container(&mut response.containers.press_awards);
+    filter_container(&mut response.containers.album_of_the_week);
+
+    if filtered_count > 0 {
+        log::debug!(
+            "[V2/Blacklist] Filtered {} discover index albums from home containers",
+            filtered_count
+        );
+    }
+
+    Ok(response)
 }
 
 /// Get discover playlists (V2 - uses QbzCore)

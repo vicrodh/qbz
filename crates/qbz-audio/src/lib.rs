@@ -39,6 +39,7 @@ pub mod loudness_cache;
 pub mod loudness_analyzer;
 pub mod settings;
 pub mod visualizer;
+pub mod analysis;
 
 // Re-export commonly used types
 pub use backend::{
@@ -62,3 +63,4 @@ pub use loudness_cache::LoudnessCache;
 pub use loudness_analyzer::LoudnessAnalyzer;
 pub use settings::AudioSettings;
 pub use visualizer::{VisualizerTap, TappedSource, RingBuffer};
+pub use analysis::SpectralAnalyzer;

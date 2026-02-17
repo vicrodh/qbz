@@ -30,6 +30,7 @@ rodio = { path = "../../src-tauri/vendor/rodio", features = ["symphonia-all"] }
 # Audio analysis
 symphonia = { workspace = true }
 ebur128 = "0.1"
+rustfft = "6.4"
 
 # Database for loudness cache
 rusqlite = { version = "0.31", features = ["bundled"] }

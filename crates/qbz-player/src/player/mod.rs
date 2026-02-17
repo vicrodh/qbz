@@ -931,6 +931,9 @@ impl Player {
             let mut current_gain_atomic: Option<Arc<AtomicU32>> = None;
             // Gapless: pending next track that has been appended to the Sink
             let mut gapless_pending: Option<GaplessPending> = None;
+            // Gapless request guard: once we request "next" for a track, do not re-arm
+            // until track changes or playback state is reset.
+            let mut gapless_request_armed = false;
 
             log::info!("Audio thread ready and waiting for commands");
 
@@ -946,7 +949,8 @@ impl Player {
                                       current_channels: &mut Option<u16>,
                                       current_normalization_gain: &mut Option<f32>,
                                       current_gain_atomic: &mut Option<Arc<AtomicU32>>,
-                                      gapless_pending: &mut Option<GaplessPending>| {
+                                      gapless_pending: &mut Option<GaplessPending>,
+                                      gapless_request_armed: &mut bool| {
                 match command {
                     AudioCommand::Play { data, track_id, duration_secs, sample_rate, channels } => {
                         log::info!(
@@ -958,6 +962,7 @@ impl Player {
                         *pause_suspend_deadline = None;
                         // Clear any pending gapless state (new Play supersedes queued gapless)
                         *gapless_pending = None;
+                        *gapless_request_armed = false;
                         thread_state.set_gapless_ready(false);
                         thread_state.set_gapless_next_track_id(0);
 
@@ -1703,6 +1708,7 @@ impl Player {
                         *current_normalization_gain = None;
                         *current_gain_atomic = None;
                         *gapless_pending = None;
+                        *gapless_request_armed = false;
                         thread_state.set_gapless_ready(false);
                         thread_state.set_gapless_next_track_id(0);
                         analyzer_enabled.store(false, Ordering::SeqCst);
@@ -1729,6 +1735,7 @@ impl Player {
                         *pause_suspend_deadline = None;
                         // Cancel any pending gapless — seek creates a new engine
                         *gapless_pending = None;
+                        *gapless_request_armed = false;
                         thread_state.set_gapless_ready(false);
                         thread_state.set_gapless_next_track_id(0);
                         let Some(ref audio_data) = *current_audio_data else {
@@ -1854,6 +1861,7 @@ impl Player {
                             Some(e) => e,
                             None => {
                                 log::warn!("Gapless: no engine, ignoring PlayNext for track {}", track_id);
+                                thread_state.set_gapless_ready(false);
                                 return;
                             }
                         };
@@ -1861,6 +1869,7 @@ impl Player {
                         // Only Rodio supports sink queueing
                         if engine.is_alsa_direct() {
                             log::info!("Gapless: ALSA Direct backend, cannot queue — ignoring PlayNext for track {}", track_id);
+                            thread_state.set_gapless_ready(false);
                             return;
                         }
 
@@ -1871,6 +1880,7 @@ impl Player {
                                     "Gapless: format mismatch (current {}Hz/{}ch vs next {}Hz/{}ch), ignoring PlayNext for track {}",
                                     cur_sr, cur_ch, sample_rate, channels, track_id
                                 );
+                                thread_state.set_gapless_ready(false);
                                 return;
                             }
                         }
@@ -1878,6 +1888,7 @@ impl Player {
                         // Don't queue if already streaming
                         if current_streaming_source.is_some() {
                             log::info!("Gapless: streaming source active, ignoring PlayNext for track {}", track_id);
+                            thread_state.set_gapless_ready(false);
                             return;
                         }
 
@@ -1886,6 +1897,7 @@ impl Player {
                             Ok(s) => s,
                             Err(e) => {
                                 log::error!("Gapless: failed to decode track {}: {}", track_id, e);
+                                thread_state.set_gapless_ready(false);
                                 return;
                             }
                         };
@@ -1929,6 +1941,7 @@ impl Player {
                         // Append to existing Sink (gapless queue)
                         if let Err(e) = engine.append(source) {
                             log::error!("Gapless: failed to append track {} to engine: {}", track_id, e);
+                            thread_state.set_gapless_ready(false);
                             return;
                         }
 
@@ -1967,11 +1980,34 @@ impl Player {
                             &mut current_normalization_gain,
                             &mut current_gain_atomic,
                             &mut gapless_pending,
+                            &mut gapless_request_armed,
                         ),
                         Err(RecvTimeoutError::Timeout) => {
                             let now = Instant::now();
                             if now.duration_since(last_empty_check) >= Duration::from_millis(500) {
                                 last_empty_check = now;
+
+                                // Streaming -> cached promotion:
+                                // once streaming download completes, persist full data and clear streaming marker.
+                                // This unlocks normal gapless pre-queue for the current track's tail.
+                                let mut clear_streaming_source = false;
+                                if let Some(streaming_src) = current_streaming_source.as_ref() {
+                                    if streaming_src.is_complete() {
+                                        if current_audio_data.is_none() {
+                                            if let Some(full_data) = streaming_src.take_complete_data() {
+                                                log::info!(
+                                                    "Streaming promotion: full track buffered ({} bytes), enabling cached transition path",
+                                                    full_data.len()
+                                                );
+                                                current_audio_data = Some(full_data);
+                                            }
+                                        }
+                                        clear_streaming_source = true;
+                                    }
+                                }
+                                if clear_streaming_source {
+                                    current_streaming_source = None;
+                                }
 
                                 let pos = thread_state.current_position();
                                 let dur = thread_state.duration.load(Ordering::SeqCst);
@@ -1993,6 +2029,7 @@ impl Player {
                                         thread_state.set_normalization_gain(pending.normalization_gain);
                                         thread_state.set_gapless_next_track_id(0);
                                         gapless_pending = None;
+                                        gapless_request_armed = false;
                                     }
                                 }
 
@@ -2007,12 +2044,14 @@ impl Player {
                                     && dur > 0
                                     && pos + 5 >= dur
                                     && gapless_pending.is_none()
+                                    && !gapless_request_armed
                                     && !thread_state.is_gapless_ready()
                                     && thread_state.get_gapless_next_track_id() == 0
                                     && current_streaming_source.is_none()
                                 {
                                     log::info!("Gapless: approaching end of track ({}s/{}s), requesting next", pos, dur);
                                     thread_state.set_gapless_ready(true);
+                                    gapless_request_armed = true;
                                 }
 
                                 // Original: check if ALL sources are done (engine empty)
@@ -2029,6 +2068,7 @@ impl Player {
                                         thread_state.set_gapless_ready(false);
                                         thread_state.set_gapless_next_track_id(0);
                                         gapless_pending = None;
+                                        gapless_request_armed = false;
                                     }
                                 }
                             }
@@ -2069,6 +2109,7 @@ impl Player {
                                     &mut current_normalization_gain,
                                     &mut current_gain_atomic,
                                     &mut gapless_pending,
+                                    &mut gapless_request_armed,
                                 ),
                                 Err(RecvTimeoutError::Timeout) => {}
                                 Err(RecvTimeoutError::Disconnected) => {
@@ -2096,6 +2137,7 @@ impl Player {
                             &mut current_normalization_gain,
                             &mut current_gain_atomic,
                             &mut gapless_pending,
+                            &mut gapless_request_armed,
                         ),
                         Err(_) => {
                             log::info!("Audio thread: channel closed, exiting");

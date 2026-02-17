@@ -4,10 +4,10 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
   export type ImmersiveTab = 'lyrics' | 'trackInfo' | 'suggestions' | 'queue';
-  export type FocusTab = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'lyrics-focus' | 'queue-focus';
+  export type FocusTab = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'spectral-ribbon' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'lyrics-focus' | 'queue-focus';
   export type ViewMode = 'focus' | 'split';
 
-  const VISUALIZER_TABS: FocusTab[] = ['visualizer', 'oscilloscope', 'energy-bands', 'lissajous', 'transient-pulse', 'album-reactive'];
+  const VISUALIZER_TABS: FocusTab[] = ['visualizer', 'oscilloscope', 'spectral-ribbon', 'energy-bands', 'lissajous', 'transient-pulse', 'album-reactive'];
 
   interface Props {
     viewMode: ViewMode;
@@ -123,6 +123,7 @@
   const vizOptions: { id: FocusTab; label: string; icon: typeof Activity }[] = [
     { id: 'visualizer', label: 'Bars', icon: Activity },
     { id: 'oscilloscope', label: 'Scope', icon: AudioWaveform },
+    { id: 'spectral-ribbon', label: 'Ribbon', icon: AudioWaveform },
     { id: 'energy-bands', label: 'Energy', icon: CircleDot },
     { id: 'lissajous', label: 'X/Y', icon: Crosshair },
     { id: 'transient-pulse', label: 'Pulse', icon: Zap },
@@ -137,7 +138,7 @@
 
 <header class="immersive-header" class:visible>
   <!-- Left: Spacer for balance -->
-  <div class="header-left"></div>
+  <div class="header-left" data-tauri-drag-region></div>
 
   <!-- Center: Mode toggle + Tabs -->
   <nav class="tabs">
@@ -180,7 +181,7 @@
           class:active={isVisualizerActive}
           onclick={() => {
             if (!isVisualizerActive) {
-              onFocusTabChange('visualizer');
+              onFocusTabChange('spectral-ribbon');
             } else {
               isVizDropdownOpen = !isVizDropdownOpen;
             }
@@ -327,6 +328,8 @@
   .header-left {
     flex: 1;
     min-width: 100px;
+    height: 100%;
+    cursor: grab;
   }
 
   .mode-toggle {

@@ -160,6 +160,8 @@ let gaplessGetNextTrackId: (() => number | null) | null = null;
 let onGaplessTransition: ((trackId: number) => Promise<void>) | null = null;
 // Track whether gapless pre-queue request is in flight
 let gaplessRequestInFlight = false;
+// One-shot guard: attempt gapless pre-queue only once per current track.
+let gaplessAttemptTrackId: number | null = null;
 
 // Session restore state - when set, next play will load the track first
 let pendingSessionRestore: { trackId: number; position: number } | null = null;
@@ -536,6 +538,8 @@ export async function stop(): Promise<void> {
     currentTrack = null;
     currentTime = 0;
     duration = 0;
+    gaplessAttemptTrackId = null;
+    gaplessRequestInFlight = false;
     notifyListeners();
   } catch (err) {
     console.error('Failed to stop playback:', err);
@@ -582,6 +586,9 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
   const prevDuration = duration;
   const prevPosition = currentTime;
   const prevWasPlaying = isPlaying;
+  if (event.track_id !== 0 && gaplessAttemptTrackId !== null && gaplessAttemptTrackId !== event.track_id) {
+    gaplessAttemptTrackId = null;
+  }
 
   // Gapless transition: backend changed track_id because gapless playback advanced
   // Handle this BEFORE the external track change handler to prevent stale queue lookups
@@ -596,6 +603,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     console.log('[Gapless] Transition detected, updating to track', event.track_id);
     try {
       await onGaplessTransition!(event.track_id);
+      gaplessAttemptTrackId = null;
     } catch (err) {
       console.error('[Gapless] Failed to handle transition:', err);
     }
@@ -726,10 +734,16 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     notifyListeners();
 
     // Gapless: when backend signals it's approaching end and wants next track queued
-    if (event.gapless_ready && !gaplessRequestInFlight && gaplessGetNextTrackId) {
+    if (
+      event.gapless_ready &&
+      !gaplessRequestInFlight &&
+      gaplessGetNextTrackId &&
+      gaplessAttemptTrackId !== currentTrack.id
+    ) {
       const nextId = gaplessGetNextTrackId();
       if (nextId && nextId > 0) {
         gaplessRequestInFlight = true;
+        gaplessAttemptTrackId = currentTrack.id;
         console.log('[Gapless] Backend ready, queueing track', nextId);
         invoke<boolean>('v2_play_next_gapless', { trackId: nextId })
           .then((queued) => {
@@ -860,5 +874,7 @@ export function reset(): void {
   isAdvancingTrack = false;
   isSkipping = false;
   queueEnded = false;
+  gaplessAttemptTrackId = null;
+  gaplessRequestInFlight = false;
   notifyListeners();
 }

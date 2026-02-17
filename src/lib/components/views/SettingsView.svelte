@@ -282,6 +282,44 @@
   let graphicsHwAccelEnabled = $state(true);
   let showLogsModal = $state(false);
 
+  type CompositionProfileId = 'nativeWayland' | 'x11Balanced' | 'x11Performance';
+
+  type CompositionProfile = {
+    id: CompositionProfileId;
+    forceX11: boolean;
+    gdkScale: string;
+    gdkDpiScale: string;
+    labelKey: string;
+    descKey: string;
+  };
+
+  const compositionProfiles: CompositionProfile[] = [
+    {
+      id: 'nativeWayland',
+      forceX11: false,
+      gdkScale: '',
+      gdkDpiScale: '',
+      labelKey: 'settings.appearance.composition.profiles.nativeWaylandLabel',
+      descKey: 'settings.appearance.composition.profiles.nativeWaylandDesc',
+    },
+    {
+      id: 'x11Balanced',
+      forceX11: true,
+      gdkScale: '1',
+      gdkDpiScale: '1.1',
+      labelKey: 'settings.appearance.composition.profiles.x11BalancedLabel',
+      descKey: 'settings.appearance.composition.profiles.x11BalancedDesc',
+    },
+    {
+      id: 'x11Performance',
+      forceX11: true,
+      gdkScale: '1',
+      gdkDpiScale: '1',
+      labelKey: 'settings.appearance.composition.profiles.x11PerformanceLabel',
+      descKey: 'settings.appearance.composition.profiles.x11PerformanceDesc',
+    },
+  ];
+
   // Navigation section IDs with translation keys
   const navSectionIds = [
     { id: 'audio', labelKey: 'settings.audio.title' },
@@ -2882,6 +2920,60 @@
     }
   }
 
+  function normalizeScaleValue(value: string): string {
+    return value.trim() || '';
+  }
+
+  function getActiveCompositionProfileId(): CompositionProfileId | null {
+    const currentScale = normalizeScaleValue(gdkScale);
+    const currentDpiScale = normalizeScaleValue(gdkDpiScale);
+    for (const profile of compositionProfiles) {
+      if (
+        profile.forceX11 === forceX11
+        && normalizeScaleValue(profile.gdkScale) === currentScale
+        && normalizeScaleValue(profile.gdkDpiScale) === currentDpiScale
+      ) {
+        return profile.id;
+      }
+    }
+    return null;
+  }
+
+  const activeCompositionProfileId = $derived(getActiveCompositionProfileId());
+
+  async function applyCompositionProfile(profileId: CompositionProfileId) {
+    const profile = compositionProfiles.find((candidate) => candidate.id === profileId);
+    if (!profile) return;
+
+    const previousForceX11 = forceX11;
+    const previousGdkScale = gdkScale;
+    const previousGdkDpiScale = gdkDpiScale;
+
+    // Optimistic UI update so toggles/inputs reflect the selected profile immediately
+    forceX11 = profile.forceX11;
+    gdkScale = profile.gdkScale;
+    gdkDpiScale = profile.gdkDpiScale;
+
+    try {
+      await invoke('v2_set_force_x11', { enabled: profile.forceX11 });
+      await invoke('v2_set_gdk_scale', { value: profile.gdkScale || null });
+      await invoke('v2_set_gdk_dpi_scale', { value: profile.gdkDpiScale || null });
+
+      showToast(
+        $t('settings.appearance.composition.profiles.applied', { values: { profile: $t(profile.labelKey) } }),
+        'info'
+      );
+      showToast($t('settings.developer.restartRequired'), 'info');
+    } catch (err) {
+      // Roll back UI state if persistence fails
+      forceX11 = previousForceX11;
+      gdkScale = previousGdkScale;
+      gdkDpiScale = previousGdkDpiScale;
+      console.error('Failed to apply composition profile:', err);
+      showToast(String(err), 'error');
+    }
+  }
+
   async function handleForceDmabufChange(enabled: boolean) {
     try {
       await invoke('v2_set_developer_force_dmabuf', { enabled });
@@ -3485,6 +3577,24 @@
           <div>
             <span>{$t('settings.appearance.composition.recoveryNote')}</span>
             <code class="recovery-cmd">{$t('settings.appearance.composition.recoveryCmd')}</code>
+          </div>
+        </div>
+
+        <div class="composition-profile-section">
+          <span class="composition-profile-title">{$t('settings.appearance.composition.profiles.title')}</span>
+          <p class="section-note">{$t('settings.appearance.composition.profiles.helpText')}</p>
+          <div class="composition-profile-grid">
+            {#each compositionProfiles as profile (profile.id)}
+              <button
+                class="composition-profile-card"
+                class:active={activeCompositionProfileId === profile.id}
+                type="button"
+                onclick={() => applyCompositionProfile(profile.id)}
+              >
+                <span class="profile-label">{$t(profile.labelKey)}</span>
+                <span class="profile-desc">{$t(profile.descKey)}</span>
+              </button>
+            {/each}
           </div>
         </div>
 
@@ -5065,6 +5175,59 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .fallback-desc {
     display: block;
     color: var(--text-secondary);
+  }
+
+  .composition-profile-section {
+    margin-bottom: 16px;
+  }
+
+  .composition-profile-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  .composition-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+
+  .composition-profile-card {
+    text-align: left;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+
+  .composition-profile-card:hover {
+    border-color: var(--accent-primary);
+    background: color-mix(in srgb, var(--bg-secondary) 92%, var(--accent-primary) 8%);
+  }
+
+  .composition-profile-card.active {
+    border-color: var(--accent-primary);
+    background: color-mix(in srgb, var(--bg-secondary) 88%, var(--accent-primary) 12%);
+  }
+
+  .profile-label {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .profile-desc {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.35;
   }
 
   .recovery-cmd {
