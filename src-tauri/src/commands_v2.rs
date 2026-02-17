@@ -1241,6 +1241,13 @@ pub fn v2_get_alsa_plugins() -> Result<Vec<AlsaPluginInfo>, String> {
     ])
 }
 
+// ==================== Link Resolver ====================
+
+#[tauri::command]
+pub fn v2_resolve_qobuz_link(url: String) -> Result<qbz_qobuz::ResolvedLink, RuntimeError> {
+    qbz_qobuz::resolve_link(&url).map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn v2_plex_ping(

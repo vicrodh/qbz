@@ -962,6 +962,7 @@ pub fn run() {
             commands_v2::v2_sync_cached_favorite_artists,
             commands_v2::v2_cache_favorite_artist,
             commands_v2::v2_uncache_favorite_artist,
+            commands_v2::v2_resolve_qobuz_link,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
