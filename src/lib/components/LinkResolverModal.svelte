@@ -114,7 +114,7 @@
   }
 
   .link-input:focus {
-    border-color: var(--accent);
+    border-color: var(--accent-primary);
   }
 
   .link-input::placeholder {
@@ -127,8 +127,8 @@
 
   .go-btn {
     padding: 10px 20px;
-    background: var(--accent);
-    color: var(--bg-primary);
+    background: var(--accent-primary);
+    color: #fff;
     border: none;
     border-radius: 8px;
     font-size: 14px;
