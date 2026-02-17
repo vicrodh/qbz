@@ -267,10 +267,11 @@
   <canvas bind:this={canvasRef} class="oscilloscope-canvas"></canvas>
 
   <div class="bottom-info">
-    <div class="track-meta">
-      <span class="track-title">{trackTitle}</span>
-      <span class="track-artist">{artist}{album ? ` \u2014 ${album}` : ''}</span>
-    </div>
+    <span class="track-title">{trackTitle}</span>
+    {#if album}
+      <span class="track-album">{album}</span>
+    {/if}
+    <span class="track-artist">{artist}</span>
     <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} compact />
   </div>
 </div>
@@ -304,15 +305,9 @@
     right: 24px;
     z-index: 10;
     display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .track-meta {
-    display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 2px;
+    gap: 3px;
   }
 
   .track-title {
@@ -320,7 +315,17 @@
     font-weight: 600;
     color: var(--text-primary, white);
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
-    max-width: 280px;
+    max-width: 400px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .track-album {
+    font-size: 12px;
+    color: var(--alpha-50, rgba(255, 255, 255, 0.5));
+    font-style: italic;
+    max-width: 400px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -329,7 +334,7 @@
   .track-artist {
     font-size: 12px;
     color: var(--alpha-60, rgba(255, 255, 255, 0.6));
-    max-width: 280px;
+    max-width: 400px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
