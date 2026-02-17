@@ -29,7 +29,9 @@ export type ViewType =
   | 'discover-qobuzissimes'
   | 'discover-albums-of-the-week'
   | 'discover-press-accolades'
-  | 'discover-playlists';
+  | 'discover-playlists'
+  | 'purchases'
+  | 'purchase-album';
 export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'playlists';
 
 // Navigation state
