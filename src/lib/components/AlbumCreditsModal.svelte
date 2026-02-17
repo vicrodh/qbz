@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { Play, ChevronDown, ChevronUp, Loader2, X } from 'lucide-svelte';
-  import type { AlbumCredits, TrackCredits } from '$lib/types';
+  import type { AlbumCredits, QobuzAlbum, Performer, TrackCredits } from '$lib/types';
 
   interface Props {
     isOpen: boolean;
@@ -54,7 +54,8 @@
     loading = true;
     error = null;
     try {
-      credits = await invoke<AlbumCredits>('get_album_credits', { albumId: id });
+      const album = await invoke<QobuzAlbum>('v2_get_album', { albumId: id });
+      credits = mapAlbumToCredits(album);
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);
       credits = null;
@@ -82,6 +83,85 @@
     if (e.key === 'Escape') {
       onClose();
     }
+  }
+
+  function parsePerformers(performersStr?: string): Performer[] {
+    if (!performersStr) return [];
+
+    return performersStr
+      .split(' - ')
+      .map((performerChunk) => {
+        const parts = performerChunk.split(',').map((part) => part.trim()).filter(Boolean);
+        if (parts.length === 0) return null;
+
+        const [name, ...roles] = parts;
+        return { name, roles };
+      })
+      .filter((performer): performer is Performer => performer !== null);
+  }
+
+  function formatTrackDuration(seconds: number): string {
+    const totalSeconds = Math.max(0, Math.floor(seconds || 0));
+    const minutes = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${minutes}:${String(secs).padStart(2, '0')}`;
+  }
+
+  function formatAlbumDuration(seconds: number): string {
+    const totalSeconds = Math.max(0, Math.floor(seconds || 0));
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    if (hours > 0) return `${hours}h ${minutes}m`;
+    return `${minutes}m`;
+  }
+
+  function formatQuality(bitDepth?: number, samplingRate?: number): string {
+    if (bitDepth && samplingRate) return `${bitDepth}-bit / ${samplingRate} kHz`;
+    if (bitDepth) return `${bitDepth}-bit`;
+    if (samplingRate) return `${samplingRate} kHz`;
+    return '-';
+  }
+
+  function mapAlbumToCredits(album: QobuzAlbum): AlbumCredits {
+    const artwork = album.image?.large || album.image?.thumbnail || album.image?.small || '';
+    const tracks = album.tracks?.items ?? [];
+    const releaseDate = album.release_date_original || '';
+    const releaseYear = releaseDate ? String(new Date(releaseDate).getFullYear()) : '';
+
+    const mappedTracks: TrackCredits[] = tracks.map((trackItem, index) => ({
+      id: trackItem.id,
+      number: trackItem.track_number || index + 1,
+      title: trackItem.title,
+      artist: trackItem.performer?.name || album.artist?.name || 'Unknown Artist',
+      duration: formatTrackDuration(trackItem.duration || 0),
+      duration_seconds: trackItem.duration || 0,
+      performers: parsePerformers(trackItem.performers),
+      copyright: trackItem.copyright,
+      album_id: album.id,
+      artist_id: trackItem.performer?.id
+    }));
+
+    return {
+      album: {
+        id: album.id,
+        artwork,
+        title: album.title,
+        artist: album.artist?.name || 'Unknown Artist',
+        artist_id: album.artist?.id,
+        year: releaseYear,
+        release_date: releaseDate || undefined,
+        label: album.label?.name || '',
+        label_id: album.label?.id,
+        genre: album.genre?.name || '',
+        quality: formatQuality(album.maximum_bit_depth, album.maximum_sampling_rate),
+        track_count: album.tracks_count ?? mappedTracks.length,
+        duration: formatAlbumDuration(album.duration || 0),
+        bit_depth: album.maximum_bit_depth,
+        sampling_rate: album.maximum_sampling_rate,
+        description: album.description
+      },
+      tracks: mappedTracks
+    };
   }
 </script>
 
