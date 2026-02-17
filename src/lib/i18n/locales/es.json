@@ -385,6 +385,7 @@
     "history": "Historial",
     "recentlyPlayed": "Reproducido Recientemente",
     "noHistoryYet": "Sin pistas reproducidas aún",
+    "historyEmpty": "Sin pistas reproducidas aún",
     "infinitePlay": "Reproducción Infinita",
     "infinitePlayEnabled": "Reproducción infinita activada",
     "infinitePlayDisabled": "Reproducción infinita desactivada",

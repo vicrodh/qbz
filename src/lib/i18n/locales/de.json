@@ -377,6 +377,7 @@
     "history": "Verlauf",
     "recentlyPlayed": "Kürzlich gespielt",
     "noHistoryYet": "Noch keine Titel abgespielt",
+    "historyEmpty": "Noch keine Titel abgespielt",
     "infinitePlay": "Unendliches Abspielen",
     "infinitePlayEnabled": "Unendliches Abspielen aktiviert",
     "infinitePlayDisabled": "Unendliches Abspielen deaktiviert",

@@ -2907,6 +2907,18 @@
     setOnResumeFromStop(async () => {
       const queueState = await getBackendQueueState();
       if (!queueState) return;
+      const tryQueueIndices = async (indices: number[]): Promise<BackendQueueTrack | null> => {
+        for (const idx of indices) {
+          if (idx < 0) continue;
+          if (queueState.total_tracks > 0 && idx >= queueState.total_tracks) continue;
+          const selected = await playQueueIndex(idx);
+          if (selected) {
+            console.log('[Player] Resume from stop: selected queue index', idx);
+            return selected;
+          }
+        }
+        return null;
+      };
 
       // Normal case: current track already selected in queue, replay it.
       if (queueState.current_track && queueState.current_index !== null) {
@@ -2915,21 +2927,41 @@
         return;
       }
 
+      // Hybrid backend state: queue index exists but current_track is missing.
+      // This can happen after queue mutations where selection metadata lags.
+      if (!queueState.current_track && queueState.current_index !== null) {
+        console.log('[Player] Resume from stop: hybrid queue state, trying [current,0,1]:', queueState.current_index);
+        const selected = await tryQueueIndices([queueState.current_index, 0, 1]);
+        if (selected) {
+          await playQueueTrack(selected);
+          return;
+        }
+      }
+
       // Empty chamber case: queue exists but no current track selected yet.
       if (queueState.current_index === null && queueState.upcoming.length > 0) {
         const firstUpcoming = queueState.upcoming[0];
-        const firstTrack = await playQueueIndex(0);
+        const firstTrack = await tryQueueIndices([0, 1]);
 
         // Preferred path: bind queue index first, then play selected track.
         if (firstTrack) {
-          console.log('[Player] Resuming from stop, starting queue from index 0');
+          console.log('[Player] Resuming from stop, starting queue from first valid index');
           await playQueueTrack(firstTrack);
           return;
         }
 
-        // Defensive fallback: if play_index fails, play first upcoming directly.
-        // This guarantees user-visible playback instead of silent no-op.
-        console.warn('[Player] playQueueIndex(0) failed, falling back to first upcoming track');
+        // Fallback #1: ask backend to advance/select next track from empty chamber state.
+        // Some queue states can reject play_index(0) while still accepting next_track.
+        const advancedTrack = await nextTrack();
+        if (advancedTrack) {
+          console.log('[Player] playQueueIndex(0) failed, resumed via nextTrack()');
+          await playQueueTrack(advancedTrack);
+          return;
+        }
+
+        // Fallback #2: play the first upcoming track directly.
+        // Last-resort to avoid a visible no-op on Play button.
+        console.warn('[Player] Queue resume fallback: playing first upcoming track directly');
         await playQueueTrack(firstUpcoming);
       }
     });
@@ -3753,6 +3785,7 @@
       />
     {:else}
       <NowPlayingBar
+        onTogglePlay={togglePlay}
         onOpenQueue={toggleQueue}
         onOpenFullScreen={openFullScreen}
         onCast={openCastPicker}

@@ -40,7 +40,6 @@ use crate::offline::OfflineState;
 use crate::offline_cache::OfflineCacheState;
 use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
 use crate::plex::{PlexMusicSection, PlexPlayResult, PlexServerInfo, PlexTrack};
-use crate::queue::QueueTrack;
 use crate::reco_store::{HomeResolved, HomeSeeds, RecoEventInput, RecoState};
 use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason, CommandRequirement};
 use crate::AppState;
@@ -3235,7 +3234,15 @@ pub async fn v2_create_track_radio(
     artist_id: u64,
     state: State<'_, AppState>,
     blacklist_state: State<'_, BlacklistState>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<String, String> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await
+        .map_err(|e| e.to_string())?;
+
     let client = state.client.read().await.clone();
 
     let session_id = tokio::task::spawn_blocking(move || -> Result<String, String> {
@@ -3302,8 +3309,10 @@ pub async fn v2_create_track_radio(
         return Err("Failed to generate any radio tracks".to_string());
     }
 
-    let queue_tracks: Vec<QueueTrack> = tracks.iter().map(track_to_queue_track_from_api).collect();
-    state.queue.set_queue(queue_tracks, Some(0));
+    let queue_tracks: Vec<CoreQueueTrack> =
+        tracks.iter().map(track_to_queue_track_from_api).collect();
+    let bridge = bridge.get().await;
+    bridge.set_queue(queue_tracks, Some(0)).await;
 
     let queue_track_ids: Vec<u64> = tracks.iter().map(|t| t.id).collect();
     let context = PlaybackContext::new(
@@ -3319,8 +3328,13 @@ pub async fn v2_create_track_radio(
     Ok(session_id)
 }
 
-fn track_to_queue_track_from_api(track: &crate::api::Track) -> QueueTrack {
-    let artwork_url = track.album.as_ref().and_then(|a| a.image.large.clone());
+fn track_to_queue_track_from_api(track: &crate::api::Track) -> CoreQueueTrack {
+    let artwork_url = track
+        .album
+        .as_ref()
+        .and_then(|a| a.image.large.clone())
+        .or_else(|| track.album.as_ref().and_then(|a| a.image.thumbnail.clone()))
+        .or_else(|| track.album.as_ref().and_then(|a| a.image.small.clone()));
     let artist = track
         .performer
         .as_ref()
@@ -3334,7 +3348,7 @@ fn track_to_queue_track_from_api(track: &crate::api::Track) -> QueueTrack {
     let album_id = track.album.as_ref().map(|a| a.id.clone());
     let artist_id = track.performer.as_ref().map(|p| p.id);
 
-    QueueTrack {
+    CoreQueueTrack {
         id: track.id,
         title: track.title.clone(),
         artist,
@@ -3361,6 +3375,16 @@ pub async fn v2_get_queue_state(
 ) -> Result<QueueState, RuntimeError> {
     let bridge = bridge.get().await;
     Ok(bridge.get_queue_state().await)
+}
+
+/// Get currently selected queue track (V2)
+#[tauri::command]
+pub async fn v2_get_current_queue_track(
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<Option<V2QueueTrack>, RuntimeError> {
+    let bridge = bridge.get().await;
+    let state = bridge.get_queue_state().await;
+    Ok(state.current_track.map(Into::into))
 }
 
 /// Set repeat mode (V2 - uses QbzCore)

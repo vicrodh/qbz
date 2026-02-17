@@ -385,6 +385,7 @@
     "history": "History",
     "recentlyPlayed": "Recently Played",
     "noHistoryYet": "No tracks played yet",
+    "historyEmpty": "No tracks played yet",
     "infinitePlay": "Infinite Play",
     "infinitePlayEnabled": "Infinite play enabled",
     "infinitePlayDisabled": "Infinite play disabled",

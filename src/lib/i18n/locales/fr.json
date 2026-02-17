@@ -377,6 +377,7 @@
     "history": "Historique",
     "recentlyPlayed": "Récemment écouté",
     "noHistoryYet": "Aucune piste lue pour l'instant",
+    "historyEmpty": "Aucune piste lue pour l'instant",
     "infinitePlay": "Lecture infinie",
     "infinitePlayEnabled": "Lecture infinie activée",
     "infinitePlayDisabled": "Lecture infinie désactivée",
