@@ -266,6 +266,12 @@
 <div class="oscilloscope-panel" class:visible={enabled}>
   <canvas bind:this={canvasRef} class="oscilloscope-canvas"></canvas>
 
+  {#if artwork}
+    <div class="artwork-thumb">
+      <img src={artwork} alt={trackTitle} />
+    </div>
+  {/if}
+
   <div class="bottom-info">
     <span class="track-title">{trackTitle}</span>
     {#if album}
@@ -340,10 +346,35 @@
     text-overflow: ellipsis;
   }
 
+  .artwork-thumb {
+    position: absolute;
+    bottom: 130px;
+    left: 24px;
+    z-index: 10;
+    width: 72px;
+    height: 72px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+
+  .artwork-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
   @media (max-width: 768px) {
     .bottom-info {
       right: 16px;
       bottom: 120px;
+    }
+
+    .artwork-thumb {
+      left: 16px;
+      bottom: 120px;
+      width: 56px;
+      height: 56px;
     }
   }
 </style>

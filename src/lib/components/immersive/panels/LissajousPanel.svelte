@@ -275,11 +275,18 @@
 
   <canvas bind:this={canvasRef} class="lissajous-canvas"></canvas>
 
-  <div class="bottom-info">
-    <div class="track-meta">
-      <span class="track-title">{trackTitle}</span>
-      <span class="track-artist">{artist}{album ? ` \u2014 ${album}` : ''}</span>
+  {#if artwork}
+    <div class="artwork-thumb">
+      <img src={artwork} alt={trackTitle} />
     </div>
+  {/if}
+
+  <div class="bottom-info">
+    <span class="track-title">{trackTitle}</span>
+    {#if album}
+      <span class="track-album">{album}</span>
+    {/if}
+    <span class="track-artist">{artist}</span>
     <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} compact />
   </div>
 </div>
@@ -324,21 +331,33 @@
     z-index: 1;
   }
 
+  .artwork-thumb {
+    position: absolute;
+    bottom: 130px;
+    left: 24px;
+    z-index: 10;
+    width: 72px;
+    height: 72px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  }
+
+  .artwork-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
   .bottom-info {
     position: absolute;
     bottom: 130px;
     right: 24px;
     z-index: 10;
     display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .track-meta {
-    display: flex;
     flex-direction: column;
     align-items: flex-end;
-    gap: 2px;
+    gap: 3px;
   }
 
   .track-title {
@@ -346,7 +365,17 @@
     font-weight: 600;
     color: var(--text-primary, white);
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
-    max-width: 280px;
+    max-width: 400px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .track-album {
+    font-size: 12px;
+    color: var(--alpha-50, rgba(255, 255, 255, 0.5));
+    font-style: italic;
+    max-width: 400px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -355,7 +384,7 @@
   .track-artist {
     font-size: 12px;
     color: var(--alpha-60, rgba(255, 255, 255, 0.6));
-    max-width: 280px;
+    max-width: 400px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -365,6 +394,13 @@
     .bottom-info {
       right: 16px;
       bottom: 120px;
+    }
+
+    .artwork-thumb {
+      left: 16px;
+      bottom: 120px;
+      width: 56px;
+      height: 56px;
     }
   }
 </style>
