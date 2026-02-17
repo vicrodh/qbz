@@ -405,7 +405,7 @@
     border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 16px;
     padding: 12px 24px;
-    min-width: 700px;
+    min-width: 670px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   }
 

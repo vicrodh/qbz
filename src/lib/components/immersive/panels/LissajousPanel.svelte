@@ -275,19 +275,20 @@
 
   <canvas bind:this={canvasRef} class="lissajous-canvas"></canvas>
 
-  {#if artwork}
-    <div class="artwork-thumb">
-      <img src={artwork} alt={trackTitle} />
-    </div>
-  {/if}
-
   <div class="bottom-info">
-    <span class="track-title">{trackTitle}</span>
-    {#if album}
-      <span class="track-album">{album}</span>
+    <div class="track-meta">
+      <span class="track-title">{trackTitle}</span>
+      {#if album}
+        <span class="track-album">{album}</span>
+      {/if}
+      <span class="track-artist">{artist}</span>
+      <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} compact />
+    </div>
+    {#if artwork}
+      <div class="artwork-thumb">
+        <img src={artwork} alt={trackTitle} />
+      </div>
     {/if}
-    <span class="track-artist">{artist}</span>
-    <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} compact />
   </div>
 </div>
 
@@ -331,29 +332,17 @@
     z-index: 1;
   }
 
-  .artwork-thumb {
-    position: absolute;
-    bottom: 130px;
-    left: 24px;
-    z-index: 10;
-    width: 72px;
-    height: 72px;
-    border-radius: 6px;
-    overflow: hidden;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
-  }
-
-  .artwork-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
   .bottom-info {
     position: absolute;
-    bottom: 130px;
+    bottom: 24px;
     right: 24px;
     z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .track-meta {
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -390,15 +379,28 @@
     text-overflow: ellipsis;
   }
 
+  .artwork-thumb {
+    width: 72px;
+    height: 72px;
+    border-radius: 6px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    flex-shrink: 0;
+  }
+
+  .artwork-thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
   @media (max-width: 768px) {
     .bottom-info {
       right: 16px;
-      bottom: 120px;
+      bottom: 16px;
     }
 
     .artwork-thumb {
-      left: 16px;
-      bottom: 120px;
       width: 56px;
       height: 56px;
     }
