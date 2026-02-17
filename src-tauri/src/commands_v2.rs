@@ -4130,16 +4130,15 @@ pub async fn v2_seek(
     runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
     log::info!("[V2] Command: seek {}", position);
     let bridge_guard = bridge.get().await;
-    let result = bridge_guard.seek(position).map_err(RuntimeError::Internal);
+    bridge_guard.seek(position).map_err(RuntimeError::Internal)?;
 
-    // Update MPRIS with new position
+    // Update MPRIS with effective playback state only after successful seek.
     let playback_state = bridge_guard.get_playback_state();
-    app_state.media_controls.set_playback_with_progress(
-        playback_state.is_playing,
-        position,
-    );
+    app_state
+        .media_controls
+        .set_playback_with_progress(playback_state.is_playing, playback_state.position);
 
-    result
+    Ok(())
 }
 
 /// Set volume (0.0 - 1.0) (V2)

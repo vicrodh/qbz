@@ -125,6 +125,7 @@
   let isDraggingProgress = $state(false);
   let isDraggingVolume = $state(false);
   let showArtworkPreview = $state(false);
+  let dragPreviewTime = $state<number | null>(null);
 
   // Offline state
   let isOffline = $state(checkIsOffline());
@@ -152,9 +153,10 @@
     }
   }
 
-  const progress = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
+  const effectiveTime = $derived(dragPreviewTime ?? currentTime);
+  const progress = $derived(duration > 0 ? (effectiveTime / duration) * 100 : 0);
   const hasTrack = $derived(trackTitle !== '');
-  const remainingTime = $derived(Math.max(0, duration - currentTime));
+  const remainingTime = $derived(Math.max(0, duration - effectiveTime));
 
   function formatTime(seconds: number): string {
     const mins = Math.floor(seconds / 60);
@@ -172,7 +174,7 @@
       const rect = progressRef.getBoundingClientRect();
       const percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
       const newTime = Math.round((percentage / 100) * duration);
-      onSeek?.(newTime);
+      dragPreviewTime = newTime;
     }
   }
 
@@ -195,8 +197,12 @@
   }
 
   function handleMouseUp() {
+    if (isDraggingProgress && dragPreviewTime !== null) {
+      onSeek?.(dragPreviewTime);
+    }
     isDraggingProgress = false;
     isDraggingVolume = false;
+    dragPreviewTime = null;
   }
 
   $effect(() => {
@@ -529,14 +535,14 @@
     width: 100%;
     height: 3px;
     background: var(--border-subtle);
-    border-radius: 2px;
+    border-radius: 999px;
     overflow: hidden;
   }
 
   .seekbar-fill {
     height: 100%;
     background: var(--accent-primary, #6366f1);
-    border-radius: 2px;
+    border-radius: 999px;
     transition: width 100ms linear;
   }
 
@@ -558,7 +564,7 @@
   }
 
   .seekbar:hover .seekbar-track {
-    height: 4px;
+    /* keep both layers stable on hover */
   }
 
   /* ===== Controls Row ===== */

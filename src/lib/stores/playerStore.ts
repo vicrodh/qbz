@@ -143,6 +143,12 @@ let isAdvancingTrack = false;
 let isSkipping = false;
 let queueEnded = false;
 let normalizationGain: number | null = null;  // Current normalization gain (null = not active)
+let pendingSeekPosition: number | null = null;
+let seekRequestInFlight = false;
+let seekTargetPosition: number | null = null;
+let seekGuardUntilMs = 0;
+const SEEK_GUARD_WINDOW_MS = 1500;
+const SEEK_SETTLE_TOLERANCE_SECS = 1;
 
 // Callbacks for track advancement (set by consumer)
 let onTrackEnded: (() => Promise<void>) | null = null;
@@ -208,6 +214,28 @@ export function getIsSkipping(): boolean {
 
 export function getNormalizationGain(): number | null {
   return normalizationGain;
+}
+
+async function flushPendingSeek(): Promise<void> {
+  if (seekRequestInFlight) return;
+  if (pendingSeekPosition === null) return;
+
+  const targetPosition = pendingSeekPosition;
+  pendingSeekPosition = null;
+  seekTargetPosition = targetPosition;
+  seekGuardUntilMs = Date.now() + SEEK_GUARD_WINDOW_MS;
+
+  seekRequestInFlight = true;
+  try {
+    await invoke('v2_seek', { position: Math.floor(targetPosition) });
+  } catch (err) {
+    console.error('Failed to seek:', err);
+  } finally {
+    seekRequestInFlight = false;
+    if (pendingSeekPosition !== null) {
+      void flushPendingSeek();
+    }
+  }
 }
 
 // ============ State Setter ============
@@ -418,8 +446,8 @@ export async function seek(position: number): Promise<void> {
       await castSeek(Math.floor(clampedPosition));
       return;
     }
-
-    await invoke('v2_seek', { position: Math.floor(clampedPosition) });
+    pendingSeekPosition = clampedPosition;
+    void flushPendingSeek();
   } catch (err) {
     console.error('Failed to seek:', err);
   }
@@ -655,7 +683,24 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
 
   // Update playback state if track matches
   if (event.track_id === currentTrack.id) {
-    currentTime = event.position;
+    const now = Date.now();
+    const seekGuardActive = seekTargetPosition !== null && now < seekGuardUntilMs;
+    if (seekGuardActive) {
+      const delta = Math.abs(event.position - seekTargetPosition);
+      if (delta <= SEEK_SETTLE_TOLERANCE_SECS) {
+        seekTargetPosition = null;
+        seekGuardUntilMs = 0;
+        currentTime = event.position;
+      } else {
+        // Ignore stale position updates briefly after seek to avoid UI snap-back.
+      }
+    } else {
+      if (seekTargetPosition !== null && now >= seekGuardUntilMs) {
+        seekTargetPosition = null;
+        seekGuardUntilMs = 0;
+      }
+      currentTime = event.position;
+    }
     isPlaying = event.is_playing;
 
     // Update volume from backend (e.g., changed via remote control or system)
@@ -802,6 +847,10 @@ export function isPollingActive(): boolean {
  * Reset all state (for logout)
  */
 export function reset(): void {
+  pendingSeekPosition = null;
+  seekRequestInFlight = false;
+  seekTargetPosition = null;
+  seekGuardUntilMs = 0;
   stopPolling();
   currentTrack = null;
   isPlaying = false;
