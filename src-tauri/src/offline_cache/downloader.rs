@@ -2,7 +2,7 @@
 
 use std::io::Write;
 use std::path::Path;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter};
 
 use super::{CacheProgress, OfflineCacheStatus};
@@ -66,6 +66,8 @@ impl StreamFetcher {
 
         let mut cached: u64 = 0;
         let mut last_progress: u8 = 0;
+        let mut last_emit_time = Instant::now();
+        const MIN_EMIT_INTERVAL: Duration = Duration::from_millis(200);
 
         // Stream the response body
         let mut stream = response.bytes_stream();
@@ -87,9 +89,11 @@ impl StreamFetcher {
                 0
             };
 
-            // Emit progress event every 2% change
-            if progress != last_progress && (progress - last_progress >= 2 || progress == 100) {
+            // Emit progress event every 2% change AND at least 200ms apart (always emit 100%)
+            let elapsed = last_emit_time.elapsed();
+            if progress != last_progress && (progress - last_progress >= 2 || progress == 100) && (elapsed >= MIN_EMIT_INTERVAL || progress == 100) {
                 last_progress = progress;
+                last_emit_time = Instant::now();
 
                 if let Some(app) = app_handle {
                     let _ = app.emit(
