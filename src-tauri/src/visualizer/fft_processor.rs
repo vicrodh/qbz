@@ -41,6 +41,10 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
     let mut output = vec![0.0f32; NUM_BARS];
     let mut smoothed = vec![0.0f32; NUM_BARS];
 
+    // Waveform buffer: 256 L + 256 R = 512 floats
+    const WAVEFORM_POINTS: usize = 256;
+    let mut waveform_buf = vec![0.0f32; WAVEFORM_POINTS * 2];
+
     // Smoothing factor: 0 = no smoothing, higher = more smoothing
     const SMOOTHING: f32 = 0.65;
 
@@ -96,6 +100,22 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
                     log::debug!("FFT error: {:?}", e);
                 }
             }
+
+            // Emit raw waveform data for oscilloscope (stereo L/R)
+            // samples[] is interleaved: L0, R0, L1, R1, ...
+            // 1024 samples = 512 stereo pairs → downsample to 256 per channel
+            let stereo_pairs = FFT_SIZE / 2; // 512
+            let step = stereo_pairs / WAVEFORM_POINTS; // 512/256 = 2
+            for i in 0..WAVEFORM_POINTS {
+                let base = i * step * 2; // index into interleaved buffer
+                waveform_buf[i] = samples[base];                          // L
+                waveform_buf[WAVEFORM_POINTS + i] = samples[base + 1];    // R
+            }
+            let waveform_bytes: Vec<u8> = waveform_buf
+                .iter()
+                .flat_map(|f| f.to_le_bytes())
+                .collect();
+            let _ = app_handle.emit("viz:waveform", waveform_bytes);
         }
 
         // Maintain target FPS
