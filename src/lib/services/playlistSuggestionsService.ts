@@ -127,7 +127,7 @@ export async function getPlaylistSuggestionsV2(
   }
 
   // Call backend - MBID resolution happens server-side with caching
-  const result = await invoke<SuggestionResult>('get_playlist_suggestions_v2', {
+  const result = await invoke<SuggestionResult>('v2_get_playlist_suggestions', {
     input: {
       artists: dedupedArtists.map(a => ({
         name: a.name,

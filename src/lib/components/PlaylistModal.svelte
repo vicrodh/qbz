@@ -357,7 +357,7 @@
 
     try {
       // Check for duplicates in regular playlists with Qobuz tracks
-      const result = await invoke<PlaylistDuplicateResult>('check_playlist_duplicates', {
+      const result = await invoke<PlaylistDuplicateResult>('v2_check_playlist_duplicates', {
         playlistId: selectedPlaylistId,
         trackIds
       });

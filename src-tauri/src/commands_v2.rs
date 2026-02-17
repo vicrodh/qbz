@@ -18,7 +18,7 @@ use qbz_models::{
 use crate::artist_blacklist::BlacklistState;
 use crate::artist_vectors::ArtistVectorStoreState;
 use crate::cache::{AudioCache, CacheStats};
-use crate::api::models::PlaylistWithTrackIds;
+use crate::api::models::{PlaylistDuplicateResult, PlaylistWithTrackIds};
 use crate::api_cache::ApiCacheState;
 use crate::audio::{AlsaPlugin, AudioBackendType, AudioDevice, BackendManager};
 use crate::cast::{AirPlayMetadata, AirPlayState, CastState, DlnaMetadata, DlnaState, MediaMetadata};
@@ -49,6 +49,21 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct V2SuggestionArtistInput {
+    pub name: String,
+    pub qobuz_id: Option<u64>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct V2PlaylistSuggestionsInput {
+    pub artists: Vec<V2SuggestionArtistInput>,
+    pub exclude_track_ids: Vec<u64>,
+    #[serde(default)]
+    pub include_reasons: bool,
+    pub config: Option<crate::artist_vectors::SuggestionConfig>,
+}
 
 // ==================== Helper Functions ====================
 
@@ -1474,6 +1489,134 @@ pub async fn v2_clear_vector_store(
     let mut guard = store_state.store.lock().await;
     let store = guard.as_mut().ok_or("No active session - please log in")?;
     store.clear_all()
+}
+
+#[tauri::command]
+pub async fn v2_get_playlist_suggestions(
+    input: V2PlaylistSuggestionsInput,
+    store_state: State<'_, ArtistVectorStoreState>,
+    musicbrainz: State<'_, crate::musicbrainz::MusicBrainzSharedState>,
+    app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<crate::artist_vectors::SuggestionResult, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    if input.artists.is_empty() {
+        return Ok(crate::artist_vectors::SuggestionResult {
+            tracks: Vec::new(),
+            source_artists: Vec::new(),
+            playlist_artists_count: 0,
+            similar_artists_count: 0,
+        });
+    }
+
+    let mut resolved_artists: Vec<(String, String)> = Vec::new();
+    let mut seen_mbids = std::collections::HashSet::new();
+
+    for artist in &input.artists {
+        let mbid_from_qobuz = if let Some(qobuz_id) = artist.qobuz_id {
+            let qobuz_artist_name = {
+                let client = app_state.client.read().await;
+                match client.get_artist(qobuz_id, false).await {
+                    Ok(qobuz_artist) => Some(qobuz_artist.name),
+                    Err(err) => {
+                        log::warn!(
+                            "[V2/Suggestions] Failed to fetch Qobuz artist {} for MBID resolution: {}",
+                            qobuz_id,
+                            err
+                        );
+                        None
+                    }
+                }
+            };
+
+            if let Some(artist_name) = qobuz_artist_name {
+                match musicbrainz.client.search_artist(&artist_name).await {
+                    Ok(search) => search
+                        .artists
+                        .into_iter()
+                        .find(|candidate| candidate.score.unwrap_or(0) >= 80)
+                        .map(|candidate| candidate.id),
+                    Err(err) => {
+                        log::warn!(
+                            "[V2/Suggestions] Failed Qobuz->MBID search for {} ({}): {}",
+                            artist.name,
+                            qobuz_id,
+                            err
+                        );
+                        None
+                    }
+                }
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
+        let resolved_mbid = if mbid_from_qobuz.is_some() {
+            mbid_from_qobuz
+        } else {
+            match musicbrainz.client.search_artist(&artist.name).await {
+                Ok(search) => search
+                    .artists
+                    .into_iter()
+                    .find(|candidate| candidate.score.unwrap_or(0) >= 80)
+                    .map(|candidate| candidate.id),
+                Err(err) => {
+                    log::warn!(
+                        "[V2/Suggestions] Failed name->MBID resolution for {}: {}",
+                        artist.name,
+                        err
+                    );
+                    None
+                }
+            }
+        };
+
+        if let Some(mbid) = resolved_mbid {
+            if seen_mbids.insert(mbid.clone()) {
+                resolved_artists.push((mbid, artist.name.clone()));
+            }
+        }
+    }
+
+    if resolved_artists.is_empty() {
+        log::warn!("[V2/Suggestions] No artists could be resolved to MusicBrainz IDs");
+        return Ok(crate::artist_vectors::SuggestionResult {
+            tracks: Vec::new(),
+            source_artists: Vec::new(),
+            playlist_artists_count: input.artists.len(),
+            similar_artists_count: 0,
+        });
+    }
+
+    let config = input.config.unwrap_or_default();
+    let builder = std::sync::Arc::new(crate::artist_vectors::ArtistVectorBuilder::new(
+        store_state.store.clone(),
+        musicbrainz.client.clone(),
+        musicbrainz.cache.clone(),
+        app_state.client.clone(),
+        crate::artist_vectors::RelationshipWeights::default(),
+    ));
+
+    let engine = crate::artist_vectors::SuggestionsEngine::new(
+        store_state.store.clone(),
+        builder,
+        app_state.client.clone(),
+        config,
+    );
+
+    let exclude_track_ids: std::collections::HashSet<u64> =
+        input.exclude_track_ids.into_iter().collect();
+
+    engine
+        .generate_suggestions(&resolved_artists, &exclude_track_ids, input.include_reasons)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
@@ -4694,6 +4837,40 @@ pub async fn v2_get_playlist_track_ids(
         .get_playlist_track_ids(playlistId)
         .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+/// Check duplicates before adding tracks to a playlist (V2).
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_check_playlist_duplicates(
+    playlistId: u64,
+    trackIds: Vec<u64>,
+    app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<PlaylistDuplicateResult, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+
+    let client = app_state.client.read().await;
+    let playlist = client
+        .get_playlist_track_ids(playlistId)
+        .await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))?;
+
+    let existing_ids: std::collections::HashSet<u64> = playlist.track_ids.into_iter().collect();
+    let duplicate_track_ids: std::collections::HashSet<u64> = trackIds
+        .iter()
+        .copied()
+        .filter(|track_id| existing_ids.contains(track_id))
+        .collect();
+
+    Ok(PlaylistDuplicateResult {
+        total_tracks: trackIds.len(),
+        duplicate_count: duplicate_track_ids.len(),
+        duplicate_track_ids,
+    })
 }
 
 /// Add tracks to playlist (V2 - uses QbzCore)
