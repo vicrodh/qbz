@@ -64,7 +64,7 @@
   let prevBassEnergy = 0;
   let frontendCooldown = 0;
   const FRONTEND_BEAT_THRESHOLD = 0.08;
-  const FRONTEND_COOLDOWN = 4; // ~133ms at 30fps
+  const FRONTEND_COOLDOWN = 4;
 
   // Colors from artwork
   let pulseColors = $state([
@@ -73,21 +73,6 @@
     { r: 200, g: 100, b: 255 },
   ]);
   let colorIndex = 0;
-
-  // Album art for canvas
-  let artworkImg: HTMLImageElement | null = null;
-  let artworkLoaded = false;
-
-  function loadArtwork(src: string) {
-    if (!src) return;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      artworkImg = img;
-      artworkLoaded = true;
-    };
-    img.src = src;
-  }
 
   function extractColors(imgSrc: string) {
     if (!imgSrc) return;
@@ -136,7 +121,6 @@
   $effect(() => {
     if (artwork) {
       extractColors(artwork);
-      loadArtwork(artwork);
     }
   });
 
@@ -244,16 +228,13 @@
     ctx.fillRect(0, 0, width, height);
 
     const centerX = width / 2;
-    const centerY = height / 2 - 20;
-    const minDim = Math.min(width, height);
-    const artSize = minDim * 0.28;
-    const artHalf = artSize / 2;
+    const centerY = height / 2;
 
     // Draw rings (expanding outward)
     for (let i = rings.length - 1; i >= 0; i--) {
       const ring = rings[i];
       ring.radius += ring.speed;
-      ring.alpha *= 0.96; // Fade out
+      ring.alpha *= 0.96;
 
       if (ring.alpha < 0.01 || ring.radius > ring.maxRadius * 1.5) {
         rings.splice(i, 1);
@@ -273,34 +254,15 @@
       ctx.shadowBlur = 0;
     }
 
-    // Ambient glow behind artwork
+    // Ambient glow at center
     if (globalEnergy > 0.02) {
       const glowColor = pulseColors[0];
-      const gradient = ctx.createRadialGradient(centerX, centerY, artHalf * 0.5, centerX, centerY, artHalf * 2);
+      const glowRadius = Math.min(width, height) * 0.14;
+      const gradient = ctx.createRadialGradient(centerX, centerY, glowRadius * 0.5, centerX, centerY, glowRadius * 2);
       gradient.addColorStop(0, `rgba(${glowColor.r}, ${glowColor.g}, ${glowColor.b}, ${globalEnergy * 0.15})`);
       gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
       ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
-    }
-
-    // Draw album art in center
-    if (artworkImg && artworkLoaded) {
-      ctx.save();
-      const cornerRadius = 8;
-      ctx.beginPath();
-      ctx.moveTo(centerX - artHalf + cornerRadius, centerY - artHalf);
-      ctx.lineTo(centerX + artHalf - cornerRadius, centerY - artHalf);
-      ctx.arcTo(centerX + artHalf, centerY - artHalf, centerX + artHalf, centerY - artHalf + cornerRadius, cornerRadius);
-      ctx.lineTo(centerX + artHalf, centerY + artHalf - cornerRadius);
-      ctx.arcTo(centerX + artHalf, centerY + artHalf, centerX + artHalf - cornerRadius, centerY + artHalf, cornerRadius);
-      ctx.lineTo(centerX - artHalf + cornerRadius, centerY + artHalf);
-      ctx.arcTo(centerX - artHalf, centerY + artHalf, centerX - artHalf, centerY + artHalf - cornerRadius, cornerRadius);
-      ctx.lineTo(centerX - artHalf, centerY - artHalf + cornerRadius);
-      ctx.arcTo(centerX - artHalf, centerY - artHalf, centerX - artHalf + cornerRadius, centerY - artHalf, cornerRadius);
-      ctx.closePath();
-      ctx.clip();
-      ctx.drawImage(artworkImg, centerX - artHalf, centerY - artHalf, artSize, artSize);
-      ctx.restore();
     }
 
     animationFrame = requestAnimationFrame(render);
@@ -345,15 +307,12 @@
 <div class="transient-pulse-panel" class:visible={enabled}>
   <canvas bind:this={canvasRef} class="transient-canvas"></canvas>
 
-  <div class="track-info">
-    <h1 class="track-title">{trackTitle}</h1>
-    <p class="track-artist">{artist}</p>
-    {#if album}
-      <p class="track-album">{album}</p>
-    {/if}
-    <div class="quality-badge-wrapper">
-      <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} />
+  <div class="bottom-info">
+    <div class="track-meta">
+      <span class="track-title">{trackTitle}</span>
+      <span class="track-artist">{artist}{album ? ` \u2014 ${album}` : ''}</span>
     </div>
+    <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} compact />
   </div>
 </div>
 
@@ -382,47 +341,47 @@
     height: 100%;
   }
 
-  .track-info {
+  .bottom-info {
     position: absolute;
-    bottom: 150px;
-    left: 0;
-    right: 0;
+    bottom: 130px;
+    right: 24px;
     z-index: 10;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    text-align: center;
-    gap: 4px;
+    gap: 12px;
+  }
+
+  .track-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
   }
 
   .track-title {
-    font-size: clamp(18px, 2.5vw, 24px);
-    font-weight: 700;
+    font-size: 15px;
+    font-weight: 600;
     color: var(--text-primary, white);
-    margin: 0;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+    max-width: 280px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .track-artist {
-    font-size: clamp(13px, 1.8vw, 16px);
-    color: var(--alpha-70, rgba(255, 255, 255, 0.7));
-    margin: 0;
-  }
-
-  .track-album {
-    font-size: clamp(11px, 1.4vw, 13px);
-    color: var(--alpha-50, rgba(255, 255, 255, 0.5));
-    margin: 0;
-    font-style: italic;
-  }
-
-  .quality-badge-wrapper {
-    margin-top: 8px;
+    font-size: 12px;
+    color: var(--alpha-60, rgba(255, 255, 255, 0.6));
+    max-width: 280px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   @media (max-width: 768px) {
-    .track-info {
-      bottom: 130px;
+    .bottom-info {
+      right: 16px;
+      bottom: 120px;
     }
   }
 </style>

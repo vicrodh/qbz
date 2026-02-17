@@ -276,21 +276,11 @@
   <canvas bind:this={canvasRef} class="lissajous-canvas"></canvas>
 
   <div class="bottom-info">
-    {#if artwork}
-      <div class="artwork-thumb">
-        <img src={artwork} alt={trackTitle} />
-      </div>
-    {/if}
     <div class="track-meta">
       <span class="track-title">{trackTitle}</span>
-      <span class="track-artist">{artist}</span>
-      {#if album}
-        <span class="track-album">{album}</span>
-      {/if}
-      <div class="quality-badge-wrapper">
-        <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} />
-      </div>
+      <span class="track-artist">{artist}{album ? ` \u2014 ${album}` : ''}</span>
     </div>
+    <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} compact />
   </div>
 </div>
 
@@ -336,76 +326,45 @@
 
   .bottom-info {
     position: absolute;
-    bottom: 140px;
-    left: 24px;
+    bottom: 130px;
+    right: 24px;
     z-index: 10;
     display: flex;
-    align-items: flex-end;
-    gap: 16px;
-  }
-
-  .artwork-thumb {
-    width: 100px;
-    height: 100px;
-    border-radius: 6px;
-    overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    flex-shrink: 0;
-  }
-
-  .artwork-thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+    align-items: center;
+    gap: 12px;
   }
 
   .track-meta {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding-bottom: 4px;
+    align-items: flex-end;
+    gap: 2px;
   }
 
   .track-title {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--text-primary, white);
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
-    max-width: 300px;
+    max-width: 280px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
   .track-artist {
-    font-size: 13px;
-    color: var(--alpha-70, rgba(255, 255, 255, 0.7));
-  }
-
-  .track-album {
     font-size: 12px;
-    color: var(--alpha-50, rgba(255, 255, 255, 0.5));
-    font-style: italic;
-  }
-
-  .quality-badge-wrapper {
-    margin-top: 4px;
+    color: var(--alpha-60, rgba(255, 255, 255, 0.6));
+    max-width: 280px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   @media (max-width: 768px) {
     .bottom-info {
-      left: 16px;
-      bottom: 130px;
-    }
-
-    .artwork-thumb {
-      width: 72px;
-      height: 72px;
-    }
-
-    .track-title {
-      font-size: 14px;
-      max-width: 200px;
+      right: 16px;
+      bottom: 120px;
     }
   }
 </style>

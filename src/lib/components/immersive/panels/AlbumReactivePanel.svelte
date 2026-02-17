@@ -112,16 +112,16 @@
           const rawGlobal = (floats[0] + floats[1] + floats[2] + floats[3] + floats[4]) / 5;
           const rawBass = (floats[0] + floats[1]) / 2;
 
-          // Fast attack, medium decay
+          // Very fast attack, fast decay — punchy for heavy music
           if (rawGlobal > smoothedGlobal) {
-            smoothedGlobal = smoothedGlobal * 0.3 + rawGlobal * 0.7;
+            smoothedGlobal = smoothedGlobal * 0.1 + rawGlobal * 0.9;
           } else {
-            smoothedGlobal = smoothedGlobal * 0.85 + rawGlobal * 0.15;
+            smoothedGlobal = smoothedGlobal * 0.6 + rawGlobal * 0.4;
           }
           if (rawBass > smoothedBass) {
-            smoothedBass = smoothedBass * 0.3 + rawBass * 0.7;
+            smoothedBass = smoothedBass * 0.1 + rawBass * 0.9;
           } else {
-            smoothedBass = smoothedBass * 0.85 + rawBass * 0.15;
+            smoothedBass = smoothedBass * 0.6 + rawBass * 0.4;
           }
 
           globalEnergy = smoothedGlobal;
@@ -157,10 +157,10 @@
     }
   });
 
-  // Computed transform values — visible breathing effect
-  const artScale = $derived(1 + globalEnergy * 0.08);
-  const glowSpread = $derived(30 + bassEnergy * 80);
-  const glowOpacity = $derived(0.2 + globalEnergy * 0.8);
+  // Computed transform values — aggressive breathing for heavy music
+  const artScale = $derived(1 + globalEnergy * 0.25);
+  const glowSpread = $derived(15 + bassEnergy * 200);
+  const glowOpacity = $derived(Math.min(0.1 + globalEnergy * 1.5, 1));
 </script>
 
 <div class="album-reactive-panel" class:visible={enabled}>

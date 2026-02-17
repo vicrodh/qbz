@@ -46,13 +46,12 @@
 
   const SMOOTHING = 0.3;
 
-  // Throttle rendering to 30fps max
   let lastRenderTime = 0;
   const FRAME_INTERVAL = 1000 / 30;
 
   // Colors extracted from artwork
-  let colorLeft = $state({ r: 0, g: 220, b: 160 });    // Default green-tinted
-  let colorRight = $state({ r: 80, g: 140, b: 255 });   // Default blue-tinted
+  let colorLeft = $state({ r: 0, g: 220, b: 160 });
+  let colorRight = $state({ r: 80, g: 140, b: 255 });
 
   function extractColors(imgSrc: string) {
     if (!imgSrc) return;
@@ -84,10 +83,8 @@
 
       if (colors.length >= 2) {
         colors.sort((a, b) => b.sat - a.sat);
-        // Left: most vibrant color, tinted green
         const c1 = colors[0];
         colorLeft = { r: Math.floor(c1.r * 0.6), g: Math.min(255, Math.floor(c1.g * 1.3)), b: Math.floor(c1.b * 0.7) };
-        // Right: contrasting color, tinted blue
         const midIdx = Math.floor(colors.length / 2);
         const c2 = colors[midIdx];
         colorRight = { r: Math.floor(c2.r * 0.6), g: Math.floor(c2.g * 0.7), b: Math.min(255, Math.floor(c2.b * 1.3)) };
@@ -110,16 +107,12 @@
     if (!canvasRef || isInitialized) return;
 
     ctx = canvasRef.getContext('2d');
-    if (!ctx) {
-      console.warn('[Oscilloscope] Canvas 2D not available');
-      return;
-    }
+    if (!ctx) return;
 
     isInitialized = true;
 
     try {
       await invoke('v2_set_visualizer_enabled', { enabled: true });
-      console.log('[Oscilloscope] Backend enabled');
     } catch (e) {
       console.error('[Oscilloscope] Failed to enable backend:', e);
     }
@@ -172,7 +165,6 @@
     }
     ctx.stroke();
 
-    // Reset shadow for next draw
     ctx.shadowBlur = 0;
   }
 
@@ -199,7 +191,6 @@
       ctx.scale(dpr, dpr);
     }
 
-    // Clear with black
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, width, height);
 
@@ -207,10 +198,9 @@
     const drawHeight = height * 0.85;
     const yOffset = (height - drawHeight) / 2;
 
-    // Layout: L in top 45%, R in bottom 45%, center 10% for divider
     const topZone = drawHeight * 0.45;
     const bottomZoneStart = drawHeight * 0.55;
-    const amplitude = topZone * 0.7; // max waveform excursion
+    const amplitude = topZone * 0.7;
 
     // Draw L channel waveform
     drawWaveform(width, yOffset + topZone / 2, amplitude, leftChannel, colorLeft);
@@ -250,7 +240,6 @@
 
     try {
       await invoke('v2_set_visualizer_enabled', { enabled: false });
-      console.log('[Oscilloscope] Backend disabled');
     } catch (e) {
       console.error('[Oscilloscope] Failed to disable backend:', e);
     }
@@ -277,23 +266,12 @@
 <div class="oscilloscope-panel" class:visible={enabled}>
   <canvas bind:this={canvasRef} class="oscilloscope-canvas"></canvas>
 
-  <div class="center-content">
-    {#if artwork}
-      <div class="artwork-container">
-        <img src={artwork} alt={trackTitle} class="artwork" />
-      </div>
-    {/if}
-
-    <div class="track-info">
-      <h1 class="track-title">{trackTitle}</h1>
-      <p class="track-artist">{artist}</p>
-      {#if album}
-        <p class="track-album">{album}</p>
-      {/if}
-      <div class="quality-badge-wrapper">
-        <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} />
-      </div>
+  <div class="bottom-info">
+    <div class="track-meta">
+      <span class="track-title">{trackTitle}</span>
+      <span class="track-artist">{artist}{album ? ` \u2014 ${album}` : ''}</span>
     </div>
+    <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} compact />
   </div>
 </div>
 
@@ -320,87 +298,47 @@
     height: 100%;
   }
 
-  .center-content {
-    position: relative;
+  .bottom-info {
+    position: absolute;
+    bottom: 130px;
+    right: 24px;
     z-index: 10;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    gap: 20px;
-    padding-top: 70px;
-    padding-bottom: 120px;
+    gap: 12px;
   }
 
-  .artwork-container {
-    width: min(45vh, 360px);
-    height: min(45vh, 360px);
-    border-radius: 8px;
-    overflow: hidden;
-    box-shadow:
-      0 8px 32px rgba(0, 0, 0, 0.5),
-      0 20px 60px rgba(0, 0, 0, 0.3);
-  }
-
-  .artwork {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .track-info {
+  .track-meta {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 6px;
-    max-width: 600px;
+    align-items: flex-end;
+    gap: 2px;
   }
 
   .track-title {
-    font-size: clamp(20px, 3vw, 28px);
-    font-weight: 700;
+    font-size: 15px;
+    font-weight: 600;
     color: var(--text-primary, white);
-    margin: 0;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+    max-width: 280px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .track-artist {
-    font-size: clamp(14px, 2vw, 18px);
-    color: var(--alpha-70, rgba(255, 255, 255, 0.7));
-    margin: 0;
-  }
-
-  .track-album {
-    font-size: clamp(12px, 1.5vw, 14px);
-    color: var(--alpha-50, rgba(255, 255, 255, 0.5));
-    margin: 0;
-    font-style: italic;
-  }
-
-  .quality-badge-wrapper {
-    margin-top: 12px;
+    font-size: 12px;
+    color: var(--alpha-60, rgba(255, 255, 255, 0.6));
+    max-width: 280px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   @media (max-width: 768px) {
-    .center-content {
-      padding: 70px 24px 130px;
-      gap: 16px;
-    }
-
-    .artwork-container {
-      width: min(55vw, 280px);
-      height: min(55vw, 280px);
-    }
-  }
-
-  @media (max-height: 600px) {
-    .artwork-container {
-      width: min(32vh, 220px);
-      height: min(32vh, 220px);
-    }
-
-    .track-info {
-      gap: 4px;
+    .bottom-info {
+      right: 16px;
+      bottom: 120px;
     }
   }
 </style>
