@@ -53,6 +53,8 @@ export function getOfflineCacheState(trackId: number): OfflineCacheInfo {
 }
 
 export function setOfflineCacheState(trackId: number, info: OfflineCacheInfo): void {
+  const current = offlineCacheStates.get(trackId);
+  if (current && current.status === info.status && current.progress === info.progress) return;
   offlineCacheStates.set(trackId, info);
   notifyListeners();
 }

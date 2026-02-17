@@ -431,7 +431,7 @@
           <button class="retry-btn" onclick={onBack}>{$t('actions.back')}</button>
         </div>
       {:else}
-      {#each album.tracks as track, trackIndex (`${track.id}-${downloadStateVersion}`)}
+      {#each album.tracks as track, trackIndex (track.id)}
         {@const downloadInfo = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
         {@const isTrackDownloaded = downloadInfo.status === 'ready'}
         {@const trackArtistId = track.artistId ?? album.artistId}

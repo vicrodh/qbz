@@ -2166,7 +2166,7 @@
       </div>
 
       <div class="virtual-track-content" style="height: {trackListTotalHeight}px;">
-        {#each visibleDisplayTracks as track, loopIdx (`${visibleTrackRange.start + loopIdx}-${track.id}-${downloadStateVersion}`)}
+        {#each visibleDisplayTracks as track, loopIdx (`${visibleTrackRange.start + loopIdx}-${track.id}`)}
           {@const idx = visibleTrackRange.start + loopIdx}
           {@const downloadInfo = track.isLocal ? { status: 'none' as const, progress: 0 } : (getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 })}
           {@const isActiveTrack = (
