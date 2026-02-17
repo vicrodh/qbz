@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Disc3, Disc, Mic2, ListMusic, Music2, Info, Radio, Maximize, Minimize, ChevronDown, X, Square, Copy, Minus, Image, Activity, AudioWaveform } from 'lucide-svelte';
+  import { Disc3, Disc, Mic2, ListMusic, Music2, Info, Radio, Maximize, Minimize, ChevronDown, X, Square, Copy, Minus, Image, Activity, AudioWaveform, CircleDot, Crosshair, Zap, HeartPulse } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
   export type ImmersiveTab = 'lyrics' | 'trackInfo' | 'suggestions' | 'queue';
-  export type FocusTab = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'lyrics-focus' | 'queue-focus';
+  export type FocusTab = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'lyrics-focus' | 'queue-focus';
   export type ViewMode = 'focus' | 'split';
 
   interface Props {
@@ -87,8 +87,12 @@
   const focusTabs: { id: FocusTab; label: string; icon: typeof Disc3 }[] = [
     { id: 'coverflow', label: 'Coverflow', icon: Disc3 },
     { id: 'static', label: 'Static', icon: Image },
-    { id: 'visualizer', label: 'Visualizer', icon: Activity },
-    { id: 'oscilloscope', label: 'Oscilloscope', icon: AudioWaveform },
+    { id: 'visualizer', label: 'Bars', icon: Activity },
+    { id: 'oscilloscope', label: 'Scope', icon: AudioWaveform },
+    { id: 'energy-bands', label: 'Energy', icon: CircleDot },
+    { id: 'lissajous', label: 'X/Y', icon: Crosshair },
+    { id: 'transient-pulse', label: 'Pulse', icon: Zap },
+    { id: 'album-reactive', label: 'Reactive', icon: HeartPulse },
     { id: 'lyrics-focus', label: 'Lyrics', icon: Mic2 },
     { id: 'queue-focus', label: 'Queue', icon: ListMusic },
   ];

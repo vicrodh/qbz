@@ -13,6 +13,10 @@
   import StaticPanel from './panels/StaticPanel.svelte';
   import VisualizerPanel from './panels/VisualizerPanel.svelte';
   import OscilloscopePanel from './panels/OscilloscopePanel.svelte';
+  import EnergyBandsPanel from './panels/EnergyBandsPanel.svelte';
+  import LissajousPanel from './panels/LissajousPanel.svelte';
+  import TransientPulsePanel from './panels/TransientPulsePanel.svelte';
+  import AlbumReactivePanel from './panels/AlbumReactivePanel.svelte';
   import LyricsFocusPanel from './panels/LyricsFocusPanel.svelte';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
@@ -148,7 +152,7 @@
   const AUTO_HIDE_DELAY = 4000;
 
   // Immersive view persistence
-  type ImmersiveViewKey = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
+  type ImmersiveViewKey = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
 
   function applyStoredView(key: ImmersiveViewKey) {
     if (key.startsWith('split-')) {
@@ -294,7 +298,7 @@
         if (viewMode === 'split') activeTab = 'queue';
         else if (viewMode === 'focus') activeFocusTab = 'queue-focus';
         break;
-      // Focus mode tabs
+      // Focus mode tabs (1-0 maps to tab order)
       case '1':
         if (viewMode === 'focus') activeFocusTab = 'coverflow';
         break;
@@ -308,9 +312,21 @@
         if (viewMode === 'focus') activeFocusTab = 'oscilloscope';
         break;
       case '5':
-        if (viewMode === 'focus') activeFocusTab = 'lyrics-focus';
+        if (viewMode === 'focus') activeFocusTab = 'energy-bands';
         break;
       case '6':
+        if (viewMode === 'focus') activeFocusTab = 'lissajous';
+        break;
+      case '7':
+        if (viewMode === 'focus') activeFocusTab = 'transient-pulse';
+        break;
+      case '8':
+        if (viewMode === 'focus') activeFocusTab = 'album-reactive';
+        break;
+      case '9':
+        if (viewMode === 'focus') activeFocusTab = 'lyrics-focus';
+        break;
+      case '0':
         if (viewMode === 'focus') activeFocusTab = 'queue-focus';
         break;
     }
@@ -355,8 +371,8 @@
     aria-label="Now Playing"
     tabindex="-1"
   >
-    <!-- Background (skip for visualizer/oscilloscope - black background) -->
-    {#if activeFocusTab !== 'visualizer' && activeFocusTab !== 'oscilloscope'}
+    <!-- Background (skip for canvas-based visualizers that render their own black background) -->
+    {#if activeFocusTab !== 'visualizer' && activeFocusTab !== 'oscilloscope' && activeFocusTab !== 'energy-bands' && activeFocusTab !== 'lissajous' && activeFocusTab !== 'transient-pulse'}
       <ImmersiveBackground {artwork} />
     {/if}
 
@@ -439,6 +455,67 @@
           {trackTitle}
           {artist}
           {album}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+          {originalBitDepth}
+          {originalSamplingRate}
+          {format}
+        />
+      {:else if activeFocusTab === 'energy-bands'}
+        <!-- Energy Bands: Concentric glowing rings driven by frequency bands -->
+        <EnergyBandsPanel
+          enabled={true}
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+          {originalBitDepth}
+          {originalSamplingRate}
+          {format}
+        />
+      {:else if activeFocusTab === 'lissajous'}
+        <!-- Lissajous: Stereo X/Y phase visualization -->
+        <LissajousPanel
+          enabled={true}
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+          {originalBitDepth}
+          {originalSamplingRate}
+          {format}
+        />
+      {:else if activeFocusTab === 'transient-pulse'}
+        <!-- Transient Pulse: Expanding rings on beat detection -->
+        <TransientPulsePanel
+          enabled={true}
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+          {originalBitDepth}
+          {originalSamplingRate}
+          {format}
+        />
+      {:else if activeFocusTab === 'album-reactive'}
+        <!-- Album Reactive: Album art with breathing scale/glow -->
+        <AlbumReactivePanel
+          enabled={true}
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {isPlaying}
           {quality}
           {bitDepth}
           {samplingRate}
