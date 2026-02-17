@@ -19,7 +19,7 @@ export async function getPurchases(
     );
     return res.json();
   }
-  return invoke('v2_purchases_get_all');
+  return invoke<PurchaseResponse>('v2_purchases_get_all');
 }
 
 export async function searchPurchases(
@@ -31,7 +31,7 @@ export async function searchPurchases(
     );
     return res.json();
   }
-  return invoke('v2_purchases_search', { query });
+  return invoke<PurchaseResponse>('v2_purchases_search', { query });
 }
 
 export async function getAlbumDetail(
@@ -41,9 +41,8 @@ export async function getAlbumDetail(
     const res = await fetch(`${MOCK_URL}/purchases/album/${albumId}`);
     return res.json();
   }
-  return invoke('v2_purchases_get_all').then((r: PurchaseResponse) =>
-    r.albums.items.find((a) => a.id === albumId)!
-  );
+  const response = await invoke<PurchaseResponse>('v2_purchases_get_all');
+  return response.albums.items.find((a) => a.id === albumId)!;
 }
 
 export async function getFormats(
@@ -53,7 +52,7 @@ export async function getFormats(
     const res = await fetch(`${MOCK_URL}/purchases/formats/${albumId}`);
     return res.json();
   }
-  return invoke('v2_purchases_get_formats', { albumId });
+  return invoke<PurchaseFormatOption[]>('v2_purchases_get_formats', { albumId });
 }
 
 export async function downloadAlbum(
@@ -68,7 +67,7 @@ export async function downloadAlbum(
     });
     return;
   }
-  return invoke('v2_purchases_download_album', {
+  return invoke<void>('v2_purchases_download_album', {
     albumId,
     formatId,
     destination
@@ -86,7 +85,7 @@ export async function downloadTrack(
     });
     return destination;
   }
-  return invoke('v2_purchases_download_track', {
+  return invoke<string>('v2_purchases_download_track', {
     trackId,
     formatId,
     destination
