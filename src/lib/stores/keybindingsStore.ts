@@ -131,6 +131,13 @@ export const ACTIONS: KeybindingAction[] = [
     defaultShortcut: '?',
     description: 'Show keyboard shortcuts modal',
   },
+  {
+    id: 'ui.openLink',
+    label: 'Open Qobuz Link',
+    category: 'ui',
+    defaultShortcut: 'Ctrl+l',
+    description: 'Paste and open a Qobuz link',
+  },
 
   // Focus Mode specific
   {

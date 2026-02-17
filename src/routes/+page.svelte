@@ -2709,6 +2709,7 @@
     registerAction('ui.queue', toggleQueue);
     registerAction('ui.escape', handleUIEscape);
     registerAction('ui.showShortcuts', () => { isShortcutsModalOpen = true; });
+    registerAction('ui.openLink', () => { isLinkResolverOpen = true; });
 
     // Session save on window close/hide
     const handleBeforeUnload = () => {
