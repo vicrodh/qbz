@@ -270,7 +270,7 @@
     text-align: center;
     gap: 6px;
     max-width: 600px;
-    margin-top: 8px;
+    margin-top: 40px;
   }
 
   .now-playing-indicator {
