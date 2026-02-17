@@ -72,10 +72,17 @@ export function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+let rafScheduled = false;
+
 function notifyListeners(): void {
-  for (const listener of listeners) {
-    listener();
-  }
+  if (rafScheduled) return;
+  rafScheduled = true;
+  requestAnimationFrame(() => {
+    rafScheduled = false;
+    for (const listener of listeners) {
+      listener();
+    }
+  });
 }
 
 // Initialize offline cache states from backend
