@@ -8,4 +8,4 @@ Categories=AudioVideo;Audio;Music;Player;
 Terminal=false
 StartupWMClass=QBZ
 Keywords=music;audio;qobuz;hifi;streaming;audiophile;
-MimeType=x-scheme-handler/qbz;
+MimeType=x-scheme-handler/qbz;x-scheme-handler/qobuzapp;
