@@ -139,7 +139,7 @@ export async function loadFolders(): Promise<void> {
   notifyListeners();
 
   try {
-    const result = await invoke<PlaylistFolder[]>('get_playlist_folders');
+    const result = await invoke<PlaylistFolder[]>('v2_get_playlist_folders');
     folders = result;
     lastError = null;
   } catch (err) {
@@ -161,7 +161,7 @@ export async function createFolder(
   iconColor?: string
 ): Promise<PlaylistFolder | null> {
   try {
-    const folder = await invoke<PlaylistFolder>('create_playlist_folder', {
+    const folder = await invoke<PlaylistFolder>('v2_create_playlist_folder', {
       name,
       iconType,
       iconPreset,
@@ -193,7 +193,7 @@ export async function updateFolder(
   }
 ): Promise<PlaylistFolder | null> {
   try {
-    const folder = await invoke<PlaylistFolder>('update_playlist_folder', {
+    const folder = await invoke<PlaylistFolder>('v2_update_playlist_folder', {
       id,
       name: updates.name,
       iconType: updates.iconType,

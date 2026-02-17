@@ -793,7 +793,7 @@
     const discoverPromise = fetchAllDiscoverData(genreIds);
 
     // Single IPC call returns fully-resolved card data (3-tier cache in Rust)
-    const mlPromise = invoke<HomeResolved>('reco_get_home_resolved', {
+    const mlPromise = invoke<HomeResolved>('v2_reco_get_home_resolved', {
       limitRecentAlbums: homeLimits.recentAlbums,
       limitContinueTracks: homeLimits.continueTracks,
       limitTopArtists: homeLimits.topArtists,

@@ -529,3 +529,17 @@ pub fn clear_favorites_cache(state: tauri::State<FavoritesCacheState>) -> Result
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.clear_all()
 }
+
+/// Check if a track is cached as favorite.
+#[tauri::command]
+pub fn is_track_favorite(
+    track_id: i64,
+    state: tauri::State<FavoritesCacheState>,
+) -> Result<bool, String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|_| "Failed to lock favorites cache store".to_string())?;
+    let store = guard.as_ref().ok_or("No active session - please log in")?;
+    store.is_track_favorite(track_id)
+}

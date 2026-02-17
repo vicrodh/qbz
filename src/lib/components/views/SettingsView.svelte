@@ -1000,7 +1000,7 @@
   async function loadLastfmState() {
     try {
       // Check if embedded (build-time) credentials are available
-      hasEmbeddedCredentials = await invoke<boolean>('lastfm_has_embedded_credentials');
+      hasEmbeddedCredentials = await invoke<boolean>('v2_lastfm_has_embedded_credentials');
 
       // Load saved credentials from localStorage (for user-provided keys)
       const savedApiKey = getUserItem('qbz-lastfm-api-key');
@@ -1647,7 +1647,7 @@
 
   async function loadRemoteControlStatus() {
     try {
-      const status = await invoke<RemoteControlStatus>('remote_control_get_status');
+      const status = await invoke<RemoteControlStatus>('v2_remote_control_get_status');
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
@@ -1663,7 +1663,7 @@
   async function handleRemoteControlToggle(enabled: boolean) {
     remoteControlLoading = true;
     try {
-      const status = await invoke<RemoteControlStatus>('remote_control_set_enabled', { enabled });
+      const status = await invoke<RemoteControlStatus>('v2_remote_control_set_enabled', { enabled });
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
@@ -1685,7 +1685,7 @@
     if (!Number.isFinite(value)) return;
     remoteControlLoading = true;
     try {
-      const status = await invoke<RemoteControlStatus>('remote_control_set_port', { port: value });
+      const status = await invoke<RemoteControlStatus>('v2_remote_control_set_port', { port: value });
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
@@ -1710,7 +1710,7 @@
     }
     remoteControlLoading = true;
     try {
-      const qr = await invoke<RemoteControlQr>('remote_control_get_pairing_qr');
+      const qr = await invoke<RemoteControlQr>('v2_remote_control_get_pairing_qr');
       remoteControlQrData = qr.qrDataUrl;
       remoteControlUrl = qr.url;
       remoteControlQrOpen = true;
@@ -1736,11 +1736,11 @@
 
     remoteControlLoading = true;
     try {
-      const qr = await invoke<RemoteControlQr>('remote_control_regenerate_token');
+      const qr = await invoke<RemoteControlQr>('v2_remote_control_regenerate_token');
       remoteControlQrData = qr.qrDataUrl;
       remoteControlUrl = qr.url;
       remoteControlQrOpen = true;
-      const status = await invoke<RemoteControlStatus>('remote_control_get_status');
+      const status = await invoke<RemoteControlStatus>('v2_remote_control_get_status');
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
@@ -1777,7 +1777,7 @@
   async function handleRemoteControlSecureChange(secure: boolean) {
     remoteControlLoading = true;
     try {
-      const status = await invoke<RemoteControlStatus>('remote_control_set_secure', { secure });
+      const status = await invoke<RemoteControlStatus>('v2_remote_control_set_secure', { secure });
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
@@ -2068,7 +2068,7 @@
 
   async function loadFlatpakStatus() {
     try {
-      isFlatpak = await invoke<boolean>('is_running_in_flatpak');
+      isFlatpak = await invoke<boolean>('v2_is_running_in_flatpak');
       if (isFlatpak) {
         flatpakHelpText = await invoke<string>('get_flatpak_help_text');
       }
@@ -2378,7 +2378,7 @@
 
   async function loadDeviceSampleRateLimit(deviceId: string) {
     try {
-      const rate = await invoke<number | null>('get_device_sample_rate_limit', { deviceId });
+      const rate = await invoke<number | null>('v2_get_device_sample_rate_limit', { deviceId });
       deviceMaxSampleRate = rate;
       console.log('[Audio] Loaded sample rate limit for', deviceId, ':', rate);
     } catch (err) {
@@ -2453,7 +2453,7 @@
 
   async function loadLyricsCacheStats() {
     try {
-      const stats = await invoke<{ entries: number; sizeBytes: number }>('lyrics_get_cache_stats');
+      const stats = await invoke<{ entries: number; sizeBytes: number }>('v2_lyrics_get_cache_stats');
       lyricsCacheStats = stats;
     } catch (err) {
       console.error('Failed to load lyrics cache stats:', err);
@@ -2471,7 +2471,7 @@
 
   async function loadDownloadSettings() {
     try {
-      const settings = await invoke<{download_root: string, show_in_library: boolean}>('get_download_settings');
+      const settings = await invoke<{download_root: string, show_in_library: boolean}>('v2_get_download_settings');
       showQobuzDownloadsInLibrary = settings.show_in_library;
     } catch (err) {
       console.error('Failed to load download settings:', err);
@@ -2566,7 +2566,7 @@
 
   async function checkLegacyCachedFiles() {
     try {
-      const result = await invoke<{has_legacy_files: boolean, total_tracks: number}>('detect_legacy_cached_files');
+      const result = await invoke<{has_legacy_files: boolean, total_tracks: number}>('v2_detect_legacy_cached_files');
       if (result.has_legacy_files && result.total_tracks > 0) {
         legacyTracksCount = result.total_tracks;
         showMigrationModal = true;

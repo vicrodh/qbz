@@ -115,7 +115,7 @@ export function getOfflineReason(): OfflineReason | null {
 async function fetchStatus(): Promise<void> {
   try {
     const wasOffline = status.isOffline;
-    const newStatus = await invoke<OfflineStatus>('get_offline_status');
+    const newStatus = await invoke<OfflineStatus>('v2_get_offline_status');
     const changed = JSON.stringify(status) !== JSON.stringify(newStatus);
     status = newStatus;
     if (changed) {
@@ -149,7 +149,7 @@ async function fetchStatus(): Promise<void> {
  */
 async function fetchSettings(): Promise<void> {
   try {
-    settings = await invoke<OfflineSettings>('get_offline_settings');
+    settings = await invoke<OfflineSettings>('v2_get_offline_settings');
     notifyListeners();
   } catch (error) {
     const msg = String(error);
@@ -166,7 +166,7 @@ async function fetchSettings(): Promise<void> {
  */
 export async function checkNetwork(): Promise<boolean> {
   try {
-    return await invoke<boolean>('check_network');
+    return await invoke<boolean>('v2_check_network');
   } catch (error) {
     console.error('Failed to check network:', error);
     return false;
@@ -184,7 +184,7 @@ export async function setManualOffline(enabled: boolean): Promise<void> {
     console.log('[Offline] wasOffline:', wasOffline);
     console.log('[Offline] ========================================');
 
-    const newStatus = await invoke<OfflineStatus>('set_manual_offline', { enabled });
+    const newStatus = await invoke<OfflineStatus>('v2_set_manual_offline', { enabled });
     status = newStatus;
     settings.manualOfflineMode = enabled;
 

@@ -492,7 +492,7 @@
       // Search based on active tab - reset to first page
       if (activeTab === 'all') {
         // Use title case for better most_popular results from Qobuz API
-        const results = await invoke<SearchAllResults<Album, Track, Artist>>('search_all', {
+        const results = await invoke<SearchAllResults<Album, Track, Artist>>('v2_search_all', {
           query: toTitleCase(searchQuery)
         });
         // Only apply if query hasn't changed while we were fetching

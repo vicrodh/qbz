@@ -690,7 +690,7 @@
         mbid?: string;
         name?: string;
         confidence: string;
-      }>('musicbrainz_resolve_artist', { name: artist.name });
+      }>('v2_musicbrainz_resolve_artist', { name: artist.name });
 
       if (!resolved?.mbid || resolved.confidence === 'none') {
         mbRelationshipsLoading = false;
@@ -705,7 +705,7 @@
         past_members: RelatedArtist[];
         groups: RelatedArtist[];
         collaborators: RelatedArtist[];
-      }>('musicbrainz_get_artist_relationships', { mbid: resolved.mbid });
+      }>('v2_musicbrainz_get_artist_relationships', { mbid: resolved.mbid });
 
       mbRelationships = {
         members: relationships.members || [],

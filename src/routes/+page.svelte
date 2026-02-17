@@ -751,7 +751,7 @@
   async function handleMusicianClick(name: string, role: string) {
     showToast($t('toast.lookingUp', { values: { name } }), 'info');
     try {
-      const musician = await invoke<ResolvedMusician>('resolve_musician', { name, role });
+      const musician = await invoke<ResolvedMusician>('v2_resolve_musician', { name, role });
       console.log('Resolved musician:', musician);
 
       switch (musician.confidence) {

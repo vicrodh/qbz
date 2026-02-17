@@ -1289,7 +1289,7 @@
           includeHidden: false,
           excludeNetworkFolders: excludeNetwork
         }),
-        invoke<LibraryStats>('library_get_stats'),
+        invoke<LibraryStats>('v2_library_get_stats'),
         includePlex
           ? invoke<PlexCachedAlbum[]>('v2_plex_cache_get_albums').catch(() => [])
           : Promise.resolve([])
@@ -1354,7 +1354,7 @@
       if (isOffline) {
         // When offline, get folders without calling is_network_path (blocks offline)
         // Use basic folder list command instead
-        folders = await invoke<LibraryFolder[]>('library_get_folders');
+        folders = await invoke<LibraryFolder[]>('v2_library_get_folders_with_metadata');
         console.log('[LocalLibrary] Received folders (offline mode):', folders.length);
 
         // Mark all network folders as inaccessible, local folders as accessible
@@ -1367,7 +1367,7 @@
         const timeoutPromise = new Promise<LibraryFolder[]>((_, reject) =>
           setTimeout(() => reject(new Error('Folder loading timeout')), 5000)
         );
-        const foldersPromise = invoke<LibraryFolder[]>('library_get_folders_with_metadata');
+        const foldersPromise = invoke<LibraryFolder[]>('v2_library_get_folders_with_metadata');
 
         folders = await Promise.race([foldersPromise, timeoutPromise]);
         console.log('[LocalLibrary] Received folders (online mode):', folders.length);
@@ -1407,7 +1407,7 @@
       console.log('[LocalLibrary] Calling library_get_artists + plex_cache_get_albums');
       const includePlex = isPlexLibraryEnabled();
       const [localArtists, plexAlbumsRaw] = await Promise.all([
-        invoke<LocalArtist[]>('library_get_artists', {
+        invoke<LocalArtist[]>('v2_library_get_artists', {
           excludeNetworkFolders: shouldExcludeNetworkFolders()
         }),
         includePlex
@@ -1469,7 +1469,7 @@
       console.log('[LocalLibrary] Calling library_search + plex_cache_search_tracks');
       const includePlex = isPlexLibraryEnabled();
       const [localTracks, plexTracksRaw] = await Promise.all([
-        invoke<LocalTrack[]>('library_search', {
+        invoke<LocalTrack[]>('v2_library_search', {
           query,
           limit: 0, // 0 = no limit, virtualization handles any list size
           excludeNetworkFolders: shouldExcludeNetworkFolders()
@@ -1534,7 +1534,7 @@
 
       if (!selected || typeof selected !== 'string') return;
 
-      const newFolder = await invoke<LibraryFolder>('library_add_folder', { path: selected });
+      const newFolder = await invoke<LibraryFolder>('v2_library_add_folder', { path: selected });
       await loadFolders();
 
       // Show warning if network folder detected
@@ -1694,7 +1694,7 @@
     cleaningUpMissingFiles = true;
     cleanupStatus = 'Scanning track paths...';
     try {
-      const result = await invoke<{ checked: number; removed: number }>('library_cleanup_missing_files');
+      const result = await invoke<{ checked: number; removed: number }>('v2_library_cleanup_missing_files');
 
       if (result.removed > 0) {
         cleanupStatus = `Removed ${result.removed} of ${result.checked} tracks`;
@@ -1783,7 +1783,7 @@
 
     fetchingArtwork = true;
     try {
-      const count = await invoke<number>('library_fetch_missing_artwork');
+      const count = await invoke<number>('v2_library_fetch_missing_artwork');
       if (count > 0) {
         alert(`Fetched artwork for ${count} albums from Discogs.`);
         await loadLibraryData();
@@ -1972,7 +1972,7 @@
         return await hydratePlexTrackQuality(mappedTracks);
       }
 
-      return await invoke<LocalTrack[]>('library_get_album_tracks', {
+      return await invoke<LocalTrack[]>('v2_library_get_album_tracks', {
         albumGroupKey: album.id
       });
     } catch (err) {

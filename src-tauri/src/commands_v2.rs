@@ -18,6 +18,7 @@ use qbz_models::{
 use crate::artist_blacklist::BlacklistState;
 use crate::artist_vectors::ArtistVectorStoreState;
 use crate::cache::{AudioCache, CacheStats};
+use crate::api::models::PlaylistWithTrackIds;
 use crate::api_cache::ApiCacheState;
 use crate::audio::{AlsaPlugin, AudioBackendType, AudioDevice, BackendManager};
 use crate::cast::{AirPlayMetadata, AirPlayState, CastState, DlnaMetadata, DlnaState, MediaMetadata};
@@ -32,7 +33,7 @@ use crate::config::tray_settings::TraySettings;
 use crate::config::tray_settings::TraySettingsState;
 use crate::config::window_settings::WindowSettingsState;
 use crate::core_bridge::CoreBridgeState;
-use crate::library::{thumbnails, LibraryState, LocalAlbum, MetadataExtractor, PlaylistLocalTrack, PlaylistSettings, PlaylistStats, get_artwork_cache_dir};
+use crate::library::{thumbnails, LibraryState, LocalAlbum, LocalTrack, MetadataExtractor, PlaylistLocalTrack, PlaylistSettings, PlaylistStats, ScanProgress, get_artwork_cache_dir};
 use crate::lyrics::LyricsState;
 use crate::musicbrainz::{CacheStats as MusicBrainzCacheStats, MusicBrainzSharedState};
 use crate::offline::OfflineState;
@@ -40,7 +41,7 @@ use crate::offline_cache::OfflineCacheState;
 use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
 use crate::plex::{PlexMusicSection, PlexPlayResult, PlexServerInfo, PlexTrack};
 use crate::queue::QueueTrack;
-use crate::reco_store::{RecoEventInput, RecoState};
+use crate::reco_store::{HomeResolved, HomeSeeds, RecoEventInput, RecoState};
 use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason, CommandRequirement};
 use crate::AppState;
 use md5::{Digest, Md5};
@@ -67,6 +68,23 @@ pub struct AlsaPluginInfo {
     pub plugin: AlsaPlugin,
     pub name: String,
     pub description: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(tag = "type", content = "content", rename_all = "lowercase")]
+pub enum V2MostPopularItem {
+    Tracks(Track),
+    Albums(Album),
+    Artists(Artist),
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct V2SearchAllResults {
+    pub albums: SearchResultsPage<Album>,
+    pub tracks: SearchResultsPage<Track>,
+    pub artists: SearchResultsPage<Artist>,
+    pub playlists: SearchResultsPage<Playlist>,
+    pub most_popular: Option<V2MostPopularItem>,
 }
 
 /// Check that Qobuz ToS has been accepted before allowing login.
@@ -1149,6 +1167,14 @@ pub fn v2_get_favorites_preferences(
 }
 
 #[tauri::command]
+pub fn v2_save_favorites_preferences(
+    prefs: FavoritesPreferences,
+    state: State<'_, crate::config::favorites_preferences::FavoritesPreferencesState>,
+) -> Result<FavoritesPreferences, String> {
+    crate::config::favorites_preferences::save_favorites_preferences(prefs, state)
+}
+
+#[tauri::command]
 pub fn v2_get_cache_stats(state: State<'_, AppState>) -> CacheStats {
     state.audio_cache.stats()
 }
@@ -1422,6 +1448,20 @@ pub fn v2_clear_artist_blacklist(
 }
 
 #[tauri::command]
+pub fn v2_get_artist_blacklist(
+    state: State<'_, BlacklistState>,
+) -> Result<Vec<crate::artist_blacklist::BlacklistedArtist>, String> {
+    state.get_all()
+}
+
+#[tauri::command]
+pub fn v2_get_blacklist_settings(
+    state: State<'_, BlacklistState>,
+) -> Result<crate::artist_blacklist::BlacklistSettings, String> {
+    state.get_settings()
+}
+
+#[tauri::command]
 pub fn v2_save_credentials(email: String, password: String) -> Result<(), String> {
     crate::credentials::save_qobuz_credentials(&email, &password)
 }
@@ -1517,6 +1557,14 @@ pub async fn v2_cast_start_discovery(state: State<'_, CastState>) -> Result<(), 
 pub async fn v2_cast_stop_discovery(state: State<'_, CastState>) -> Result<(), String> {
     let mut discovery = state.discovery.lock().await;
     discovery.stop_discovery().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_cast_get_devices(
+    state: State<'_, CastState>,
+) -> Result<Vec<crate::cast::DiscoveredDevice>, String> {
+    let discovery = state.discovery.lock().await;
+    Ok(discovery.get_discovered_devices())
 }
 
 #[tauri::command]
@@ -1631,6 +1679,14 @@ pub async fn v2_dlna_start_discovery(state: State<'_, DlnaState>) -> Result<(), 
 pub async fn v2_dlna_stop_discovery(state: State<'_, DlnaState>) -> Result<(), String> {
     let mut discovery = state.discovery.lock().await;
     discovery.stop_discovery().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_get_devices(
+    state: State<'_, DlnaState>,
+) -> Result<Vec<crate::cast::DiscoveredDlnaDevice>, String> {
+    let discovery = state.discovery.lock().await;
+    Ok(discovery.get_discovered_devices())
 }
 
 #[tauri::command]
@@ -1765,6 +1821,14 @@ pub async fn v2_airplay_start_discovery(state: State<'_, AirPlayState>) -> Resul
 pub async fn v2_airplay_stop_discovery(state: State<'_, AirPlayState>) -> Result<(), String> {
     let mut discovery = state.discovery.lock().await;
     discovery.stop_discovery().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_airplay_get_devices(
+    state: State<'_, AirPlayState>,
+) -> Result<Vec<crate::cast::DiscoveredAirPlayDevice>, String> {
+    let discovery = state.discovery.lock().await;
+    Ok(discovery.get_discovered_devices())
 }
 
 #[tauri::command]
@@ -1951,6 +2015,33 @@ pub async fn v2_library_clear_thumbnails_cache() -> Result<u64, String> {
     let size_before = thumbnails::get_cache_size().unwrap_or(0);
     thumbnails::clear_thumbnails().map_err(|e| e.to_string())?;
     Ok(size_before)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_library_get_thumbnail(artworkPath: String) -> Result<String, String> {
+    crate::library::library_get_thumbnail(artworkPath).await
+}
+
+#[tauri::command]
+pub async fn v2_library_get_thumbnails_cache_size() -> Result<u64, String> {
+    crate::library::library_get_thumbnails_cache_size().await
+}
+
+#[tauri::command]
+pub async fn v2_library_get_scan_progress(
+    library_state: State<'_, LibraryState>,
+) -> Result<ScanProgress, String> {
+    crate::library::library_get_scan_progress(library_state).await
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_library_get_tracks_by_ids(
+    trackIds: Vec<i64>,
+    library_state: State<'_, LibraryState>,
+) -> Result<Vec<LocalTrack>, String> {
+    crate::library::library_get_tracks_by_ids(trackIds, library_state).await
 }
 
 #[tauri::command]
@@ -2281,6 +2372,34 @@ pub fn v2_set_show_network_folders_in_manual_offline(
 }
 
 #[tauri::command]
+pub async fn v2_get_offline_status(
+    state: State<'_, OfflineState>,
+) -> Result<crate::offline::OfflineStatus, String> {
+    crate::offline::commands::get_offline_status(state).await
+}
+
+#[tauri::command]
+pub fn v2_get_offline_settings(
+    state: State<'_, OfflineState>,
+) -> Result<crate::offline::OfflineSettings, String> {
+    crate::offline::commands::get_offline_settings(state)
+}
+
+#[tauri::command]
+pub async fn v2_set_manual_offline(
+    enabled: bool,
+    state: State<'_, OfflineState>,
+    app_handle: tauri::AppHandle,
+) -> Result<crate::offline::OfflineStatus, String> {
+    crate::offline::commands::set_manual_offline(enabled, state, app_handle).await
+}
+
+#[tauri::command]
+pub async fn v2_check_network() -> bool {
+    crate::offline::commands::check_network().await
+}
+
+#[tauri::command]
 pub fn v2_add_tracks_to_pending_playlist(
     pending_id: i64,
     qobuz_track_ids: Vec<u64>,
@@ -2335,6 +2454,13 @@ pub fn v2_mark_scrobbles_sent(
 }
 
 #[tauri::command]
+pub fn v2_get_pending_playlists(
+    state: State<'_, OfflineState>,
+) -> Result<Vec<crate::offline::PendingPlaylist>, String> {
+    crate::offline::commands::get_pending_playlists(state)
+}
+
+#[tauri::command]
 pub async fn v2_remove_cached_track(
     track_id: u64,
     cache_state: State<'_, OfflineCacheState>,
@@ -2354,6 +2480,25 @@ pub async fn v2_remove_cached_track(
     let db = guard.as_ref().ok_or("No active session - please log in")?;
     let _ = db.remove_qobuz_cached_track(track_id);
     Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_get_cached_tracks(
+    cache_state: State<'_, OfflineCacheState>,
+) -> Result<Vec<crate::offline_cache::CachedTrackInfo>, String> {
+    let guard = cache_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.get_all_tracks()
+}
+
+#[tauri::command]
+pub async fn v2_get_offline_cache_stats(
+    cache_state: State<'_, OfflineCacheState>,
+) -> Result<crate::offline_cache::OfflineCacheStats, String> {
+    let limit = *cache_state.limit_bytes.lock().await;
+    let guard = cache_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.get_stats(&cache_state.get_cache_path(), limit)
 }
 
 #[tauri::command]
@@ -2587,6 +2732,64 @@ pub async fn v2_reco_train_scores(
     Ok(())
 }
 
+#[tauri::command]
+pub async fn v2_reco_get_home(
+    limitRecentAlbums: Option<u32>,
+    limitContinueTracks: Option<u32>,
+    limitTopArtists: Option<u32>,
+    limitFavorites: Option<u32>,
+    state: State<'_, RecoState>,
+) -> Result<HomeSeeds, String> {
+    crate::reco_store::commands::reco_get_home(
+        limitRecentAlbums,
+        limitContinueTracks,
+        limitTopArtists,
+        limitFavorites,
+        state,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn v2_reco_get_home_ml(
+    limitRecentAlbums: Option<u32>,
+    limitContinueTracks: Option<u32>,
+    limitTopArtists: Option<u32>,
+    limitFavorites: Option<u32>,
+    state: State<'_, RecoState>,
+) -> Result<HomeSeeds, String> {
+    crate::reco_store::commands::reco_get_home_ml(
+        limitRecentAlbums,
+        limitContinueTracks,
+        limitTopArtists,
+        limitFavorites,
+        state,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn v2_reco_get_home_resolved(
+    limitRecentAlbums: Option<u32>,
+    limitContinueTracks: Option<u32>,
+    limitTopArtists: Option<u32>,
+    limitFavorites: Option<u32>,
+    reco_state: State<'_, RecoState>,
+    app_state: State<'_, AppState>,
+    cache_state: State<'_, ApiCacheState>,
+) -> Result<HomeResolved, String> {
+    crate::reco_store::commands::reco_get_home_resolved(
+        limitRecentAlbums,
+        limitContinueTracks,
+        limitTopArtists,
+        limitFavorites,
+        reco_state,
+        app_state,
+        cache_state,
+    )
+    .await
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct V2LibraryCacheStats {
@@ -2695,6 +2898,79 @@ pub async fn v2_playlist_increment_play_count(
 }
 
 #[tauri::command]
+pub async fn v2_playlist_get_all_stats(
+    state: State<'_, LibraryState>,
+) -> Result<Vec<PlaylistStats>, String> {
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.get_all_playlist_stats().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_playlist_get_all_local_track_counts(
+    state: State<'_, LibraryState>,
+) -> Result<std::collections::HashMap<u64, u32>, String> {
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.get_all_playlist_local_track_counts()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_get_playlist_folders(
+    state: State<'_, LibraryState>,
+) -> Result<Vec<crate::library::PlaylistFolder>, String> {
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.get_all_playlist_folders().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_create_playlist_folder(
+    name: String,
+    iconType: Option<String>,
+    iconPreset: Option<String>,
+    iconColor: Option<String>,
+    state: State<'_, LibraryState>,
+) -> Result<crate::library::PlaylistFolder, String> {
+    let guard__ = state.db.lock().await;
+    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    db.create_playlist_folder(
+        &name,
+        iconType.as_deref(),
+        iconPreset.as_deref(),
+        iconColor.as_deref(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_update_playlist_folder(
+    id: String,
+    name: Option<String>,
+    iconType: Option<String>,
+    iconPreset: Option<String>,
+    iconColor: Option<String>,
+    customImagePath: Option<String>,
+    isHidden: Option<bool>,
+    state: State<'_, LibraryState>,
+) -> Result<crate::library::PlaylistFolder, String> {
+    crate::library::update_playlist_folder(
+        id,
+        name,
+        iconType,
+        iconPreset,
+        iconColor,
+        customImagePath,
+        isHidden,
+        state,
+    )
+    .await
+}
+
+#[tauri::command]
 pub async fn v2_library_get_albums(
     include_hidden: Option<bool>,
     exclude_network_folders: Option<bool>,
@@ -2718,6 +2994,91 @@ pub async fn v2_library_get_albums(
         exclude_network_folders.unwrap_or(false),
     )
     .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_library_get_stats(
+    state: State<'_, LibraryState>,
+    download_settings_state: State<'_, DownloadSettingsState>,
+) -> Result<crate::library::LibraryStats, String> {
+    crate::library::library_get_stats(state, download_settings_state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_get_folders(
+    state: State<'_, LibraryState>,
+) -> Result<Vec<String>, String> {
+    crate::library::library_get_folders(state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_get_folders_with_metadata(
+    state: State<'_, LibraryState>,
+) -> Result<Vec<crate::library::LibraryFolder>, String> {
+    crate::library::library_get_folders_with_metadata(state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_add_folder(
+    path: String,
+    state: State<'_, LibraryState>,
+) -> Result<crate::library::LibraryFolder, String> {
+    crate::library::library_add_folder(path, state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_cleanup_missing_files(
+    state: State<'_, LibraryState>,
+) -> Result<crate::library::CleanupResult, String> {
+    crate::library::library_cleanup_missing_files(state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_fetch_missing_artwork(
+    state: State<'_, LibraryState>,
+) -> Result<u32, String> {
+    crate::library::library_fetch_missing_artwork(state).await
+}
+
+#[tauri::command]
+pub async fn v2_library_get_artists(
+    exclude_network_folders: Option<bool>,
+    state: State<'_, LibraryState>,
+    download_settings_state: State<'_, DownloadSettingsState>,
+) -> Result<Vec<crate::library::LocalArtist>, String> {
+    crate::library::library_get_artists(
+        exclude_network_folders,
+        state,
+        download_settings_state,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn v2_library_search(
+    query: String,
+    limit: Option<u32>,
+    exclude_network_folders: Option<bool>,
+    state: State<'_, LibraryState>,
+    download_settings_state: State<'_, DownloadSettingsState>,
+) -> Result<Vec<crate::library::LocalTrack>, String> {
+    crate::library::library_search(
+        query,
+        limit,
+        exclude_network_folders,
+        state,
+        download_settings_state,
+    )
+    .await
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_library_get_album_tracks(
+    albumGroupKey: String,
+    state: State<'_, LibraryState>,
+) -> Result<Vec<crate::library::LocalTrack>, String> {
+    crate::library::library_get_album_tracks(albumGroupKey, state).await
 }
 
 #[tauri::command]
@@ -3430,6 +3791,164 @@ pub async fn v2_search_artists(
     Ok(results)
 }
 
+/// Search all categories in one call (albums/tracks/artists/playlists + most_popular)
+#[tauri::command]
+pub async fn v2_search_all(
+    query: String,
+    state: State<'_, AppState>,
+    blacklist_state: State<'_, BlacklistState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<V2SearchAllResults, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+
+    let url = crate::api::endpoints::build_url(crate::api::endpoints::paths::CATALOG_SEARCH);
+    let response: serde_json::Value = {
+        let client = state.client.read().await;
+        client
+            .get_http()
+            .get(&url)
+            .header(
+                "X-App-Id",
+                client
+                    .app_id()
+                    .await
+                    .map_err(|e| RuntimeError::Internal(e.to_string()))?,
+            )
+            .header(
+                "X-User-Auth-Token",
+                client
+                    .auth_token()
+                    .await
+                    .map_err(|e| RuntimeError::Internal(e.to_string()))?,
+            )
+            .query(&[("query", query.as_str()), ("limit", "30"), ("offset", "0")])
+            .send()
+            .await
+            .map_err(|e| RuntimeError::Internal(format!("Request failed: {}", e)))?
+            .json()
+            .await
+            .map_err(|e| RuntimeError::Internal(format!("JSON parse failed: {}", e)))?
+    };
+
+    let mut albums: SearchResultsPage<Album> = response
+        .get("albums")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_else(|| SearchResultsPage {
+            items: vec![],
+            total: 0,
+            offset: 0,
+            limit: 30,
+        });
+    let mut tracks: SearchResultsPage<Track> = response
+        .get("tracks")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_else(|| SearchResultsPage {
+            items: vec![],
+            total: 0,
+            offset: 0,
+            limit: 30,
+        });
+    let mut artists: SearchResultsPage<Artist> = response
+        .get("artists")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_else(|| SearchResultsPage {
+            items: vec![],
+            total: 0,
+            offset: 0,
+            limit: 30,
+        });
+    let playlists: SearchResultsPage<Playlist> = response
+        .get("playlists")
+        .and_then(|v| serde_json::from_value(v.clone()).ok())
+        .unwrap_or_else(|| SearchResultsPage {
+            items: vec![],
+            total: 0,
+            offset: 0,
+            limit: 30,
+        });
+
+    let most_popular: Option<V2MostPopularItem> = response
+        .get("most_popular")
+        .and_then(|mp| mp.get("items"))
+        .and_then(|items| items.as_array())
+        .and_then(|arr| {
+            for item in arr {
+                let item_type = item.get("type").and_then(|t| t.as_str())?;
+                let content = item.get("content")?;
+
+                match item_type {
+                    "tracks" => {
+                        if let Ok(track) = serde_json::from_value::<Track>(content.clone()) {
+                            if let Some(ref performer) = track.performer {
+                                if blacklist_state.is_blacklisted(performer.id) {
+                                    continue;
+                                }
+                            }
+                            return Some(V2MostPopularItem::Tracks(track));
+                        }
+                    }
+                    "albums" => {
+                        if let Ok(album) = serde_json::from_value::<Album>(content.clone()) {
+                            if blacklist_state.is_blacklisted(album.artist.id) {
+                                continue;
+                            }
+                            return Some(V2MostPopularItem::Albums(album));
+                        }
+                    }
+                    "artists" => {
+                        if let Ok(artist) = serde_json::from_value::<Artist>(content.clone()) {
+                            if blacklist_state.is_blacklisted(artist.id) {
+                                continue;
+                            }
+                            return Some(V2MostPopularItem::Artists(artist));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            None
+        });
+
+    let original_album_count = albums.items.len();
+    albums
+        .items
+        .retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+    let filtered_albums = original_album_count - albums.items.len();
+    if filtered_albums > 0 {
+        albums.total = albums.total.saturating_sub(filtered_albums as u32);
+    }
+
+    let original_track_count = tracks.items.len();
+    tracks.items.retain(|track| {
+        if let Some(ref performer) = track.performer {
+            !blacklist_state.is_blacklisted(performer.id)
+        } else {
+            true
+        }
+    });
+    let filtered_tracks = original_track_count - tracks.items.len();
+    if filtered_tracks > 0 {
+        tracks.total = tracks.total.saturating_sub(filtered_tracks as u32);
+    }
+
+    let original_artist_count = artists.items.len();
+    artists
+        .items
+        .retain(|artist| !blacklist_state.is_blacklisted(artist.id));
+    let filtered_artists = original_artist_count - artists.items.len();
+    if filtered_artists > 0 {
+        artists.total = artists.total.saturating_sub(filtered_artists as u32);
+    }
+
+    Ok(V2SearchAllResults {
+        albums,
+        tracks,
+        artists,
+        playlists,
+        most_popular,
+    })
+}
+
 // ==================== Catalog Commands (V2) ====================
 
 /// Get album by ID (V2 - uses QbzCore)
@@ -4061,6 +4580,26 @@ pub async fn v2_get_playlist(
     bridge.get_playlist(playlistId).await.map_err(RuntimeError::Internal)
 }
 
+/// Get playlist metadata + track ids for progressive loading.
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_playlist_track_ids(
+    playlistId: u64,
+    app_state: State<'_, AppState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<PlaylistWithTrackIds, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+
+    let client = app_state.client.read().await;
+    client
+        .get_playlist_track_ids(playlistId)
+        .await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
 /// Add tracks to playlist (V2 - uses QbzCore)
 #[tauri::command]
 #[allow(non_snake_case)]
@@ -4444,6 +4983,45 @@ pub async fn v2_update_playlist(
     log::info!("[V2] update_playlist: {}", playlistId);
     let bridge = bridge.get().await;
     bridge.update_playlist(playlistId, name.as_deref(), description.as_deref(), isPublic).await.map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_get_custom_order(
+    playlistId: u64,
+    library_state: State<'_, LibraryState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Vec<(i64, bool, i32)>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    crate::library::playlist_get_custom_order(playlistId, library_state)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_has_custom_order(
+    playlistId: u64,
+    library_state: State<'_, LibraryState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<bool, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    crate::library::playlist_has_custom_order(playlistId, library_state)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_get_tracks_with_local_copies(
+    trackIds: Vec<u64>,
+    library_state: State<'_, LibraryState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Vec<u64>, RuntimeError> {
+    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    crate::library::playlist_get_tracks_with_local_copies(trackIds, library_state)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Search playlists (V2 - uses QbzCore)
@@ -4903,6 +5481,190 @@ pub async fn v2_musicbrainz_resolve_artist(
     let client = state.client.lock().await;
     client.resolve_artist(&name).await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+#[tauri::command]
+pub async fn v2_resolve_musician(
+    name: String,
+    role: String,
+    mb_state: State<'_, MusicBrainzV2State>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<crate::musicbrainz::ResolvedMusician, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let resolved_artist = {
+        let client = mb_state.client.lock().await;
+        client
+            .resolve_artist(&name)
+            .await
+            .map_err(|e| RuntimeError::Internal(e.to_string()))?
+    };
+
+    let normalized_target = name.trim().to_lowercase();
+    let bridge = bridge.get().await;
+    let artist_results = bridge
+        .search_artists(&name, 10, 0, None)
+        .await
+        .map_err(RuntimeError::Internal)?;
+    let exact = artist_results
+        .items
+        .iter()
+        .find(|artist| artist.name.trim().to_lowercase() == normalized_target);
+
+    if let Some(artist) = exact {
+        let qobuz_artist_id = i64::try_from(artist.id).ok();
+        return Ok(crate::musicbrainz::ResolvedMusician {
+            name,
+            role,
+            mbid: None,
+            qobuz_artist_id,
+            confidence: crate::musicbrainz::MusicianConfidence::Confirmed,
+            bands: Vec::new(),
+            appears_on_count: 0,
+        });
+    }
+
+    let album_results = bridge
+        .search_albums(&name, 20, 0, None)
+        .await
+        .map_err(RuntimeError::Internal)?;
+    let appears_on_count = album_results.total as usize;
+
+    let confidence = if appears_on_count > 0 {
+        crate::musicbrainz::MusicianConfidence::Contextual
+    } else if resolved_artist.is_some() {
+        crate::musicbrainz::MusicianConfidence::Weak
+    } else {
+        crate::musicbrainz::MusicianConfidence::None
+    };
+
+    Ok(crate::musicbrainz::ResolvedMusician {
+        name,
+        role,
+        mbid: resolved_artist.as_ref().map(|a| a.mbid.clone()),
+        qobuz_artist_id: None,
+        confidence,
+        bands: Vec::new(),
+        appears_on_count,
+    })
+}
+
+#[tauri::command]
+pub async fn v2_get_musician_appearances(
+    name: String,
+    role: String,
+    limit: Option<u32>,
+    offset: Option<u32>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<crate::musicbrainz::MusicianAppearances, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let bridge = bridge.get().await;
+    let results = bridge
+        .search_albums(&name, limit.unwrap_or(20), offset.unwrap_or(0), None)
+        .await
+        .map_err(RuntimeError::Internal)?;
+
+    let albums = results
+        .items
+        .into_iter()
+        .map(|album| crate::musicbrainz::AlbumAppearance {
+            album_id: album.id,
+            album_title: album.title,
+            album_artwork: album.image.large.or(album.image.small).unwrap_or_default(),
+            artist_name: album.artist.name,
+            year: album.release_date_original,
+            role_on_album: role.clone(),
+        })
+        .collect::<Vec<_>>();
+
+    Ok(crate::musicbrainz::MusicianAppearances {
+        albums,
+        total: results.total as usize,
+    })
+}
+
+#[tauri::command]
+pub async fn v2_musicbrainz_get_artist_relationships(
+    mbid: String,
+    state: State<'_, MusicBrainzSharedState>,
+) -> Result<crate::musicbrainz::ArtistRelationships, String> {
+    // Check cache first
+    {
+        let cache_opt = state.cache.lock().await;
+        let cache = cache_opt.as_ref().ok_or("No active session - please log in")?;
+        if let Some(cached) = cache.get_artist_relations(&mbid)? {
+            return Ok(cached);
+        }
+    }
+
+    let artist = state.client.get_artist_with_relations(&mbid).await?;
+
+    let mut members = Vec::new();
+    let mut past_members = Vec::new();
+    let mut groups = Vec::new();
+    let mut collaborators = Vec::new();
+
+    if let Some(relations) = &artist.relations {
+        for relation in relations {
+            let Some(related_artist) = &relation.artist else {
+                continue;
+            };
+
+            let related = crate::musicbrainz::RelatedArtist {
+                mbid: related_artist.id.clone(),
+                name: related_artist.name.clone(),
+                role: relation.attributes.as_ref().and_then(|a| a.first().cloned()),
+                period: Some(crate::musicbrainz::Period {
+                    begin: relation.begin.clone(),
+                    end: relation.end.clone(),
+                }),
+                ended: relation.ended.unwrap_or(false),
+            };
+
+            match relation.relation_type.as_str() {
+                "member of band" => {
+                    if relation.direction.as_deref() == Some("backward") {
+                        if related.ended {
+                            past_members.push(related);
+                        } else {
+                            members.push(related);
+                        }
+                    } else {
+                        groups.push(related);
+                    }
+                }
+                "collaboration" => {
+                    collaborators.push(related);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let result = crate::musicbrainz::ArtistRelationships {
+        members,
+        past_members,
+        groups,
+        collaborators,
+    };
+
+    // Cache result
+    {
+        let cache_opt = state.cache.lock().await;
+        let cache = cache_opt.as_ref().ok_or("No active session - please log in")?;
+        cache.set_artist_relations(&mbid, &result)?;
+    }
+
+    Ok(result)
 }
 
 // --- Last.fm V2 ---
@@ -5908,6 +6670,36 @@ pub fn v2_set_show_whats_new_on_launch(
 }
 
 #[tauri::command]
+pub fn v2_get_update_preferences(
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<crate::updates::UpdatePreferences, String> {
+    crate::updates::get_update_preferences(state)
+}
+
+#[tauri::command]
+pub fn v2_get_current_version(
+    state: State<'_, crate::updates::UpdatesState>,
+) -> String {
+    crate::updates::get_current_version(state)
+}
+
+#[tauri::command]
+pub async fn v2_check_for_updates(
+    mode: String,
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<crate::updates::UpdateCheckResult, String> {
+    crate::updates::check_for_updates(mode, state).await
+}
+
+#[tauri::command]
+pub async fn v2_fetch_release_for_version(
+    version: String,
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<Option<crate::updates::ReleaseInfo>, String> {
+    crate::updates::fetch_release_for_version(version, state).await
+}
+
+#[tauri::command]
 pub fn v2_acknowledge_release(
     version: String,
     state: State<'_, crate::updates::UpdatesState>,
@@ -5929,6 +6721,14 @@ pub fn v2_mark_whats_new_shown(
     state: State<'_, crate::updates::UpdatesState>,
 ) -> Result<(), String> {
     crate::updates::mark_whats_new_shown(version, state)
+}
+
+#[tauri::command]
+pub fn v2_has_whats_new_been_shown(
+    version: String,
+    state: State<'_, crate::updates::UpdatesState>,
+) -> Result<bool, String> {
+    crate::updates::has_whats_new_been_shown(version, state)
 }
 
 #[tauri::command]
@@ -5954,6 +6754,96 @@ pub fn v2_set_show_downloads_in_library(
     state: State<'_, crate::config::download_settings::DownloadSettingsState>,
 ) -> Result<(), String> {
     crate::config::download_settings::set_show_downloads_in_library(show, state)
+}
+
+#[tauri::command]
+pub fn v2_get_download_settings(
+    state: State<'_, crate::config::download_settings::DownloadSettingsState>,
+) -> Result<crate::config::download_settings::DownloadSettings, String> {
+    crate::config::download_settings::get_download_settings(state)
+}
+
+#[tauri::command]
+pub async fn v2_lyrics_get_cache_stats(
+    state: State<'_, crate::lyrics::LyricsState>,
+) -> Result<crate::lyrics::commands::LyricsCacheStats, String> {
+    crate::lyrics::commands::lyrics_get_cache_stats(state).await
+}
+
+#[tauri::command]
+pub fn v2_lastfm_has_embedded_credentials() -> bool {
+    crate::lastfm::LastFmClient::has_embedded_credentials()
+}
+
+#[tauri::command]
+pub async fn v2_remote_control_get_status(
+    app_handle: tauri::AppHandle,
+) -> Result<crate::api_server::RemoteControlStatus, String> {
+    crate::api_server::remote_control_get_status(app_handle).await
+}
+
+#[tauri::command]
+pub async fn v2_remote_control_set_enabled(
+    enabled: bool,
+    app_handle: tauri::AppHandle,
+) -> Result<crate::api_server::RemoteControlStatus, String> {
+    crate::api_server::remote_control_set_enabled(enabled, app_handle).await
+}
+
+#[tauri::command]
+pub async fn v2_remote_control_set_port(
+    port: u16,
+    app_handle: tauri::AppHandle,
+) -> Result<crate::api_server::RemoteControlStatus, String> {
+    crate::api_server::remote_control_set_port(port, app_handle).await
+}
+
+#[tauri::command]
+pub async fn v2_remote_control_set_secure(
+    secure: bool,
+    app_handle: tauri::AppHandle,
+) -> Result<crate::api_server::RemoteControlStatus, String> {
+    crate::api_server::remote_control_set_secure(secure, app_handle).await
+}
+
+#[tauri::command]
+pub async fn v2_remote_control_regenerate_token(
+    app_handle: tauri::AppHandle,
+) -> Result<crate::api_server::RemoteControlQr, String> {
+    crate::api_server::remote_control_regenerate_token(app_handle).await
+}
+
+#[tauri::command]
+pub async fn v2_remote_control_get_pairing_qr(
+    app_handle: tauri::AppHandle,
+) -> Result<crate::api_server::RemoteControlQr, String> {
+    crate::api_server::remote_control_get_pairing_qr(app_handle).await
+}
+
+#[tauri::command]
+pub fn v2_is_running_in_flatpak() -> bool {
+    crate::flatpak::is_running_in_flatpak()
+}
+
+#[tauri::command]
+pub async fn v2_detect_legacy_cached_files(
+    cache_state: State<'_, OfflineCacheState>,
+) -> Result<crate::offline_cache::MigrationStatus, String> {
+    let tracks_dir = cache_state.cache_dir.read().unwrap().join("tracks");
+    let track_ids = crate::offline_cache::detect_legacy_cached_files(&tracks_dir)?;
+    Ok(crate::offline_cache::MigrationStatus {
+        has_legacy_files: !track_ids.is_empty(),
+        total_tracks: track_ids.len(),
+        ..Default::default()
+    })
+}
+
+#[tauri::command]
+pub fn v2_get_device_sample_rate_limit(
+    state: State<'_, crate::config::audio_settings::AudioSettingsState>,
+    device_id: String,
+) -> Result<Option<u32>, String> {
+    crate::config::audio_settings::get_device_sample_rate_limit(state, device_id)
 }
 
 #[tauri::command]

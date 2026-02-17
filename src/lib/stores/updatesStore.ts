@@ -67,7 +67,7 @@ export async function initUpdatesStore(): Promise<void> {
   // Only fetch once.
   if (!versionLoaded) {
     try {
-      currentVersion = await invoke<string>('get_current_version');
+      currentVersion = await invoke<string>('v2_get_current_version');
       versionLoaded = true;
     } catch (error) {
       console.error('[Updates] Failed to get current version:', error);
@@ -79,7 +79,7 @@ export async function initUpdatesStore(): Promise<void> {
   // so a pre-login failure doesn't lock in stale defaults.
   if (!prefsLoaded) {
     try {
-      preferences = await invoke<UpdatePreferences>('get_update_preferences');
+      preferences = await invoke<UpdatePreferences>('v2_get_update_preferences');
       prefsLoaded = true;
     } catch {
       // Expected before login — store not initialised yet.
@@ -91,7 +91,7 @@ export async function initUpdatesStore(): Promise<void> {
 
 export async function refreshUpdatePreferences(): Promise<void> {
   try {
-    preferences = await invoke<UpdatePreferences>('get_update_preferences');
+    preferences = await invoke<UpdatePreferences>('v2_get_update_preferences');
     notify();
   } catch (error) {
     console.debug('[Updates] Failed to refresh update preferences:', error);
@@ -121,7 +121,7 @@ export async function setShowWhatsNewOnLaunch(enabled: boolean): Promise<void> {
 }
 
 export async function checkForUpdates(mode: 'launch' | 'manual'): Promise<UpdateCheckResult> {
-  const result = await invoke<UpdateCheckResult>('check_for_updates', { mode });
+  const result = await invoke<UpdateCheckResult>('v2_check_for_updates', { mode });
   return {
     ...result,
     release: result.release ?? null,
@@ -130,7 +130,7 @@ export async function checkForUpdates(mode: 'launch' | 'manual'): Promise<Update
 
 export async function fetchReleaseForVersion(version: string): Promise<ReleaseInfo | null> {
   try {
-    const release = await invoke<ReleaseInfo | null>('fetch_release_for_version', { version });
+    const release = await invoke<ReleaseInfo | null>('v2_fetch_release_for_version', { version });
     return release ?? null;
   } catch (error) {
     console.debug('[Updates] Failed to fetch release for version:', version, error);
@@ -148,7 +148,7 @@ export async function ignoreRelease(version: string): Promise<void> {
 
 export async function hasWhatsNewBeenShown(version: string): Promise<boolean> {
   try {
-    return await invoke<boolean>('has_whats_new_been_shown', { version });
+    return await invoke<boolean>('v2_has_whats_new_been_shown', { version });
   } catch (error) {
     console.debug('[Updates] Failed to check whats_new_shown:', version, error);
     return false;
@@ -162,4 +162,3 @@ export async function markWhatsNewShown(version: string): Promise<void> {
     console.debug('[Updates] Failed to mark whats_new_shown:', version, error);
   }
 }
-

@@ -58,7 +58,7 @@ export async function getHomeSeeds(limits?: {
   topArtists?: number;
   favorites?: number;
 }): Promise<HomeSeeds> {
-  return invoke<HomeSeeds>('reco_get_home', {
+  return invoke<HomeSeeds>('v2_reco_get_home', {
     limitRecentAlbums: limits?.recentAlbums,
     limitContinueTracks: limits?.continueTracks,
     limitTopArtists: limits?.topArtists,
@@ -86,7 +86,7 @@ export async function getHomeSeedsML(limits?: {
   topArtists?: number;
   favorites?: number;
 }): Promise<HomeSeeds> {
-  return invoke<HomeSeeds>('reco_get_home_ml', {
+  return invoke<HomeSeeds>('v2_reco_get_home_ml', {
     limitRecentAlbums: limits?.recentAlbums,
     limitContinueTracks: limits?.continueTracks,
     limitTopArtists: limits?.topArtists,

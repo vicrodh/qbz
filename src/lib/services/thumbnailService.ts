@@ -25,7 +25,7 @@ export async function getThumbnailUrl(artworkPath: string): Promise<string> {
   const requestPromise = (async () => {
     try {
       // Call backend to get/generate thumbnail
-      const thumbnailPath = await invoke<string>('library_get_thumbnail', {
+      const thumbnailPath = await invoke<string>('v2_library_get_thumbnail', {
         artworkPath,
       });
 
@@ -87,7 +87,7 @@ export async function clearAllThumbnails(): Promise<void> {
  * Get the size of the thumbnails cache in bytes.
  */
 export async function getThumbnailsCacheSize(): Promise<number> {
-  return invoke<number>('library_get_thumbnails_cache_size');
+  return invoke<number>('v2_library_get_thumbnails_cache_size');
 }
 
 /**

@@ -47,7 +47,7 @@
     error = null;
 
     try {
-      const result = await invoke<MusicianAppearances>('get_musician_appearances', {
+      const result = await invoke<MusicianAppearances>('v2_get_musician_appearances', {
         name: musician.name,
         role: musician.role,
         limit: ITEMS_PER_PAGE,
@@ -71,7 +71,7 @@
     isLoadingMore = true;
 
     try {
-      const result = await invoke<MusicianAppearances>('get_musician_appearances', {
+      const result = await invoke<MusicianAppearances>('v2_get_musician_appearances', {
         name: musician.name,
         role: musician.role,
         limit: ITEMS_PER_PAGE,

@@ -81,7 +81,7 @@ function notifyListeners(): void {
 // Initialize offline cache states from backend
 export async function initOfflineCacheStates(): Promise<void> {
   try {
-    const tracks = await invoke<CachedTrackInfo[]>('get_cached_tracks');
+    const tracks = await invoke<CachedTrackInfo[]>('v2_get_cached_tracks');
     for (const track of tracks) {
       offlineCacheStates.set(track.trackId, {
         status: track.status,
@@ -203,7 +203,7 @@ export async function removeCachedTrack(trackId: number): Promise<void> {
 
 // Get offline cache stats
 export async function getOfflineCacheStats(): Promise<OfflineCacheStats> {
-  return invoke<OfflineCacheStats>('get_offline_cache_stats');
+  return invoke<OfflineCacheStats>('v2_get_offline_cache_stats');
 }
 
 // Clear all offline cache

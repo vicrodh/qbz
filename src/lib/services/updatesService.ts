@@ -140,7 +140,7 @@ export interface LaunchUpdateDecision {
  */
 async function shouldShowFlatpakWelcome(): Promise<boolean> {
   try {
-    const isFlatpak = await invoke<boolean>('is_running_in_flatpak');
+    const isFlatpak = await invoke<boolean>('v2_is_running_in_flatpak');
     if (!isFlatpak) return false;
     const alreadyShown = await invoke<boolean>('has_flatpak_welcome_been_shown');
     return !alreadyShown;

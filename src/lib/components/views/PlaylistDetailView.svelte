@@ -602,7 +602,7 @@
 
         if (pending.trackIds.length > 0) {
           try {
-            const qobuzTracks = await invoke<PlaylistTrack[]>('get_tracks_by_ids', {
+            const qobuzTracks = await invoke<PlaylistTrack[]>('v2_get_tracks_batch', {
               trackIds: pending.trackIds
             });
             tracks = qobuzTracks.map((track, idx) => mapPlaylistTrack(track, idx));
@@ -619,9 +619,9 @@
         // === Regular playlist — decide strategy based on track count ===
 
         // Phase 1: lightweight metadata + track IDs (always fast)
-        console.log(`[Perf] invoke get_playlist_track_ids START (+${(performance.now() - _t0).toFixed(1)}ms)`);
-        const meta = await invoke<PlaylistWithTrackIds>('get_playlist_track_ids', { playlistId });
-        console.log(`[Perf] invoke get_playlist_track_ids DONE (+${(performance.now() - _t0).toFixed(1)}ms) — ${meta.track_ids.length} IDs`);
+        console.log(`[Perf] invoke v2_get_playlist_track_ids START (+${(performance.now() - _t0).toFixed(1)}ms)`);
+        const meta = await invoke<PlaylistWithTrackIds>('v2_get_playlist_track_ids', { playlistId });
+        console.log(`[Perf] invoke v2_get_playlist_track_ids DONE (+${(performance.now() - _t0).toFixed(1)}ms) — ${meta.track_ids.length} IDs`);
 
         // Set playlist metadata immediately
         playlist = {
