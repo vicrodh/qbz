@@ -2892,8 +2892,27 @@
         setIsPlaying(false);
         return;
       }
+      const previousTrackId = currentTrack?.id ?? null;
       const nextTrackResult = await nextTrack();
       if (nextTrackResult) {
+        // Defensive fallback for issue #80:
+        // if backend returns same track on auto-advance while repeat-one is off,
+        // force one additional advance attempt to break one-track loops.
+        if (
+          previousTrackId !== null &&
+          nextTrackResult.id === previousTrackId &&
+          repeatMode !== 'one'
+        ) {
+          console.warn(
+            '[Player] Auto-advance returned same track id, forcing one extra nextTrack()',
+            previousTrackId
+          );
+          const forcedNext = await nextTrack();
+          if (forcedNext && forcedNext.id !== previousTrackId) {
+            await playQueueTrack(forcedNext);
+            return;
+          }
+        }
         await playQueueTrack(nextTrackResult);
       } else {
         // Queue ended - stop playback and clear player
@@ -2971,7 +2990,19 @@
       try {
         const queueState = getQueueState();
         if (queueState.queue.length > 0) {
-          return Number(queueState.queue[0].id);
+          const firstId = Number(queueState.queue[0].id);
+          const currentId = currentTrack?.id ?? null;
+          if (!Number.isNaN(firstId) && firstId > 0 && firstId !== currentId) {
+            return firstId;
+          }
+
+          // Defensive fallback: skip stale first slot if it matches current track.
+          if (queueState.queue.length > 1) {
+            const secondId = Number(queueState.queue[1].id);
+            if (!Number.isNaN(secondId) && secondId > 0 && secondId !== currentId) {
+              return secondId;
+            }
+          }
         }
       } catch {
         // Ignore

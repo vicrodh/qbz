@@ -4208,6 +4208,17 @@ pub async fn v2_play_next_gapless(
 
     let bridge_guard = bridge.get().await;
     let player = bridge_guard.player();
+    let current_track_id = player.state.current_track_id();
+
+    // Defensive guard: never queue the currently playing track as "next".
+    // This avoids infinite one-track loops when frontend queue state is stale.
+    if current_track_id != 0 && current_track_id == track_id {
+        log::warn!(
+            "[V2/GAPLESS] Ignoring play_next_gapless for current track {}",
+            track_id
+        );
+        return Ok(false);
+    }
 
     // Check offline cache (persistent disk cache)
     {

@@ -471,12 +471,17 @@ pub fn run() {
                     };
                     tokio::time::sleep(sleep_duration).await;
 
-                    // Only emit if state changed or position advanced
-                    let should_emit = track_id != 0 && (
+                    // Emit when:
+                    // 1) normal in-track state changes/position updates, or
+                    // 2) terminal transition to no-track (track_id becomes 0).
+                    // Case (2) is required so frontend can run end-of-track fallback
+                    // auto-advance paths reliably.
+                    let track_cleared = track_id == 0 && last_track_id != 0;
+                    let should_emit = (track_id != 0 && (
                         is_playing != last_is_playing
                         || track_id != last_track_id
                         || (is_playing && position != last_position)
-                    );
+                    )) || track_cleared;
 
                     let should_update_mpris = should_emit || (track_id == 0 && last_track_id != 0);
 
