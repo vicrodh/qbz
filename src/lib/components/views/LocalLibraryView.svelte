@@ -330,6 +330,7 @@
   // Source filters (OR within this group)
   let filterLocalFiles = $state(false);
   let filterOfflineCache = $state(false);
+  let filterPlexLibrary = $state(false);
 
   const LOSSLESS_FORMATS = ['flac', 'wav', 'aiff', 'alac', 'ape', 'dsd', 'dsf', 'dff'];
   const LOSSY_FORMATS = ['mp3', 'aac', 'm4a', 'ogg', 'opus', 'wma'];
@@ -338,12 +339,12 @@
   let hasActiveFilters = $derived(
     filterHiRes || filterCdQuality || filterLossy ||
     filterFlac || filterAlac || filterApe || filterWav || filterMp3 || filterAac || filterOther ||
-    filterLocalFiles || filterOfflineCache
+    filterLocalFiles || filterOfflineCache || filterPlexLibrary
   );
 
   // Count active filters for badge
   let activeFilterCount = $derived(
-    [filterHiRes, filterCdQuality, filterLossy, filterFlac, filterAlac, filterApe, filterWav, filterMp3, filterAac, filterOther, filterLocalFiles, filterOfflineCache]
+    [filterHiRes, filterCdQuality, filterLossy, filterFlac, filterAlac, filterApe, filterWav, filterMp3, filterAac, filterOther, filterLocalFiles, filterOfflineCache, filterPlexLibrary]
       .filter(Boolean).length
   );
 
@@ -383,13 +384,14 @@
     }
 
     // Check source (OR logic - pass if any selected matches, or none selected)
-    const sourceFiltersActive = filterLocalFiles || filterOfflineCache;
+    const sourceFiltersActive = filterLocalFiles || filterOfflineCache || filterPlexLibrary;
     let passesSource = !sourceFiltersActive; // Pass if no source filters
 
     if (sourceFiltersActive) {
       const source = album.source ?? 'user';
-      if (filterLocalFiles && (source === 'user' || source === 'plex')) passesSource = true;
+      if (filterLocalFiles && source === 'user') passesSource = true;
       if (filterOfflineCache && source === 'qobuz_download') passesSource = true;
+      if (filterPlexLibrary && source === 'plex') passesSource = true;
     }
 
     // AND between sections
@@ -409,6 +411,7 @@
     filterOther = false;
     filterLocalFiles = false;
     filterOfflineCache = false;
+    filterPlexLibrary = false;
   }
 
   // Album sorting state
@@ -905,6 +908,7 @@
   let plexRepairAttempted = $state(false);
   let plexRepairInProgress = $state(false);
   let plexRepairQueued = $state(false);
+  let plexSessionSyncAttempted = $state(false);
   let fetchingArtwork = $state(false);
   let updatingArtwork = $state(false);
   let hasDiscogsCredentials = $state(false);
@@ -1121,6 +1125,13 @@
     return true;
   }
 
+  function hasPlexConfig(): boolean {
+    const enabled = getUserItem('qbz-plex-enabled') === 'true';
+    const baseUrl = (getUserItem('qbz-plex-poc-base-url') || '').trim();
+    const token = (getUserItem('qbz-plex-poc-token') || '').trim();
+    return enabled && baseUrl.length > 0 && token.length > 0;
+  }
+
   function buildPlexArtworkUrl(path: string): string {
     const baseUrl = getUserItem('qbz-plex-poc-base-url') || '';
     const token = getUserItem('qbz-plex-poc-token') || '';
@@ -1224,6 +1235,29 @@
     }
   }
 
+  async function syncPlexLibrary(showFeedback = true) {
+    if (!hasPlexConfig()) return;
+    if (isOffline && getOfflineReason() === 'no_network') return;
+    if (plexRepairInProgress) return;
+
+    try {
+      const repaired = await repairLegacyPlexCache();
+      if (repaired) {
+        await loadLibraryData({ background: true });
+        if (showFeedback) {
+          showToast($t('library.plexSyncDone'), 'success');
+        }
+      } else if (showFeedback) {
+        showToast($t('library.plexSyncFailed'), 'error');
+      }
+    } catch (err) {
+      console.error('[LocalLibrary] Failed to sync Plex library:', err);
+      if (showFeedback) {
+        showToast($t('library.plexSyncFailed'), 'error');
+      }
+    }
+  }
+
   function mapPlexAlbum(plexAlbum: PlexCachedAlbum): LocalAlbum {
     const artist = plexAlbum.artist?.trim() || 'Unknown Artist';
     const title = normalizePlexAlbumTitle(artist, plexAlbum.title || 'Unknown Album');
@@ -1296,6 +1330,15 @@
       ]);
       const fetchMs = performance.now() - fetchStart;
       let workingPlexAlbumsRaw = plexAlbumsRaw;
+      if (
+        includePlex &&
+        hasPlexConfig() &&
+        workingPlexAlbumsRaw.length === 0 &&
+        !plexSessionSyncAttempted
+      ) {
+        plexSessionSyncAttempted = true;
+        void syncPlexLibrary(false);
+      }
       const shouldAttemptRepair =
         includePlex &&
         !plexRepairAttempted &&
@@ -3206,6 +3249,17 @@
         {/if}
       </div>
       <div class="header-actions">
+        {#if hasPlexConfig()}
+          <button
+            class="icon-btn plex-sync-btn"
+            onclick={() => syncPlexLibrary(true)}
+            disabled={plexRepairInProgress || (isOffline && getOfflineReason() === 'no_network')}
+            title={$t('library.syncPlexLibrary')}
+          >
+            <RefreshCw size={20} class={plexRepairInProgress ? 'spinning' : ''} />
+            <span>{plexRepairInProgress ? $t('library.syncingPlexLibrary') : $t('library.syncPlexLibrary')}</span>
+          </button>
+        {/if}
         <button class="icon-btn" onclick={handleScan} disabled={scanning} title={$t('library.scanLibrary')}>
           <RefreshCw size={20} class={scanning ? 'spinning' : ''} />
         </button>
@@ -3656,19 +3710,25 @@
                   </div>
 
                   <div class="filter-section">
-                    <div class="filter-section-label">Source</div>
+                    <div class="filter-section-label">{$t('library.source')}</div>
                     <div class="filter-checkboxes source-row">
                       <label class="filter-checkbox">
                         <input type="checkbox" bind:checked={filterLocalFiles} />
                         <span class="checkmark"></span>
                         <HardDrive size={14} class="filter-icon" />
-                        <span class="label-text">Local</span>
+                        <span class="label-text">{$t('library.localFiles')}</span>
                       </label>
                       <label class="filter-checkbox">
                         <input type="checkbox" bind:checked={filterOfflineCache} />
                         <span class="checkmark"></span>
                         <img src="/qobuz-logo-filled.svg" alt="" class="filter-icon qobuz-icon" />
-                        <span class="label-text">Offline cache</span>
+                        <span class="label-text">{$t('library.offlineCache')}</span>
+                      </label>
+                      <label class="filter-checkbox">
+                        <input type="checkbox" bind:checked={filterPlexLibrary} />
+                        <span class="checkmark"></span>
+                        <Network size={14} class="filter-icon" />
+                        <span class="label-text">{$t('library.plexLibrary')}</span>
                       </label>
                     </div>
                   </div>
@@ -4268,6 +4328,18 @@
   .icon-btn:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .plex-sync-btn {
+    width: auto;
+    padding: 0 10px;
+    gap: 6px;
+  }
+
+  .plex-sync-btn span {
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
   }
 
   :global(.spinning) {
