@@ -65,8 +65,8 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
     // Transient detection state
     let mut prev_rms = 0.0f32;
     let mut transient_cooldown = 0u32; // frames remaining in cooldown
-    const TRANSIENT_THRESHOLD: f32 = 0.15; // RMS jump threshold
-    const TRANSIENT_COOLDOWN_FRAMES: u32 = 6; // ~200ms at 30fps
+    const TRANSIENT_THRESHOLD: f32 = 0.04; // RMS jump threshold (sensitive)
+    const TRANSIENT_COOLDOWN_FRAMES: u32 = 3; // ~100ms at 30fps
 
     // Smoothing factor: 0 = no smoothing, higher = more smoothing
     const SMOOTHING: f32 = 0.65;
@@ -155,8 +155,29 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
                     let _ = app_handle.emit("viz:energy", energy_bytes);
 
                     // --- Transient Detection: detect sharp RMS jumps ---
-                    let current_rms: f32 = energy_bands.iter().sum::<f32>() / NUM_ENERGY_BANDS as f32;
-                    let rms_delta = current_rms - prev_rms;
+                    // Use raw (pre-smoothed) RMS for transient sensitivity
+                    // Weight bass/sub-bass more heavily for beat detection
+                    let raw_rms = {
+                        let mut raw_sum = 0.0f32;
+                        for (band_idx, &(lo, hi)) in ENERGY_BAND_RANGES.iter().enumerate() {
+                            let mut sum_sq = 0.0f32;
+                            let mut cnt = 0u32;
+                            for (freq, magnitude) in data.iter() {
+                                let f = freq.val();
+                                if f >= lo && f < hi {
+                                    let mag = magnitude.val();
+                                    sum_sq += mag * mag;
+                                    cnt += 1;
+                                }
+                            }
+                            let band_rms = if cnt > 0 { (sum_sq / cnt as f32).sqrt() } else { 0.0 };
+                            // Bass/sub-bass weighted 2x for beat detection
+                            let weight = if band_idx < 2 { 2.0 } else { 1.0 };
+                            raw_sum += (band_rms * 6.0).powf(0.5).clamp(0.0, 1.0) * weight;
+                        }
+                        raw_sum / (NUM_ENERGY_BANDS as f32 + 2.0) // account for extra bass weight
+                    };
+                    let rms_delta = raw_rms - prev_rms;
 
                     if transient_cooldown > 0 {
                         transient_cooldown -= 1;
@@ -164,13 +185,13 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
 
                     if rms_delta > TRANSIENT_THRESHOLD && transient_cooldown == 0 {
                         // Transient detected! Emit intensity (0.0 - 1.0)
-                        let intensity = (rms_delta * 3.0).clamp(0.0, 1.0);
+                        let intensity = (rms_delta * 5.0).clamp(0.0, 1.0);
                         let transient_bytes: Vec<u8> = intensity.to_le_bytes().to_vec();
                         let _ = app_handle.emit("viz:transient", transient_bytes);
                         transient_cooldown = TRANSIENT_COOLDOWN_FRAMES;
                     }
 
-                    prev_rms = current_rms;
+                    prev_rms = raw_rms;
                 }
                 Err(e) => {
                     log::debug!("FFT error: {:?}", e);

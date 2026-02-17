@@ -108,12 +108,21 @@
         const bytes = new Uint8Array(payload);
         const floats = new Float32Array(bytes.buffer);
         if (floats.length >= 5) {
-          // Smooth the values for gentle animation
+          // Smooth with faster attack for visible reactivity
           const rawGlobal = (floats[0] + floats[1] + floats[2] + floats[3] + floats[4]) / 5;
           const rawBass = (floats[0] + floats[1]) / 2;
 
-          smoothedGlobal = smoothedGlobal * 0.7 + rawGlobal * 0.3;
-          smoothedBass = smoothedBass * 0.7 + rawBass * 0.3;
+          // Fast attack, medium decay
+          if (rawGlobal > smoothedGlobal) {
+            smoothedGlobal = smoothedGlobal * 0.3 + rawGlobal * 0.7;
+          } else {
+            smoothedGlobal = smoothedGlobal * 0.85 + rawGlobal * 0.15;
+          }
+          if (rawBass > smoothedBass) {
+            smoothedBass = smoothedBass * 0.3 + rawBass * 0.7;
+          } else {
+            smoothedBass = smoothedBass * 0.85 + rawBass * 0.15;
+          }
 
           globalEnergy = smoothedGlobal;
           bassEnergy = smoothedBass;
@@ -148,10 +157,10 @@
     }
   });
 
-  // Computed transform values — gentle breathing
-  const artScale = $derived(1 + globalEnergy * 0.04);
-  const glowSpread = $derived(20 + bassEnergy * 40);
-  const glowOpacity = $derived(0.1 + globalEnergy * 0.4);
+  // Computed transform values — visible breathing effect
+  const artScale = $derived(1 + globalEnergy * 0.08);
+  const glowSpread = $derived(30 + bassEnergy * 80);
+  const glowOpacity = $derived(0.2 + globalEnergy * 0.8);
 </script>
 
 <div class="album-reactive-panel" class:visible={enabled}>
@@ -227,8 +236,9 @@
 
   .glow-layer {
     position: absolute;
-    width: min(45vh, 360px);
-    height: min(45vh, 360px);
+    inset: 0;
+    width: 100%;
+    height: 100%;
     border-radius: 8px;
     pointer-events: none;
     transition: box-shadow 100ms ease, opacity 100ms ease;
@@ -330,16 +340,14 @@
       gap: 16px;
     }
 
-    .artwork-container,
-    .glow-layer {
+    .artwork-container {
       width: min(55vw, 280px);
       height: min(55vw, 280px);
     }
   }
 
   @media (max-height: 600px) {
-    .artwork-container,
-    .glow-layer {
+    .artwork-container {
       width: min(32vh, 220px);
       height: min(32vh, 220px);
     }

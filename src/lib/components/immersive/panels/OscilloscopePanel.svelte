@@ -203,32 +203,36 @@
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, width, height);
 
+    // Constrain drawing area to 85% of height, centered
+    const drawHeight = height * 0.85;
+    const yOffset = (height - drawHeight) / 2;
+
     // Layout: L in top 45%, R in bottom 45%, center 10% for divider
-    const topZone = height * 0.45;
-    const bottomZoneStart = height * 0.55;
+    const topZone = drawHeight * 0.45;
+    const bottomZoneStart = drawHeight * 0.55;
     const amplitude = topZone * 0.7; // max waveform excursion
 
     // Draw L channel waveform
-    drawWaveform(width, topZone / 2, amplitude, leftChannel, colorLeft);
+    drawWaveform(width, yOffset + topZone / 2, amplitude, leftChannel, colorLeft);
 
     // Draw R channel waveform
-    drawWaveform(width, bottomZoneStart + topZone / 2, amplitude, rightChannel, colorRight);
+    drawWaveform(width, yOffset + bottomZoneStart + topZone / 2, amplitude, rightChannel, colorRight);
 
     // Center divider line
     ctx.beginPath();
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
     ctx.lineWidth = 1;
     ctx.shadowBlur = 0;
-    ctx.moveTo(0, height / 2);
-    ctx.lineTo(width, height / 2);
+    ctx.moveTo(0, yOffset + drawHeight / 2);
+    ctx.lineTo(width, yOffset + drawHeight / 2);
     ctx.stroke();
 
     // Channel labels
     ctx.font = '11px monospace';
     ctx.fillStyle = `rgba(${colorLeft.r}, ${colorLeft.g}, ${colorLeft.b}, 0.6)`;
-    ctx.fillText('L', 12, topZone / 2 - amplitude * 0.5 - 8);
+    ctx.fillText('L', 12, yOffset + topZone / 2 - amplitude * 0.5 - 8);
     ctx.fillStyle = `rgba(${colorRight.r}, ${colorRight.g}, ${colorRight.b}, 0.6)`;
-    ctx.fillText('R', 12, bottomZoneStart + topZone / 2 - amplitude * 0.5 - 8);
+    ctx.fillText('R', 12, yOffset + bottomZoneStart + topZone / 2 - amplitude * 0.5 - 8);
 
     animationFrame = requestAnimationFrame(render);
   }
@@ -273,17 +277,18 @@
 <div class="oscilloscope-panel" class:visible={enabled}>
   <canvas bind:this={canvasRef} class="oscilloscope-canvas"></canvas>
 
-  <div class="bottom-info">
+  <div class="center-content">
     {#if artwork}
-      <div class="artwork-thumb">
-        <img src={artwork} alt={trackTitle} />
+      <div class="artwork-container">
+        <img src={artwork} alt={trackTitle} class="artwork" />
       </div>
     {/if}
-    <div class="track-meta">
-      <span class="track-title">{trackTitle}</span>
-      <span class="track-artist">{artist}</span>
+
+    <div class="track-info">
+      <h1 class="track-title">{trackTitle}</h1>
+      <p class="track-artist">{artist}</p>
       {#if album}
-        <span class="track-album">{album}</span>
+        <p class="track-album">{album}</p>
       {/if}
       <div class="quality-badge-wrapper">
         <QualityBadge {quality} {bitDepth} {samplingRate} {originalBitDepth} {originalSamplingRate} {format} />
@@ -315,85 +320,87 @@
     height: 100%;
   }
 
-  .bottom-info {
-    position: absolute;
-    bottom: 140px;
-    left: 24px;
+  .center-content {
+    position: relative;
     z-index: 10;
     display: flex;
-    align-items: flex-end;
-    gap: 16px;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    padding-top: 70px;
+    padding-bottom: 120px;
   }
 
-  .artwork-thumb {
-    width: 120px;
-    height: 120px;
-    border-radius: 6px;
+  .artwork-container {
+    width: min(45vh, 360px);
+    height: min(45vh, 360px);
+    border-radius: 8px;
     overflow: hidden;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
-    flex-shrink: 0;
+    box-shadow:
+      0 8px 32px rgba(0, 0, 0, 0.5),
+      0 20px 60px rgba(0, 0, 0, 0.3);
   }
 
-  .artwork-thumb img {
+  .artwork {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
 
-  .track-meta {
+  .track-info {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding-bottom: 4px;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    max-width: 600px;
   }
 
   .track-title {
-    font-size: 16px;
-    font-weight: 600;
+    font-size: clamp(20px, 3vw, 28px);
+    font-weight: 700;
     color: var(--text-primary, white);
-    text-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
-    max-width: 300px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    margin: 0;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
   }
 
   .track-artist {
-    font-size: 13px;
+    font-size: clamp(14px, 2vw, 18px);
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
+    margin: 0;
   }
 
   .track-album {
-    font-size: 12px;
+    font-size: clamp(12px, 1.5vw, 14px);
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
+    margin: 0;
     font-style: italic;
   }
 
   .quality-badge-wrapper {
-    margin-top: 4px;
+    margin-top: 12px;
   }
 
   @media (max-width: 768px) {
-    .bottom-info {
-      left: 16px;
-      bottom: 130px;
+    .center-content {
+      padding: 70px 24px 130px;
+      gap: 16px;
     }
 
-    .artwork-thumb {
-      width: 80px;
-      height: 80px;
-    }
-
-    .track-title {
-      font-size: 14px;
-      max-width: 200px;
+    .artwork-container {
+      width: min(55vw, 280px);
+      height: min(55vw, 280px);
     }
   }
 
   @media (max-height: 600px) {
-    .artwork-thumb {
-      width: 80px;
-      height: 80px;
+    .artwork-container {
+      width: min(32vh, 220px);
+      height: min(32vh, 220px);
+    }
+
+    .track-info {
+      gap: 4px;
     }
   }
 </style>

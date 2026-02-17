@@ -60,6 +60,12 @@
   // Current global energy for ambient glow
   let globalEnergy = 0;
 
+  // Frontend-side supplementary beat detection from energy data
+  let prevBassEnergy = 0;
+  let frontendCooldown = 0;
+  const FRONTEND_BEAT_THRESHOLD = 0.08;
+  const FRONTEND_COOLDOWN = 4; // ~133ms at 30fps
+
   // Colors from artwork
   let pulseColors = $state([
     { r: 255, g: 100, b: 100 },
@@ -190,6 +196,19 @@
         const floats = new Float32Array(bytes.buffer);
         if (floats.length >= 5) {
           globalEnergy = (floats[0] + floats[1] + floats[2] + floats[3] + floats[4]) / 5;
+
+          // Frontend-side supplementary beat detection (bass-weighted)
+          const currentBass = (floats[0] * 2 + floats[1] * 1.5) / 3.5;
+          const bassDelta = currentBass - prevBassEnergy;
+          prevBassEnergy = currentBass;
+
+          if (frontendCooldown > 0) {
+            frontendCooldown--;
+          } else if (bassDelta > FRONTEND_BEAT_THRESHOLD && canvasRef) {
+            const rect = canvasRef.getBoundingClientRect();
+            spawnRing(Math.min(bassDelta * 3, 1.0), rect.width, rect.height);
+            frontendCooldown = FRONTEND_COOLDOWN;
+          }
         }
       }
     });

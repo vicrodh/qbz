@@ -191,9 +191,13 @@
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, width, height);
 
+    // Constrain drawing area to 85% of height, centered
+    const drawHeight = height * 0.85;
+    const yOffset = (height - drawHeight) / 2;
+
     const centerX = width / 2;
-    const centerY = height / 2 - 20; // Offset up slightly for controls
-    const minDim = Math.min(width, height);
+    const centerY = yOffset + drawHeight / 2;
+    const minDim = Math.min(width, drawHeight);
     const artSize = minDim * 0.3;
     const artHalf = artSize / 2;
 
