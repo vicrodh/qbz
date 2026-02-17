@@ -807,6 +807,27 @@
   const PLEX_CLIENT_ID_KEY = 'qbz-plex-poc-client-id';
   const PLEX_METADATA_WRITE_KEY = 'qbz-plex-poc-metadata-write-enabled';
 
+  // Qobuz Link Handler state
+  let qobuzLinkHandlerEnabled = $state(false);
+  let qobuzLinkHandlerBusy = $state(false);
+
+  async function handleQobuzLinkHandlerToggle(enabled: boolean) {
+    qobuzLinkHandlerBusy = true;
+    try {
+      if (enabled) {
+        await invoke('v2_register_qobuzapp_handler');
+      } else {
+        await invoke('v2_deregister_qobuzapp_handler');
+      }
+      qobuzLinkHandlerEnabled = enabled;
+    } catch (err) {
+      console.error('Failed to toggle qobuzapp handler:', err);
+      showToast(get(t)('settings.integrations.qobuzLinkHandlerError'), 'error');
+    } finally {
+      qobuzLinkHandlerBusy = false;
+    }
+  }
+
   // Load saved settings on mount
   onMount(() => {
     // Load theme
@@ -884,6 +905,11 @@
 
     // Load remote control status
     loadRemoteControlStatus();
+
+    // Check qobuzapp:// link handler registration
+    invoke<boolean>('v2_check_qobuzapp_handler')
+      .then((registered) => { qobuzLinkHandlerEnabled = registered; })
+      .catch((err) => { console.warn('Could not check qobuzapp handler:', err); });
 
     // Warm-start Plex panel from local cache and refresh in background
     hydratePlexAddressFieldsFromBaseUrl();
@@ -3680,6 +3706,15 @@
   <!-- Integrations Section -->
   <section class="section" bind:this={integrationsSection}>
     <h3 class="section-title">{$t('settings.integrations.title')}</h3>
+
+    <!-- Qobuz Link Handler -->
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.qobuzLinkHandler')}</span>
+        <small class="setting-note">{$t('settings.integrations.qobuzLinkHandlerDesc')}</small>
+      </div>
+      <Toggle enabled={qobuzLinkHandlerEnabled} onchange={handleQobuzLinkHandlerToggle} disabled={qobuzLinkHandlerBusy} />
+    </div>
 
     {#if lastfmConnected}
       <div class="setting-row">
