@@ -299,12 +299,23 @@ pub fn run() {
     let user_data_paths = user_data::UserDataPaths::new();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // Second instance launched — bring existing window to front
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.unminimize();
                 let _ = window.set_focus();
+            }
+
+            // Check if second instance was launched with a Qobuz link arg
+            for arg in &args {
+                if arg.starts_with("qobuzapp://") || arg.contains("play.qobuz.com/") || arg.contains("open.qobuz.com/") {
+                    if let Ok(resolved) = qbz_qobuz::resolve_link(arg) {
+                        log::info!("Single-instance forwarding link: {:?}", resolved);
+                        let _ = app.emit("link:resolved", &resolved);
+                    }
+                    break;
+                }
             }
         }))
         .plugin(tauri_plugin_opener::init())
@@ -394,6 +405,26 @@ pub fn run() {
 
             // NOTE: Subscription purge check moved to activate_user_session
             // (runs after login when per-user state is available)
+
+            // Check if app was launched with a Qobuz link argument
+            // (first launch, not single-instance — that's handled by the plugin above)
+            {
+                let launch_handle = app.handle().clone();
+                let args: Vec<String> = std::env::args().collect();
+                for arg in &args[1..] { // skip binary name
+                    if arg.starts_with("qobuzapp://") || arg.contains("play.qobuz.com/") || arg.contains("open.qobuz.com/") {
+                        if let Ok(resolved) = qbz_qobuz::resolve_link(arg) {
+                            log::info!("Launch arg link resolved: {:?}", resolved);
+                            // Delay emission to give frontend time to mount
+                            tauri::async_runtime::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                                let _ = launch_handle.emit("link:resolved", &resolved);
+                            });
+                        }
+                        break;
+                    }
+                }
+            }
 
             // Start background task to emit playback events
             let app_handle = app.handle().clone();
