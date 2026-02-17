@@ -6364,52 +6364,19 @@ pub async fn v2_subscribe_playlist(
         .map_err(|e| format!("Failed to fetch created playlist: {}", e))
 }
 
-#[tauri::command]
-pub async fn v2_cache_track_for_offline(
+/// Shared helper: spawn the download task for a single track.
+/// Used by both v2_cache_track_for_offline (single) and v2_cache_tracks_batch_for_offline (batch).
+fn spawn_track_cache_download(
     track_id: u64,
-    title: String,
-    artist: String,
-    album: Option<String>,
-    album_id: Option<String>,
-    duration_secs: u64,
-    quality: String,
-    bit_depth: Option<u32>,
-    sample_rate: Option<f64>,
-    state: State<'_, AppState>,
-    cache_state: State<'_, OfflineCacheState>,
-    library_state: State<'_, crate::library::LibraryState>,
-    app_handle: tauri::AppHandle,
-) -> Result<(), String> {
-    log::info!("Command: v2_cache_track_for_offline {} - {} by {}", track_id, title, artist);
-
-    let track_info = crate::offline_cache::TrackCacheInfo {
-        track_id,
-        title,
-        artist,
-        album,
-        album_id,
-        duration_secs,
-        quality,
-        bit_depth,
-        sample_rate,
-    };
-
-    let file_path = cache_state.track_file_path(track_id, "flac");
-    let file_path_str = file_path.to_string_lossy().to_string();
-    {
-        let guard = cache_state.db.lock().await;
-        let db = guard.as_ref().ok_or("No active session - please log in")?;
-        db.insert_track(&track_info, &file_path_str)?;
-    }
-
-    let client = state.client.clone();
-    let fetcher = cache_state.fetcher.clone();
-    let db = cache_state.db.clone();
-    let offline_root = cache_state.get_cache_path();
-    let library_db = library_state.db.clone();
-    let app = app_handle.clone();
-    let semaphore = cache_state.cache_semaphore.clone();
-
+    file_path: std::path::PathBuf,
+    client: std::sync::Arc<tokio::sync::RwLock<crate::api::QobuzClient>>,
+    fetcher: std::sync::Arc<crate::offline_cache::StreamFetcher>,
+    db: std::sync::Arc<tokio::sync::Mutex<Option<crate::offline_cache::OfflineCacheDb>>>,
+    offline_root: String,
+    library_db: std::sync::Arc<tokio::sync::Mutex<Option<qbz_library::LibraryDatabase>>>,
+    app: tauri::AppHandle,
+    semaphore: std::sync::Arc<tokio::sync::Semaphore>,
+) {
     tokio::spawn(async move {
         let _permit = match semaphore.acquire_owned().await {
             Ok(permit) => permit,
@@ -6567,6 +6534,129 @@ pub async fn v2_cache_track_for_offline(
             }
         }
     });
+}
+
+#[tauri::command]
+pub async fn v2_cache_track_for_offline(
+    track_id: u64,
+    title: String,
+    artist: String,
+    album: Option<String>,
+    album_id: Option<String>,
+    duration_secs: u64,
+    quality: String,
+    bit_depth: Option<u32>,
+    sample_rate: Option<f64>,
+    state: State<'_, AppState>,
+    cache_state: State<'_, OfflineCacheState>,
+    library_state: State<'_, crate::library::LibraryState>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    log::info!("Command: v2_cache_track_for_offline {} - {} by {}", track_id, title, artist);
+
+    let track_info = crate::offline_cache::TrackCacheInfo {
+        track_id,
+        title,
+        artist,
+        album,
+        album_id,
+        duration_secs,
+        quality,
+        bit_depth,
+        sample_rate,
+    };
+
+    let file_path = cache_state.track_file_path(track_id, "flac");
+    let file_path_str = file_path.to_string_lossy().to_string();
+    {
+        let guard = cache_state.db.lock().await;
+        let db = guard.as_ref().ok_or("No active session - please log in")?;
+        db.insert_track(&track_info, &file_path_str)?;
+    }
+
+    spawn_track_cache_download(
+        track_id,
+        file_path,
+        state.client.clone(),
+        cache_state.fetcher.clone(),
+        cache_state.db.clone(),
+        cache_state.get_cache_path(),
+        library_state.db.clone(),
+        app_handle.clone(),
+        cache_state.cache_semaphore.clone(),
+    );
+
+    Ok(())
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BatchTrackInfo {
+    pub id: u64,
+    pub title: String,
+    pub artist: String,
+    pub album: Option<String>,
+    pub album_id: Option<String>,
+    pub duration_secs: u64,
+    pub quality: String,
+    pub bit_depth: Option<u32>,
+    pub sample_rate: Option<f64>,
+}
+
+#[tauri::command]
+pub async fn v2_cache_tracks_batch_for_offline(
+    tracks: Vec<BatchTrackInfo>,
+    state: State<'_, AppState>,
+    cache_state: State<'_, OfflineCacheState>,
+    library_state: State<'_, crate::library::LibraryState>,
+    app_handle: tauri::AppHandle,
+) -> Result<(), String> {
+    log::info!("Command: v2_cache_tracks_batch_for_offline ({} tracks)", tracks.len());
+
+    // Build TrackCacheInfo + file_path pairs for batch insert
+    let mut batch: Vec<(crate::offline_cache::TrackCacheInfo, String)> = Vec::with_capacity(tracks.len());
+    for track in &tracks {
+        let file_path = cache_state.track_file_path(track.id, "flac");
+        let file_path_str = file_path.to_string_lossy().to_string();
+        batch.push((
+            crate::offline_cache::TrackCacheInfo {
+                track_id: track.id,
+                title: track.title.clone(),
+                artist: track.artist.clone(),
+                album: track.album.clone(),
+                album_id: track.album_id.clone(),
+                duration_secs: track.duration_secs,
+                quality: track.quality.clone(),
+                bit_depth: track.bit_depth,
+                sample_rate: track.sample_rate,
+            },
+            file_path_str,
+        ));
+    }
+
+    // Single transactional batch insert
+    {
+        let guard = cache_state.db.lock().await;
+        let db = guard.as_ref().ok_or("No active session - please log in")?;
+        let refs: Vec<(&crate::offline_cache::TrackCacheInfo, String)> = batch.iter().map(|(info, path)| (info, path.clone())).collect();
+        db.insert_tracks_batch(&refs)?;
+    }
+
+    // Spawn download tasks for each track
+    for track in &tracks {
+        let file_path = cache_state.track_file_path(track.id, "flac");
+        spawn_track_cache_download(
+            track.id,
+            file_path,
+            state.client.clone(),
+            cache_state.fetcher.clone(),
+            cache_state.db.clone(),
+            cache_state.get_cache_path(),
+            library_state.db.clone(),
+            app_handle.clone(),
+            cache_state.cache_semaphore.clone(),
+        );
+    }
 
     Ok(())
 }

@@ -11,7 +11,7 @@
   import TrackRow from '../TrackRow.svelte';
   import PlaylistSuggestions from '../PlaylistSuggestions.svelte';
   import { extractAdaptiveArtists } from '$lib/services/playlistSuggestionsService';
-  import { type OfflineCacheStatus, cacheTrackForOffline, getOfflineCacheState } from '$lib/stores/offlineCacheState';
+  import { type OfflineCacheStatus, cacheTrackForOffline, cacheTracksForOfflineBatch, getOfflineCacheState } from '$lib/stores/offlineCacheState';
   import {
     subscribe as subscribeOffline,
     getStatus as getOfflineStatus,
@@ -1937,22 +1937,20 @@
     const playlistName = playlist?.name || '';
     showToast(translate('playlist.preparingPlaylistOffline', { values: { count: tracksToCache.length, name: playlistName } }), 'info');
 
-    for (const track of tracksToCache) {
-      try {
-        await cacheTrackForOffline({
-          id: track.id,
-          title: track.title,
-          artist: track.artist || 'Unknown',
-          album: track.album,
-          albumId: track.albumId,
-          durationSecs: track.durationSeconds,
-          quality: '-',
-          bitDepth: track.bitDepth,
-          sampleRate: track.samplingRate,
-        });
-      } catch (err) {
-        console.error(`Failed to queue offline cache for "${track.title}":`, err);
-      }
+    try {
+      await cacheTracksForOfflineBatch(tracksToCache.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist || 'Unknown',
+        album: track.album,
+        albumId: track.albumId,
+        durationSecs: track.durationSeconds,
+        quality: '-',
+        bitDepth: track.bitDepth,
+        sampleRate: track.samplingRate,
+      })));
+    } catch (err) {
+      console.error('Failed to batch queue offline cache:', err);
     }
   }
 </script>

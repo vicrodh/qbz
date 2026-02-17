@@ -844,6 +844,7 @@ pub fn run() {
             commands_v2::v2_show_track_notification,
             commands_v2::v2_subscribe_playlist,
             commands_v2::v2_cache_track_for_offline,
+            commands_v2::v2_cache_tracks_batch_for_offline,
             commands_v2::v2_start_legacy_migration,
             commands_v2::v2_library_scan,
             commands_v2::v2_library_stop_scan,

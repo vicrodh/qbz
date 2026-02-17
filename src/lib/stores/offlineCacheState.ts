@@ -196,6 +196,48 @@ export async function cacheTrackForOffline(track: {
   }
 }
 
+// Cache multiple tracks for offline in a single batch IPC call
+export async function cacheTracksForOfflineBatch(tracks: Array<{
+  id: number;
+  title: string;
+  artist: string;
+  album?: string;
+  albumId?: string;
+  durationSecs: number;
+  quality: string;
+  bitDepth?: number;
+  sampleRate?: number;
+}>): Promise<void> {
+  if (tracks.length === 0) return;
+
+  // Mark all as queued immediately
+  for (const track of tracks) {
+    setOfflineCacheState(track.id, { status: 'queued', progress: 0 });
+  }
+
+  try {
+    await invoke('v2_cache_tracks_batch_for_offline', {
+      tracks: tracks.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        albumId: track.albumId,
+        durationSecs: track.durationSecs,
+        quality: track.quality,
+        bitDepth: track.bitDepth,
+        sampleRate: track.sampleRate,
+      })),
+    });
+  } catch (err) {
+    console.error('Failed to batch cache tracks for offline:', err);
+    for (const track of tracks) {
+      setOfflineCacheState(track.id, { status: 'failed', progress: 0, error: String(err) });
+    }
+    throw err;
+  }
+}
+
 // Remove a track from offline cache
 export async function removeCachedTrack(trackId: number): Promise<void> {
   try {

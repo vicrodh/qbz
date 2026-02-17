@@ -15,6 +15,7 @@
     startOfflineCacheEventListeners,
     stopOfflineCacheEventListeners,
     cacheTrackForOffline,
+    cacheTracksForOfflineBatch,
     removeCachedTrack,
     getOfflineCacheState,
     openAlbumFolder,
@@ -1125,22 +1126,20 @@
 
     showToast($t('toast.preparingTracksOffline', { values: { count: tracksToDownload.length, album: album.title } }), 'info');
 
-    for (const track of tracksToDownload) {
-      try {
-        await cacheTrackForOffline({
-          id: track.id,
-          title: track.title,
-          artist: track.artist || album.artist || 'Unknown',
-          album: album.title,
-          albumId: album.id,
-          durationSecs: track.durationSeconds,
-          quality: track.quality || '-',
-          bitDepth: track.bitDepth,
-          sampleRate: track.samplingRate,
-        });
-      } catch (err) {
-        console.error(`Failed to queue download for "${track.title}":`, err);
-      }
+    try {
+      await cacheTracksForOfflineBatch(tracksToDownload.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist || album.artist || 'Unknown',
+        album: album.title,
+        albumId: album.id,
+        durationSecs: track.durationSeconds,
+        quality: track.quality || '-',
+        bitDepth: track.bitDepth,
+        sampleRate: track.samplingRate,
+      })));
+    } catch (err) {
+      console.error('Failed to batch queue downloads:', err);
     }
   }
 
@@ -2024,22 +2023,20 @@
 
     showToast($t('toast.preparingTracksOffline', { values: { count: tracksToDownload.length, album: selectedAlbum.title } }), 'info');
 
-    for (const track of tracksToDownload) {
-      try {
-        await cacheTrackForOffline({
-          id: track.id,
-          title: track.title,
-          artist: track.artist || selectedAlbum.artist || 'Unknown',
-          album: selectedAlbum.title,
-          albumId: selectedAlbum.id,
-          durationSecs: track.durationSeconds,
-          quality: track.quality || '-',
-          bitDepth: track.bitDepth,
-          sampleRate: track.samplingRate,
-        });
-      } catch (err) {
-        console.error(`Failed to queue "${track.title}" for offline:`, err);
-      }
+    try {
+      await cacheTracksForOfflineBatch(tracksToDownload.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist || selectedAlbum.artist || 'Unknown',
+        album: selectedAlbum.title,
+        albumId: selectedAlbum.id,
+        durationSecs: track.durationSeconds,
+        quality: track.quality || '-',
+        bitDepth: track.bitDepth,
+        sampleRate: track.samplingRate,
+      })));
+    } catch (err) {
+      console.error('Failed to batch queue for offline:', err);
     }
   }
 
@@ -2059,22 +2056,20 @@
 
     showToast($t('toast.refreshingAlbumOffline', { values: { album: selectedAlbum.title } }), 'info');
 
-    for (const track of selectedAlbum.tracks) {
-      try {
-        await cacheTrackForOffline({
-          id: track.id,
-          title: track.title,
-          artist: track.artist || selectedAlbum.artist || 'Unknown',
-          album: selectedAlbum.title,
-          albumId: selectedAlbum.id,
-          durationSecs: track.durationSeconds,
-          quality: track.quality || '-',
-          bitDepth: track.bitDepth,
-          sampleRate: track.samplingRate,
-        });
-      } catch (err) {
-        console.error(`Failed to refresh "${track.title}" for offline:`, err);
-      }
+    try {
+      await cacheTracksForOfflineBatch(selectedAlbum.tracks.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist || selectedAlbum.artist || 'Unknown',
+        album: selectedAlbum.title,
+        albumId: selectedAlbum.id,
+        durationSecs: track.durationSeconds,
+        quality: track.quality || '-',
+        bitDepth: track.bitDepth,
+        sampleRate: track.samplingRate,
+      })));
+    } catch (err) {
+      console.error('Failed to batch refresh for offline:', err);
     }
   }
 
@@ -2097,22 +2092,20 @@
 
       showToast($t('toast.refreshingAlbumOffline', { values: { album: album.title } }), 'info');
 
-      for (const track of album.tracks.items) {
-        try {
-          await cacheTrackForOffline({
-            id: track.id,
-            title: track.title,
-            artist: track.performer?.name || album.artist?.name || 'Unknown',
-            album: album.title,
-            albumId: album.id,
-            durationSecs: track.duration,
-            quality: track.hires_streamable ? 'Hi-Res' : '-',
-            bitDepth: track.maximum_bit_depth,
-            sampleRate: track.maximum_sampling_rate,
-          });
-        } catch (err) {
-          console.error(`Failed to refresh "${track.title}" for offline:`, err);
-        }
+      try {
+        await cacheTracksForOfflineBatch(album.tracks.items.map(track => ({
+          id: track.id,
+          title: track.title,
+          artist: track.performer?.name || album.artist?.name || 'Unknown',
+          album: album.title,
+          albumId: album.id,
+          durationSecs: track.duration,
+          quality: track.hires_streamable ? 'Hi-Res' : '-',
+          bitDepth: track.maximum_bit_depth,
+          sampleRate: track.maximum_sampling_rate,
+        })));
+      } catch (err) {
+        console.error('Failed to batch refresh for offline:', err);
       }
     } catch (err) {
       console.error('Failed to load album:', err);
