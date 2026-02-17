@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Play, Pause, Heart, HardDrive, AlertCircle, Ban } from 'lucide-svelte';
+  import { Play, Pause, Heart, HardDrive, AlertCircle, Ban, Music } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import TrackMenu from './TrackMenu.svelte';
   import DownloadButton from './DownloadButton.svelte';
@@ -35,6 +35,8 @@
     hideDownload?: boolean;
     hideFavorite?: boolean;
     compact?: boolean; // Compact mode: smaller height, artist as column
+    showArtwork?: boolean; // Optional artwork column (e.g., playlist detail)
+    artworkUrl?: string;
     onPlay?: () => void;
     onArtistClick?: () => void;
     onAlbumClick?: () => void;
@@ -83,6 +85,8 @@
     hideDownload = false,
     hideFavorite = false,
     compact = false,
+    showArtwork = false,
+    artworkUrl,
     onPlay,
     onArtistClick,
     onAlbumClick,
@@ -180,6 +184,18 @@
       <span>{number}</span>
     {/if}
   </div>
+
+  <!-- Track Info -->
+  {#if showArtwork}
+    <div class="track-artwork">
+      <div class="track-artwork-placeholder">
+        <Music size={14} />
+      </div>
+      {#if artworkUrl}
+        <img src={artworkUrl} alt={title} loading="lazy" decoding="async" />
+      {/if}
+    </div>
+  {/if}
 
   <!-- Track Info -->
   <div class="track-info">
@@ -443,6 +459,35 @@
   .track-info {
     flex: 1;
     min-width: 0;
+  }
+
+  .track-artwork {
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+    background-color: var(--bg-tertiary);
+  }
+
+  .track-artwork img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1;
+  }
+
+  .track-artwork-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.7;
   }
 
   .track-title {

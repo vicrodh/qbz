@@ -2157,6 +2157,7 @@
           <div class="col-checkbox"></div>
         {/if}
         <div class="col-number">#</div>
+        <div class="col-artwork"></div>
         <div class="col-title">Title</div>
         <div class="col-album">Album</div>
         <div class="col-duration">Duration</div>
@@ -2233,6 +2234,8 @@
               title={track.title}
               artist={track.artist}
               album={track.album}
+              showArtwork={true}
+              artworkUrl={track.albumArt}
               duration={track.duration}
               quality={track.bitDepth && track.samplingRate
                 ? `${track.bitDepth}bit/${track.samplingRate}kHz`
@@ -2673,6 +2676,11 @@
   .col-title {
     flex: 1;
     min-width: 0;
+  }
+
+  .col-artwork {
+    width: 36px;
+    flex-shrink: 0;
   }
 
   .col-album {

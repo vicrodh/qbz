@@ -3023,6 +3023,7 @@
   .jump-nav {
     position: sticky;
     top: 0;
+    z-index: 40000;
     display: flex;
     justify-content: space-between;
     align-items: center;
