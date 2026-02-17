@@ -458,19 +458,6 @@ pub fn run() {
                             )
                         };
 
-                    // Adaptive polling:
-                    // - fast (250ms) when playing - improves seekbar/lyrics sync
-                    // - slow (1000ms) when paused/stopped with a track loaded
-                    // - very slow (5000ms) when no track is loaded (idle)
-                    let sleep_duration = if is_playing {
-                        std::time::Duration::from_millis(250)
-                    } else if track_id == 0 {
-                        std::time::Duration::from_millis(5000)
-                    } else {
-                        std::time::Duration::from_millis(1000)
-                    };
-                    tokio::time::sleep(sleep_duration).await;
-
                     // Emit when:
                     // 1) normal in-track state changes/position updates, or
                     // 2) terminal transition to no-track (track_id becomes 0).
@@ -524,6 +511,19 @@ pub fn run() {
                             media_controls.set_playback_with_progress(is_playing, position);
                         }
                     }
+
+                    // Adaptive polling:
+                    // - fast (250ms) when playing - improves seekbar/lyrics sync
+                    // - slow (1000ms) when paused/stopped with a track loaded
+                    // - very slow (5000ms) when no track is loaded (idle)
+                    let sleep_duration = if is_playing {
+                        std::time::Duration::from_millis(250)
+                    } else if track_id == 0 {
+                        std::time::Duration::from_millis(5000)
+                    } else {
+                        std::time::Duration::from_millis(1000)
+                    };
+                    tokio::time::sleep(sleep_duration).await;
                 }
             });
 

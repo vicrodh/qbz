@@ -4191,7 +4191,6 @@ pub async fn v2_set_media_metadata(
         duration_secs,
         cover_url,
     );
-    app_state.media_controls.set_playback_with_progress(true, 0);
     Ok(())
 }
 
