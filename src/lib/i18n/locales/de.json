@@ -19,7 +19,8 @@
     "recentlyAdded": "Kürzlich hinzugefügt",
     "backTo": "Zurück zu",
     "updates": "Updates",
-    "flatpak": "Flatpak"
+    "flatpak": "Flatpak",
+    "purchases": "Einkäufe"
   },
   "home": {
     "title": "Start",
@@ -638,6 +639,8 @@
       "useSystemTitleBarDesc": "QBZ-eigene Titelleiste durch die native Fensterdekoration des Systems ersetzen. Änderung startet die App neu.",
       "hideTitleBar": "Titelleiste ausblenden",
       "hideTitleBarDesc": "Titelleiste komplett ausblenden (für Tiling-Window-Manager-Nutzer)",
+      "showPurchases": "Einkäufe anzeigen",
+      "showPurchasesDesc": "Einkäufe-Bereich in der Seitenleiste zum Durchsuchen und Herunterladen gekaufter Musik anzeigen",
       "immersiveDefaultView": "Standard-Ansicht im Immersiv-Modus",
       "immersiveViews": {
         "remember": "Letzte Ansicht merken",
@@ -1404,6 +1407,46 @@
     "addingPhase": "Titel zur Playlist hinzufugen...",
     "addingProgress": "Titel hinzufugen: {current} / {total}",
     "partsCreated": "Aufgeteilt in {count} Playlists (Qobuz-Limit: 2000 Titel)"
+  },
+  "purchases": {
+    "title": "Einkäufe",
+    "tabs": {
+      "albums": "Alben",
+      "tracks": "Titel"
+    },
+    "search": "Einkäufe durchsuchen...",
+    "empty": "Noch keine Einkäufe. Besuche Qobuz, um Musik zu kaufen.",
+    "emptyTracks": "Keine einzeln gekauften Titel.",
+    "unavailable": "Dieses Album ist nicht mehr zum Download verfügbar.",
+    "downloadAll": "Alles herunterladen",
+    "downloadTrack": "Titel herunterladen",
+    "chooseFolder": "Download-Ordner wählen",
+    "format": "Format",
+    "purchasedOn": "Gekauft:",
+    "addToLibrary": "Zur lokalen Bibliothek hinzufügen",
+    "addToLibraryDesc": "Den heruntergeladenen Ordner zu deiner lokalen Musikbibliothek hinzufügen.",
+    "downloading": "Wird heruntergeladen...",
+    "downloadProgress": "Herunterladen {current}/{total}...",
+    "complete": "Download abgeschlossen",
+    "failed": "Download fehlgeschlagen",
+    "filter": {
+      "all": "Alle",
+      "downloaded": "Heruntergeladen",
+      "notDownloaded": "Nicht heruntergeladen",
+      "hires": "Hi-Res"
+    },
+    "sort": {
+      "date": "Kaufdatum",
+      "artist": "Künstler",
+      "album": "Album",
+      "quality": "Qualität"
+    },
+    "formats": {
+      "flac_hires_192": "FLAC 24-bit / 192 kHz",
+      "flac_hires_96": "FLAC 24-bit / 96 kHz",
+      "flac_cd": "FLAC 16-bit / 44,1 kHz",
+      "mp3_320": "MP3 320 kbps"
+    }
   },
   "linkResolver": {
     "title": "Qobuz-Link oeffnen",
