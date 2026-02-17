@@ -339,6 +339,7 @@
   import FlatpakWelcomeModal from '$lib/components/updates/FlatpakWelcomeModal.svelte';
   import KeyboardShortcutsModal from '$lib/components/KeyboardShortcutsModal.svelte';
   import KeybindingsSettings from '$lib/components/KeybindingsSettings.svelte';
+  import LinkResolverModal from '$lib/components/LinkResolverModal.svelte';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
   import { refreshUpdatePreferences, resetUpdatesStore } from '$lib/stores/updatesStore';
   import {
@@ -556,6 +557,7 @@
   let isAboutModalOpen = $state(false);
   let isShortcutsModalOpen = $state(false);
   let isKeybindingsSettingsOpen = $state(false);
+  let isLinkResolverOpen = $state(false);
 
   // Track Info Modal State
   let isTrackInfoOpen = $state(false);
@@ -733,6 +735,38 @@
     } catch (err) {
       console.error('Failed to load artist:', err);
       showToast($t('toast.failedLoadArtist'), 'error');
+    }
+  }
+
+  /**
+   * Handle a resolved Qobuz link (from modal or OS scheme handler).
+   */
+  async function handleResolvedLink(resolved: { type: string; id: string | number }) {
+    try {
+      switch (resolved.type) {
+        case 'OpenAlbum':
+          await handleAlbumClick(String(resolved.id));
+          break;
+        case 'OpenTrack': {
+          // Fetch track to get its album, then navigate there
+          const track = await invoke<Track>('v2_get_track', { trackId: Number(resolved.id) });
+          if (track?.album?.id) {
+            await handleAlbumClick(String(track.album.id));
+          }
+          break;
+        }
+        case 'OpenArtist':
+          await handleArtistClick(Number(resolved.id));
+          break;
+        case 'OpenPlaylist':
+          selectPlaylist(Number(resolved.id));
+          break;
+        default:
+          console.warn('Unknown resolved link type:', resolved.type);
+      }
+    } catch (err) {
+      console.error('Failed to handle resolved link:', err);
+      showToast($t('linkResolver.invalidLink'), 'error');
     }
   }
 
@@ -3032,6 +3066,7 @@
     let unlistenTrayNext: UnlistenFn | null = null;
     let unlistenTrayPrevious: UnlistenFn | null = null;
     let unlistenMediaControls: UnlistenFn | null = null;
+    let unlistenLinkResolved: UnlistenFn | null = null;
 
     (async () => {
       const unlisten1 = await listen('tray:play_pause', () => {
@@ -3119,6 +3154,15 @@
       });
       if (disposed) { unlisten4(); return; }
       unlistenMediaControls = unlisten4;
+
+      const unlisten5 = await listen('link:resolved', (event) => {
+        const resolved = event.payload as { type: string; id: string | number };
+        if (resolved?.type) {
+          handleResolvedLink(resolved);
+        }
+      });
+      if (disposed) { unlisten5(); return; }
+      unlistenLinkResolved = unlisten5;
     })();
 
     return () => {
@@ -3129,6 +3173,7 @@
       unlistenTrayNext?.();
       unlistenTrayPrevious?.();
       unlistenMediaControls?.();
+      unlistenLinkResolved?.();
       // Save session before cleanup
       saveSessionBeforeClose();
       cleanupBootstrap();
@@ -3967,6 +4012,13 @@
     <KeybindingsSettings
       isOpen={isKeybindingsSettingsOpen}
       onClose={() => isKeybindingsSettingsOpen = false}
+    />
+
+    <!-- Link Resolver Modal -->
+    <LinkResolverModal
+      isOpen={isLinkResolverOpen}
+      onClose={() => isLinkResolverOpen = false}
+      onResolve={handleResolvedLink}
     />
 
     {#if updateRelease}
