@@ -1382,7 +1382,7 @@
     },
     "pulseConfig": {
       "title": "Choose Apps for Bit-Perfect",
-      "subtitle": "Add QBZ and any players you want without resampling.",
+      "subtitle": "Add QBZ and any players you want without resampling. Uses PipeWire stream rules (applies to all audio APIs).",
       "apps": {
         "qbz": "QBZ",
         "qobuzPlayer": "qobuz-player (TUI)",
@@ -1446,7 +1446,7 @@
       "detectDac": "Detect DAC",
       "backup": "Backup",
       "pipewireConfig": "PipeWire",
-      "pulseConfig": "Pulse",
+      "pulseConfig": "Apps",
       "wireplumberConfig": "WirePlumber",
       "restart": "Restart",
       "verify": "Verify",

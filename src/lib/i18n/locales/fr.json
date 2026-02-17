@@ -1299,7 +1299,7 @@
     },
     "pulseConfig": {
       "title": "Choisir les applications bit-perfect",
-      "subtitle": "Ajoutez QBZ et les lecteurs que vous voulez sans rééchantillonnage.",
+      "subtitle": "Ajoutez QBZ et les lecteurs que vous voulez sans rééchantillonnage. Utilise les règles de flux PipeWire (s'applique à toutes les APIs audio).",
       "apps": {
         "qbz": "QBZ",
         "qobuzPlayer": "qobuz-player (TUI)",
@@ -1363,7 +1363,7 @@
       "detectDac": "Détecter DAC",
       "backup": "Sauvegarde",
       "pipewireConfig": "PipeWire",
-      "pulseConfig": "Pulse",
+      "pulseConfig": "Apps",
       "wireplumberConfig": "WirePlumber",
       "restart": "Redémarrer",
       "verify": "Vérifier",
