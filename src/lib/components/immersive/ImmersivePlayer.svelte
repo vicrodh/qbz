@@ -12,6 +12,7 @@
   import CoverflowPanel from './panels/CoverflowPanel.svelte';
   import StaticPanel from './panels/StaticPanel.svelte';
   import VisualizerPanel from './panels/VisualizerPanel.svelte';
+  import OscilloscopePanel from './panels/OscilloscopePanel.svelte';
   import LyricsFocusPanel from './panels/LyricsFocusPanel.svelte';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
@@ -147,7 +148,7 @@
   const AUTO_HIDE_DELAY = 4000;
 
   // Immersive view persistence
-  type ImmersiveViewKey = 'coverflow' | 'static' | 'visualizer' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
+  type ImmersiveViewKey = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
 
   function applyStoredView(key: ImmersiveViewKey) {
     if (key.startsWith('split-')) {
@@ -301,9 +302,15 @@
         if (viewMode === 'focus') activeFocusTab = 'static';
         break;
       case '3':
-        if (viewMode === 'focus') activeFocusTab = 'lyrics-focus';
+        if (viewMode === 'focus') activeFocusTab = 'visualizer';
         break;
       case '4':
+        if (viewMode === 'focus') activeFocusTab = 'oscilloscope';
+        break;
+      case '5':
+        if (viewMode === 'focus') activeFocusTab = 'lyrics-focus';
+        break;
+      case '6':
         if (viewMode === 'focus') activeFocusTab = 'queue-focus';
         break;
     }
@@ -348,8 +355,8 @@
     aria-label="Now Playing"
     tabindex="-1"
   >
-    <!-- Background (skip entirely for visualizer - black background) -->
-    {#if activeFocusTab !== 'visualizer'}
+    <!-- Background (skip for visualizer/oscilloscope - black background) -->
+    {#if activeFocusTab !== 'visualizer' && activeFocusTab !== 'oscilloscope'}
       <ImmersiveBackground {artwork} />
     {/if}
 
@@ -412,6 +419,21 @@
       {:else if activeFocusTab === 'visualizer'}
         <!-- Visualizer: Audio spectrum with mirror mode -->
         <VisualizerPanel
+          enabled={true}
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+          {originalBitDepth}
+          {originalSamplingRate}
+          {format}
+        />
+      {:else if activeFocusTab === 'oscilloscope'}
+        <!-- Oscilloscope: Stereo L/R waveforms -->
+        <OscilloscopePanel
           enabled={true}
           {artwork}
           {trackTitle}

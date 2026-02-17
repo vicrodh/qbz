@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { Disc3, Disc, Mic2, ListMusic, Music2, Info, Radio, Maximize, Minimize, ChevronDown, X, Square, Copy, Minus, Image, Activity } from 'lucide-svelte';
+  import { Disc3, Disc, Mic2, ListMusic, Music2, Info, Radio, Maximize, Minimize, ChevronDown, X, Square, Copy, Minus, Image, Activity, AudioWaveform } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
   export type ImmersiveTab = 'lyrics' | 'trackInfo' | 'suggestions' | 'queue';
-  export type FocusTab = 'coverflow' | 'static' | 'visualizer' | 'lyrics-focus' | 'queue-focus';
+  export type FocusTab = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'lyrics-focus' | 'queue-focus';
   export type ViewMode = 'focus' | 'split';
 
   interface Props {
@@ -88,6 +88,7 @@
     { id: 'coverflow', label: 'Coverflow', icon: Disc3 },
     { id: 'static', label: 'Static', icon: Image },
     { id: 'visualizer', label: 'Visualizer', icon: Activity },
+    { id: 'oscilloscope', label: 'Oscilloscope', icon: AudioWaveform },
     { id: 'lyrics-focus', label: 'Lyrics', icon: Mic2 },
     { id: 'queue-focus', label: 'Queue', icon: ListMusic },
   ];
