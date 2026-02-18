@@ -231,6 +231,50 @@ fn open_plex_cache_db() -> Result<Connection, String> {
         let _ = conn.execute(&stmt, []);
     }
 
+    // Backfill album_key for existing rows that have NULL
+    {
+        let needs_backfill: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM plex_cache_tracks WHERE album_key IS NULL LIMIT 1)",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if needs_backfill {
+            let mut read_stmt = conn
+                .prepare("SELECT rating_key, artist, album FROM plex_cache_tracks WHERE album_key IS NULL")
+                .map_err(|e| format!("Failed to prepare album_key backfill read: {}", e))?;
+            let rows: Vec<(String, String, String)> = read_stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?
+                            .unwrap_or_else(|| "Unknown Artist".to_string()),
+                        row.get::<_, Option<String>>(2)?
+                            .unwrap_or_else(|| "Unknown Album".to_string()),
+                    ))
+                })
+                .map_err(|e| format!("Failed to read tracks for album_key backfill: {}", e))?
+                .filter_map(|r| r.ok())
+                .collect();
+            drop(read_stmt);
+
+            for (rating_key, artist_raw, album_raw) in &rows {
+                let artist = decode_xml_entities(artist_raw.trim());
+                let artist = if artist.is_empty() { "Unknown Artist".to_string() } else { artist };
+                let album = decode_xml_entities(album_raw.trim());
+                let album = if album.is_empty() { "Unknown Album".to_string() } else { album };
+                let album = normalize_album_title(Some(&artist), &album);
+                let key = plex_album_key(&artist, &album);
+                let _ = conn.execute(
+                    "UPDATE plex_cache_tracks SET album_key = ?1 WHERE rating_key = ?2",
+                    params![key, rating_key],
+                );
+            }
+        }
+    }
+
     Ok(conn)
 }
 
