@@ -126,6 +126,8 @@ Download the `.deb` from [Releases](https://github.com/vicrodh/qbz/releases).
 sudo apt install ./qbz_*.deb
 ```
 
+> **Requires glibc 2.38+** (Ubuntu 24.04+, Debian 13+, Mint 22+). Older releases like Ubuntu 22.04 or Pop!_OS 22.04 ship glibc 2.35 and won't work — use Flatpak, Snap, or AppImage instead.
+
 ### RPM (Fedora/openSUSE/RHEL-based)
 
 Download the `.rpm` from [Releases](https://github.com/vicrodh/qbz/releases).
@@ -133,6 +135,8 @@ Download the `.rpm` from [Releases](https://github.com/vicrodh/qbz/releases).
 ```bash
 sudo dnf install ./qbz-*.rpm
 ```
+
+> **Requires glibc 2.38+** (Fedora 39+, openSUSE Tumbleweed, RHEL 10+). For older releases, use Flatpak, Snap, or AppImage instead.
 
 > **Note:** Pre-built binaries include all API integrations (Last.fm, Discogs, Spotify, Apple Music, Tidal, Deezer) ready to use. If you build from source, you'll need to provide your own API keys.
 
