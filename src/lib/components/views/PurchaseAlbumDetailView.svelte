@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
-  import { ArrowLeft, Download, Check, Loader2, FolderOpen, AlertTriangle, Library } from 'lucide-svelte';
+  import { ArrowLeft, Download, Check, Loader2, AlertTriangle, Library } from 'lucide-svelte';
   import QualityBadge from '../QualityBadge.svelte';
   import Dropdown from '../Dropdown.svelte';
   import ViewTransition from '../ViewTransition.svelte';
@@ -28,11 +28,6 @@
   let downloadStatuses = $state<Map<number, PurchaseDownloadProgress['status']>>(new Map());
   let isDownloadingAll = $state(false);
   let allComplete = $state(false);
-
-  // Mock mode folder picker
-  let mockFolderPath = $state('~/Music');
-  let showMockFolderInput = $state(false);
-  let pendingDownloadAction = $state<'all' | number | null>(null);
 
   function formatPurchaseDate(iso?: string): string {
     if (!iso) return '';
@@ -83,35 +78,21 @@
   }
 
   async function promptForFolder(action: 'all' | number) {
-    const isMock = import.meta.env.DEV && import.meta.env.VITE_MOCK_PURCHASES === 'true';
-    if (isMock) {
-      pendingDownloadAction = action;
-      showMockFolderInput = true;
-      return;
-    }
-
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
       const { audioDir } = await import('@tauri-apps/api/path');
       const defaultPath = await audioDir();
       const dest = await open({
         directory: true,
+        multiple: false,
         defaultPath,
         title: get(t)('purchases.chooseFolder'),
       });
-      if (dest) {
-        await executeDownload(action, dest as string);
+      if (dest && typeof dest === 'string') {
+        await executeDownload(action, dest);
       }
     } catch (err) {
       console.error('Folder picker error:', err);
-    }
-  }
-
-  async function confirmMockFolder() {
-    showMockFolderInput = false;
-    if (pendingDownloadAction !== null) {
-      await executeDownload(pendingDownloadAction, mockFolderPath);
-      pendingDownloadAction = null;
     }
   }
 
@@ -271,19 +252,6 @@
         {/if}
       </div>
     </div>
-
-    <!-- Mock folder picker -->
-    {#if showMockFolderInput}
-      <div class="mock-folder-picker">
-        <FolderOpen size={14} />
-        <span>{$t('purchases.chooseFolder')}:</span>
-        <input type="text" bind:value={mockFolderPath} />
-        <button class="mock-confirm" onclick={confirmMockFolder}>OK</button>
-        <button class="mock-cancel" onclick={() => { showMockFolderInput = false; pendingDownloadAction = null; }}>
-          {$t('actions.cancel')}
-        </button>
-      </div>
-    {/if}
 
     <!-- Download progress -->
     {#if isDownloadingAll || allComplete}
@@ -572,51 +540,6 @@
     display: flex;
     align-items: center;
     gap: 12px;
-  }
-
-  /* Mock folder picker */
-  .mock-folder-picker {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 8px;
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 16px;
-  }
-
-  .mock-folder-picker input {
-    flex: 1;
-    background: var(--bg-primary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 4px;
-    padding: 4px 8px;
-    color: var(--text-primary);
-    font-size: 13px;
-    font-family: monospace;
-  }
-
-  .mock-confirm {
-    padding: 4px 12px;
-    border-radius: 4px;
-    border: none;
-    background: var(--accent-primary);
-    color: white;
-    cursor: pointer;
-    font-size: 13px;
-  }
-
-  .mock-cancel {
-    padding: 4px 12px;
-    border-radius: 4px;
-    border: 1px solid var(--border-subtle);
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: 13px;
   }
 
   /* Progress section */
