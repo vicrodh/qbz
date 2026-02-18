@@ -54,6 +54,7 @@
   let searchQuery = $state('');
   let searchExpanded = $state(false);
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+  let showRegionNotice = $state(getUserItem('qbz-purchases-region-notice-seen') !== 'true');
 
   // Data
   let albums = $state<PurchasedAlbum[]>([]);
@@ -300,6 +301,11 @@
     loadPurchases();
   }
 
+  function dismissRegionNotice() {
+    showRegionNotice = false;
+    setUserItem('qbz-purchases-region-notice-seen', 'true');
+  }
+
   onMount(() => {
     loadPurchases();
   });
@@ -315,6 +321,15 @@
       <h1>{$t('purchases.title')}</h1>
     </div>
   </div>
+
+  {#if showRegionNotice}
+    <div class="region-notice" role="status" aria-live="polite">
+      <span>{$t('purchases.regionNotice')}</span>
+      <button type="button" class="region-notice-close" onclick={dismissRegionNotice}>
+        {$t('actions.close')}
+      </button>
+    </div>
+  {/if}
 
   <!-- Sticky Navigation Bar -->
   <div class="purchases-nav">
@@ -835,6 +850,35 @@
     font-weight: 700;
     color: var(--text-primary);
     margin: 0;
+  }
+
+  .region-notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    border: 1px solid var(--alpha-12);
+    border-radius: 10px;
+    background: rgba(88, 165, 255, 0.08);
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  .region-notice-close {
+    border: 1px solid var(--alpha-12);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    border-radius: 8px;
+    padding: 4px 8px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+
+  .region-notice-close:hover {
+    border-color: var(--alpha-18);
+    color: var(--text-primary);
   }
 
   /* ── Sticky Navigation Bar ── */

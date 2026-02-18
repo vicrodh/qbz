@@ -1671,7 +1671,8 @@
     "view": {
       "list": "List view",
       "grid": "Grid view"
-    }
+    },
+    "regionNotice": "Purchases availability depends on your Qobuz account and region. If unavailable, this may be expected."
   },
   "linkResolver": {
     "title": "Open Qobuz Link",

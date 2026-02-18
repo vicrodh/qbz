@@ -1471,7 +1471,8 @@
     "view": {
       "list": "Listenansicht",
       "grid": "Rasteransicht"
-    }
+    },
+    "regionNotice": "Die Verfügbarkeit von Käufen hängt von deinem Qobuz-Konto und deiner Region ab. Wenn es nicht verfügbar ist, kann das erwartet sein."
   },
   "linkResolver": {
     "title": "Qobuz-Link oeffnen",

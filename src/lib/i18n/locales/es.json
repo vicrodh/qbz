@@ -1671,7 +1671,8 @@
     "view": {
       "list": "Vista de lista",
       "grid": "Vista de cuadricula"
-    }
+    },
+    "regionNotice": "La disponibilidad de Compras depende de tu cuenta y region de Qobuz. Si no aparece disponible, puede ser esperado."
   },
   "linkResolver": {
     "title": "Abrir enlace de Qobuz",
