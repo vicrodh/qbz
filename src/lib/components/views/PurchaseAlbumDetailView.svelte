@@ -2,9 +2,9 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
-  import { ArrowLeft, Download, Check, Loader2, FolderOpen, Music, AlertTriangle, Library } from 'lucide-svelte';
+  import { ArrowLeft, Download, Check, Loader2, FolderOpen, AlertTriangle, Library, ChevronDown } from 'lucide-svelte';
   import QualityBadge from '../QualityBadge.svelte';
-  import Dropdown from '../Dropdown.svelte';
+  import ViewTransition from '../ViewTransition.svelte';
   import { getAlbumDetail, getFormats, downloadAlbum, downloadTrack } from '$lib/services/purchases';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import type { PurchasedAlbum, PurchasedTrack, PurchaseFormatOption, PurchaseDownloadProgress } from '$lib/types/purchases';
@@ -28,6 +28,9 @@
   let isDownloadingAll = $state(false);
   let allComplete = $state(false);
 
+  // Format dropdown state
+  let showFormatMenu = $state(false);
+
   // Mock mode folder picker
   let mockFolderPath = $state('~/Music');
   let showMockFolderInput = $state(false);
@@ -46,23 +49,9 @@
     }
   }
 
-  function formatQualityLabel(bitDepth?: number, samplingRate?: number): string {
-    if (!bitDepth || !samplingRate) return '';
-    return `${bitDepth}-bit / ${samplingRate} kHz`;
-  }
-
-  function getFormatLabels(): string[] {
-    return formats.map((f) => f.label);
-  }
-
   function getSelectedFormatLabel(): string {
     const fmt = formats.find((f) => f.id === selectedFormatId);
     return fmt?.label || '';
-  }
-
-  function handleFormatChange(label: string) {
-    const fmt = formats.find((f) => f.label === label);
-    if (fmt) selectedFormatId = fmt.id;
   }
 
   function getTrackStatus(trackId: number): PurchaseDownloadProgress['status'] | null {
@@ -77,6 +66,13 @@
       groups.get(disc)!.push(track);
     }
     return groups;
+  }
+
+  function formatTotalDuration(seconds: number): string {
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    if (hrs > 0) return `${hrs}h ${mins}m`;
+    return `${mins}m`;
   }
 
   async function promptForFolder(action: 'all' | number) {
@@ -131,7 +127,6 @@
         downloadStatuses = new Map(downloadStatuses);
       }
       isDownloadingAll = false;
-      // Check if all complete
       const allDone = trackItems.every(
         (track) => downloadStatuses.get(track.id) === 'complete'
       );
@@ -177,56 +172,68 @@
     Array.from(downloadStatuses.values()).filter((s) => s === 'complete').length
   );
   const totalTracks = $derived(album?.tracks?.items?.length || 0);
+  const totalDurationSeconds = $derived(
+    (album?.tracks?.items || []).reduce((sum, track) => sum + track.duration, 0)
+  );
 
   onMount(() => {
     loadAlbum();
   });
 </script>
 
+<ViewTransition duration={200} distance={12} direction="up">
 <div class="purchase-album-detail">
-  <!-- Back button -->
+  <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
-    <span>{$t('nav.backTo')}</span>
+    <span>Back</span>
   </button>
 
   {#if loading}
     <div class="loading-state">
-      <Loader2 size={24} class="spin" />
-      <span>{$t('actions.loading')}</span>
+      <div class="spinner"></div>
     </div>
   {:else if error}
     <div class="error-state">
       <p>{error}</p>
     </div>
   {:else if album}
-    <!-- Album header -->
+    <!-- Album Header -->
     <div class="album-header">
-      <div class="album-cover">
+      <div class="artwork">
         <img src={getQobuzImage(album.image)} alt={album.title} />
       </div>
-      <div class="album-info">
-        <h2 class="album-title">{album.title}</h2>
-        <button class="artist-name" onclick={() => onArtistClick?.(album!.artist.id)}>
-          {album.artist.name}
-        </button>
-        {#if album.purchased_at}
-          <span class="purchase-date">
+      <div class="metadata">
+        <h1 class="album-title">{album.title}</h1>
+        {#if onArtistClick}
+          <button class="artist-link" onclick={() => onArtistClick?.(album!.artist.id)}>
+            {album.artist.name}
+          </button>
+        {:else}
+          <div class="artist-name">{album.artist.name}</div>
+        {/if}
+        <div class="album-info">
+          {#if album.purchased_at}
             {$t('purchases.purchasedOn')} {formatPurchaseDate(album.purchased_at)}
-          </span>
-        {/if}
-        {#if album.label}
-          <span class="label-name">{album.label.name}</span>
-        {/if}
-        <div class="quality-info">
+          {/if}
+          {#if album.label}
+            {#if album.purchased_at} · {/if}
+            {album.label.name}
+          {/if}
+          {#if album.genre}
+            · {album.genre.name}
+          {/if}
+        </div>
+        <div class="album-quality">
           <QualityBadge
             bitDepth={album.maximum_bit_depth}
             samplingRate={album.maximum_sampling_rate}
           />
-          <span class="quality-text">
-            {formatQualityLabel(album.maximum_bit_depth, album.maximum_sampling_rate)}
-          </span>
+          {#if album.maximum_bit_depth && album.maximum_sampling_rate}
+            <span class="quality-text">{album.maximum_bit_depth}-bit / {album.maximum_sampling_rate} kHz</span>
+          {/if}
         </div>
+        <div class="album-stats">{totalTracks} tracks · {formatTotalDuration(totalDurationSeconds)}</div>
 
         {#if !album.downloadable}
           <div class="unavailable-banner">
@@ -234,31 +241,43 @@
             <span>{$t('purchases.unavailable')}</span>
           </div>
         {:else}
-          <!-- Format selector + Download All -->
-          <div class="download-controls">
-            {#if formats.length > 0}
-              <div class="format-picker">
-                <span class="format-label">{$t('purchases.format')}:</span>
-                <Dropdown
-                  value={getSelectedFormatLabel()}
-                  options={getFormatLabels()}
-                  onchange={handleFormatChange}
-                />
-              </div>
-            {/if}
+          <!-- Action Buttons -->
+          <div class="actions">
             <button
-              class="download-all-btn"
+              class="action-btn-circle primary download-all-action"
               onclick={() => promptForFolder('all')}
               disabled={isDownloadingAll || !selectedFormatId}
+              title={$t('purchases.downloadAll')}
             >
               {#if isDownloadingAll}
-                <Loader2 size={14} class="spin" />
-                <span>{$t('purchases.downloading')}</span>
+                <Loader2 size={20} class="spin" />
               {:else}
-                <Download size={14} />
-                <span>{$t('purchases.downloadAll')}</span>
+                <Download size={20} />
               {/if}
             </button>
+
+            {#if formats.length > 0}
+              <div class="format-selector">
+                <button class="format-btn" onclick={() => { showFormatMenu = !showFormatMenu; }}>
+                  <span>{getSelectedFormatLabel()}</span>
+                  <ChevronDown size={14} />
+                </button>
+                {#if showFormatMenu}
+                  <div class="dropdown-backdrop" onclick={() => showFormatMenu = false} role="presentation"></div>
+                  <div class="dropdown-menu">
+                    {#each formats as fmt (fmt.id)}
+                      <button
+                        class="dropdown-item"
+                        class:selected={selectedFormatId === fmt.id}
+                        onclick={() => { selectedFormatId = fmt.id; showFormatMenu = false; }}
+                      >
+                        {fmt.label}
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
@@ -270,8 +289,8 @@
         <FolderOpen size={14} />
         <span>{$t('purchases.chooseFolder')}:</span>
         <input type="text" bind:value={mockFolderPath} />
-        <button class="confirm-btn" onclick={confirmMockFolder}>OK</button>
-        <button class="cancel-btn" onclick={() => { showMockFolderInput = false; pendingDownloadAction = null; }}>
+        <button class="btn btn-primary btn-sm" onclick={confirmMockFolder}>OK</button>
+        <button class="btn btn-secondary btn-sm" onclick={() => { showMockFolderInput = false; pendingDownloadAction = null; }}>
           {$t('actions.cancel')}
         </button>
       </div>
@@ -279,7 +298,7 @@
 
     <!-- Download progress bar -->
     {#if isDownloadingAll || allComplete}
-      <div class="progress-bar-container">
+      <div class="progress-section">
         <div class="progress-label">
           {#if allComplete}
             <Check size={14} />
@@ -299,7 +318,7 @@
       </div>
     {/if}
 
-    <!-- Add to Library button (after all downloads complete) -->
+    <!-- Add to Library (after all downloads complete) -->
     {#if allComplete}
       <div class="add-to-library">
         <button class="add-to-library-btn">
@@ -310,76 +329,139 @@
       </div>
     {/if}
 
-    <!-- Track list -->
+    <!-- Divider -->
+    <div class="divider"></div>
+
+    <!-- Track List -->
     <div class="track-list">
-      {#each [...discGroups.entries()] as [discNum, discTracks] (discNum)}
-        {#if isMultiDisc}
-          <div class="disc-header">
-            <span>Disc {discNum}</span>
-          </div>
-        {/if}
-        {#each discTracks as track (track.id)}
-          {@const status = getTrackStatus(track.id)}
-          <div class="track-row" class:downloading={status === 'downloading'} class:complete={status === 'complete'} class:failed={status === 'failed'}>
-            <span class="track-number">{track.track_number}</span>
-            <div class="track-info">
-              <span class="track-title">{track.title}</span>
-              {#if track.performer.name !== album.artist.name}
-                <span class="track-performer">{track.performer.name}</span>
-              {/if}
+      <!-- Table Header -->
+      <div class="table-header">
+        <div class="col-number">#</div>
+        <div class="col-title">Title</div>
+        <div class="col-duration">Duration</div>
+        <div class="col-quality">Quality</div>
+        <div class="col-download"><Download size={14} /></div>
+      </div>
+
+      <!-- Track Rows -->
+      <div class="tracks">
+        {#each [...discGroups.entries()] as [discNum, discTracks] (discNum)}
+          {#if isMultiDisc}
+            <div class="disc-header">
+              <span>Disc {discNum}</span>
             </div>
-            <span class="track-duration">{formatDuration(track.duration)}</span>
-            <div class="track-quality">
-              {#if track.hires}
-                <QualityBadge bitDepth={track.maximum_bit_depth} samplingRate={track.maximum_sampling_rate} />
-              {/if}
+          {/if}
+          {#each discTracks as track (track.id)}
+            {@const status = getTrackStatus(track.id)}
+            <div
+              class="track-row"
+              class:downloading={status === 'downloading'}
+              class:complete={status === 'complete'}
+              class:failed={status === 'failed'}
+            >
+              <div class="col-number">
+                {#if status === 'downloading'}
+                  <Loader2 size={14} class="spin" />
+                {:else if status === 'complete'}
+                  <Check size={14} class="status-complete" />
+                {:else}
+                  <span>{track.track_number}</span>
+                {/if}
+              </div>
+              <div class="col-title">
+                <span class="track-title">{track.title}</span>
+                {#if track.performer.name !== album.artist.name}
+                  <span class="track-performer">{track.performer.name}</span>
+                {/if}
+              </div>
+              <div class="col-duration">
+                {formatDuration(track.duration)}
+              </div>
+              <div class="col-quality">
+                {#if track.hires}
+                  <QualityBadge bitDepth={track.maximum_bit_depth} samplingRate={track.maximum_sampling_rate} />
+                {/if}
+              </div>
+              <div class="col-download">
+                {#if status === 'complete'}
+                  <span class="download-done"><Check size={14} /></span>
+                {:else if status === 'downloading'}
+                  <span class="download-active"><Loader2 size={14} class="spin" /></span>
+                {:else if status === 'failed'}
+                  <button
+                    class="download-track-btn failed"
+                    onclick={() => promptForFolder(track.id)}
+                    title={$t('purchases.failed')}
+                  >
+                    <AlertTriangle size={14} />
+                  </button>
+                {:else if album.downloadable}
+                  <button
+                    class="download-track-btn"
+                    onclick={() => promptForFolder(track.id)}
+                    title={$t('purchases.downloadTrack')}
+                  >
+                    <Download size={14} />
+                  </button>
+                {/if}
+              </div>
             </div>
-            <div class="track-action">
-              {#if status === 'complete'}
-                <span class="status-icon complete"><Check size={14} /></span>
-              {:else if status === 'downloading'}
-                <span class="status-icon downloading"><Loader2 size={14} class="spin" /></span>
-              {:else if status === 'failed'}
-                <button class="download-track-btn failed" onclick={() => promptForFolder(track.id)} title={$t('purchases.failed')}>
-                  <AlertTriangle size={14} />
-                </button>
-              {:else if album.downloadable}
-                <button class="download-track-btn" onclick={() => promptForFolder(track.id)} title={$t('purchases.downloadTrack')}>
-                  <Download size={14} />
-                </button>
-              {/if}
-            </div>
-          </div>
+          {/each}
         {/each}
-      {/each}
+      </div>
     </div>
   {/if}
 </div>
+</ViewTransition>
 
 <style>
   .purchase-album-detail {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    width: 100%;
+    height: 100%;
+    padding: 24px;
+    padding-left: 18px;
+    padding-right: 8px;
+    padding-bottom: 100px;
+    overflow-y: auto;
   }
 
+  /* Custom scrollbar */
+  .purchase-album-detail::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .purchase-album-detail::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .purchase-album-detail::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+
+  .purchase-album-detail::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
+
+  /* Back button (matches AlbumDetailView) */
   .back-btn {
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-muted);
     background: none;
     border: none;
-    color: var(--text-secondary);
     cursor: pointer;
-    padding: 4px 0;
-    font-size: 0.8125rem;
-    width: fit-content;
+    margin-bottom: 24px;
+    transition: color 150ms ease;
   }
 
   .back-btn:hover {
-    color: var(--accent-primary);
+    color: var(--text-secondary);
   }
 
+  /* Loading / Error */
   .loading-state,
   .error-state {
     display: flex;
@@ -387,8 +469,17 @@
     align-items: center;
     justify-content: center;
     gap: 12px;
-    padding: 60px 20px;
-    color: var(--text-tertiary);
+    padding: 64px;
+    color: var(--text-muted);
+  }
+
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--bg-tertiary);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
   }
 
   :global(.spin) {
@@ -400,72 +491,87 @@
     to { transform: rotate(360deg); }
   }
 
-  /* Album header */
+  /* Album Header (matches AlbumDetailView) */
   .album-header {
     display: flex;
-    gap: 24px;
+    gap: 32px;
+    margin-bottom: 32px;
   }
 
-  .album-cover {
+  .artwork {
     flex-shrink: 0;
-    width: 200px;
-    height: 200px;
-    border-radius: 8px;
+    width: 224px;
+    height: 224px;
+    border-radius: 12px;
     overflow: hidden;
-    background: var(--bg-secondary);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   }
 
-  .album-cover img {
+  .artwork img {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
 
-  .album-info {
+  .metadata {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    min-width: 0;
+    justify-content: center;
   }
 
   .album-title {
-    margin: 0;
-    font-size: 1.5rem;
-    font-weight: 600;
+    font-size: 24px;
+    font-weight: 700;
     color: var(--text-primary);
+    margin-bottom: 4px;
   }
 
-  .artist-name {
+  .artist-link {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--accent-primary);
     background: none;
     border: none;
-    padding: 0;
-    color: var(--text-secondary);
     cursor: pointer;
-    font-size: 1rem;
     text-align: left;
+    width: fit-content;
+    margin-bottom: 8px;
   }
 
-  .artist-name:hover {
-    color: var(--accent-primary);
+  .artist-link:hover {
     text-decoration: underline;
   }
 
-  .purchase-date,
-  .label-name {
-    font-size: 0.8125rem;
-    color: var(--text-tertiary);
+  .artist-name {
+    font-size: 18px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 8px;
   }
 
-  .quality-info {
+  .album-info {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 4px;
+  }
+
+  .album-quality {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-top: 4px;
+    margin-bottom: 4px;
   }
 
   .quality-text {
-    font-size: 0.8125rem;
-    color: var(--text-secondary);
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  .album-stats {
+    font-size: 14px;
+    color: var(--text-muted);
+    margin-bottom: 24px;
   }
 
   .unavailable-banner {
@@ -474,55 +580,93 @@
     gap: 8px;
     margin-top: 8px;
     padding: 8px 12px;
-    background: var(--bg-warning, rgba(255, 152, 0, 0.1));
-    border: 1px solid var(--border-warning, rgba(255, 152, 0, 0.3));
+    background: rgba(255, 152, 0, 0.1);
+    border: 1px solid rgba(255, 152, 0, 0.3);
     border-radius: 6px;
-    color: var(--text-warning, #ff9800);
-    font-size: 0.8125rem;
+    color: #ff9800;
+    font-size: 13px;
   }
 
-  .download-controls {
+  /* Actions (matches AlbumDetailView pattern) */
+  .actions {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-top: 8px;
-    flex-wrap: wrap;
   }
 
-  .format-picker {
+  .download-all-action:disabled {
+    opacity: 0.4;
+  }
+
+  /* Format selector dropdown */
+  .format-selector {
+    position: relative;
+  }
+
+  .format-btn {
     display: flex;
     align-items: center;
     gap: 8px;
+    height: 36px;
+    padding: 0 14px;
+    border-radius: 18px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    box-shadow: inset 0 0 0 1px var(--border-strong);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 150ms ease;
   }
 
-  .format-label {
-    font-size: 0.8125rem;
-    color: var(--text-secondary);
-    white-space: nowrap;
+  .format-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+    box-shadow: inset 0 0 0 1px var(--text-primary);
   }
 
-  .download-all-btn {
+  .dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
+  }
+
+  .dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 200px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    z-index: 100;
+  }
+
+  .dropdown-item {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 8px 16px;
-    border-radius: 6px;
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
     border: none;
-    background: var(--accent-primary);
-    color: var(--accent-on-primary, #fff);
+    background: none;
+    color: var(--text-secondary);
+    font-size: 13px;
     cursor: pointer;
-    font-size: 0.8125rem;
-    font-weight: 500;
-    transition: opacity 0.15s ease;
+    border-radius: 6px;
+    transition: all 100ms ease;
   }
 
-  .download-all-btn:hover:not(:disabled) {
-    opacity: 0.9;
+  .dropdown-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
   }
 
-  .download-all-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
+  .dropdown-item.selected {
+    color: var(--accent-primary);
+    font-weight: 600;
   }
 
   /* Mock folder picker */
@@ -532,60 +676,42 @@
     gap: 8px;
     padding: 10px 14px;
     background: var(--bg-secondary);
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--bg-tertiary);
     border-radius: 8px;
-    font-size: 0.8125rem;
-    color: var(--text-secondary);
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 16px;
   }
 
   .mock-folder-picker input {
     flex: 1;
     background: var(--bg-primary);
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--bg-tertiary);
     border-radius: 4px;
     padding: 4px 8px;
     color: var(--text-primary);
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-family: monospace;
   }
 
-  .confirm-btn {
-    padding: 4px 12px;
-    border-radius: 4px;
-    border: none;
-    background: var(--accent-primary);
-    color: var(--accent-on-primary, #fff);
-    cursor: pointer;
-    font-size: 0.8125rem;
-  }
-
-  .cancel-btn {
-    padding: 4px 12px;
-    border-radius: 4px;
-    border: 1px solid var(--border-primary);
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
-    cursor: pointer;
-    font-size: 0.8125rem;
-  }
-
-  /* Progress bar */
-  .progress-bar-container {
+  /* Progress section */
+  .progress-section {
     display: flex;
     flex-direction: column;
     gap: 6px;
     padding: 12px 14px;
     background: var(--bg-secondary);
     border-radius: 8px;
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--bg-tertiary);
+    margin-bottom: 16px;
   }
 
   .progress-label {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 0.8125rem;
-    color: var(--text-secondary);
+    font-size: 13px;
+    color: var(--text-muted);
   }
 
   .progress-bar {
@@ -615,6 +741,7 @@
     background: var(--bg-secondary);
     border-radius: 8px;
     border: 1px solid var(--success, #4caf50);
+    margin-bottom: 16px;
   }
 
   .add-to-library-btn {
@@ -627,40 +754,104 @@
     background: var(--success, #4caf50);
     color: #fff;
     cursor: pointer;
-    font-size: 0.8125rem;
+    font-size: 13px;
     font-weight: 500;
     white-space: nowrap;
   }
 
-  .add-to-library-desc {
-    font-size: 0.8125rem;
-    color: var(--text-tertiary);
+  .add-to-library-btn:hover {
+    opacity: 0.9;
   }
 
-  /* Track list */
+  .add-to-library-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+
+  /* Divider (matches AlbumDetailView) */
+  .divider {
+    height: 1px;
+    background-color: var(--bg-tertiary);
+    margin: 32px 0;
+  }
+
+  /* Track List */
   .track-list {
     display: flex;
     flex-direction: column;
-    gap: 1px;
-    padding-bottom: 24px;
+    width: 100%;
+  }
+
+  /* Table Header (matches AlbumDetailView) */
+  .table-header {
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 400;
+    box-sizing: border-box;
+  }
+
+  .table-header .col-number {
+    width: 48px;
+    text-align: center;
+  }
+
+  .table-header .col-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .table-header .col-duration {
+    width: 80px;
+    text-align: center;
+  }
+
+  .table-header .col-quality {
+    width: 80px;
+    text-align: center;
+  }
+
+  .table-header .col-download {
+    width: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.5;
+  }
+
+  /* Tracks */
+  .tracks {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
   }
 
   .disc-header {
-    padding: 12px 12px 6px;
-    font-size: 0.75rem;
+    padding: 16px 16px 6px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--text-tertiary);
+    color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
 
+  /* Track Row (matches AlbumDetailView TrackRow dimensions) */
   .track-row {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
+    gap: 16px;
+    padding: 0 16px;
+    height: 44px;
     border-radius: 6px;
-    transition: background 0.15s ease;
+    transition: background 150ms ease;
   }
 
   .track-row:hover {
@@ -668,23 +859,29 @@
   }
 
   .track-row.downloading {
-    background: var(--bg-active);
+    background: var(--bg-active, var(--bg-hover));
   }
 
   .track-row.complete {
-    opacity: 0.7;
+    opacity: 0.6;
   }
 
-  .track-number {
-    width: 28px;
-    text-align: right;
-    font-size: 0.8125rem;
-    color: var(--text-tertiary);
-    flex-shrink: 0;
+  .track-row .col-number {
+    width: 48px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-muted);
     font-variant-numeric: tabular-nums;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .track-info {
+  :global(.status-complete) {
+    color: var(--success, #4caf50);
+  }
+
+  .track-row .col-title {
     flex: 1;
     min-width: 0;
     display: flex;
@@ -693,7 +890,7 @@
   }
 
   .track-title {
-    font-size: 0.875rem;
+    font-size: 14px;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -701,43 +898,42 @@
   }
 
   .track-performer {
-    font-size: 0.75rem;
-    color: var(--text-tertiary);
+    font-size: 12px;
+    color: var(--text-muted);
   }
 
-  .track-duration {
-    flex-shrink: 0;
-    font-size: 0.8125rem;
-    color: var(--text-tertiary);
-    min-width: 45px;
-    text-align: right;
+  .track-row .col-duration {
+    width: 80px;
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-muted);
     font-variant-numeric: tabular-nums;
   }
 
-  .track-quality {
-    flex-shrink: 0;
+  .track-row .col-quality {
+    width: 80px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
-  .track-action {
-    flex-shrink: 0;
+  .track-row .col-download {
     width: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
   }
 
-  .status-icon {
+  .download-done {
+    color: var(--success, #4caf50);
     display: flex;
     align-items: center;
-    justify-content: center;
   }
 
-  .status-icon.complete {
-    color: var(--success, #4caf50);
-  }
-
-  .status-icon.downloading {
+  .download-active {
     color: var(--accent-primary);
+    display: flex;
+    align-items: center;
   }
 
   .download-track-btn {
@@ -747,21 +943,24 @@
     width: 28px;
     height: 28px;
     border-radius: 6px;
-    border: 1px solid var(--border-primary);
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 150ms ease;
+    opacity: 0;
+  }
+
+  .track-row:hover .download-track-btn {
+    opacity: 1;
   }
 
   .download-track-btn:hover {
-    background: var(--accent-primary);
-    color: var(--accent-on-primary, #fff);
-    border-color: var(--accent-primary);
+    color: var(--accent-primary);
   }
 
   .download-track-btn.failed {
     color: var(--error, #f44336);
-    border-color: var(--error, #f44336);
+    opacity: 1;
   }
 </style>

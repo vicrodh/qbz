@@ -2,10 +2,9 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
-  import { Search, X, Download, Music, Disc3, Loader2, ShoppingBag } from 'lucide-svelte';
+  import { Search, X, Download, Music, Disc3, ShoppingBag, ChevronDown } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import QualityBadge from '../QualityBadge.svelte';
-  import Dropdown from '../Dropdown.svelte';
   import { getPurchases, searchPurchases } from '$lib/services/purchases';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import type { PurchasedAlbum, PurchasedTrack, PurchaseResponse } from '$lib/types/purchases';
@@ -30,9 +29,13 @@
 
   let activeTab = $state<PurchasesTab>('albums');
   let searchQuery = $state('');
-  let searchInput = $state<HTMLInputElement | null>(null);
+  let searchExpanded = $state(false);
   let filterOption = $state<FilterOption>('all');
   let sortOption = $state<SortOption>('date');
+
+  // Sort/filter dropdown state
+  let showSortMenu = $state(false);
+  let showFilterMenu = $state(false);
 
   let albums = $state<PurchasedAlbum[]>([]);
   let tracks = $state<PurchasedTrack[]>([]);
@@ -44,34 +47,12 @@
   const FILTER_KEYS: FilterOption[] = ['all', 'hires'];
   const SORT_KEYS: SortOption[] = ['date', 'artist', 'album', 'quality'];
 
-  function getFilterLabels(): string[] {
-    const tr = get(t);
-    return FILTER_KEYS.map((key) => tr(`purchases.filter.${key}`));
+  function getFilterLabel(key: FilterOption): string {
+    return get(t)(`purchases.filter.${key}`);
   }
 
-  function getSortLabels(): string[] {
-    const tr = get(t);
-    return SORT_KEYS.map((key) => tr(`purchases.sort.${key}`));
-  }
-
-  function getFilterDisplayValue(): string {
-    return get(t)(`purchases.filter.${filterOption}`);
-  }
-
-  function getSortDisplayValue(): string {
-    return get(t)(`purchases.sort.${sortOption}`);
-  }
-
-  function handleFilterChange(label: string) {
-    const labels = getFilterLabels();
-    const idx = labels.indexOf(label);
-    if (idx >= 0) filterOption = FILTER_KEYS[idx];
-  }
-
-  function handleSortChange(label: string) {
-    const labels = getSortLabels();
-    const idx = labels.indexOf(label);
-    if (idx >= 0) sortOption = SORT_KEYS[idx];
+  function getSortLabel(key: SortOption): string {
+    return get(t)(`purchases.sort.${key}`);
   }
 
   function formatPurchaseDate(iso?: string): string {
@@ -96,22 +77,17 @@
     const sorted = [...list];
     switch (sort) {
       case 'date':
-        return sorted.sort(
-          (a, b) =>
-            new Date(b.purchased_at || '').getTime() -
-            new Date(a.purchased_at || '').getTime()
+        return sorted.sort((a, b) =>
+          new Date(b.purchased_at || '').getTime() - new Date(a.purchased_at || '').getTime()
         );
       case 'artist':
-        return sorted.sort((a, b) =>
-          a.artist.name.localeCompare(b.artist.name)
-        );
+        return sorted.sort((a, b) => a.artist.name.localeCompare(b.artist.name));
       case 'album':
         return sorted.sort((a, b) => a.title.localeCompare(b.title));
       case 'quality':
-        return sorted.sort(
-          (a, b) =>
-            (b.maximum_sampling_rate || 0) - (a.maximum_sampling_rate || 0) ||
-            (b.maximum_bit_depth || 0) - (a.maximum_bit_depth || 0)
+        return sorted.sort((a, b) =>
+          (b.maximum_sampling_rate || 0) - (a.maximum_sampling_rate || 0) ||
+          (b.maximum_bit_depth || 0) - (a.maximum_bit_depth || 0)
         );
       default:
         return sorted;
@@ -122,24 +98,17 @@
     const sorted = [...list];
     switch (sort) {
       case 'date':
-        return sorted.sort(
-          (a, b) =>
-            new Date(b.purchased_at || '').getTime() -
-            new Date(a.purchased_at || '').getTime()
+        return sorted.sort((a, b) =>
+          new Date(b.purchased_at || '').getTime() - new Date(a.purchased_at || '').getTime()
         );
       case 'artist':
-        return sorted.sort((a, b) =>
-          a.performer.name.localeCompare(b.performer.name)
-        );
+        return sorted.sort((a, b) => a.performer.name.localeCompare(b.performer.name));
       case 'album':
-        return sorted.sort((a, b) =>
-          (a.album?.title || '').localeCompare(b.album?.title || '')
-        );
+        return sorted.sort((a, b) => (a.album?.title || '').localeCompare(b.album?.title || ''));
       case 'quality':
-        return sorted.sort(
-          (a, b) =>
-            (b.maximum_sampling_rate || 0) - (a.maximum_sampling_rate || 0) ||
-            (b.maximum_bit_depth || 0) - (a.maximum_bit_depth || 0)
+        return sorted.sort((a, b) =>
+          (b.maximum_sampling_rate || 0) - (a.maximum_sampling_rate || 0) ||
+          (b.maximum_bit_depth || 0) - (a.maximum_bit_depth || 0)
         );
       default:
         return sorted;
@@ -199,6 +168,7 @@
 
   function clearSearch() {
     searchQuery = '';
+    searchExpanded = false;
     loadPurchases();
   }
 
@@ -208,83 +178,129 @@
 </script>
 
 <div class="purchases-view">
-  <!-- Header -->
-  <div class="purchases-header">
-    <div class="title-row">
-      <ShoppingBag size={20} />
-      <h2>{$t('purchases.title')}</h2>
+  <!-- Header (Favorites-style: icon + title) -->
+  <div class="header">
+    <div class="header-icon">
+      <ShoppingBag size={32} color="var(--accent-primary)" />
     </div>
+    <div class="header-content">
+      <h1>{$t('purchases.title')}</h1>
+    </div>
+  </div>
 
-    <!-- Search bar -->
-    <div class="search-bar">
-      <Search size={14} />
-      <input
-        type="text"
-        bind:value={searchQuery}
-        bind:this={searchInput}
-        placeholder={$t('purchases.search')}
-        oninput={handleSearchInput}
-      />
-      {#if searchQuery}
-        <button class="clear-btn" onclick={clearSearch}>
-          <X size={14} />
+  <!-- Navigation Bar (Favorites-style: sticky tabs + search toggle) -->
+  <div class="purchases-nav">
+    <div class="nav-left">
+      <button
+        class="nav-link"
+        class:active={activeTab === 'albums'}
+        onclick={() => (activeTab = 'albums')}
+      >
+        <Disc3 size={16} />
+        <span>{$t('purchases.tabs.albums')}</span>
+        <span class="nav-count">{displayedAlbums.length}</span>
+      </button>
+      <button
+        class="nav-link"
+        class:active={activeTab === 'tracks'}
+        onclick={() => (activeTab = 'tracks')}
+      >
+        <Music size={16} />
+        <span>{$t('purchases.tabs.tracks')}</span>
+        <span class="nav-count">{displayedTracks.length}</span>
+      </button>
+    </div>
+    <div class="nav-right">
+      {#if !searchExpanded}
+        <button class="search-icon-btn" onclick={() => searchExpanded = true} title={$t('nav.search')}>
+          <Search size={16} />
         </button>
+      {:else}
+        <div class="search-expanded">
+          <Search size={16} class="search-icon-inline" />
+          <input
+            type="text"
+            placeholder={$t('purchases.search')}
+            bind:value={searchQuery}
+            oninput={handleSearchInput}
+            class="search-input-inline"
+          />
+          {#if searchQuery}
+            <button class="search-clear-btn" onclick={clearSearch} title={$t('actions.clear')}>
+              <X size={14} />
+            </button>
+          {:else}
+            <button class="search-clear-btn" onclick={() => searchExpanded = false} title={$t('actions.close')}>
+              <X size={14} />
+            </button>
+          {/if}
+        </div>
       {/if}
     </div>
+  </div>
 
-    <!-- Tabs and controls -->
-    <div class="controls-row">
-      <div class="tabs">
-        <button
-          class="tab"
-          class:active={activeTab === 'albums'}
-          onclick={() => (activeTab = 'albums')}
-        >
-          <Disc3 size={14} />
-          <span>{$t('purchases.tabs.albums')}</span>
-          <span class="count">{displayedAlbums.length}</span>
+  <!-- Toolbar (Favorites-style: filter/sort controls) -->
+  <div class="toolbar">
+    <div class="toolbar-controls">
+      <!-- Filter dropdown -->
+      <div class="dropdown-container">
+        <button class="control-btn" onclick={() => { showFilterMenu = !showFilterMenu; showSortMenu = false; }}>
+          <span>{getFilterLabel(filterOption)}</span>
+          <ChevronDown size={14} />
         </button>
-        <button
-          class="tab"
-          class:active={activeTab === 'tracks'}
-          onclick={() => (activeTab = 'tracks')}
-        >
-          <Music size={14} />
-          <span>{$t('purchases.tabs.tracks')}</span>
-          <span class="count">{displayedTracks.length}</span>
-        </button>
+        {#if showFilterMenu}
+          <div class="dropdown-backdrop" onclick={() => showFilterMenu = false} role="presentation"></div>
+          <div class="dropdown-menu">
+            {#each FILTER_KEYS as key (key)}
+              <button
+                class="dropdown-item"
+                class:selected={filterOption === key}
+                onclick={() => { filterOption = key; showFilterMenu = false; }}
+              >
+                {getFilterLabel(key)}
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
 
-      <div class="filters">
-        <Dropdown
-          value={getFilterDisplayValue()}
-          options={getFilterLabels()}
-          onchange={handleFilterChange}
-        />
-        <Dropdown
-          value={getSortDisplayValue()}
-          options={getSortLabels()}
-          onchange={handleSortChange}
-        />
+      <!-- Sort dropdown -->
+      <div class="dropdown-container">
+        <button class="control-btn" onclick={() => { showSortMenu = !showSortMenu; showFilterMenu = false; }}>
+          <span>{getSortLabel(sortOption)}</span>
+          <ChevronDown size={14} />
+        </button>
+        {#if showSortMenu}
+          <div class="dropdown-backdrop" onclick={() => showSortMenu = false} role="presentation"></div>
+          <div class="dropdown-menu">
+            {#each SORT_KEYS as key (key)}
+              <button
+                class="dropdown-item"
+                class:selected={sortOption === key}
+                onclick={() => { sortOption = key; showSortMenu = false; }}
+              >
+                {getSortLabel(key)}
+              </button>
+            {/each}
+          </div>
+        {/if}
       </div>
     </div>
   </div>
 
   <!-- Content -->
-  <div class="purchases-content">
+  <div class="content">
     {#if loading}
-      <div class="loading-state">
-        <Loader2 size={24} class="spin" />
-        <span>{$t('actions.loading')}</span>
+      <div class="loading">
+        <div class="spinner"></div>
       </div>
     {:else if error}
-      <div class="error-state">
+      <div class="empty">
         <p>{error}</p>
-        <button class="retry-btn" onclick={loadPurchases}>{$t('actions.retry')}</button>
       </div>
     {:else if activeTab === 'albums'}
       {#if displayedAlbums.length === 0}
-        <div class="empty-state">
+        <div class="empty">
           <ShoppingBag size={48} />
           <p>{$t('purchases.empty')}</p>
         </div>
@@ -314,7 +330,7 @@
       {/if}
     {:else}
       {#if displayedTracks.length === 0}
-        <div class="empty-state">
+        <div class="empty">
           <Music size={48} />
           <p>{$t('purchases.emptyTracks')}</p>
         </div>
@@ -345,7 +361,7 @@
                     {track.performer.name}
                   </button>
                   {#if track.album}
-                    <span class="separator">-</span>
+                    <span class="separator">·</span>
                     <span class="album-name">{track.album.title}</span>
                   {/if}
                 </span>
@@ -374,161 +390,304 @@
 
 <style>
   .purchases-view {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
+    padding: 24px;
+    padding-left: 18px;
+    padding-right: 8px;
+    padding-bottom: 100px;
+    overflow-y: auto;
     height: 100%;
   }
 
-  .purchases-header {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
+  .purchases-view::-webkit-scrollbar {
+    width: 6px;
   }
 
-  .title-row {
+  .purchases-view::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .purchases-view::-webkit-scrollbar-thumb {
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+  }
+
+  .purchases-view::-webkit-scrollbar-thumb:hover {
+    background: var(--text-muted);
+  }
+
+  /* ── Header (Favorites style) ── */
+  .header {
     display: flex;
+    align-items: center;
+    gap: 20px;
+    margin-bottom: 16px;
+  }
+
+  .header-icon {
+    width: 94px;
+    height: 94px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(135deg, var(--accent-primary) 0%, #6b8aff 100%);
+    border-radius: 16px;
+    flex-shrink: 0;
+  }
+
+  .header-content {
+    flex: 1;
+  }
+
+  .header-content h1 {
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0;
+  }
+
+  /* ── Sticky Navigation Bar (Favorites style) ── */
+  .purchases-nav {
+    position: sticky;
+    top: -24px;
+    display: flex;
+    justify-content: space-between;
     align-items: center;
     gap: 10px;
-    color: var(--text-primary);
+    padding: 10px 24px;
+    margin: 0 -8px 12px -18px;
+    width: calc(100% + 26px);
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--alpha-6);
+    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
+    z-index: 10;
   }
 
-  .title-row h2 {
-    margin: 0;
-    font-size: 1.4rem;
-    font-weight: 600;
-  }
-
-  .search-bar {
+  .nav-left {
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: var(--bg-secondary);
-    border-radius: 8px;
-    border: 1px solid var(--border-primary);
+    gap: 20px;
+  }
+
+  .nav-link {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 0;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 150ms ease, border-color 150ms ease;
+  }
+
+  .nav-link:hover {
     color: var(--text-secondary);
   }
 
-  .search-bar input {
+  .nav-link.active {
+    color: var(--text-primary);
+    border-bottom-color: var(--accent-primary);
+  }
+
+  .nav-count {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.7;
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .search-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border: none;
+    background: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 150ms ease;
+  }
+
+  .search-icon-btn:hover {
+    color: var(--text-primary);
+    background: var(--bg-tertiary);
+  }
+
+  .search-expanded {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    min-width: 240px;
+  }
+
+  .search-input-inline {
     flex: 1;
     background: none;
     border: none;
     outline: none;
     color: var(--text-primary);
-    font-size: 0.875rem;
+    font-size: 13px;
   }
 
-  .search-bar input::placeholder {
-    color: var(--text-tertiary);
+  .search-input-inline::placeholder {
+    color: var(--text-muted);
   }
 
-  .clear-btn {
-    background: none;
+  .search-clear-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
     border: none;
+    background: none;
+    color: var(--text-muted);
     cursor: pointer;
-    color: var(--text-tertiary);
-    padding: 2px;
-    display: flex;
-    align-items: center;
+    border-radius: 4px;
+    transition: all 150ms ease;
+    flex-shrink: 0;
   }
 
-  .clear-btn:hover {
+  .search-clear-btn:hover {
     color: var(--text-primary);
+    background: var(--bg-tertiary);
   }
 
-  .controls-row {
+  /* ── Toolbar (Favorites style) ── */
+  .toolbar {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 12px;
+    gap: 16px;
+    margin-bottom: 24px;
   }
 
-  .tabs {
-    display: flex;
-    gap: 4px;
-  }
-
-  .tab {
+  .toolbar-controls {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 6px 14px;
-    border: 1px solid var(--border-primary);
-    border-radius: 6px;
-    background: var(--bg-secondary);
+    gap: 10px;
+  }
+
+  .dropdown-container {
+    position: relative;
+  }
+
+  .control-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
     color: var(--text-secondary);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 12px;
     cursor: pointer;
-    font-size: 0.8125rem;
-    transition: all 0.15s ease;
+    transition: all 150ms ease;
   }
 
-  .tab:hover {
+  .control-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
   }
 
-  .tab.active {
-    background: var(--accent-primary);
-    color: var(--accent-on-primary, #fff);
-    border-color: var(--accent-primary);
+  .dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
   }
 
-  .count {
-    font-size: 0.75rem;
-    opacity: 0.7;
+  .dropdown-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    min-width: 170px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 6px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    z-index: 100;
   }
 
-  .filters {
+  .dropdown-item {
     display: flex;
-    gap: 8px;
+    align-items: center;
+    width: 100%;
+    text-align: left;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 100ms ease;
   }
 
-  .purchases-content {
+  .dropdown-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .dropdown-item.selected {
+    color: var(--accent-primary);
+    font-weight: 600;
+  }
+
+  /* ── Content ── */
+  .content {
     flex: 1;
-    overflow-y: auto;
   }
 
-  /* Loading / Error / Empty states */
-  .loading-state,
-  .error-state,
-  .empty-state {
+  /* Loading / Empty */
+  .loading {
     display: flex;
-    flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    padding: 60px 20px;
-    color: var(--text-tertiary);
+    padding: 64px;
   }
 
-  .error-state p {
-    color: var(--error);
-  }
-
-  .retry-btn {
-    padding: 6px 16px;
-    border-radius: 6px;
-    border: 1px solid var(--border-primary);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    cursor: pointer;
-  }
-
-  .empty-state p {
-    font-size: 0.875rem;
-  }
-
-  :global(.spin) {
+  .spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--bg-tertiary);
+    border-top-color: var(--accent-primary);
+    border-radius: 50%;
     animation: spin 1s linear infinite;
   }
 
   @keyframes spin {
-    from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
   }
 
-  /* Albums grid */
+  .empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 64px;
+    color: var(--text-muted);
+  }
+
+  .empty p {
+    margin-top: 12px;
+    font-size: 14px;
+  }
+
+  /* ── Albums grid ── */
   .albums-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(162px, 1fr));
@@ -541,8 +700,12 @@
   }
 
   .album-card-wrapper.unavailable {
-    opacity: 0.5;
-    pointer-events: none;
+    opacity: 0.45;
+    filter: grayscale(0.6);
+  }
+
+  .album-card-wrapper.unavailable:hover {
+    opacity: 0.55;
   }
 
   .unavailable-overlay {
@@ -552,19 +715,18 @@
     right: 0;
     text-align: center;
     padding: 4px 8px;
-    background: rgba(0, 0, 0, 0.7);
-    color: var(--text-tertiary);
-    font-size: 0.7rem;
+    background: rgba(0, 0, 0, 0.75);
+    color: var(--text-muted);
+    font-size: 11px;
     border-radius: 4px;
     margin: 0 8px;
   }
 
-  /* Tracks list */
+  /* ── Tracks list ── */
   .tracks-list {
     display: flex;
     flex-direction: column;
-    gap: 2px;
-    padding-bottom: 24px;
+    gap: 1px;
   }
 
   .track-row {
@@ -573,7 +735,7 @@
     gap: 12px;
     padding: 8px 12px;
     border-radius: 6px;
-    transition: background 0.15s ease;
+    transition: background 150ms ease;
   }
 
   .track-row:hover {
@@ -581,7 +743,7 @@
   }
 
   .track-row.active {
-    background: var(--bg-active);
+    background: var(--bg-active, var(--bg-hover));
   }
 
   .track-artwork {
@@ -605,7 +767,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-tertiary);
+    color: var(--text-muted);
   }
 
   .track-info {
@@ -617,7 +779,7 @@
   }
 
   .track-title {
-    font-size: 0.875rem;
+    font-size: 14px;
     color: var(--text-primary);
     white-space: nowrap;
     overflow: hidden;
@@ -627,9 +789,9 @@
   .track-meta {
     display: flex;
     align-items: center;
-    gap: 4px;
-    font-size: 0.75rem;
-    color: var(--text-tertiary);
+    gap: 5px;
+    font-size: 12px;
+    color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -641,7 +803,8 @@
     padding: 0;
     color: var(--text-secondary);
     cursor: pointer;
-    font-size: 0.75rem;
+    font-size: 12px;
+    transition: color 150ms ease;
   }
 
   .artist-link:hover {
@@ -650,11 +813,11 @@
   }
 
   .separator {
-    color: var(--text-tertiary);
+    color: var(--text-muted);
   }
 
   .album-name {
-    color: var(--text-tertiary);
+    color: var(--text-muted);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -666,8 +829,8 @@
 
   .track-duration {
     flex-shrink: 0;
-    font-size: 0.8125rem;
-    color: var(--text-tertiary);
+    font-size: 13px;
+    color: var(--text-muted);
     min-width: 45px;
     text-align: right;
     font-variant-numeric: tabular-nums;
@@ -675,8 +838,8 @@
 
   .track-date {
     flex-shrink: 0;
-    font-size: 0.75rem;
-    color: var(--text-tertiary);
+    font-size: 12px;
+    color: var(--text-muted);
     min-width: 80px;
     text-align: right;
   }
@@ -689,16 +852,16 @@
     width: 28px;
     height: 28px;
     border-radius: 6px;
-    border: 1px solid var(--border-primary);
-    background: var(--bg-secondary);
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-tertiary);
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 150ms ease;
   }
 
   .download-btn:hover {
     background: var(--accent-primary);
-    color: var(--accent-on-primary, #fff);
+    color: #fff;
     border-color: var(--accent-primary);
   }
 </style>
