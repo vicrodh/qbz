@@ -2,8 +2,9 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
-  import { ArrowLeft, Download, Check, Loader2, FolderOpen, AlertTriangle, Library, ChevronDown } from 'lucide-svelte';
+  import { ArrowLeft, Download, Check, Loader2, FolderOpen, AlertTriangle, Library } from 'lucide-svelte';
   import QualityBadge from '../QualityBadge.svelte';
+  import Dropdown from '../Dropdown.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { getAlbumDetail, getFormats, downloadAlbum, downloadTrack } from '$lib/services/purchases';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
@@ -28,9 +29,6 @@
   let isDownloadingAll = $state(false);
   let allComplete = $state(false);
 
-  // Format dropdown state
-  let showFormatMenu = $state(false);
-
   // Mock mode folder picker
   let mockFolderPath = $state('~/Music');
   let showMockFolderInput = $state(false);
@@ -49,9 +47,18 @@
     }
   }
 
+  function getFormatLabels(): string[] {
+    return formats.map((f) => f.label);
+  }
+
   function getSelectedFormatLabel(): string {
     const fmt = formats.find((f) => f.id === selectedFormatId);
     return fmt?.label || '';
+  }
+
+  function handleFormatChange(label: string) {
+    const fmt = formats.find((f) => f.label === label);
+    if (fmt) selectedFormatId = fmt.id;
   }
 
   function getTrackStatus(trackId: number): PurchaseDownloadProgress['status'] | null {
@@ -83,7 +90,6 @@
       return;
     }
 
-    // Real mode — use Tauri dialog
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
       const { audioDir } = await import('@tauri-apps/api/path');
@@ -217,23 +223,21 @@
             {$t('purchases.purchasedOn')} {formatPurchaseDate(album.purchased_at)}
           {/if}
           {#if album.label}
-            {#if album.purchased_at} · {/if}
+            {#if album.purchased_at} &middot; {/if}
             {album.label.name}
           {/if}
           {#if album.genre}
-            · {album.genre.name}
+            &middot; {album.genre.name}
           {/if}
         </div>
         <div class="album-quality">
           <QualityBadge
             bitDepth={album.maximum_bit_depth}
             samplingRate={album.maximum_sampling_rate}
+            compact={true}
           />
-          {#if album.maximum_bit_depth && album.maximum_sampling_rate}
-            <span class="quality-text">{album.maximum_bit_depth}-bit / {album.maximum_sampling_rate} kHz</span>
-          {/if}
         </div>
-        <div class="album-stats">{totalTracks} tracks · {formatTotalDuration(totalDurationSeconds)}</div>
+        <div class="album-stats">{totalTracks} tracks &middot; {formatTotalDuration(totalDurationSeconds)}</div>
 
         {#if !album.downloadable}
           <div class="unavailable-banner">
@@ -241,10 +245,10 @@
             <span>{$t('purchases.unavailable')}</span>
           </div>
         {:else}
-          <!-- Action Buttons -->
+          <!-- Actions -->
           <div class="actions">
             <button
-              class="action-btn-circle primary download-all-action"
+              class="action-btn-circle primary"
               onclick={() => promptForFolder('all')}
               disabled={isDownloadingAll || !selectedFormatId}
               title={$t('purchases.downloadAll')}
@@ -257,26 +261,11 @@
             </button>
 
             {#if formats.length > 0}
-              <div class="format-selector">
-                <button class="format-btn" onclick={() => { showFormatMenu = !showFormatMenu; }}>
-                  <span>{getSelectedFormatLabel()}</span>
-                  <ChevronDown size={14} />
-                </button>
-                {#if showFormatMenu}
-                  <div class="dropdown-backdrop" onclick={() => showFormatMenu = false} role="presentation"></div>
-                  <div class="dropdown-menu">
-                    {#each formats as fmt (fmt.id)}
-                      <button
-                        class="dropdown-item"
-                        class:selected={selectedFormatId === fmt.id}
-                        onclick={() => { selectedFormatId = fmt.id; showFormatMenu = false; }}
-                      >
-                        {fmt.label}
-                      </button>
-                    {/each}
-                  </div>
-                {/if}
-              </div>
+              <Dropdown
+                value={getSelectedFormatLabel()}
+                options={getFormatLabels()}
+                onchange={handleFormatChange}
+              />
             {/if}
           </div>
         {/if}
@@ -289,14 +278,14 @@
         <FolderOpen size={14} />
         <span>{$t('purchases.chooseFolder')}:</span>
         <input type="text" bind:value={mockFolderPath} />
-        <button class="btn btn-primary btn-sm" onclick={confirmMockFolder}>OK</button>
-        <button class="btn btn-secondary btn-sm" onclick={() => { showMockFolderInput = false; pendingDownloadAction = null; }}>
+        <button class="mock-confirm" onclick={confirmMockFolder}>OK</button>
+        <button class="mock-cancel" onclick={() => { showMockFolderInput = false; pendingDownloadAction = null; }}>
           {$t('actions.cancel')}
         </button>
       </div>
     {/if}
 
-    <!-- Download progress bar -->
+    <!-- Download progress -->
     {#if isDownloadingAll || allComplete}
       <div class="progress-section">
         <div class="progress-label">
@@ -318,7 +307,7 @@
       </div>
     {/if}
 
-    <!-- Add to Library (after all downloads complete) -->
+    <!-- Add to Library -->
     {#if allComplete}
       <div class="add-to-library">
         <button class="add-to-library-btn">
@@ -340,7 +329,7 @@
         <div class="col-title">Title</div>
         <div class="col-duration">Duration</div>
         <div class="col-quality">Quality</div>
-        <div class="col-download"><Download size={14} /></div>
+        <div class="col-icon"><Download size={14} /></div>
       </div>
 
       <!-- Track Rows -->
@@ -378,8 +367,8 @@
                 {formatDuration(track.duration)}
               </div>
               <div class="col-quality">
-                {#if track.hires}
-                  <QualityBadge bitDepth={track.maximum_bit_depth} samplingRate={track.maximum_sampling_rate} />
+                {#if track.maximum_bit_depth && track.maximum_sampling_rate}
+                  {track.maximum_bit_depth}/{track.maximum_sampling_rate}
                 {/if}
               </div>
               <div class="col-download">
@@ -425,7 +414,6 @@
     overflow-y: auto;
   }
 
-  /* Custom scrollbar */
   .purchase-album-detail::-webkit-scrollbar {
     width: 6px;
   }
@@ -443,7 +431,7 @@
     background: var(--text-muted);
   }
 
-  /* Back button (matches AlbumDetailView) */
+  /* Back button (AlbumDetailView) */
   .back-btn {
     display: flex;
     align-items: center;
@@ -491,7 +479,7 @@
     to { transform: rotate(360deg); }
   }
 
-  /* Album Header (matches AlbumDetailView) */
+  /* Album Header (AlbumDetailView) */
   .album-header {
     display: flex;
     gap: 32px;
@@ -557,15 +545,7 @@
   }
 
   .album-quality {
-    display: flex;
-    align-items: center;
-    gap: 8px;
     margin-bottom: 4px;
-  }
-
-  .quality-text {
-    font-size: 14px;
-    color: var(--text-muted);
   }
 
   .album-stats {
@@ -587,86 +567,11 @@
     font-size: 13px;
   }
 
-  /* Actions (matches AlbumDetailView pattern) */
+  /* Actions (AlbumDetailView pattern) */
   .actions {
     display: flex;
     align-items: center;
     gap: 12px;
-  }
-
-  .download-all-action:disabled {
-    opacity: 0.4;
-  }
-
-  /* Format selector dropdown */
-  .format-selector {
-    position: relative;
-  }
-
-  .format-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    height: 36px;
-    padding: 0 14px;
-    border-radius: 18px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    box-shadow: inset 0 0 0 1px var(--border-strong);
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .format-btn:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-    box-shadow: inset 0 0 0 1px var(--text-primary);
-  }
-
-  .dropdown-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 99;
-  }
-
-  .dropdown-menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    min-width: 200px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 8px;
-    padding: 6px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-    z-index: 100;
-  }
-
-  .dropdown-item {
-    display: flex;
-    align-items: center;
-    width: 100%;
-    text-align: left;
-    padding: 8px 12px;
-    border: none;
-    background: none;
-    color: var(--text-secondary);
-    font-size: 13px;
-    cursor: pointer;
-    border-radius: 6px;
-    transition: all 100ms ease;
-  }
-
-  .dropdown-item:hover {
-    background: var(--bg-hover);
-    color: var(--text-primary);
-  }
-
-  .dropdown-item.selected {
-    color: var(--accent-primary);
-    font-weight: 600;
   }
 
   /* Mock folder picker */
@@ -692,6 +597,26 @@
     color: var(--text-primary);
     font-size: 13px;
     font-family: monospace;
+  }
+
+  .mock-confirm {
+    padding: 4px 12px;
+    border-radius: 4px;
+    border: none;
+    background: var(--accent-primary);
+    color: white;
+    cursor: pointer;
+    font-size: 13px;
+  }
+
+  .mock-cancel {
+    padding: 4px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border-subtle);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 13px;
   }
 
   /* Progress section */
@@ -768,7 +693,7 @@
     color: var(--text-muted);
   }
 
-  /* Divider (matches AlbumDetailView) */
+  /* Divider (AlbumDetailView) */
   .divider {
     height: 1px;
     background-color: var(--bg-tertiary);
@@ -782,7 +707,7 @@
     width: 100%;
   }
 
-  /* Table Header (matches AlbumDetailView) */
+  /* Table Header (AlbumDetailView) */
   .table-header {
     width: 100%;
     height: 40px;
@@ -818,7 +743,7 @@
     text-align: center;
   }
 
-  .table-header .col-download {
+  .table-header .col-icon {
     width: 28px;
     display: flex;
     align-items: center;
@@ -843,7 +768,7 @@
     letter-spacing: 0.5px;
   }
 
-  /* Track Row (matches AlbumDetailView TrackRow dimensions) */
+  /* Track Row (AlbumDetailView column dimensions) */
   .track-row {
     display: flex;
     align-items: center;
@@ -912,9 +837,9 @@
 
   .track-row .col-quality {
     width: 80px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    text-align: center;
+    font-size: 12px;
+    color: #666666;
   }
 
   .track-row .col-download {

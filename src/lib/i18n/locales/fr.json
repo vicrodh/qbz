@@ -1433,7 +1433,9 @@
       "all": "Tout",
       "downloaded": "Téléchargés",
       "notDownloaded": "Non téléchargés",
-      "hires": "Hi-Res"
+      "hires": "Hi-Res",
+      "availability": "Disponibilité",
+      "hideUnavailable": "Masquer les indisponibles"
     },
     "sort": {
       "date": "Date d'achat",

@@ -1633,7 +1633,9 @@
       "all": "All",
       "downloaded": "Downloaded",
       "notDownloaded": "Not Downloaded",
-      "hires": "Hi-Res"
+      "hires": "Hi-Res",
+      "availability": "Availability",
+      "hideUnavailable": "Hide unavailable"
     },
     "sort": {
       "date": "Purchase Date",
