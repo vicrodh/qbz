@@ -11,6 +11,8 @@ type Release = {
   published_at: string
   body: string | null
   html_url: string
+  prerelease: boolean
+  draft: boolean
 }
 
 const RELEASES_URL = 'https://api.github.com/repos/vicrodh/qbz/releases'
@@ -38,7 +40,8 @@ export function ChangelogPage() {
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('release fetch failed'))))
       .then((data: Release[]) => {
         if (!active) return
-        setReleases(data)
+        // Only show stable releases (no pre-releases, drafts, or RCs)
+        setReleases(data.filter((r) => !r.prerelease && !r.draft))
         setLoading(false)
       })
       .catch(() => {

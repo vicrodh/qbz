@@ -40,6 +40,8 @@ type ReleaseData = {
   published_at: string
   assets: ReleaseAsset[]
   html_url: string
+  prerelease: boolean
+  draft: boolean
 }
 
 type DownloadItem = {
@@ -252,8 +254,10 @@ export function DownloadSection() {
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error('release fetch failed'))))
       .then((data: ReleaseData[]) => {
         if (!active) return
-        // Find the first release that has assets
-        const releaseWithAssets = data.find((r) => r.assets && r.assets.length > 0)
+        // Find the first stable release that has assets (skip pre-releases, drafts, and RCs)
+        const releaseWithAssets = data.find(
+          (r) => r.assets && r.assets.length > 0 && !r.prerelease && !r.draft
+        )
         if (releaseWithAssets) {
           setRelease(releaseWithAssets)
         } else {
