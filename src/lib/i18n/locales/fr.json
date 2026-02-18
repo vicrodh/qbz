@@ -1435,7 +1435,9 @@
       "notDownloaded": "Non téléchargés",
       "hires": "Hi-Res",
       "availability": "Disponibilité",
-      "hideUnavailable": "Masquer les indisponibles"
+      "hideUnavailable": "Masquer les indisponibles",
+      "downloads": "Telechargements",
+      "hideDownloaded": "Masquer les telecharges sur cet ordinateur"
     },
     "sort": {
       "date": "Date d'achat",

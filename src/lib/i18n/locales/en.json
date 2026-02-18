@@ -1635,7 +1635,9 @@
       "notDownloaded": "Not Downloaded",
       "hires": "Hi-Res",
       "availability": "Availability",
-      "hideUnavailable": "Hide unavailable"
+      "hideUnavailable": "Hide unavailable",
+      "downloads": "Downloads",
+      "hideDownloaded": "Hide downloaded on this computer"
     },
     "sort": {
       "date": "Purchase Date",

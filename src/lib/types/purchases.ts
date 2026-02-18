@@ -24,6 +24,7 @@ export interface PurchasedAlbum {
   maximum_bit_depth?: number;
   maximum_sampling_rate?: number;
   downloadable: boolean;
+  downloaded?: boolean;
   purchased_at?: string;
   tracks?: PaginatedList<PurchasedTrack>;
 }
@@ -44,6 +45,7 @@ export interface PurchasedTrack {
   maximum_bit_depth?: number;
   maximum_sampling_rate?: number;
   streamable: boolean;
+  downloaded?: boolean;
   purchased_at?: string;
 }
 

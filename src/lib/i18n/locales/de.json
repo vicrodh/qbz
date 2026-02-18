@@ -1435,7 +1435,9 @@
       "notDownloaded": "Nicht heruntergeladen",
       "hires": "Hi-Res",
       "availability": "Verfügbarkeit",
-      "hideUnavailable": "Nicht verfügbare ausblenden"
+      "hideUnavailable": "Nicht verfügbare ausblenden",
+      "downloads": "Downloads",
+      "hideDownloaded": "Heruntergeladene auf diesem Computer ausblenden"
     },
     "sort": {
       "date": "Kaufdatum",

@@ -10,6 +10,11 @@
   import QualityBadge from '../QualityBadge.svelte';
   import { getPurchases, searchPurchases } from '$lib/services/purchases';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
+  import {
+    getHideUnavailable, setHideUnavailable,
+    getHiResOnly, setHiResOnly,
+    getHideDownloaded, setHideDownloaded,
+  } from '$lib/stores/purchasesStore';
   import type { PurchasedAlbum, PurchasedTrack, PurchaseResponse } from '$lib/types/purchases';
 
   type PurchasesTab = 'albums' | 'tracks';
@@ -68,13 +73,19 @@
   // Albums: filter panel (LocalLibraryView pattern)
   let showFilterPanel = $state(false);
   let filterPanelRef = $state<HTMLDivElement | null>(null);
-  let filterHideUnavailable = $state(false);
-  let filterHiResOnly = $state(false);
+  let filterHideUnavailable = $state(getHideUnavailable());
+  let filterHiResOnly = $state(getHiResOnly());
+  let filterHideDownloaded = $state(getHideDownloaded());
 
   // Tracks: grouping
   let trackGroupingEnabled = $state(false);
   let trackGroupMode = $state<TrackGroupMode>('artist');
   let showTrackGroupMenu = $state(false);
+
+  // Persist filter changes
+  $effect(() => { setHideUnavailable(filterHideUnavailable); });
+  $effect(() => { setHiResOnly(filterHiResOnly); });
+  $effect(() => { setHideDownloaded(filterHideDownloaded); });
 
   const albumSortOptions = [
     { value: 'date' as SortBy, label: 'Purchase date' },
@@ -83,14 +94,18 @@
     { value: 'quality' as SortBy, label: 'Quality' },
   ];
 
-  const hasActiveFilters = $derived(filterHideUnavailable || filterHiResOnly);
+  const hasActiveFilters = $derived(filterHideUnavailable || filterHiResOnly || filterHideDownloaded);
   const activeFilterCount = $derived(
-    (filterHideUnavailable ? 1 : 0) + (filterHiResOnly ? 1 : 0)
+    (filterHideUnavailable ? 1 : 0) + (filterHiResOnly ? 1 : 0) + (filterHideDownloaded ? 1 : 0)
   );
 
   function clearAllFilters() {
     filterHideUnavailable = false;
     filterHiResOnly = false;
+    filterHideDownloaded = false;
+    setHideUnavailable(false);
+    setHiResOnly(false);
+    setHideDownloaded(false);
   }
 
   function selectAlbumSort(value: SortBy) {
@@ -127,6 +142,14 @@
     let result = list;
     if (filterHideUnavailable) result = result.filter((a) => a.downloadable);
     if (filterHiResOnly) result = result.filter((a) => a.hires);
+    if (filterHideDownloaded) result = result.filter((a) => !a.downloaded);
+    return result;
+  }
+
+  function applyTrackFilters(list: PurchasedTrack[]): PurchasedTrack[] {
+    let result = list;
+    if (filterHideDownloaded) result = result.filter((track) => !track.downloaded);
+    if (filterHiResOnly) result = result.filter((track) => track.hires);
     return result;
   }
 
@@ -172,6 +195,7 @@
   }
 
   const filteredAlbums = $derived(sortAlbums(applyAlbumFilters(albums)));
+  const filteredTracks = $derived(applyTrackFilters(tracks));
   const groupedAlbums = $derived(
     albumGroupingEnabled ? groupAlbums(filteredAlbums) : [{ key: 'all', title: '', items: filteredAlbums }]
   );
@@ -198,7 +222,7 @@
   }
 
   const groupedTracks = $derived(
-    trackGroupingEnabled ? groupTracks(tracks) : [{ key: 'all', title: '', items: tracks }]
+    trackGroupingEnabled ? groupTracks(filteredTracks) : [{ key: 'all', title: '', items: filteredTracks }]
   );
 
   // ── Data loading ──
@@ -278,7 +302,7 @@
       >
         <Music size={16} />
         <span>{$t('purchases.tabs.tracks')}</span>
-        <span class="nav-count">{tracks.length}</span>
+        <span class="nav-count">{filteredTracks.length}</span>
       </button>
     </div>
     <div class="nav-right">
@@ -420,6 +444,16 @@
                   </label>
                 </div>
               </div>
+              <div class="filter-section">
+                <div class="filter-section-label">{$t('purchases.filter.downloads')}</div>
+                <div class="filter-checkboxes">
+                  <label class="filter-checkbox">
+                    <input type="checkbox" bind:checked={filterHideDownloaded} />
+                    <span class="checkmark"></span>
+                    <span class="label-text">{$t('purchases.filter.hideDownloaded')}</span>
+                  </label>
+                </div>
+              </div>
             </div>
           {/if}
         </div>
@@ -483,6 +517,55 @@
               >
                 Name (A-Z)
               </button>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Filter button (shared with albums) -->
+        <div class="dropdown-container" bind:this={filterPanelRef}>
+          <button
+            class="control-btn icon-only"
+            class:active={hasActiveFilters}
+            onclick={() => (showFilterPanel = !showFilterPanel)}
+            title="Filter"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4.22657 2C2.50087 2 1.58526 4.03892 2.73175 5.32873L8.99972 12.3802V19C8.99972 19.3788 9.21373 19.725 9.55251 19.8944L13.5525 21.8944C13.8625 22.0494 14.2306 22.0329 14.5255 21.8507C14.8203 21.6684 14.9997 21.3466 14.9997 21V12.3802L21.2677 5.32873C22.4142 4.03893 21.4986 2 19.7729 2H4.22657Z"/>
+            </svg>
+            {#if activeFilterCount > 0}
+              <span class="filter-badge">{activeFilterCount}</span>
+            {/if}
+          </button>
+          {#if showFilterPanel}
+            <div class="filter-backdrop" onclick={() => showFilterPanel = false} role="presentation"></div>
+            <div class="filter-panel">
+              <div class="filter-panel-header">
+                <span>{$t('library.filters')}</span>
+                {#if hasActiveFilters}
+                  <button class="clear-filters-btn" onclick={clearAllFilters}>{$t('library.clearAllFilters')}</button>
+                {/if}
+              </div>
+              <div class="filter-section">
+                <div class="filter-section-label">{$t('library.quality')}</div>
+                <div class="filter-checkboxes">
+                  <label class="filter-checkbox">
+                    <input type="checkbox" bind:checked={filterHiResOnly} />
+                    <span class="checkmark"></span>
+                    <span class="label-text">Hi-Res</span>
+                    <span class="label-hint">24bit+</span>
+                  </label>
+                </div>
+              </div>
+              <div class="filter-section">
+                <div class="filter-section-label">{$t('purchases.filter.downloads')}</div>
+                <div class="filter-checkboxes">
+                  <label class="filter-checkbox">
+                    <input type="checkbox" bind:checked={filterHideDownloaded} />
+                    <span class="checkmark"></span>
+                    <span class="label-text">{$t('purchases.filter.hideDownloaded')}</span>
+                  </label>
+                </div>
+              </div>
             </div>
           {/if}
         </div>
@@ -570,7 +653,7 @@
         {/each}
       {/if}
     {:else}
-      {#if tracks.length === 0}
+      {#if filteredTracks.length === 0}
         <div class="empty">
           <Music size={48} />
           <p>{$t('purchases.emptyTracks')}</p>

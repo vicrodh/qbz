@@ -1635,7 +1635,9 @@
       "notDownloaded": "No Descargados",
       "hires": "Hi-Res",
       "availability": "Disponibilidad",
-      "hideUnavailable": "Ocultar no disponibles"
+      "hideUnavailable": "Ocultar no disponibles",
+      "downloads": "Descargas",
+      "hideDownloaded": "Ocultar descargados en este equipo"
     },
     "sort": {
       "date": "Fecha de Compra",

@@ -187,8 +187,14 @@
   {:else if album}
     <!-- Album Header -->
     <div class="album-header">
-      <div class="artwork">
+      <div class="artwork" class:unavailable={!album.downloadable}>
         <img src={getQobuzImage(album.image)} alt={album.title} />
+        {#if !album.downloadable}
+          <div class="artwork-unavailable-overlay">
+            <AlertTriangle size={18} />
+            <span>{$t('purchases.unavailable')}</span>
+          </div>
+        {/if}
       </div>
       <div class="metadata">
         <h1 class="album-title">{album.title}</h1>
@@ -220,12 +226,7 @@
         </div>
         <div class="album-stats">{totalTracks} tracks &middot; {formatTotalDuration(totalDurationSeconds)}</div>
 
-        {#if !album.downloadable}
-          <div class="unavailable-banner">
-            <AlertTriangle size={14} />
-            <span>{$t('purchases.unavailable')}</span>
-          </div>
-        {:else}
+        {#if album.downloadable}
           <!-- Actions -->
           <div class="actions">
             <button
@@ -455,6 +456,7 @@
   }
 
   .artwork {
+    position: relative;
     flex-shrink: 0;
     width: 224px;
     height: 224px;
@@ -463,10 +465,29 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   }
 
+  .artwork.unavailable img {
+    filter: grayscale(0.6);
+    opacity: 0.4;
+  }
+
   .artwork img {
     width: 100%;
     height: 100%;
     object-fit: cover;
+  }
+
+  .artwork-unavailable-overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    color: var(--text-muted);
+    font-size: 12px;
+    text-align: center;
+    padding: 16px;
   }
 
   .metadata {
@@ -520,19 +541,6 @@
     font-size: 14px;
     color: var(--text-muted);
     margin-bottom: 24px;
-  }
-
-  .unavailable-banner {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-top: 8px;
-    padding: 8px 12px;
-    background: rgba(255, 152, 0, 0.1);
-    border: 1px solid rgba(255, 152, 0, 0.3);
-    border-radius: 6px;
-    color: #ff9800;
-    font-size: 13px;
   }
 
   /* Actions (AlbumDetailView pattern) */

@@ -19,6 +19,7 @@ MOCK_ALBUMS = [
         "maximum_bit_depth": 24,
         "maximum_sampling_rate": 192.0,
         "downloadable": True,
+        "downloaded": True,
         "purchased_at": "2026-01-15T10:30:00Z",
         "tracks": {
             "offset": 0,
@@ -106,6 +107,7 @@ MOCK_ALBUMS = [
         "maximum_bit_depth": 24,
         "maximum_sampling_rate": 96.0,
         "downloadable": True,
+        "downloaded": True,
         "purchased_at": "2026-01-20T14:00:00Z",
         "tracks": {
             "offset": 0,
@@ -511,6 +513,7 @@ MOCK_INDIVIDUAL_TRACKS = [
         "maximum_bit_depth": 24,
         "maximum_sampling_rate": 192.0,
         "streamable": True,
+        "downloaded": True,
         "purchased_at": "2026-02-12T09:30:00Z",
     },
     {
@@ -555,6 +558,7 @@ MOCK_INDIVIDUAL_TRACKS = [
         "maximum_bit_depth": 24,
         "maximum_sampling_rate": 96.0,
         "streamable": True,
+        "downloaded": True,
         "purchased_at": "2026-01-28T17:45:00Z",
     },
     {
