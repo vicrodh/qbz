@@ -6,7 +6,7 @@
   import QualityBadge from '../QualityBadge.svelte';
   import Dropdown from '../Dropdown.svelte';
   import ViewTransition from '../ViewTransition.svelte';
-  import { getAlbumDetail, getFormats, downloadAlbum, downloadTrack } from '$lib/services/purchases';
+  import { getAlbumDetail, getFormats, downloadAlbum, downloadTrack, markTrackDownloaded } from '$lib/services/purchases';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import type { PurchasedAlbum, PurchasedTrack, PurchaseFormatOption, PurchaseDownloadProgress } from '$lib/types/purchases';
 
@@ -108,6 +108,7 @@
         try {
           await downloadTrack(track.id, selectedFormatId, destination);
           downloadStatuses.set(track.id, 'complete');
+          await markTrackDownloaded(track.id, album.id, destination).catch(() => {});
         } catch {
           downloadStatuses.set(track.id, 'failed');
         }
@@ -124,6 +125,7 @@
       try {
         await downloadTrack(action, selectedFormatId, destination);
         downloadStatuses.set(action, 'complete');
+        await markTrackDownloaded(action, album.id, destination).catch(() => {});
       } catch {
         downloadStatuses.set(action, 'failed');
       }

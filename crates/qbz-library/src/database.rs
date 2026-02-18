@@ -191,6 +191,17 @@ impl LibraryDatabase {
             );
 
             CREATE INDEX IF NOT EXISTS idx_artist_images_fetched ON artist_images(fetched_at);
+
+            -- Downloaded purchases registry (permanent — user owns these files)
+            CREATE TABLE IF NOT EXISTS downloaded_purchases (
+                track_id INTEGER PRIMARY KEY,
+                album_id TEXT,
+                file_path TEXT NOT NULL,
+                downloaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_downloaded_purchases_album
+                ON downloaded_purchases(album_id);
         "#,
             )
             .map_err(|e| LibraryError::Database(format!("Failed to create schema: {}", e)))?;
@@ -3725,5 +3736,58 @@ impl LibraryDatabase {
         settings
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| LibraryError::Database(format!("Failed to collect playlists: {}", e)))
+    }
+
+    // ── Downloaded Purchases Registry ──
+
+    /// Record a track as downloaded on this computer.
+    pub fn mark_purchase_downloaded(
+        &self,
+        track_id: i64,
+        album_id: Option<&str>,
+        file_path: &str,
+    ) -> Result<(), LibraryError> {
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO downloaded_purchases (track_id, album_id, file_path, downloaded_at)
+                 VALUES (?1, ?2, ?3, datetime('now'))",
+                rusqlite::params![track_id, album_id, file_path],
+            )
+            .map_err(|e| {
+                LibraryError::Database(format!("Failed to mark purchase downloaded: {}", e))
+            })?;
+        Ok(())
+    }
+
+    /// Remove a downloaded purchase record (e.g. user deleted the file).
+    pub fn remove_downloaded_purchase(&self, track_id: i64) -> Result<(), LibraryError> {
+        self.conn
+            .execute(
+                "DELETE FROM downloaded_purchases WHERE track_id = ?1",
+                [track_id],
+            )
+            .map_err(|e| {
+                LibraryError::Database(format!("Failed to remove downloaded purchase: {}", e))
+            })?;
+        Ok(())
+    }
+
+    /// Get all downloaded track IDs for fast lookup.
+    pub fn get_downloaded_purchase_track_ids(&self) -> Result<Vec<i64>, LibraryError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT track_id FROM downloaded_purchases")
+            .map_err(|e| {
+                LibraryError::Database(format!("Failed to prepare statement: {}", e))
+            })?;
+
+        let ids = stmt
+            .query_map([], |row| row.get::<_, i64>(0))
+            .map_err(|e| {
+                LibraryError::Database(format!("Failed to query downloaded purchases: {}", e))
+            })?;
+
+        ids.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| LibraryError::Database(format!("Failed to collect ids: {}", e)))
     }
 }

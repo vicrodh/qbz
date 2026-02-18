@@ -8,13 +8,13 @@
   } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import QualityBadge from '../QualityBadge.svelte';
-  import { getPurchases, searchPurchases } from '$lib/services/purchases';
+  import { getPurchases, searchPurchases, getDownloadedTrackIds } from '$lib/services/purchases';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import {
     getHideUnavailable, setHideUnavailable,
-    getHiResOnly, setHiResOnly,
     getHideDownloaded, setHideDownloaded,
   } from '$lib/stores/purchasesStore';
+  import { getUserItem, setUserItem } from '$lib/utils/userStorage';
   import type { PurchasedAlbum, PurchasedTrack, PurchaseResponse } from '$lib/types/purchases';
 
   type PurchasesTab = 'albums' | 'tracks';
@@ -58,6 +58,7 @@
   // Data
   let albums = $state<PurchasedAlbum[]>([]);
   let tracks = $state<PurchasedTrack[]>([]);
+  let downloadedTrackIds = $state<Set<number>>(new Set());
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -73,8 +74,9 @@
   // Albums: filter panel (LocalLibraryView pattern)
   let showFilterPanel = $state(false);
   let filterPanelRef = $state<HTMLDivElement | null>(null);
+  type QualityFilter = 'all' | 'hires' | 'cd' | 'lossy';
   let filterHideUnavailable = $state(getHideUnavailable());
-  let filterHiResOnly = $state(getHiResOnly());
+  let filterQuality = $state<QualityFilter>((getUserItem('qbz-purchases-quality-filter') as QualityFilter) || 'all');
   let filterHideDownloaded = $state(getHideDownloaded());
 
   // Tracks: grouping
@@ -84,7 +86,7 @@
 
   // Persist filter changes
   $effect(() => { setHideUnavailable(filterHideUnavailable); });
-  $effect(() => { setHiResOnly(filterHiResOnly); });
+  $effect(() => { setUserItem('qbz-purchases-quality-filter', filterQuality); });
   $effect(() => { setHideDownloaded(filterHideDownloaded); });
 
   const albumSortOptions = [
@@ -94,17 +96,17 @@
     { value: 'quality' as SortBy, label: 'Quality' },
   ];
 
-  const hasActiveFilters = $derived(filterHideUnavailable || filterHiResOnly || filterHideDownloaded);
+  const hasActiveFilters = $derived(filterHideUnavailable || filterQuality !== 'all' || filterHideDownloaded);
   const activeFilterCount = $derived(
-    (filterHideUnavailable ? 1 : 0) + (filterHiResOnly ? 1 : 0) + (filterHideDownloaded ? 1 : 0)
+    (filterHideUnavailable ? 1 : 0) + (filterQuality !== 'all' ? 1 : 0) + (filterHideDownloaded ? 1 : 0)
   );
 
   function clearAllFilters() {
     filterHideUnavailable = false;
-    filterHiResOnly = false;
+    filterQuality = 'all';
     filterHideDownloaded = false;
     setHideUnavailable(false);
-    setHiResOnly(false);
+    setUserItem('qbz-purchases-quality-filter', 'all');
     setHideDownloaded(false);
   }
 
@@ -138,10 +140,18 @@
 
   // ── Album filtering & sorting ──
 
+  function matchesQualityFilter(hires: boolean, bitDepth?: number, samplingRate?: number): boolean {
+    if (filterQuality === 'all') return true;
+    if (filterQuality === 'hires') return hires;
+    if (filterQuality === 'cd') return !hires && (bitDepth === 16 || (!bitDepth && !samplingRate));
+    if (filterQuality === 'lossy') return !bitDepth || bitDepth < 16;
+    return true;
+  }
+
   function applyAlbumFilters(list: PurchasedAlbum[]): PurchasedAlbum[] {
     let result = list;
     if (filterHideUnavailable) result = result.filter((a) => a.downloadable);
-    if (filterHiResOnly) result = result.filter((a) => a.hires);
+    if (filterQuality !== 'all') result = result.filter((a) => matchesQualityFilter(a.hires, a.maximum_bit_depth, a.maximum_sampling_rate));
     if (filterHideDownloaded) result = result.filter((a) => !a.downloaded);
     return result;
   }
@@ -149,7 +159,7 @@
   function applyTrackFilters(list: PurchasedTrack[]): PurchasedTrack[] {
     let result = list;
     if (filterHideDownloaded) result = result.filter((track) => !track.downloaded);
-    if (filterHiResOnly) result = result.filter((track) => track.hires);
+    if (filterQuality !== 'all') result = result.filter((track) => matchesQualityFilter(track.hires, track.maximum_bit_depth, track.maximum_sampling_rate));
     return result;
   }
 
@@ -227,13 +237,35 @@
 
   // ── Data loading ──
 
+  function enrichWithDownloadStatus(
+    albumList: PurchasedAlbum[],
+    trackList: PurchasedTrack[],
+    dlIds: Set<number>,
+  ): { albums: PurchasedAlbum[]; tracks: PurchasedTrack[] } {
+    const enrichedAlbums = albumList.map((album) => {
+      const albumTrackIds = album.tracks?.items?.map((track) => track.id) || [];
+      const allDownloaded = albumTrackIds.length > 0 && albumTrackIds.every((id) => dlIds.has(id));
+      return { ...album, downloaded: allDownloaded };
+    });
+    const enrichedTracks = trackList.map((track) => ({
+      ...track,
+      downloaded: dlIds.has(track.id),
+    }));
+    return { albums: enrichedAlbums, tracks: enrichedTracks };
+  }
+
   async function loadPurchases() {
     loading = true;
     error = null;
     try {
-      const response: PurchaseResponse = await getPurchases();
-      albums = response.albums.items;
-      tracks = response.tracks.items;
+      const [response, dlIds] = await Promise.all([
+        getPurchases(),
+        getDownloadedTrackIds().catch(() => new Set<number>()),
+      ]);
+      downloadedTrackIds = dlIds;
+      const enriched = enrichWithDownloadStatus(response.albums.items, response.tracks.items, dlIds);
+      albums = enriched.albums;
+      tracks = enriched.tracks;
     } catch (err) {
       error = String(err);
     } finally {
@@ -251,8 +283,9 @@
       loading = true;
       try {
         const response = await searchPurchases(searchQuery.trim());
-        albums = response.albums.items;
-        tracks = response.tracks.items;
+        const enriched = enrichWithDownloadStatus(response.albums.items, response.tracks.items, downloadedTrackIds);
+        albums = enriched.albums;
+        tracks = enriched.tracks;
       } catch (err) {
         error = String(err);
       } finally {
@@ -437,10 +470,27 @@
                 <div class="filter-section-label">{$t('library.quality')}</div>
                 <div class="filter-checkboxes">
                   <label class="filter-checkbox">
-                    <input type="checkbox" bind:checked={filterHiResOnly} />
-                    <span class="checkmark"></span>
+                    <input type="radio" name="quality-filter" value="all" bind:group={filterQuality} />
+                    <span class="checkmark radio"></span>
+                    <span class="label-text">{$t('purchases.filter.all')}</span>
+                  </label>
+                  <label class="filter-checkbox">
+                    <input type="radio" name="quality-filter" value="hires" bind:group={filterQuality} />
+                    <span class="checkmark radio"></span>
                     <span class="label-text">Hi-Res</span>
                     <span class="label-hint">24bit+</span>
+                  </label>
+                  <label class="filter-checkbox">
+                    <input type="radio" name="quality-filter" value="cd" bind:group={filterQuality} />
+                    <span class="checkmark radio"></span>
+                    <span class="label-text">CD</span>
+                    <span class="label-hint">16/44.1</span>
+                  </label>
+                  <label class="filter-checkbox">
+                    <input type="radio" name="quality-filter" value="lossy" bind:group={filterQuality} />
+                    <span class="checkmark radio"></span>
+                    <span class="label-text">Lossy</span>
+                    <span class="label-hint">MP3</span>
                   </label>
                 </div>
               </div>
@@ -549,10 +599,27 @@
                 <div class="filter-section-label">{$t('library.quality')}</div>
                 <div class="filter-checkboxes">
                   <label class="filter-checkbox">
-                    <input type="checkbox" bind:checked={filterHiResOnly} />
-                    <span class="checkmark"></span>
+                    <input type="radio" name="quality-filter" value="all" bind:group={filterQuality} />
+                    <span class="checkmark radio"></span>
+                    <span class="label-text">{$t('purchases.filter.all')}</span>
+                  </label>
+                  <label class="filter-checkbox">
+                    <input type="radio" name="quality-filter" value="hires" bind:group={filterQuality} />
+                    <span class="checkmark radio"></span>
                     <span class="label-text">Hi-Res</span>
                     <span class="label-hint">24bit+</span>
+                  </label>
+                  <label class="filter-checkbox">
+                    <input type="radio" name="quality-filter" value="cd" bind:group={filterQuality} />
+                    <span class="checkmark radio"></span>
+                    <span class="label-text">CD</span>
+                    <span class="label-hint">16/44.1</span>
+                  </label>
+                  <label class="filter-checkbox">
+                    <input type="radio" name="quality-filter" value="lossy" bind:group={filterQuality} />
+                    <span class="checkmark radio"></span>
+                    <span class="label-text">Lossy</span>
+                    <span class="label-hint">MP3</span>
                   </label>
                 </div>
               </div>
@@ -1156,6 +1223,19 @@
     transform: rotate(45deg) translateY(-1px);
   }
 
+  .filter-checkbox .checkmark.radio {
+    border-radius: 50%;
+  }
+
+  .filter-checkbox input:checked + .checkmark.radio::after {
+    width: 6px;
+    height: 6px;
+    border: none;
+    background: white;
+    border-radius: 50%;
+    transform: none;
+  }
+
   .filter-checkbox .label-text {
     font-size: 12px;
     color: var(--text-primary);
@@ -1233,16 +1313,17 @@
 
   .unavailable-overlay {
     position: absolute;
-    bottom: 36px;
+    top: 0;
     left: 0;
     right: 0;
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
     text-align: center;
-    padding: 4px 8px;
-    background: rgba(0, 0, 0, 0.75);
+    padding: 16px;
     color: var(--text-muted);
     font-size: 11px;
-    border-radius: 4px;
-    margin: 0 8px;
   }
 
   /* ── Albums list ── */

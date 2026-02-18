@@ -26,19 +26,6 @@ export function setHideUnavailable(v: boolean): void {
   setUserItem(KEY_HIDE_UNAVAILABLE, String(v));
 }
 
-// Filter: hi-res only
-const KEY_HIRES_ONLY = 'qbz-purchases-hires-only';
-let hiResOnly = getUserItem(KEY_HIRES_ONLY) === 'true';
-
-export function getHiResOnly(): boolean {
-  return hiResOnly;
-}
-
-export function setHiResOnly(v: boolean): void {
-  hiResOnly = v;
-  setUserItem(KEY_HIRES_ONLY, String(v));
-}
-
 // Filter: hide downloaded
 const KEY_HIDE_DOWNLOADED = 'qbz-purchases-hide-downloaded';
 let hideDownloaded = getUserItem(KEY_HIDE_DOWNLOADED) === 'true';

@@ -7263,3 +7263,41 @@ pub fn v2_restart_app(app: tauri::AppHandle) {
     log::info!("[V2] App restart requested by user");
     app.restart();
 }
+
+// ── Downloaded Purchases Registry ──
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_purchases_mark_downloaded(
+    trackId: i64,
+    albumId: Option<String>,
+    filePath: String,
+    library_state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = library_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.mark_purchase_downloaded(trackId, albumId.as_deref(), &filePath)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_purchases_remove_downloaded(
+    trackId: i64,
+    library_state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = library_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.remove_downloaded_purchase(trackId)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_purchases_get_downloaded_track_ids(
+    library_state: State<'_, LibraryState>,
+) -> Result<Vec<i64>, String> {
+    let guard = library_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.get_downloaded_purchase_track_ids()
+        .map_err(|e| e.to_string())
+}
