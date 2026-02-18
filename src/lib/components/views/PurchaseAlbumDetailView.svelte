@@ -467,9 +467,12 @@
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
   }
 
+  .artwork.unavailable {
+    background: var(--bg-tertiary);
+  }
+
   .artwork.unavailable img {
-    filter: grayscale(0.6);
-    opacity: 0.4;
+    display: none;
   }
 
   .artwork img {
