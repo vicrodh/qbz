@@ -107,6 +107,7 @@
     "searchAlbums": "Alben suchen...",
     "searchArtists": "Künstler suchen...",
     "searchTracks": "Titel, Alben, Künstler suchen...",
+    "searchAlbumTracks": "Titel suchen...",
     "trackCount": "{count} Titel",
     "albumCount": "{count} Alben",
     "artistCount": "{count} Künstler",

@@ -110,6 +110,7 @@
     "searchAlbums": "Buscar álbumes...",
     "searchArtists": "Buscar artistas...",
     "searchTracks": "Buscar pistas, álbumes, artistas...",
+    "searchAlbumTracks": "Buscar pistas...",
     "trackCount": "{count} pistas",
     "albumCount": "{count} álbumes",
     "artistCount": "{count} artistas",

@@ -120,6 +120,8 @@
     artworkPath?: string;
     source: string;
     albumKey: string;
+    trackNumber?: number;
+    discNumber?: number;
   }
 
   interface PlexMusicSection {
@@ -141,6 +143,8 @@
     bitrateKbps?: number;
     samplingRateHz?: number;
     bitDepth?: number;
+    trackNumber?: number;
+    discNumber?: number;
   }
 
   interface PlexTrackMetadata {
@@ -917,6 +921,8 @@
   // Album detail state (for viewing album tracks)
   let selectedAlbum = $state<LocalAlbum | null>(null);
   let albumTracks = $state<LocalTrack[]>([]);
+  let albumTrackSearch = $state('');
+  let showAlbumTrackSearch = $state(false);
 
   // Qobuz artist images cache (artist name -> image URL)
   let artistImages = $state<Map<string, string>>(new Map());
@@ -972,6 +978,14 @@
       loadLibraryData();
     }
     previousOfflineState = isOffline;
+  });
+
+  // Clear album track search when navigating away from album
+  $effect(() => {
+    if (!selectedAlbum) {
+      albumTrackSearch = '';
+      showAlbumTrackSearch = false;
+    }
   });
 
   // Reactive effect: update virtualization state when album or track count changes
@@ -1289,8 +1303,8 @@
       album_artist: artist,
       album_group_key: plexTrack.albumKey,
       album_group_title: album || 'Unknown Album',
-      track_number: undefined,
-      disc_number: undefined,
+      track_number: plexTrack.trackNumber,
+      disc_number: plexTrack.discNumber,
       duration_secs: plexTrack.durationSecs,
       format: plexTrack.format,
       bit_depth: plexTrack.bitDepth,
@@ -3115,7 +3129,13 @@
 <ViewTransition duration={200} distance={12} direction="down">
 <div class="library-view" class:virtualized-active={!selectedAlbum && ((activeTab === 'albums' && !showHiddenAlbums && albums.length > 0) || (activeTab === 'artists' && artists.length > 0) || (activeTab === 'tracks' && tracks.length > 0))}>
   {#if selectedAlbum}
-    {@const albumSections = buildAlbumSections(albumTracks)}
+    {@const filteredAlbumTracks = albumTrackSearch.trim()
+      ? albumTracks.filter(track =>
+          track.title.toLowerCase().includes(albumTrackSearch.toLowerCase()) ||
+          track.artist.toLowerCase().includes(albumTrackSearch.toLowerCase())
+        )
+      : albumTracks}
+    {@const albumSections = buildAlbumSections(filteredAlbumTracks)}
     {@const showDiscHeaders = albumSections.length > 1}
     <!-- Album Detail View -->
     <div class="album-detail">
@@ -3124,16 +3144,39 @@
           <ArrowLeft size={16} />
           <span>{$t('library.backToLibrary')}</span>
         </button>
-        <button
-          class="edit-btn"
-          onclick={openAlbumEditModal}
-          title={selectedAlbum?.source === 'plex' && getUserItem(PLEX_METADATA_WRITE_KEY) !== 'true'
-            ? $t('settings.integrations.plexWriteDisabledNotice')
-            : $t('actions.edit')}
-          disabled={selectedAlbum?.source === 'plex' && getUserItem(PLEX_METADATA_WRITE_KEY) !== 'true'}
-        >
-          <Edit3 size={16} />
-        </button>
+        <div class="nav-row-actions">
+          {#if showAlbumTrackSearch}
+            <div class="album-track-search">
+              <Search size={14} />
+              <input
+                type="text"
+                placeholder={$t('library.searchAlbumTracks')}
+                bind:value={albumTrackSearch}
+              />
+              <button class="search-close-btn" onclick={() => { albumTrackSearch = ''; showAlbumTrackSearch = false; }}>
+                <X size={14} />
+              </button>
+            </div>
+          {:else}
+            <button
+              class="edit-btn"
+              onclick={() => showAlbumTrackSearch = true}
+              title={$t('library.searchAlbumTracks')}
+            >
+              <Search size={16} />
+            </button>
+          {/if}
+          <button
+            class="edit-btn"
+            onclick={openAlbumEditModal}
+            title={selectedAlbum?.source === 'plex' && getUserItem(PLEX_METADATA_WRITE_KEY) !== 'true'
+              ? $t('settings.integrations.plexWriteDisabledNotice')
+              : $t('actions.edit')}
+            disabled={selectedAlbum?.source === 'plex' && getUserItem(PLEX_METADATA_WRITE_KEY) !== 'true'}
+          >
+            <Edit3 size={16} />
+          </button>
+        </div>
       </div>
 
       <div class="album-header">
@@ -5589,6 +5632,52 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 24px;
+  }
+
+  .nav-row-actions {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .album-track-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    padding: 4px 8px;
+    color: var(--text-muted);
+  }
+
+  .album-track-search input {
+    background: none;
+    border: none;
+    outline: none;
+    color: var(--text-primary);
+    font-size: 13px;
+    width: 180px;
+  }
+
+  .album-track-search input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .search-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+  }
+
+  .search-close-btn:hover {
+    color: var(--text-primary);
   }
 
   .edit-btn {
