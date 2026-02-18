@@ -32,15 +32,11 @@
     is_active: boolean;
   }
 
-  interface AlsaDevice {
+  interface BackendAudioDevice {
     id: string;
     name: string;
     description: string | null;
     is_default: boolean;
-    max_sample_rate: number | null;
-    supported_sample_rates: number[] | null;
-    device_bus: string | null;
-    is_hardware: boolean;
   }
 
   // Props
@@ -55,7 +51,7 @@
   let settings = $state<AudioSettings | null>(null);
   let outputStatus = $state<AudioOutputStatus | null>(null);
   let pipewireSinks = $state<PipewireSink[]>([]);
-  let alsaDevices = $state<AlsaDevice[]>([]);
+  let alsaDevices = $state<BackendAudioDevice[]>([]);
   let hardwareStatus = $state<HardwareAudioStatus | null>(null);
   let isHovering = $state(false);
   
@@ -82,7 +78,7 @@
     return sink?.description ?? null;
   });
 
-  // Get ALSA description for current device (fancy name from aplay -L)
+  // Get ALSA description for current device (backend-provided when available)
   const alsaDescription = $derived.by(() => {
     if (!currentDevice) return null;
     const device = alsaDevices.find(d => d.id === currentDevice || d.name === currentDevice);
@@ -151,7 +147,7 @@
         invoke<AudioSettings>('v2_get_audio_settings'),
         invoke<AudioOutputStatus>('get_audio_output_status'),
         invoke<PipewireSink[]>('get_pipewire_sinks').catch(() => [] as PipewireSink[]),
-        invoke<AlsaDevice[]>('get_alsa_devices').catch(() => [] as AlsaDevice[]),
+        invoke<BackendAudioDevice[]>('v2_get_devices_for_backend', { backendType: 'Alsa' }).catch(() => [] as BackendAudioDevice[]),
         invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null)
       ]);
       settings = settingsResult;

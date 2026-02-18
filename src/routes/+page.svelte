@@ -764,9 +764,12 @@
           break;
         case 'OpenTrack': {
           // Fetch track to get its album, then navigate there
-          const track = await invoke<Track>('v2_get_track', { trackId: Number(resolved.id) });
-          if (track?.album?.id) {
-            await handleAlbumClick(String(track.album.id));
+          const track = await invoke<unknown>('v2_get_track', { trackId: Number(resolved.id) });
+          const data = track as Record<string, unknown> | null;
+          const nestedAlbum = (data?.album as Record<string, unknown> | undefined)?.id;
+          const albumId = nestedAlbum ?? data?.album_id ?? data?.albumId;
+          if (albumId !== undefined && albumId !== null) {
+            await handleAlbumClick(String(albumId));
           }
           break;
         }
@@ -1110,7 +1113,7 @@
         showToast($t('toast.couldNotFetchDetails'), 'error');
         return;
       }
-      const response = await invoke<{ pageUrl: string }>('share_album_songlink', {
+      const response = await invoke<{ pageUrl: string }>('v2_share_album_songlink', {
         upc: album.upc || null,
         albumId: album.id,
         title: album.title,
@@ -1935,7 +1938,7 @@
     if (!selectedAlbum?.id) return;
     try {
       showToast($t('toast.fetchingAlbumLink'), 'info');
-      const response = await invoke<{ pageUrl: string }>('share_album_songlink', {
+      const response = await invoke<{ pageUrl: string }>('v2_share_album_songlink', {
         upc: selectedAlbum.upc || null,
         albumId: selectedAlbum.id,
         title: selectedAlbum.title,
@@ -2024,8 +2027,9 @@
 
   async function handleDownloadAlbum() {
     if (!selectedAlbum) return;
+    const album = selectedAlbum;
 
-    const tracksToDownload = selectedAlbum.tracks.filter(track => {
+    const tracksToDownload = album.tracks.filter(track => {
       const status = getOfflineCacheState(track.id).status;
       return status === 'none' || status === 'failed';
     });
@@ -2035,15 +2039,15 @@
       return;
     }
 
-    showToast($t('toast.preparingTracksOffline', { values: { count: tracksToDownload.length, album: selectedAlbum.title } }), 'info');
+    showToast($t('toast.preparingTracksOffline', { values: { count: tracksToDownload.length, album: album.title } }), 'info');
 
     try {
       await cacheTracksForOfflineBatch(tracksToDownload.map(track => ({
         id: track.id,
         title: track.title,
-        artist: track.artist || selectedAlbum.artist || 'Unknown',
-        album: selectedAlbum.title,
-        albumId: selectedAlbum.id,
+        artist: track.artist || album.artist || 'Unknown',
+        album: album.title,
+        albumId: album.id,
         durationSecs: track.durationSeconds,
         quality: track.quality || '-',
         bitDepth: track.bitDepth,
@@ -2067,16 +2071,17 @@
 
   async function handleReDownloadAlbum() {
     if (!selectedAlbum) return;
+    const album = selectedAlbum;
 
-    showToast($t('toast.refreshingAlbumOffline', { values: { album: selectedAlbum.title } }), 'info');
+    showToast($t('toast.refreshingAlbumOffline', { values: { album: album.title } }), 'info');
 
     try {
-      await cacheTracksForOfflineBatch(selectedAlbum.tracks.map(track => ({
+      await cacheTracksForOfflineBatch(album.tracks.map(track => ({
         id: track.id,
         title: track.title,
-        artist: track.artist || selectedAlbum.artist || 'Unknown',
-        album: selectedAlbum.title,
-        albumId: selectedAlbum.id,
+        artist: track.artist || album.artist || 'Unknown',
+        album: album.title,
+        albumId: album.id,
         durationSecs: track.durationSeconds,
         quality: track.quality || '-',
         bitDepth: track.bitDepth,
@@ -2684,7 +2689,7 @@
     void downloadStateVersion;
     
     try {
-      const isDownloaded = await invoke<boolean>('check_album_fully_cached', { albumId });
+      const isDownloaded = await invoke<boolean>('v2_check_album_fully_cached', { albumId });
       albumDownloadCache.set(albumId, isDownloaded);
       return isDownloaded;
     } catch {

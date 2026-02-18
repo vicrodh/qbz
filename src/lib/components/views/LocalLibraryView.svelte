@@ -1074,7 +1074,7 @@
 
   async function checkDiscogsCredentials() {
     try {
-      hasDiscogsCredentials = await invoke<boolean>('discogs_has_credentials');
+      hasDiscogsCredentials = await invoke<boolean>('v2_discogs_has_credentials');
     } catch {
       hasDiscogsCredentials = false;
     }
@@ -2308,7 +2308,7 @@
       discogsImagePage = 0;
       discogsFetchSuccessful = false;
 
-      const options = await invoke<DiscogsImageOption[]>('discogs_search_artwork', {
+      const options = await invoke<DiscogsImageOption[]>('v2_discogs_search_artwork', {
         artist: selectedAlbum.artist,
         album: selectedAlbum.title,
         catalogNumber: selectedAlbum.catalog_number || null
@@ -2362,7 +2362,7 @@
       if (selectedDiscogsImage) {
         console.log('Downloading Discogs artwork from:', selectedDiscogsImage);
 
-        const localPath = await invoke<string>('discogs_download_artwork', {
+        const localPath = await invoke<string>('v2_discogs_download_artwork', {
           imageUrl: selectedDiscogsImage,
           artist: selectedAlbum.artist,
           album: selectedAlbum.title

@@ -597,7 +597,7 @@ export async function flushListenBrainzQueue(): Promise<number> {
   }
 
   try {
-    const sent = await invoke<number>('listenbrainz_flush_queue');
+    const sent = await invoke<number>('v2_listenbrainz_flush_queue');
     if (sent > 0) {
       console.log(`ListenBrainz: Flushed ${sent} queued listens`);
     }

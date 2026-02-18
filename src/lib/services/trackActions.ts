@@ -258,7 +258,7 @@ export async function shareSonglinkTrack(trackId: number, isrc?: string): Promis
   const resolvedIsrc = isrc?.trim();
   try {
     showToast('Fetching Song.link...', 'info');
-    const response = await invoke<SongLinkResponse>('share_track_songlink', {
+    const response = await invoke<SongLinkResponse>('v2_share_track_songlink', {
       isrc: resolvedIsrc?.length ? resolvedIsrc : null,
       url: qobuzUrl,
       trackId

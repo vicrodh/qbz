@@ -89,6 +89,23 @@ pub struct AlsaPluginInfo {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct HardwareAudioStatus {
+    pub hardware_sample_rate: Option<u32>,
+    pub hardware_format: Option<String>,
+    pub is_active: bool,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct DacCapabilities {
+    pub node_name: String,
+    pub sample_rates: Vec<u32>,
+    pub formats: Vec<String>,
+    pub channels: Option<u32>,
+    pub description: Option<String>,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "type", content = "content", rename_all = "lowercase")]
 pub enum V2MostPopularItem {
     Tracks(Track),
@@ -1240,6 +1257,66 @@ pub fn v2_get_devices_for_backend(
 }
 
 #[tauri::command]
+pub fn v2_get_hardware_audio_status(
+    state: State<'_, AppState>,
+) -> Result<HardwareAudioStatus, String> {
+    let sample_rate = state.player.state.get_sample_rate();
+    let bit_depth = state.player.state.get_bit_depth();
+    let active = state.player.state.is_playing() && sample_rate > 0;
+
+    let hardware_sample_rate = if sample_rate > 0 { Some(sample_rate) } else { None };
+    let hardware_format = if sample_rate > 0 && bit_depth > 0 {
+        Some(format!("{}-bit / {:.1}kHz", bit_depth, sample_rate as f64 / 1000.0))
+    } else {
+        None
+    };
+
+    Ok(HardwareAudioStatus {
+        hardware_sample_rate,
+        hardware_format,
+        is_active: active,
+    })
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_get_default_device_name(
+    backendType: AudioBackendType,
+) -> Result<Option<String>, String> {
+    let backend = BackendManager::create_backend(backendType)?;
+    let devices = backend.enumerate_devices()?;
+    Ok(devices.into_iter().find(|d| d.is_default).map(|d| d.name))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_query_dac_capabilities(
+    nodeName: String,
+) -> Result<DacCapabilities, String> {
+    let mut capabilities = DacCapabilities {
+        node_name: nodeName.clone(),
+        sample_rates: vec![44100, 48000, 88200, 96000, 176400, 192000],
+        formats: vec!["S16LE".to_string(), "S24LE".to_string(), "F32LE".to_string()],
+        channels: Some(2),
+        description: None,
+        error: None,
+    };
+
+    if let Ok(backend) = BackendManager::create_backend(AudioBackendType::PipeWire) {
+        if let Ok(devices) = backend.enumerate_devices() {
+            if let Some(device) = devices
+                .iter()
+                .find(|d| d.id == nodeName || d.name == nodeName)
+            {
+                capabilities.description = device.description.clone().or_else(|| Some(device.name.clone()));
+            }
+        }
+    }
+
+    Ok(capabilities)
+}
+
+#[tauri::command]
 pub fn v2_get_alsa_plugins() -> Result<Vec<AlsaPluginInfo>, String> {
     Ok(vec![
         AlsaPluginInfo {
@@ -1265,6 +1342,12 @@ pub fn v2_get_alsa_plugins() -> Result<Vec<AlsaPluginInfo>, String> {
 #[tauri::command]
 pub fn v2_resolve_qobuz_link(url: String) -> Result<qbz_qobuz::ResolvedLink, RuntimeError> {
     qbz_qobuz::resolve_link(&url).map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_get_qobuz_track_url(trackId: u64) -> Result<String, RuntimeError> {
+    Ok(format!("https://play.qobuz.com/track/{}", trackId))
 }
 
 /// Check if QBZ is the default handler for qobuzapp:// links.
@@ -1874,6 +1957,13 @@ pub async fn v2_cast_seek(position_secs: f64, state: State<'_, CastState>) -> Re
 }
 
 #[tauri::command]
+pub async fn v2_cast_get_position(
+    state: State<'_, CastState>,
+) -> Result<crate::cast::CastPositionInfo, String> {
+    state.chromecast.get_media_position().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn v2_cast_set_volume(volume: f32, state: State<'_, CastState>) -> Result<(), String> {
     state.chromecast.set_volume(volume).map_err(|e| e.to_string())
 }
@@ -2011,6 +2101,15 @@ pub async fn v2_dlna_seek(position_secs: u64, state: State<'_, DlnaState>) -> Re
     let mut connection = state.connection.lock().await;
     let conn = connection.as_mut().ok_or("Not connected")?;
     conn.seek(position_secs).await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_dlna_get_position(
+    state: State<'_, DlnaState>,
+) -> Result<crate::cast::DlnaPositionInfo, String> {
+    let connection = state.connection.lock().await;
+    let conn = connection.as_ref().ok_or_else(|| "Not connected".to_string())?;
+    conn.get_position_info().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -3438,6 +3537,91 @@ pub async fn v2_library_set_custom_artist_image(
 }
 
 #[tauri::command]
+pub async fn v2_create_artist_radio(
+    artist_id: u64,
+    artist_name: String,
+    state: State<'_, AppState>,
+    blacklist_state: State<'_, BlacklistState>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<String, String> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let client = state.client.read().await.clone();
+
+    let session_id = tokio::task::spawn_blocking(move || -> Result<String, String> {
+        let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+        let builder = crate::radio_engine::RadioPoolBuilder::new(
+            &radio_db,
+            &client,
+            crate::radio_engine::BuildRadioOptions::default(),
+        );
+        let rt = tokio::runtime::Handle::current();
+        let session = rt.block_on(builder.create_artist_radio(artist_id))?;
+        Ok(session.id)
+    })
+    .await
+    .map_err(|e| format!("Radio task failed: {}", e))??;
+
+    let client = state.client.read().await;
+    let track_ids = tokio::task::spawn_blocking({
+        let session_id = session_id.clone();
+        move || -> Result<Vec<u64>, String> {
+            let radio_db = crate::radio_engine::db::RadioDb::open_default()?;
+            let radio_engine = crate::radio_engine::RadioEngine::new(radio_db);
+            let mut ids = Vec::new();
+            for _ in 0..60 {
+                match radio_engine.next_track(&session_id) {
+                    Ok(radio_track) => ids.push(radio_track.track_id),
+                    Err(_) => break,
+                }
+            }
+            Ok(ids.into_iter().take(50).collect())
+        }
+    })
+    .await
+    .map_err(|e| format!("Track generation task failed: {}", e))??;
+
+    let mut tracks = Vec::new();
+    for next_track_id in track_ids {
+        if let Ok(track) = client.get_track(next_track_id).await {
+            if let Some(ref performer) = track.performer {
+                if blacklist_state.is_blacklisted(performer.id) {
+                    continue;
+                }
+            }
+            tracks.push(track);
+        }
+    }
+
+    if tracks.is_empty() {
+        return Err("Failed to generate any radio tracks".to_string());
+    }
+
+    let queue_tracks: Vec<CoreQueueTrack> =
+        tracks.iter().map(track_to_queue_track_from_api).collect();
+    let bridge = bridge.get().await;
+    bridge.set_queue(queue_tracks, Some(0)).await;
+
+    let queue_track_ids: Vec<u64> = tracks.iter().map(|t| t.id).collect();
+    let context = PlaybackContext::new(
+        ContextType::Radio,
+        session_id.clone(),
+        artist_name,
+        ContentSource::Qobuz,
+        queue_track_ids,
+        0,
+    );
+    state.context.set_context(context);
+
+    Ok(session_id)
+}
+
+#[tauri::command]
 pub async fn v2_create_track_radio(
     track_id: u64,
     track_name: String,
@@ -4823,6 +5007,42 @@ pub async fn v2_get_playlist(
     bridge.get_playlist(playlistId).await.map_err(RuntimeError::Internal)
 }
 
+#[tauri::command]
+pub async fn v2_playlist_import_preview(
+    url: String,
+) -> Result<crate::playlist_import::ImportPlaylist, RuntimeError> {
+    crate::playlist_import::preview_public_playlist(&url)
+        .await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_playlist_import_execute(
+    url: String,
+    nameOverride: Option<String>,
+    isPublic: bool,
+    app_state: State<'_, AppState>,
+    app: tauri::AppHandle,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<crate::playlist_import::ImportSummary, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+
+    let client = app_state.client.read().await;
+    crate::playlist_import::import_public_playlist(
+        &url,
+        &client,
+        nameOverride.as_deref(),
+        isPublic,
+        &app,
+    )
+    .await
+    .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
 /// Get playlist metadata + track ids for progressive loading.
 #[tauri::command]
 #[allow(non_snake_case)]
@@ -5904,6 +6124,87 @@ pub async fn v2_get_musician_appearances(
 }
 
 #[tauri::command]
+pub async fn v2_remote_metadata_search(
+    provider: String,
+    query: String,
+    artist: Option<String>,
+    limit: Option<usize>,
+    musicbrainz_state: State<'_, MusicBrainzSharedState>,
+) -> Result<Vec<crate::library::remote_metadata::RemoteAlbumSearchResult>, RuntimeError> {
+    use crate::library::remote_metadata::{
+        discogs_extended_to_search_result, musicbrainz_release_to_search_result, RemoteProvider,
+    };
+    let provider = provider
+        .parse::<RemoteProvider>()
+        .map_err(RuntimeError::Internal)?;
+    let max = limit.unwrap_or(10).clamp(1, 25);
+
+    match provider {
+        RemoteProvider::MusicBrainz => {
+            let response = musicbrainz_state
+                .client
+                .search_releases_extended(&query, artist.as_deref().unwrap_or(""), None, max)
+                .await
+                .map_err(RuntimeError::Internal)?;
+            Ok(response
+                .releases
+                .iter()
+                .map(musicbrainz_release_to_search_result)
+                .collect())
+        }
+        RemoteProvider::Discogs => {
+            let client = crate::discogs::DiscogsClient::new();
+            let results = client
+                .search_releases(artist.as_deref().unwrap_or(""), &query, None, max)
+                .await
+                .map_err(RuntimeError::Internal)?;
+            Ok(results
+                .iter()
+                .map(discogs_extended_to_search_result)
+                .collect())
+        }
+    }
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_remote_metadata_get_album(
+    provider: String,
+    providerId: String,
+    musicbrainz_state: State<'_, MusicBrainzSharedState>,
+) -> Result<crate::library::remote_metadata::RemoteAlbumMetadata, RuntimeError> {
+    use crate::library::remote_metadata::{
+        discogs_full_to_metadata, musicbrainz_full_to_metadata, RemoteProvider,
+    };
+
+    let provider = provider
+        .parse::<RemoteProvider>()
+        .map_err(RuntimeError::Internal)?;
+
+    match provider {
+        RemoteProvider::MusicBrainz => {
+            let full = musicbrainz_state
+                .client
+                .get_release_with_tracks(&providerId)
+                .await
+                .map_err(RuntimeError::Internal)?;
+            Ok(musicbrainz_full_to_metadata(&full))
+        }
+        RemoteProvider::Discogs => {
+            let id = providerId
+                .parse::<u64>()
+                .map_err(|e| RuntimeError::Internal(format!("Invalid Discogs release id: {}", e)))?;
+            let client = crate::discogs::DiscogsClient::new();
+            let full = client
+                .get_release_metadata(id)
+                .await
+                .map_err(RuntimeError::Internal)?;
+            Ok(discogs_full_to_metadata(&full))
+        }
+    }
+}
+
+#[tauri::command]
 pub async fn v2_musicbrainz_get_artist_relationships(
     mbid: String,
     state: State<'_, MusicBrainzSharedState>,
@@ -6110,6 +6411,69 @@ pub async fn v2_listenbrainz_queue_listen(
         isrc.as_deref(),
         duration_ms,
     ).map_err(|e| RuntimeError::Internal(e))
+}
+
+#[tauri::command]
+pub async fn v2_listenbrainz_flush_queue(
+    state: State<'_, ListenBrainzV2State>,
+    legacy_state: State<'_, crate::listenbrainz::ListenBrainzSharedState>,
+) -> Result<u32, RuntimeError> {
+    let queued = {
+        let cache_guard = legacy_state.cache.lock().await;
+        let cache = cache_guard
+            .as_ref()
+            .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+        cache.get_queued_listens(500).map_err(RuntimeError::Internal)?
+    };
+
+    if queued.is_empty() {
+        return Ok(0);
+    }
+
+    let client = state.client.lock().await;
+    let mut sent_ids = Vec::new();
+
+    for listen in &queued {
+        let additional_info = qbz_integrations::listenbrainz::AdditionalInfo {
+            recording_mbid: listen.recording_mbid.clone(),
+            release_mbid: listen.release_mbid.clone(),
+            artist_mbids: listen.artist_mbids.clone(),
+            isrc: listen.isrc.clone(),
+            duration_ms: listen.duration_ms,
+            tracknumber: None,
+            media_player: "QBZ".to_string(),
+            media_player_version: env!("CARGO_PKG_VERSION").to_string(),
+            submission_client: "QBZ".to_string(),
+            submission_client_version: env!("CARGO_PKG_VERSION").to_string(),
+        };
+
+        if client
+            .submit_listen(
+                &listen.artist_name,
+                &listen.track_name,
+                listen.release_name.as_deref(),
+                listen.listened_at,
+                Some(additional_info),
+            )
+            .await
+            .is_ok()
+        {
+            sent_ids.push(listen.id);
+        }
+    }
+    drop(client);
+
+    if sent_ids.is_empty() {
+        return Ok(0);
+    }
+
+    let cache_guard = legacy_state.cache.lock().await;
+    let cache = cache_guard
+        .as_ref()
+        .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
+    cache.mark_listens_sent(&sent_ids).map_err(RuntimeError::Internal)?;
+
+    Ok(sent_ids.len() as u32)
 }
 
 // ==================== Playback Context Commands (V2) ====================
@@ -6577,6 +6941,239 @@ pub async fn v2_subscribe_playlist(
         .get_playlist(new_playlist.id)
         .await
         .map_err(|e| format!("Failed to fetch created playlist: {}", e))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_share_track_songlink(
+    isrc: Option<String>,
+    url: String,
+    trackId: Option<u64>,
+    state: State<'_, AppState>,
+) -> Result<crate::share::SongLinkResponse, RuntimeError> {
+    if let Some(code) = isrc.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+        return state
+            .songlink
+            .get_by_isrc(code)
+            .await
+            .map_err(|e| RuntimeError::Internal(e.to_string()));
+    }
+
+    let fallback_url = if let Some(id) = trackId {
+        format!("https://play.qobuz.com/track/{}", id)
+    } else {
+        url
+    };
+    state
+        .songlink
+        .get_by_url(&fallback_url, crate::share::ContentType::Track)
+        .await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_share_album_songlink(
+    upc: Option<String>,
+    albumId: Option<String>,
+    title: Option<String>,
+    artist: Option<String>,
+    state: State<'_, AppState>,
+) -> Result<crate::share::SongLinkResponse, RuntimeError> {
+    let _ = (title, artist);
+    if let Some(code) = upc.as_deref().map(str::trim).filter(|v| !v.is_empty()) {
+        return state
+            .songlink
+            .get_by_upc(code)
+            .await
+            .map_err(|e| RuntimeError::Internal(e.to_string()));
+    }
+
+    let fallback_url = albumId
+        .map(|id| format!("https://play.qobuz.com/album/{}", id))
+        .ok_or_else(|| RuntimeError::Internal("Missing UPC/albumId for song.link album lookup".to_string()))?;
+    state
+        .songlink
+        .get_by_url(&fallback_url, crate::share::ContentType::Album)
+        .await
+        .map_err(|e| RuntimeError::Internal(e.to_string()))
+}
+
+#[tauri::command]
+pub async fn v2_library_backfill_downloads(
+    state: State<'_, LibraryState>,
+    offline_cache_state: State<'_, crate::offline_cache::OfflineCacheState>,
+) -> Result<crate::library::commands::BackfillReport, RuntimeError> {
+    crate::library::commands::library_backfill_downloads(state, offline_cache_state)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_lyrics_get(
+    trackId: Option<u64>,
+    title: String,
+    artist: String,
+    album: Option<String>,
+    durationSecs: Option<u64>,
+    state: State<'_, LyricsState>,
+) -> Result<Option<crate::lyrics::LyricsPayload>, RuntimeError> {
+    crate::lyrics::commands::lyrics_get(trackId, title, artist, album, durationSecs, state)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_create_pending_playlist(
+    name: String,
+    description: Option<String>,
+    isPublic: bool,
+    trackIds: Vec<u64>,
+    localTrackPaths: Vec<String>,
+    state: State<'_, OfflineState>,
+) -> Result<i64, RuntimeError> {
+    crate::offline::commands::create_pending_playlist(
+        name,
+        description,
+        isPublic,
+        trackIds,
+        localTrackPaths,
+        state,
+    )
+    .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+pub fn v2_get_pending_playlist_count(
+    state: State<'_, OfflineState>,
+) -> Result<u32, RuntimeError> {
+    crate::offline::commands::get_pending_playlist_count(state)
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+pub fn v2_queue_scrobble(
+    artist: String,
+    track: String,
+    album: Option<String>,
+    timestamp: i64,
+    state: State<'_, OfflineState>,
+) -> Result<i64, RuntimeError> {
+    crate::offline::commands::queue_scrobble(artist, track, album, timestamp, state)
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_get_queued_scrobbles(
+    limit: Option<u32>,
+    state: State<'_, OfflineState>,
+) -> Result<Vec<crate::offline::QueuedScrobble>, RuntimeError> {
+    crate::offline::commands::get_queued_scrobbles(limit, state)
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+pub fn v2_get_queued_scrobble_count(
+    state: State<'_, OfflineState>,
+) -> Result<u32, RuntimeError> {
+    crate::offline::commands::get_queued_scrobble_count(state)
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_cleanup_sent_scrobbles(
+    olderThanDays: Option<u32>,
+    state: State<'_, OfflineState>,
+) -> Result<u32, RuntimeError> {
+    crate::offline::commands::cleanup_sent_scrobbles(olderThanDays, state)
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_track_by_path(
+    filePath: String,
+    state: State<'_, LibraryState>,
+) -> Result<Option<LocalTrack>, RuntimeError> {
+    crate::library::commands::get_track_by_path(filePath, state)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_check_network_path(path: String) -> Result<crate::network::NetworkPathInfo, RuntimeError> {
+    Ok(crate::network::commands::check_network_path(path))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_library_update_folder_settings(
+    id: i64,
+    alias: Option<String>,
+    enabled: bool,
+    isNetwork: bool,
+    networkFsType: Option<String>,
+    userOverrideNetwork: bool,
+    state: State<'_, LibraryState>,
+) -> Result<crate::library::LibraryFolder, RuntimeError> {
+    crate::library::commands::library_update_folder_settings(
+        id,
+        alias,
+        enabled,
+        isNetwork,
+        networkFsType,
+        userOverrideNetwork,
+        state,
+    )
+    .await
+    .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+pub async fn v2_discogs_has_credentials() -> Result<bool, RuntimeError> {
+    crate::library::commands::discogs_has_credentials()
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_discogs_search_artwork(
+    artist: String,
+    album: String,
+    catalogNumber: Option<String>,
+) -> Result<Vec<crate::discogs::DiscogsImageOption>, RuntimeError> {
+    crate::library::commands::discogs_search_artwork(artist, album, catalogNumber)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_discogs_download_artwork(
+    imageUrl: String,
+    artist: String,
+    album: String,
+) -> Result<String, RuntimeError> {
+    crate::library::commands::discogs_download_artwork(imageUrl, artist, album)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_check_album_fully_cached(
+    albumId: String,
+    cache_state: State<'_, crate::offline_cache::OfflineCacheState>,
+) -> Result<bool, RuntimeError> {
+    crate::offline_cache::commands::check_album_fully_cached(albumId, cache_state)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Shared helper: spawn the download task for a single track.

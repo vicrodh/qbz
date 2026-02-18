@@ -5,11 +5,10 @@
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
   import { ask } from '@tauri-apps/plugin-dialog';
-  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, HelpCircle, Ban, AlertTriangle, RefreshCw } from 'lucide-svelte';
+  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, Ban, AlertTriangle, RefreshCw } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import DeviceDropdown from '../DeviceDropdown.svelte';
-  import AlsaUtilsHelpModal from '../AlsaUtilsHelpModal.svelte';
   import DACSetupWizard from '../DACSetupWizard.svelte';
   import RemoteControlSetupGuide from '../RemoteControlSetupGuide.svelte';
   import LogsModal from '../LogsModal.svelte';
@@ -235,7 +234,6 @@
   let legacyTracksCount = $state(0);
 
   // ALSA Utils help modal
-  let showAlsaUtilsHelpModal = $state(false);
 
   // DAC Setup Wizard modal
   let showDACWizardModal = $state(false);
@@ -596,7 +594,7 @@
   }
 
   // Device options based on selected backend (derived)
-  // For ALSA: use description from aplay -L if available, otherwise translate
+  // For ALSA: use backend-provided description if available, otherwise translate
   // For PipeWire/PulseAudio: names are already friendly
   let deviceOptions = $derived.by(() => {
     // First pass: generate display names
@@ -2186,7 +2184,7 @@
         if (settings.output_device) {
           const device = backendDevices.find(d => d.id === settings.output_device);
           if (device) {
-            // Use description from aplay -L if available (ALSA), otherwise translate
+            // Use backend-provided description if available (ALSA), otherwise translate
             outputDevice = (device.description && settings.backend_type === 'Alsa')
               ? device.description
               : (needsTranslation(device.name) ? getDevicePrettyName(device.name) : device.name);
@@ -2671,7 +2669,7 @@
         repaired_tracks: number;
         skipped_tracks: number;
         failed_tracks: string[];
-      }>('library_backfill_downloads');
+      }>('v2_library_backfill_downloads');
 
       const message = `Repair complete!\n\nAdded: ${report.added_tracks}\nRepaired: ${report.repaired_tracks}\nSkipped: ${report.skipped_tracks}\nFailed: ${report.failed_tracks.length}`;
 
@@ -3221,13 +3219,6 @@
             title={$t('settings.audio.refreshDevices')}
           >
             <RefreshCw size={16} />
-          </button>
-          <button
-            class="help-icon-btn"
-            onclick={() => showAlsaUtilsHelpModal = true}
-            title={$t('settings.audio.helpBitPerfect')}
-          >
-            <HelpCircle size={16} />
           </button>
         </div>
       {:else if selectedBackend === 'PipeWire'}
@@ -6152,11 +6143,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   isOpen={showMigrationModal}
   onClose={closeMigrationModal}
   totalTracks={legacyTracksCount}
-/>
-
-<AlsaUtilsHelpModal
-  isOpen={showAlsaUtilsHelpModal}
-  onClose={() => showAlsaUtilsHelpModal = false}
 />
 
 <DACSetupWizard

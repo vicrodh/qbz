@@ -81,7 +81,7 @@
   // Detect if the current path is on a network mount
   async function detectNetworkStatus() {
     try {
-      const info = await invoke<{ isNetwork: boolean }>('check_network_path', { path: currentPath });
+      const info = await invoke<{ isNetwork: boolean }>('v2_check_network_path', { path: currentPath });
       detectedIsNetwork = info.isNetwork;
     } catch (err) {
       console.error('Failed to detect network status:', err);
@@ -118,7 +118,7 @@
         });
       }
 
-      const updatedFolder = await invoke<LibraryFolder>('library_update_folder_settings', {
+      const updatedFolder = await invoke<LibraryFolder>('v2_library_update_folder_settings', {
         id: folder.id,
         alias: alias.trim() || null,
         enabled,

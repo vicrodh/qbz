@@ -351,7 +351,7 @@ export async function createPendingPlaylist(
   trackIds: number[],
   localTrackPaths: string[]
 ): Promise<number> {
-  return invoke<number>('create_pending_playlist', {
+  return invoke<number>('v2_create_pending_playlist', {
     name,
     description,
     isPublic,
@@ -371,7 +371,7 @@ export async function getPendingPlaylists(): Promise<PendingPlaylist[]> {
  * Get count of pending playlists
  */
 export async function getPendingPlaylistCount(): Promise<number> {
-  return invoke<number>('get_pending_playlist_count');
+  return invoke<number>('v2_get_pending_playlist_count');
 }
 
 /**
@@ -412,7 +412,7 @@ export async function queueScrobble(
   album: string | null,
   timestamp: number
 ): Promise<number> {
-  return invoke<number>('queue_scrobble', {
+  return invoke<number>('v2_queue_scrobble', {
     artist,
     track,
     album,
@@ -424,7 +424,7 @@ export async function queueScrobble(
  * Get queued scrobbles (up to limit)
  */
 export async function getQueuedScrobbles(limit?: number): Promise<QueuedScrobble[]> {
-  return invoke<QueuedScrobble[]>('get_queued_scrobbles', { limit });
+  return invoke<QueuedScrobble[]>('v2_get_queued_scrobbles', { limit });
 }
 
 /**
@@ -438,14 +438,14 @@ export async function markScrobblesSent(ids: number[]): Promise<void> {
  * Get count of queued (unsent) scrobbles
  */
 export async function getQueuedScrobbleCount(): Promise<number> {
-  return invoke<number>('get_queued_scrobble_count');
+  return invoke<number>('v2_get_queued_scrobble_count');
 }
 
 /**
  * Cleanup old sent scrobbles
  */
 export async function cleanupSentScrobbles(olderThanDays?: number): Promise<number> {
-  return invoke<number>('cleanup_sent_scrobbles', { olderThanDays });
+  return invoke<number>('v2_cleanup_sent_scrobbles', { olderThanDays });
 }
 
 /**
@@ -530,7 +530,7 @@ export async function syncPendingPlaylists(): Promise<void> {
                 console.log(`[Offline] Resolving path: ${filePath}`);
 
                 // Get track ID from file path
-                const trackInfo = await invoke<{ id: number } | null>('get_track_by_path', {
+                const trackInfo = await invoke<{ id: number } | null>('v2_get_track_by_path', {
                   filePath
                 });
 

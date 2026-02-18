@@ -22,7 +22,8 @@ def main() -> int:
         "src/routes/**/*.svelte",
     ]
 
-    invoke_pat = re.compile(r"invoke\(\s*['\"]([^'\"]+)['\"]")
+    # Match both invoke('cmd') and invoke<Type>('cmd')
+    invoke_pat = re.compile(r"invoke(?:<[^>]*>)?\(\s*['\"]([^'\"]+)['\"]")
     registrations_pat = re.compile(r"commands_v2::(v2_[A-Za-z0-9_]+|runtime_[A-Za-z0-9_]+)")
 
     front_paths = []
@@ -33,9 +34,9 @@ def main() -> int:
     for path in front_paths:
         text = load_text(path)
         rel = path.relative_to(root)
-        for idx, line in enumerate(text.splitlines(), 1):
-            for m in invoke_pat.finditer(line):
-                invokes.append((m.group(1), f"{rel}:{idx}"))
+        for m in invoke_pat.finditer(text):
+            line_no = text.count("\n", 0, m.start()) + 1
+            invokes.append((m.group(1), f"{rel}:{line_no}"))
 
     lib_rs = load_text(root / "src-tauri/src/lib.rs")
     registered_v2 = set(registrations_pat.findall(lib_rs))

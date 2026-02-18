@@ -163,7 +163,7 @@
     selectedResult = null;
 
     try {
-      const results = await invoke<RemoteAlbumSearchResult[]>('remote_metadata_search', {
+      const results = await invoke<RemoteAlbumSearchResult[]>('v2_remote_metadata_search', {
         provider: remoteProvider,
         query: albumTitle.trim(),
         artist: albumArtist.trim() || null,
@@ -186,7 +186,7 @@
 
     remoteLoading = true;
     try {
-      const metadata = await invoke<RemoteAlbumMetadata>('remote_metadata_get_album', {
+      const metadata = await invoke<RemoteAlbumMetadata>('v2_remote_metadata_get_album', {
         provider: selectedResult.provider,
         providerId: selectedResult.provider_id
       });

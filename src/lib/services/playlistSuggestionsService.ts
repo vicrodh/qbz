@@ -156,7 +156,7 @@ export async function getVectorStoreStats(): Promise<VectorStoreStats> {
  * @returns Number of vectors removed
  */
 export async function cleanupVectorStore(maxAgeDays?: number): Promise<number> {
-  return invoke<number>('cleanup_vector_store', { maxAgeDays: maxAgeDays ?? null });
+  return invoke<number>('v2_clear_vector_store', { maxAgeDays: maxAgeDays ?? null });
 }
 
 // ============ Helpers ============

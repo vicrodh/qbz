@@ -882,7 +882,7 @@
 
     isCopying = true;
     try {
-      const newPlaylist = await invoke<Playlist>('subscribe_playlist', { playlistId: playlist.id });
+      const newPlaylist = await invoke<Playlist>('v2_subscribe_playlist', { playlistId: playlist.id });
       // Mark as copied so button disappears
       markPlaylistAsCopied(playlist.id);
       // Notify parent to refresh sidebar

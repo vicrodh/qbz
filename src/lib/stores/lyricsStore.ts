@@ -309,7 +309,7 @@ export async function fetchLyrics(): Promise<void> {
 
   try {
     console.log(`[Lyrics] Fetching for: "${track.title}" by "${track.artist}"`);
-    const result = await invoke<LyricsPayload | null>('lyrics_get', {
+    const result = await invoke<LyricsPayload | null>('v2_lyrics_get', {
       trackId: track.id,
       title: track.title,
       artist: track.artist,

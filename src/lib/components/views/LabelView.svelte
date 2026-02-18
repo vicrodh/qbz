@@ -80,7 +80,7 @@
         image?: { small?: string; thumbnail?: string; large?: string };
         albums?: { items: QobuzAlbum[]; total: number; offset: number; limit: number };
         albums_count?: number;
-      }>('get_label', { labelId, limit: 100, offset: 0 });
+      }>('v2_get_label', { labelId, limit: 100, offset: 0 });
 
       label = {
         id: result.id,
@@ -116,7 +116,7 @@
         id: number;
         name: string;
         albums?: { items: QobuzAlbum[]; total: number; offset: number; limit: number };
-      }>('get_label', { labelId, limit: 100, offset: albumsFetched });
+      }>('v2_get_label', { labelId, limit: 100, offset: albumsFetched });
 
       const newAlbums = result.albums?.items ?? [];
       albums = [...albums, ...newAlbums];
