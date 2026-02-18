@@ -6,6 +6,6 @@ Type=Application
 Icon=qbz
 Categories=AudioVideo;Audio;Music;Player;
 Terminal=false
-StartupWMClass=qbz-nix
+StartupWMClass=QBZ
 Keywords=music;audio;qobuz;hifi;streaming;audiophile;
 MimeType=x-scheme-handler/qbz;x-scheme-handler/qobuzapp;

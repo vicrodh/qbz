@@ -116,7 +116,7 @@ jobs:
           mkdir -p "tarball-staging/${TARBALL_DIR}/icons/hicolor"/{32x32,48x48,64x64,128x128,256x256}/apps
 
           # Binary
-          cp src-tauri/target/release/qbz-nix "tarball-staging/${TARBALL_DIR}/qbz"
+          cp src-tauri/target/release/qbz "tarball-staging/${TARBALL_DIR}/qbz"
 
           # Icons (use available sizes, copy 128x128 for missing sizes)
           cp src-tauri/icons/32x32.png "tarball-staging/${TARBALL_DIR}/icons/hicolor/32x32/apps/qbz.png"
