@@ -19,7 +19,7 @@ export async function getPurchases(
     );
     return res.json();
   }
-  return invoke<PurchaseResponse>('v2_purchases_get_all');
+  return invoke<PurchaseResponse>('v2_purchases_get_all', { limit, offset });
 }
 
 export async function searchPurchases(
@@ -41,8 +41,7 @@ export async function getAlbumDetail(
     const res = await fetch(`${MOCK_URL}/purchases/album/${albumId}`);
     return res.json();
   }
-  const response = await invoke<PurchaseResponse>('v2_purchases_get_all');
-  return response.albums.items.find((a) => a.id === albumId)!;
+  return invoke<PurchasedAlbum>('v2_purchases_get_album', { albumId });
 }
 
 export async function getFormats(

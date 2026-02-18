@@ -106,9 +106,9 @@
         downloadStatuses.set(track.id, 'downloading');
         downloadStatuses = new Map(downloadStatuses);
         try {
-          await downloadTrack(track.id, selectedFormatId, destination);
+          const filePath = await downloadTrack(track.id, selectedFormatId, destination);
           downloadStatuses.set(track.id, 'complete');
-          await markTrackDownloaded(track.id, album.id, destination).catch(() => {});
+          await markTrackDownloaded(track.id, album.id, filePath).catch(() => {});
         } catch {
           downloadStatuses.set(track.id, 'failed');
         }
@@ -123,9 +123,9 @@
       downloadStatuses.set(action, 'downloading');
       downloadStatuses = new Map(downloadStatuses);
       try {
-        await downloadTrack(action, selectedFormatId, destination);
+        const filePath = await downloadTrack(action, selectedFormatId, destination);
         downloadStatuses.set(action, 'complete');
-        await markTrackDownloaded(action, album.id, destination).catch(() => {});
+        await markTrackDownloaded(action, album.id, filePath).catch(() => {});
       } catch {
         downloadStatuses.set(action, 'failed');
       }
@@ -175,7 +175,7 @@
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
-    <span>Back</span>
+    <span>{$t('actions.back')}</span>
   </button>
 
   {#if loading}
@@ -226,7 +226,9 @@
             compact={true}
           />
         </div>
-        <div class="album-stats">{totalTracks} tracks &middot; {formatTotalDuration(totalDurationSeconds)}</div>
+        <div class="album-stats">
+          {$t('purchases.tracksCount', { values: { count: totalTracks } })} &middot; {formatTotalDuration(totalDurationSeconds)}
+        </div>
 
         {#if album.downloadable}
           <!-- Actions -->
@@ -295,11 +297,11 @@
     <!-- Track List -->
     <div class="track-list">
       <!-- Table Header -->
-      <div class="table-header">
-        <div class="col-number">#</div>
-        <div class="col-title">Title</div>
-        <div class="col-duration">Duration</div>
-        <div class="col-quality">Quality</div>
+        <div class="table-header">
+          <div class="col-number">#</div>
+        <div class="col-title">{$t('purchases.table.title')}</div>
+        <div class="col-duration">{$t('album.duration')}</div>
+        <div class="col-quality">{$t('album.quality')}</div>
         <div class="col-icon"><Download size={14} /></div>
       </div>
 
@@ -308,7 +310,7 @@
         {#each [...discGroups.entries()] as [discNum, discTracks] (discNum)}
           {#if isMultiDisc}
             <div class="disc-header">
-              <span>Disc {discNum}</span>
+              <span>{$t('album.disc')} {discNum}</span>
             </div>
           {/if}
           {#each discTracks as track (track.id)}

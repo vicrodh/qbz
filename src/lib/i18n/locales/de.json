@@ -1450,6 +1450,27 @@
       "flac_hires_96": "FLAC 24-bit / 96 kHz",
       "flac_cd": "FLAC 16-bit / 44,1 kHz",
       "mp3_320": "MP3 320 kbps"
+    },
+    "tracksCount": "{count} Titel",
+    "sortLabel": "Sortieren",
+    "table": {
+      "title": "Titel"
+    },
+    "group": {
+      "off": "Gruppe: Aus",
+      "alpha": "Gruppe: A-Z",
+      "artist": "Gruppe: Künstler",
+      "album": "Gruppe: Album",
+      "name": "Gruppe: Name",
+      "optionOff": "Aus",
+      "optionAlpha": "Alphabetisch (A-Z)",
+      "optionArtist": "Künstler",
+      "optionAlbum": "Album",
+      "optionName": "Name (A-Z)"
+    },
+    "view": {
+      "list": "Listenansicht",
+      "grid": "Rasteransicht"
     }
   },
   "linkResolver": {

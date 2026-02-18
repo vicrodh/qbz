@@ -90,10 +90,10 @@
   $effect(() => { setHideDownloaded(filterHideDownloaded); });
 
   const albumSortOptions = [
-    { value: 'date' as SortBy, label: 'Purchase date' },
-    { value: 'artist' as SortBy, label: 'Artist' },
-    { value: 'album' as SortBy, label: 'Album' },
-    { value: 'quality' as SortBy, label: 'Quality' },
+    { value: 'date' as SortBy, labelKey: 'purchases.sort.date' },
+    { value: 'artist' as SortBy, labelKey: 'purchases.sort.artist' },
+    { value: 'album' as SortBy, labelKey: 'purchases.sort.album' },
+    { value: 'quality' as SortBy, labelKey: 'purchases.sort.quality' },
   ];
 
   const hasActiveFilters = $derived(filterHideUnavailable || filterQuality !== 'all' || filterHideDownloaded);
@@ -375,10 +375,10 @@
         <div class="dropdown-container">
           <button class="control-btn" onclick={() => (showAlbumGroupMenu = !showAlbumGroupMenu)}>
             <span>{!albumGroupingEnabled
-              ? 'Group: Off'
+              ? $t('purchases.group.off')
               : albumGroupMode === 'alpha'
-                ? 'Group: A-Z'
-                : 'Group: Artist'}</span>
+                ? $t('purchases.group.alpha')
+                : $t('purchases.group.artist')}</span>
             <ChevronDown size={14} />
           </button>
           {#if showAlbumGroupMenu}
@@ -388,21 +388,21 @@
                 class:selected={!albumGroupingEnabled}
                 onclick={() => { albumGroupingEnabled = false; showAlbumGroupMenu = false; }}
               >
-                Off
+                {$t('purchases.group.optionOff')}
               </button>
               <button
                 class="dropdown-item"
                 class:selected={albumGroupingEnabled && albumGroupMode === 'alpha'}
                 onclick={() => { albumGroupMode = 'alpha'; albumGroupingEnabled = true; showAlbumGroupMenu = false; }}
               >
-                Alphabetical (A-Z)
+                {$t('purchases.group.optionAlpha')}
               </button>
               <button
                 class="dropdown-item"
                 class:selected={albumGroupingEnabled && albumGroupMode === 'artist'}
                 onclick={() => { albumGroupMode = 'artist'; albumGroupingEnabled = true; showAlbumGroupMenu = false; }}
               >
-                Artist
+                {$t('purchases.group.optionArtist')}
               </button>
             </div>
           {/if}
@@ -411,7 +411,7 @@
         <!-- Sort dropdown -->
         <div class="dropdown-container">
           <button class="control-btn" onclick={() => (showAlbumSortMenu = !showAlbumSortMenu)}>
-            <span>Sort: {albumSortOptions.find(o => o.value === albumSortBy)?.label}</span>
+            <span>{$t('purchases.sortLabel')}: {$t(albumSortOptions.find(option => option.value === albumSortBy)?.labelKey ?? 'purchases.sort.date')}</span>
             <ChevronDown size={14} />
           </button>
           {#if showAlbumSortMenu}
@@ -422,7 +422,7 @@
                   class:selected={albumSortBy === option.value}
                   onclick={() => selectAlbumSort(option.value)}
                 >
-                  <span>{option.label}</span>
+                  <span>{$t(option.labelKey)}</span>
                   {#if albumSortBy === option.value}
                     <span class="sort-indicator">{albumSortDirection === 'asc' ? '↑' : '↓'}</span>
                   {/if}
@@ -438,7 +438,7 @@
             class="control-btn icon-only"
             class:active={hasActiveFilters}
             onclick={() => (showFilterPanel = !showFilterPanel)}
-            title="Filter"
+            title={$t('library.filters')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path d="M4.22657 2C2.50087 2 1.58526 4.03892 2.73175 5.32873L8.99972 12.3802V19C8.99972 19.3788 9.21373 19.725 9.55251 19.8944L13.5525 21.8944C13.8625 22.0494 14.2306 22.0329 14.5255 21.8507C14.8203 21.6684 14.9997 21.3466 14.9997 21V12.3802L21.2677 5.32873C22.4142 4.03893 21.4986 2 19.7729 2H4.22657Z"/>
@@ -477,19 +477,19 @@
                   <label class="filter-checkbox">
                     <input type="radio" name="quality-filter" value="hires" bind:group={filterQuality} />
                     <span class="checkmark radio"></span>
-                    <span class="label-text">Hi-Res</span>
+                    <span class="label-text">{$t('purchases.filter.hires')}</span>
                     <span class="label-hint">24bit+</span>
                   </label>
                   <label class="filter-checkbox">
                     <input type="radio" name="quality-filter" value="cd" bind:group={filterQuality} />
                     <span class="checkmark radio"></span>
-                    <span class="label-text">CD</span>
+                    <span class="label-text">{$t('quality.cdQuality')}</span>
                     <span class="label-hint">16/44.1</span>
                   </label>
                   <label class="filter-checkbox">
                     <input type="radio" name="quality-filter" value="lossy" bind:group={filterQuality} />
                     <span class="checkmark radio"></span>
-                    <span class="label-text">Lossy</span>
+                    <span class="label-text">{$t('quality.mp3')}</span>
                     <span class="label-hint">MP3</span>
                   </label>
                 </div>
@@ -512,7 +512,7 @@
         <button
           class="icon-btn"
           onclick={() => (albumViewMode = albumViewMode === 'grid' ? 'list' : 'grid')}
-          title={albumViewMode === 'grid' ? 'List view' : 'Grid view'}
+          title={albumViewMode === 'grid' ? $t('purchases.view.list') : $t('purchases.view.grid')}
         >
           {#if albumViewMode === 'grid'}
             <List size={16} />
@@ -529,11 +529,11 @@
             <span>
               {trackGroupingEnabled
                 ? trackGroupMode === 'album'
-                  ? 'Group: Album'
+                  ? $t('purchases.group.album')
                   : trackGroupMode === 'artist'
-                    ? 'Group: Artist'
-                    : 'Group: Name'
-                : 'Group: Off'}
+                    ? $t('purchases.group.artist')
+                    : $t('purchases.group.name')
+                : $t('purchases.group.off')}
             </span>
             <ChevronDown size={14} />
           </button>
@@ -544,28 +544,28 @@
                 class:selected={!trackGroupingEnabled}
                 onclick={() => { trackGroupingEnabled = false; showTrackGroupMenu = false; }}
               >
-                Off
+                {$t('purchases.group.optionOff')}
               </button>
               <button
                 class="dropdown-item"
                 class:selected={trackGroupingEnabled && trackGroupMode === 'album'}
                 onclick={() => { trackGroupMode = 'album'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
               >
-                Album
+                {$t('purchases.group.optionAlbum')}
               </button>
               <button
                 class="dropdown-item"
                 class:selected={trackGroupingEnabled && trackGroupMode === 'artist'}
                 onclick={() => { trackGroupMode = 'artist'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
               >
-                Artist
+                {$t('purchases.group.optionArtist')}
               </button>
               <button
                 class="dropdown-item"
                 class:selected={trackGroupingEnabled && trackGroupMode === 'name'}
                 onclick={() => { trackGroupMode = 'name'; trackGroupingEnabled = true; showTrackGroupMenu = false; }}
               >
-                Name (A-Z)
+                {$t('purchases.group.optionName')}
               </button>
             </div>
           {/if}
@@ -577,7 +577,7 @@
             class="control-btn icon-only"
             class:active={hasActiveFilters}
             onclick={() => (showFilterPanel = !showFilterPanel)}
-            title="Filter"
+            title={$t('library.filters')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
               <path d="M4.22657 2C2.50087 2 1.58526 4.03892 2.73175 5.32873L8.99972 12.3802V19C8.99972 19.3788 9.21373 19.725 9.55251 19.8944L13.5525 21.8944C13.8625 22.0494 14.2306 22.0329 14.5255 21.8507C14.8203 21.6684 14.9997 21.3466 14.9997 21V12.3802L21.2677 5.32873C22.4142 4.03893 21.4986 2 19.7729 2H4.22657Z"/>
@@ -606,19 +606,19 @@
                   <label class="filter-checkbox">
                     <input type="radio" name="quality-filter" value="hires" bind:group={filterQuality} />
                     <span class="checkmark radio"></span>
-                    <span class="label-text">Hi-Res</span>
+                    <span class="label-text">{$t('purchases.filter.hires')}</span>
                     <span class="label-hint">24bit+</span>
                   </label>
                   <label class="filter-checkbox">
                     <input type="radio" name="quality-filter" value="cd" bind:group={filterQuality} />
                     <span class="checkmark radio"></span>
-                    <span class="label-text">CD</span>
+                    <span class="label-text">{$t('quality.cdQuality')}</span>
                     <span class="label-hint">16/44.1</span>
                   </label>
                   <label class="filter-checkbox">
                     <input type="radio" name="quality-filter" value="lossy" bind:group={filterQuality} />
                     <span class="checkmark radio"></span>
-                    <span class="label-text">Lossy</span>
+                    <span class="label-text">{$t('quality.mp3')}</span>
                     <span class="label-hint">MP3</span>
                   </label>
                 </div>

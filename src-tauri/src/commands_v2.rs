@@ -18,7 +18,10 @@ use qbz_models::{
 use crate::artist_blacklist::BlacklistState;
 use crate::artist_vectors::ArtistVectorStoreState;
 use crate::cache::{AudioCache, CacheStats};
-use crate::api::models::{PlaylistDuplicateResult, PlaylistWithTrackIds};
+use crate::api::models::{
+    PlaylistDuplicateResult, PlaylistWithTrackIds, PurchaseAlbum, PurchaseResponse, PurchaseTrack,
+    SearchResultsPage as ApiSearchResultsPage,
+};
 use crate::api_cache::ApiCacheState;
 use crate::audio::{AlsaPlugin, AudioBackendType, AudioDevice, BackendManager};
 use crate::cast::{AirPlayMetadata, AirPlayState, CastState, DlnaMetadata, DlnaState, MediaMetadata};
@@ -49,6 +52,7 @@ use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::collections::HashSet;
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct V2SuggestionArtistInput {
@@ -7262,6 +7266,412 @@ pub fn v2_set_force_x11(
 pub fn v2_restart_app(app: tauri::AppHandle) {
     log::info!("[V2] App restart requested by user");
     app.restart();
+}
+
+// ── Purchases (Qobuz) ──
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub struct V2PurchaseFormatOption {
+    pub id: u32,
+    pub label: String,
+    pub bit_depth: Option<u32>,
+    pub sampling_rate: Option<f64>,
+}
+
+fn v2_purchase_extension(format_id: u32, mime_type: &str) -> &'static str {
+    if format_id == 5 || mime_type.contains("mpeg") {
+        "mp3"
+    } else {
+        "flac"
+    }
+}
+
+fn v2_purchase_target_path(
+    destination: &str,
+    artist_name: &str,
+    album_title: &str,
+    track_number: u32,
+    track_title: &str,
+    ext: &str,
+) -> PathBuf {
+    let artist_dir = crate::offline_cache::metadata::sanitize_filename(artist_name);
+    let album_dir = crate::offline_cache::metadata::sanitize_filename(album_title);
+    let title_clean = crate::offline_cache::metadata::sanitize_filename(track_title);
+
+    let file_name = if track_number > 0 {
+        format!("{:02} - {}.{}", track_number, title_clean, ext)
+    } else {
+        format!("{}.{}", title_clean, ext)
+    };
+
+    PathBuf::from(destination)
+        .join(artist_dir)
+        .join(album_dir)
+        .join(file_name)
+}
+
+fn v2_apply_purchase_download_flags(
+    response: &mut PurchaseResponse,
+    downloaded_ids: &HashSet<i64>,
+) {
+    for track in &mut response.tracks.items {
+        track.downloaded = downloaded_ids.contains(&(track.id as i64));
+    }
+
+    for album in &mut response.albums.items {
+        let album_track_ids: Vec<i64> = response
+            .tracks
+            .items
+            .iter()
+            .filter(|track| {
+                track
+                    .album
+                    .as_ref()
+                    .map(|album_ref| album_ref.id == album.id)
+                    .unwrap_or(false)
+            })
+            .map(|track| track.id as i64)
+            .collect();
+
+        album.downloaded = !album_track_ids.is_empty()
+            && album_track_ids
+                .iter()
+                .all(|track_id| downloaded_ids.contains(track_id));
+    }
+}
+
+fn v2_filter_purchase_response(mut response: PurchaseResponse, query: &str) -> PurchaseResponse {
+    let q = query.to_lowercase();
+
+    response.albums.items.retain(|album| {
+        album.title.to_lowercase().contains(&q) || album.artist.name.to_lowercase().contains(&q)
+    });
+    response.albums.total = response.albums.items.len() as u32;
+    response.albums.offset = 0;
+
+    response.tracks.items.retain(|track| {
+        track.title.to_lowercase().contains(&q)
+            || track.performer.name.to_lowercase().contains(&q)
+            || track
+                .album
+                .as_ref()
+                .map(|album_ref| album_ref.title.to_lowercase().contains(&q))
+                .unwrap_or(false)
+    });
+    response.tracks.total = response.tracks.items.len() as u32;
+    response.tracks.offset = 0;
+
+    response
+}
+
+async fn v2_download_purchase_track_impl(
+    track_id: u64,
+    format_id: u32,
+    destination: &str,
+    app_state: &AppState,
+) -> Result<String, String> {
+    let client = app_state.client.read().await;
+    let track = client
+        .get_track(track_id)
+        .await
+        .map_err(|e| format!("Failed to fetch track {}: {}", track_id, e))?;
+    let stream = client
+        .get_track_file_url_by_format(track_id, format_id)
+        .await
+        .map_err(|e| format!("Failed to get download URL for track {}: {}", track_id, e))?;
+    drop(client);
+
+    let data = download_audio(&stream.url).await?;
+
+    let artist_name = track
+        .performer
+        .as_ref()
+        .map(|artist| artist.name.clone())
+        .unwrap_or_else(|| "Unknown Artist".to_string());
+    let album_title = track
+        .album
+        .as_ref()
+        .map(|album| album.title.clone())
+        .unwrap_or_else(|| "Singles".to_string());
+    let extension = v2_purchase_extension(stream.format_id, &stream.mime_type);
+    let target_path = v2_purchase_target_path(
+        destination,
+        &artist_name,
+        &album_title,
+        track.track_number,
+        &track.title,
+        extension,
+    );
+
+    if let Some(parent) = target_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create destination folder: {}", e))?;
+    }
+
+    let temp_path = target_path.with_extension(format!("{}.part", extension));
+    fs::write(&temp_path, &data).map_err(|e| format!("Failed to write temporary file: {}", e))?;
+    fs::rename(&temp_path, &target_path).map_err(|e| format!("Failed to finalize file: {}", e))?;
+
+    Ok(target_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_purchases_get_all(
+    limit: Option<u32>,
+    offset: Option<u32>,
+    app_state: State<'_, AppState>,
+    library_state: State<'_, LibraryState>,
+) -> Result<PurchaseResponse, String> {
+    let client = app_state.client.read().await;
+    let mut response = if let (Some(lim), Some(off)) = (limit, offset) {
+        client
+            .get_user_purchases_page(lim, off)
+            .await
+            .map_err(|e| format!("Failed to fetch purchases page: {}", e))?
+    } else {
+        client
+            .get_user_purchases_all()
+            .await
+            .map_err(|e| format!("Failed to fetch purchases: {}", e))?
+    };
+    drop(client);
+
+    let guard = library_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    let downloaded_ids: HashSet<i64> = db
+        .get_downloaded_purchase_track_ids()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .collect();
+
+    v2_apply_purchase_download_flags(&mut response, &downloaded_ids);
+    Ok(response)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_purchases_search(
+    query: String,
+    app_state: State<'_, AppState>,
+    library_state: State<'_, LibraryState>,
+) -> Result<PurchaseResponse, String> {
+    let mut response = v2_purchases_get_all(None, None, app_state, library_state).await?;
+    if query.trim().is_empty() {
+        return Ok(response);
+    }
+    response = v2_filter_purchase_response(response, query.trim());
+    Ok(response)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_purchases_get_album(
+    albumId: String,
+    app_state: State<'_, AppState>,
+    library_state: State<'_, LibraryState>,
+) -> Result<PurchaseAlbum, String> {
+    let client = app_state.client.read().await;
+    let album = client
+        .get_album(&albumId)
+        .await
+        .map_err(|e| format!("Failed to fetch album {}: {}", albumId, e))?;
+    let purchases = client
+        .get_user_purchases_all()
+        .await
+        .map_err(|e| format!("Failed to fetch purchases: {}", e))?;
+    drop(client);
+
+    let purchase_meta = purchases.albums.items.iter().find(|item| item.id == albumId);
+
+    let tracks_items: Vec<PurchaseTrack> = album
+        .tracks
+        .as_ref()
+        .map(|tracks| {
+            tracks
+                .items
+                .iter()
+                .map(|track| PurchaseTrack {
+                    id: track.id,
+                    title: track.title.clone(),
+                    track_number: track.track_number,
+                    media_number: track.media_number,
+                    duration: track.duration,
+                    performer: track.performer.clone().unwrap_or_default(),
+                    album: track.album.clone(),
+                    hires: track.hires,
+                    maximum_sampling_rate: track.maximum_sampling_rate,
+                    maximum_bit_depth: track.maximum_bit_depth,
+                    streamable: track.streamable,
+                    downloaded: false,
+                    purchased_at: purchase_meta.and_then(|item| item.purchased_at.clone()),
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut result = PurchaseAlbum {
+        id: album.id.clone(),
+        title: album.title.clone(),
+        artist: album.artist.clone(),
+        image: album.image.clone(),
+        release_date_original: album.release_date_original.clone(),
+        label: album.label.clone(),
+        genre: album.genre.clone(),
+        tracks_count: album.tracks_count,
+        duration: album.duration,
+        hires: album.hires,
+        maximum_sampling_rate: album.maximum_sampling_rate,
+        maximum_bit_depth: album.maximum_bit_depth,
+        downloadable: purchase_meta.map(|item| item.downloadable).unwrap_or(true),
+        downloaded: false,
+        purchased_at: purchase_meta.and_then(|item| item.purchased_at.clone()),
+        tracks: Some(ApiSearchResultsPage {
+            offset: 0,
+            limit: tracks_items.len() as u32,
+            total: tracks_items.len() as u32,
+            items: tracks_items,
+        }),
+    };
+
+    let guard = library_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    let downloaded_ids: HashSet<i64> = db
+        .get_downloaded_purchase_track_ids()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .collect();
+
+    if let Some(tracks) = &mut result.tracks {
+        for track in &mut tracks.items {
+            track.downloaded = downloaded_ids.contains(&(track.id as i64));
+        }
+        result.downloaded = !tracks.items.is_empty()
+            && tracks
+                .items
+                .iter()
+                .all(|track| downloaded_ids.contains(&(track.id as i64)));
+    }
+
+    Ok(result)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_purchases_get_formats(
+    albumId: String,
+    app_state: State<'_, AppState>,
+) -> Result<Vec<V2PurchaseFormatOption>, String> {
+    let client = app_state.client.read().await;
+    let album = client
+        .get_album(&albumId)
+        .await
+        .map_err(|e| format!("Failed to fetch album {}: {}", albumId, e))?;
+    drop(client);
+
+    let mut formats = Vec::new();
+
+    if album.hires && album.maximum_sampling_rate.unwrap_or(0.0) > 96.0 {
+        formats.push(V2PurchaseFormatOption {
+            id: 27,
+            label: "FLAC 24-bit / 192 kHz".to_string(),
+            bit_depth: Some(24),
+            sampling_rate: Some(192.0),
+        });
+    }
+
+    if album.hires {
+        formats.push(V2PurchaseFormatOption {
+            id: 7,
+            label: "FLAC 24-bit / 96 kHz".to_string(),
+            bit_depth: Some(24),
+            sampling_rate: Some(96.0),
+        });
+    }
+
+    formats.push(V2PurchaseFormatOption {
+        id: 6,
+        label: "FLAC 16-bit / 44.1 kHz".to_string(),
+        bit_depth: Some(16),
+        sampling_rate: Some(44.1),
+    });
+
+    formats.push(V2PurchaseFormatOption {
+        id: 5,
+        label: "MP3 320 kbps".to_string(),
+        bit_depth: None,
+        sampling_rate: None,
+    });
+
+    Ok(formats)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_purchases_download_track(
+    trackId: u64,
+    formatId: u32,
+    destination: String,
+    app_state: State<'_, AppState>,
+    library_state: State<'_, LibraryState>,
+) -> Result<String, String> {
+    let file_path =
+        v2_download_purchase_track_impl(trackId, formatId, &destination, &app_state).await?;
+
+    let guard = library_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.mark_purchase_downloaded(trackId as i64, None, &file_path)
+        .map_err(|e| e.to_string())?;
+
+    Ok(file_path)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_purchases_download_album(
+    albumId: String,
+    formatId: u32,
+    destination: String,
+    app_state: State<'_, AppState>,
+    library_state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let client = app_state.client.read().await;
+    let album = client
+        .get_album(&albumId)
+        .await
+        .map_err(|e| format!("Failed to fetch album {}: {}", albumId, e))?;
+    drop(client);
+
+    let tracks = album
+        .tracks
+        .as_ref()
+        .map(|list| list.items.clone())
+        .unwrap_or_default();
+
+    let mut failures: Vec<String> = Vec::new();
+    for track in tracks {
+        match v2_download_purchase_track_impl(track.id, formatId, &destination, &app_state).await {
+            Ok(file_path) => {
+                let guard = library_state.db.lock().await;
+                let db = guard.as_ref().ok_or("No active session - please log in")?;
+                if let Err(err) =
+                    db.mark_purchase_downloaded(track.id as i64, Some(albumId.as_str()), &file_path)
+                {
+                    failures.push(format!("track {} registry error: {}", track.id, err));
+                }
+            }
+            Err(err) => failures.push(format!("track {}: {}", track.id, err)),
+        }
+    }
+
+    if failures.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Album download completed with errors: {}",
+            failures.join(" | ")
+        ))
+    }
 }
 
 // ── Downloaded Purchases Registry ──

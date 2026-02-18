@@ -1036,7 +1036,144 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
+    /// Get one purchases page from Qobuz.
+    pub async fn get_user_purchases_page(&self, limit: u32, offset: u32) -> Result<PurchaseResponse> {
+        let url = endpoints::build_url(paths::PURCHASE_GET_USER_PURCHASES);
+        let http_response = self
+            .http
+            .get(&url)
+            .headers(self.authenticated_headers().await?)
+            .query(&[
+                ("limit", limit.to_string()),
+                ("offset", offset.to_string()),
+            ])
+            .send()
+            .await?;
+        log::debug!(
+            "[API] get_user_purchases_page(limit={}, offset={}) status={}",
+            limit,
+            offset,
+            http_response.status()
+        );
+        let response: Value = http_response.json().await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get all purchases by paginating through Qobuz purchases API.
+    pub async fn get_user_purchases_all(&self) -> Result<PurchaseResponse> {
+        let page_limit = 500u32;
+        let mut offset = 0u32;
+
+        let mut all_albums: Vec<PurchaseAlbum> = Vec::new();
+        let mut all_tracks: Vec<PurchaseTrack> = Vec::new();
+        let mut albums_total: u32;
+        let mut tracks_total: u32;
+        let mut totals_initialized = false;
+
+        loop {
+            let page = self.get_user_purchases_page(page_limit, offset).await?;
+            if !totals_initialized {
+                albums_total = page.albums.total;
+                tracks_total = page.tracks.total;
+                totals_initialized = true;
+            } else {
+                albums_total = page.albums.total;
+                tracks_total = page.tracks.total;
+            }
+
+            let got = page.albums.items.len() as u32;
+            all_albums.extend(page.albums.items);
+            all_tracks.extend(page.tracks.items);
+
+            if got == 0 || offset + got >= albums_total {
+                break;
+            }
+            offset += got;
+        }
+
+        Ok(PurchaseResponse {
+            albums: SearchResultsPage {
+                items: all_albums,
+                total: if totals_initialized { albums_total } else { 0 },
+                offset: 0,
+                limit: page_limit,
+            },
+            tracks: SearchResultsPage {
+                items: all_tracks,
+                total: if totals_initialized { tracks_total } else { 0 },
+                offset: 0,
+                limit: page_limit,
+            },
+        })
+    }
+
     // === Authenticated endpoints ===
+
+    /// Get a signed file URL for a specific format_id.
+    pub async fn get_track_file_url_by_format(
+        &self,
+        track_id: u64,
+        format_id: u32,
+    ) -> Result<StreamUrl> {
+        let url = endpoints::build_url(paths::TRACK_GET_FILE_URL);
+        let timestamp = get_timestamp();
+        let secret = self.secret().await?;
+        let signature = sign_get_file_url(track_id, format_id, timestamp, &secret);
+
+        let response = self
+            .http
+            .get(&url)
+            .headers(self.authenticated_headers().await?)
+            .query(&[
+                ("track_id", track_id.to_string()),
+                ("format_id", format_id.to_string()),
+                ("intent", "stream".to_string()),
+                ("request_ts", timestamp.to_string()),
+                ("request_sig", signature),
+            ])
+            .send()
+            .await?;
+
+        match response.status() {
+            StatusCode::OK => {
+                let json: Value = response.json().await?;
+
+                let restrictions: Vec<StreamRestriction> = json
+                    .get("restrictions")
+                    .and_then(|v| serde_json::from_value(v.clone()).ok())
+                    .unwrap_or_default();
+
+                let stream_url = json
+                    .get("url")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                if stream_url.is_empty() {
+                    return Err(ApiError::TrackUnavailable(track_id));
+                }
+
+                Ok(StreamUrl {
+                    url: stream_url,
+                    format_id: json.get("format_id").and_then(|v| v.as_u64()).unwrap_or(0) as u32,
+                    mime_type: json
+                        .get("mime_type")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("")
+                        .to_string(),
+                    sampling_rate: json
+                        .get("sampling_rate")
+                        .and_then(|v| v.as_f64())
+                        .unwrap_or(0.0),
+                    bit_depth: json.get("bit_depth").and_then(|v| v.as_u64()).map(|v| v as u32),
+                    track_id,
+                    restrictions,
+                })
+            }
+            StatusCode::BAD_REQUEST => Err(ApiError::InvalidAppSecret),
+            status => Err(ApiError::ApiResponse(format!("Unexpected status: {}", status))),
+        }
+    }
 
     /// Get stream URL for a track (requires auth + signature)
     pub async fn get_stream_url(&self, track_id: u64, quality: Quality) -> Result<StreamUrl> {
