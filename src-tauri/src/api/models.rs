@@ -2,6 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
+fn serde_true() -> bool {
+    true
+}
+
 /// Audio quality format IDs
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[repr(u32)]
@@ -375,6 +379,61 @@ pub struct SearchResultsPage<T> {
     pub total: u32,
     pub offset: u32,
     pub limit: u32,
+}
+
+// ============ Purchases API Models ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchaseResponse {
+    pub albums: SearchResultsPage<PurchaseAlbum>,
+    pub tracks: SearchResultsPage<PurchaseTrack>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchaseAlbum {
+    pub id: String,
+    pub title: String,
+    #[serde(default)]
+    pub artist: Artist,
+    #[serde(default)]
+    pub image: ImageSet,
+    pub release_date_original: Option<String>,
+    pub label: Option<Label>,
+    pub genre: Option<Genre>,
+    pub tracks_count: Option<u32>,
+    pub duration: Option<u32>,
+    #[serde(default)]
+    pub hires: bool,
+    pub maximum_sampling_rate: Option<f64>,
+    pub maximum_bit_depth: Option<u32>,
+    #[serde(default = "serde_true")]
+    pub downloadable: bool,
+    #[serde(default)]
+    pub downloaded: bool,
+    pub purchased_at: Option<String>,
+    #[serde(default)]
+    pub tracks: Option<SearchResultsPage<PurchaseTrack>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchaseTrack {
+    pub id: u64,
+    pub title: String,
+    pub track_number: u32,
+    pub media_number: Option<u32>,
+    pub duration: u32,
+    #[serde(default)]
+    pub performer: Artist,
+    pub album: Option<AlbumSummary>,
+    #[serde(default)]
+    pub hires: bool,
+    pub maximum_sampling_rate: Option<f64>,
+    pub maximum_bit_depth: Option<u32>,
+    #[serde(default = "serde_true")]
+    pub streamable: bool,
+    #[serde(default)]
+    pub downloaded: bool,
+    pub purchased_at: Option<String>,
 }
 
 /// Favorites container

@@ -6,6 +6,7 @@ pub const BASE_URL: &str = "https://www.qobuz.com/api.json/0.2";
 pub mod paths {
     // User
     pub const USER_LOGIN: &str = "/user/login";
+    pub const PURCHASE_GET_USER_PURCHASES: &str = "/purchase/getUserPurchases";
 
     // Track
     pub const TRACK_GET: &str = "/track/get";

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus, X, User, Disc, Music } from 'lucide-svelte';
+  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus, X, User, Disc, Music, ShoppingBag } from 'lucide-svelte';
   import type { FavoritesPreferences } from '$lib/types';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
@@ -83,6 +83,7 @@
     isExpanded?: boolean;
     onToggle?: () => void;
     showTitleBar?: boolean;
+    showPurchases?: boolean;
   }
 
   let {
@@ -101,7 +102,8 @@
     subscription = 'Qobuz™',
     isExpanded = true,
     onToggle,
-    showTitleBar = true
+    showTitleBar = true,
+    showPurchases = false
   }: Props = $props();
 
   let userPlaylists = $state<Playlist[]>([]);
@@ -1374,6 +1376,20 @@
         </button>
       {/if}
     </nav>
+
+    <!-- Purchases Section (conditional on settings toggle) -->
+    {#if showPurchases}
+      <nav class="nav-section">
+        <NavigationItem
+          label={$t('nav.purchases')}
+          active={activeView === 'purchases' || activeView === 'purchase-album'}
+          onclick={() => handleViewChange('purchases')}
+          showLabel={isExpanded}
+        >
+          {#snippet icon()}<ShoppingBag size={14} />{/snippet}
+        </NavigationItem>
+      </nav>
+    {/if}
 
     <!-- Playlists Section (hidden in offline mode) -->
     {#if !isOffline}

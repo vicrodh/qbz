@@ -322,6 +322,8 @@
   import BlacklistManagerView from '$lib/components/views/BlacklistManagerView.svelte';
   import DiscoverBrowseView from '$lib/components/views/DiscoverBrowseView.svelte';
   import DiscoverPlaylistsBrowseView from '$lib/components/views/DiscoverPlaylistsBrowseView.svelte';
+  import PurchasesView from '$lib/components/views/PurchasesView.svelte';
+  import PurchaseAlbumDetailView from '$lib/components/views/PurchaseAlbumDetailView.svelte';
 
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
@@ -343,6 +345,7 @@
   import LinkResolverModal from '$lib/components/LinkResolverModal.svelte';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
   import { refreshUpdatePreferences, resetUpdatesStore } from '$lib/stores/updatesStore';
+  import { getShowPurchases, setShowPurchases } from '$lib/stores/purchasesStore';
   import {
     decideLaunchModals,
     disableUpdateChecks,
@@ -372,6 +375,9 @@
 
   // Sidebar State (from sidebarStore subscription)
   let sidebarExpanded = $state(getIsExpanded());
+
+  // Purchases visibility
+  let showPurchases = $state(getShowPurchases());
 
   // Title Bar State (from titleBarStore subscription)
   let showTitleBar = $state(shouldShowTitleBar());
@@ -432,6 +438,14 @@
   let selectedMusician = $state<ResolvedMusician | null>(null);
   let musicianModalData = $state<ResolvedMusician | null>(null);
   let isArtistAlbumsLoading = $state(false);
+
+  // Purchase downloads state
+  let selectedPurchaseAlbumId = $state<string | null>(null);
+
+  function handlePurchaseAlbumClick(albumId: string) {
+    selectedPurchaseAlbumId = albumId;
+    navigateTo('purchase-album');
+  }
 
   function waitForHomePaint(): Promise<void> {
     if (typeof window === 'undefined') return Promise.resolve();
@@ -3304,6 +3318,7 @@
       isExpanded={sidebarExpanded}
       onToggle={toggleSidebar}
       showTitleBar={showTitleBar}
+      {showPurchases}
     />
 
     <!-- Content Area (main + lyrics sidebar) -->
@@ -3413,6 +3428,7 @@
           onBack={navGoBack}
           onLogout={handleLogout}
           onBlacklistManagerClick={() => navigateTo('blacklist-manager')}
+          onPurchasesToggle={(v) => { showPurchases = v; }}
           userName={userInfo?.userName}
           subscription={userInfo?.subscription}
           subscriptionValidUntil={userInfo?.subscriptionValidUntil}
@@ -3766,6 +3782,19 @@
           onPlaylistPlayLater={queuePlaylistLaterById}
           onPlaylistCopyToLibrary={copyPlaylistToLibraryById}
           onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
+        />
+      {:else if activeView === 'purchases'}
+        <PurchasesView
+          onAlbumClick={handlePurchaseAlbumClick}
+          onArtistClick={handleArtistClick}
+          activeTrackId={currentTrack?.id}
+          isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'purchase-album' && selectedPurchaseAlbumId}
+        <PurchaseAlbumDetailView
+          albumId={selectedPurchaseAlbumId}
+          onBack={navGoBack}
+          onArtistClick={handleArtistClick}
         />
       {/if}
     </main>

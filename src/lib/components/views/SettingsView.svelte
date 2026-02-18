@@ -93,11 +93,16 @@
     isEnabled as isBlacklistEnabled,
     subscribe as subscribeBlacklist
   } from '$lib/stores/artistBlacklistStore';
+  import {
+    getShowPurchases,
+    setShowPurchases as setShowPurchasesStore
+  } from '$lib/stores/purchasesStore';
 
   interface Props {
     onBack?: () => void;
     onLogout?: () => void;
     onBlacklistManagerClick?: () => void;
+    onPurchasesToggle?: (enabled: boolean) => void;
     userName?: string;
     userEmail?: string;
     subscription?: string;
@@ -181,12 +186,22 @@
     onBack,
     onLogout,
     onBlacklistManagerClick,
+    onPurchasesToggle,
     userName = 'User',
     userEmail = '',
     subscription = 'Qobuz™',
     subscriptionValidUntil = null,
     showTitleBar = true
   }: Props = $props();
+
+  // Purchases toggle
+  let purchasesEnabled = $state(getShowPurchases());
+
+  function handlePurchasesToggle(v: boolean) {
+    purchasesEnabled = v;
+    setShowPurchasesStore(v);
+    onPurchasesToggle?.(v);
+  }
 
   // Cache state (memory cache)
   let cacheStats = $state<CacheStats | null>(null);
@@ -3545,6 +3560,14 @@
         options={getImmersiveViewOptions()}
         onchange={handleImmersiveViewChange}
       />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.showPurchases')}</span>
+        <span class="setting-desc">{$t('settings.appearance.showPurchasesDesc')}</span>
+      </div>
+      <Toggle enabled={purchasesEnabled} onchange={handlePurchasesToggle} />
     </div>
 
     <!-- Composition subsection (collapsible) -->

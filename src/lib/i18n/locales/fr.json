@@ -19,7 +19,8 @@
     "recentlyAdded": "Récemment ajouté",
     "backTo": "Retour à",
     "updates": "Mises à jour",
-    "flatpak": "Flatpak"
+    "flatpak": "Flatpak",
+    "purchases": "Achats"
   },
   "home": {
     "title": "Accueil",
@@ -638,6 +639,8 @@
       "useSystemTitleBarDesc": "Remplacer la barre de titre personnalisée de QBZ par les décorations natives de votre système. Ce changement redémarrera l'application.",
       "hideTitleBar": "Masquer la barre de titre",
       "hideTitleBarDesc": "Masquer complètement la barre de titre (pour les utilisateurs de gestionnaires de fenêtres en mosaïque)",
+      "showPurchases": "Afficher les achats",
+      "showPurchasesDesc": "Afficher la section Achats dans la barre latérale pour parcourir et télécharger votre musique achetée",
       "immersiveDefaultView": "Vue par défaut du mode immersif",
       "immersiveViews": {
         "remember": "Mémoriser la dernière utilisée",
@@ -1404,6 +1407,71 @@
     "addingPhase": "Ajout des titres a la playlist...",
     "addingProgress": "Ajout des titres : {current} / {total}",
     "partsCreated": "Divisee en {count} playlists (limite Qobuz : 2000 titres)"
+  },
+  "purchases": {
+    "title": "Achats",
+    "tabs": {
+      "albums": "Albums",
+      "tracks": "Pistes"
+    },
+    "search": "Rechercher dans les achats...",
+    "empty": "Aucun achat pour le moment. Visitez Qobuz pour acheter de la musique.",
+    "emptyTracks": "Aucune piste achetée individuellement.",
+    "unavailable": "Cet album n'est plus disponible au téléchargement.",
+    "downloadAll": "Tout télécharger",
+    "downloadTrack": "Télécharger la piste",
+    "chooseFolder": "Choisir le dossier de téléchargement",
+    "format": "Format",
+    "purchasedOn": "Acheté :",
+    "addToLibrary": "Ajouter à la bibliothèque locale",
+    "addToLibraryDesc": "Ajouter le dossier téléchargé à votre bibliothèque musicale locale.",
+    "downloading": "Téléchargement...",
+    "downloadProgress": "Téléchargement {current}/{total}...",
+    "complete": "Téléchargement terminé",
+    "failed": "Échec du téléchargement",
+    "filter": {
+      "all": "Tout",
+      "downloaded": "Téléchargés",
+      "notDownloaded": "Non téléchargés",
+      "hires": "Hi-Res",
+      "availability": "Disponibilité",
+      "hideUnavailable": "Masquer les indisponibles",
+      "downloads": "Telechargements",
+      "hideDownloaded": "Masquer les telecharges sur cet ordinateur"
+    },
+    "sort": {
+      "date": "Date d'achat",
+      "artist": "Artiste",
+      "album": "Album",
+      "quality": "Qualité"
+    },
+    "formats": {
+      "flac_hires_192": "FLAC 24 bits / 192 kHz",
+      "flac_hires_96": "FLAC 24 bits / 96 kHz",
+      "flac_cd": "FLAC 16 bits / 44,1 kHz",
+      "mp3_320": "MP3 320 kbps"
+    },
+    "tracksCount": "{count} pistes",
+    "sortLabel": "Trier",
+    "table": {
+      "title": "Titre"
+    },
+    "group": {
+      "off": "Groupe : Desactive",
+      "alpha": "Groupe : A-Z",
+      "artist": "Groupe : Artiste",
+      "album": "Groupe : Album",
+      "name": "Groupe : Nom",
+      "optionOff": "Desactive",
+      "optionAlpha": "Alphabetique (A-Z)",
+      "optionArtist": "Artiste",
+      "optionAlbum": "Album",
+      "optionName": "Nom (A-Z)"
+    },
+    "view": {
+      "list": "Vue liste",
+      "grid": "Vue grille"
+    }
   },
   "linkResolver": {
     "title": "Ouvrir un lien Qobuz",
