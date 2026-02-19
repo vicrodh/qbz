@@ -694,7 +694,13 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     const now = Date.now();
     const seekGuardActive = seekTargetPosition !== null && now < seekGuardUntilMs;
     if (seekGuardActive) {
-      const delta = Math.abs(event.position - seekTargetPosition);
+      const target = seekTargetPosition;
+      if (target === null) {
+        currentTime = event.position;
+        isPlaying = event.is_playing;
+        return;
+      }
+      const delta = Math.abs(event.position - target);
       if (delta <= SEEK_SETTLE_TOLERANCE_SECS) {
         seekTargetPosition = null;
         seekGuardUntilMs = 0;
