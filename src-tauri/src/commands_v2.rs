@@ -8101,7 +8101,7 @@ pub async fn v2_purchases_get_album(
                     maximum_bit_depth: track.maximum_bit_depth,
                     streamable: track.streamable,
                     downloaded: false,
-                    purchased_at: purchase_meta.and_then(|item| item.purchased_at.clone()),
+                    purchased_at: purchase_meta.and_then(|item| item.purchased_at),
                 })
                 .collect()
         })
@@ -8122,7 +8122,7 @@ pub async fn v2_purchases_get_album(
         maximum_bit_depth: album.maximum_bit_depth,
         downloadable: purchase_meta.map(|item| item.downloadable).unwrap_or(true),
         downloaded: false,
-        purchased_at: purchase_meta.and_then(|item| item.purchased_at.clone()),
+        purchased_at: purchase_meta.and_then(|item| item.purchased_at),
         tracks: Some(ApiSearchResultsPage {
             offset: 0,
             limit: tracks_items.len() as u32,

@@ -25,7 +25,7 @@ export interface PurchasedAlbum {
   maximum_sampling_rate?: number;
   downloadable: boolean;
   downloaded?: boolean;
-  purchased_at?: string;
+  purchased_at?: number;
   tracks?: PaginatedList<PurchasedTrack>;
 }
 
@@ -46,7 +46,7 @@ export interface PurchasedTrack {
   maximum_sampling_rate?: number;
   streamable: boolean;
   downloaded?: boolean;
-  purchased_at?: string;
+  purchased_at?: number;
 }
 
 export interface PurchaseDownloadProgress {

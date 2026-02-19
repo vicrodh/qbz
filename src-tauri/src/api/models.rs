@@ -410,7 +410,7 @@ pub struct PurchaseAlbum {
     pub downloadable: bool,
     #[serde(default)]
     pub downloaded: bool,
-    pub purchased_at: Option<String>,
+    pub purchased_at: Option<i64>,
     #[serde(default)]
     pub tracks: Option<SearchResultsPage<PurchaseTrack>>,
 }
@@ -433,7 +433,7 @@ pub struct PurchaseTrack {
     pub streamable: bool,
     #[serde(default)]
     pub downloaded: bool,
-    pub purchased_at: Option<String>,
+    pub purchased_at: Option<i64>,
 }
 
 /// Favorites container

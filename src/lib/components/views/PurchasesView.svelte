@@ -121,10 +121,10 @@
     showAlbumSortMenu = false;
   }
 
-  function formatPurchaseDate(iso?: string): string {
-    if (!iso) return '';
+  function formatPurchaseDate(ts?: number): string {
+    if (!ts) return '';
     try {
-      return new Date(iso).toLocaleDateString(undefined, {
+      return new Date(ts * 1000).toLocaleDateString(undefined, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
@@ -170,7 +170,7 @@
     switch (albumSortBy) {
       case 'date':
         return sorted.sort((a, b) =>
-          dir * (new Date(a.purchased_at || '').getTime() - new Date(b.purchased_at || '').getTime())
+          dir * ((a.purchased_at || 0) - (b.purchased_at || 0))
         );
       case 'artist':
         return sorted.sort((a, b) => dir * a.artist.name.localeCompare(b.artist.name));
