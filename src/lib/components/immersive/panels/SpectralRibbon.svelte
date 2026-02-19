@@ -223,9 +223,9 @@
   }
 
   function drawInterpolatedColumnAtX(columnX: number, t01: number) {
-    const t = Math.max(0, Math.min(1, t01));
+    const interpWeight = Math.max(0, Math.min(1, t01));
     for (let bandIdx = 0; bandIdx < NUM_BANDS; bandIdx++) {
-      interpBands[bandIdx] = prevBands[bandIdx] + (latestBands[bandIdx] - prevBands[bandIdx]) * t;
+      interpBands[bandIdx] = prevBands[bandIdx] + (latestBands[bandIdx] - prevBands[bandIdx]) * interpWeight;
     }
     drawColumnFromBands(columnX, interpBands);
   }
