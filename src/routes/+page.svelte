@@ -2803,9 +2803,10 @@
     // Subscribe to UI state changes
     const unsubscribeUI = subscribeUI(() => {
       const uiState = getUIState();
-      // Close network sidebar when queue opens
+      // Close network sidebar and lyrics when queue opens
       if (uiState.isQueueOpen && !isQueueOpen) {
         closeContentSidebar('network');
+        hideLyricsSidebar();
       }
       isQueueOpen = uiState.isQueueOpen;
       isFullScreenOpen = uiState.isFullScreenOpen;
@@ -2908,11 +2909,12 @@
       lyricsIsSynced = state.isSynced;
       lyricsActiveIndex = state.activeIndex;
       lyricsActiveProgress = state.activeProgress;
-      lyricsSidebarVisible = state.sidebarVisible;
-      // Close network sidebar when lyrics opens
-      if (state.sidebarVisible) {
+      // Close network sidebar and queue when lyrics opens
+      if (state.sidebarVisible && !lyricsSidebarVisible) {
         closeContentSidebar('network');
+        closeQueue();
       }
+      lyricsSidebarVisible = state.sidebarVisible;
     });
 
     // Subscribe to content sidebar for mutual exclusion (network closes lyrics/queue)
@@ -3811,7 +3813,7 @@
     {/if}
 
     <!-- Lyrics Sidebar -->
-    {#if lyricsSidebarVisible}
+    {#if lyricsSidebarVisible && !isQueueOpen}
       <LyricsSidebar
         title={currentTrack?.title}
         artist={currentTrack?.artist}
@@ -3821,6 +3823,29 @@
         isSynced={lyricsIsSynced}
         isLoading={lyricsStatus === 'loading'}
         error={lyricsStatus === 'error' ? lyricsError : (lyricsStatus === 'not_found' ? $t('player.noLyrics') : null)}
+      />
+    {/if}
+
+    <!-- Queue Sidebar -->
+    {#if isQueueOpen}
+      <QueuePanel
+        currentTrack={currentQueueTrack ?? undefined}
+        upcomingTracks={queue}
+        {queueTotalTracks}
+        {queueRemainingTracks}
+        {historyTracks}
+        isRadioMode={getCurrentContext()?.type === 'radio'}
+        onPlayTrack={handleQueueTrackPlay}
+        onPlayHistoryTrack={handlePlayHistoryTrack}
+        onClearQueue={handleClearQueue}
+        onSaveAsPlaylist={handleSaveQueueAsPlaylist}
+        onReorderTrack={handleQueueReorder}
+        onToggleInfinitePlay={handleToggleInfinitePlay}
+        {infinitePlayEnabled}
+        {isPlaying}
+        onRemoveFromQueue={handleRemoveFromQueue}
+        onAddToPlaylist={handleQueueTrackAddToPlaylist}
+        onShowTrackInfo={handleQueueTrackInfo}
       />
     {/if}
     </div>
@@ -3899,29 +3924,6 @@
         onVolumeChange={handleVolumeChange}
       />
     {/if}
-
-    <!-- Queue Panel -->
-    <QueuePanel
-      isOpen={isQueueOpen}
-      onClose={closeQueue}
-      currentTrack={currentQueueTrack ?? undefined}
-      upcomingTracks={queue}
-      {queueTotalTracks}
-      {queueRemainingTracks}
-      {historyTracks}
-      isRadioMode={getCurrentContext()?.type === 'radio'}
-      onPlayTrack={handleQueueTrackPlay}
-      onPlayHistoryTrack={handlePlayHistoryTrack}
-      onClearQueue={handleClearQueue}
-      onSaveAsPlaylist={handleSaveQueueAsPlaylist}
-      onReorderTrack={handleQueueReorder}
-      onToggleInfinitePlay={handleToggleInfinitePlay}
-      {infinitePlayEnabled}
-      {isPlaying}
-      onRemoveFromQueue={handleRemoveFromQueue}
-      onAddToPlaylist={handleQueueTrackAddToPlaylist}
-      onShowTrackInfo={handleQueueTrackInfo}
-    />
 
     <!-- Immersive Player (replaces ExpandedPlayer + FocusMode) -->
     {#if currentTrack}

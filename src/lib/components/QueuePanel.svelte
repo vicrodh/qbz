@@ -20,8 +20,6 @@
   }
 
   interface Props {
-    isOpen: boolean;
-    onClose: () => void;
     currentTrack?: QueueTrack;
     upcomingTracks: QueueTrack[];
     queueTotalTracks?: number; // Total tracks in the entire queue
@@ -42,8 +40,6 @@
   }
 
   let {
-    isOpen,
-    onClose,
     currentTrack,
     upcomingTracks,
     queueTotalTracks = 0,
@@ -112,17 +108,6 @@
       // Ignore
     }
   }
-
-  // Reset state when panel closes
-  $effect(() => {
-    if (!isOpen) {
-      activeTab = 'queue';
-      searchOpen = false;
-      searchQuery = '';
-      displayCount = DISPLAY_LIMIT;
-      historyDisplayCount = DISPLAY_LIMIT;
-    }
-  });
 
   // Check favorite status when current track changes
   $effect(() => {
@@ -231,10 +216,6 @@
     onPlayHistoryTrack?.(track.id);
   }
 
-  function handleClose() {
-    onClose();
-  }
-
   // Context menu handlers for queue tracks
   function toggleTrackMenu(e: MouseEvent, index: number) {
     e.stopPropagation();
@@ -280,35 +261,28 @@
   }
 </script>
 
-{#if isOpen}
-  <!-- Backdrop -->
-  <div class="backdrop" onclick={handleClose} role="presentation"></div>
-
-  <!-- Queue Panel -->
-  <div class="queue-panel">
-    <!-- Header with Tabs -->
-    <div class="header">
-      <div class="tabs">
-        <button
-          class="tab"
-          class:active={activeTab === 'queue'}
-          onclick={() => activeTab = 'queue'}
-        >
-          {$t('player.queue')}
-        </button>
-        <span class="tab-separator">|</span>
-        <button
-          class="tab"
-          class:active={activeTab === 'history'}
-          onclick={() => activeTab = 'history'}
-        >
-          {$t('player.history')}
-        </button>
-      </div>
-      <button class="close-btn" onclick={handleClose}>
-        <X size={20} />
+<!-- Queue Panel -->
+<aside class="queue-panel" onclick={handlePanelClick}>
+  <!-- Header with Tabs -->
+  <div class="header">
+    <div class="tabs">
+      <button
+        class="tab"
+        class:active={activeTab === 'queue'}
+        onclick={() => activeTab = 'queue'}
+      >
+        {$t('player.queue')}
+      </button>
+      <span class="tab-separator">|</span>
+      <button
+        class="tab"
+        class:active={activeTab === 'history'}
+        onclick={() => activeTab = 'history'}
+      >
+        {$t('player.history')}
       </button>
     </div>
+  </div>
 
     <!-- Content -->
     <div class="content">
@@ -551,44 +525,26 @@
         </div>
       </div>
     {/if}
-  </div>
-{/if}
+</aside>
 
 <style>
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    background-color: rgba(0, 0, 0, 0.4);
-    z-index: 40;
-  }
-
   .queue-panel {
-    position: fixed;
-    top: 32px;
-    right: 0;
-    bottom: 104px;
     width: 340px;
-    z-index: 50;
+    min-width: 340px;
+    height: 100%;
     display: flex;
     flex-direction: column;
-    animation: slideIn 200ms ease-out;
     background-color: var(--bg-secondary);
     border-left: 1px solid var(--bg-tertiary);
-    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.3);
-  }
-
-  @keyframes slideIn {
-    from { transform: translateX(100%); }
-    to { transform: translateX(0); }
   }
 
   /* Header */
   .header {
     padding: 12px 16px;
     border-bottom: 1px solid var(--bg-tertiary);
+    background: var(--bg-primary);
     display: flex;
     align-items: center;
-    justify-content: space-between;
     flex-shrink: 0;
   }
 
@@ -620,23 +576,6 @@
   .tab-separator {
     color: var(--text-disabled);
     font-size: 14px;
-  }
-
-  .close-btn {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: color 150ms ease;
-  }
-
-  .close-btn:hover {
-    color: var(--text-primary);
   }
 
   /* Content */

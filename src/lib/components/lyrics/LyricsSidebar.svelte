@@ -68,7 +68,7 @@
   .lyrics-sidebar {
     width: 340px;
     min-width: 340px;
-    height: calc(100vh - 104px);
+    height: 100%;
     display: flex;
     flex-direction: column;
     border-left: 1px solid var(--bg-tertiary);
