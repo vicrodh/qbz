@@ -1,6 +1,21 @@
 //! API response models
 
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Lenient deserializer: if the field is present but has a wrong type, return None
+/// instead of failing the entire response. Use for non-vital optional fields.
+fn lenient_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    if value.is_null() {
+        return Ok(None);
+    }
+    Ok(serde_json::from_value(value).ok())
+}
 
 fn serde_true() -> bool {
     true
@@ -397,19 +412,27 @@ pub struct PurchaseAlbum {
     pub artist: Artist,
     #[serde(default)]
     pub image: ImageSet,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub release_date_original: Option<String>,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub label: Option<Label>,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub genre: Option<Genre>,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub tracks_count: Option<u32>,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub duration: Option<u32>,
     #[serde(default)]
     pub hires: bool,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub maximum_sampling_rate: Option<f64>,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub maximum_bit_depth: Option<u32>,
     #[serde(default = "serde_true")]
     pub downloadable: bool,
     #[serde(default)]
     pub downloaded: bool,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub purchased_at: Option<i64>,
     #[serde(default)]
     pub tracks: Option<SearchResultsPage<PurchaseTrack>>,
@@ -419,20 +442,27 @@ pub struct PurchaseAlbum {
 pub struct PurchaseTrack {
     pub id: u64,
     pub title: String,
+    #[serde(default)]
     pub track_number: u32,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub media_number: Option<u32>,
+    #[serde(default)]
     pub duration: u32,
     #[serde(default)]
     pub performer: Artist,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub album: Option<AlbumSummary>,
     #[serde(default)]
     pub hires: bool,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub maximum_sampling_rate: Option<f64>,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub maximum_bit_depth: Option<u32>,
     #[serde(default = "serde_true")]
     pub streamable: bool,
     #[serde(default)]
     pub downloaded: bool,
+    #[serde(default, deserialize_with = "lenient_option")]
     pub purchased_at: Option<i64>,
 }
 
