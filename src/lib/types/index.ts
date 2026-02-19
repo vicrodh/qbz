@@ -17,6 +17,7 @@ export interface QobuzTrack {
   id: number;
   title: string;
   duration: number;
+  track_number?: number;
   album?: {
     id?: string;
     title: string;
@@ -89,6 +90,7 @@ export interface TrackCredits {
 export interface QobuzAlbum {
   id: string;
   title: string;
+  description?: string;
   artist: { id?: number; name: string };
   image: QobuzImage;
   release_date_original?: string;
