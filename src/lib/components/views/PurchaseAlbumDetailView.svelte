@@ -2,21 +2,34 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
-  import { ArrowLeft, Download, Check, Loader2, AlertTriangle, Library } from 'lucide-svelte';
+  import { ArrowLeft, Download, Check, Loader2, AlertTriangle, Library, Play } from 'lucide-svelte';
   import QualityBadge from '../QualityBadge.svelte';
   import Dropdown from '../Dropdown.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { getAlbumDetail, getFormats, downloadAlbum, downloadTrack, markTrackDownloaded } from '$lib/services/purchases';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import type { PurchasedAlbum, PurchasedTrack, PurchaseFormatOption, PurchaseDownloadProgress } from '$lib/types/purchases';
+  import type { DisplayTrack } from '$lib/types';
 
   interface Props {
     albumId: string;
     onBack?: () => void;
     onArtistClick?: (artistId: number) => void;
+    onTrackPlay?: (track: DisplayTrack) => void;
+    onAlbumPlay?: (albumId: string) => void;
+    activeTrackId?: number | null;
+    isPlaybackActive?: boolean;
   }
 
-  let { albumId, onBack, onArtistClick }: Props = $props();
+  let {
+    albumId,
+    onBack,
+    onArtistClick,
+    onTrackPlay,
+    onAlbumPlay,
+    activeTrackId = null,
+    isPlaybackActive = false,
+  }: Props = $props();
 
   let album = $state<PurchasedAlbum | null>(null);
   let formats = $state<PurchaseFormatOption[]>([]);
@@ -68,6 +81,24 @@
       groups.get(disc)!.push(track);
     }
     return groups;
+  }
+
+  function toDisplayTrack(track: PurchasedTrack): DisplayTrack {
+    return {
+      id: track.id,
+      title: track.title,
+      number: track.track_number,
+      artist: track.performer?.name || album?.artist.name,
+      album: album?.title || track.album?.title,
+      albumArt: getQobuzImage(album?.image || track.album?.image),
+      albumId: album?.id || track.album?.id,
+      artistId: track.performer?.id || album?.artist.id,
+      duration: formatDuration(track.duration),
+      durationSeconds: track.duration,
+      hires: track.hires,
+      bitDepth: track.maximum_bit_depth,
+      samplingRate: track.maximum_sampling_rate,
+    };
   }
 
   function formatTotalDuration(seconds: number): string {
@@ -233,8 +264,17 @@
         {#if album.downloadable}
           <!-- Actions -->
           <div class="actions">
+            {#if onAlbumPlay}
+              <button
+                class="action-btn-circle primary"
+                onclick={() => onAlbumPlay?.(albumId)}
+                title={$t('actions.play')}
+              >
+                <Play size={20} fill="currentColor" color="currentColor" />
+              </button>
+            {/if}
             <button
-              class="action-btn-circle primary"
+              class="action-btn-circle{onAlbumPlay ? '' : ' primary'}"
               onclick={() => promptForFolder('all')}
               disabled={isDownloadingAll || !selectedFormatId}
               title={$t('purchases.downloadAll')}
@@ -315,14 +355,24 @@
           {/if}
           {#each discTracks as track (track.id)}
             {@const status = getTrackStatus(track.id)}
+            {@const isActive = activeTrackId === track.id}
             <div
               class="track-row"
               class:downloading={status === 'downloading'}
               class:complete={status === 'complete'}
               class:failed={status === 'failed'}
+              class:active={isActive}
+              class:clickable={track.streamable && !!onTrackPlay}
+              onclick={() => track.streamable && onTrackPlay?.(toDisplayTrack(track))}
+              role={track.streamable && onTrackPlay ? 'button' : undefined}
+              tabindex={track.streamable && onTrackPlay ? 0 : undefined}
             >
               <div class="col-number">
-                {#if status === 'downloading'}
+                {#if isActive && isPlaybackActive}
+                  <div class="playing-bars">
+                    <span></span><span></span><span></span>
+                  </div>
+                {:else if status === 'downloading'}
                   <Loader2 size={14} class="spin" />
                 {:else if status === 'complete'}
                   <Check size={14} class="status-complete" />
@@ -825,5 +875,58 @@
   .download-track-btn.failed {
     color: var(--error, #f44336);
     opacity: 1;
+  }
+
+  .track-row.clickable {
+    cursor: pointer;
+  }
+
+  .track-row.active {
+    background: var(--bg-active, var(--bg-hover));
+  }
+
+  .track-row.active .track-title {
+    color: var(--accent-primary);
+  }
+
+  .track-row.active .col-number {
+    color: var(--accent-primary);
+  }
+
+  /* Playing bars animation */
+  .playing-bars {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 2px;
+    height: 14px;
+  }
+
+  .playing-bars span {
+    display: block;
+    width: 3px;
+    background: var(--accent-primary);
+    border-radius: 1px;
+    animation: playing-bar 0.8s ease-in-out infinite;
+  }
+
+  .playing-bars span:nth-child(1) {
+    height: 40%;
+    animation-delay: 0s;
+  }
+
+  .playing-bars span:nth-child(2) {
+    height: 70%;
+    animation-delay: 0.2s;
+  }
+
+  .playing-bars span:nth-child(3) {
+    height: 50%;
+    animation-delay: 0.4s;
+  }
+
+  @keyframes playing-bar {
+    0%, 100% { height: 40%; }
+    50% { height: 100%; }
   }
 </style>

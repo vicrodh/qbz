@@ -16,6 +16,7 @@
   } from '$lib/stores/purchasesStore';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
   import type { PurchasedAlbum, PurchasedTrack, PurchaseResponse } from '$lib/types/purchases';
+  import type { DisplayTrack } from '$lib/types';
 
   type PurchasesTab = 'albums' | 'tracks';
   type AlbumGroupMode = 'alpha' | 'artist';
@@ -38,6 +39,8 @@
   interface Props {
     onAlbumClick?: (albumId: string) => void;
     onArtistClick?: (artistId: number) => void;
+    onTrackPlay?: (track: DisplayTrack) => void;
+    onAlbumPlay?: (albumId: string) => void;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
   }
@@ -45,6 +48,8 @@
   let {
     onAlbumClick,
     onArtistClick,
+    onTrackPlay,
+    onAlbumPlay,
     activeTrackId = null,
     isPlaybackActive = false,
   }: Props = $props();
@@ -304,6 +309,23 @@
   function dismissRegionNotice() {
     showRegionNotice = false;
     setUserItem('qbz-purchases-region-notice-seen', 'true');
+  }
+
+  function toDisplayTrack(track: PurchasedTrack): DisplayTrack {
+    return {
+      id: track.id,
+      title: track.title,
+      artist: track.performer?.name,
+      album: track.album?.title,
+      albumArt: getQobuzImage(track.album?.image),
+      albumId: track.album?.id,
+      artistId: track.performer?.id,
+      duration: formatDuration(track.duration),
+      durationSeconds: track.duration,
+      hires: track.hires,
+      bitDepth: track.maximum_bit_depth,
+      samplingRate: track.maximum_sampling_rate,
+    };
   }
 
   onMount(() => {
@@ -747,7 +769,15 @@
           {/if}
           <div class="tracks-list">
             {#each group.items as track (track.id)}
-              <div class="track-row" class:active={activeTrackId === track.id}>
+              <div
+                class="track-row"
+                class:active={activeTrackId === track.id}
+                class:playing={activeTrackId === track.id && isPlaybackActive}
+                class:clickable={track.streamable && !!onTrackPlay}
+                onclick={() => track.streamable && onTrackPlay?.(toDisplayTrack(track))}
+                role={track.streamable && onTrackPlay ? 'button' : undefined}
+                tabindex={track.streamable && onTrackPlay ? 0 : undefined}
+              >
                 <div class="track-artwork">
                   {#if track.album?.image}
                     <img
@@ -1472,8 +1502,16 @@
     background: var(--bg-hover);
   }
 
+  .track-row.clickable {
+    cursor: pointer;
+  }
+
   .track-row.active {
     background: var(--bg-active, var(--bg-hover));
+  }
+
+  .track-row.active .track-title {
+    color: var(--accent-primary);
   }
 
   .track-artwork {

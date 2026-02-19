@@ -3794,6 +3794,8 @@
         <PurchasesView
           onAlbumClick={handlePurchaseAlbumClick}
           onArtistClick={handleArtistClick}
+          onTrackPlay={handleDisplayTrackPlay}
+          onAlbumPlay={playAlbumById}
           activeTrackId={currentTrack?.id}
           isPlaybackActive={isPlaying}
         />
@@ -3802,6 +3804,10 @@
           albumId={selectedPurchaseAlbumId}
           onBack={navGoBack}
           onArtistClick={handleArtistClick}
+          onTrackPlay={handleDisplayTrackPlay}
+          onAlbumPlay={playAlbumById}
+          activeTrackId={currentTrack?.id}
+          isPlaybackActive={isPlaying}
         />
       {/if}
     </main>
