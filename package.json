@@ -4,7 +4,8 @@
   "description": "Native high-fidelity client for Qobuz™ subscribers on Linux with Hi-Fi audio support (uses the Qobuz API; not certified by Qobuz)",
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "svelte-kit sync && vite dev --force",
+    "dev:clean-runtime": "bash ./scripts/clean-dev-runtime.sh",
     "dev:tauri": "./scripts/dev-with-env.sh",
     "build": "vite build",
     "preview": "vite preview",

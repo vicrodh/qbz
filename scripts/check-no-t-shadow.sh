@@ -35,6 +35,7 @@ done < <(rg -l --glob '*.svelte' '\$t\(' "${SRC_DIR}")
 # Any $derived expression using variable name t.
 check_pattern "usage of t inside \$derived" '\$derived\([^)]*\bt\b'
 
+
 if [[ "${had_issues}" -ne 0 ]]; then
   echo
   echo "check-no-t-shadow: FAIL"
