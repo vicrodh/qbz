@@ -33,6 +33,27 @@
 
   const LOGIN_TIMEOUT_MS = 60000; // 60 seconds
 
+  function formatErrorMessage(err: unknown): string {
+    if (typeof err === 'string') return err;
+    if (err instanceof Error) return err.message;
+    if (err && typeof err === 'object') {
+      const obj = err as Record<string, unknown>;
+      const candidates = ['message', 'error', 'details', 'reason'];
+      for (const key of candidates) {
+        const value = obj[key];
+        if (typeof value === 'string' && value.trim().length > 0) {
+          return value;
+        }
+      }
+      try {
+        return JSON.stringify(obj);
+      } catch {
+        return 'Unknown error';
+      }
+    }
+    return 'Unknown error';
+  }
+
   // Initialize the Qobuz™ client on mount
   $effect(() => {
     initializeClient();
@@ -128,7 +149,7 @@
     } catch (err) {
       console.error('Failed to initialize client:', err);
       clearTimeoutTimer();
-      initError = String(err);
+      initError = formatErrorMessage(err);
     } finally {
       if (!isTimedOut) {
         isInitializing = false;
@@ -224,7 +245,7 @@
       }
     } catch (err) {
       console.error('Login error:', err);
-      error = String(err);
+      error = formatErrorMessage(err);
     } finally {
       isLoading = false;
     }
@@ -236,7 +257,7 @@
       onStartOffline?.();
     } catch (err) {
       console.error('Failed to enable offline mode:', err);
-      error = String(err);
+      error = formatErrorMessage(err);
     }
   }
 </script>
