@@ -130,12 +130,15 @@ jobs:
           [Desktop Entry]
           Name=QBZ
           Comment=Native Qobuz client with hi-res audio support
-          Exec=qbz
+          Exec=qbz %u
           Icon=qbz
           Terminal=false
           Type=Application
           Categories=AudioVideo;Audio;Music;Player;
           Keywords=music;audio;qobuz;hifi;streaming;audiophile;
+          StartupWMClass=com.blitzfc.qbz
+          StartupNotify=true
+          MimeType=x-scheme-handler/qbz;x-scheme-handler/qobuzapp;
           EOF
 
           tar -czvf "dist/qbz_${VERSION}_amd64.tar.gz" -C tarball-staging "${TARBALL_DIR}"
