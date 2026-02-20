@@ -1446,6 +1446,8 @@
     "purchasedOn": "Gekauft:",
     "addToLibrary": "Zur lokalen Bibliothek hinzufügen",
     "addToLibraryDesc": "Den heruntergeladenen Ordner zu deiner lokalen Musikbibliothek hinzufügen.",
+    "addToLibrarySuccess": "Ordner zur lokalen Bibliothek hinzugefuegt.",
+    "addToLibraryError": "Fehler beim Hinzufuegen des Ordners zur Bibliothek.",
     "downloading": "Wird heruntergeladen...",
     "downloadProgress": "Herunterladen {current}/{total}...",
     "complete": "Download abgeschlossen",

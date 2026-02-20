@@ -1446,6 +1446,8 @@
     "purchasedOn": "Acheté :",
     "addToLibrary": "Ajouter à la bibliothèque locale",
     "addToLibraryDesc": "Ajouter le dossier téléchargé à votre bibliothèque musicale locale.",
+    "addToLibrarySuccess": "Dossier ajoute a la bibliotheque locale.",
+    "addToLibraryError": "Erreur lors de l'ajout du dossier a la bibliotheque.",
     "downloading": "Téléchargement...",
     "downloadProgress": "Téléchargement {current}/{total}...",
     "complete": "Téléchargement terminé",

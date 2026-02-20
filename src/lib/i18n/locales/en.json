@@ -1646,6 +1646,8 @@
     "purchasedOn": "Purchased:",
     "addToLibrary": "Add to Local Library",
     "addToLibraryDesc": "Add the downloaded folder to your local music library.",
+    "addToLibrarySuccess": "Folder added to local library.",
+    "addToLibraryError": "Failed to add folder to library.",
     "downloading": "Downloading...",
     "downloadProgress": "Downloading {current}/{total}...",
     "complete": "Download complete",

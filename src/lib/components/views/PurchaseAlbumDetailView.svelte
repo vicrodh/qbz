@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
+  import { invoke } from '@tauri-apps/api/core';
   import { ArrowLeft, Download, Check, Loader2, AlertTriangle, Library, Play } from 'lucide-svelte';
   import QualityBadge from '../QualityBadge.svelte';
   import Dropdown from '../Dropdown.svelte';
@@ -10,6 +11,7 @@
   import { purchaseDownloads, startAlbumDownload, startTrackDownload } from '$lib/stores/purchaseDownloadStore';
   import type { TrackDownloadStatus } from '$lib/stores/purchaseDownloadStore';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
+  import { showToast } from '$lib/stores/toastStore';
   import type { PurchasedAlbum, PurchasedTrack, PurchaseFormatOption } from '$lib/types/purchases';
   import type { DisplayTrack } from '$lib/types';
 
@@ -44,6 +46,23 @@
   const downloadStatuses = $derived(albumDlState?.trackStatuses ?? {});
   const isDownloadingAll = $derived(albumDlState?.isDownloadingAll ?? false);
   const allComplete = $derived(albumDlState?.allComplete ?? false);
+  const downloadDestination = $derived(albumDlState?.destination ?? null);
+
+  let addingToLibrary = $state(false);
+
+  async function handleAddToLibrary() {
+    if (!downloadDestination || addingToLibrary) return;
+    addingToLibrary = true;
+    try {
+      await invoke('v2_library_add_folder', { path: downloadDestination });
+      showToast(get(t)('purchases.addToLibrarySuccess'), 'success');
+    } catch (err) {
+      console.error('Failed to add folder to library:', err);
+      showToast(get(t)('purchases.addToLibraryError'), 'error');
+    } finally {
+      addingToLibrary = false;
+    }
+  }
 
   function formatPurchaseDate(ts?: number): string {
     if (!ts) return '';
@@ -301,10 +320,14 @@
     {/if}
 
     <!-- Add to Library -->
-    {#if allComplete}
+    {#if allComplete && downloadDestination}
       <div class="add-to-library">
-        <button class="add-to-library-btn">
-          <Library size={14} />
+        <button class="add-to-library-btn" onclick={handleAddToLibrary} disabled={addingToLibrary}>
+          {#if addingToLibrary}
+            <Loader2 size={14} class="spin" />
+          {:else}
+            <Library size={14} />
+          {/if}
           <span>{$t('purchases.addToLibrary')}</span>
         </button>
         <span class="add-to-library-desc">{$t('purchases.addToLibraryDesc')}</span>

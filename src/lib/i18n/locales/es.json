@@ -1646,6 +1646,8 @@
     "purchasedOn": "Comprado:",
     "addToLibrary": "Agregar a Biblioteca Local",
     "addToLibraryDesc": "Agregar la carpeta descargada a tu biblioteca de musica local.",
+    "addToLibrarySuccess": "Carpeta agregada a la biblioteca local.",
+    "addToLibraryError": "Error al agregar la carpeta a la biblioteca.",
     "downloading": "Descargando...",
     "downloadProgress": "Descargando {current}/{total}...",
     "complete": "Descarga completa",

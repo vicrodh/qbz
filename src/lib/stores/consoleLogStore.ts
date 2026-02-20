@@ -11,6 +11,8 @@
  *   (reduces GC/CPU overhead in production)
  */
 
+import { getUserItem, setUserItem } from '$lib/utils/userStorage';
+
 interface ConsoleEntry {
   level: 'log' | 'warn' | 'error' | 'info';
   timestamp: string;
@@ -21,9 +23,11 @@ const MAX_ENTRIES = 2000;
 let entries: ConsoleEntry[] = [];
 let initialized = false;
 
+const VERBOSE_CAPTURE_KEY = 'qbz-verbose-capture';
+
 // Verbose capture mode - when true, captures log/info even in production
 // Can be enabled via Developer Mode for debugging production issues
-let verboseCapture = false;
+let verboseCapture = getUserItem(VERBOSE_CAPTURE_KEY) === 'true';
 
 // Keep references to the real console methods
 const originalConsole = {
@@ -96,12 +100,14 @@ export function initConsoleCapture() {
 /** Enable verbose capture (log/info) in production - for debugging */
 export function enableVerboseCapture() {
   verboseCapture = true;
+  setUserItem(VERBOSE_CAPTURE_KEY, 'true');
   originalConsole.info('[ConsoleCapture] Verbose capture enabled');
 }
 
 /** Disable verbose capture (log/info) in production */
 export function disableVerboseCapture() {
   verboseCapture = false;
+  setUserItem(VERBOSE_CAPTURE_KEY, 'false');
   originalConsole.info('[ConsoleCapture] Verbose capture disabled');
 }
 

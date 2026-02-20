@@ -101,6 +101,14 @@
   $effect(() => { setUserItem('qbz-purchases-quality-filter', filterQuality); });
   $effect(() => { setHideDownloaded(filterHideDownloaded); });
 
+  /** Close all dropdown menus (mutual exclusion) */
+  function closeAllMenus() {
+    showAlbumGroupMenu = false;
+    showAlbumSortMenu = false;
+    showFilterPanel = false;
+    showTrackGroupMenu = false;
+  }
+
   const albumSortOptions = [
     { value: 'date' as SortBy, labelKey: 'purchases.sort.date' },
     { value: 'artist' as SortBy, labelKey: 'purchases.sort.artist' },
@@ -501,7 +509,7 @@
       <div class="toolbar-controls">
         <!-- Group dropdown -->
         <div class="dropdown-container">
-          <button class="control-btn" onclick={() => (showAlbumGroupMenu = !showAlbumGroupMenu)}>
+          <button class="control-btn" onclick={() => { const wasOpen = showAlbumGroupMenu; closeAllMenus(); showAlbumGroupMenu = !wasOpen; }}>
             <span>{!albumGroupingEnabled
               ? $t('purchases.group.off')
               : albumGroupMode === 'alpha'
@@ -538,7 +546,7 @@
 
         <!-- Sort dropdown -->
         <div class="dropdown-container">
-          <button class="control-btn" onclick={() => (showAlbumSortMenu = !showAlbumSortMenu)}>
+          <button class="control-btn" onclick={() => { const wasOpen = showAlbumSortMenu; closeAllMenus(); showAlbumSortMenu = !wasOpen; }}>
             <span>{$t('purchases.sortLabel')}: {$t(albumSortOptions.find(option => option.value === albumSortBy)?.labelKey ?? 'purchases.sort.date')}</span>
             <ChevronDown size={14} />
           </button>
@@ -565,7 +573,7 @@
           <button
             class="control-btn icon-only"
             class:active={hasActiveFilters}
-            onclick={() => (showFilterPanel = !showFilterPanel)}
+            onclick={() => { const wasOpen = showFilterPanel; closeAllMenus(); showFilterPanel = !wasOpen; }}
             title={$t('library.filters')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
@@ -653,7 +661,7 @@
       <div class="toolbar-controls">
         <!-- Track group dropdown -->
         <div class="dropdown-container">
-          <button class="control-btn" onclick={() => (showTrackGroupMenu = !showTrackGroupMenu)}>
+          <button class="control-btn" onclick={() => { const wasOpen = showTrackGroupMenu; closeAllMenus(); showTrackGroupMenu = !wasOpen; }}>
             <span>
               {trackGroupingEnabled
                 ? trackGroupMode === 'album'
@@ -704,7 +712,7 @@
           <button
             class="control-btn icon-only"
             class:active={hasActiveFilters}
-            onclick={() => (showFilterPanel = !showFilterPanel)}
+            onclick={() => { const wasOpen = showFilterPanel; closeAllMenus(); showFilterPanel = !wasOpen; }}
             title={$t('library.filters')}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">

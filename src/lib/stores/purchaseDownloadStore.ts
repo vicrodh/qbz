@@ -7,6 +7,7 @@ interface AlbumDownloadState {
   trackStatuses: Record<number, TrackDownloadStatus>;
   isDownloadingAll: boolean;
   allComplete: boolean;
+  destination?: string;
 }
 
 // Persistent store: albumId -> download state (survives component unmount)
@@ -47,6 +48,7 @@ export function startAlbumDownload(
     trackStatuses: {},
     isDownloadingAll: true,
     allComplete: false,
+    destination,
   }));
   executeAlbumDownload(albumId, trackIds, formatId, destination);
 }
