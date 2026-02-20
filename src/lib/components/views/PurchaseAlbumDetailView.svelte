@@ -402,7 +402,7 @@
                 {:else if status === 'failed'}
                   <button
                     class="download-track-btn failed"
-                    onclick={() => promptForFolder(track.id)}
+                    onclick={(e) => { e.stopPropagation(); promptForFolder(track.id); }}
                     title={$t('purchases.failed')}
                   >
                     <AlertTriangle size={14} />
@@ -410,7 +410,7 @@
                 {:else if album.downloadable}
                   <button
                     class="download-track-btn"
-                    onclick={() => promptForFolder(track.id)}
+                    onclick={(e) => { e.stopPropagation(); promptForFolder(track.id); }}
                     title={$t('purchases.downloadTrack')}
                   >
                     <Download size={14} />
