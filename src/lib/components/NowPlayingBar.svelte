@@ -491,7 +491,7 @@
     background: var(--bg-secondary);
     backdrop-filter: blur(20px);
     border-top: 1px solid var(--border-subtle);
-    z-index: 100;
+    z-index: 2001;
     display: flex;
     flex-direction: column;
   }
