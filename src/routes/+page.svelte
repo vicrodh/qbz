@@ -4146,6 +4146,7 @@
       isOpen={isLinkResolverOpen}
       onClose={() => isLinkResolverOpen = false}
       onResolve={handleResolvedLink}
+      onOpenImporter={() => { isLinkResolverOpen = false; openPlaylistImport(); }}
     />
 
     {#if updateRelease}

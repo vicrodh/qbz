@@ -1746,10 +1746,13 @@
     "emptyFolder": "Empty folder"
   },
   "linkResolver": {
-    "title": "Open Qobuz Link",
-    "placeholder": "Paste a Qobuz link (album, track, artist, playlist)...",
+    "title": "Open Music Link",
+    "placeholder": "Paste a link from Qobuz, Spotify, Apple Music, Tidal, Deezer, or song.link...",
     "go": "Go",
     "resolving": "Resolving...",
-    "invalidLink": "Invalid or unsupported Qobuz link."
+    "invalidLink": "Invalid or unsupported music link.",
+    "notOnQobuz": "This content is not available on Qobuz.",
+    "playlistDetected": "This is a playlist. Use the Playlist Importer for playlists.",
+    "openPlaylistImporter": "Open Playlist Importer"
   }
 }

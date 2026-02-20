@@ -5,6 +5,50 @@ use serde_json::Value;
 use crate::playlist_import::errors::PlaylistImportError;
 use crate::playlist_import::models::{ImportPlaylist, ImportProvider, ImportTrack};
 
+/// Detect if a URL is a Deezer track, album, or playlist.
+///
+/// Deezer URLs:
+/// - Track: `deezer.com/track/{id}` or `deezer.com/{locale}/track/{id}`
+/// - Album: `deezer.com/album/{id}` or `deezer.com/{locale}/album/{id}`
+/// - Playlist: `deezer.com/playlist/{id}` or `deezer.com/{locale}/playlist/{id}`
+pub fn detect_resource(url: &str) -> Option<super::MusicResource> {
+    if !url.contains("deezer.com") {
+        return None;
+    }
+
+    // Playlist
+    if parse_playlist_id(url).is_some() {
+        return Some(super::MusicResource::Playlist {
+            provider: super::MusicProvider::Deezer,
+        });
+    }
+
+    let parts: Vec<&str> = url.split('/').collect();
+    for (idx, part) in parts.iter().enumerate() {
+        match *part {
+            "track" => {
+                if parts.get(idx + 1).map(|s| !s.is_empty()).unwrap_or(false) {
+                    return Some(super::MusicResource::Track {
+                        provider: super::MusicProvider::Deezer,
+                        url: url.to_string(),
+                    });
+                }
+            }
+            "album" => {
+                if parts.get(idx + 1).map(|s| !s.is_empty()).unwrap_or(false) {
+                    return Some(super::MusicResource::Album {
+                        provider: super::MusicProvider::Deezer,
+                        url: url.to_string(),
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    None
+}
+
 pub fn parse_playlist_id(url: &str) -> Option<String> {
     if !url.contains("deezer.com") {
         return None;

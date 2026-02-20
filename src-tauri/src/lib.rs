@@ -1090,6 +1090,7 @@ pub fn run() {
             commands_v2::v2_purchases_get_downloaded_track_ids,
             commands_v2::v2_dynamic_suggest,
             commands_v2::v2_dynamic_suggest_raw,
+            commands_v2::v2_resolve_music_link,
             commands_v2::v2_resolve_qobuz_link,
             commands_v2::v2_get_qobuz_track_url,
             commands_v2::v2_check_qobuzapp_handler,

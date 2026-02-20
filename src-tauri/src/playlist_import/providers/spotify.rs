@@ -9,6 +9,39 @@ use crate::playlist_import::models::{ImportPlaylist, ImportProvider, ImportTrack
 const SPOTIFY_PROXY_URL: &str = "https://qbz-api-proxy.blitzkriegfc.workers.dev/spotify";
 const SPOTIFY_API_BASE: &str = "https://api.spotify.com/v1";
 
+/// Detect if a URL is a Spotify track, album, or playlist.
+pub fn detect_resource(url: &str) -> Option<super::MusicResource> {
+    let lower = url.to_ascii_lowercase();
+    if !lower.contains("spotify.com/") && !lower.starts_with("spotify:") {
+        return None;
+    }
+
+    // Playlist check first (so parse_playlist_id takes priority for playlists)
+    if parse_playlist_id(url).is_some() {
+        return Some(super::MusicResource::Playlist {
+            provider: super::MusicProvider::Spotify,
+        });
+    }
+
+    // Track: open.spotify.com/track/<id> or spotify:track:<id>
+    if lower.contains("/track/") || lower.contains(":track:") {
+        return Some(super::MusicResource::Track {
+            provider: super::MusicProvider::Spotify,
+            url: url.to_string(),
+        });
+    }
+
+    // Album: open.spotify.com/album/<id> or spotify:album:<id>
+    if lower.contains("/album/") || lower.contains(":album:") {
+        return Some(super::MusicResource::Album {
+            provider: super::MusicProvider::Spotify,
+            url: url.to_string(),
+        });
+    }
+
+    None
+}
+
 pub fn parse_playlist_id(url: &str) -> Option<String> {
     if let Some(rest) = url.strip_prefix("spotify:playlist:") {
         if !rest.is_empty() {

@@ -1507,11 +1507,14 @@
     "emptyFolder": "Leerer Ordner"
   },
   "linkResolver": {
-    "title": "Qobuz-Link oeffnen",
-    "placeholder": "Einen Qobuz-Link einfuegen (Album, Titel, Kuenstler, Playlist)...",
+    "title": "Musik-Link oeffnen",
+    "placeholder": "Link von Qobuz, Spotify, Apple Music, Tidal, Deezer oder song.link einfuegen...",
     "go": "Los",
     "resolving": "Wird aufgeloest...",
-    "invalidLink": "Ungueltiger oder nicht unterstuetzter Qobuz-Link."
+    "invalidLink": "Ungueltiger oder nicht unterstuetzter Musik-Link.",
+    "notOnQobuz": "Dieser Inhalt ist auf Qobuz nicht verfuegbar.",
+    "playlistDetected": "Dies ist eine Playlist. Verwende den Playlist-Importer fuer Playlists.",
+    "openPlaylistImporter": "Playlist-Importer oeffnen"
   },
   "yourMixes": {
     "title": "DailyQ",

@@ -15,6 +15,45 @@ const RATE_LIMIT_DELAY_MS: u64 = 200; // Delay between API calls to avoid 429
 const TIDAL_PROXY_URL: &str = "https://qbz-api-proxy.blitzkriegfc.workers.dev/tidal";
 const TIDAL_API_BASE: &str = "https://openapi.tidal.com/v2";
 
+/// Detect if a URL is a Tidal track, album, or playlist.
+///
+/// Tidal URLs:
+/// - Track: `tidal.com/browse/track/{id}` or `tidal.com/track/{id}`
+/// - Album: `tidal.com/browse/album/{id}` or `tidal.com/album/{id}`
+/// - Playlist: `tidal.com/browse/playlist/{id}` or `tidal.com/playlist/{id}`
+pub fn detect_resource(url: &str) -> Option<super::MusicResource> {
+    if !url.contains("tidal.com") {
+        return None;
+    }
+
+    // Playlist
+    if parse_playlist_id(url).is_some() {
+        return Some(super::MusicResource::Playlist {
+            provider: super::MusicProvider::Tidal,
+        });
+    }
+
+    let lower = url.to_ascii_lowercase();
+
+    // Track
+    if lower.contains("/track/") || lower.contains("/browse/track/") {
+        return Some(super::MusicResource::Track {
+            provider: super::MusicProvider::Tidal,
+            url: url.to_string(),
+        });
+    }
+
+    // Album
+    if lower.contains("/album/") || lower.contains("/browse/album/") {
+        return Some(super::MusicResource::Album {
+            provider: super::MusicProvider::Tidal,
+            url: url.to_string(),
+        });
+    }
+
+    None
+}
+
 pub fn parse_playlist_id(url: &str) -> Option<String> {
     if !url.contains("tidal.com") {
         return None;

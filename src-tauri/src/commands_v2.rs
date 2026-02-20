@@ -1429,6 +1429,117 @@ pub fn v2_get_alsa_plugins() -> Result<Vec<AlsaPluginInfo>, String> {
 
 // ==================== Link Resolver ====================
 
+/// Result of resolving a cross-platform music link.
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(tag = "kind")]
+pub enum MusicLinkResult {
+    /// Successfully resolved to a Qobuz entity.
+    Resolved {
+        link: qbz_qobuz::ResolvedLink,
+        provider: Option<String>,
+    },
+    /// The URL is a playlist — redirect to the Playlist Importer.
+    PlaylistDetected {
+        provider: String,
+    },
+    /// The content exists on the source platform but is not available on Qobuz.
+    NotOnQobuz {
+        provider: Option<String>,
+    },
+}
+
+/// Resolve a cross-platform music link to a Qobuz navigation action.
+///
+/// Accepts URLs from Qobuz, Spotify, Apple Music, Tidal, Deezer, song.link, and album.link.
+/// For non-Qobuz tracks/albums, uses the Odesli API to find the Qobuz equivalent.
+/// For playlists, returns `PlaylistDetected` so the frontend can redirect to the importer.
+#[tauri::command]
+pub async fn v2_resolve_music_link(
+    url: String,
+    state: State<'_, AppState>,
+) -> Result<MusicLinkResult, RuntimeError> {
+    use crate::playlist_import::providers::{detect_music_resource, MusicResource};
+
+    let url = url.trim().to_string();
+    if url.is_empty() {
+        return Err(RuntimeError::Internal("Empty URL".to_string()));
+    }
+
+    // 1. Try Qobuz native resolve first (sync, no network)
+    if let Ok(resolved) = qbz_qobuz::resolve_link(&url) {
+        return Ok(MusicLinkResult::Resolved {
+            link: resolved,
+            provider: None,
+        });
+    }
+
+    // 2. Detect what kind of resource this is
+    let resource = detect_music_resource(&url).ok_or_else(|| {
+        RuntimeError::Internal("Unsupported or invalid music link".to_string())
+    })?;
+
+    match resource {
+        MusicResource::Qobuz => {
+            // Already handled above, but just in case
+            let resolved = qbz_qobuz::resolve_link(&url)
+                .map_err(|e| RuntimeError::Internal(e.to_string()))?;
+            Ok(MusicLinkResult::Resolved {
+                link: resolved,
+                provider: None,
+            })
+        }
+
+        MusicResource::Playlist { provider } => Ok(MusicLinkResult::PlaylistDetected {
+            provider: format!("{:?}", provider),
+        }),
+
+        MusicResource::Track { provider, url: source_url } => {
+            resolve_via_odesli(&state.songlink, &source_url, Some(&provider)).await
+        }
+
+        MusicResource::Album { provider, url: source_url } => {
+            resolve_via_odesli(&state.songlink, &source_url, Some(&provider)).await
+        }
+
+        MusicResource::SongLink { url: source_url } => {
+            resolve_via_odesli(&state.songlink, &source_url, None).await
+        }
+    }
+}
+
+/// Use the Odesli API to find the Qobuz equivalent of a cross-platform URL,
+/// then parse the Qobuz URL into a ResolvedLink.
+async fn resolve_via_odesli(
+    songlink: &crate::share::SongLinkClient,
+    url: &str,
+    provider: Option<&crate::playlist_import::providers::MusicProvider>,
+) -> Result<MusicLinkResult, RuntimeError> {
+    let provider_name = provider.map(|p| format!("{:?}", p));
+
+    // Call Odesli API — it accepts any supported music URL
+    let response = songlink
+        .get_by_url(url, crate::share::ContentType::Track)
+        .await
+        .map_err(|e| RuntimeError::Internal(format!("Odesli API error: {}", e)))?;
+
+    // Look for a Qobuz URL in the platforms map
+    let qobuz_url = response.platforms.get("qobuz");
+
+    match qobuz_url {
+        Some(qobuz_url) => {
+            let resolved = qbz_qobuz::resolve_link(qobuz_url)
+                .map_err(|e| RuntimeError::Internal(format!("Failed to parse Qobuz URL from Odesli: {}", e)))?;
+            Ok(MusicLinkResult::Resolved {
+                link: resolved,
+                provider: provider_name,
+            })
+        }
+        None => Ok(MusicLinkResult::NotOnQobuz {
+            provider: provider_name,
+        }),
+    }
+}
+
 #[tauri::command]
 pub fn v2_resolve_qobuz_link(url: String) -> Result<qbz_qobuz::ResolvedLink, RuntimeError> {
     qbz_qobuz::resolve_link(&url).map_err(|e| RuntimeError::Internal(e.to_string()))

@@ -1746,10 +1746,13 @@
     "emptyFolder": "Carpeta vacía"
   },
   "linkResolver": {
-    "title": "Abrir enlace de Qobuz",
-    "placeholder": "Pega un enlace de Qobuz (album, track, artista, playlist)...",
+    "title": "Abrir enlace de música",
+    "placeholder": "Pega un enlace de Qobuz, Spotify, Apple Music, Tidal, Deezer o song.link...",
     "go": "Ir",
     "resolving": "Resolviendo...",
-    "invalidLink": "Enlace de Qobuz invalido o no soportado."
+    "invalidLink": "Enlace inválido o no soportado.",
+    "notOnQobuz": "Este contenido no está disponible en Qobuz.",
+    "playlistDetected": "Esto es una playlist. Usa el Importador de Playlists.",
+    "openPlaylistImporter": "Abrir Importador de Playlists"
   }
 }

@@ -5,6 +5,50 @@ use serde_json::Value;
 use crate::playlist_import::errors::PlaylistImportError;
 use crate::playlist_import::models::{ImportPlaylist, ImportProvider, ImportTrack};
 
+/// Detect if a URL is an Apple Music track, album, or playlist.
+///
+/// Apple Music URLs:
+/// - Track: `music.apple.com/{storefront}/album/{name}/{id}?i={track_id}`
+/// - Album: `music.apple.com/{storefront}/album/{name}/{id}` (no `?i=`)
+/// - Playlist: `music.apple.com/{storefront}/playlist/{name}/{pl.xxx}`
+/// - Song: `music.apple.com/{storefront}/song/{name}/{id}`
+pub fn detect_resource(url: &str) -> Option<super::MusicResource> {
+    if !url.contains("music.apple.com/") {
+        return None;
+    }
+
+    // Playlist
+    if parse_playlist_id(url).is_some() {
+        return Some(super::MusicResource::Playlist {
+            provider: super::MusicProvider::AppleMusic,
+        });
+    }
+
+    // Song page (explicit song URL)
+    if url.contains("/song/") {
+        return Some(super::MusicResource::Track {
+            provider: super::MusicProvider::AppleMusic,
+            url: url.to_string(),
+        });
+    }
+
+    // Album page — with ?i= parameter means specific track
+    if url.contains("/album/") {
+        if url.contains("?i=") || url.contains("&i=") {
+            return Some(super::MusicResource::Track {
+                provider: super::MusicProvider::AppleMusic,
+                url: url.to_string(),
+            });
+        }
+        return Some(super::MusicResource::Album {
+            provider: super::MusicProvider::AppleMusic,
+            url: url.to_string(),
+        });
+    }
+
+    None
+}
+
 pub fn parse_playlist_id(url: &str) -> Option<(String, String)> {
     if !url.contains("music.apple.com/") {
         return None;
