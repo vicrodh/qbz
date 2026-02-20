@@ -376,7 +376,10 @@
 <style>
   .dailyq-view {
     padding: 24px;
+    padding-bottom: 100px;
     color: var(--text-primary);
+    height: 100%;
+    overflow-y: auto;
   }
 
   .playlist-header {
