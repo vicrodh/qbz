@@ -1678,6 +1678,40 @@
     },
     "regionNotice": "La disponibilidad de Compras depende de tu cuenta y region de Qobuz. Si no aparece disponible, puede ser esperado."
   },
+  "yourMixes": {
+    "title": "DailyQ",
+    "subtitle": "Basado en tus escuchas recientes.",
+    "actions": {
+      "saveAsPlaylist": "Guardar como playlist"
+    },
+    "form": {
+      "limit": "Limite",
+      "listenedTrackIds": "IDs de pistas escuchadas (separadas por coma)",
+      "listenedTrackIdsPlaceholder": "123,456,789",
+      "tracksToAnalyse": "Pistas a analizar (una linea: trackId,artistId,genreId,labelId)",
+      "tracksToAnalysePlaceholder": "123,45,78,90",
+      "prefillFromRecents": "Usar log reciente de QBZ",
+      "run": "Obtener sugerencias",
+      "probeRaw": "Probar respuesta raw",
+      "rawResponse": "Respuesta raw"
+    },
+    "result": {
+      "algorithm": "Algoritmo",
+      "count": "{count} pistas",
+      "sourceCached": "Cacheado por hoy",
+      "sourceLive": "Generado al momento",
+      "empty": "No se devolvieron pistas sugeridas.",
+      "emptyHint": "Se probaron estrategias de fallback del payload. Esta cuenta/semillas puede no estar devolviendo candidatos ahora.",
+      "unknownArtist": "Artista desconocido"
+    },
+    "errors": {
+      "fetchFailed": "No se pudieron obtener sugerencias dinamicas.",
+      "prefillFailed": "No se pudieron cargar datos recientes del log de QBZ.",
+      "rawProbeFailed": "No se pudo obtener la respuesta raw del endpoint.",
+      "playlistsLoadFailed": "No se pudieron cargar tus playlists.",
+      "emptyPlaylist": "No hay pistas para guardar como playlist."
+    }
+  },
   "linkResolver": {
     "title": "Abrir enlace de Qobuz",
     "placeholder": "Pega un enlace de Qobuz (album, track, artista, playlist)...",

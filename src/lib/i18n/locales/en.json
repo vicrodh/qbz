@@ -1678,6 +1678,40 @@
     },
     "regionNotice": "Purchases availability depends on your Qobuz account and region. If unavailable, this may be expected."
   },
+  "yourMixes": {
+    "title": "DailyQ",
+    "subtitle": "Based on your recent listening.",
+    "actions": {
+      "saveAsPlaylist": "Save as playlist"
+    },
+    "form": {
+      "limit": "Limit",
+      "listenedTrackIds": "Listened track IDs (comma-separated)",
+      "listenedTrackIdsPlaceholder": "123,456,789",
+      "tracksToAnalyse": "Tracks to analyse (one row: trackId,artistId,genreId,labelId)",
+      "tracksToAnalysePlaceholder": "123,45,78,90",
+      "prefillFromRecents": "Use QBZ recent log",
+      "run": "Fetch Suggestions",
+      "probeRaw": "Probe Raw Response",
+      "rawResponse": "Raw response"
+    },
+    "result": {
+      "algorithm": "Algorithm",
+      "count": "{count} tracks",
+      "sourceCached": "Cached for today",
+      "sourceLive": "Freshly generated",
+      "empty": "No suggested tracks returned.",
+      "emptyHint": "Tried fallback payload strategies. This account/seed set may currently return no mix candidates.",
+      "unknownArtist": "Unknown artist"
+    },
+    "errors": {
+      "fetchFailed": "Failed to fetch dynamic suggestions.",
+      "prefillFailed": "Failed to load recent data from QBZ logs.",
+      "rawProbeFailed": "Failed to fetch raw endpoint response.",
+      "playlistsLoadFailed": "Failed to load your playlists.",
+      "emptyPlaylist": "No tracks available to save as playlist."
+    }
+  },
   "linkResolver": {
     "title": "Open Qobuz Link",
     "placeholder": "Paste a Qobuz link (album, track, artist, playlist)...",
