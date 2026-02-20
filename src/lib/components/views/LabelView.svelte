@@ -267,38 +267,18 @@
         console.log(`[LabelView] Parsed ${topTracks.length} top tracks`);
       }
 
-      // Parse releases containers
+      // Parse critics' picks from label/page release containers
       if (result.releases && result.releases.length > 0) {
-        console.log(`[LabelView] Found ${result.releases.length} release containers:`,
-          result.releases.map((c, i) => `[${i}] id=${c.id}, items=${c.data?.items?.length ?? 0}`));
-
-        // First container = main releases
-        const firstContainer = result.releases[0];
-        if (firstContainer?.data?.items) {
-          releases = firstContainer.data.items as unknown as QobuzAlbum[];
-        }
-
-        // Look for critics' picks / awarded container
-        for (let i = 1; i < result.releases.length; i++) {
-          const container = result.releases[i];
+        for (const container of result.releases) {
           const containerId = container?.id?.toLowerCase() || '';
           if (containerId.includes('award') || containerId.includes('critic') || containerId.includes('press')) {
             if (container?.data?.items) {
               criticsPicks = container.data.items as unknown as QobuzAlbum[];
+              console.log(`[LabelView] Critics' picks: ${criticsPicks.length} albums from container '${container.id}'`);
             }
             break;
           }
         }
-
-        // If no critics' picks found via ID, try the second container
-        if (criticsPicks.length === 0 && result.releases.length > 1) {
-          const secondContainer = result.releases[1];
-          if (secondContainer?.data?.items && (secondContainer.data.items as unknown[]).length > 0) {
-            criticsPicks = secondContainer.data.items as unknown as QobuzAlbum[];
-          }
-        }
-      } else {
-        console.log('[LabelView] No releases containers in response. Keys:', result ? Object.keys(result) : 'null');
       }
 
       // Parse playlists
@@ -320,20 +300,28 @@
     }
   }
 
-  async function loadLabelDescription() {
-    // Fallback: fetch description from v2_get_label if label/page didn't include it
+  async function loadLabelAlbumsAndDescription() {
+    // Fetch albums + description from v2_get_label (same endpoint as old LabelView)
     try {
-      const detail = await invoke<{ description?: string }>('v2_get_label', {
-        labelId,
-        limit: 1,
-        offset: 0
-      });
-      if (detail?.description) {
-        labelDescription = detail.description;
-        console.log('[LabelView] Description loaded from v2_get_label fallback');
+      const result = await invoke<{
+        description?: string;
+        albums?: { items?: QobuzAlbum[]; total?: number };
+        albums_count?: number;
+      }>('v2_get_label', { labelId, limit: 20, offset: 0 });
+
+      // Set releases from the albums
+      if (result?.albums?.items && result.albums.items.length > 0) {
+        releases = result.albums.items;
+        console.log(`[LabelView] Loaded ${releases.length} releases from v2_get_label`);
+      }
+
+      // Set description if not already set from label/page
+      if (!labelDescription && result?.description) {
+        labelDescription = result.description;
+        console.log('[LabelView] Description loaded from v2_get_label');
       }
     } catch (err) {
-      console.error('[LabelView] Failed to load label description fallback:', err);
+      console.error('[LabelView] Failed to load label albums/description:', err);
     }
   }
 
@@ -561,10 +549,8 @@
   }
 
   onMount(() => {
-    loadLabelPage().then(() => {
-      // If page data didn't include description, fetch it separately
-      if (!labelDescription) loadLabelDescription();
-    });
+    loadLabelPage();
+    loadLabelAlbumsAndDescription();
     loadMoreLabels();
     unsubFavorites = subscribeFavorites(() => {
       trackFavoritesVersion++;
@@ -590,9 +576,8 @@
     artists = [];
     moreLabels = [];
     labelDescription = null;
-    loadLabelPage().then(() => {
-      if (!labelDescription) loadLabelDescription();
-    });
+    loadLabelPage();
+    loadLabelAlbumsAndDescription();
     loadMoreLabels();
   });
 
