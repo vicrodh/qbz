@@ -342,24 +342,30 @@
   }
 
   async function loadArtistImages(artistList: Record<string, unknown>[]) {
-    // Fetch images for artists that don't have them from the label page data
-    const fetches = artistList.map(async (artist) => {
-      const id = artist.id as number;
-      // Skip if we already have a local image from the label page data
-      if (getArtistImageUrl(artist)) return;
-      try {
-        const detail = await invoke<{ image?: { small?: string; thumbnail?: string; large?: string } }>(
-          'v2_get_artist', { artistId: id }
-        );
-        const url = detail?.image?.large || detail?.image?.thumbnail || detail?.image?.small;
-        if (url) {
-          artistImageMap = new Map([...artistImageMap, [id, url]]);
-        }
-      } catch {
-        // Silently skip — placeholder will show
+    // Only fetch for artists missing images from the label page data
+    const needsFetch = artistList.filter(a => !getArtistImageUrl(a));
+    if (needsFetch.length === 0) return;
+
+    // Parallel fetch, but single state update at the end to avoid N re-renders
+    const results = await Promise.allSettled(
+      needsFetch.map(artist =>
+        invoke<{ image?: { small?: string; thumbnail?: string; large?: string } }>(
+          'v2_get_artist', { artistId: artist.id as number }
+        )
+      )
+    );
+
+    const newMap = new Map(artistImageMap);
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'fulfilled' && result.value?.image) {
+        const img = result.value.image;
+        // Prefer smaller images for carousel performance
+        const url = img.thumbnail || img.small || img.large;
+        if (url) newMap.set(needsFetch[i].id as number, url);
       }
-    });
-    await Promise.allSettled(fetches);
+    }
+    artistImageMap = newMap; // Single state update
   }
 
   // Track playback — mirrors ArtistDetailView exactly
@@ -1183,7 +1189,7 @@
 
   /* Sections */
   .section-anchor { scroll-margin-top: 56px; }
-  .section { margin-bottom: 28px; }
+  .section { margin-bottom: 48px; }
   .section-header {
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px; margin-bottom: 20px;
