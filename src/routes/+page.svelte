@@ -936,6 +936,14 @@
           navigateTo('search');
           break;
 
+        case 'daily_q':
+          navigateTo('dailyq');
+          break;
+
+        case 'weekly_q':
+          navigateTo('weeklyq');
+          break;
+
         case 'radio':
           // Radio is dynamic/endless - no specific page to navigate to
           console.log('[ContextNav] Radio is currently playing');
