@@ -1,16 +1,17 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
-  import { Disc3, Play, Music, MoreHorizontal, User, ChevronDown, ChevronUp } from 'lucide-svelte';
+  import { ArrowLeft, Disc3, Play, Music, MoreHorizontal, User, ChevronDown, ChevronUp } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import AlbumCard from '../AlbumCard.svelte';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
-  import QobuzPlaylistCard from '../QobuzPlaylistCard.svelte';
+  import SearchPlaylistCard from '../SearchPlaylistCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import QualityBadge from '../QualityBadge.svelte';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { togglePlay } from '$lib/stores/playerStore';
   import type { QobuzAlbum, LabelPageData, LabelExploreItem, DisplayTrack } from '$lib/types';
+  import type { Playlist } from '$lib/stores/searchState';
 
   interface Track {
     id: number;
@@ -95,7 +96,7 @@
   let topTracks = $state<Track[]>([]);
   let releases = $state<QobuzAlbum[]>([]);
   let criticsPicks = $state<QobuzAlbum[]>([]);
-  let playlists = $state<Record<string, unknown>[]>([]);
+  let playlists = $state<Playlist[]>([]);
   let artists = $state<Record<string, unknown>[]>([]);
   let moreLabels = $state<LabelExploreItem[]>([]);
 
@@ -235,7 +236,7 @@
 
       // Parse playlists
       if (result.playlists?.items && result.playlists.items.length > 0) {
-        playlists = result.playlists.items as Record<string, unknown>[];
+        playlists = result.playlists.items as unknown as Playlist[];
       }
 
       // Parse artists
@@ -368,16 +369,22 @@
     failedLabelImages = new Set([...failedLabelImages, itemId]);
   }
 
-  function getArtistImage(artist: Record<string, unknown>): string | null {
-    const images = artist.images as Record<string, unknown> | undefined;
-    if (!images) return null;
-    const portrait = images.portrait as Record<string, string> | undefined;
-    if (portrait?.hash && portrait?.format) {
-      return `https://static.qobuz.com/images/artists/covers/medium/${portrait.hash}.${portrait.format}`;
-    }
-    // Fallback: direct image fields
+  function getArtistImageUrl(artist: Record<string, unknown>): string | null {
+    // Direct image fields (standard Qobuz artist response)
     const image = artist.image as Record<string, string> | undefined;
-    return image?.large || image?.thumbnail || image?.small || null;
+    if (image) {
+      const url = image.large || image.thumbnail || image.small;
+      if (url) return url;
+    }
+    // Fallback: nested images.portrait with hash construction
+    const images = artist.images as Record<string, unknown> | undefined;
+    if (images) {
+      const portrait = images.portrait as Record<string, string> | undefined;
+      if (portrait?.hash && portrait?.format) {
+        return `https://static.qobuz.com/images/artists/covers/medium/${portrait.hash}.${portrait.format}`;
+      }
+    }
+    return null;
   }
 
   function getArtistName(artist: Record<string, unknown>): string {
@@ -386,20 +393,6 @@
       return (name as Record<string, string>).display || '';
     }
     return String(name || '');
-  }
-
-  function getPlaylistImage(playlist: Record<string, unknown>): string {
-    const images = playlist.images as Record<string, unknown> | undefined;
-    if (images) {
-      const rectangle = images.rectangle as string[] | string | undefined;
-      if (Array.isArray(rectangle) && rectangle.length > 0) return rectangle[0];
-      if (typeof rectangle === 'string') return rectangle;
-      const covers = images.covers as string[] | undefined;
-      if (covers && covers.length > 0) return covers[0];
-    }
-    const images300 = playlist.images300 as string[] | undefined;
-    if (images300 && images300.length > 0) return images300[0];
-    return '';
   }
 
   // Download status tracking
@@ -468,6 +461,12 @@
       <button class="retry-btn" onclick={loadLabelPage}>{$t('actions.retry')}</button>
     </div>
   {:else if pageData}
+    <!-- Back button -->
+    <button class="back-btn" onclick={onBack}>
+      <ArrowLeft size={16} />
+      <span>{$t('actions.back')}</span>
+    </button>
+
     <!-- Header -->
     <header class="label-header">
       <div class="label-image-wrapper">
@@ -494,12 +493,6 @@
           </div>
           <button class="read-more-btn" onclick={() => descriptionExpanded = !descriptionExpanded}>
             {descriptionExpanded ? $t('label.readLess') : $t('label.readMore')}
-          </button>
-        {/if}
-        {#if topTracks.length > 0}
-          <button class="play-btn" onclick={handlePlayAllTracks}>
-            <Play size={18} fill="currentColor" color="currentColor" />
-            <span>{$t('actions.play')}</span>
           </button>
         {/if}
       </div>
@@ -728,18 +721,10 @@
       <div class="section">
         <HorizontalScrollRow title={$t('label.playlists')}>
           {#snippet children()}
-            {#each playlists as playlist}
-              {@const pid = (playlist.id as number) || 0}
-              {@const pname = String(playlist.name || playlist.title || '')}
-              {@const powner = (playlist.owner as Record<string, unknown>)?.name as string || ''}
-              <QobuzPlaylistCard
-                playlistId={pid}
-                name={pname}
-                owner={powner}
-                image={getPlaylistImage(playlist)}
-                trackCount={playlist.tracks_count as number}
-                duration={playlist.duration as number}
-                onclick={() => onPlaylistClick?.(pid)}
+            {#each playlists as playlist (playlist.id)}
+              <SearchPlaylistCard
+                {playlist}
+                onclick={() => onPlaylistClick?.(playlist.id)}
               />
             {/each}
             <div class="spacer"></div>
@@ -756,11 +741,11 @@
             {#each artists as artist}
               {@const artistId = artist.id as number}
               {@const artistName = getArtistName(artist)}
-              {@const artistImage = getArtistImage(artist)}
+              {@const artistImage = getArtistImageUrl(artist)}
               <button class="artist-card" onclick={() => onArtistClick?.(artistId)}>
                 <div class="artist-image-wrapper">
                   <div class="artist-image-placeholder">
-                    <User size={48} />
+                    <User size={40} />
                   </div>
                   {#if !failedArtistImages.has(artistId) && artistImage}
                     <img
@@ -887,6 +872,24 @@
     opacity: 0.9;
   }
 
+  /* Back button */
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    margin-bottom: 24px;
+    transition: color 150ms ease;
+  }
+
+  .back-btn:hover {
+    color: var(--text-secondary);
+  }
+
   /* Header */
   .label-header {
     display: flex;
@@ -897,7 +900,7 @@
   .label-image-wrapper {
     width: 180px;
     height: 180px;
-    border-radius: 16px;
+    border-radius: 50%;
     overflow: hidden;
     flex-shrink: 0;
     background: var(--bg-tertiary);
@@ -978,26 +981,6 @@
     text-decoration: underline;
   }
 
-  .play-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 24px;
-    background: var(--accent-primary);
-    color: white;
-    border: none;
-    border-radius: 24px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: opacity 150ms ease;
-    width: fit-content;
-  }
-
-  .play-btn:hover {
-    opacity: 0.9;
-  }
-
   /* Section layout */
   .section {
     margin-bottom: 8px;
@@ -1028,6 +1011,34 @@
     display: flex;
     align-items: center;
     gap: 12px;
+  }
+
+  .action-btn-circle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background-color: var(--bg-tertiary);
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .action-btn-circle:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .action-btn-circle.primary {
+    background-color: var(--accent-primary);
+    color: white;
+  }
+
+  .action-btn-circle.primary:hover {
+    opacity: 0.9;
   }
 
   .see-all-btn {
@@ -1320,20 +1331,21 @@
     color: var(--text-primary);
   }
 
-  /* Artist cards */
+  /* Artist cards (matches SearchView style) */
   .artist-card {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 8px;
-    width: 120px;
-    flex-shrink: 0;
-    background: none;
+    text-align: center;
+    padding: 16px;
+    background-color: var(--bg-secondary);
     border: none;
+    border-radius: 12px;
     cursor: pointer;
-    padding: 8px;
-    border-radius: 8px;
     transition: background-color 150ms ease;
+    width: 160px;
+    height: 220px;
+    flex-shrink: 0;
   }
 
   .artist-card:hover {
@@ -1341,21 +1353,26 @@
   }
 
   .artist-image-wrapper {
-    width: 100px;
-    height: 100px;
-    border-radius: 50%;
-    overflow: hidden;
     position: relative;
+    width: 120px;
+    height: 120px;
+    min-height: 120px;
+    border-radius: 50%;
+    margin-bottom: 12px;
+    flex-shrink: 0;
+    overflow: hidden;
   }
 
   .artist-image-placeholder {
     width: 100%;
     height: 100%;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    background-color: var(--bg-tertiary);
+    background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
     color: var(--text-muted);
+    flex-shrink: 0;
   }
 
   .artist-image {
@@ -1363,19 +1380,23 @@
     inset: 0;
     width: 100%;
     height: 100%;
+    border-radius: 50%;
     object-fit: cover;
     z-index: 1;
   }
 
   .artist-name {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 500;
     color: var(--text-primary);
-    text-align: center;
+    margin-bottom: 4px;
+    width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
-    white-space: nowrap;
-    width: 100%;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    line-height: 1.3;
   }
 
   /* Label cards */
@@ -1413,7 +1434,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-muted);
     background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
     color: white;
   }
