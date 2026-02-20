@@ -3796,6 +3796,7 @@
         />
       {:else if activeView === 'dailyq'}
         <DynamicSuggestView
+          onBack={navGoBack}
           onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queueDisplayTrackNext}
           onTrackPlayLater={queueDisplayTrackLater}
@@ -3814,6 +3815,7 @@
         />
       {:else if activeView === 'weeklyq'}
         <WeeklySuggestView
+          onBack={navGoBack}
           onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queueDisplayTrackNext}
           onTrackPlayLater={queueDisplayTrackLater}

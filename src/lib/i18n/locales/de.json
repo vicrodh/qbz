@@ -1489,7 +1489,8 @@
   "yourMixes": {
     "title": "DailyQ",
     "subtitle": "Basierend auf deinem letzten Hoerverlauf.",
-    "cardDesc": "Bereichere deinen Tag mit einer personalisierten Musikauswahl."
+    "cardDesc": "Bereichere deinen Tag mit einer personalisierten Musikauswahl.",
+    "algorithmInfo": "Basierend auf dem Qobuz\u2122-Vorschlagsalgorithmus, kuratiert aus deinem lokalen Hoerverlauf."
   },
   "weeklyMixes": {
     "title": "WeeklyQ",

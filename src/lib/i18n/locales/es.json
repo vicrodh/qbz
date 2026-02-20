@@ -1697,11 +1697,10 @@
       "probeRaw": "Probar respuesta raw",
       "rawResponse": "Respuesta raw"
     },
+    "algorithmInfo": "Impulsado por el algoritmo de sugerencias de Qobuz\u2122, curado a partir de tu historial de reproducciones local.",
     "result": {
       "algorithm": "Algoritmo",
       "count": "{count} pistas",
-      "sourceCached": "Cacheado por hoy",
-      "sourceLive": "Generado al momento",
       "empty": "No se devolvieron pistas sugeridas.",
       "emptyHint": "Se probaron estrategias de fallback del payload. Esta cuenta/semillas puede no estar devolviendo candidatos ahora.",
       "unknownArtist": "Artista desconocido"

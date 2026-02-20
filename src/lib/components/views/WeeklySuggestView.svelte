@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
-  import { ListPlus, Play, RefreshCw, Search, Shuffle, X } from 'lucide-svelte';
+  import { ArrowLeft, Info, ListPlus, Play, Search, Shuffle, X } from 'lucide-svelte';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import TrackRow from '$lib/components/TrackRow.svelte';
   import { t } from '$lib/i18n';
@@ -21,6 +21,7 @@
   } from '$lib/types/dynamicSuggest';
 
   interface Props {
+    onBack: () => void;
     onTrackPlay?: (track: DisplayTrack) => void;
     onTrackPlayNext?: (track: DisplayTrack) => void;
     onTrackPlayLater?: (track: DisplayTrack) => void;
@@ -39,6 +40,7 @@
   }
 
   let {
+    onBack,
     onTrackPlay,
     onTrackPlayNext,
     onTrackPlayLater,
@@ -83,7 +85,6 @@
   const DAILY_SEED_POOL = 120;
 
   let loading = $state(false);
-  let mixSource = $state<'cache' | 'live' | null>(null);
   let showPlaylistModal = $state(false);
   let userPlaylists = $state<Playlist[]>([]);
   let playlistModalTrackIds = $state<number[]>([]);
@@ -92,11 +93,15 @@
   let autoRunDone = false;
   let searchQuery = $state('');
 
-  function getLocalDateKey(date: Date = new Date()): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+  function getMostRecentFriday(date: Date = new Date()): string {
+    const d = new Date(date);
+    const day = d.getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+    const daysSinceFriday = (day + 2) % 7;
+    d.setDate(d.getDate() - daysSinceFriday);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const dayStr = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${dayStr}`;
   }
 
   function dedupeTrackIds(ids: number[]): number[] {
@@ -195,15 +200,13 @@
   async function generateDailyQ(cacheMode: 'none' | 'read-write' = 'none'): Promise<void> {
     loading = true;
     error = null;
-    if (cacheMode !== 'read-write') mixSource = null;
 
     try {
-      const localDate = getLocalDateKey();
+      const weekKey = getMostRecentFriday();
       if (cacheMode === 'read-write') {
-        const cached = readDailyCache(localDate);
+        const cached = readDailyCache(weekKey);
         if (cached) {
           result = cached.result;
-          mixSource = 'cache';
           return;
         }
       }
@@ -220,11 +223,10 @@
       }
 
       result = response;
-      mixSource = 'live';
 
       if (cacheMode === 'read-write') {
         writeDailyCache({
-          localDate,
+          localDate: weekKey,
           result: response,
           cachedAtIso: new Date().toISOString()
         });
@@ -232,7 +234,6 @@
     } catch (err) {
       error = err instanceof Error ? err.message : $t('yourMixes.errors.fetchFailed');
       result = null;
-      mixSource = null;
     } finally {
       loading = false;
     }
@@ -300,24 +301,24 @@
       }));
   }
 
-  async function handleTrackClick(track: DynamicSuggestTrack, trackIndex: number): Promise<void> {
-    const trackIds = filteredTracks.map(trk => trk.id);
-    const contextIndex = trackIds.indexOf(track.id);
+  async function handleTrackClick(track: DynamicSuggestTrack): Promise<void> {
+    const queueTracks = buildQueueTracks(filteredTracks);
+    const queueTrackIds = queueTracks.map(qt => qt.id);
+    const queueIndex = queueTrackIds.indexOf(track.id);
 
-    if (contextIndex >= 0 && trackIds.length > 0) {
-      await setPlaybackContext(
-        'home_list',
-        'weeklyq',
-        'WeeklyQ',
-        'qobuz',
-        trackIds,
-        contextIndex
-      );
-    }
+    if (queueIndex < 0) return;
+
+    await setPlaybackContext(
+      'home_list',
+      'weeklyq',
+      'WeeklyQ',
+      'qobuz',
+      queueTrackIds,
+      queueIndex
+    );
 
     try {
-      const queueTracks = buildQueueTracks(filteredTracks);
-      await invoke('v2_set_queue', { tracks: queueTracks, startIndex: trackIndex });
+      await invoke('v2_set_queue', { tracks: queueTracks, startIndex: queueIndex });
     } catch (err) {
       console.error('Failed to set queue:', err);
     }
@@ -327,7 +328,7 @@
 
   async function handlePlayAll(): Promise<void> {
     if (filteredTracks.length === 0) return;
-    await handleTrackClick(filteredTracks[0], 0);
+    await handleTrackClick(filteredTracks[0]);
   }
 
   async function handleShuffle(): Promise<void> {
@@ -335,7 +336,7 @@
     const randomIndex = Math.floor(Math.random() * filteredTracks.length);
     const track = filteredTracks[randomIndex];
     if (!track) return;
-    await handleTrackClick(track, randomIndex);
+    await handleTrackClick(track);
   }
 
   const filteredTracks = $derived.by(() => {
@@ -351,6 +352,14 @@
     });
   });
 
+  const totalDurationFormatted = $derived.by(() => {
+    const totalSecs = filteredTracks.reduce((sum, track) => sum + (track.duration || 0), 0);
+    const hours = Math.floor(totalSecs / 3600);
+    const mins = Math.floor((totalSecs % 3600) / 60);
+    if (hours > 0) return `${hours} hr ${mins} min`;
+    return `${mins} min`;
+  });
+
   onMount(() => {
     if (autoRunDone) return;
     autoRunDone = true;
@@ -359,24 +368,33 @@
 </script>
 
 <div class="dailyq-view">
+  <div class="nav-row">
+    <button class="back-btn" onclick={onBack}>
+      <ArrowLeft size={16} />
+      <span>{$t('actions.back')}</span>
+    </button>
+  </div>
+
   <div class="playlist-header">
     <div class="artwork-container">
       <div class="artwork artwork-weekly"></div>
     </div>
 
     <div class="metadata">
-      <span class="playlist-label">{$t('favorites.playlists')}</span>
-      <h1 class="playlist-title">{$t('weeklyMixes.title')}</h1>
-      <p class="playlist-description">{$t('weeklyMixes.subtitle')}</p>
+      <span class="playlist-label">{$t('home.yourMixes')}</span>
+      <h1 class="playlist-title">
+        {$t('weeklyMixes.title')}
+        <button class="info-btn" title={$t('yourMixes.algorithmInfo')}>
+          <Info size={16} />
+        </button>
+      </h1>
+      <p class="playlist-description">{@html $t('weeklyMixes.cardDesc')}</p>
       <div class="playlist-info">
-        {#if mixSource === 'cache'}
-          <span>{$t('yourMixes.result.sourceCached')}</span>
-          <span class="separator">•</span>
-        {:else if mixSource === 'live'}
-          <span>{$t('yourMixes.result.sourceLive')}</span>
-          <span class="separator">•</span>
-        {/if}
         <span>{$t('yourMixes.result.count', { values: { count: filteredTracks.length } })}</span>
+        {#if filteredTracks.length > 0}
+          <span class="separator">•</span>
+          <span>{totalDurationFormatted}</span>
+        {/if}
       </div>
 
       <div class="actions">
@@ -388,9 +406,6 @@
         </button>
         <button class="action-btn-circle" onclick={openSaveAsPlaylist} disabled={loading || !result || result.tracks.items.length === 0} title={$t('yourMixes.actions.saveAsPlaylist')}>
           <ListPlus size={18} />
-        </button>
-        <button class="action-btn-circle" onclick={() => generateDailyQ('none')} disabled={loading} title={$t('actions.refresh')}>
-          <RefreshCw size={18} />
         </button>
       </div>
     </div>
@@ -454,7 +469,7 @@
           hideFavorite={trackBlacklisted}
           downloadStatus={cacheStatus.status}
           downloadProgress={cacheStatus.progress}
-          onPlay={!trackBlacklisted ? () => handleTrackClick(track, index) : undefined}
+          onPlay={!trackBlacklisted ? () => handleTrackClick(track) : undefined}
           onDownload={!trackBlacklisted && onTrackDownload ? () => onTrackDownload(displayTrack) : undefined}
           onRemoveDownload={isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
           menuActions={trackBlacklisted ? {
@@ -462,7 +477,7 @@
             onGoToArtist: track.performer?.id && onTrackGoToArtist ? () => onTrackGoToArtist(track.performer!.id!) : undefined,
             onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined,
           } : {
-            onPlayNow: () => handleTrackClick(track, index),
+            onPlayNow: () => handleTrackClick(track),
             onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(displayTrack) : undefined,
             onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(displayTrack) : undefined,
             onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined,
@@ -504,6 +519,29 @@
     color: var(--text-primary);
     height: 100%;
     overflow-y: auto;
+  }
+
+  .nav-row {
+    display: flex;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 14px;
+    transition: color 150ms ease;
+  }
+
+  .back-btn:hover {
+    color: var(--text-primary);
   }
 
   .playlist-header {
@@ -576,6 +614,25 @@
     color: var(--text-primary);
     margin: 0 0 8px 0;
     line-height: 1.2;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .info-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    transition: color 150ms ease;
+  }
+
+  .info-btn:hover {
+    color: var(--text-primary);
   }
 
   .playlist-description {

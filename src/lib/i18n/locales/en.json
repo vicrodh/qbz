@@ -1697,11 +1697,10 @@
       "probeRaw": "Probe Raw Response",
       "rawResponse": "Raw response"
     },
+    "algorithmInfo": "Powered by the Qobuz\u2122 suggestion algorithm, curated from your local listening history.",
     "result": {
       "algorithm": "Algorithm",
       "count": "{count} tracks",
-      "sourceCached": "Cached for today",
-      "sourceLive": "Freshly generated",
       "empty": "No suggested tracks returned.",
       "emptyHint": "Tried fallback payload strategies. This account/seed set may currently return no mix candidates.",
       "unknownArtist": "Unknown artist"
