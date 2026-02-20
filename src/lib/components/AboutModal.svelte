@@ -141,9 +141,10 @@
         <!-- Author -->
         <div class="info-section author-section">
           <h3>Author</h3>
-          <button class="author-link" onclick={() => handleOpenUrl('https://github.com/vicrodh')}>
-            Victor RH
-            <ExternalLink size={12} />
+          <button class="author-pill" onclick={() => handleOpenUrl('https://github.com/vicrodh')}>
+            <img src="https://github.com/vicrodh.png?size=32" alt="vicrodh" class="author-avatar" />
+            vicrodh
+            <ExternalLink size={11} />
           </button>
         </div>
 
@@ -203,7 +204,7 @@
     background: var(--bg-secondary);
     border-radius: 16px;
     width: 90%;
-    max-width: 672px;
+    max-width: 782px;
     max-height: 85vh;
     overflow-y: auto;
     box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
@@ -344,9 +345,9 @@
   }
 
   .attributions {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 24px;
   }
 
   .attribution {
@@ -359,25 +360,34 @@
     font-weight: 500;
   }
 
-  .author-link {
+  .author-pill {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 14px;
-    color: var(--text-primary);
-    background: none;
+    gap: 8px;
+    padding: 6px 12px 6px 6px;
+    background: var(--bg-tertiary);
     border: none;
-    padding: 0;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
     cursor: pointer;
-    transition: color 150ms ease;
+    transition: all 150ms ease;
   }
 
-  .author-link:hover {
+  .author-pill:hover {
+    background: var(--bg-hover);
     color: var(--accent-primary);
   }
 
-  .author-link :global(svg) {
-    opacity: 0.5;
+  .author-pill :global(svg) {
+    opacity: 0.4;
+  }
+
+  .author-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
   }
 
   .contributors {
