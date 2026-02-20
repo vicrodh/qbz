@@ -233,13 +233,24 @@ async function copyToClipboard(text: string, successMessage: string): Promise<vo
   }
 }
 
+/** Extract a human-readable message from a Tauri RuntimeError or unknown throw. */
+function errorMessage(err: unknown): string {
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object') {
+    const obj = err as Record<string, unknown>;
+    if (typeof obj.details === 'string') return obj.details;
+    if (typeof obj.message === 'string') return obj.message;
+  }
+  return 'Unknown error';
+}
+
 export async function shareQobuzTrackLink(trackId: number): Promise<void> {
   try {
     const url = await invoke<string>('v2_get_qobuz_track_url', { trackId });
     await copyToClipboard(url, 'Qobuz link copied');
   } catch (err) {
     console.error('Failed to get Qobuz link:', err);
-    showToast(`Failed to share Qobuz link: ${err}`, 'error');
+    showToast(`Failed to share Qobuz link: ${errorMessage(err)}`, 'error');
   }
 }
 
@@ -266,6 +277,6 @@ export async function shareSonglinkTrack(trackId: number, isrc?: string): Promis
     await copyToClipboard(response.pageUrl, 'Song.link copied');
   } catch (err) {
     console.error('Failed to get Song.link:', err);
-    showToast(`Song.link error: ${err}`, 'error');
+    showToast(`Song.link error: ${errorMessage(err)}`, 'error');
   }
 }

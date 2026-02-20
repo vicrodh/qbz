@@ -49,7 +49,8 @@ impl SongLinkClient {
     }
 
     /// Get song.link URL for a track by ISRC
-    /// Qobuz isn't supported by Odesli, so we use ISRC to find the track on Spotify
+    /// Qobuz isn't supported by Odesli, so we resolve ISRC → Deezer track URL → Odesli.
+    /// Deezer's free API supports ISRC lookup without authentication.
     pub async fn get_by_isrc(&self, isrc: &str) -> Result<SongLinkResponse, ShareError> {
         let cache_key = format!("isrc:{}", isrc);
 
@@ -59,43 +60,63 @@ impl SongLinkClient {
             return Ok(cached);
         }
 
-        // Use Spotify search URL with ISRC - Odesli will resolve it
-        // Format: https://open.spotify.com/search/isrc:{ISRC}
-        let spotify_search_url = format!("https://open.spotify.com/search/isrc%3A{}", isrc);
-        log::info!("Fetching song.link via Spotify ISRC search: {}", isrc);
+        // Step 1: Resolve ISRC to a real Deezer track URL via Deezer's free API
+        let deezer_api_url = format!("https://api.deezer.com/2.0/track/isrc:{}", isrc);
+        log::info!("Resolving ISRC {} via Deezer API", isrc);
+
+        let deezer_response = self
+            .client
+            .get(&deezer_api_url)
+            .send()
+            .await?;
+
+        let deezer_track_url = if deezer_response.status().is_success() {
+            let body: serde_json::Value = deezer_response.json().await
+                .map_err(|e| ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e)))?;
+
+            // Check for Deezer error response (they return 200 with {"error": {...}})
+            if body.get("error").is_some() {
+                log::warn!("Deezer ISRC lookup returned error for {}", isrc);
+                None
+            } else {
+                body.get("link")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string())
+            }
+        } else {
+            log::warn!("Deezer API returned {} for ISRC {}", deezer_response.status(), isrc);
+            None
+        };
+
+        let track_url = match deezer_track_url {
+            Some(url) => {
+                log::info!("Resolved ISRC {} to Deezer URL: {}", isrc, url);
+                url
+            }
+            None => {
+                return Err(ShareError::OdesliError(format!(
+                    "Could not find track with ISRC {} on any supported platform", isrc
+                )));
+            }
+        };
+
+        // Step 2: Pass the real Deezer URL to Odesli
+        log::info!("Fetching song.link for Deezer URL: {}", track_url);
 
         let response = self
             .client
             .get(ODESLI_API_URL)
-            .query(&[("url", &spotify_search_url), ("userCountry", &"US".to_string())])
+            .query(&[("url", &track_url), ("userCountry", &"US".to_string())])
             .send()
             .await?;
 
-        // If Spotify search doesn't work, try Deezer
         if !response.status().is_success() {
-            log::debug!("Spotify search failed, trying Deezer...");
-            let deezer_url = format!("https://www.deezer.com/search/{}", isrc);
-
-            let response = self
-                .client
-                .get(ODESLI_API_URL)
-                .query(&[("url", &deezer_url), ("userCountry", &"US".to_string())])
-                .send()
-                .await?;
-
-            if !response.status().is_success() {
-                let status = response.status();
-                let text = response.text().await.unwrap_or_default();
-                return Err(ShareError::OdesliError(format!(
-                    "HTTP {}: {}",
-                    status, text
-                )));
-            }
-
-            let odesli: OdesliResponse = response.json().await?;
-            let result = self.convert_response(odesli, isrc.to_string(), ContentType::Track)?;
-            self.store_in_cache(cache_key, result.clone());
-            return Ok(result);
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(ShareError::OdesliError(format!(
+                "HTTP {}: {}",
+                status, text
+            )));
         }
 
         let odesli: OdesliResponse = response.json().await?;
@@ -165,6 +186,12 @@ impl SongLinkClient {
         if !response.status().is_success() {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
+            // Provide a friendlier message for common errors
+            if status.as_u16() == 400 && text.contains("could_not_resolve_entity") {
+                return Err(ShareError::OdesliError(
+                    "Track not found on any supported platform. Try a track with an ISRC code.".to_string()
+                ));
+            }
             return Err(ShareError::OdesliError(format!(
                 "HTTP {}: {}",
                 status, text
