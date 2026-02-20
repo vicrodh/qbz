@@ -3795,9 +3795,41 @@
           onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
         />
       {:else if activeView === 'dailyq'}
-        <DynamicSuggestView />
+        <DynamicSuggestView
+          onTrackPlay={handleDisplayTrackPlay}
+          onTrackPlayNext={queueDisplayTrackNext}
+          onTrackPlayLater={queueDisplayTrackLater}
+          onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackShareQobuz={shareQobuzTrackLink}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackGoToAlbum={handleAlbumClick}
+          onTrackGoToArtist={handleArtistClick}
+          onTrackShowInfo={showTrackInfo}
+          onTrackDownload={handleDisplayTrackDownload}
+          onTrackRemoveDownload={handleTrackRemoveDownload}
+          onTrackReDownload={handleDisplayTrackDownload}
+          getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
+        />
       {:else if activeView === 'weeklyq'}
-        <WeeklySuggestView />
+        <WeeklySuggestView
+          onTrackPlay={handleDisplayTrackPlay}
+          onTrackPlayNext={queueDisplayTrackNext}
+          onTrackPlayLater={queueDisplayTrackLater}
+          onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackShareQobuz={shareQobuzTrackLink}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackGoToAlbum={handleAlbumClick}
+          onTrackGoToArtist={handleArtistClick}
+          onTrackShowInfo={showTrackInfo}
+          onTrackDownload={handleDisplayTrackDownload}
+          onTrackRemoveDownload={handleTrackRemoveDownload}
+          onTrackReDownload={handleDisplayTrackDownload}
+          getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
+        />
       {:else if activeView === 'purchases'}
         <PurchasesView
           onAlbumClick={handlePurchaseAlbumClick}

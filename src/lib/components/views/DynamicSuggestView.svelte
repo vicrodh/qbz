@@ -9,12 +9,52 @@
   import { getDynamicSuggest } from '$lib/services/dynamicSuggest';
   import { getHomeSeeds, getHomeSeedsML } from '$lib/services/recoService';
   import { showToast } from '$lib/stores/toastStore';
+  import { setPlaybackContext } from '$lib/stores/playbackContextStore';
+  import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
+  import type { OfflineCacheStatus } from '$lib/stores/offlineCacheState';
+  import type { DisplayTrack } from '$lib/types';
   import type {
     DynamicSuggestResponse,
     DynamicTrackToAnalyseInput,
     DynamicSuggestTrack
   } from '$lib/types/dynamicSuggest';
+
+  interface Props {
+    onTrackPlay?: (track: DisplayTrack) => void;
+    onTrackPlayNext?: (track: DisplayTrack) => void;
+    onTrackPlayLater?: (track: DisplayTrack) => void;
+    onTrackAddToPlaylist?: (trackId: number) => void;
+    onTrackShareQobuz?: (trackId: number) => void;
+    onTrackShareSonglink?: (track: DisplayTrack) => void;
+    onTrackGoToAlbum?: (albumId: string) => void;
+    onTrackGoToArtist?: (artistId: number) => void;
+    onTrackShowInfo?: (trackId: number) => void;
+    onTrackDownload?: (track: DisplayTrack) => void;
+    onTrackRemoveDownload?: (trackId: number) => void;
+    onTrackReDownload?: (track: DisplayTrack) => void;
+    getTrackOfflineCacheStatus?: (trackId: number) => { status: OfflineCacheStatus; progress: number };
+    activeTrackId?: number | null;
+    isPlaybackActive?: boolean;
+  }
+
+  let {
+    onTrackPlay,
+    onTrackPlayNext,
+    onTrackPlayLater,
+    onTrackAddToPlaylist,
+    onTrackShareQobuz,
+    onTrackShareSonglink,
+    onTrackGoToAlbum,
+    onTrackGoToArtist,
+    onTrackShowInfo,
+    onTrackDownload,
+    onTrackRemoveDownload,
+    onTrackReDownload,
+    getTrackOfflineCacheStatus,
+    activeTrackId = null,
+    isPlaybackActive = false,
+  }: Props = $props();
 
   interface RawSuggestTrack {
     performer?: { id?: number };
@@ -221,17 +261,73 @@
     }
   }
 
-  async function playTrack(track: DynamicSuggestTrack): Promise<void> {
-    try {
-      await invoke('v2_play_track', { trackId: track.id });
-    } catch (err) {
-      console.error('Failed to play DailyQ track:', err);
+  function toDisplayTrack(track: DynamicSuggestTrack): DisplayTrack {
+    return {
+      id: track.id,
+      title: track.title,
+      artist: track.performer?.name || 'Unknown Artist',
+      album: track.album?.title,
+      albumArt: getQobuzImage(track.album?.image),
+      albumId: track.album?.id,
+      artistId: track.performer?.id,
+      duration: formatDuration(track.duration || 0),
+      durationSeconds: track.duration || 0,
+      hires: track.hires,
+      bitDepth: track.maximum_bit_depth,
+      samplingRate: track.maximum_sampling_rate,
+    };
+  }
+
+  function buildQueueTracks(tracks: DynamicSuggestTrack[]) {
+    return tracks
+      .filter(trk => {
+        if (!trk.performer?.id) return true;
+        return !isArtistBlacklisted(trk.performer.id);
+      })
+      .map(trk => ({
+        id: trk.id,
+        title: trk.title,
+        artist: trk.performer?.name || 'Unknown Artist',
+        album: trk.album?.title || 'DailyQ',
+        duration_secs: trk.duration || 0,
+        artwork_url: getQobuzImage(trk.album?.image) || '',
+        hires: trk.hires ?? false,
+        bit_depth: trk.maximum_bit_depth ?? null,
+        sample_rate: trk.maximum_sampling_rate ?? null,
+        is_local: false,
+        album_id: trk.album?.id || null,
+        artist_id: trk.performer?.id ?? null,
+      }));
+  }
+
+  async function handleTrackClick(track: DynamicSuggestTrack, trackIndex: number): Promise<void> {
+    const trackIds = filteredTracks.map(trk => trk.id);
+    const contextIndex = trackIds.indexOf(track.id);
+
+    if (contextIndex >= 0 && trackIds.length > 0) {
+      await setPlaybackContext(
+        'home_list',
+        'dailyq',
+        'DailyQ',
+        'qobuz',
+        trackIds,
+        contextIndex
+      );
     }
+
+    try {
+      const queueTracks = buildQueueTracks(filteredTracks);
+      await invoke('v2_set_queue', { tracks: queueTracks, startIndex: trackIndex });
+    } catch (err) {
+      console.error('Failed to set queue:', err);
+    }
+
+    onTrackPlay?.(toDisplayTrack(track));
   }
 
   async function handlePlayAll(): Promise<void> {
     if (filteredTracks.length === 0) return;
-    await playTrack(filteredTracks[0]);
+    await handleTrackClick(filteredTracks[0], 0);
   }
 
   async function handleShuffle(): Promise<void> {
@@ -239,7 +335,7 @@
     const randomIndex = Math.floor(Math.random() * filteredTracks.length);
     const track = filteredTracks[randomIndex];
     if (!track) return;
-    await playTrack(track);
+    await handleTrackClick(track, randomIndex);
   }
 
   const filteredTracks = $derived.by(() => {
@@ -338,6 +434,10 @@
       </div>
 
       {#each filteredTracks as track, index}
+        {@const trackBlacklisted = track.performer?.id ? isArtistBlacklisted(track.performer.id) : false}
+        {@const cacheStatus = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
+        {@const isTrackDownloaded = cacheStatus.status === 'ready'}
+        {@const displayTrack = toDisplayTrack(track)}
         <TrackRow
           trackId={track.id}
           number={index + 1}
@@ -348,8 +448,34 @@
           quality={qualityLabel(track)}
           showArtwork={true}
           artworkUrl={getQobuzImage(track.album?.image)}
-          hideDownload={true}
-          onPlay={() => playTrack(track)}
+          isPlaying={isPlaybackActive && activeTrackId === track.id}
+          isBlacklisted={trackBlacklisted}
+          hideDownload={trackBlacklisted}
+          hideFavorite={trackBlacklisted}
+          downloadStatus={cacheStatus.status}
+          downloadProgress={cacheStatus.progress}
+          onPlay={!trackBlacklisted ? () => handleTrackClick(track, index) : undefined}
+          onDownload={!trackBlacklisted && onTrackDownload ? () => onTrackDownload(displayTrack) : undefined}
+          onRemoveDownload={isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined}
+          menuActions={trackBlacklisted ? {
+            onGoToAlbum: track.album?.id && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.album!.id!) : undefined,
+            onGoToArtist: track.performer?.id && onTrackGoToArtist ? () => onTrackGoToArtist(track.performer!.id!) : undefined,
+            onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined,
+          } : {
+            onPlayNow: () => handleTrackClick(track, index),
+            onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(displayTrack) : undefined,
+            onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(displayTrack) : undefined,
+            onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined,
+            onShareQobuz: onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
+            onShareSonglink: onTrackShareSonglink ? () => onTrackShareSonglink(displayTrack) : undefined,
+            onGoToAlbum: track.album?.id && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.album!.id!) : undefined,
+            onGoToArtist: track.performer?.id && onTrackGoToArtist ? () => onTrackGoToArtist(track.performer!.id!) : undefined,
+            onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined,
+            onDownload: onTrackDownload ? () => onTrackDownload(displayTrack) : undefined,
+            isTrackDownloaded,
+            onReDownload: isTrackDownloaded && onTrackReDownload ? () => onTrackReDownload(displayTrack) : undefined,
+            onRemoveDownload: isTrackDownloaded && onTrackRemoveDownload ? () => onTrackRemoveDownload(track.id) : undefined,
+          }}
         />
       {/each}
     </div>
