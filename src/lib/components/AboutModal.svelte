@@ -13,6 +13,7 @@
   let { isOpen, onClose }: Props = $props();
 
   const BUILD_DATE = import.meta.env.VITE_BUILD_DATE || new Date().toISOString().split('T')[0];
+  const BUILD_COMMIT = import.meta.env.VITE_BUILD_COMMIT || '';
 
   let appName = $state('QBZ');
   let appVersion = $state('0.0.0');
@@ -100,7 +101,7 @@
             <span class="label">Platform</span>
             <span class="value">{platformLabel}</span>
             <span class="label">Build</span>
-            <span class="value">{BUILD_DATE}</span>
+            <span class="value">{BUILD_DATE}{#if BUILD_COMMIT} <span class="commit">({BUILD_COMMIT})</span>{/if}</span>
           </div>
         </div>
 
@@ -330,7 +331,7 @@
 
   .info-grid {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto 1fr auto 1fr;
     gap: 6px 16px;
     font-size: 13px;
   }
@@ -342,6 +343,11 @@
   .value {
     color: var(--text-primary);
     font-family: var(--font-mono);
+  }
+
+  .commit {
+    color: var(--text-muted);
+    font-size: 11px;
   }
 
   .attributions {

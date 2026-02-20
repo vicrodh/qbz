@@ -1,6 +1,7 @@
 // @ts-nocheck - Node.js globals used in vite config
 import { defineConfig } from "vite";
 import { sveltekit } from "@sveltejs/kit/vite";
+import { execSync } from "child_process";
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -10,6 +11,9 @@ export default defineConfig(async () => ({
   define: {
     'import.meta.env.VITE_BUILD_DATE': JSON.stringify(
       new Date().toISOString().split('T')[0]
+    ),
+    'import.meta.env.VITE_BUILD_COMMIT': JSON.stringify(
+      (() => { try { return execSync('git rev-parse --short=6 HEAD').toString().trim(); } catch { return ''; } })()
     ),
     // Immersive rendering feature flag (WebGL2-based effects)
     // Set QBZ_IMMERSIVE=false to compile out immersive rendering

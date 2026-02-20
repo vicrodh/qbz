@@ -13,6 +13,7 @@ declare global {
 // Extend Vite's ImportMetaEnv with our custom env variables
 interface ImportMetaEnv {
   readonly VITE_BUILD_DATE: string;
+  readonly VITE_BUILD_COMMIT: string;
   readonly VITE_IMMERSIVE_ENABLED: string;
 }
 
