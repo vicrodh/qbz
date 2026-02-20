@@ -265,9 +265,7 @@
 <div class="dailyq-view">
   <div class="playlist-header">
     <div class="artwork-container">
-      <div class="artwork">
-        <video src="/video/dailyq.mp4" autoplay loop muted playsinline></video>
-      </div>
+      <div class="artwork artwork-daily"></div>
     </div>
 
     <div class="metadata">
@@ -402,10 +400,12 @@
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }
 
-  .artwork video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+  .artwork-daily {
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.25) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 60%, rgba(255, 200, 50, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 80%, rgba(255, 140, 0, 0.5) 0%, transparent 60%),
+      linear-gradient(135deg, #e8a020 0%, #d4781a 30%, #c45e18 60%, #a04010 100%);
   }
 
   .metadata {

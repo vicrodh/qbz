@@ -1453,36 +1453,31 @@
     {/if}
 
     {#if sectionId === 'yourMixes'}
-      <HorizontalScrollRow>
-        {#snippet header()}
-          <div class="section-header-group">
-            <h2 class="section-title">{$t('home.yourMixes')}</h2>
-          </div>
-        {/snippet}
-        {#snippet children()}
-          <button class="mix-card" onclick={() => onNavigateDailyQ?.()}
-                  onkeydown={(e) => e.key === 'Enter' && onNavigateDailyQ?.()}>
-            <div class="mix-card-artwork">
-              <video src="/video/dailyq.mp4" autoplay loop muted playsinline></video>
+      <div class="your-mixes-section">
+        <h2 class="section-title">{$t('home.yourMixes')}</h2>
+        <div class="mix-cards-row">
+          <button class="mix-card" onclick={() => onNavigateDailyQ?.()}>
+            <div class="mix-card-artwork mix-gradient-daily">
+              <span class="mix-card-badge">qobuz</span>
+              <span class="mix-card-name">DailyQ</span>
             </div>
             <div class="mix-card-info">
               <div class="mix-card-title">{$t('yourMixes.title')}</div>
               <div class="mix-card-owner">Qobuz</div>
             </div>
           </button>
-          <button class="mix-card" onclick={() => onNavigateWeeklyQ?.()}
-                  onkeydown={(e) => e.key === 'Enter' && onNavigateWeeklyQ?.()}>
-            <div class="mix-card-artwork">
-              <video src="/video/weeklyq.mp4" autoplay loop muted playsinline></video>
+          <button class="mix-card" onclick={() => onNavigateWeeklyQ?.()}>
+            <div class="mix-card-artwork mix-gradient-weekly">
+              <span class="mix-card-badge">qobuz</span>
+              <span class="mix-card-name">WeeklyQ</span>
             </div>
             <div class="mix-card-info">
               <div class="mix-card-title">{$t('weeklyMixes.title')}</div>
               <div class="mix-card-owner">Qobuz</div>
             </div>
           </button>
-          <div class="spacer"></div>
-        {/snippet}
-      </HorizontalScrollRow>
+        </div>
+      </div>
     {/if}
   {/each}
 
@@ -1852,6 +1847,17 @@
     color: var(--text-primary);
   }
 
+  .your-mixes-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mix-cards-row {
+    display: flex;
+    gap: 16px;
+  }
+
   .mix-card {
     flex-shrink: 0;
     width: 180px;
@@ -1868,14 +1874,44 @@
     height: 180px;
     border-radius: 8px;
     overflow: hidden;
-    background: var(--bg-tertiary);
     margin-bottom: 8px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 12px;
+    box-sizing: border-box;
   }
 
-  .mix-card-artwork video {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+  .mix-gradient-daily {
+    background:
+      radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.25) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 60%, rgba(255, 200, 50, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 80%, rgba(255, 140, 0, 0.5) 0%, transparent 60%),
+      linear-gradient(135deg, #e8a020 0%, #d4781a 30%, #c45e18 60%, #a04010 100%);
+  }
+
+  .mix-gradient-weekly {
+    background:
+      radial-gradient(ellipse at 40% 20%, rgba(255, 200, 255, 0.35) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 50%, rgba(200, 150, 255, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 70%, rgba(130, 80, 200, 0.5) 0%, transparent 60%),
+      linear-gradient(135deg, #b060d0 0%, #8040b0 30%, #6030a0 60%, #402080 100%);
+  }
+
+  .mix-card-badge {
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    letter-spacing: 0.02em;
+  }
+
+  .mix-card-name {
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.1;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   }
 
   .mix-card-title {
