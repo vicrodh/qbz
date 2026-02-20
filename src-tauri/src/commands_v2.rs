@@ -1518,11 +1518,11 @@ pub async fn v2_resolve_music_link(
     }
 }
 
-/// Use the Odesli API to identify a cross-platform URL (title/artist),
-/// then search Qobuz to find the matching album.
+/// Identify a cross-platform music URL and search Qobuz for the equivalent.
 ///
-/// Odesli does NOT include Qobuz in its platform map, so we extract metadata
-/// and perform a Qobuz catalog search instead.
+/// Fast path: for Spotify/Tidal/Deezer, calls the platform API directly to get
+/// title+artist (~300ms). Fallback: uses Odesli API (~2-3s).
+/// Then searches Qobuz with progressively simpler queries.
 async fn resolve_via_odesli_and_search(
     songlink: &crate::share::SongLinkClient,
     url: &str,
@@ -1531,9 +1531,58 @@ async fn resolve_via_odesli_and_search(
     bridge: &State<'_, CoreBridgeState>,
     runtime: &State<'_, RuntimeManagerState>,
 ) -> Result<MusicLinkResult, RuntimeError> {
+    use crate::playlist_import::providers::MusicProvider;
+
     let provider_name = provider.map(|p| format!("{:?}", p));
 
-    // 1. Call Odesli API to identify the content (with one retry for transient errors)
+    // 1. Get title + artist: try direct platform API first (fast), fall back to Odesli
+    let (title, artist) = if let Some(prov) = provider {
+        match try_direct_platform_metadata(url, prov, is_track).await {
+            Some(meta) => {
+                log::info!("Link resolver: direct API resolved '{}' by '{}'", meta.0, meta.1);
+                meta
+            }
+            None => {
+                log::info!("Link resolver: direct API failed, falling back to Odesli");
+                fetch_metadata_via_odesli(songlink, url).await?
+            }
+        }
+    } else {
+        // No provider (song.link URLs) — use Odesli
+        fetch_metadata_via_odesli(songlink, url).await?
+    };
+
+    if title.is_empty() {
+        return Ok(MusicLinkResult::NotOnQobuz {
+            provider: provider_name,
+        });
+    }
+
+    // 2. Search Qobuz with progressively simpler queries
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let bridge_guard = bridge.get().await;
+
+    if let Some(result) = search_qobuz_smart(
+        &*bridge_guard, &title, &artist, is_track, &provider_name,
+    ).await? {
+        return Ok(result);
+    }
+
+    log::info!("Link resolver: '{}' by '{}' not found on Qobuz", title, artist);
+    Ok(MusicLinkResult::NotOnQobuz {
+        provider: provider_name,
+    })
+}
+
+/// Fetch metadata from Odesli API (with one retry for transient errors).
+async fn fetch_metadata_via_odesli(
+    songlink: &crate::share::SongLinkClient,
+    url: &str,
+) -> Result<(String, String), RuntimeError> {
     let response = match songlink
         .get_by_url(url, crate::share::ContentType::Track)
         .await
@@ -1549,71 +1598,256 @@ async fn resolve_via_odesli_and_search(
         }
     };
 
-    let title = response.title.as_deref().unwrap_or("").trim();
-    let artist = response.artist.as_deref().unwrap_or("").trim();
+    let title = response.title.unwrap_or_default().trim().to_string();
+    let artist = response.artist.unwrap_or_default().trim().to_string();
+    Ok((title, artist))
+}
 
-    if title.is_empty() {
-        return Ok(MusicLinkResult::NotOnQobuz {
-            provider: provider_name,
-        });
-    }
-
-    log::info!(
-        "Link resolver: Odesli identified '{}' by '{}', searching Qobuz...",
-        title, artist
-    );
-
-    // 2. Search Qobuz using title + artist
-    runtime
-        .manager()
-        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
-        .await?;
-
-    let query = if artist.is_empty() {
+/// Search Qobuz with progressively simpler queries until a match is found.
+///
+/// Strategy:
+/// 1. "title artist" (exact)
+/// 2. "cleaned_title artist" (remove parenthetical/bracket suffixes)
+/// 3. "artist" only with album search (broad)
+async fn search_qobuz_smart(
+    bridge: &crate::core_bridge::CoreBridge,
+    title: &str,
+    artist: &str,
+    is_track: bool,
+    provider_name: &Option<String>,
+) -> Result<Option<MusicLinkResult>, RuntimeError> {
+    let full_query = if artist.is_empty() {
         title.to_string()
     } else {
         format!("{} {}", title, artist)
     };
 
-    let bridge = bridge.get().await;
-
+    // Attempt 1: full query
     if is_track {
-        // Search tracks, navigate to the track's album
-        let results = bridge
-            .search_tracks(&query, 5, 0, None)
-            .await
-            .map_err(RuntimeError::Internal)?;
-
+        let results = bridge.search_tracks(&full_query, 5, 0, None).await.map_err(RuntimeError::Internal)?;
         if let Some(track) = results.items.first() {
-            log::info!("Link resolver: found Qobuz track id={}", track.id);
-            return Ok(MusicLinkResult::Resolved {
+            log::info!("Link resolver: found Qobuz track id={} (full query)", track.id);
+            return Ok(Some(MusicLinkResult::Resolved {
                 link: qbz_qobuz::ResolvedLink::OpenTrack(track.id),
-                provider: provider_name,
-            });
+                provider: provider_name.clone(),
+            }));
         }
     }
 
-    // Search albums (also as fallback for tracks)
-    let results = bridge
-        .search_albums(&query, 5, 0, None)
-        .await
-        .map_err(RuntimeError::Internal)?;
-
+    let results = bridge.search_albums(&full_query, 5, 0, None).await.map_err(RuntimeError::Internal)?;
     if let Some(album) = results.items.first() {
-        log::info!("Link resolver: found Qobuz album id={}", album.id);
-        return Ok(MusicLinkResult::Resolved {
+        log::info!("Link resolver: found Qobuz album id={} (full query)", album.id);
+        return Ok(Some(MusicLinkResult::Resolved {
             link: qbz_qobuz::ResolvedLink::OpenAlbum(album.id.clone()),
-            provider: provider_name,
-        });
+            provider: provider_name.clone(),
+        }));
     }
 
-    log::info!(
-        "Link resolver: '{}' by '{}' not found on Qobuz",
-        title, artist
+    // Attempt 2: clean title (remove parenthetical/bracket suffixes like "Remastered", "Deluxe")
+    let cleaned = clean_title(title);
+    if cleaned != title && !cleaned.is_empty() {
+        let clean_query = if artist.is_empty() {
+            cleaned.clone()
+        } else {
+            format!("{} {}", cleaned, artist)
+        };
+
+        log::info!("Link resolver: retrying with cleaned query '{}'", clean_query);
+        let results = bridge.search_albums(&clean_query, 5, 0, None).await.map_err(RuntimeError::Internal)?;
+        if let Some(album) = results.items.first() {
+            log::info!("Link resolver: found Qobuz album id={} (cleaned query)", album.id);
+            return Ok(Some(MusicLinkResult::Resolved {
+                link: qbz_qobuz::ResolvedLink::OpenAlbum(album.id.clone()),
+                provider: provider_name.clone(),
+            }));
+        }
+    }
+
+    // Attempt 3: search by artist name only (broad)
+    if !artist.is_empty() && artist != title {
+        log::info!("Link resolver: retrying with artist-only query '{}'", artist);
+        let results = bridge.search_albums(artist, 10, 0, None).await.map_err(RuntimeError::Internal)?;
+        let title_lower = title.to_ascii_lowercase();
+        let cleaned_lower = clean_title(title).to_ascii_lowercase();
+        for album in &results.items {
+            let album_title_lower = album.title.to_ascii_lowercase();
+            if album_title_lower.contains(&cleaned_lower)
+                || cleaned_lower.contains(&album_title_lower)
+                || album_title_lower.contains(&title_lower)
+            {
+                log::info!("Link resolver: found Qobuz album id={} (artist-only + title match)", album.id);
+                return Ok(Some(MusicLinkResult::Resolved {
+                    link: qbz_qobuz::ResolvedLink::OpenAlbum(album.id.clone()),
+                    provider: provider_name.clone(),
+                }));
+            }
+        }
+    }
+
+    Ok(None)
+}
+
+/// Remove parenthetical/bracket suffixes from a title.
+/// "Senjutsu (2021 Remaster)" → "Senjutsu"
+/// "The Number of the Beast [Deluxe Edition]" → "The Number of the Beast"
+fn clean_title(title: &str) -> String {
+    let mut result = title.to_string();
+    // Remove trailing (...) and [...]
+    while let Some(pos) = result.rfind('(') {
+        if result[pos..].contains(')') {
+            result = result[..pos].trim_end().to_string();
+        } else {
+            break;
+        }
+    }
+    while let Some(pos) = result.rfind('[') {
+        if result[pos..].contains(']') {
+            result = result[..pos].trim_end().to_string();
+        } else {
+            break;
+        }
+    }
+    result.trim().to_string()
+}
+
+// ── Direct platform metadata (bypass Odesli for speed) ──
+
+const QBZ_PROXY_BASE: &str = "https://qbz-api-proxy.blitzkriegfc.workers.dev";
+
+/// Try to get title+artist directly from the platform API.
+/// Returns None if the platform isn't supported or the request fails.
+async fn try_direct_platform_metadata(
+    url: &str,
+    provider: &crate::playlist_import::providers::MusicProvider,
+    is_track: bool,
+) -> Option<(String, String)> {
+    use crate::playlist_import::providers::MusicProvider;
+
+    match provider {
+        MusicProvider::Deezer => try_deezer_metadata(url, is_track).await,
+        MusicProvider::Spotify => try_spotify_metadata(url, is_track).await,
+        MusicProvider::Tidal => try_tidal_metadata(url, is_track).await,
+        MusicProvider::AppleMusic => None, // No direct API available
+    }
+}
+
+/// Extract a numeric or alphanumeric ID after /track/ or /album/ in a URL.
+fn extract_entity_id(url: &str, entity_type: &str) -> Option<String> {
+    let pattern = format!("/{}/", entity_type);
+    let idx = url.find(&pattern)?;
+    let rest = &url[idx + pattern.len()..];
+    let id = rest.split(['?', '/', '#']).next()?;
+    if id.is_empty() { None } else { Some(id.to_string()) }
+}
+
+/// Extract Spotify ID from URL or URI.
+fn extract_spotify_entity_id(url: &str, entity_type: &str) -> Option<String> {
+    // URI format: spotify:track:abc123
+    let uri_pattern = format!("spotify:{}:", entity_type);
+    if let Some(rest) = url.strip_prefix(&uri_pattern) {
+        let id = rest.split(['?', '/']).next()?;
+        if !id.is_empty() { return Some(id.to_string()); }
+    }
+    extract_entity_id(url, entity_type)
+}
+
+async fn try_deezer_metadata(url: &str, is_track: bool) -> Option<(String, String)> {
+    let entity = if is_track { "track" } else { "album" };
+    let id = extract_entity_id(url, entity)
+        .or_else(|| if is_track { None } else { extract_entity_id(url, "track") })?;
+    let api_url = format!("https://api.deezer.com/{}/{}", entity, id);
+
+    log::debug!("Link resolver: Deezer direct API: {}", api_url);
+    let data: serde_json::Value = reqwest::get(&api_url).await.ok()?.json().await.ok()?;
+    if data.get("error").is_some() { return None; }
+
+    let title = data.get("title")?.as_str()?.to_string();
+    let artist = data.get("artist")
+        .and_then(|a| a.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Some((title, artist))
+}
+
+async fn try_spotify_metadata(url: &str, is_track: bool) -> Option<(String, String)> {
+    let entity = if is_track { "track" } else { "album" };
+    let id = extract_spotify_entity_id(url, entity)?;
+    let token = get_proxy_token("spotify").await?;
+    let api_url = format!("https://api.spotify.com/v1/{}s/{}", entity, id);
+
+    log::debug!("Link resolver: Spotify direct API: {}", api_url);
+    let data: serde_json::Value = reqwest::Client::new()
+        .get(&api_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send().await.ok()?
+        .json().await.ok()?;
+
+    let title = data.get("name")?.as_str()?.to_string();
+    let artist = data.get("artists")
+        .and_then(|a| a.as_array())
+        .and_then(|a| a.first())
+        .and_then(|a| a.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Some((title, artist))
+}
+
+async fn try_tidal_metadata(url: &str, is_track: bool) -> Option<(String, String)> {
+    let entity = if is_track { "track" } else { "album" };
+    let id = extract_entity_id(url, entity)
+        // Also try /browse/track/ pattern
+        .or_else(|| extract_entity_id(url, &format!("browse/{}", entity)))?;
+    let token = get_proxy_token("tidal").await?;
+    let api_url = format!(
+        "https://openapi.tidal.com/v2/{}s/{}?countryCode=US&include=artists",
+        entity, id
     );
-    Ok(MusicLinkResult::NotOnQobuz {
-        provider: provider_name,
-    })
+
+    log::debug!("Link resolver: Tidal direct API: {}", api_url);
+    let data: serde_json::Value = reqwest::Client::new()
+        .get(&api_url)
+        .header("Authorization", format!("Bearer {}", token))
+        .send().await.ok()?
+        .json().await.ok()?;
+
+    let title = data.get("data")
+        .and_then(|d| d.get("attributes"))
+        .and_then(|a| a.get("title"))
+        .and_then(|v| v.as_str())?
+        .to_string();
+
+    // Artist name is in the "included" array
+    let artist = data.get("included")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.iter().find(|item|
+            item.get("type").and_then(|v| v.as_str()) == Some("artists")
+        ))
+        .and_then(|item| item.get("attributes"))
+        .and_then(|a| a.get("name"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    Some((title, artist))
+}
+
+/// Get an OAuth token from the QBZ proxy for the given platform.
+async fn get_proxy_token(platform: &str) -> Option<String> {
+    let url = format!("{}/{}/token", QBZ_PROXY_BASE, platform);
+    let data: serde_json::Value = reqwest::Client::builder()
+        .default_headers({
+            let mut h = reqwest::header::HeaderMap::new();
+            h.insert(reqwest::header::USER_AGENT, reqwest::header::HeaderValue::from_static("QBZ/1.0.0"));
+            h
+        })
+        .build().ok()?
+        .get(&url)
+        .send().await.ok()?
+        .json().await.ok()?;
+    data.get("access_token")
+        .and_then(|v| v.as_str())
+        .map(|v| v.to_string())
 }
 
 #[tauri::command]
