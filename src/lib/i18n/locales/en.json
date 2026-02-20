@@ -1738,6 +1738,11 @@
     "subtitle": "Based on your weekly listening.",
     "cardDesc": "Take a weekly journey with a fresh mix <strong>every Friday</strong>."
   },
+  "playlistManager": {
+    "switchToFlat": "Flat view",
+    "switchToFolders": "Folder view",
+    "emptyFolder": "Empty folder"
+  },
   "linkResolver": {
     "title": "Open Qobuz Link",
     "placeholder": "Paste a Qobuz link (album, track, artist, playlist)...",

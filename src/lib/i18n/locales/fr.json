@@ -1499,6 +1499,11 @@
       "noFormats": "Aucun format de telechargement disponible pour cette piste."
     }
   },
+  "playlistManager": {
+    "switchToFlat": "Vue plate",
+    "switchToFolders": "Vue dossiers",
+    "emptyFolder": "Dossier vide"
+  },
   "linkResolver": {
     "title": "Ouvrir un lien Qobuz",
     "placeholder": "Collez un lien Qobuz (album, piste, artiste, playlist)...",

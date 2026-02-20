@@ -1499,6 +1499,11 @@
       "noFormats": "Keine Download-Formate fuer diesen Titel verfuegbar."
     }
   },
+  "playlistManager": {
+    "switchToFlat": "Flache Ansicht",
+    "switchToFolders": "Ordneransicht",
+    "emptyFolder": "Leerer Ordner"
+  },
   "linkResolver": {
     "title": "Qobuz-Link oeffnen",
     "placeholder": "Einen Qobuz-Link einfuegen (Album, Titel, Kuenstler, Playlist)...",

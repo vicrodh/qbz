@@ -1738,6 +1738,11 @@
     "subtitle": "Basado en tus escuchas semanales.",
     "cardDesc": "Un viaje semanal con un mix fresco <strong>cada viernes</strong>."
   },
+  "playlistManager": {
+    "switchToFlat": "Vista plana",
+    "switchToFolders": "Vista de carpetas",
+    "emptyFolder": "Carpeta vacía"
+  },
   "linkResolver": {
     "title": "Abrir enlace de Qobuz",
     "placeholder": "Pega un enlace de Qobuz (album, track, artista, playlist)...",

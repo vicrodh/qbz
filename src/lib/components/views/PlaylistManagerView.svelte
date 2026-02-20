@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, Filter, ArrowUpDown, LayoutGrid, List, GripVertical, EyeOff, Eye, BarChart2, Play, Pencil, Search, X, Cloud, CloudOff, Wifi, Heart, Folder, FolderPlus, ChevronRight, ChevronDown, ChevronUp, Trash2, Star, Music, Disc, Library, Info } from 'lucide-svelte';
+  import { ArrowLeft, Filter, ArrowUpDown, LayoutGrid, List, GripVertical, EyeOff, Eye, BarChart2, Play, Pencil, Search, X, Cloud, CloudOff, Wifi, Heart, Folder, FolderPlus, FolderOpen, ChevronRight, ChevronDown, ChevronUp, Trash2, Star, Music, Disc, Library, Info, Rows3, Network } from 'lucide-svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
   import ViewTransition from '../ViewTransition.svelte';
@@ -62,7 +62,7 @@
 
   type PlaylistFilter = 'all' | 'visible' | 'hidden' | 'offline_all' | 'offline_partial' | 'offline_unavailable';
   type PlaylistSort = 'name' | 'recent' | 'playcount' | 'tracks' | 'custom';
-  type ViewMode = 'list' | 'grid';
+  type ViewMode = 'list' | 'grid' | 'tree';
 
   interface Props {
     onBack?: () => void;
@@ -94,6 +94,11 @@
   let viewMode = $state<ViewMode>(
     (getUserItem('qbz-pm-view') as ViewMode) || 'grid'
   );
+  let folderMode = $state<boolean>(
+    (getUserItem('qbz-pm-folder-mode') as string) !== 'false'
+  );
+  let treeFolderExpanded = $state<Set<string>>(new Set());
+  let treeInitialized = $state(false);
 
   // Search state
   let searchQuery = $state('');
@@ -132,6 +137,21 @@
   $effect(() => { setUserItem('qbz-pm-filter', filter); });
   $effect(() => { setUserItem('qbz-pm-sort', sort); });
   $effect(() => { setUserItem('qbz-pm-view', viewMode); });
+  $effect(() => { setUserItem('qbz-pm-folder-mode', String(folderMode)); });
+
+  // Guard: when folder mode turns off and we're in tree view, switch to grid
+  $effect(() => {
+    if (!folderMode && viewMode === 'tree') {
+      viewMode = 'grid';
+    }
+  });
+
+  // Guard: when folder mode turns off, reset to root
+  $effect(() => {
+    if (!folderMode) {
+      currentFolderId = null;
+    }
+  });
 
   // Helper functions for closing menus with global store
   function closeFilterMenu() {
@@ -247,6 +267,34 @@
     return false;
   }
 
+  // Reusable sort helper
+  function applySortToList(items: Playlist[]): Playlist[] {
+    const sorted = [...items];
+    if (sort === 'name') {
+      sorted.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sort === 'playcount') {
+      sorted.sort((a, b) => {
+        const countA = playlistStats.get(a.id)?.play_count ?? 0;
+        const countB = playlistStats.get(b.id)?.play_count ?? 0;
+        return countB - countA;
+      });
+    } else if (sort === 'tracks') {
+      sorted.sort((a, b) => {
+        const countA = getTotalTrackCount(a);
+        const countB = getTotalTrackCount(b);
+        return countB - countA;
+      });
+    } else if (sort === 'custom') {
+      sorted.sort((a, b) => {
+        const posA = playlistSettings.get(a.id)?.position ?? 999;
+        const posB = playlistSettings.get(b.id)?.position ?? 999;
+        return posA - posB;
+      });
+    }
+    // 'recent' keeps original order from API
+    return sorted;
+  }
+
   // Filtered and sorted playlists (single-pass filter for search + visibility + folder)
   const displayPlaylists = $derived.by(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -257,10 +305,12 @@
       // Search filter
       if (hasSearch && !p.name.toLowerCase().includes(query)) return false;
 
-      // Folder filter
+      // Folder filter: only apply when folder mode is ON and not in tree view
       const settings = playlistSettings.get(p.id);
-      const playlistFolderId = settings?.folder_id ?? null;
-      if (playlistFolderId !== currentFolderId) return false;
+      if (folderMode && viewMode !== 'tree') {
+        const playlistFolderId = settings?.folder_id ?? null;
+        if (playlistFolderId !== currentFolderId) return false;
+      }
 
       // Visibility / offline filter
       if (isOffline) {
@@ -287,31 +337,7 @@
       return true;
     });
 
-    // Apply sort
-    if (sort === 'name') {
-      result.sort((a, b) => a.name.localeCompare(b.name));
-    } else if (sort === 'playcount') {
-      result.sort((a, b) => {
-        const countA = playlistStats.get(a.id)?.play_count ?? 0;
-        const countB = playlistStats.get(b.id)?.play_count ?? 0;
-        return countB - countA;
-      });
-    } else if (sort === 'tracks') {
-      result.sort((a, b) => {
-        const countA = getTotalTrackCount(a);
-        const countB = getTotalTrackCount(b);
-        return countB - countA;
-      });
-    } else if (sort === 'custom') {
-      result.sort((a, b) => {
-        const posA = playlistSettings.get(a.id)?.position ?? 999;
-        const posB = playlistSettings.get(b.id)?.position ?? 999;
-        return posA - posB;
-      });
-    }
-    // 'recent' keeps original order from API
-
-    return result;
+    return applySortToList(result);
   });
 
   // Pre-computed index map: playlist id -> index in displayPlaylists (avoids O(n) findIndex per item)
@@ -327,6 +353,91 @@
   const currentFolder = $derived(
     currentFolderId ? folders.find(f => f.id === currentFolderId) : null
   );
+
+  // === Tree View ===
+
+  interface TreeFolder {
+    type: 'folder';
+    folder: PlaylistFolder;
+    playlists: Playlist[];
+  }
+  interface TreePlaylist {
+    type: 'playlist';
+    playlist: Playlist;
+  }
+  type TreeNode = TreeFolder | TreePlaylist;
+
+  const treeNodes = $derived.by(() => {
+    if (viewMode !== 'tree') return [] as TreeNode[];
+    const nodes: TreeNode[] = [];
+    const query = searchQuery.trim().toLowerCase();
+    const hasSearch = query.length > 0;
+    const isOffline = offlineStatus.isOffline;
+
+    function getPlaylistsForFolder(folderId: string | null): Playlist[] {
+      const filtered = playlists.filter(p => {
+        if (hasSearch && !p.name.toLowerCase().includes(query)) return false;
+        const s = playlistSettings.get(p.id);
+        if ((s?.folder_id ?? null) !== folderId) return false;
+        // Same visibility/offline filter as displayPlaylists
+        if (isOffline) {
+          if (filter === 'offline_all' || filter === 'all') {
+            return getLocalContentStatus(p.id) === 'all_local';
+          } else if (filter === 'offline_partial') {
+            return getLocalContentStatus(p.id) === 'some_local';
+          } else if (filter === 'offline_unavailable') {
+            const status = getLocalContentStatus(p.id);
+            return status === 'no' || status === 'unknown';
+          } else if (filter === 'visible') {
+            return !s?.hidden && isPlaylistAvailableOffline(p.id);
+          } else if (filter === 'hidden') {
+            return !!s?.hidden;
+          }
+        } else {
+          if (filter === 'visible') {
+            return !s?.hidden;
+          } else if (filter === 'hidden') {
+            return !!s?.hidden;
+          }
+        }
+        return true;
+      });
+      return applySortToList(filtered);
+    }
+
+    // Folders first
+    for (const folder of folders) {
+      const folderPlaylists = getPlaylistsForFolder(folder.id);
+      if (!hasSearch || folderPlaylists.length > 0) {
+        nodes.push({ type: 'folder', folder, playlists: folderPlaylists });
+      }
+    }
+
+    // Root playlists (no folder)
+    for (const p of getPlaylistsForFolder(null)) {
+      nodes.push({ type: 'playlist', playlist: p });
+    }
+
+    return nodes;
+  });
+
+  function toggleTreeFolder(folderId: string) {
+    const next = new Set(treeFolderExpanded);
+    if (next.has(folderId)) {
+      next.delete(folderId);
+    } else {
+      next.add(folderId);
+    }
+    treeFolderExpanded = next;
+  }
+
+  // Auto-expand all folders on first tree open
+  $effect(() => {
+    if (viewMode === 'tree' && !treeInitialized && folders.length > 0) {
+      treeFolderExpanded = new Set(folders.map(f => f.id));
+      treeInitialized = true;
+    }
+  });
 
   // Get playlist count for a folder
   function getPlaylistCountInFolder(folderId: string): number {
@@ -770,8 +881,8 @@
     <h1>Playlist Manager</h1>
   </div>
 
-  <!-- Breadcrumb Navigation (when inside a folder) -->
-  {#if currentFolderId && currentFolder}
+  <!-- Breadcrumb Navigation (when inside a folder, only in folder mode and not tree) -->
+  {#if folderMode && viewMode !== 'tree' && currentFolderId && currentFolder}
     <div class="breadcrumb">
       <button class="breadcrumb-item" onclick={navigateToRoot}>
         All Playlists
@@ -899,16 +1010,41 @@
       {/if}
     </div>
 
-    <!-- View toggle -->
-    <button class="control-btn icon-only" onclick={() => viewMode = viewMode === 'list' ? 'grid' : 'list'}>
-      {#if viewMode === 'list'}
-        <LayoutGrid size={16} />
+    <!-- Folder/Flat toggle -->
+    <button
+      class="control-btn icon-only"
+      onclick={() => folderMode = !folderMode}
+      title={folderMode ? $t('playlistManager.switchToFlat') : $t('playlistManager.switchToFolders')}
+    >
+      {#if folderMode}
+        <FolderOpen size={16} />
       {:else}
-        <List size={16} />
+        <Rows3 size={16} />
       {/if}
     </button>
 
-    {#if !currentFolderId}
+    <!-- View toggle (cycle) -->
+    <button class="control-btn icon-only" onclick={() => {
+      if (folderMode) {
+        viewMode = viewMode === 'grid' ? 'list' : viewMode === 'list' ? 'tree' : 'grid';
+      } else {
+        viewMode = viewMode === 'list' ? 'grid' : 'list';
+      }
+    }}>
+      {#if viewMode === 'grid'}
+        <List size={16} />
+      {:else if viewMode === 'list'}
+        {#if folderMode}
+          <Network size={16} />
+        {:else}
+          <LayoutGrid size={16} />
+        {/if}
+      {:else}
+        <LayoutGrid size={16} />
+      {/if}
+    </button>
+
+    {#if folderMode && !currentFolderId}
       <button class="control-btn" onclick={openCreateFolderModal}>
         <FolderPlus size={16} />
         <span>New Folder</span>
@@ -936,8 +1072,8 @@
     </div>
   {:else}
     <ViewTransition duration={200} distance={12} direction="up">
-    <!-- Folders Section (only at root level) -->
-    {#if !currentFolderId && folders.length > 0}
+    <!-- Folders Section (only at root level, folder mode, non-tree) -->
+    {#if folderMode && viewMode !== 'tree' && !currentFolderId && folders.length > 0}
       <div class="folders-section">
         <button
           class="section-header-btn"
@@ -1059,7 +1195,7 @@
         <p>{filter === 'hidden' ? 'No hidden playlists' : filter === 'visible' ? 'No visible playlists' : currentFolderId ? 'No playlists in this folder' : 'No playlists yet'}</p>
       </div>
     {:else if displayPlaylists.length > 0}
-      {#if !currentFolderId && folders.length > 0}
+      {#if folderMode && viewMode !== 'tree' && !currentFolderId && folders.length > 0}
         <div class="section-header-btn playlists-section-header">
           <span class="section-title">Playlists ({displayPlaylists.length})</span>
         </div>
@@ -1180,6 +1316,154 @@
             {/if}
           </div>
         </div>
+      {/each}
+    </div>
+  {:else if viewMode === 'tree'}
+    <!-- Tree View -->
+    <div class="tree">
+      {#each treeNodes as node}
+        {#if node.type === 'folder'}
+          <div class="tree-folder">
+            <button class="tree-folder-header" onclick={() => toggleTreeFolder(node.folder.id)}>
+              {#if treeFolderExpanded.has(node.folder.id)}
+                <ChevronDown size={14} class="tree-chevron" />
+              {:else}
+                <ChevronRight size={14} class="tree-chevron" />
+              {/if}
+              <div class="tree-folder-icon" style={node.folder.icon_color ? `background: ${node.folder.icon_color};` : ''}>
+                {#if node.folder.icon_type === 'custom' && node.folder.custom_image_path}
+                  <img src={node.folder.custom_image_path} alt="" class="tree-folder-img" />
+                {:else if node.folder.icon_preset === 'heart'}
+                  <Heart size={16} />
+                {:else if node.folder.icon_preset === 'star'}
+                  <Star size={16} />
+                {:else if node.folder.icon_preset === 'music'}
+                  <Music size={16} />
+                {:else if node.folder.icon_preset === 'disc'}
+                  <Disc size={16} />
+                {:else if node.folder.icon_preset === 'library'}
+                  <Library size={16} />
+                {:else}
+                  <Folder size={16} />
+                {/if}
+              </div>
+              <span class="tree-folder-name">{node.folder.name}</span>
+              <span class="tree-folder-count">{node.playlists.length}</span>
+            </button>
+            {#if treeFolderExpanded.has(node.folder.id)}
+              <div class="tree-children">
+                {#each node.playlists as playlist (playlist.id)}
+                  {@const isHidden = playlistSettings.get(playlist.id)?.hidden}
+                  {@const isFavorite = playlistSettings.get(playlist.id)?.is_favorite}
+                  {@const isUnavailable = offlineStatus.isOffline && !isPlaylistAvailableOffline(playlist.id)}
+                  <div
+                    class="tree-item"
+                    class:hidden={isHidden}
+                    class:unavailable={isUnavailable}
+                    role="button"
+                    tabindex="0"
+                    onclick={() => onPlaylistSelect?.(playlist.id)}
+                  >
+                    <div class="tree-item-artwork">
+                      <PlaylistCollage artworks={playlist.images ?? []} size={32} />
+                    </div>
+                    <div class="tree-item-info">
+                      <span class="tree-item-name">{playlist.name}</span>
+                      <span class="tree-item-meta">{getTotalTrackCount(playlist)} tracks</span>
+                    </div>
+                    {#if !isUnavailable}
+                      <div class="tree-item-actions">
+                        <button
+                          class="favorite-btn"
+                          class:is-active={isFavorite}
+                          onclick={(e) => { e.stopPropagation(); toggleFavorite(playlist); }}
+                          title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                        >
+                          <Heart size={12} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'currentColor'} />
+                        </button>
+                        <button
+                          class="visibility-btn"
+                          class:is-hidden={isHidden}
+                          onclick={(e) => { e.stopPropagation(); toggleHidden(playlist); }}
+                          title={isHidden ? 'Show in sidebar' : 'Hide from sidebar'}
+                        >
+                          {#if isHidden}
+                            <EyeOff size={12} />
+                          {:else}
+                            <Eye size={12} />
+                          {/if}
+                        </button>
+                        <button
+                          class="edit-btn"
+                          onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
+                          title="Edit playlist"
+                        >
+                          <Pencil size={12} />
+                        </button>
+                      </div>
+                    {/if}
+                  </div>
+                {/each}
+                {#if node.playlists.length === 0}
+                  <div class="tree-empty">{$t('playlistManager.emptyFolder')}</div>
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {:else}
+          <!-- Root-level playlist (no folder) -->
+          {@const playlist = node.playlist}
+          {@const isHidden = playlistSettings.get(playlist.id)?.hidden}
+          {@const isFavorite = playlistSettings.get(playlist.id)?.is_favorite}
+          {@const isUnavailable = offlineStatus.isOffline && !isPlaylistAvailableOffline(playlist.id)}
+          <div
+            class="tree-item root"
+            class:hidden={isHidden}
+            class:unavailable={isUnavailable}
+            role="button"
+            tabindex="0"
+            onclick={() => onPlaylistSelect?.(playlist.id)}
+          >
+            <div class="tree-item-artwork">
+              <PlaylistCollage artworks={playlist.images ?? []} size={32} />
+            </div>
+            <div class="tree-item-info">
+              <span class="tree-item-name">{playlist.name}</span>
+              <span class="tree-item-meta">{getTotalTrackCount(playlist)} tracks</span>
+            </div>
+            {#if !isUnavailable}
+              <div class="tree-item-actions">
+                <button
+                  class="favorite-btn"
+                  class:is-active={isFavorite}
+                  onclick={(e) => { e.stopPropagation(); toggleFavorite(playlist); }}
+                  title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                >
+                  <Heart size={12} fill={isFavorite ? 'var(--accent-primary)' : 'none'} color={isFavorite ? 'var(--accent-primary)' : 'currentColor'} />
+                </button>
+                <button
+                  class="visibility-btn"
+                  class:is-hidden={isHidden}
+                  onclick={(e) => { e.stopPropagation(); toggleHidden(playlist); }}
+                  title={isHidden ? 'Show in sidebar' : 'Hide from sidebar'}
+                >
+                  {#if isHidden}
+                    <EyeOff size={12} />
+                  {:else}
+                    <Eye size={12} />
+                  {/if}
+                </button>
+                <button
+                  class="edit-btn"
+                  onclick={(e) => { e.stopPropagation(); openEditModal(playlist); }}
+                  title="Edit playlist"
+                >
+                  <Pencil size={12} />
+                </button>
+              </div>
+            {/if}
+          </div>
+        {/if}
       {/each}
     </div>
   {:else}
@@ -2266,5 +2550,142 @@
     color: var(--text-muted);
     margin-right: 8px;
     flex-shrink: 0;
+  }
+
+  /* Tree View */
+  .tree {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .tree-folder-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 6px 8px;
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-primary);
+    transition: background-color 150ms ease;
+  }
+
+  .tree-folder-header:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .tree-folder-header :global(.tree-chevron) {
+    flex-shrink: 0;
+    color: var(--text-muted);
+  }
+
+  .tree-folder-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+    color: var(--text-primary);
+    flex-shrink: 0;
+  }
+
+  .tree-folder-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 6px;
+  }
+
+  .tree-folder-name {
+    font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tree-folder-count {
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+
+  .tree-children {
+    padding-left: 24px;
+  }
+
+  .tree-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 150ms ease;
+  }
+
+  .tree-item:hover {
+    background: var(--bg-tertiary);
+  }
+
+  .tree-item.hidden {
+    opacity: 0.6;
+  }
+
+  .tree-item.unavailable {
+    opacity: 0.5;
+  }
+
+  .tree-item-artwork {
+    flex-shrink: 0;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .tree-item-info {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  .tree-item-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .tree-item-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+
+  .tree-item-actions {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-shrink: 0;
+    opacity: 0;
+    transition: opacity 150ms ease;
+  }
+
+  .tree-item:hover .tree-item-actions {
+    opacity: 1;
+  }
+
+  .tree-empty {
+    padding: 8px 12px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-style: italic;
   }
 </style>
