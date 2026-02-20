@@ -3565,6 +3565,11 @@
           onLabelClick={handleLabelClick}
           onNavigateReleases={handleNavigateLabelReleases}
           onPlaylistClick={selectPlaylist}
+          onPlaylistPlay={playPlaylistById}
+          onPlaylistPlayNext={queuePlaylistNextById}
+          onPlaylistPlayLater={queuePlaylistLaterById}
+          onPlaylistCopyToLibrary={copyPlaylistToLibraryById}
+          onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
           onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queueQobuzTrackNext}
           onTrackPlayLater={queueQobuzTrackLater}

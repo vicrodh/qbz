@@ -54,6 +54,11 @@
     onLabelClick?: (labelId: number, labelName?: string) => void;
     onNavigateReleases?: (labelId: number, labelName: string) => void;
     onPlaylistClick?: (playlistId: number) => void;
+    onPlaylistPlay?: (playlistId: number) => void;
+    onPlaylistPlayNext?: (playlistId: number) => void;
+    onPlaylistPlayLater?: (playlistId: number) => void;
+    onPlaylistCopyToLibrary?: (playlistId: number) => void;
+    onPlaylistShareQobuz?: (playlistId: number) => void;
     onTrackPlay?: (track: DisplayTrack) => void;
     onTrackPlayNext?: (track: Track) => void;
     onTrackPlayLater?: (track: Track) => void;
@@ -84,6 +89,11 @@
     onLabelClick,
     onNavigateReleases,
     onPlaylistClick,
+    onPlaylistPlay,
+    onPlaylistPlayNext,
+    onPlaylistPlayLater,
+    onPlaylistCopyToLibrary,
+    onPlaylistShareQobuz,
     onTrackPlay,
     onTrackPlayNext,
     onTrackPlayLater,
@@ -994,6 +1004,11 @@
                 duration={playlist.duration as number | undefined}
                 genre={(playlist.genres as { name: string }[])?.[0]?.name}
                 onclick={() => onPlaylistClick?.(playlist.id as number)}
+                onPlay={onPlaylistPlay ? () => onPlaylistPlay(playlist.id as number) : undefined}
+                onPlayNext={onPlaylistPlayNext ? () => onPlaylistPlayNext(playlist.id as number) : undefined}
+                onPlayLater={onPlaylistPlayLater ? () => onPlaylistPlayLater(playlist.id as number) : undefined}
+                onCopyToLibrary={onPlaylistCopyToLibrary ? () => onPlaylistCopyToLibrary(playlist.id as number) : undefined}
+                onShareQobuz={onPlaylistShareQobuz ? () => onPlaylistShareQobuz(playlist.id as number) : undefined}
               />
             {/each}
             <div class="spacer"></div>
@@ -1189,7 +1204,7 @@
 
   /* Sections */
   .section-anchor { scroll-margin-top: 56px; }
-  .section { margin-bottom: 48px; }
+  .section { margin-bottom: 64px; }
   .section-header {
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px; margin-bottom: 20px;
@@ -1232,7 +1247,7 @@
   .context-menu-item:hover { background-color: var(--bg-hover); color: var(--text-primary); }
 
   /* Tracks */
-  .top-tracks-section { margin-bottom: 48px; }
+  .top-tracks-section { margin-bottom: 64px; }
   .tracks-list { display: flex; flex-direction: column; }
   .track-row {
     display: flex; align-items: center; gap: 12px;
