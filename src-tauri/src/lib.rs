@@ -3,12 +3,12 @@
 //! This application uses the Qobuz API but is not certified by Qobuz.
 
 // New multi-crate architecture
-pub mod tauri_adapter;
-pub mod core_bridge;
 pub mod commands_v2;
+pub mod core_bridge;
+pub mod integrations_v2;
 pub mod runtime;
 pub mod session_lifecycle;
-pub mod integrations_v2;
+pub mod tauri_adapter;
 
 pub mod api;
 pub mod api_cache;
@@ -22,7 +22,6 @@ pub mod commands;
 pub mod config;
 pub mod credentials;
 pub mod discogs;
-pub mod offline_cache;
 pub mod flatpak;
 pub mod lastfm;
 pub mod library;
@@ -34,13 +33,14 @@ pub mod migration;
 pub mod musicbrainz;
 pub mod network;
 pub mod offline;
+pub mod offline_cache;
 pub mod playback_context;
-pub mod plex;
 pub mod player;
 pub mod playlist_import;
+pub mod plex;
 pub mod queue;
-pub mod reco_store;
 pub mod radio_engine;
+pub mod reco_store;
 pub mod session_store;
 pub mod share;
 pub mod tray;
@@ -81,7 +81,10 @@ impl AppState {
     }
 
     pub fn with_device(device_name: Option<String>) -> Self {
-        Self::with_device_and_settings(device_name, config::audio_settings::AudioSettings::default())
+        Self::with_device_and_settings(
+            device_name,
+            config::audio_settings::AudioSettings::default(),
+        )
     }
 
     pub fn with_device_and_settings(
@@ -92,7 +95,10 @@ impl AppState {
         let playback_cache = match PlaybackCache::new(500 * 1024 * 1024) {
             Ok(cache) => Some(Arc::new(cache)),
             Err(e) => {
-                log::warn!("Failed to create playback cache: {}. Disk spillover disabled.", e);
+                log::warn!(
+                    "Failed to create playback cache: {}. Disk spillover disabled.",
+                    e
+                );
                 None
             }
         };
@@ -110,7 +116,12 @@ impl AppState {
 
         Self {
             client: Arc::new(RwLock::new(QobuzClient::default())),
-            player: Player::new(device_name, audio_settings, Some(viz_tap), audio::AudioDiagnostic::new()),
+            player: Player::new(
+                device_name,
+                audio_settings,
+                Some(viz_tap),
+                audio::AudioDiagnostic::new(),
+            ),
             queue: QueueManager::new(),
             context: ContextManager::new(),
             media_controls: MediaControlsManager::new(),
@@ -173,9 +184,10 @@ pub fn run() {
     let (saved_device, audio_settings) = config::audio_settings::AudioSettingsStore::new()
         .ok()
         .and_then(|store| {
-            store.get_settings().ok().map(|settings| {
-                (settings.output_device.clone(), settings)
-            })
+            store
+                .get_settings()
+                .ok()
+                .map(|settings| (settings.output_device.clone(), settings))
         })
         .unwrap_or_else(|| {
             log::info!("No saved audio settings found, using defaults");
@@ -233,8 +245,7 @@ pub fn run() {
     let use_system_titlebar = window_settings.use_system_titlebar;
 
     // Initialize casting state (Chromecast, DLNA) — device-level, not per-user
-    let cast_state = cast::CastState::new()
-        .expect("Failed to initialize Chromecast state");
+    let cast_state = cast::CastState::new().expect("Failed to initialize Chromecast state");
     let dlna_state = cast::DlnaState::new(cast_state.media_server.clone())
         .expect("Failed to initialize DLNA state");
 
@@ -252,20 +263,25 @@ pub fn run() {
     let download_settings_state = config::download_settings::create_empty_download_settings_state();
     let offline_state = offline::OfflineState::new_empty();
     let playback_prefs_state = config::playback_preferences::PlaybackPreferencesState::new_empty();
-    let favorites_prefs_state = config::favorites_preferences::FavoritesPreferencesState::new_empty();
+    let favorites_prefs_state =
+        config::favorites_preferences::FavoritesPreferencesState::new_empty();
     let favorites_cache_state = config::favorites_cache::FavoritesCacheState::new_empty();
     let tray_settings_state = config::tray_settings::TraySettingsState::new_empty();
-    let remote_control_settings_state = config::remote_control_settings::RemoteControlSettingsState::new_empty();
+    let remote_control_settings_state =
+        config::remote_control_settings::RemoteControlSettingsState::new_empty();
     let allowed_origins_state = config::remote_control_settings::AllowedOriginsState::new_empty();
     // LegalSettings is GLOBAL (not per-user) - must be initialized at startup
     // so ToS acceptance can be checked BEFORE attempting auto-login
     let legal_settings_state = config::legal_settings::create_legal_settings_state()
         .unwrap_or_else(|e| {
-            log::warn!("Failed to initialize legal settings: {}. Using empty state.", e);
+            log::warn!(
+                "Failed to initialize legal settings: {}. Using empty state.",
+                e
+            );
             config::legal_settings::create_empty_legal_settings_state()
         });
-    let updates_state = updates::UpdatesState::new_empty()
-        .expect("Failed to initialize empty updates state");
+    let updates_state =
+        updates::UpdatesState::new_empty().expect("Failed to initialize empty updates state");
     let subscription_state = config::create_empty_subscription_state();
     let musicbrainz_state = musicbrainz::MusicBrainzSharedState::new_empty();
     let artist_vectors_state = artist_vectors::ArtistVectorStoreState::new_empty();
@@ -278,17 +294,26 @@ pub fn run() {
     let lastfm_v2_state = integrations_v2::LastFmV2State::new();
     let developer_settings_state = config::developer_settings::DeveloperSettingsState::new()
         .unwrap_or_else(|e| {
-            log::warn!("Failed to initialize developer settings: {}. Using empty state.", e);
+            log::warn!(
+                "Failed to initialize developer settings: {}. Using empty state.",
+                e
+            );
             config::developer_settings::DeveloperSettingsState::new_empty()
         });
     let graphics_settings_state = config::graphics_settings::GraphicsSettingsState::new()
         .unwrap_or_else(|e| {
-            log::warn!("Failed to initialize graphics settings: {}. Using empty state.", e);
+            log::warn!(
+                "Failed to initialize graphics settings: {}. Using empty state.",
+                e
+            );
             config::graphics_settings::GraphicsSettingsState::new_empty()
         });
-    let window_settings_state = config::window_settings::WindowSettingsState::new()
-        .unwrap_or_else(|e| {
-            log::warn!("Failed to initialize window settings: {}. Using empty state.", e);
+    let window_settings_state =
+        config::window_settings::WindowSettingsState::new().unwrap_or_else(|e| {
+            log::warn!(
+                "Failed to initialize window settings: {}. Using empty state.",
+                e
+            );
             config::window_settings::WindowSettingsState::new_empty()
         });
 
@@ -309,7 +334,10 @@ pub fn run() {
 
             // Check if second instance was launched with a Qobuz link arg
             for arg in &args {
-                if arg.starts_with("qobuzapp://") || arg.contains("play.qobuz.com/") || arg.contains("open.qobuz.com/") {
+                if arg.starts_with("qobuzapp://")
+                    || arg.contains("play.qobuz.com/")
+                    || arg.contains("open.qobuz.com/")
+                {
                     if let Ok(resolved) = qbz_qobuz::resolve_link(arg) {
                         log::info!("Single-instance forwarding link: {:?}", resolved);
                         let _ = app.emit("link:resolved", &resolved);
@@ -321,7 +349,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(AppState::with_device_and_settings(saved_device, audio_settings))
+        .manage(AppState::with_device_and_settings(
+            saved_device,
+            audio_settings,
+        ))
         .manage(core_bridge::CoreBridgeState::new())
         .manage(runtime::RuntimeManagerState::new())
         .manage(user_data_paths)
@@ -332,10 +363,7 @@ pub fn run() {
             // decorations:true at runtime (WM buttons don't work). By
             // creating the window with the right value from the start, the
             // WM sees the correct state when the window is first mapped.
-            log::info!(
-                "Creating main window (decorations={})",
-                use_system_titlebar
-            );
+            log::info!("Creating main window (decorations={})", use_system_titlebar);
             tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
@@ -390,7 +418,9 @@ pub fn run() {
                             let v2_state = b.player().state.clone();
                             *v2_player_state_setter.write().await = Some(v2_state);
                             *core_bridge_arc.write().await = Some(b);
-                            log::info!("CoreBridge initialized successfully (V2 player state captured)");
+                            log::info!(
+                                "CoreBridge initialized successfully (V2 player state captured)"
+                            );
                         }
                         Err(e) => {
                             log::error!("Failed to initialize CoreBridge: {}", e);
@@ -411,8 +441,12 @@ pub fn run() {
             {
                 let launch_handle = app.handle().clone();
                 let args: Vec<String> = std::env::args().collect();
-                for arg in &args[1..] { // skip binary name
-                    if arg.starts_with("qobuzapp://") || arg.contains("play.qobuz.com/") || arg.contains("open.qobuz.com/") {
+                for arg in &args[1..] {
+                    // skip binary name
+                    if arg.starts_with("qobuzapp://")
+                        || arg.contains("play.qobuz.com/")
+                        || arg.contains("open.qobuz.com/")
+                    {
                         if let Ok(resolved) = qbz_qobuz::resolve_link(arg) {
                             log::info!("Launch arg link resolved: {:?}", resolved);
                             // Delay emission to give frontend time to mount
@@ -438,43 +472,39 @@ pub fn run() {
                 loop {
                     // Check V2 player state first (takes priority if active)
                     // V2 player is accessed via async lock, but we only need a clone
-                    let v2_state_opt: Option<qbz_player::SharedState> = v2_player_state.read().await.clone();
+                    let v2_state_opt: Option<qbz_player::SharedState> =
+                        v2_player_state.read().await.clone();
 
                     // Determine which player is active (V2 takes priority if it has a track)
-                    let (is_playing, track_id, position, duration, volume, sample_rate, bit_depth, normalization_gain, gapless_ready, gapless_next_track_id) =
-                        if let Some(ref v2_state) = v2_state_opt {
-                            let v2_track_id = v2_state.current_track_id();
-                            if v2_track_id != 0 {
-                                // V2 player is active
-                                (
-                                    v2_state.is_playing(),
-                                    v2_track_id,
-                                    v2_state.current_position(),
-                                    v2_state.duration(),
-                                    v2_state.volume(),
-                                    v2_state.get_sample_rate(),
-                                    v2_state.get_bit_depth(),
-                                    v2_state.get_normalization_gain(),
-                                    v2_state.is_gapless_ready(),
-                                    v2_state.get_gapless_next_track_id(),
-                                )
-                            } else {
-                                // Fallback to legacy player
-                                (
-                                    legacy_player_state.is_playing(),
-                                    legacy_player_state.current_track_id(),
-                                    legacy_player_state.current_position(),
-                                    legacy_player_state.duration(),
-                                    legacy_player_state.volume(),
-                                    legacy_player_state.get_sample_rate(),
-                                    legacy_player_state.get_bit_depth(),
-                                    legacy_player_state.get_normalization_gain(),
-                                    legacy_player_state.is_gapless_ready(),
-                                    legacy_player_state.get_gapless_next_track_id(),
-                                )
-                            }
+                    let (
+                        is_playing,
+                        track_id,
+                        position,
+                        duration,
+                        volume,
+                        sample_rate,
+                        bit_depth,
+                        normalization_gain,
+                        gapless_ready,
+                        gapless_next_track_id,
+                    ) = if let Some(ref v2_state) = v2_state_opt {
+                        let v2_track_id = v2_state.current_track_id();
+                        if v2_track_id != 0 {
+                            // V2 player is active
+                            (
+                                v2_state.is_playing(),
+                                v2_track_id,
+                                v2_state.current_position(),
+                                v2_state.duration(),
+                                v2_state.volume(),
+                                v2_state.get_sample_rate(),
+                                v2_state.get_bit_depth(),
+                                v2_state.get_normalization_gain(),
+                                v2_state.is_gapless_ready(),
+                                v2_state.get_gapless_next_track_id(),
+                            )
                         } else {
-                            // V2 not initialized yet, use legacy
+                            // Fallback to legacy player
                             (
                                 legacy_player_state.is_playing(),
                                 legacy_player_state.current_track_id(),
@@ -487,7 +517,22 @@ pub fn run() {
                                 legacy_player_state.is_gapless_ready(),
                                 legacy_player_state.get_gapless_next_track_id(),
                             )
-                        };
+                        }
+                    } else {
+                        // V2 not initialized yet, use legacy
+                        (
+                            legacy_player_state.is_playing(),
+                            legacy_player_state.current_track_id(),
+                            legacy_player_state.current_position(),
+                            legacy_player_state.duration(),
+                            legacy_player_state.volume(),
+                            legacy_player_state.get_sample_rate(),
+                            legacy_player_state.get_bit_depth(),
+                            legacy_player_state.get_normalization_gain(),
+                            legacy_player_state.is_gapless_ready(),
+                            legacy_player_state.get_gapless_next_track_id(),
+                        )
+                    };
 
                     // Emit when:
                     // 1) normal in-track state changes/position updates, or
@@ -495,11 +540,11 @@ pub fn run() {
                     // Case (2) is required so frontend can run end-of-track fallback
                     // auto-advance paths reliably.
                     let track_cleared = track_id == 0 && last_track_id != 0;
-                    let should_emit = (track_id != 0 && (
-                        is_playing != last_is_playing
-                        || track_id != last_track_id
-                        || (is_playing && position != last_position)
-                    )) || track_cleared;
+                    let should_emit = (track_id != 0
+                        && (is_playing != last_is_playing
+                            || track_id != last_track_id
+                            || (is_playing && position != last_position)))
+                        || track_cleared;
 
                     let should_update_mpris = should_emit || (track_id == 0 && last_track_id != 0);
 
@@ -519,7 +564,11 @@ pub fn run() {
                             duration,
                             track_id,
                             volume,
-                            sample_rate: if sample_rate > 0 { Some(sample_rate) } else { None },
+                            sample_rate: if sample_rate > 0 {
+                                Some(sample_rate)
+                            } else {
+                                None
+                            },
                             bit_depth: if bit_depth > 0 { Some(bit_depth) } else { None },
                             shuffle: Some(shuffle),
                             repeat: Some(repeat.to_string()),
@@ -564,7 +613,8 @@ pub fn run() {
             // Handle close to tray — read dynamically from state so per-user
             // settings take effect after login without needing a restart.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let close_to_tray = window.app_handle()
+                let close_to_tray = window
+                    .app_handle()
                     .try_state::<config::tray_settings::TraySettingsState>()
                     .and_then(|state| state.get_settings().ok())
                     .map(|s| s.close_to_tray)
@@ -576,13 +626,13 @@ pub fn run() {
                 } else {
                     // Cleanup cast devices on actual close
                     log::info!("App closing: cleaning up cast devices");
-                    
+
                     // Disconnect Chromecast if connected (sends message through channel)
                     if let Some(cast_state) = window.app_handle().try_state::<cast::CastState>() {
                         log::info!("Disconnecting Chromecast on app exit");
                         let _ = cast_state.chromecast.disconnect();
                     }
-                    
+
                     // Note: DLNA connection will be dropped when the app exits,
                     // which will naturally close the connection. The tokio Mutex
                     // prevents us from synchronously stopping playback here.
@@ -1026,6 +1076,8 @@ pub fn run() {
             commands_v2::v2_discogs_download_artwork,
             commands_v2::v2_check_album_fully_cached,
             commands_v2::v2_purchases_get_all,
+            commands_v2::v2_purchases_get_ids,
+            commands_v2::v2_purchases_get_by_type,
             commands_v2::v2_purchases_search,
             commands_v2::v2_purchases_get_album,
             commands_v2::v2_purchases_get_formats,
@@ -1034,6 +1086,8 @@ pub fn run() {
             commands_v2::v2_purchases_mark_downloaded,
             commands_v2::v2_purchases_remove_downloaded,
             commands_v2::v2_purchases_get_downloaded_track_ids,
+            commands_v2::v2_dynamic_suggest,
+            commands_v2::v2_dynamic_suggest_raw,
             commands_v2::v2_resolve_qobuz_link,
             commands_v2::v2_get_qobuz_track_url,
             commands_v2::v2_check_qobuzapp_handler,

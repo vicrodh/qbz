@@ -15,28 +15,38 @@ use qbz_models::{
     QueueTrack as CoreQueueTrack, RepeatMode, SearchResultsPage, Track, UserSession,
 };
 
-use crate::artist_blacklist::BlacklistState;
-use crate::artist_vectors::ArtistVectorStoreState;
-use crate::cache::{AudioCache, CacheStats};
 use crate::api::models::{
-    PlaylistDuplicateResult, PlaylistWithTrackIds, PurchaseAlbum, PurchaseResponse, PurchaseTrack,
+    DynamicSuggestRequest, DynamicSuggestResponse, DynamicTrackToAnalyse, PlaylistDuplicateResult,
+    PlaylistWithTrackIds, PurchaseAlbum, PurchaseIdsResponse, PurchaseResponse, PurchaseTrack,
     SearchResultsPage as ApiSearchResultsPage,
 };
 use crate::api_cache::ApiCacheState;
+use crate::artist_blacklist::BlacklistState;
+use crate::artist_vectors::ArtistVectorStoreState;
 use crate::audio::{AlsaPlugin, AudioBackendType, AudioDevice, BackendManager};
-use crate::cast::{AirPlayMetadata, AirPlayState, CastState, DlnaMetadata, DlnaState, MediaMetadata};
+use crate::cache::{AudioCache, CacheStats};
+use crate::cast::{
+    AirPlayMetadata, AirPlayState, CastState, DlnaMetadata, DlnaState, MediaMetadata,
+};
 use crate::config::audio_settings::{AudioSettings, AudioSettingsState};
 use crate::config::developer_settings::{DeveloperSettings, DeveloperSettingsState};
 use crate::config::download_settings::DownloadSettingsState;
 use crate::config::favorites_preferences::FavoritesPreferences;
-use crate::config::graphics_settings::{GraphicsSettings, GraphicsSettingsState, GraphicsStartupStatus};
+use crate::config::graphics_settings::{
+    GraphicsSettings, GraphicsSettingsState, GraphicsStartupStatus,
+};
 use crate::config::legal_settings::LegalSettingsState;
-use crate::config::playback_preferences::{AutoplayMode, PlaybackPreferences, PlaybackPreferencesState};
+use crate::config::playback_preferences::{
+    AutoplayMode, PlaybackPreferences, PlaybackPreferencesState,
+};
 use crate::config::tray_settings::TraySettings;
 use crate::config::tray_settings::TraySettingsState;
 use crate::config::window_settings::WindowSettingsState;
 use crate::core_bridge::CoreBridgeState;
-use crate::library::{thumbnails, LibraryState, LocalAlbum, LocalTrack, MetadataExtractor, PlaylistLocalTrack, PlaylistSettings, PlaylistStats, ScanProgress, get_artwork_cache_dir};
+use crate::library::{
+    get_artwork_cache_dir, thumbnails, LibraryState, LocalAlbum, LocalTrack, MetadataExtractor,
+    PlaylistLocalTrack, PlaylistSettings, PlaylistStats, ScanProgress,
+};
 use crate::lyrics::LyricsState;
 use crate::musicbrainz::{CacheStats as MusicBrainzCacheStats, MusicBrainzSharedState};
 use crate::offline::OfflineState;
@@ -44,15 +54,18 @@ use crate::offline_cache::OfflineCacheState;
 use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
 use crate::plex::{PlexMusicSection, PlexPlayResult, PlexServerInfo, PlexTrack};
 use crate::reco_store::{HomeResolved, HomeSeeds, RecoEventInput, RecoState};
-use crate::runtime::{RuntimeManagerState, RuntimeStatus, RuntimeError, RuntimeEvent, DegradedReason, CommandRequirement};
+use crate::runtime::{
+    CommandRequirement, DegradedReason, RuntimeError, RuntimeEvent, RuntimeManagerState,
+    RuntimeStatus,
+};
 use crate::AppState;
 use md5::{Digest, Md5};
 use notify_rust::Notification;
+use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
 use std::sync::Mutex;
-use std::collections::HashSet;
 
 #[derive(Debug, Clone, serde::Deserialize)]
 pub struct V2SuggestionArtistInput {
@@ -129,9 +142,9 @@ pub struct V2SearchAllResults {
 ///
 /// Returns Ok(()) if ToS accepted, Err with specific error code if not.
 fn require_tos_accepted(legal_state: &LegalSettingsState) -> Result<(), (String, String)> {
-    let guard = legal_state.lock().map_err(|e| {
-        ("tos_check_failed".to_string(), format!("Lock error: {}", e))
-    })?;
+    let guard = legal_state
+        .lock()
+        .map_err(|e| ("tos_check_failed".to_string(), format!("Lock error: {}", e)))?;
 
     let tos_accepted = guard
         .as_ref()
@@ -156,18 +169,18 @@ fn require_tos_accepted(legal_state: &LegalSettingsState) -> Result<(), (String,
 /// - Legacy + CoreBridge auth succeeded but session activation failed
 ///
 /// Ensures runtime_get_status never reports a half-authenticated state.
-async fn rollback_auth_state(
-    manager: &crate::runtime::RuntimeManager,
-    app: &tauri::AppHandle,
-) {
+async fn rollback_auth_state(manager: &crate::runtime::RuntimeManager, app: &tauri::AppHandle) {
     log::warn!("[V2] Rolling back auth state after partial login failure");
     manager.set_legacy_auth(false, None).await;
     manager.set_corebridge_auth(false).await;
     manager.set_session_activated(false, 0).await;
-    let _ = app.emit("runtime:event", RuntimeEvent::AuthChanged {
-        logged_in: false,
-        user_id: None,
-    });
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::AuthChanged {
+            logged_in: false,
+            user_id: None,
+        },
+    );
 }
 
 /// Convert quality string from frontend to Quality enum
@@ -192,7 +205,8 @@ fn limit_quality_for_device(quality: Quality, max_sample_rate: Option<u32>) -> Q
             Quality::UltraHiRes | Quality::HiRes => {
                 log::info!(
                     "[V2/Quality Limit] Device max {}Hz, limiting {} to Lossless (44.1kHz)",
-                    max_rate, quality.label()
+                    max_rate,
+                    quality.label()
                 );
                 Quality::Lossless
             }
@@ -297,7 +311,10 @@ fn v2_cache_notification_artwork(url: &str) -> Result<PathBuf, String> {
         .map_err(|e| format!("Failed to download artwork: {}", e))?;
 
     if !response.status().is_success() {
-        return Err(format!("Failed to download artwork: HTTP {}", response.status()));
+        return Err(format!(
+            "Failed to download artwork: HTTP {}",
+            response.status()
+        ));
     }
 
     let bytes = response
@@ -385,7 +402,12 @@ pub async fn runtime_bootstrap(
                 log::error!("[Runtime] Bundle extraction failed: {}", e);
                 manager.set_degraded(reason.clone()).await;
                 manager.set_bootstrap_in_progress(false).await;
-                let _ = app.emit("runtime:event", RuntimeEvent::RuntimeDegraded { reason: reason.clone() });
+                let _ = app.emit(
+                    "runtime:event",
+                    RuntimeEvent::RuntimeDegraded {
+                        reason: reason.clone(),
+                    },
+                );
                 return Err(RuntimeError::RuntimeDegraded(reason));
             }
         }
@@ -399,7 +421,10 @@ pub async fn runtime_bootstrap(
         match guard {
             Ok(ref g) => {
                 if let Some(store) = g.as_ref() {
-                    store.get_settings().map(|s| s.qobuz_tos_accepted).unwrap_or(false)
+                    store
+                        .get_settings()
+                        .map(|s| s.qobuz_tos_accepted)
+                        .unwrap_or(false)
                 } else {
                     false
                 }
@@ -412,7 +437,10 @@ pub async fn runtime_bootstrap(
         log::info!("[Runtime] ToS not accepted, skipping auto-login. User must accept ToS first.");
         manager.set_bootstrap_in_progress(false).await;
         let status = manager.get_status().await;
-        log::info!("[Runtime] Bootstrap complete (ToS gate): {:?}", status.state);
+        log::info!(
+            "[Runtime] Bootstrap complete (ToS gate): {:?}",
+            status.state
+        );
         return Ok(status);
     }
 
@@ -436,12 +464,18 @@ pub async fn runtime_bootstrap(
         let client = app_state.client.read().await;
         match client.login(&creds.email, &creds.password).await {
             Ok(session) => {
-                log::info!("[Runtime] Legacy auth successful for user {}", session.user_id);
+                log::info!(
+                    "[Runtime] Legacy auth successful for user {}",
+                    session.user_id
+                );
                 manager.set_legacy_auth(true, Some(session.user_id)).await;
-                let _ = app.emit("runtime:event", RuntimeEvent::AuthChanged {
-                    logged_in: true,
-                    user_id: Some(session.user_id),
-                });
+                let _ = app.emit(
+                    "runtime:event",
+                    RuntimeEvent::AuthChanged {
+                        logged_in: true,
+                        user_id: Some(session.user_id),
+                    },
+                );
 
                 // Step 4: Authenticate CoreBridge/V2 - REQUIRED per ADR
                 if let Some(bridge) = core_bridge.try_get().await {
@@ -452,9 +486,12 @@ pub async fn runtime_bootstrap(
                         }
                         Err(e) => {
                             log::error!("[Runtime] CoreBridge auth failed: {}", e);
-                            let _ = app.emit("runtime:event", RuntimeEvent::CoreBridgeAuthFailed {
-                                error: e.to_string(),
-                            });
+                            let _ = app.emit(
+                                "runtime:event",
+                                RuntimeEvent::CoreBridgeAuthFailed {
+                                    error: e.to_string(),
+                                },
+                            );
                             manager.set_bootstrap_in_progress(false).await;
                             return Err(RuntimeError::V2AuthFailed(e));
                         }
@@ -468,7 +505,9 @@ pub async fn runtime_bootstrap(
                 // Step 5: Activate per-user session - REQUIRED (FATAL if fails)
                 // This initializes all per-user stores and sets runtime state
                 // Session activation failure is FATAL per parity with v2_auto_login/v2_manual_login
-                if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
+                if let Err(e) =
+                    crate::session_lifecycle::activate_session(&app, session.user_id).await
+                {
                     log::error!("[Runtime] Session activation failed: {}", e);
                     // Rollback auth state since session is not usable
                     manager.set_legacy_auth(false, None).await;
@@ -476,7 +515,12 @@ pub async fn runtime_bootstrap(
                     let reason = DegradedReason::SessionActivationFailed(e.clone());
                     manager.set_degraded(reason.clone()).await;
                     manager.set_bootstrap_in_progress(false).await;
-                    let _ = app.emit("runtime:event", RuntimeEvent::RuntimeDegraded { reason: reason.clone() });
+                    let _ = app.emit(
+                        "runtime:event",
+                        RuntimeEvent::RuntimeDegraded {
+                            reason: reason.clone(),
+                        },
+                    );
                     return Err(RuntimeError::RuntimeDegraded(reason));
                 }
             }
@@ -526,7 +570,12 @@ pub async fn v2_init_client(
                 let reason = DegradedReason::BundleExtractionFailed(e.to_string());
                 log::error!("[V2] Bundle extraction failed: {}", e);
                 manager.set_degraded(reason.clone()).await;
-                let _ = app.emit("runtime:event", RuntimeEvent::RuntimeDegraded { reason: reason.clone() });
+                let _ = app.emit(
+                    "runtime:event",
+                    RuntimeEvent::RuntimeDegraded {
+                        reason: reason.clone(),
+                    },
+                );
                 return Err(RuntimeError::RuntimeDegraded(reason));
             }
         }
@@ -560,11 +609,14 @@ pub async fn v2_get_user_info(
     app_state: State<'_, AppState>,
 ) -> Result<Option<V2UserInfo>, RuntimeError> {
     let client = app_state.client.read().await;
-    Ok(client.get_user_info().await.map(|(name, subscription, valid_until)| V2UserInfo {
-        user_name: name,
-        subscription,
-        subscription_valid_until: valid_until,
-    }))
+    Ok(client
+        .get_user_info()
+        .await
+        .map(|(name, subscription, valid_until)| V2UserInfo {
+            user_name: name,
+            subscription,
+            subscription_valid_until: valid_until,
+        }))
 }
 
 /// Auto-login using saved credentials (Phase 2 of runtime initialization)
@@ -654,10 +706,13 @@ pub async fn v2_auto_login(
 
     log::info!("[V2] Legacy auth successful for user {}", session.user_id);
     manager.set_legacy_auth(true, Some(session.user_id)).await;
-    let _ = app.emit("runtime:event", RuntimeEvent::AuthChanged {
-        logged_in: true,
-        user_id: Some(session.user_id),
-    });
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::AuthChanged {
+            logged_in: true,
+            user_id: Some(session.user_id),
+        },
+    );
 
     // V2 CoreBridge auth - REQUIRED per ADR Runtime Session Contract
     if let Some(bridge) = core_bridge.try_get().await {
@@ -669,9 +724,12 @@ pub async fn v2_auto_login(
             Err(e) => {
                 log::error!("[V2] CoreBridge auth failed: {}", e);
                 rollback_auth_state(&manager, &app).await;
-                let _ = app.emit("runtime:event", RuntimeEvent::CoreBridgeAuthFailed {
-                    error: e.to_string(),
-                });
+                let _ = app.emit(
+                    "runtime:event",
+                    RuntimeEvent::CoreBridgeAuthFailed {
+                        error: e.to_string(),
+                    },
+                );
                 // V2 auth failed - return failure per ADR
                 return Ok(V2LoginResponse {
                     success: false,
@@ -715,9 +773,12 @@ pub async fn v2_auto_login(
     }
 
     // Emit ready event
-    let _ = app.emit("runtime:event", RuntimeEvent::RuntimeReady {
-        user_id: session.user_id,
-    });
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::RuntimeReady {
+            user_id: session.user_id,
+        },
+    );
 
     Ok(V2LoginResponse {
         success: true,
@@ -791,10 +852,13 @@ pub async fn v2_manual_login(
 
     log::info!("[V2] Legacy auth successful for user {}", session.user_id);
     manager.set_legacy_auth(true, Some(session.user_id)).await;
-    let _ = app.emit("runtime:event", RuntimeEvent::AuthChanged {
-        logged_in: true,
-        user_id: Some(session.user_id),
-    });
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::AuthChanged {
+            logged_in: true,
+            user_id: Some(session.user_id),
+        },
+    );
 
     // V2 CoreBridge auth - REQUIRED per ADR Runtime Session Contract
     if let Some(bridge) = core_bridge.try_get().await {
@@ -806,9 +870,12 @@ pub async fn v2_manual_login(
             Err(e) => {
                 log::error!("[V2] CoreBridge auth failed: {}", e);
                 rollback_auth_state(&manager, &app).await;
-                let _ = app.emit("runtime:event", RuntimeEvent::CoreBridgeAuthFailed {
-                    error: e.to_string(),
-                });
+                let _ = app.emit(
+                    "runtime:event",
+                    RuntimeEvent::CoreBridgeAuthFailed {
+                        error: e.to_string(),
+                    },
+                );
                 // V2 auth failed - return failure per ADR
                 return Ok(V2LoginResponse {
                     success: false,
@@ -852,9 +919,12 @@ pub async fn v2_manual_login(
     }
 
     // Emit ready event
-    let _ = app.emit("runtime:event", RuntimeEvent::RuntimeReady {
-        user_id: session.user_id,
-    });
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::RuntimeReady {
+            user_id: session.user_id,
+        },
+    );
 
     Ok(V2LoginResponse {
         success: true,
@@ -920,7 +990,11 @@ fn spawn_v2_prefetch(
 
         // Skip local tracks - they don't need prefetching from Qobuz
         if track.is_local {
-            log::debug!("[V2/PREFETCH] Skipping local track: {} - {}", track_id, track_title);
+            log::debug!(
+                "[V2/PREFETCH] Skipping local track: {} - {}",
+                track_id,
+                track_title
+            );
             continue;
         }
 
@@ -944,7 +1018,11 @@ fn spawn_v2_prefetch(
         let bridge_clone = bridge.clone();
         let cache_clone = cache.clone();
 
-        log::info!("[V2/PREFETCH] Prefetching track: {} - {}", track_id, track_title);
+        log::info!(
+            "[V2/PREFETCH] Prefetching track: {} - {}",
+            track_id,
+            track_title
+        );
 
         // Spawn background task for each track (with semaphore to limit concurrency)
         tokio::spawn(async move {
@@ -952,7 +1030,10 @@ fn spawn_v2_prefetch(
             let _permit = match V2_PREFETCH_SEMAPHORE.acquire().await {
                 Ok(permit) => permit,
                 Err(_) => {
-                    log::warn!("[V2/PREFETCH] Semaphore closed, skipping track {}", track_id);
+                    log::warn!(
+                        "[V2/PREFETCH] Semaphore closed, skipping track {}",
+                        track_id
+                    );
                     cache_clone.unmark_fetching(track_id);
                     return;
                 }
@@ -990,9 +1071,7 @@ fn spawn_v2_prefetch(
 
 /// Check if user is logged in (V2 - uses QbzCore)
 #[tauri::command]
-pub async fn v2_is_logged_in(
-    bridge: State<'_, CoreBridgeState>,
-) -> Result<bool, RuntimeError> {
+pub async fn v2_is_logged_in(bridge: State<'_, CoreBridgeState>) -> Result<bool, RuntimeError> {
     let bridge = bridge.get().await;
     Ok(bridge.is_logged_in().await)
 }
@@ -1025,11 +1104,16 @@ pub async fn v2_login(
     // Step 1: Legacy auth
     let session = {
         let client = app_state.client.read().await;
-        client.login(&email, &password).await
+        client
+            .login(&email, &password)
+            .await
             .map_err(|e| RuntimeError::Internal(e.to_string()))?
     };
     manager.set_legacy_auth(true, Some(session.user_id)).await;
-    log::info!("[v2_login] Legacy auth successful for user {}", session.user_id);
+    log::info!(
+        "[v2_login] Legacy auth successful for user {}",
+        session.user_id
+    );
 
     // Step 2: CoreBridge auth
     let bridge_guard = bridge.get().await;
@@ -1076,13 +1160,16 @@ pub async fn v2_logout(
     log::info!("[v2_logout] Starting logout");
 
     // Step 1: Deactivate session (teardown stores, clear runtime state)
-    crate::session_lifecycle::deactivate_session(&app).await
+    crate::session_lifecycle::deactivate_session(&app)
+        .await
         .map_err(RuntimeError::Internal)?;
     log::info!("[v2_logout] Session deactivated");
 
     // Step 2: CoreBridge logout
     let bridge_guard = bridge.get().await;
-    bridge_guard.logout().await
+    bridge_guard
+        .logout()
+        .await
         .map_err(RuntimeError::Internal)?;
     log::info!("[v2_logout] CoreBridge logged out");
 
@@ -1102,20 +1189,16 @@ pub async fn v2_logout(
 /// Uses user_id = 0 as a special "offline user" marker.
 /// Queue commands will work because session_activated is set.
 #[tauri::command]
-pub async fn v2_activate_offline_session(
-    app: tauri::AppHandle,
-) -> Result<(), RuntimeError> {
-    crate::session_lifecycle::activate_offline_session(&app).await
+pub async fn v2_activate_offline_session(app: tauri::AppHandle) -> Result<(), RuntimeError> {
+    crate::session_lifecycle::activate_offline_session(&app)
+        .await
         .map_err(RuntimeError::Internal)
 }
 
 // ==================== UX / Settings Commands (V2 Native) ====================
 
 #[tauri::command]
-pub async fn v2_set_api_locale(
-    locale: String,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub async fn v2_set_api_locale(locale: String, state: State<'_, AppState>) -> Result<(), String> {
     let client = state.client.read().await;
     client.set_locale(locale).await;
     Ok(())
@@ -1130,10 +1213,7 @@ pub fn v2_set_use_system_titlebar(
 }
 
 #[tauri::command]
-pub fn v2_set_enable_tray(
-    value: bool,
-    state: State<'_, TraySettingsState>,
-) -> Result<(), String> {
+pub fn v2_set_enable_tray(value: bool, state: State<'_, TraySettingsState>) -> Result<(), String> {
     state.set_enable_tray(value)?;
     // Mirror to global startup store so tray visibility on next launch
     // is consistent even before session activation/runtime bootstrap.
@@ -1183,9 +1263,7 @@ pub fn v2_get_playback_preferences(
 }
 
 #[tauri::command]
-pub fn v2_get_tray_settings(
-    state: State<'_, TraySettingsState>,
-) -> Result<TraySettings, String> {
+pub fn v2_get_tray_settings(state: State<'_, TraySettingsState>) -> Result<TraySettings, String> {
     state.get_settings()
 }
 
@@ -1264,9 +1342,17 @@ pub fn v2_get_hardware_audio_status(
     let bit_depth = state.player.state.get_bit_depth();
     let active = state.player.state.is_playing() && sample_rate > 0;
 
-    let hardware_sample_rate = if sample_rate > 0 { Some(sample_rate) } else { None };
+    let hardware_sample_rate = if sample_rate > 0 {
+        Some(sample_rate)
+    } else {
+        None
+    };
     let hardware_format = if sample_rate > 0 && bit_depth > 0 {
-        Some(format!("{}-bit / {:.1}kHz", bit_depth, sample_rate as f64 / 1000.0))
+        Some(format!(
+            "{}-bit / {:.1}kHz",
+            bit_depth,
+            sample_rate as f64 / 1000.0
+        ))
     } else {
         None
     };
@@ -1280,9 +1366,7 @@ pub fn v2_get_hardware_audio_status(
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn v2_get_default_device_name(
-    backendType: AudioBackendType,
-) -> Result<Option<String>, String> {
+pub fn v2_get_default_device_name(backendType: AudioBackendType) -> Result<Option<String>, String> {
     let backend = BackendManager::create_backend(backendType)?;
     let devices = backend.enumerate_devices()?;
     Ok(devices.into_iter().find(|d| d.is_default).map(|d| d.name))
@@ -1290,13 +1374,15 @@ pub fn v2_get_default_device_name(
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn v2_query_dac_capabilities(
-    nodeName: String,
-) -> Result<DacCapabilities, String> {
+pub fn v2_query_dac_capabilities(nodeName: String) -> Result<DacCapabilities, String> {
     let mut capabilities = DacCapabilities {
         node_name: nodeName.clone(),
         sample_rates: vec![44100, 48000, 88200, 96000, 176400, 192000],
-        formats: vec!["S16LE".to_string(), "S24LE".to_string(), "F32LE".to_string()],
+        formats: vec![
+            "S16LE".to_string(),
+            "S24LE".to_string(),
+            "F32LE".to_string(),
+        ],
         channels: Some(2),
         description: None,
         error: None,
@@ -1308,7 +1394,10 @@ pub fn v2_query_dac_capabilities(
                 .iter()
                 .find(|d| d.id == nodeName || d.name == nodeName)
             {
-                capabilities.description = device.description.clone().or_else(|| Some(device.name.clone()));
+                capabilities.description = device
+                    .description
+                    .clone()
+                    .or_else(|| Some(device.name.clone()));
             }
         }
     }
@@ -1366,7 +1455,11 @@ pub fn v2_check_qobuzapp_handler() -> Result<bool, RuntimeError> {
 #[tauri::command]
 pub fn v2_register_qobuzapp_handler() -> Result<bool, RuntimeError> {
     let status = std::process::Command::new("xdg-mime")
-        .args(["default", "com.blitzfc.qbz.desktop", "x-scheme-handler/qobuzapp"])
+        .args([
+            "default",
+            "com.blitzfc.qbz.desktop",
+            "x-scheme-handler/qobuzapp",
+        ])
         .status()
         .map_err(|e| RuntimeError::Internal(format!("Failed to run xdg-mime: {}", e)))?;
 
@@ -1408,10 +1501,7 @@ pub fn v2_deregister_qobuzapp_handler() -> Result<bool, RuntimeError> {
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub async fn v2_plex_ping(
-    baseUrl: String,
-    token: String,
-) -> Result<PlexServerInfo, String> {
+pub async fn v2_plex_ping(baseUrl: String, token: String) -> Result<PlexServerInfo, String> {
     crate::plex::plex_ping(baseUrl, token).await
 }
 
@@ -1444,10 +1534,7 @@ pub async fn v2_plex_auth_pin_check(
 }
 
 #[tauri::command]
-pub fn v2_set_visualizer_enabled(
-    enabled: bool,
-    state: State<'_, AppState>,
-) -> Result<(), String> {
+pub fn v2_set_visualizer_enabled(enabled: bool, state: State<'_, AppState>) -> Result<(), String> {
     state.visualizer.set_enabled(enabled);
     Ok(())
 }
@@ -1552,9 +1639,7 @@ pub fn v2_clear_cache(state: State<'_, AppState>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub async fn v2_clear_artist_cache(
-    cache_state: State<'_, ApiCacheState>,
-) -> Result<usize, String> {
+pub async fn v2_clear_artist_cache(cache_state: State<'_, ApiCacheState>) -> Result<usize, String> {
     let guard = cache_state.cache.lock().await;
     let cache = guard.as_ref().ok_or("No active session - please log in")?;
     cache.clear_all_artists()
@@ -1733,9 +1818,7 @@ pub fn v2_set_blacklist_enabled(
 }
 
 #[tauri::command]
-pub fn v2_clear_artist_blacklist(
-    state: State<'_, BlacklistState>,
-) -> Result<(), String> {
+pub fn v2_clear_artist_blacklist(state: State<'_, BlacklistState>) -> Result<(), String> {
     state.clear_all()
 }
 
@@ -1921,7 +2004,9 @@ pub async fn v2_cast_play_track(
 
     let url = {
         let mut server_guard = cast_state.media_server.lock().await;
-        let server = server_guard.as_mut().ok_or("Media server not initialized")?;
+        let server = server_guard
+            .as_mut()
+            .ok_or("Media server not initialized")?;
         server.register_audio(track_id, audio_data, &content_type);
         match target_ip.as_deref() {
             Some(ip) => server.get_audio_url_for_target(track_id, ip),
@@ -1953,19 +2038,28 @@ pub async fn v2_cast_stop(state: State<'_, CastState>) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn v2_cast_seek(position_secs: f64, state: State<'_, CastState>) -> Result<(), String> {
-    state.chromecast.seek(position_secs).map_err(|e| e.to_string())
+    state
+        .chromecast
+        .seek(position_secs)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn v2_cast_get_position(
     state: State<'_, CastState>,
 ) -> Result<crate::cast::CastPositionInfo, String> {
-    state.chromecast.get_media_position().map_err(|e| e.to_string())
+    state
+        .chromecast
+        .get_media_position()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn v2_cast_set_volume(volume: f32, state: State<'_, CastState>) -> Result<(), String> {
-    state.chromecast.set_volume(volume).map_err(|e| e.to_string())
+    state
+        .chromecast
+        .set_volume(volume)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2051,7 +2145,9 @@ pub async fn v2_dlna_play_track(
 
     let url = {
         let mut server_guard = dlna_state.media_server.lock().await;
-        let server = server_guard.as_mut().ok_or("Media server not initialized")?;
+        let server = server_guard
+            .as_mut()
+            .ok_or("Media server not initialized")?;
         server.register_audio(track_id, audio_data, &content_type);
         match target_ip.as_deref() {
             Some(ip) => server.get_audio_url_for_target(track_id, ip),
@@ -2108,7 +2204,9 @@ pub async fn v2_dlna_get_position(
     state: State<'_, DlnaState>,
 ) -> Result<crate::cast::DlnaPositionInfo, String> {
     let connection = state.connection.lock().await;
-    let conn = connection.as_ref().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_ref()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.get_position_info().await.map_err(|e| e.to_string())
 }
 
@@ -2198,7 +2296,10 @@ pub async fn v2_airplay_stop(state: State<'_, AirPlayState>) -> Result<(), Strin
 }
 
 #[tauri::command]
-pub async fn v2_airplay_set_volume(volume: f32, state: State<'_, AirPlayState>) -> Result<(), String> {
+pub async fn v2_airplay_set_volume(
+    volume: f32,
+    state: State<'_, AirPlayState>,
+) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
     let conn = connection.as_mut().ok_or("Not connected")?;
     conn.set_volume(volume).map_err(|e| e.to_string())
@@ -2258,7 +2359,8 @@ pub async fn v2_library_remove_folder(
     let guard = state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
     db.remove_folder(&path).map_err(|e| e.to_string())?;
-    db.delete_tracks_in_folder(&path).map_err(|e| e.to_string())?;
+    db.delete_tracks_in_folder(&path)
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -2275,14 +2377,19 @@ pub async fn v2_library_check_folder_accessible(path: String) -> Result<bool, St
     let path_clone = path.clone();
     let check_result = tokio::time::timeout(
         std::time::Duration::from_secs(6),
-        tokio::task::spawn_blocking(move || std::fs::read_dir(std::path::Path::new(&path_clone)).is_ok()),
+        tokio::task::spawn_blocking(move || {
+            std::fs::read_dir(std::path::Path::new(&path_clone)).is_ok()
+        }),
     )
     .await;
 
     match check_result {
         Ok(Ok(accessible)) => Ok(accessible),
         Ok(Err(_)) => {
-            log::warn!("[V2] Failed to spawn blocking task for folder check: {}", path);
+            log::warn!(
+                "[V2] Failed to spawn blocking task for folder check: {}",
+                path
+            );
             Ok(false)
         }
         Err(_) => {
@@ -2495,7 +2602,8 @@ pub async fn v2_playlist_reorder(
 ) -> Result<(), String> {
     let guard = state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
-    db.reorder_playlists(&playlist_ids).map_err(|e| e.to_string())
+    db.reorder_playlists(&playlist_ids)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -2616,7 +2724,9 @@ pub async fn v2_musicbrainz_get_cache_stats(
     state: State<'_, MusicBrainzSharedState>,
 ) -> Result<MusicBrainzCacheStats, String> {
     let cache_opt = state.cache.lock().await;
-    let cache = cache_opt.as_ref().ok_or("No active session - please log in")?;
+    let cache = cache_opt
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     cache.get_stats()
 }
 
@@ -2625,7 +2735,9 @@ pub async fn v2_musicbrainz_clear_cache(
     state: State<'_, MusicBrainzSharedState>,
 ) -> Result<(), String> {
     let cache_opt = state.cache.lock().await;
-    let cache = cache_opt.as_ref().ok_or("No active session - please log in")?;
+    let cache = cache_opt
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     cache.clear_all()
 }
 
@@ -2634,7 +2746,10 @@ pub fn v2_set_show_partial_playlists(
     enabled: bool,
     state: State<'_, OfflineState>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_show_partial_playlists(enabled)
 }
@@ -2644,7 +2759,10 @@ pub fn v2_set_allow_cast_while_offline(
     enabled: bool,
     state: State<'_, OfflineState>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_allow_cast_while_offline(enabled)
 }
@@ -2654,7 +2772,10 @@ pub fn v2_set_allow_immediate_scrobbling(
     enabled: bool,
     state: State<'_, OfflineState>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_allow_immediate_scrobbling(enabled)
 }
@@ -2664,7 +2785,10 @@ pub fn v2_set_allow_accumulated_scrobbling(
     enabled: bool,
     state: State<'_, OfflineState>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_allow_accumulated_scrobbling(enabled)
 }
@@ -2674,7 +2798,10 @@ pub fn v2_set_show_network_folders_in_manual_offline(
     enabled: bool,
     state: State<'_, OfflineState>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.set_show_network_folders_in_manual_offline(enabled)
 }
@@ -2714,7 +2841,10 @@ pub fn v2_add_tracks_to_pending_playlist(
     local_track_paths: Vec<String>,
     state: State<'_, OfflineState>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.add_tracks_to_pending_playlist(pending_id, &qobuz_track_ids, &local_track_paths)
 }
@@ -2725,7 +2855,10 @@ pub fn v2_update_pending_playlist_qobuz_id(
     qobuz_playlist_id: u64,
     state: State<'_, OfflineState>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.update_qobuz_playlist_id(pending_id, qobuz_playlist_id)
 }
@@ -2736,7 +2869,10 @@ pub fn v2_mark_pending_playlist_synced(
     qobuz_playlist_id: u64,
     state: State<'_, OfflineState>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.mark_playlist_synced(pending_id, qobuz_playlist_id)
 }
@@ -2746,17 +2882,20 @@ pub fn v2_delete_pending_playlist(
     pending_id: i64,
     state: State<'_, OfflineState>,
 ) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.delete_pending_playlist(pending_id)
 }
 
 #[tauri::command]
-pub fn v2_mark_scrobbles_sent(
-    ids: Vec<i64>,
-    state: State<'_, OfflineState>,
-) -> Result<(), String> {
-    let guard = state.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+pub fn v2_mark_scrobbles_sent(ids: Vec<i64>, state: State<'_, OfflineState>) -> Result<(), String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
     let store = guard.as_ref().ok_or("No active session - please log in")?;
     store.mark_scrobbles_sent(&ids)
 }
@@ -2825,7 +2964,8 @@ pub async fn v2_open_offline_cache_folder(
     cache_state: State<'_, OfflineCacheState>,
 ) -> Result<(), String> {
     let path = cache_state.cache_dir.read().unwrap().clone();
-    std::fs::create_dir_all(&path).map_err(|e| format!("Failed to create cache directory: {}", e))?;
+    std::fs::create_dir_all(&path)
+        .map_err(|e| format!("Failed to create cache directory: {}", e))?;
     open::that(&path).map_err(|e| format!("Failed to open folder: {}", e))?;
     Ok(())
 }
@@ -3146,16 +3286,18 @@ pub async fn v2_playlist_get_all_settings(
     state: State<'_, LibraryState>,
 ) -> Result<Vec<PlaylistSettings>, String> {
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_all_playlist_settings().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-pub async fn v2_playlist_get_favorites(
-    state: State<'_, LibraryState>,
-) -> Result<Vec<u64>, String> {
+pub async fn v2_playlist_get_favorites(state: State<'_, LibraryState>) -> Result<Vec<u64>, String> {
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_favorite_playlist_ids().map_err(|e| e.to_string())
 }
 
@@ -3166,7 +3308,9 @@ pub async fn v2_playlist_get_local_tracks_with_position(
     state: State<'_, LibraryState>,
 ) -> Result<Vec<PlaylistLocalTrack>, String> {
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_playlist_local_tracks_with_position(playlistId)
         .map_err(|e| e.to_string())
 }
@@ -3178,8 +3322,11 @@ pub async fn v2_playlist_get_settings(
     state: State<'_, LibraryState>,
 ) -> Result<Option<PlaylistSettings>, String> {
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
-    db.get_playlist_settings(playlistId).map_err(|e| e.to_string())
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+    db.get_playlist_settings(playlistId)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -3189,7 +3336,9 @@ pub async fn v2_playlist_get_stats(
     state: State<'_, LibraryState>,
 ) -> Result<Option<PlaylistStats>, String> {
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_playlist_stats(playlistId).map_err(|e| e.to_string())
 }
 
@@ -3200,7 +3349,9 @@ pub async fn v2_playlist_increment_play_count(
     state: State<'_, LibraryState>,
 ) -> Result<PlaylistStats, String> {
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.increment_playlist_play_count(playlistId)
         .map_err(|e| e.to_string())
 }
@@ -3210,7 +3361,9 @@ pub async fn v2_playlist_get_all_stats(
     state: State<'_, LibraryState>,
 ) -> Result<Vec<PlaylistStats>, String> {
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_all_playlist_stats().map_err(|e| e.to_string())
 }
 
@@ -3219,7 +3372,9 @@ pub async fn v2_playlist_get_all_local_track_counts(
     state: State<'_, LibraryState>,
 ) -> Result<std::collections::HashMap<u64, u32>, String> {
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_all_playlist_local_track_counts()
         .map_err(|e| e.to_string())
 }
@@ -3229,7 +3384,9 @@ pub async fn v2_get_playlist_folders(
     state: State<'_, LibraryState>,
 ) -> Result<Vec<crate::library::PlaylistFolder>, String> {
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_all_playlist_folders().map_err(|e| e.to_string())
 }
 
@@ -3243,7 +3400,9 @@ pub async fn v2_create_playlist_folder(
     state: State<'_, LibraryState>,
 ) -> Result<crate::library::PlaylistFolder, String> {
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.create_playlist_folder(
         &name,
         iconType.as_deref(),
@@ -3294,7 +3453,9 @@ pub async fn v2_library_get_albums(
         .unwrap_or(false);
 
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
 
     db.get_albums_with_full_filter(
         include_hidden.unwrap_or(false),
@@ -3313,9 +3474,7 @@ pub async fn v2_library_get_stats(
 }
 
 #[tauri::command]
-pub async fn v2_library_get_folders(
-    state: State<'_, LibraryState>,
-) -> Result<Vec<String>, String> {
+pub async fn v2_library_get_folders(state: State<'_, LibraryState>) -> Result<Vec<String>, String> {
     crate::library::library_get_folders(state).await
 }
 
@@ -3354,12 +3513,8 @@ pub async fn v2_library_get_artists(
     state: State<'_, LibraryState>,
     download_settings_state: State<'_, DownloadSettingsState>,
 ) -> Result<Vec<crate::library::LocalArtist>, String> {
-    crate::library::library_get_artists(
-        exclude_network_folders,
-        state,
-        download_settings_state,
-    )
-    .await
+    crate::library::library_get_artists(exclude_network_folders, state, download_settings_state)
+        .await
 }
 
 #[tauri::command]
@@ -3418,7 +3573,10 @@ pub async fn v2_plex_play_track(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<PlexPlayResult, String> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresClientInit)
+        .await
         .map_err(|e| e.to_string())?;
 
     let resolved = crate::plex::plex_resolve_track_media(baseUrl, token, ratingKey).await?;
@@ -3457,7 +3615,8 @@ pub async fn v2_library_update_folder_path(
 
     let guard = state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
-    db.update_folder_path(id, &new_path).map_err(|e| e.to_string())?;
+    db.update_folder_path(id, &new_path)
+        .map_err(|e| e.to_string())?;
 
     let network_info = crate::network::is_network_path(path_ref);
     if network_info.is_network {
@@ -3514,7 +3673,10 @@ pub async fn v2_library_set_custom_artist_image(
     let artwork_dir = get_artwork_cache_dir();
     let source = std::path::Path::new(&custom_image_path);
     if !source.exists() {
-        return Err(format!("Source image does not exist: {}", custom_image_path));
+        return Err(format!(
+            "Source image does not exist: {}",
+            custom_image_path
+        ));
     }
     let extension = source.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
     use md5::{Digest, Md5};
@@ -3532,8 +3694,13 @@ pub async fn v2_library_set_custom_artist_image(
 
     let guard = state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
-    db.cache_artist_image(&artist_name, None, "custom", Some(&dest_path.to_string_lossy()))
-        .map_err(|e| e.to_string())
+    db.cache_artist_image(
+        &artist_name,
+        None,
+        "custom",
+        Some(&dest_path.to_string_lossy()),
+    )
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -3788,7 +3955,10 @@ pub async fn v2_set_repeat_mode(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     let bridge = bridge.get().await;
     bridge.set_repeat_mode(mode).await;
     Ok(())
@@ -3800,7 +3970,10 @@ pub async fn v2_toggle_shuffle(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<bool, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     let bridge = bridge.get().await;
     Ok(bridge.toggle_shuffle().await)
 }
@@ -3812,7 +3985,10 @@ pub async fn v2_set_shuffle(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     log::info!("[V2] set_shuffle: {}", enabled);
     let bridge = bridge.get().await;
     bridge.set_shuffle(enabled).await;
@@ -3825,7 +4001,10 @@ pub async fn v2_clear_queue(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     let bridge = bridge.get().await;
     bridge.clear_queue().await;
     Ok(())
@@ -3953,7 +4132,10 @@ pub async fn v2_add_to_queue(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     log::info!("[V2] add_to_queue: {} - {}", track.id, track.title);
     let bridge = bridge.get().await;
     bridge.add_track(track.into()).await;
@@ -3967,7 +4149,10 @@ pub async fn v2_add_to_queue_next(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     log::info!("[V2] add_to_queue_next: {} - {}", track.id, track.title);
     let bridge = bridge.get().await;
     bridge.add_track_next(track.into()).await;
@@ -3982,8 +4167,15 @@ pub async fn v2_set_queue(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
-    log::info!("[V2] set_queue: {} tracks, start at {}", tracks.len(), start_index);
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+    log::info!(
+        "[V2] set_queue: {} tracks, start at {}",
+        tracks.len(),
+        start_index
+    );
     let queue_tracks: Vec<CoreQueueTrack> = tracks.into_iter().map(Into::into).collect();
     let bridge = bridge.get().await;
     bridge.set_queue(queue_tracks, Some(start_index)).await;
@@ -3997,7 +4189,10 @@ pub async fn v2_remove_from_queue(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     log::info!("[V2] remove_from_queue: index {}", index);
     let bridge = bridge.get().await;
     bridge.remove_track(index).await;
@@ -4012,10 +4207,19 @@ pub async fn v2_remove_upcoming_track(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
-    log::info!("[V2] remove_upcoming_track: upcoming_index {}", upcoming_index);
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+    log::info!(
+        "[V2] remove_upcoming_track: upcoming_index {}",
+        upcoming_index
+    );
     let bridge = bridge.get().await;
-    Ok(bridge.remove_upcoming_track(upcoming_index).await.map(Into::into))
+    Ok(bridge
+        .remove_upcoming_track(upcoming_index)
+        .await
+        .map(Into::into))
 }
 
 /// Skip to next track in queue (V2 - uses CoreBridge)
@@ -4024,7 +4228,10 @@ pub async fn v2_next_track(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     log::info!("[V2] next_track");
     let bridge = bridge.get().await;
     let track = bridge.next_track().await;
@@ -4037,7 +4244,10 @@ pub async fn v2_previous_track(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     log::info!("[V2] previous_track");
     let bridge = bridge.get().await;
     let track = bridge.previous_track().await;
@@ -4051,7 +4261,10 @@ pub async fn v2_play_queue_index(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Option<V2QueueTrack>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     log::info!("[V2] play_queue_index: {}", index);
     let bridge = bridge.get().await;
     let track = bridge.play_index(index).await;
@@ -4066,7 +4279,10 @@ pub async fn v2_move_queue_track(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<bool, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     log::info!("[V2] move_queue_track: {} -> {}", from_index, to_index);
     let bridge = bridge.get().await;
     Ok(bridge.move_track(from_index, to_index).await)
@@ -4079,7 +4295,10 @@ pub async fn v2_add_tracks_to_queue(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     log::info!("[V2] add_tracks_to_queue: {} tracks", tracks.len());
     let queue_tracks: Vec<CoreQueueTrack> = tracks.into_iter().map(Into::into).collect();
     let bridge = bridge.get().await;
@@ -4095,7 +4314,10 @@ pub async fn v2_add_tracks_to_queue_next(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     log::info!("[V2] add_tracks_to_queue_next: {} tracks", tracks.len());
     let bridge = bridge.get().await;
     // Add in reverse order so they end up in the correct order
@@ -4120,19 +4342,29 @@ pub async fn v2_search_albums(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<SearchResultsPage<Album>, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 search
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     let bridge = bridge.get().await;
-    let mut results = bridge.search_albums(&query, limit, offset, searchType.as_deref()).await
+    let mut results = bridge
+        .search_albums(&query, limit, offset, searchType.as_deref())
+        .await
         .map_err(RuntimeError::Internal)?;
 
     // Filter out albums from blacklisted artists
     let original_count = results.items.len();
-    results.items.retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+    results
+        .items
+        .retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
 
     let filtered_count = original_count - results.items.len();
     if filtered_count > 0 {
-        log::debug!("[V2/Blacklist] Filtered {} albums from search results", filtered_count);
+        log::debug!(
+            "[V2/Blacklist] Filtered {} albums from search results",
+            filtered_count
+        );
         results.total = results.total.saturating_sub(filtered_count as u32);
     }
 
@@ -4152,10 +4384,15 @@ pub async fn v2_search_tracks(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<SearchResultsPage<Track>, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 search
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     let bridge = bridge.get().await;
-    let mut results = bridge.search_tracks(&query, limit, offset, searchType.as_deref()).await
+    let mut results = bridge
+        .search_tracks(&query, limit, offset, searchType.as_deref())
+        .await
         .map_err(RuntimeError::Internal)?;
 
     // Filter out tracks from blacklisted artists
@@ -4170,7 +4407,10 @@ pub async fn v2_search_tracks(
 
     let filtered_count = original_count - results.items.len();
     if filtered_count > 0 {
-        log::debug!("[V2/Blacklist] Filtered {} tracks from search results", filtered_count);
+        log::debug!(
+            "[V2/Blacklist] Filtered {} tracks from search results",
+            filtered_count
+        );
         results.total = results.total.saturating_sub(filtered_count as u32);
     }
 
@@ -4190,19 +4430,29 @@ pub async fn v2_search_artists(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<SearchResultsPage<Artist>, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 search
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     let bridge = bridge.get().await;
-    let mut results = bridge.search_artists(&query, limit, offset, searchType.as_deref()).await
+    let mut results = bridge
+        .search_artists(&query, limit, offset, searchType.as_deref())
+        .await
         .map_err(RuntimeError::Internal)?;
 
     // Filter out blacklisted artists
     let original_count = results.items.len();
-    results.items.retain(|artist| !blacklist_state.is_blacklisted(artist.id));
+    results
+        .items
+        .retain(|artist| !blacklist_state.is_blacklisted(artist.id));
 
     let filtered_count = original_count - results.items.len();
     if filtered_count > 0 {
-        log::debug!("[V2/Blacklist] Filtered {} artists from search results", filtered_count);
+        log::debug!(
+            "[V2/Blacklist] Filtered {} artists from search results",
+            filtered_count
+        );
         results.total = results.total.saturating_sub(filtered_count as u32);
     }
 
@@ -4217,7 +4467,10 @@ pub async fn v2_search_all(
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<V2SearchAllResults, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
 
     let url = crate::api::endpoints::build_url(crate::api::endpoints::paths::CATALOG_SEARCH);
     let response: serde_json::Value = {
@@ -4377,9 +4630,15 @@ pub async fn v2_get_album(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Album, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
     let bridge = bridge.get().await;
-    bridge.get_album(&albumId).await.map_err(RuntimeError::Internal)
+    bridge
+        .get_album(&albumId)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Get track by ID (V2 - uses QbzCore)
@@ -4390,9 +4649,15 @@ pub async fn v2_get_track(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Track, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
     let bridge = bridge.get().await;
-    bridge.get_track(trackId).await.map_err(RuntimeError::Internal)
+    bridge
+        .get_track(trackId)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Get artist by ID (V2 - uses QbzCore)
@@ -4403,9 +4668,15 @@ pub async fn v2_get_artist(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Artist, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
     let bridge = bridge.get().await;
-    bridge.get_artist(artistId).await.map_err(RuntimeError::Internal)
+    bridge
+        .get_artist(artistId)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 // ==================== Favorites Commands (V2) ====================
@@ -4421,7 +4692,10 @@ pub async fn v2_get_favorites(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<serde_json::Value, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 favorites
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     let bridge = bridge.get().await;
     let resolved_limit = limit.unwrap_or(500);
@@ -4442,11 +4716,17 @@ pub async fn v2_add_favorite(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 favorites
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] add_favorite type={} id={}", favType, itemId);
     let bridge = bridge.get().await;
-    bridge.add_favorite(&favType, &itemId).await.map_err(RuntimeError::Internal)
+    bridge
+        .add_favorite(&favType, &itemId)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Remove item from favorites (V2 - uses QbzCore)
@@ -4459,11 +4739,17 @@ pub async fn v2_remove_favorite(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 favorites
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] remove_favorite type={} id={}", favType, itemId);
     let bridge = bridge.get().await;
-    bridge.remove_favorite(&favType, &itemId).await.map_err(RuntimeError::Internal)
+    bridge
+        .remove_favorite(&favType, &itemId)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 // ==================== Playback Commands (V2) ====================
@@ -4478,7 +4764,10 @@ pub async fn v2_pause_playback(
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresClientInit)
+        .await?;
     log::info!("[V2] Command: pause_playback");
     app_state.media_controls.set_playback(false);
     let bridge = bridge.get().await;
@@ -4492,7 +4781,10 @@ pub async fn v2_resume_playback(
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresClientInit)
+        .await?;
     log::info!("[V2] Command: resume_playback");
     app_state.media_controls.set_playback(true);
     let bridge = bridge.get().await;
@@ -4506,7 +4798,10 @@ pub async fn v2_stop_playback(
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresClientInit)
+        .await?;
     log::info!("[V2] Command: stop_playback");
     app_state.media_controls.set_stopped();
     let bridge = bridge.get().await;
@@ -4521,10 +4816,15 @@ pub async fn v2_seek(
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresClientInit)
+        .await?;
     log::info!("[V2] Command: seek {}", position);
     let bridge_guard = bridge.get().await;
-    bridge_guard.seek(position).map_err(RuntimeError::Internal)?;
+    bridge_guard
+        .seek(position)
+        .map_err(RuntimeError::Internal)?;
 
     // Update MPRIS with effective playback state only after successful seek.
     let playback_state = bridge_guard.get_playback_state();
@@ -4542,7 +4842,10 @@ pub async fn v2_set_volume(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresClientInit).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresClientInit)
+        .await?;
     let bridge = bridge.get().await;
     bridge.set_volume(volume).map_err(RuntimeError::Internal)
 }
@@ -4557,10 +4860,9 @@ pub async fn v2_get_playback_state(
     let playback_state = bridge.get_playback_state();
 
     // Update MPRIS with current progress (called every ~500ms from frontend)
-    app_state.media_controls.set_playback_with_progress(
-        playback_state.is_playing,
-        playback_state.position,
-    );
+    app_state
+        .media_controls
+        .set_playback_with_progress(playback_state.is_playing, playback_state.position);
 
     Ok(playback_state)
 }
@@ -4630,9 +4932,12 @@ pub async fn v2_play_next_gapless(
             let path = std::path::Path::new(&file_path);
             if path.exists() {
                 log::info!("[V2/GAPLESS] Track {} from OFFLINE cache", track_id);
-                let audio_data = std::fs::read(path)
-                    .map_err(|e| RuntimeError::Internal(format!("Failed to read cached file: {}", e)))?;
-                player.play_next(audio_data, track_id).map_err(RuntimeError::Internal)?;
+                let audio_data = std::fs::read(path).map_err(|e| {
+                    RuntimeError::Internal(format!("Failed to read cached file: {}", e))
+                })?;
+                player
+                    .play_next(audio_data, track_id)
+                    .map_err(RuntimeError::Internal)?;
                 return Ok(true);
             }
         }
@@ -4641,21 +4946,36 @@ pub async fn v2_play_next_gapless(
     // Check memory cache (L1)
     let cache = app_state.audio_cache.clone();
     if let Some(cached) = cache.get(track_id) {
-        log::info!("[V2/GAPLESS] Track {} from MEMORY cache ({} bytes)", track_id, cached.size_bytes);
-        player.play_next(cached.data, track_id).map_err(RuntimeError::Internal)?;
+        log::info!(
+            "[V2/GAPLESS] Track {} from MEMORY cache ({} bytes)",
+            track_id,
+            cached.size_bytes
+        );
+        player
+            .play_next(cached.data, track_id)
+            .map_err(RuntimeError::Internal)?;
         return Ok(true);
     }
 
     // Check playback cache (L2 - disk)
     if let Some(playback_cache) = cache.get_playback_cache() {
         if let Some(audio_data) = playback_cache.get(track_id) {
-            log::info!("[V2/GAPLESS] Track {} from DISK cache ({} bytes)", track_id, audio_data.len());
-            player.play_next(audio_data, track_id).map_err(RuntimeError::Internal)?;
+            log::info!(
+                "[V2/GAPLESS] Track {} from DISK cache ({} bytes)",
+                track_id,
+                audio_data.len()
+            );
+            player
+                .play_next(audio_data, track_id)
+                .map_err(RuntimeError::Internal)?;
             return Ok(true);
         }
     }
 
-    log::info!("[V2/GAPLESS] Track {} not in any cache, gapless not possible", track_id);
+    log::info!(
+        "[V2/GAPLESS] Track {} not in any cache, gapless not possible",
+        track_id
+    );
     Ok(false)
 }
 
@@ -4700,7 +5020,10 @@ pub async fn v2_prefetch_track(
 
     log::info!(
         "[V2] Command: prefetch_track {} (quality_str={:?}, parsed={:?}, final={:?})",
-        track_id, quality, preferred_quality, final_quality
+        track_id,
+        quality,
+        preferred_quality,
+        final_quality
     );
 
     let cache = app_state.audio_cache.clone();
@@ -4731,8 +5054,9 @@ pub async fn v2_prefetch_track(
                 let path = std::path::Path::new(&file_path);
                 if path.exists() {
                     log::info!("[V2] Prefetching track {} from offline cache", track_id);
-                    let audio_data = std::fs::read(path)
-                        .map_err(|e| RuntimeError::Internal(format!("Failed to read cached file: {}", e)))?;
+                    let audio_data = std::fs::read(path).map_err(|e| {
+                        RuntimeError::Internal(format!("Failed to read cached file: {}", e))
+                    })?;
                     cache.insert(track_id, audio_data);
                     return Ok(());
                 }
@@ -4740,11 +5064,14 @@ pub async fn v2_prefetch_track(
         }
 
         let bridge_guard = bridge.get().await;
-        let stream_url = bridge_guard.get_stream_url(track_id, final_quality).await
+        let stream_url = bridge_guard
+            .get_stream_url(track_id, final_quality)
+            .await
             .map_err(RuntimeError::Internal)?;
         drop(bridge_guard);
 
-        let audio_data = download_audio(&stream_url.url).await
+        let audio_data = download_audio(&stream_url.url)
+            .await
             .map_err(RuntimeError::Internal)?;
         cache.insert(track_id, audio_data);
         Ok(())
@@ -4782,7 +5109,10 @@ pub async fn v2_play_track(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<V2PlayTrackResult, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playback
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     let preferred_quality = parse_quality(quality.as_deref());
 
@@ -4815,14 +5145,24 @@ pub async fn v2_play_track(
 
     // Check streaming_only setting
     let streaming_only = {
-        let guard = audio_settings.store.lock()
+        let guard = audio_settings
+            .store
+            .lock()
             .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-        guard.as_ref().and_then(|s| s.get_settings().ok()).map(|s| s.streaming_only).unwrap_or(false)
+        guard
+            .as_ref()
+            .and_then(|s| s.get_settings().ok())
+            .map(|s| s.streaming_only)
+            .unwrap_or(false)
     };
 
     log::info!(
         "[V2] play_track {} (quality_str={:?}, parsed={:?}, final={:?}, format_id={})",
-        track_id, quality, preferred_quality, final_quality, final_quality.id()
+        track_id,
+        quality,
+        preferred_quality,
+        final_quality,
+        final_quality.id()
     );
 
     let bridge_guard = bridge.get().await;
@@ -4846,16 +5186,28 @@ pub async fn v2_play_track(
         if let Some(file_path) = cached_path {
             let path = std::path::Path::new(&file_path);
             if path.exists() {
-                log::info!("[V2/CACHE HIT] Track {} from OFFLINE cache: {:?}", track_id, path);
-                let audio_data = std::fs::read(path)
-                    .map_err(|e| RuntimeError::Internal(format!("Failed to read cached file: {}", e)))?;
-                player.play_data(audio_data, track_id)
+                log::info!(
+                    "[V2/CACHE HIT] Track {} from OFFLINE cache: {:?}",
+                    track_id,
+                    path
+                );
+                let audio_data = std::fs::read(path).map_err(|e| {
+                    RuntimeError::Internal(format!("Failed to read cached file: {}", e))
+                })?;
+                player
+                    .play_data(audio_data, track_id)
                     .map_err(RuntimeError::Internal)?;
 
                 // Prefetch next tracks in background (using CoreBridge queue)
                 let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
                 drop(bridge_guard);
-                spawn_v2_prefetch(bridge.0.clone(), app_state.audio_cache.clone(), upcoming_tracks, final_quality, streaming_only);
+                spawn_v2_prefetch(
+                    bridge.0.clone(),
+                    app_state.audio_cache.clone(),
+                    upcoming_tracks,
+                    final_quality,
+                    streaming_only,
+                );
                 return Ok(V2PlayTrackResult { format_id: None });
             }
         }
@@ -4865,42 +5217,74 @@ pub async fn v2_play_track(
     // TODO: Move cache to qbz-core in future refactor
     let cache = app_state.audio_cache.clone();
     if let Some(cached) = cache.get(track_id) {
-        log::info!("[V2/CACHE HIT] Track {} from MEMORY cache ({} bytes)", track_id, cached.size_bytes);
-        player.play_data(cached.data, track_id)
+        log::info!(
+            "[V2/CACHE HIT] Track {} from MEMORY cache ({} bytes)",
+            track_id,
+            cached.size_bytes
+        );
+        player
+            .play_data(cached.data, track_id)
             .map_err(RuntimeError::Internal)?;
 
         // Prefetch next tracks in background (using CoreBridge queue)
         let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
         drop(bridge_guard);
-        spawn_v2_prefetch(bridge.0.clone(), cache.clone(), upcoming_tracks, final_quality, streaming_only);
+        spawn_v2_prefetch(
+            bridge.0.clone(),
+            cache.clone(),
+            upcoming_tracks,
+            final_quality,
+            streaming_only,
+        );
         return Ok(V2PlayTrackResult { format_id: None });
     }
 
     // Check playback cache (L2 - disk)
     if let Some(playback_cache) = cache.get_playback_cache() {
         if let Some(audio_data) = playback_cache.get(track_id) {
-            log::info!("[V2/CACHE HIT] Track {} from DISK cache ({} bytes)", track_id, audio_data.len());
+            log::info!(
+                "[V2/CACHE HIT] Track {} from DISK cache ({} bytes)",
+                track_id,
+                audio_data.len()
+            );
             cache.insert(track_id, audio_data.clone());
-            player.play_data(audio_data, track_id)
+            player
+                .play_data(audio_data, track_id)
                 .map_err(RuntimeError::Internal)?;
 
             // Prefetch next tracks in background (using CoreBridge queue)
             let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
             drop(bridge_guard);
-            spawn_v2_prefetch(bridge.0.clone(), cache.clone(), upcoming_tracks, final_quality, streaming_only);
+            spawn_v2_prefetch(
+                bridge.0.clone(),
+                cache.clone(),
+                upcoming_tracks,
+                final_quality,
+                streaming_only,
+            );
             return Ok(V2PlayTrackResult { format_id: None });
         }
     }
 
     // Not in any cache - get stream URL from Qobuz via CoreBridge
-    log::info!("[V2] Track {} not in cache, fetching from network...", track_id);
+    log::info!(
+        "[V2] Track {} not in cache, fetching from network...",
+        track_id
+    );
 
-    let stream_url = bridge_guard.get_stream_url(track_id, final_quality).await
+    let stream_url = bridge_guard
+        .get_stream_url(track_id, final_quality)
+        .await
         .map_err(RuntimeError::Internal)?;
-    log::info!("[V2] Got stream URL for track {} (format_id={})", track_id, stream_url.format_id);
+    log::info!(
+        "[V2] Got stream URL for track {} (format_id={})",
+        track_id,
+        stream_url.format_id
+    );
 
     // Download the audio
-    let audio_data = download_audio(&stream_url.url).await
+    let audio_data = download_audio(&stream_url.url)
+        .await
         .map_err(RuntimeError::Internal)?;
     let data_size = audio_data.len();
 
@@ -4909,20 +5293,32 @@ pub async fn v2_play_track(
         cache.insert(track_id, audio_data.clone());
         log::info!("[V2/CACHED] Track {} stored in memory cache", track_id);
     } else {
-        log::info!("[V2/NOT CACHED] Track {} - streaming_only mode active", track_id);
+        log::info!(
+            "[V2/NOT CACHED] Track {} - streaming_only mode active",
+            track_id
+        );
     }
 
     // Play it via qbz-player
-    player.play_data(audio_data, track_id)
+    player
+        .play_data(audio_data, track_id)
         .map_err(RuntimeError::Internal)?;
     log::info!("[V2] Playing track {} ({} bytes)", track_id, data_size);
 
     // Prefetch next tracks in background (using CoreBridge queue)
     let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
     drop(bridge_guard);
-    spawn_v2_prefetch(bridge.0.clone(), cache, upcoming_tracks, final_quality, streaming_only);
+    spawn_v2_prefetch(
+        bridge.0.clone(),
+        cache,
+        upcoming_tracks,
+        final_quality,
+        streaming_only,
+    );
 
-    Ok(V2PlayTrackResult { format_id: Some(stream_url.format_id) })
+    Ok(V2PlayTrackResult {
+        format_id: Some(stream_url.format_id),
+    })
 }
 
 // ==================== Audio Device Commands (V2) ====================
@@ -4985,11 +5381,17 @@ pub async fn v2_get_user_playlists(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Vec<Playlist>, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playlists
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] get_user_playlists");
     let bridge = bridge.get().await;
-    bridge.get_user_playlists().await.map_err(RuntimeError::Internal)
+    bridge
+        .get_user_playlists()
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Get playlist by ID (V2 - uses QbzCore)
@@ -5001,11 +5403,17 @@ pub async fn v2_get_playlist(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Playlist, RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playlists
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] get_playlist: {}", playlistId);
     let bridge = bridge.get().await;
-    bridge.get_playlist(playlistId).await.map_err(RuntimeError::Internal)
+    bridge
+        .get_playlist(playlistId)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
@@ -5108,11 +5516,21 @@ pub async fn v2_add_tracks_to_playlist(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playlists
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
-    log::info!("[V2] add_tracks_to_playlist: playlist {} <- {} tracks", playlistId, trackIds.len());
+    log::info!(
+        "[V2] add_tracks_to_playlist: playlist {} <- {} tracks",
+        playlistId,
+        trackIds.len()
+    );
     let bridge = bridge.get().await;
-    bridge.add_tracks_to_playlist(playlistId, &trackIds).await.map_err(RuntimeError::Internal)
+    bridge
+        .add_tracks_to_playlist(playlistId, &trackIds)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Remove tracks from playlist (V2 - uses QbzCore)
@@ -5127,25 +5545,36 @@ pub async fn v2_remove_tracks_from_playlist(
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
     // Runtime contract: require CoreBridge auth for V2 playlists
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     let ptids = playlistTrackIds.unwrap_or_default();
     let tids = trackIds.unwrap_or_default();
     log::info!(
         "[V2] remove_tracks_from_playlist: playlist {} (playlistTrackIds={}, trackIds={})",
-        playlistId, ptids.len(), tids.len()
+        playlistId,
+        ptids.len(),
+        tids.len()
     );
 
     let bridge = bridge.get().await;
 
     // If we have direct playlist_track_ids, use them
     if !ptids.is_empty() {
-        return bridge.remove_tracks_from_playlist(playlistId, &ptids).await.map_err(RuntimeError::Internal);
+        return bridge
+            .remove_tracks_from_playlist(playlistId, &ptids)
+            .await
+            .map_err(RuntimeError::Internal);
     }
 
     // Otherwise resolve track_ids → playlist_track_ids via full playlist fetch
     if !tids.is_empty() {
-        let playlist = bridge.get_playlist(playlistId).await.map_err(RuntimeError::Internal)?;
+        let playlist = bridge
+            .get_playlist(playlistId)
+            .await
+            .map_err(RuntimeError::Internal)?;
 
         let track_id_set: std::collections::HashSet<u64> = tids.into_iter().collect();
         let resolved_ptids: Vec<u64> = playlist
@@ -5160,13 +5589,20 @@ pub async fn v2_remove_tracks_from_playlist(
             .unwrap_or_default();
 
         if resolved_ptids.is_empty() {
-            return Err(RuntimeError::Internal("Could not resolve any track IDs to playlist track IDs".to_string()));
+            return Err(RuntimeError::Internal(
+                "Could not resolve any track IDs to playlist track IDs".to_string(),
+            ));
         }
 
-        return bridge.remove_tracks_from_playlist(playlistId, &resolved_ptids).await.map_err(RuntimeError::Internal);
+        return bridge
+            .remove_tracks_from_playlist(playlistId, &resolved_ptids)
+            .await
+            .map_err(RuntimeError::Internal);
     }
 
-    Err(RuntimeError::Internal("Either playlistTrackIds or trackIds must be provided".to_string()))
+    Err(RuntimeError::Internal(
+        "Either playlistTrackIds or trackIds must be provided".to_string(),
+    ))
 }
 
 // ==================== Audio Settings Commands (V2) ====================
@@ -5181,7 +5617,9 @@ pub fn v2_get_audio_settings(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
     store.get_settings().map_err(RuntimeError::Internal)
 }
 
@@ -5196,14 +5634,19 @@ pub fn v2_set_audio_output_device(
         .map(|d| crate::audio::normalize_device_id_to_stable(d));
     log::info!(
         "[V2] set_audio_output_device {:?} -> {:?} (normalized)",
-        device, normalized_device
+        device,
+        normalized_device
     );
     let guard = state
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_output_device(normalized_device.as_deref()).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_output_device(normalized_device.as_deref())
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set audio exclusive mode (V2)
@@ -5217,8 +5660,12 @@ pub fn v2_set_audio_exclusive_mode(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_exclusive_mode(enabled).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_exclusive_mode(enabled)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set DAC passthrough mode (V2)
@@ -5232,8 +5679,12 @@ pub fn v2_set_audio_dac_passthrough(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_dac_passthrough(enabled).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_dac_passthrough(enabled)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set PipeWire force bit-perfect mode (V2)
@@ -5247,8 +5698,12 @@ pub fn v2_set_audio_pw_force_bitperfect(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_pw_force_bitperfect(enabled).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_pw_force_bitperfect(enabled)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set preferred sample rate (V2)
@@ -5262,7 +5717,9 @@ pub fn v2_set_audio_sample_rate(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
     store.set_sample_rate(rate).map_err(RuntimeError::Internal)
 }
 
@@ -5278,8 +5735,12 @@ pub fn v2_set_audio_backend_type(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_backend_type(backendType).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_backend_type(backendType)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set ALSA plugin (V2)
@@ -5293,8 +5754,12 @@ pub fn v2_set_audio_alsa_plugin(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_alsa_plugin(plugin).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_alsa_plugin(plugin)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set gapless playback enabled (V2)
@@ -5308,8 +5773,12 @@ pub fn v2_set_audio_gapless_enabled(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_gapless_enabled(enabled).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_gapless_enabled(enabled)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set normalization enabled (V2)
@@ -5323,8 +5792,12 @@ pub fn v2_set_audio_normalization_enabled(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_normalization_enabled(enabled).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_normalization_enabled(enabled)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set normalization target LUFS (V2)
@@ -5338,8 +5811,12 @@ pub fn v2_set_audio_normalization_target(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_normalization_target_lufs(target).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_normalization_target_lufs(target)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set device max sample rate (V2)
@@ -5353,8 +5830,12 @@ pub fn v2_set_audio_device_max_sample_rate(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_device_max_sample_rate(rate).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_device_max_sample_rate(rate)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set limit quality to device capability (V2)
@@ -5368,8 +5849,12 @@ pub fn v2_set_audio_limit_quality_to_device(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_limit_quality_to_device(enabled).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_limit_quality_to_device(enabled)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set streaming only mode (V2)
@@ -5383,22 +5868,29 @@ pub fn v2_set_audio_streaming_only(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_streaming_only(enabled).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_streaming_only(enabled)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Reset audio settings to defaults (V2)
 #[tauri::command]
-pub fn v2_reset_audio_settings(
-    state: State<'_, AudioSettingsState>,
-) -> Result<(), RuntimeError> {
+pub fn v2_reset_audio_settings(state: State<'_, AudioSettingsState>) -> Result<(), RuntimeError> {
     log::info!("[V2] reset_audio_settings");
     let guard = state
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.reset_all().map(|_| ()).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .reset_all()
+        .map(|_| ())
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set stream first track enabled (V2)
@@ -5412,8 +5904,12 @@ pub fn v2_set_audio_stream_first_track(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_stream_first_track(enabled).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_stream_first_track(enabled)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set stream buffer seconds (V2)
@@ -5427,8 +5923,12 @@ pub fn v2_set_audio_stream_buffer_seconds(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_stream_buffer_seconds(seconds).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_stream_buffer_seconds(seconds)
+        .map_err(RuntimeError::Internal)
 }
 
 /// Set ALSA hardware volume control (V2)
@@ -5442,8 +5942,12 @@ pub fn v2_set_audio_alsa_hardware_volume(
         .store
         .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
-    store.set_alsa_hardware_volume(enabled).map_err(RuntimeError::Internal)
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_alsa_hardware_volume(enabled)
+        .map_err(RuntimeError::Internal)
 }
 
 // ==================== Extended Playlist Commands (V2) ====================
@@ -5458,11 +5962,17 @@ pub async fn v2_create_playlist(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Playlist, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] create_playlist: {}", name);
     let bridge = bridge.get().await;
-    bridge.create_playlist(&name, description.as_deref(), isPublic).await.map_err(RuntimeError::Internal)
+    bridge
+        .create_playlist(&name, description.as_deref(), isPublic)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Delete a playlist (V2 - uses QbzCore)
@@ -5473,11 +5983,17 @@ pub async fn v2_delete_playlist(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] delete_playlist: {}", playlistId);
     let bridge = bridge.get().await;
-    bridge.delete_playlist(playlistId).await.map_err(RuntimeError::Internal)
+    bridge
+        .delete_playlist(playlistId)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Update a playlist (V2 - uses QbzCore)
@@ -5491,11 +6007,22 @@ pub async fn v2_update_playlist(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Playlist, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] update_playlist: {}", playlistId);
     let bridge = bridge.get().await;
-    bridge.update_playlist(playlistId, name.as_deref(), description.as_deref(), isPublic).await.map_err(RuntimeError::Internal)
+    bridge
+        .update_playlist(
+            playlistId,
+            name.as_deref(),
+            description.as_deref(),
+            isPublic,
+        )
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
@@ -5505,7 +6032,10 @@ pub async fn v2_playlist_get_custom_order(
     library_state: State<'_, LibraryState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Vec<(i64, bool, i32)>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     crate::library::playlist_get_custom_order(playlistId, library_state)
         .await
         .map_err(RuntimeError::Internal)
@@ -5518,7 +6048,10 @@ pub async fn v2_playlist_has_custom_order(
     library_state: State<'_, LibraryState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<bool, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     crate::library::playlist_has_custom_order(playlistId, library_state)
         .await
         .map_err(RuntimeError::Internal)
@@ -5531,7 +6064,10 @@ pub async fn v2_playlist_get_tracks_with_local_copies(
     library_state: State<'_, LibraryState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Vec<u64>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
     crate::library::playlist_get_tracks_with_local_copies(trackIds, library_state)
         .await
         .map_err(RuntimeError::Internal)
@@ -5546,11 +6082,17 @@ pub async fn v2_search_playlists(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<SearchResultsPage<Playlist>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] search_playlists: {}", query);
     let bridge = bridge.get().await;
-    bridge.search_playlists(&query, limit, offset).await.map_err(RuntimeError::Internal)
+    bridge
+        .search_playlists(&query, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 // ==================== Extended Catalog Commands (V2) ====================
@@ -5563,11 +6105,17 @@ pub async fn v2_get_tracks_batch(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Vec<Track>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] get_tracks_batch: {} tracks", trackIds.len());
     let bridge = bridge.get().await;
-    bridge.get_tracks_batch(&trackIds).await.map_err(RuntimeError::Internal)
+    bridge
+        .get_tracks_batch(&trackIds)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Get genres (V2 - uses QbzCore)
@@ -5578,11 +6126,17 @@ pub async fn v2_get_genres(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Vec<GenreInfo>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] get_genres: parent={:?}", parentId);
     let bridge = bridge.get().await;
-    bridge.get_genres(parentId).await.map_err(RuntimeError::Internal)
+    bridge
+        .get_genres(parentId)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Get discover index (V2 - uses QbzCore)
@@ -5594,7 +6148,10 @@ pub async fn v2_get_discover_index(
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<DiscoverResponse, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] get_discover_index: genres={:?}", genreIds);
     let bridge = bridge.get().await;
@@ -5604,18 +6161,19 @@ pub async fn v2_get_discover_index(
         .map_err(RuntimeError::Internal)?;
 
     let mut filtered_count: usize = 0;
-    let mut filter_container = |container: &mut Option<qbz_models::DiscoverContainer<DiscoverAlbum>>| {
-        if let Some(section) = container.as_mut() {
-            let before = section.data.items.len();
-            section.data.items.retain(|album| {
-                !album
-                    .artists
-                    .iter()
-                    .any(|artist| blacklist_state.is_blacklisted(artist.id))
-            });
-            filtered_count += before.saturating_sub(section.data.items.len());
-        }
-    };
+    let mut filter_container =
+        |container: &mut Option<qbz_models::DiscoverContainer<DiscoverAlbum>>| {
+            if let Some(section) = container.as_mut() {
+                let before = section.data.items.len();
+                section.data.items.retain(|album| {
+                    !album
+                        .artists
+                        .iter()
+                        .any(|artist| blacklist_state.is_blacklisted(artist.id))
+                });
+                filtered_count += before.saturating_sub(section.data.items.len());
+            }
+        };
 
     filter_container(&mut response.containers.ideal_discography);
     filter_container(&mut response.containers.new_releases);
@@ -5645,11 +6203,17 @@ pub async fn v2_get_discover_playlists(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<DiscoverPlaylistsResponse, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] get_discover_playlists: tag={:?}", tag);
     let bridge = bridge.get().await;
-    bridge.get_discover_playlists(tag, genreIds, limit, offset).await.map_err(RuntimeError::Internal)
+    bridge
+        .get_discover_playlists(tag, genreIds, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Get playlist tags (V2 - uses QbzCore)
@@ -5658,11 +6222,17 @@ pub async fn v2_get_playlist_tags(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Vec<PlaylistTag>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] get_playlist_tags");
     let bridge = bridge.get().await;
-    bridge.get_playlist_tags().await.map_err(RuntimeError::Internal)
+    bridge
+        .get_playlist_tags()
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Get discover albums from a browse endpoint (V2 - uses QbzCore)
@@ -5678,7 +6248,10 @@ pub async fn v2_get_discover_albums(
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<DiscoverData<DiscoverAlbum>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     // Map endpoint type to actual path
     let endpoint = match endpointType.as_str() {
@@ -5688,29 +6261,37 @@ pub async fn v2_get_discover_albums(
         "qobuzissimes" => "/discover/qobuzissims",
         "albumOfTheWeek" => "/discover/albumOfTheWeek",
         "pressAward" => "/discover/pressAward",
-        _ => return Err(RuntimeError::Internal(format!("Unknown discover endpoint type: {}", endpointType))),
+        _ => {
+            return Err(RuntimeError::Internal(format!(
+                "Unknown discover endpoint type: {}",
+                endpointType
+            )))
+        }
     };
 
     log::info!("[V2] get_discover_albums: type={}", endpointType);
     let bridge = bridge.get().await;
-    let mut results = bridge.get_discover_albums(
-        endpoint,
-        genreIds,
-        offset.unwrap_or(0),
-        limit.unwrap_or(50),
-    ).await
+    let mut results = bridge
+        .get_discover_albums(endpoint, genreIds, offset.unwrap_or(0), limit.unwrap_or(50))
+        .await
         .map_err(RuntimeError::Internal)?;
 
     // Filter out albums from blacklisted artists
     let original_count = results.items.len();
     results.items.retain(|album| {
         // Check if any of the album's artists are blacklisted
-        !album.artists.iter().any(|artist| blacklist_state.is_blacklisted(artist.id))
+        !album
+            .artists
+            .iter()
+            .any(|artist| blacklist_state.is_blacklisted(artist.id))
     });
 
     let filtered_count = original_count - results.items.len();
     if filtered_count > 0 {
-        log::debug!("[V2/Blacklist] Filtered {} albums from discover results", filtered_count);
+        log::debug!(
+            "[V2/Blacklist] Filtered {} albums from discover results",
+            filtered_count
+        );
     }
 
     Ok(results)
@@ -5728,20 +6309,34 @@ pub async fn v2_get_featured_albums(
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<SearchResultsPage<Album>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
-    log::info!("[V2] get_featured_albums: type={}, genre={:?}", featuredType, genreId);
+    log::info!(
+        "[V2] get_featured_albums: type={}, genre={:?}",
+        featuredType,
+        genreId
+    );
     let bridge = bridge.get().await;
-    let mut results = bridge.get_featured_albums(&featuredType, limit, offset, genreId).await
+    let mut results = bridge
+        .get_featured_albums(&featuredType, limit, offset, genreId)
+        .await
         .map_err(RuntimeError::Internal)?;
 
     // Filter out albums from blacklisted artists
     let original_count = results.items.len();
-    results.items.retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+    results
+        .items
+        .retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
 
     let filtered_count = original_count - results.items.len();
     if filtered_count > 0 {
-        log::debug!("[V2/Blacklist] Filtered {} albums from featured results", filtered_count);
+        log::debug!(
+            "[V2/Blacklist] Filtered {} albums from featured results",
+            filtered_count
+        );
         results.total = results.total.saturating_sub(filtered_count as u32);
     }
 
@@ -5757,11 +6352,17 @@ pub async fn v2_get_artist_page(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<PageArtistResponse, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] get_artist_page: {} sort={:?}", artistId, sort);
     let bridge = bridge.get().await;
-    bridge.get_artist_page(artistId, sort.as_deref()).await.map_err(RuntimeError::Internal)
+    bridge
+        .get_artist_page(artistId, sort.as_deref())
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Get similar artists (V2 - uses QbzCore)
@@ -5775,16 +6376,23 @@ pub async fn v2_get_similar_artists(
     blacklist_state: State<'_, BlacklistState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<SearchResultsPage<Artist>, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] get_similar_artists: {}", artistId);
     let bridge = bridge.get().await;
-    let mut results = bridge.get_similar_artists(artistId, limit, offset).await
+    let mut results = bridge
+        .get_similar_artists(artistId, limit, offset)
+        .await
         .map_err(RuntimeError::Internal)?;
 
     // Filter out blacklisted artists
     let original_count = results.items.len();
-    results.items.retain(|artist| !blacklist_state.is_blacklisted(artist.id));
+    results
+        .items
+        .retain(|artist| !blacklist_state.is_blacklisted(artist.id));
 
     let filtered_count = original_count - results.items.len();
     if filtered_count > 0 {
@@ -5805,11 +6413,22 @@ pub async fn v2_get_artist_with_albums(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<Artist, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
-    log::info!("[V2] get_artist_with_albums: {} limit={:?} offset={:?}", artistId, limit, offset);
+    log::info!(
+        "[V2] get_artist_with_albums: {} limit={:?} offset={:?}",
+        artistId,
+        limit,
+        offset
+    );
     let bridge = bridge.get().await;
-    bridge.get_artist_with_albums(artistId, limit, offset).await.map_err(RuntimeError::Internal)
+    bridge
+        .get_artist_with_albums(artistId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 /// Get label details (V2 - uses QbzCore)
@@ -5822,11 +6441,17 @@ pub async fn v2_get_label(
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<LabelDetail, RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresCoreBridgeAuth).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
 
     log::info!("[V2] get_label: {}", labelId);
     let bridge = bridge.get().await;
-    bridge.get_label(labelId, limit, offset).await.map_err(RuntimeError::Internal)
+    bridge
+        .get_label(labelId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
 }
 
 // ==================== Integrations V2 Commands ====================
@@ -5834,7 +6459,7 @@ pub async fn v2_get_label(
 // These commands use the qbz-integrations crate which is Tauri-independent.
 // They can work without Tauri for TUI/headless clients.
 
-use crate::integrations_v2::{ListenBrainzV2State, MusicBrainzV2State, LastFmV2State};
+use crate::integrations_v2::{LastFmV2State, ListenBrainzV2State, MusicBrainzV2State};
 
 // --- ListenBrainz V2 ---
 
@@ -5877,12 +6502,16 @@ pub async fn v2_listenbrainz_connect(
 ) -> Result<qbz_integrations::listenbrainz::UserInfo, RuntimeError> {
     log::info!("[V2] listenbrainz_connect");
     let client = state.client.lock().await;
-    let user_info = client.set_token(&token).await
+    let user_info = client
+        .set_token(&token)
+        .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))?;
 
     // Save credentials for persistence
     drop(client);
-    state.save_credentials(token, user_info.user_name.clone()).await;
+    state
+        .save_credentials(token, user_info.user_name.clone())
+        .await;
 
     Ok(user_info)
 }
@@ -5916,8 +6545,11 @@ pub async fn v2_listenbrainz_now_playing(
     log::debug!("[V2] listenbrainz_now_playing: {} - {}", artist, track);
 
     // Build additional info if any MusicBrainz data provided
-    let additional_info = if recording_mbid.is_some() || release_mbid.is_some()
-        || artist_mbids.is_some() || isrc.is_some() || duration_ms.is_some()
+    let additional_info = if recording_mbid.is_some()
+        || release_mbid.is_some()
+        || artist_mbids.is_some()
+        || isrc.is_some()
+        || duration_ms.is_some()
     {
         Some(qbz_integrations::listenbrainz::AdditionalInfo {
             recording_mbid,
@@ -5936,7 +6568,9 @@ pub async fn v2_listenbrainz_now_playing(
     };
 
     let client = state.client.lock().await;
-    client.submit_playing_now(&artist, &track, album.as_deref(), additional_info).await
+    client
+        .submit_playing_now(&artist, &track, album.as_deref(), additional_info)
+        .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
@@ -5957,8 +6591,11 @@ pub async fn v2_listenbrainz_scrobble(
     log::info!("[V2] listenbrainz_scrobble: {} - {}", artist, track);
 
     // Build additional info if any MusicBrainz data provided
-    let additional_info = if recording_mbid.is_some() || release_mbid.is_some()
-        || artist_mbids.is_some() || isrc.is_some() || duration_ms.is_some()
+    let additional_info = if recording_mbid.is_some()
+        || release_mbid.is_some()
+        || artist_mbids.is_some()
+        || isrc.is_some()
+        || duration_ms.is_some()
     {
         Some(qbz_integrations::listenbrainz::AdditionalInfo {
             recording_mbid,
@@ -5977,7 +6614,15 @@ pub async fn v2_listenbrainz_scrobble(
     };
 
     let client = state.client.lock().await;
-    client.submit_listen(&artist, &track, album.as_deref(), timestamp, additional_info).await
+    client
+        .submit_listen(
+            &artist,
+            &track,
+            album.as_deref(),
+            timestamp,
+            additional_info,
+        )
+        .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
@@ -6014,7 +6659,9 @@ pub async fn v2_musicbrainz_resolve_track(
 ) -> Result<Option<qbz_integrations::musicbrainz::ResolvedTrack>, RuntimeError> {
     log::debug!("[V2] musicbrainz_resolve_track: {} - {}", artist, title);
     let client = state.client.lock().await;
-    client.resolve_track(&artist, &title, isrc.as_deref()).await
+    client
+        .resolve_track(&artist, &title, isrc.as_deref())
+        .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
@@ -6026,7 +6673,9 @@ pub async fn v2_musicbrainz_resolve_artist(
 ) -> Result<Option<qbz_integrations::musicbrainz::ResolvedArtist>, RuntimeError> {
     log::debug!("[V2] musicbrainz_resolve_artist: {}", name);
     let client = state.client.lock().await;
-    client.resolve_artist(&name).await
+    client
+        .resolve_artist(&name)
+        .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
@@ -6207,9 +6856,9 @@ pub async fn v2_remote_metadata_get_album(
             Ok(musicbrainz_full_to_metadata(&full))
         }
         RemoteProvider::Discogs => {
-            let id = providerId
-                .parse::<u64>()
-                .map_err(|e| RuntimeError::Internal(format!("Invalid Discogs release id: {}", e)))?;
+            let id = providerId.parse::<u64>().map_err(|e| {
+                RuntimeError::Internal(format!("Invalid Discogs release id: {}", e))
+            })?;
             let client = crate::discogs::DiscogsClient::new();
             let full = client
                 .get_release_metadata(id)
@@ -6228,7 +6877,9 @@ pub async fn v2_musicbrainz_get_artist_relationships(
     // Check cache first
     {
         let cache_opt = state.cache.lock().await;
-        let cache = cache_opt.as_ref().ok_or("No active session - please log in")?;
+        let cache = cache_opt
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         if let Some(cached) = cache.get_artist_relations(&mbid)? {
             return Ok(cached);
         }
@@ -6250,7 +6901,10 @@ pub async fn v2_musicbrainz_get_artist_relationships(
             let related = crate::musicbrainz::RelatedArtist {
                 mbid: related_artist.id.clone(),
                 name: related_artist.name.clone(),
-                role: relation.attributes.as_ref().and_then(|a| a.first().cloned()),
+                role: relation
+                    .attributes
+                    .as_ref()
+                    .and_then(|a| a.first().cloned()),
                 period: Some(crate::musicbrainz::Period {
                     begin: relation.begin.clone(),
                     end: relation.end.clone(),
@@ -6288,7 +6942,9 @@ pub async fn v2_musicbrainz_get_artist_relationships(
     // Cache result
     {
         let cache_opt = state.cache.lock().await;
-        let cache = cache_opt.as_ref().ok_or("No active session - please log in")?;
+        let cache = cache_opt
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         cache.set_artist_relations(&mbid, &result)?;
     }
 
@@ -6304,7 +6960,9 @@ pub async fn v2_lastfm_get_auth_url(
 ) -> Result<String, RuntimeError> {
     log::info!("[V2] lastfm_get_auth_url");
     let client = state.client.lock().await;
-    let (token, auth_url) = client.get_token().await
+    let (token, auth_url) = client
+        .get_token()
+        .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))?;
 
     // Store pending token for later session retrieval
@@ -6321,11 +6979,15 @@ pub async fn v2_lastfm_complete_auth(
 ) -> Result<qbz_integrations::LastFmSession, RuntimeError> {
     log::info!("[V2] lastfm_complete_auth");
 
-    let token = state.take_pending_token().await
+    let token = state
+        .take_pending_token()
+        .await
         .ok_or_else(|| RuntimeError::Internal("No pending auth token".to_string()))?;
 
     let mut client = state.client.lock().await;
-    let session = client.get_session(&token).await
+    let session = client
+        .get_session(&token)
+        .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))?;
 
     Ok(session)
@@ -6342,9 +7004,7 @@ pub async fn v2_lastfm_is_authenticated(
 
 /// Disconnect from Last.fm (V2)
 #[tauri::command]
-pub async fn v2_lastfm_disconnect(
-    state: State<'_, LastFmV2State>,
-) -> Result<(), RuntimeError> {
+pub async fn v2_lastfm_disconnect(state: State<'_, LastFmV2State>) -> Result<(), RuntimeError> {
     log::info!("[V2] lastfm_disconnect");
     let mut client = state.client.lock().await;
     client.clear_session();
@@ -6361,7 +7021,9 @@ pub async fn v2_lastfm_now_playing(
 ) -> Result<(), RuntimeError> {
     log::debug!("[V2] lastfm_now_playing: {} - {}", artist, track);
     let client = state.client.lock().await;
-    client.update_now_playing(&artist, &track, album.as_deref()).await
+    client
+        .update_now_playing(&artist, &track, album.as_deref())
+        .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
@@ -6376,7 +7038,9 @@ pub async fn v2_lastfm_scrobble(
 ) -> Result<(), RuntimeError> {
     log::info!("[V2] lastfm_scrobble: {} - {}", artist, track);
     let client = state.client.lock().await;
-    client.scrobble(&artist, &track, album.as_deref(), timestamp).await
+    client
+        .scrobble(&artist, &track, album.as_deref(), timestamp)
+        .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))
 }
 
@@ -6413,20 +7077,23 @@ pub async fn v2_listenbrainz_queue_listen(
     log::info!("[V2] listenbrainz_queue_listen: {} - {}", artist, track);
 
     let cache_guard = legacy_state.cache.lock().await;
-    let cache = cache_guard.as_ref()
+    let cache = cache_guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
 
-    cache.queue_listen(
-        timestamp,
-        &artist,
-        &track,
-        album.as_deref(),
-        recording_mbid.as_deref(),
-        release_mbid.as_deref(),
-        artist_mbids.as_deref(),
-        isrc.as_deref(),
-        duration_ms,
-    ).map_err(|e| RuntimeError::Internal(e))
+    cache
+        .queue_listen(
+            timestamp,
+            &artist,
+            &track,
+            album.as_deref(),
+            recording_mbid.as_deref(),
+            release_mbid.as_deref(),
+            artist_mbids.as_deref(),
+            isrc.as_deref(),
+            duration_ms,
+        )
+        .map_err(|e| RuntimeError::Internal(e))
 }
 
 #[tauri::command]
@@ -6436,10 +7103,12 @@ pub async fn v2_listenbrainz_flush_queue(
 ) -> Result<u32, RuntimeError> {
     let queued = {
         let cache_guard = legacy_state.cache.lock().await;
-        let cache = cache_guard
-            .as_ref()
-            .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
-        cache.get_queued_listens(500).map_err(RuntimeError::Internal)?
+        let cache = cache_guard.as_ref().ok_or_else(|| {
+            RuntimeError::Internal("No active session - please log in".to_string())
+        })?;
+        cache
+            .get_queued_listens(500)
+            .map_err(RuntimeError::Internal)?
     };
 
     if queued.is_empty() {
@@ -6487,7 +7156,9 @@ pub async fn v2_listenbrainz_flush_queue(
     let cache = cache_guard
         .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session - please log in".to_string()))?;
-    cache.mark_listens_sent(&sent_ids).map_err(RuntimeError::Internal)?;
+    cache
+        .mark_listens_sent(&sent_ids)
+        .map_err(RuntimeError::Internal)?;
 
     Ok(sent_ids.len() as u32)
 }
@@ -6515,9 +7186,12 @@ pub async fn v2_set_playback_context(
     app_state: State<'_, AppState>,
     runtime: State<'_, RuntimeManagerState>,
 ) -> Result<(), RuntimeError> {
-    runtime.manager().check_requirements(CommandRequirement::RequiresUserSession).await?;
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
 
-    use crate::playback_context::{PlaybackContext, ContextType, ContentSource};
+    use crate::playback_context::{ContentSource, ContextType, PlaybackContext};
 
     let ctx_type = match contextType.as_str() {
         "album" => ContextType::Album,
@@ -6528,24 +7202,28 @@ pub async fn v2_set_playback_context(
         "local_library" => ContextType::LocalLibrary,
         "radio" => ContextType::Radio,
         "search" => ContextType::Search,
-        _ => return Err(RuntimeError::Internal(format!("Invalid context type: {}", contextType))),
+        _ => {
+            return Err(RuntimeError::Internal(format!(
+                "Invalid context type: {}",
+                contextType
+            )))
+        }
     };
 
     let content_source = match source.as_str() {
         "qobuz" => ContentSource::Qobuz,
         "local" => ContentSource::Local,
         "plex" => ContentSource::Plex,
-        _ => return Err(RuntimeError::Internal(format!("Invalid source: {}", source))),
+        _ => {
+            return Err(RuntimeError::Internal(format!(
+                "Invalid source: {}",
+                source
+            )))
+        }
     };
 
-    let context = PlaybackContext::new(
-        ctx_type,
-        id,
-        label,
-        content_source,
-        trackIds,
-        startPosition,
-    );
+    let context =
+        PlaybackContext::new(ctx_type, id, label, content_source, trackIds, startPosition);
 
     app_state.context.set_context(context);
     log::info!("[V2] set_playback_context: type={}", contextType);
@@ -6554,9 +7232,7 @@ pub async fn v2_set_playback_context(
 
 /// Clear playback context (V2)
 #[tauri::command]
-pub async fn v2_clear_playback_context(
-    app_state: State<'_, AppState>,
-) -> Result<(), RuntimeError> {
+pub async fn v2_clear_playback_context(app_state: State<'_, AppState>) -> Result<(), RuntimeError> {
     app_state.context.clear_context();
     log::info!("[V2] clear_playback_context");
     Ok(())
@@ -6564,9 +7240,7 @@ pub async fn v2_clear_playback_context(
 
 /// Check if playback context is active (V2)
 #[tauri::command]
-pub async fn v2_has_playback_context(
-    app_state: State<'_, AppState>,
-) -> Result<bool, RuntimeError> {
+pub async fn v2_has_playback_context(app_state: State<'_, AppState>) -> Result<bool, RuntimeError> {
     Ok(app_state.context.has_context())
 }
 
@@ -6578,11 +7252,15 @@ pub async fn v2_save_session_position(
     positionSecs: u64,
     session_state: State<'_, crate::session_store::SessionStoreState>,
 ) -> Result<(), RuntimeError> {
-    let guard = session_state.store.lock()
+    let guard = session_state
+        .store
+        .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.save_position(positionSecs)
+    store
+        .save_position(positionSecs)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6592,11 +7270,15 @@ pub async fn v2_save_session_volume(
     volume: f32,
     session_state: State<'_, crate::session_store::SessionStoreState>,
 ) -> Result<(), RuntimeError> {
-    let guard = session_state.store.lock()
+    let guard = session_state
+        .store
+        .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.save_volume(volume)
+    store
+        .save_volume(volume)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6607,11 +7289,15 @@ pub async fn v2_save_session_playback_mode(
     repeatMode: String,
     session_state: State<'_, crate::session_store::SessionStoreState>,
 ) -> Result<(), RuntimeError> {
-    let guard = session_state.store.lock()
+    let guard = session_state
+        .store
+        .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.save_playback_mode(shuffle, &repeatMode)
+    store
+        .save_playback_mode(shuffle, &repeatMode)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6638,13 +7324,21 @@ pub async fn v2_save_session_state(
         saved_at: 0, // Will be set by save_session
     };
 
-    let guard = session_state.store.lock()
+    let guard = session_state
+        .store
+        .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.save_session(&session)
+    store
+        .save_session(&session)
         .map_err(|e| RuntimeError::Internal(e))?;
-    log::debug!("[V2] save_session_state: index={:?} pos={}", currentIndex, currentPositionSecs);
+    log::debug!(
+        "[V2] save_session_state: index={:?} pos={}",
+        currentIndex,
+        currentPositionSecs
+    );
     Ok(())
 }
 
@@ -6653,12 +7347,14 @@ pub async fn v2_save_session_state(
 pub async fn v2_load_session_state(
     session_state: State<'_, crate::session_store::SessionStoreState>,
 ) -> Result<crate::session_store::PersistedSession, RuntimeError> {
-    let guard = session_state.store.lock()
+    let guard = session_state
+        .store
+        .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.load_session()
-        .map_err(|e| RuntimeError::Internal(e))
+    store.load_session().map_err(|e| RuntimeError::Internal(e))
 }
 
 /// Clear session (V2)
@@ -6666,11 +7362,15 @@ pub async fn v2_load_session_state(
 pub async fn v2_clear_session(
     session_state: State<'_, crate::session_store::SessionStoreState>,
 ) -> Result<(), RuntimeError> {
-    let guard = session_state.store.lock()
+    let guard = session_state
+        .store
+        .lock()
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.clear_session()
+    store
+        .clear_session()
         .map_err(|e| RuntimeError::Internal(e))?;
     log::info!("[V2] clear_session");
     Ok(())
@@ -6683,11 +7383,15 @@ pub async fn v2_clear_session(
 pub async fn v2_get_cached_favorite_tracks(
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<Vec<i64>, RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.get_favorite_track_ids()
+    store
+        .get_favorite_track_ids()
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6697,11 +7401,15 @@ pub async fn v2_sync_cached_favorite_tracks(
     trackIds: Vec<i64>,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<(), RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.sync_favorite_tracks(&trackIds)
+    store
+        .sync_favorite_tracks(&trackIds)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6711,11 +7419,15 @@ pub async fn v2_cache_favorite_track(
     trackId: i64,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<(), RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.add_favorite_track(trackId)
+    store
+        .add_favorite_track(trackId)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6725,11 +7437,15 @@ pub async fn v2_uncache_favorite_track(
     trackId: i64,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<(), RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.remove_favorite_track(trackId)
+    store
+        .remove_favorite_track(trackId)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6738,12 +7454,14 @@ pub async fn v2_uncache_favorite_track(
 pub async fn v2_clear_favorites_cache(
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<(), RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.clear_all()
-        .map_err(|e| RuntimeError::Internal(e))
+    store.clear_all().map_err(|e| RuntimeError::Internal(e))
 }
 
 /// Get cached favorite albums (V2)
@@ -6751,11 +7469,15 @@ pub async fn v2_clear_favorites_cache(
 pub async fn v2_get_cached_favorite_albums(
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<Vec<String>, RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.get_favorite_album_ids()
+    store
+        .get_favorite_album_ids()
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6765,11 +7487,15 @@ pub async fn v2_sync_cached_favorite_albums(
     albumIds: Vec<String>,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<(), RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.sync_favorite_albums(&albumIds)
+    store
+        .sync_favorite_albums(&albumIds)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6779,11 +7505,15 @@ pub async fn v2_cache_favorite_album(
     albumId: String,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<(), RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.add_favorite_album(&albumId)
+    store
+        .add_favorite_album(&albumId)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6793,11 +7523,15 @@ pub async fn v2_uncache_favorite_album(
     albumId: String,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<(), RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.remove_favorite_album(&albumId)
+    store
+        .remove_favorite_album(&albumId)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6806,11 +7540,15 @@ pub async fn v2_uncache_favorite_album(
 pub async fn v2_get_cached_favorite_artists(
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<Vec<i64>, RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.get_favorite_artist_ids()
+    store
+        .get_favorite_artist_ids()
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6820,11 +7558,15 @@ pub async fn v2_sync_cached_favorite_artists(
     artistIds: Vec<i64>,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<(), RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.sync_favorite_artists(&artistIds)
+    store
+        .sync_favorite_artists(&artistIds)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6834,11 +7576,15 @@ pub async fn v2_cache_favorite_artist(
     artistId: i64,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<(), RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.add_favorite_artist(artistId)
+    store
+        .add_favorite_artist(artistId)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6848,11 +7594,15 @@ pub async fn v2_uncache_favorite_artist(
     artistId: i64,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
 ) -> Result<(), RuntimeError> {
-    let guard = cache_state.store.lock()
+    let guard = cache_state
+        .store
+        .lock()
         .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
-    let store = guard.as_ref()
+    let store = guard
+        .as_ref()
         .ok_or_else(|| RuntimeError::Internal("No active session".to_string()))?;
-    store.remove_favorite_artist(artistId)
+    store
+        .remove_favorite_artist(artistId)
         .map_err(|e| RuntimeError::Internal(e))
 }
 
@@ -6867,7 +7617,11 @@ pub fn v2_show_track_notification(
     bit_depth: Option<u32>,
     sample_rate: Option<f64>,
 ) -> Result<(), String> {
-    log::info!("Command: v2_show_track_notification - {} by {}", title, artist);
+    log::info!(
+        "Command: v2_show_track_notification - {} by {}",
+        title,
+        artist
+    );
 
     let mut lines = Vec::new();
     let mut line1_parts = Vec::new();
@@ -6887,7 +7641,11 @@ pub fn v2_show_track_notification(
     }
 
     let mut notification = Notification::new();
-    notification.summary(&title).body(&lines.join("\n")).appname("QBZ").timeout(4000);
+    notification
+        .summary(&title)
+        .body(&lines.join("\n"))
+        .appname("QBZ")
+        .timeout(4000);
 
     if let Some(url) = artwork_url {
         if let Ok(path) = v2_cache_notification_artwork(&url) {
@@ -6898,7 +7656,10 @@ pub fn v2_show_track_notification(
     }
 
     if let Err(e) = notification.show() {
-        log::warn!("Could not show notification (notification system may be unavailable): {}", e);
+        log::warn!(
+            "Could not show notification (notification system may be unavailable): {}",
+            e
+        );
     }
     Ok(())
 }
@@ -6926,7 +7687,10 @@ pub async fn v2_subscribe_playlist(
         return Err("Source playlist has no tracks to copy".to_string());
     }
 
-    let attribution = format!("\n\n---\nOriginally curated by {} on Qobuz", source.owner.name);
+    let attribution = format!(
+        "\n\n---\nOriginally curated by {} on Qobuz",
+        source.owner.name
+    );
     let new_description = match source.description {
         Some(ref desc) if !desc.is_empty() => Some(format!("{}{}", desc, attribution)),
         _ => Some(attribution.trim_start().to_string()),
@@ -7007,7 +7771,9 @@ pub async fn v2_share_album_songlink(
 
     let fallback_url = albumId
         .map(|id| format!("https://play.qobuz.com/album/{}", id))
-        .ok_or_else(|| RuntimeError::Internal("Missing UPC/albumId for song.link album lookup".to_string()))?;
+        .ok_or_else(|| {
+            RuntimeError::Internal("Missing UPC/albumId for song.link album lookup".to_string())
+        })?;
     state
         .songlink
         .get_by_url(&fallback_url, crate::share::ContentType::Album)
@@ -7062,11 +7828,8 @@ pub fn v2_create_pending_playlist(
 }
 
 #[tauri::command]
-pub fn v2_get_pending_playlist_count(
-    state: State<'_, OfflineState>,
-) -> Result<u32, RuntimeError> {
-    crate::offline::commands::get_pending_playlist_count(state)
-        .map_err(RuntimeError::Internal)
+pub fn v2_get_pending_playlist_count(state: State<'_, OfflineState>) -> Result<u32, RuntimeError> {
+    crate::offline::commands::get_pending_playlist_count(state).map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
@@ -7087,16 +7850,12 @@ pub fn v2_get_queued_scrobbles(
     limit: Option<u32>,
     state: State<'_, OfflineState>,
 ) -> Result<Vec<crate::offline::QueuedScrobble>, RuntimeError> {
-    crate::offline::commands::get_queued_scrobbles(limit, state)
-        .map_err(RuntimeError::Internal)
+    crate::offline::commands::get_queued_scrobbles(limit, state).map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
-pub fn v2_get_queued_scrobble_count(
-    state: State<'_, OfflineState>,
-) -> Result<u32, RuntimeError> {
-    crate::offline::commands::get_queued_scrobble_count(state)
-        .map_err(RuntimeError::Internal)
+pub fn v2_get_queued_scrobble_count(state: State<'_, OfflineState>) -> Result<u32, RuntimeError> {
+    crate::offline::commands::get_queued_scrobble_count(state).map_err(RuntimeError::Internal)
 }
 
 #[tauri::command]
@@ -7122,7 +7881,9 @@ pub async fn v2_get_track_by_path(
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn v2_check_network_path(path: String) -> Result<crate::network::NetworkPathInfo, RuntimeError> {
+pub fn v2_check_network_path(
+    path: String,
+) -> Result<crate::network::NetworkPathInfo, RuntimeError> {
     Ok(crate::network::commands::check_network_path(path))
 }
 
@@ -7209,7 +7970,11 @@ fn spawn_track_cache_download(
         let _permit = match semaphore.acquire_owned().await {
             Ok(permit) => permit,
             Err(err) => {
-                log::error!("Failed to acquire cache slot for track {}: {}", track_id, err);
+                log::error!(
+                    "Failed to acquire cache slot for track {}: {}",
+                    track_id,
+                    err
+                );
                 if let Some(db_guard) = db.lock().await.as_ref() {
                     let _ = db_guard.update_status(
                         track_id,
@@ -7217,18 +7982,28 @@ fn spawn_track_cache_download(
                         Some("Failed to start caching"),
                     );
                 }
-                let _ = app.emit("offline:caching_failed", serde_json::json!({
-                    "trackId": track_id,
-                    "error": "Failed to acquire cache slot"
-                }));
+                let _ = app.emit(
+                    "offline:caching_failed",
+                    serde_json::json!({
+                        "trackId": track_id,
+                        "error": "Failed to acquire cache slot"
+                    }),
+                );
                 return;
             }
         };
 
         if let Some(db_guard) = db.lock().await.as_ref() {
-            let _ = db_guard.update_status(track_id, crate::offline_cache::OfflineCacheStatus::Downloading, None);
+            let _ = db_guard.update_status(
+                track_id,
+                crate::offline_cache::OfflineCacheStatus::Downloading,
+                None,
+            );
         }
-        let _ = app.emit("offline:caching_started", serde_json::json!({ "trackId": track_id }));
+        let _ = app.emit(
+            "offline:caching_started",
+            serde_json::json!({ "trackId": track_id }),
+        );
 
         let stream_url = {
             let client_guard = client.read().await;
@@ -7248,41 +8023,64 @@ fn spawn_track_cache_download(
                         Some(&format!("Failed to get stream URL: {}", e)),
                     );
                 }
-                let _ = app.emit("offline:caching_failed", serde_json::json!({
-                    "trackId": track_id,
-                    "error": e.to_string()
-                }));
+                let _ = app.emit(
+                    "offline:caching_failed",
+                    serde_json::json!({
+                        "trackId": track_id,
+                        "error": e.to_string()
+                    }),
+                );
                 return;
             }
         };
 
-        match fetcher.fetch_to_file(&url, &file_path, track_id, Some(&app)).await {
+        match fetcher
+            .fetch_to_file(&url, &file_path, track_id, Some(&app))
+            .await
+        {
             Ok(size) => {
                 log::info!("Caching complete for track {}: {} bytes", track_id, size);
                 if let Some(db_guard) = db.lock().await.as_ref() {
                     let _ = db_guard.mark_complete(track_id, size);
                 }
-                let _ = app.emit("offline:caching_completed", serde_json::json!({
-                    "trackId": track_id,
-                    "size": size
-                }));
+                let _ = app.emit(
+                    "offline:caching_completed",
+                    serde_json::json!({
+                        "trackId": track_id,
+                        "size": size
+                    }),
+                );
 
                 // Post-processing kept in V2 to avoid command->command delegation.
                 let file_path_str = file_path.to_string_lossy().to_string();
                 let qobuz_client = client.read().await;
-                let metadata = match crate::offline_cache::metadata::fetch_complete_metadata(track_id, &*qobuz_client).await {
+                let metadata = match crate::offline_cache::metadata::fetch_complete_metadata(
+                    track_id,
+                    &*qobuz_client,
+                )
+                .await
+                {
                     Ok(m) => m,
                     Err(e) => {
-                        log::warn!("Post-processing metadata fetch failed for {}: {}", track_id, e);
+                        log::warn!(
+                            "Post-processing metadata fetch failed for {}: {}",
+                            track_id,
+                            e
+                        );
                         return;
                     }
                 };
 
-                if let Err(e) = crate::offline_cache::metadata::write_flac_tags(&file_path_str, &metadata) {
+                if let Err(e) =
+                    crate::offline_cache::metadata::write_flac_tags(&file_path_str, &metadata)
+                {
                     log::warn!("Failed to write tags for {}: {}", track_id, e);
                 }
                 if let Some(artwork_url) = &metadata.artwork_url {
-                    if let Err(e) = crate::offline_cache::metadata::embed_artwork(&file_path_str, artwork_url).await {
+                    if let Err(e) =
+                        crate::offline_cache::metadata::embed_artwork(&file_path_str, artwork_url)
+                            .await
+                    {
                         log::warn!("Failed to embed artwork for {}: {}", track_id, e);
                     }
                 }
@@ -7302,21 +8100,26 @@ fn spawn_track_cache_download(
 
                 if let Some(artwork_url) = &metadata.artwork_url {
                     if let Some(parent_dir) = std::path::Path::new(&new_path).parent() {
-                        let _ = crate::offline_cache::metadata::save_album_artwork(parent_dir, artwork_url).await;
+                        let _ = crate::offline_cache::metadata::save_album_artwork(
+                            parent_dir,
+                            artwork_url,
+                        )
+                        .await;
                     }
                 }
 
-                let (bit_depth_detected, sample_rate_detected) = match lofty::read_from_path(&new_path) {
-                    Ok(tagged_file) => {
-                        use lofty::AudioFile;
-                        let properties = tagged_file.properties();
-                        (
-                            properties.bit_depth().map(|bd| bd as u32),
-                            properties.sample_rate().map(|sr| sr as f64),
-                        )
-                    }
-                    Err(_) => (None, None),
-                };
+                let (bit_depth_detected, sample_rate_detected) =
+                    match lofty::read_from_path(&new_path) {
+                        Ok(tagged_file) => {
+                            use lofty::AudioFile;
+                            let properties = tagged_file.properties();
+                            (
+                                properties.bit_depth().map(|bd| bd as u32),
+                                properties.sample_rate().map(|sr| sr as f64),
+                            )
+                        }
+                        Err(_) => (None, None),
+                    };
 
                 let album_artist = metadata.album_artist.as_ref().unwrap_or(&metadata.artist);
                 let album_group_key = format!("{}|{}", metadata.album, album_artist);
@@ -7345,20 +8148,30 @@ fn spawn_track_cache_download(
                     let _ = db_guard.update_file_path(track_id, &new_path);
                 }
 
-                let _ = app.emit("offline:caching_processed", serde_json::json!({
-                    "trackId": track_id,
-                    "path": new_path
-                }));
+                let _ = app.emit(
+                    "offline:caching_processed",
+                    serde_json::json!({
+                        "trackId": track_id,
+                        "path": new_path
+                    }),
+                );
             }
             Err(e) => {
                 log::error!("Caching failed for track {}: {}", track_id, e);
                 if let Some(db_guard) = db.lock().await.as_ref() {
-                    let _ = db_guard.update_status(track_id, crate::offline_cache::OfflineCacheStatus::Failed, Some(&e));
+                    let _ = db_guard.update_status(
+                        track_id,
+                        crate::offline_cache::OfflineCacheStatus::Failed,
+                        Some(&e),
+                    );
                 }
-                let _ = app.emit("offline:caching_failed", serde_json::json!({
-                    "trackId": track_id,
-                    "error": e
-                }));
+                let _ = app.emit(
+                    "offline:caching_failed",
+                    serde_json::json!({
+                        "trackId": track_id,
+                        "error": e
+                    }),
+                );
             }
         }
     });
@@ -7379,7 +8192,12 @@ pub async fn v2_cache_track_for_offline(
     cache_state: State<'_, OfflineCacheState>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    log::info!("Command: v2_cache_track_for_offline {} - {} by {}", track_id, title, artist);
+    log::info!(
+        "Command: v2_cache_track_for_offline {} - {} by {}",
+        track_id,
+        title,
+        artist
+    );
 
     let track_info = crate::offline_cache::TrackCacheInfo {
         track_id,
@@ -7437,10 +8255,14 @@ pub async fn v2_cache_tracks_batch_for_offline(
     cache_state: State<'_, OfflineCacheState>,
     app_handle: tauri::AppHandle,
 ) -> Result<(), String> {
-    log::info!("Command: v2_cache_tracks_batch_for_offline ({} tracks)", tracks.len());
+    log::info!(
+        "Command: v2_cache_tracks_batch_for_offline ({} tracks)",
+        tracks.len()
+    );
 
     // Build TrackCacheInfo + file_path pairs for batch insert
-    let mut batch: Vec<(crate::offline_cache::TrackCacheInfo, String)> = Vec::with_capacity(tracks.len());
+    let mut batch: Vec<(crate::offline_cache::TrackCacheInfo, String)> =
+        Vec::with_capacity(tracks.len());
     for track in &tracks {
         let file_path = cache_state.track_file_path(track.id, "flac");
         let file_path_str = file_path.to_string_lossy().to_string();
@@ -7464,7 +8286,10 @@ pub async fn v2_cache_tracks_batch_for_offline(
     {
         let guard = cache_state.db.lock().await;
         let db = guard.as_ref().ok_or("No active session - please log in")?;
-        let refs: Vec<(&crate::offline_cache::TrackCacheInfo, String)> = batch.iter().map(|(info, path)| (info, path.clone())).collect();
+        let refs: Vec<(&crate::offline_cache::TrackCacheInfo, String)> = batch
+            .iter()
+            .map(|(info, path)| (info, path.clone()))
+            .collect();
         db.insert_tracks_batch(&refs)?;
     }
 
@@ -7522,9 +8347,7 @@ pub async fn v2_start_legacy_migration(
 }
 
 #[tauri::command]
-pub async fn v2_library_scan(
-    state: State<'_, crate::library::LibraryState>,
-) -> Result<(), String> {
+pub async fn v2_library_scan(state: State<'_, crate::library::LibraryState>) -> Result<(), String> {
     crate::library::library_scan_impl(state).await
 }
 
@@ -7587,7 +8410,10 @@ pub async fn v2_factory_reset(
     download_settings: State<'_, crate::config::download_settings::DownloadSettingsState>,
     audio_settings: State<'_, crate::config::audio_settings::AudioSettingsState>,
     tray_settings: State<'_, crate::config::tray_settings::TraySettingsState>,
-    remote_control_settings: State<'_, crate::config::remote_control_settings::RemoteControlSettingsState>,
+    remote_control_settings: State<
+        '_,
+        crate::config::remote_control_settings::RemoteControlSettingsState,
+    >,
     allowed_origins: State<'_, crate::config::remote_control_settings::AllowedOriginsState>,
     legal_settings: State<'_, crate::config::legal_settings::LegalSettingsState>,
     updates: State<'_, crate::updates::UpdatesState>,
@@ -7689,9 +8515,7 @@ pub fn v2_get_update_preferences(
 }
 
 #[tauri::command]
-pub fn v2_get_current_version(
-    state: State<'_, crate::updates::UpdatesState>,
-) -> String {
+pub fn v2_get_current_version(state: State<'_, crate::updates::UpdatesState>) -> String {
     crate::updates::get_current_version(state)
 }
 
@@ -7891,6 +8715,14 @@ pub struct V2PurchaseFormatOption {
     pub sampling_rate: Option<f64>,
 }
 
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct V2DynamicTrackToAnalyseInput {
+    pub trackId: u64,
+    pub artistId: u64,
+    pub genreId: u64,
+    pub labelId: u64,
+}
+
 fn v2_purchase_extension(format_id: u32, mime_type: &str) -> &'static str {
     if format_id == 5 || mime_type.contains("mpeg") {
         "mp3"
@@ -8064,6 +8896,85 @@ pub async fn v2_purchases_get_all(
 
 #[tauri::command]
 #[allow(non_snake_case)]
+pub async fn v2_purchases_get_ids(
+    limit: Option<u32>,
+    offset: Option<u32>,
+    purchaseType: Option<String>,
+    app_state: State<'_, AppState>,
+) -> Result<PurchaseIdsResponse, String> {
+    let lim = limit.unwrap_or(500);
+    let off = offset.unwrap_or(0);
+    let type_ref = purchaseType.as_deref();
+
+    let client = app_state.client.read().await;
+    let response = client
+        .get_user_purchases_ids_page_typed(type_ref, lim, off)
+        .await
+        .map_err(|e| format!("Failed to fetch purchase IDs page: {}", e))?;
+    drop(client);
+
+    Ok(response)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_purchases_get_by_type(
+    purchaseType: String,
+    app_state: State<'_, AppState>,
+    library_state: State<'_, LibraryState>,
+) -> Result<PurchaseResponse, String> {
+    if purchaseType != "albums" && purchaseType != "tracks" {
+        return Err(format!(
+            "Invalid purchase type '{}'. Expected 'albums' or 'tracks'.",
+            purchaseType
+        ));
+    }
+
+    let client = app_state.client.read().await;
+    let mut response = client
+        .get_user_purchases_all_typed(&purchaseType)
+        .await
+        .map_err(|e| format!("Failed to fetch {} purchases: {}", purchaseType, e))?;
+    drop(client);
+
+    let guard = library_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    let downloaded_ids: HashSet<i64> = db
+        .get_downloaded_purchase_track_ids()
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .collect();
+
+    if purchaseType == "tracks" {
+        for track in &mut response.tracks.items {
+            track.downloaded = downloaded_ids.contains(&(track.id as i64));
+        }
+    } else {
+        for album in &mut response.albums.items {
+            let album_track_ids: Vec<i64> = album
+                .tracks
+                .as_ref()
+                .map(|tracks_page| {
+                    tracks_page
+                        .items
+                        .iter()
+                        .map(|track| track.id as i64)
+                        .collect::<Vec<i64>>()
+                })
+                .unwrap_or_default();
+
+            album.downloaded = !album_track_ids.is_empty()
+                && album_track_ids
+                    .iter()
+                    .all(|track_id| downloaded_ids.contains(track_id));
+        }
+    }
+
+    Ok(response)
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_purchases_search(
     query: String,
     app_state: State<'_, AppState>,
@@ -8095,7 +9006,11 @@ pub async fn v2_purchases_get_album(
         .map_err(|e| format!("Failed to fetch purchases: {}", e))?;
     drop(client);
 
-    let purchase_meta = purchases.albums.items.iter().find(|item| item.id == albumId);
+    let purchase_meta = purchases
+        .albums
+        .items
+        .iter()
+        .find(|item| item.id == albumId);
 
     let tracks_items: Vec<PurchaseTrack> = album
         .tracks
@@ -8323,4 +9238,64 @@ pub async fn v2_purchases_get_downloaded_track_ids(
     let db = guard.as_ref().ok_or("No active session - please log in")?;
     db.get_downloaded_purchase_track_ids()
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_dynamic_suggest(
+    limit: Option<u32>,
+    listenedTrackIds: Option<Vec<u64>>,
+    tracksToAnalyse: Option<Vec<V2DynamicTrackToAnalyseInput>>,
+    app_state: State<'_, AppState>,
+) -> Result<DynamicSuggestResponse, String> {
+    let request = DynamicSuggestRequest {
+        limit: limit.unwrap_or(50).clamp(1, 200),
+        listened_tracks_ids: listenedTrackIds.unwrap_or_default(),
+        track_to_analysed: tracksToAnalyse
+            .unwrap_or_default()
+            .into_iter()
+            .map(|item| DynamicTrackToAnalyse {
+                track_id: item.trackId,
+                artist_id: item.artistId,
+                genre_id: item.genreId,
+                label_id: item.labelId,
+            })
+            .collect(),
+    };
+
+    let client = app_state.client.read().await;
+    client
+        .get_dynamic_suggest(&request)
+        .await
+        .map_err(|e| format!("Failed to fetch dynamic suggestions: {}", e))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_dynamic_suggest_raw(
+    limit: Option<u32>,
+    listenedTrackIds: Option<Vec<u64>>,
+    tracksToAnalyse: Option<Vec<V2DynamicTrackToAnalyseInput>>,
+    app_state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let request = DynamicSuggestRequest {
+        limit: limit.unwrap_or(50).clamp(1, 200),
+        listened_tracks_ids: listenedTrackIds.unwrap_or_default(),
+        track_to_analysed: tracksToAnalyse
+            .unwrap_or_default()
+            .into_iter()
+            .map(|item| DynamicTrackToAnalyse {
+                track_id: item.trackId,
+                artist_id: item.artistId,
+                genre_id: item.genreId,
+                label_id: item.labelId,
+            })
+            .collect(),
+    };
+
+    let client = app_state.client.read().await;
+    client
+        .get_dynamic_suggest_raw(&request)
+        .await
+        .map_err(|e| format!("Failed to fetch raw dynamic suggestions: {}", e))
 }
