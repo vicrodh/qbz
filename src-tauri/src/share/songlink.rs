@@ -1,4 +1,7 @@
-//! Odesli/song.link API client
+//! song.link URL generation via Deezer ISRC/UPC resolution
+//!
+//! Primary path: ISRC/UPC → Deezer API (single request) → construct song.link URL directly.
+//! Fallback path: URL → Odesli API (for tracks without ISRC/UPC).
 
 use std::collections::HashMap;
 use std::sync::Mutex;
@@ -10,7 +13,7 @@ use super::errors::ShareError;
 use super::models::{ContentType, OdesliResponse, SongLinkResponse};
 
 const ODESLI_API_URL: &str = "https://api.song.link/v1-alpha.1/links";
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const CACHE_TTL: Duration = Duration::from_secs(3600); // 1 hour
 
 /// Cached entry with TTL
@@ -50,155 +53,119 @@ impl SongLinkClient {
     }
 
     /// Get song.link URL for a track by ISRC
-    /// Qobuz isn't supported by Odesli, so we resolve ISRC → Deezer track ID → Odesli.
-    /// Deezer's free API supports ISRC lookup without authentication.
+    /// Resolves ISRC → Deezer track ID (single HTTP request) → constructs song.link URL directly.
+    /// No Odesli API call needed — much faster than the two-request approach.
     pub async fn get_by_isrc(&self, isrc: &str) -> Result<SongLinkResponse, ShareError> {
         let cache_key = format!("isrc:{}", isrc);
 
-        // Check cache first
         if let Some(cached) = self.get_from_cache(&cache_key) {
             log::debug!("Cache hit for ISRC: {}", isrc);
             return Ok(cached);
         }
 
-        // Step 1: Resolve ISRC to a Deezer track ID via Deezer's free API
         let deezer_api_url = format!("https://api.deezer.com/2.0/track/isrc:{}", isrc);
         log::info!("Resolving ISRC {} via Deezer API", isrc);
 
-        let deezer_response = self
-            .client
-            .get(&deezer_api_url)
-            .send()
-            .await?;
+        let deezer_response = self.client.get(&deezer_api_url).send().await?;
 
-        let deezer_id: Option<u64> = if deezer_response.status().is_success() {
-            let body: serde_json::Value = deezer_response.json().await
-                .map_err(|e| ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e)))?;
+        if !deezer_response.status().is_success() {
+            return Err(ShareError::OdesliError(format!(
+                "Deezer API returned {} for ISRC {}", deezer_response.status(), isrc
+            )));
+        }
 
-            if body.get("error").is_some() {
-                log::warn!("Deezer ISRC lookup returned error for {}", isrc);
-                None
-            } else {
-                body.get("id").and_then(|v| v.as_u64())
-            }
-        } else {
-            log::warn!("Deezer API returned {} for ISRC {}", deezer_response.status(), isrc);
-            None
-        };
+        let body: serde_json::Value = deezer_response.json().await
+            .map_err(|e| ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e)))?;
 
-        let deezer_id = deezer_id.ok_or_else(|| {
-            ShareError::OdesliError(format!(
+        if body.get("error").is_some() {
+            return Err(ShareError::OdesliError(format!(
                 "Could not find track with ISRC {} on Deezer", isrc
-            ))
+            )));
+        }
+
+        let deezer_id = body.get("id").and_then(|v| v.as_u64()).ok_or_else(|| {
+            ShareError::OdesliError(format!("Could not find track with ISRC {} on Deezer", isrc))
         })?;
 
         log::info!("Resolved ISRC {} to Deezer ID: {}", isrc, deezer_id);
 
-        // Step 2: Query Odesli with platform+type+id (faster than URL resolution)
-        let id_str = deezer_id.to_string();
-        let response = self
-            .client
-            .get(ODESLI_API_URL)
-            .query(&[
-                ("platform", "deezer"),
-                ("type", "song"),
-                ("id", &id_str),
-                ("userCountry", "US"),
-            ])
-            .send()
-            .await?;
+        // Construct song.link URL directly — no Odesli API call needed
+        let page_url = format!("https://song.link/d/{}", deezer_id);
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(ShareError::OdesliError(format!(
-                "HTTP {}: {}",
-                status, text
-            )));
-        }
+        let result = SongLinkResponse {
+            page_url,
+            title: body.get("title").and_then(|v| v.as_str()).map(String::from),
+            artist: body.get("artist")
+                .and_then(|a| a.get("name"))
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            thumbnail_url: body.get("album")
+                .and_then(|a| a.get("cover_xl"))
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            platforms: HashMap::new(),
+            identifier: isrc.to_string(),
+            content_type: ContentType::Track.as_str().to_string(),
+        };
 
-        let odesli: OdesliResponse = response.json().await?;
-        let result = self.convert_response(odesli, isrc.to_string(), ContentType::Track)?;
-
-        // Cache the result
         self.store_in_cache(cache_key, result.clone());
-
         Ok(result)
     }
 
     /// Get song.link URL for an album by UPC
-    /// Resolves UPC → Deezer album ID → Odesli (Odesli no longer accepts ?upc= directly).
+    /// Resolves UPC → Deezer album ID (single HTTP request) → constructs album.link URL directly.
+    /// No Odesli API call needed.
     pub async fn get_by_upc(&self, upc: &str) -> Result<SongLinkResponse, ShareError> {
         let cache_key = format!("upc:{}", upc);
 
-        // Check cache first
         if let Some(cached) = self.get_from_cache(&cache_key) {
             log::debug!("Cache hit for UPC: {}", upc);
             return Ok(cached);
         }
 
-        // Step 1: Resolve UPC to a Deezer album ID
         let deezer_api_url = format!("https://api.deezer.com/2.0/album/upc:{}", upc);
         log::info!("Resolving UPC {} via Deezer API", upc);
 
-        let deezer_response = self
-            .client
-            .get(&deezer_api_url)
-            .send()
-            .await?;
+        let deezer_response = self.client.get(&deezer_api_url).send().await?;
 
-        let deezer_id: Option<u64> = if deezer_response.status().is_success() {
-            let body: serde_json::Value = deezer_response.json().await
-                .map_err(|e| ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e)))?;
+        if !deezer_response.status().is_success() {
+            return Err(ShareError::OdesliError(format!(
+                "Deezer API returned {} for UPC {}", deezer_response.status(), upc
+            )));
+        }
 
-            if body.get("error").is_some() {
-                log::warn!("Deezer UPC lookup returned error for {}", upc);
-                None
-            } else {
-                body.get("id").and_then(|v| v.as_u64())
-            }
-        } else {
-            log::warn!("Deezer API returned {} for UPC {}", deezer_response.status(), upc);
-            None
-        };
+        let body: serde_json::Value = deezer_response.json().await
+            .map_err(|e| ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e)))?;
 
-        let deezer_id = deezer_id.ok_or_else(|| {
-            ShareError::OdesliError(format!(
+        if body.get("error").is_some() {
+            return Err(ShareError::OdesliError(format!(
                 "Could not find album with UPC {} on Deezer", upc
-            ))
+            )));
+        }
+
+        let deezer_id = body.get("id").and_then(|v| v.as_u64()).ok_or_else(|| {
+            ShareError::OdesliError(format!("Could not find album with UPC {} on Deezer", upc))
         })?;
 
         log::info!("Resolved UPC {} to Deezer album ID: {}", upc, deezer_id);
 
-        // Step 2: Query Odesli with platform+type+id
-        let id_str = deezer_id.to_string();
-        let response = self
-            .client
-            .get(ODESLI_API_URL)
-            .query(&[
-                ("platform", "deezer"),
-                ("type", "album"),
-                ("id", &id_str),
-                ("userCountry", "US"),
-            ])
-            .send()
-            .await?;
+        // Construct album.link URL directly — no Odesli API call needed
+        let page_url = format!("https://album.link/d/{}", deezer_id);
 
-        if !response.status().is_success() {
-            let status = response.status();
-            let text = response.text().await.unwrap_or_default();
-            return Err(ShareError::OdesliError(format!(
-                "HTTP {}: {}",
-                status, text
-            )));
-        }
+        let result = SongLinkResponse {
+            page_url,
+            title: body.get("title").and_then(|v| v.as_str()).map(String::from),
+            artist: body.get("artist")
+                .and_then(|a| a.get("name"))
+                .and_then(|v| v.as_str())
+                .map(String::from),
+            thumbnail_url: body.get("cover_xl").and_then(|v| v.as_str()).map(String::from),
+            platforms: HashMap::new(),
+            identifier: upc.to_string(),
+            content_type: ContentType::Album.as_str().to_string(),
+        };
 
-        let odesli: OdesliResponse = response.json().await?;
-        let result = self.convert_response(odesli, upc.to_string(), ContentType::Album)?;
-
-        // Cache the result
         self.store_in_cache(cache_key, result.clone());
-
         Ok(result)
     }
 
