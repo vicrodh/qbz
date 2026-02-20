@@ -47,7 +47,8 @@
     "artistPlays": "{count} reproducciones",
     "moreFromFavorites": "Más de Favoritos",
     "startListening": "Empieza a Escuchar",
-    "startListeningDescription": "Reproduce música o agrega favoritos para activar recomendaciones."
+    "startListeningDescription": "Reproduce música o agrega favoritos para activar recomendaciones.",
+    "yourMixes": "Tus mixes"
   },
   "discover": {
     "newReleases": "Novedades",

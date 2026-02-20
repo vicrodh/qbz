@@ -47,7 +47,8 @@
     "artistPlays": "{count} plays",
     "moreFromFavorites": "More From Favorites",
     "startListening": "Start Listening",
-    "startListeningDescription": "Play music or add favorites to activate recommendations."
+    "startListeningDescription": "Play music or add favorites to activate recommendations.",
+    "yourMixes": "Your mixes"
   },
   "discover": {
     "newReleases": "New Releases",

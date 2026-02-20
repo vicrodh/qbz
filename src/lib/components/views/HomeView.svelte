@@ -129,6 +129,8 @@
     onNavigateAlbumsOfTheWeek?: () => void;
     onNavigatePressAccolades?: () => void;
     onNavigateQobuzPlaylists?: () => void;
+    onNavigateDailyQ?: () => void;
+    onNavigateWeeklyQ?: () => void;
   }
 
   let {
@@ -175,6 +177,8 @@
     onNavigateAlbumsOfTheWeek,
     onNavigatePressAccolades,
     onNavigateQobuzPlaylists,
+    onNavigateDailyQ,
+    onNavigateWeeklyQ,
   }: Props = $props();
 
   // Home settings state
@@ -1447,6 +1451,39 @@
         </HorizontalScrollRow>
       {/if}
     {/if}
+
+    {#if sectionId === 'yourMixes'}
+      <HorizontalScrollRow>
+        {#snippet header()}
+          <div class="section-header-group">
+            <h2 class="section-title">{$t('home.yourMixes')}</h2>
+          </div>
+        {/snippet}
+        {#snippet children()}
+          <button class="mix-card" onclick={() => onNavigateDailyQ?.()}
+                  onkeydown={(e) => e.key === 'Enter' && onNavigateDailyQ?.()}>
+            <div class="mix-card-artwork">
+              <video src="/video/dailyq.mp4" autoplay loop muted playsinline></video>
+            </div>
+            <div class="mix-card-info">
+              <div class="mix-card-title">{$t('yourMixes.title')}</div>
+              <div class="mix-card-owner">Qobuz</div>
+            </div>
+          </button>
+          <button class="mix-card" onclick={() => onNavigateWeeklyQ?.()}
+                  onkeydown={(e) => e.key === 'Enter' && onNavigateWeeklyQ?.()}>
+            <div class="mix-card-artwork">
+              <video src="/video/weeklyq.mp4" autoplay loop muted playsinline></video>
+            </div>
+            <div class="mix-card-info">
+              <div class="mix-card-title">{$t('weeklyMixes.title')}</div>
+              <div class="mix-card-owner">Qobuz</div>
+            </div>
+          </button>
+          <div class="spacer"></div>
+        {/snippet}
+      </HorizontalScrollRow>
+    {/if}
   {/each}
 
   <!-- Empty state: only show after all loading completes with no content -->
@@ -1813,6 +1850,50 @@
 
   .see-all-link:hover {
     color: var(--text-primary);
+  }
+
+  .mix-card {
+    flex-shrink: 0;
+    width: 180px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    color: inherit;
+  }
+
+  .mix-card-artwork {
+    width: 180px;
+    height: 180px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--bg-tertiary);
+    margin-bottom: 8px;
+  }
+
+  .mix-card-artwork video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .mix-card-title {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    line-height: 1.4;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 2px;
+  }
+
+  .mix-card-owner {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-muted);
+    line-height: 1.4;
   }
 
 </style>

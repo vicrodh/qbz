@@ -31,7 +31,9 @@ export type ViewType =
   | 'discover-press-accolades'
   | 'discover-playlists'
   | 'purchases'
-  | 'purchase-album';
+  | 'purchase-album'
+  | 'dailyq'
+  | 'weeklyq';
 export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'playlists';
 
 // Navigation state

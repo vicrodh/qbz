@@ -324,6 +324,8 @@
   import DiscoverPlaylistsBrowseView from '$lib/components/views/DiscoverPlaylistsBrowseView.svelte';
   import PurchasesView from '$lib/components/views/PurchasesView.svelte';
   import PurchaseAlbumDetailView from '$lib/components/views/PurchaseAlbumDetailView.svelte';
+  import DynamicSuggestView from '$lib/components/views/DynamicSuggestView.svelte';
+  import WeeklySuggestView from '$lib/components/views/WeeklySuggestView.svelte';
 
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
@@ -3383,6 +3385,8 @@
             onNavigateAlbumsOfTheWeek={() => navigateTo('discover-albums-of-the-week')}
             onNavigatePressAccolades={() => navigateTo('discover-press-accolades')}
             onNavigateQobuzPlaylists={() => navigateTo('discover-playlists')}
+            onNavigateDailyQ={() => navigateTo('dailyq')}
+            onNavigateWeeklyQ={() => navigateTo('weeklyq')}
           />
         {/if}
       {:else if activeView === 'search'}
@@ -3790,6 +3794,10 @@
           onPlaylistCopyToLibrary={copyPlaylistToLibraryById}
           onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
         />
+      {:else if activeView === 'dailyq'}
+        <DynamicSuggestView />
+      {:else if activeView === 'weeklyq'}
+        <WeeklySuggestView />
       {:else if activeView === 'purchases'}
         <PurchasesView
           onAlbumClick={handlePurchaseAlbumClick}
