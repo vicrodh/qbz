@@ -1,6 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { ArrowLeft, Info, ListPlus, Play, RefreshCw, Search, Shuffle, X } from 'lucide-svelte';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import TrackRow from '$lib/components/TrackRow.svelte';
@@ -348,6 +348,28 @@
     });
   });
 
+  let showAlgoTooltip = $state(false);
+  let algoTooltipTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function toggleAlgoTooltip(event: MouseEvent) {
+    event.stopPropagation();
+    if (showAlgoTooltip) {
+      dismissAlgoTooltip();
+      return;
+    }
+    showAlgoTooltip = true;
+    algoTooltipTimer = setTimeout(dismissAlgoTooltip, 2000);
+  }
+
+  function dismissAlgoTooltip() {
+    showAlgoTooltip = false;
+    if (algoTooltipTimer) { clearTimeout(algoTooltipTimer); algoTooltipTimer = null; }
+  }
+
+  function handleGlobalClick() {
+    if (showAlgoTooltip) dismissAlgoTooltip();
+  }
+
   const totalDurationFormatted = $derived.by(() => {
     const totalSecs = filteredTracks.reduce((sum, track) => sum + (track.duration || 0), 0);
     const hours = Math.floor(totalSecs / 3600);
@@ -360,6 +382,12 @@
     if (autoRunDone) return;
     autoRunDone = true;
     void generateDailyQ('read-write');
+    document.addEventListener('click', handleGlobalClick);
+  });
+
+  onDestroy(() => {
+    dismissAlgoTooltip();
+    document.removeEventListener('click', handleGlobalClick);
   });
 </script>
 
@@ -380,9 +408,14 @@
       <span class="playlist-label">{$t('home.yourMixes')}</span>
       <h1 class="playlist-title">
         {$t('yourMixes.title')}
-        <button class="info-btn" title={$t('yourMixes.algorithmInfo')}>
-          <Info size={16} />
-        </button>
+        <span class="info-wrapper">
+          <button class="info-btn" onclick={toggleAlgoTooltip}>
+            <Info size={16} />
+          </button>
+          {#if showAlgoTooltip}
+            <span class="info-tooltip">{$t('yourMixes.algorithmInfo')}</span>
+          {/if}
+        </span>
       </h1>
       <p class="playlist-description">{@html $t('yourMixes.cardDesc')}</p>
       <div class="playlist-info">
@@ -618,6 +651,12 @@
     gap: 8px;
   }
 
+  .info-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+  }
+
   .info-btn {
     display: inline-flex;
     align-items: center;
@@ -632,6 +671,31 @@
 
   .info-btn:hover {
     color: var(--text-primary);
+  }
+
+  .info-tooltip {
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1.4;
+    padding: 8px 12px;
+    border-radius: 6px;
+    white-space: normal;
+    width: 260px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 10;
+    pointer-events: none;
+    animation: tooltip-fade-in 150ms ease;
+  }
+
+  @keyframes tooltip-fade-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-4px); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0); }
   }
 
   .playlist-description {
