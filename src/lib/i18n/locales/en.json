@@ -1712,6 +1712,10 @@
       "emptyPlaylist": "No tracks available to save as playlist."
     }
   },
+  "weeklyMixes": {
+    "title": "WeeklyQ",
+    "subtitle": "Based on your weekly listening."
+  },
   "linkResolver": {
     "title": "Open Qobuz Link",
     "placeholder": "Paste a Qobuz link (album, track, artist, playlist)...",
