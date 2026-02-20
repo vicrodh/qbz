@@ -1,5 +1,6 @@
 import { invoke } from '@tauri-apps/api/core';
 import type {
+  PurchaseIdsResponse,
   PurchaseResponse,
   PurchasedAlbum,
   PurchaseFormatOption
@@ -32,6 +33,39 @@ export async function searchPurchases(
     return res.json();
   }
   return invoke<PurchaseResponse>('v2_purchases_search', { query });
+}
+
+export async function getPurchasesByType(
+  purchaseType: 'albums' | 'tracks'
+): Promise<PurchaseResponse> {
+  if (USE_MOCK) {
+    const res = await fetch(`${MOCK_URL}/purchases/${purchaseType}`);
+    return res.json();
+  }
+
+  return invoke<PurchaseResponse>('v2_purchases_get_by_type', { purchaseType });
+}
+
+export async function getPurchaseIds(
+  limit = 500,
+  offset = 0,
+  purchaseType?: 'albums' | 'tracks'
+): Promise<PurchaseIdsResponse> {
+  if (USE_MOCK) {
+    const params = new URLSearchParams({
+      limit: String(limit),
+      offset: String(offset)
+    });
+    if (purchaseType) params.set('type', purchaseType);
+    const res = await fetch(`${MOCK_URL}/purchases/ids?${params.toString()}`);
+    return res.json();
+  }
+
+  return invoke<PurchaseIdsResponse>('v2_purchases_get_ids', {
+    limit,
+    offset,
+    purchaseType: purchaseType ?? null
+  });
 }
 
 export async function getAlbumDetail(

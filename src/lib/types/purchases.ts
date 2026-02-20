@@ -3,6 +3,11 @@ export interface PurchaseResponse {
   tracks: PaginatedList<PurchasedTrack>;
 }
 
+export interface PurchaseIdsResponse {
+  albums: PaginatedList<unknown>;
+  tracks: PaginatedList<unknown>;
+}
+
 export interface PaginatedList<T> {
   offset: number;
   limit: number;

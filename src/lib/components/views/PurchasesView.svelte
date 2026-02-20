@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
   import {
@@ -8,14 +7,14 @@
   } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import QualityBadge from '../QualityBadge.svelte';
-  import { getPurchases, searchPurchases, getDownloadedTrackIds } from '$lib/services/purchases';
+  import { getPurchasesByType, getPurchaseIds, searchPurchases, getDownloadedTrackIds } from '$lib/services/purchases';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import {
     getHideUnavailable, setHideUnavailable,
     getHideDownloaded, setHideDownloaded,
   } from '$lib/stores/purchasesStore';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
-  import type { PurchasedAlbum, PurchasedTrack, PurchaseResponse } from '$lib/types/purchases';
+  import type { PurchasedAlbum, PurchasedTrack } from '$lib/types/purchases';
   import type { DisplayTrack } from '$lib/types';
 
   type PurchasesTab = 'albums' | 'tracks';
@@ -65,6 +64,11 @@
   let albums = $state<PurchasedAlbum[]>([]);
   let tracks = $state<PurchasedTrack[]>([]);
   let downloadedTrackIds = $state<Set<number>>(new Set());
+  let totalAlbumPurchases = $state(0);
+  let totalTrackPurchases = $state(0);
+  let metadataLoaded = $state(false);
+  let albumsLoaded = $state(false);
+  let tracksLoaded = $state(false);
   let loading = $state(true);
   let error = $state<string | null>(null);
 
@@ -212,6 +216,17 @@
 
   const filteredAlbums = $derived(sortAlbums(applyAlbumFilters(albums)));
   const filteredTracks = $derived(applyTrackFilters(tracks));
+  const isSearchActive = $derived(searchQuery.trim().length > 0);
+  const albumTabCount = $derived(
+    isSearchActive || hasActiveFilters
+      ? filteredAlbums.length
+      : (totalAlbumPurchases || filteredAlbums.length)
+  );
+  const trackTabCount = $derived(
+    isSearchActive || hasActiveFilters
+      ? filteredTracks.length
+      : (totalTrackPurchases || filteredTracks.length)
+  );
   const groupedAlbums = $derived(
     albumGroupingEnabled ? groupAlbums(filteredAlbums) : [{ key: 'all', title: '', items: filteredAlbums }]
   );
@@ -260,18 +275,49 @@
     return { albums: enrichedAlbums, tracks: enrichedTracks };
   }
 
-  async function loadPurchases() {
+  async function loadPurchasesMetadata() {
+    if (metadataLoaded) return;
+
+    const [dlIds, idsResponse] = await Promise.all([
+      getDownloadedTrackIds().catch(() => new Set<number>()),
+      getPurchaseIds(1, 0).catch(() => null),
+    ]);
+    downloadedTrackIds = dlIds;
+    totalAlbumPurchases = idsResponse?.albums?.total ?? 0;
+    totalTrackPurchases = idsResponse?.tracks?.total ?? 0;
+    metadataLoaded = true;
+  }
+
+  async function loadPurchasesByTab(tab: PurchasesTab, force = false) {
+    if (!force) {
+      if (tab === 'albums' && albumsLoaded) return;
+      if (tab === 'tracks' && tracksLoaded) return;
+    }
+
     loading = true;
     error = null;
     try {
-      const [response, dlIds] = await Promise.all([
-        getPurchases(),
-        getDownloadedTrackIds().catch(() => new Set<number>()),
-      ]);
-      downloadedTrackIds = dlIds;
-      const enriched = enrichWithDownloadStatus(response.albums.items, response.tracks.items, dlIds);
-      albums = enriched.albums;
-      tracks = enriched.tracks;
+      await loadPurchasesMetadata();
+      const response = await getPurchasesByType(tab);
+      const enriched = enrichWithDownloadStatus(
+        response.albums.items,
+        response.tracks.items,
+        downloadedTrackIds,
+      );
+
+      if (tab === 'albums') {
+        albums = enriched.albums;
+        albumsLoaded = true;
+        if (!totalAlbumPurchases) {
+          totalAlbumPurchases = response.albums.total || enriched.albums.length;
+        }
+      } else {
+        tracks = enriched.tracks;
+        tracksLoaded = true;
+        if (!totalTrackPurchases) {
+          totalTrackPurchases = response.tracks.total || enriched.tracks.length;
+        }
+      }
     } catch (err) {
       error = String(err);
     } finally {
@@ -283,15 +329,18 @@
     if (searchTimeout) clearTimeout(searchTimeout);
     searchTimeout = setTimeout(async () => {
       if (!searchQuery.trim()) {
-        await loadPurchases();
+        await loadPurchasesByTab(activeTab, true);
         return;
       }
       loading = true;
       try {
+        await loadPurchasesMetadata();
         const response = await searchPurchases(searchQuery.trim());
         const enriched = enrichWithDownloadStatus(response.albums.items, response.tracks.items, downloadedTrackIds);
         albums = enriched.albums;
         tracks = enriched.tracks;
+        albumsLoaded = true;
+        tracksLoaded = true;
       } catch (err) {
         error = String(err);
       } finally {
@@ -303,7 +352,7 @@
   function clearSearch() {
     searchQuery = '';
     searchExpanded = false;
-    loadPurchases();
+    void loadPurchasesByTab(activeTab, true);
   }
 
   function dismissRegionNotice() {
@@ -328,8 +377,9 @@
     };
   }
 
-  onMount(() => {
-    loadPurchases();
+  $effect(() => {
+    if (searchQuery.trim()) return;
+    void loadPurchasesByTab(activeTab);
   });
 </script>
 
@@ -363,7 +413,7 @@
       >
         <Disc3 size={16} />
         <span>{$t('purchases.tabs.albums')}</span>
-        <span class="nav-count">{filteredAlbums.length}</span>
+        <span class="nav-count">{albumTabCount}</span>
       </button>
       <button
         class="nav-link"
@@ -372,7 +422,7 @@
       >
         <Music size={16} />
         <span>{$t('purchases.tabs.tracks')}</span>
-        <span class="nav-count">{filteredTracks.length}</span>
+        <span class="nav-count">{trackTabCount}</span>
       </button>
     </div>
     <div class="nav-right">
