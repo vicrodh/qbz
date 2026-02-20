@@ -401,6 +401,14 @@
   }
 
   .artwork-weekly {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .artwork-weekly::before {
+    content: '';
+    position: absolute;
+    inset: -40%;
     background:
       linear-gradient(125deg, transparent 20%, rgba(255, 220, 255, 0.5) 23%, transparent 26%),
       linear-gradient(125deg, transparent 55%, rgba(30, 0, 50, 0.4) 58%, transparent 61%),
@@ -408,18 +416,16 @@
       radial-gradient(ellipse at 70% 50%, rgba(200, 150, 255, 0.4) 0%, transparent 50%),
       radial-gradient(ellipse at 20% 70%, rgba(130, 80, 200, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #b060d0 0%, #8040b0 30%, #6030a0 60%, #402080 100%);
-    background-size: 200% 200%;
-    animation: silk-shift 25s ease-in-out infinite alternate;
+    will-change: transform;
+    animation: silk-weekly 34s ease-in-out infinite alternate;
   }
 
-  @keyframes silk-shift {
-    0%   { background-position: 0% 0%; }
-    14%  { background-position: 80% 25%; }
-    31%  { background-position: 20% 70%; }
-    47%  { background-position: 95% 40%; }
-    62%  { background-position: 10% 90%; }
-    78%  { background-position: 65% 15%; }
-    100% { background-position: 35% 60%; }
+  @keyframes silk-weekly {
+    0%   { transform: translate(-3%, 6%) rotate(2deg) scale(1.01); }
+    20%  { transform: translate(7%, -4%) rotate(-5deg) scale(0.98); }
+    45%  { transform: translate(-6%, -2%) rotate(7deg) scale(1.03); }
+    70%  { transform: translate(4%, 7%) rotate(-3deg) scale(1); }
+    100% { transform: translate(-5%, 3%) rotate(4deg) scale(0.99); }
   }
 
   .metadata {
