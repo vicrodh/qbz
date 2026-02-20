@@ -55,18 +55,17 @@
   let totalAlbums = $state(0);
   let albumsFetched = $state(0);
 
+  // API search state
+  let apiSearchResults = $state<QobuzAlbum[] | null>(null);
+  let apiSearching = $state(false);
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+  let searchVersion = 0;
+
   // Download status tracking
   let albumOfflineCacheStatuses = $state<Map<string, boolean>>(new Map());
 
-  // Derived: filtered albums based on search
-  let filteredAlbums = $derived(
-    searchQuery.trim()
-      ? albums.filter(album =>
-          album.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          album.artist?.name?.toLowerCase().includes(searchQuery.toLowerCase())
-        )
-      : albums
-  );
+  // When API search is active, show API results; otherwise show all loaded albums
+  let displayAlbums = $derived(apiSearchResults !== null ? apiSearchResults : albums);
 
   async function loadLabel() {
     loading = true;
@@ -167,17 +166,55 @@
 
   function clearSearch() {
     searchQuery = '';
+    apiSearchResults = null;
+    apiSearching = false;
+    if (searchTimeout) clearTimeout(searchTimeout);
   }
 
   function toggleSearch() {
     searchExpanded = !searchExpanded;
     if (!searchExpanded) {
       searchQuery = '';
+      apiSearchResults = null;
+      apiSearching = false;
+      if (searchTimeout) clearTimeout(searchTimeout);
     }
   }
 
-  // Scroll handler for infinite loading
+  function handleSearchInput() {
+    if (searchTimeout) clearTimeout(searchTimeout);
+    const query = searchQuery.trim();
+    if (query.length < 2) {
+      apiSearchResults = null;
+      apiSearching = false;
+      return;
+    }
+    apiSearching = true;
+    searchTimeout = setTimeout(() => performLabelSearch(query), 300);
+  }
+
+  async function performLabelSearch(query: string) {
+    searchVersion++;
+    const thisVersion = searchVersion;
+    try {
+      const results = await invoke<{ items: QobuzAlbum[]; total: number; offset: number; limit: number }>(
+        'v2_search_albums', { query, limit: 200, offset: 0, searchType: null }
+      );
+      if (thisVersion !== searchVersion) return;
+      apiSearchResults = results.items.filter(
+        album => album.label?.id === labelId
+      );
+    } catch (e) {
+      console.error('Label search failed:', e);
+      if (thisVersion === searchVersion) apiSearchResults = [];
+    } finally {
+      if (thisVersion === searchVersion) apiSearching = false;
+    }
+  }
+
+  // Scroll handler for infinite loading (disabled during API search)
   function handleScroll(e: Event) {
+    if (apiSearchResults !== null) return;
     const target = e.target as HTMLElement;
     const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
 
@@ -216,7 +253,9 @@
   <nav class="label-nav">
     <div class="nav-left">
       <span class="nav-title">Albums</span>
-      {#if albumsFetched > 0 && albumsFetched < totalAlbums}
+      {#if apiSearchResults !== null}
+        <span class="nav-count">{apiSearchResults.length} result{apiSearchResults.length !== 1 ? 's' : ''}</span>
+      {:else if albumsFetched > 0 && albumsFetched < totalAlbums}
         <span class="nav-count">Showing {albumsFetched} of {totalAlbums}</span>
       {/if}
     </div>
@@ -229,6 +268,7 @@
             class="search-input-inline"
             placeholder="Search albums..."
             bind:value={searchQuery}
+            oninput={handleSearchInput}
             autofocus
           />
           {#if searchQuery}
@@ -266,14 +306,19 @@
         <Disc3 size={48} />
         <p>No albums found for this label</p>
       </div>
-    {:else if filteredAlbums.length === 0}
+    {:else if apiSearching}
+      <div class="loading">
+        <div class="spinner"></div>
+        <p>Searching...</p>
+      </div>
+    {:else if displayAlbums.length === 0}
       <div class="empty">
         <Search size={48} />
         <p>No albums match "{searchQuery}"</p>
       </div>
     {:else}
       <div class="album-grid">
-        {#each filteredAlbums as album (album.id)}
+        {#each displayAlbums as album (album.id)}
           <AlbumCard
             albumId={album.id}
             artwork={album.image?.large || album.image?.thumbnail || ''}
