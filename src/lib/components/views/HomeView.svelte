@@ -1883,6 +1883,8 @@
       radial-gradient(ellipse at 70% 60%, rgba(255, 200, 50, 0.4) 0%, transparent 50%),
       radial-gradient(ellipse at 20% 80%, rgba(255, 140, 0, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #e8a020 0%, #d4781a 30%, #c45e18 60%, #a04010 100%);
+    background-size: 200% 200%;
+    animation: silk-shift 10s ease-in-out infinite alternate;
   }
 
   .mix-gradient-weekly {
@@ -1891,6 +1893,15 @@
       radial-gradient(ellipse at 70% 50%, rgba(200, 150, 255, 0.4) 0%, transparent 50%),
       radial-gradient(ellipse at 20% 70%, rgba(130, 80, 200, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #b060d0 0%, #8040b0 30%, #6030a0 60%, #402080 100%);
+    background-size: 200% 200%;
+    animation: silk-shift 10s ease-in-out infinite alternate;
+    animation-delay: -5s;
+  }
+
+  @keyframes silk-shift {
+    0%   { background-position: 0% 0%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 30% 100%; }
   }
 
   .mix-card-badge {

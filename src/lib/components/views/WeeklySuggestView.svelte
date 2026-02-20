@@ -406,6 +406,14 @@
       radial-gradient(ellipse at 70% 50%, rgba(200, 150, 255, 0.4) 0%, transparent 50%),
       radial-gradient(ellipse at 20% 70%, rgba(130, 80, 200, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #b060d0 0%, #8040b0 30%, #6030a0 60%, #402080 100%);
+    background-size: 200% 200%;
+    animation: silk-shift 10s ease-in-out infinite alternate;
+  }
+
+  @keyframes silk-shift {
+    0%   { background-position: 0% 0%; }
+    50%  { background-position: 100% 50%; }
+    100% { background-position: 30% 100%; }
   }
 
   .metadata {
