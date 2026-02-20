@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { onMount } from 'svelte';
-  import { ArrowLeft, Disc3, Play, Music, MoreHorizontal, User, ChevronDown, ChevronUp } from 'lucide-svelte';
+  import { onMount, onDestroy } from 'svelte';
+  import { ArrowLeft, Disc3, Play, Music, MoreHorizontal, Heart, User, ChevronDown, ChevronUp } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import AlbumCard from '../AlbumCard.svelte';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
@@ -10,6 +10,12 @@
   import QualityBadge from '../QualityBadge.svelte';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { togglePlay } from '$lib/stores/playerStore';
+  import {
+    subscribe as subscribeFavorites,
+    isTrackFavorite,
+    isTrackToggling,
+    toggleTrackFavorite
+  } from '$lib/stores/favoritesStore';
   import type { QobuzAlbum, LabelPageData, LabelExploreItem, DisplayTrack } from '$lib/types';
   import type { Playlist } from '$lib/stores/searchState';
 
@@ -52,6 +58,7 @@
     onTrackPlay?: (track: DisplayTrack) => void;
     onTrackPlayNext?: (track: Track) => void;
     onTrackPlayLater?: (track: Track) => void;
+    onTrackAddFavorite?: (trackId: number) => void;
     onTrackAddToPlaylist?: (trackId: number) => void;
     onTrackGoToAlbum?: (albumId: string) => void;
     activeTrackId?: number | null;
@@ -81,6 +88,7 @@
     onTrackPlay,
     onTrackPlayNext,
     onTrackPlayLater,
+    onTrackAddFavorite,
     onTrackAddToPlaylist,
     onTrackGoToAlbum,
     activeTrackId = null,
@@ -100,25 +108,72 @@
   let artists = $state<Record<string, unknown>[]>([]);
   let moreLabels = $state<LabelExploreItem[]>([]);
 
-  // Track expand state (like ArtistDetailView: 5 → 10 → all)
+  // Track expand state (like ArtistDetailView: 5 → 20 → 50)
   let visibleTracksCount = $state(5);
   let showTracksContextMenu = $state(false);
 
   // Description expand
   let descriptionExpanded = $state(false);
 
+  // Favorites reactivity
+  let trackFavoritesVersion = $state(0);
+  let unsubFavorites: (() => void) | null = null;
+
+  function checkTrackFav(trackId: number): boolean {
+    return trackFavoritesVersion >= 0 && isTrackFavorite(trackId);
+  }
+  function checkTrackToggling(trackId: number): boolean {
+    return trackFavoritesVersion >= 0 && isTrackToggling(trackId);
+  }
+
   // Failed images
   let failedArtistImages = $state(new Set<number>());
   let failedLabelImages = $state(new Set<number>());
 
+  // Jump-nav
+  let labelDetailEl = $state<HTMLDivElement | null>(null);
+  let headerSection = $state<HTMLElement | null>(null);
+  let popularTracksSection = $state<HTMLDivElement | null>(null);
+  let releasesSection = $state<HTMLDivElement | null>(null);
+  let criticsPicksSection = $state<HTMLDivElement | null>(null);
+  let playlistsSection = $state<HTMLDivElement | null>(null);
+  let artistsSection = $state<HTMLDivElement | null>(null);
+  let moreLabelsSection = $state<HTMLDivElement | null>(null);
+  let activeJumpSection = $state('about');
+  let jumpObserver: IntersectionObserver | null = null;
+
+  let hasTopTracks = $derived(topTracks.length > 0);
+  let hasReleases = $derived(releases.length > 0);
+  let hasCriticsPicks = $derived(criticsPicks.length > 0);
+  let hasPlaylists = $derived(playlists.length > 0);
+  let hasArtists = $derived(artists.length > 0);
+  let hasMoreLabels = $derived(moreLabels.length > 0);
+
+  let jumpSections = $derived.by(() => [
+    { id: 'about', labelKey: 'label.about', el: headerSection, visible: true },
+    { id: 'popular', labelKey: 'label.popularTracks', el: popularTracksSection, visible: hasTopTracks },
+    { id: 'releases', labelKey: 'label.releases', el: releasesSection, visible: hasReleases },
+    { id: 'critics', labelKey: 'label.criticsPicks', el: criticsPicksSection, visible: hasCriticsPicks },
+    { id: 'playlists', labelKey: 'label.playlists', el: playlistsSection, visible: hasPlaylists },
+    { id: 'artists', labelKey: 'label.artists', el: artistsSection, visible: hasArtists },
+    { id: 'labels', labelKey: 'label.otherLabels', el: moreLabelsSection, visible: hasMoreLabels },
+  ].filter(section => section.visible));
+
+  let showJumpNav = $derived(jumpSections.length > 1);
+
+  function scrollToSection(target: HTMLElement | null, id: string) {
+    activeJumpSection = id;
+    target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   let visibleTracks = $derived(topTracks.slice(0, visibleTracksCount));
-  let canLoadMoreTracks = $derived(topTracks.length > visibleTracksCount);
+  let canLoadMoreTracks = $derived(visibleTracksCount < 50 && topTracks.length > visibleTracksCount);
 
   function loadMoreTracks() {
     if (visibleTracksCount === 5) {
-      visibleTracksCount = 10;
-    } else if (visibleTracksCount === 10) {
-      visibleTracksCount = topTracks.length;
+      visibleTracksCount = 20;
+    } else if (visibleTracksCount === 20) {
+      visibleTracksCount = 50;
     }
   }
 
@@ -153,7 +208,6 @@
       const artistRaw = raw.artist as Record<string, unknown> | undefined;
       const audioInfo = raw.audio_info as Record<string, unknown> | undefined;
       const rights = raw.rights as Record<string, unknown> | undefined;
-      const physicalSupport = raw.physical_support as Record<string, unknown> | undefined;
 
       let album: Track['album'] | undefined;
       if (albumRaw) {
@@ -200,13 +254,19 @@
       const result = await invoke<LabelPageData>('v2_get_label_page', { labelId });
       pageData = result;
 
+      console.log('[LabelView] Raw label page data:', JSON.stringify(result).slice(0, 500));
+
       // Parse top tracks
       if (result.top_tracks && result.top_tracks.length > 0) {
         topTracks = parseTopTracks(result.top_tracks as Record<string, unknown>[]);
+        console.log(`[LabelView] Parsed ${topTracks.length} top tracks`);
       }
 
       // Parse releases containers
       if (result.releases && result.releases.length > 0) {
+        console.log(`[LabelView] Found ${result.releases.length} release containers:`,
+          result.releases.map((c, i) => `[${i}] id=${c.id}, items=${c.data?.items?.length ?? 0}`));
+
         // First container = main releases
         const firstContainer = result.releases[0];
         if (firstContainer?.data?.items) {
@@ -232,11 +292,14 @@
             criticsPicks = secondContainer.data.items as unknown as QobuzAlbum[];
           }
         }
+      } else {
+        console.log('[LabelView] No releases containers in response. Keys:', result ? Object.keys(result) : 'null');
       }
 
       // Parse playlists
       if (result.playlists?.items && result.playlists.items.length > 0) {
         playlists = result.playlists.items as unknown as Playlist[];
+        console.log(`[LabelView] Parsed ${playlists.length} playlists`);
       }
 
       // Parse artists
@@ -257,7 +320,6 @@
         'v2_get_label_explore', { limit: 20, offset: 0 }
       );
       if (result?.items) {
-        // Filter out current label
         moreLabels = (result.items as LabelExploreItem[]).filter(item => item.id !== labelId);
       }
     } catch (e) {
@@ -265,7 +327,7 @@
     }
   }
 
-  // Track playback
+  // Track playback — mirrors ArtistDetailView exactly
   function buildTopTracksQueue(tracks: Track[]) {
     return tracks.map((track) => ({
       id: track.id,
@@ -297,6 +359,7 @@
           trackIds,
           index
         );
+        console.log(`[LabelView] Context created: "${pageData?.name}" top tracks, ${trackIds.length} tracks, starting at ${index}`);
         try {
           const queueTracks = buildTopTracksQueue(topTracks);
           await invoke('v2_set_queue', { tracks: queueTracks, startIndex: index });
@@ -307,10 +370,10 @@
     }
 
     if (onTrackPlay) {
-      const displayTrack: DisplayTrack = {
+      onTrackPlay({
         id: track.id,
         title: track.title,
-        artist: track.performer?.name || '',
+        artist: track.performer?.name || pageData?.name || '',
         album: track.album?.title || '',
         albumArt: track.album?.image?.large || track.album?.image?.thumbnail || '',
         duration: formatDuration(track.duration),
@@ -321,8 +384,7 @@
         albumId: track.album?.id,
         artistId: track.performer?.id,
         isrc: track.isrc,
-      };
-      onTrackPlay(displayTrack);
+      });
     }
   }
 
@@ -356,6 +418,19 @@
     onTrackAddToPlaylist(topTracks[0].id);
   }
 
+  async function createTrackRadio(track: Track) {
+    try {
+      const trackArtistId = track.performer?.id || 0;
+      await invoke<string>('v2_create_track_radio', {
+        trackId: track.id,
+        trackName: track.title,
+        artistId: trackArtistId
+      });
+    } catch (err) {
+      console.error('Failed to create track radio:', err);
+    }
+  }
+
   function handlePausePlayback(event: MouseEvent) {
     event.stopPropagation();
     void togglePlay();
@@ -370,13 +445,11 @@
   }
 
   function getArtistImageUrl(artist: Record<string, unknown>): string | null {
-    // Direct image fields (standard Qobuz artist response)
     const image = artist.image as Record<string, string> | undefined;
     if (image) {
       const url = image.large || image.thumbnail || image.small;
       if (url) return url;
     }
-    // Fallback: nested images.portrait with hash construction
     const images = artist.images as Record<string, unknown> | undefined;
     if (images) {
       const portrait = images.portrait as Record<string, string> | undefined;
@@ -422,6 +495,14 @@
   onMount(() => {
     loadLabelPage();
     loadMoreLabels();
+    unsubFavorites = subscribeFavorites(() => {
+      trackFavoritesVersion++;
+    });
+  });
+
+  onDestroy(() => {
+    unsubFavorites?.();
+    jumpObserver?.disconnect();
   });
 
   // Reload when labelId changes
@@ -430,6 +511,7 @@
     loading = true;
     visibleTracksCount = 5;
     descriptionExpanded = false;
+    activeJumpSection = 'about';
     topTracks = [];
     releases = [];
     criticsPicks = [];
@@ -446,9 +528,54 @@
       loadAllAlbumDownloadStatuses(releases);
     }
   });
+
+  // Jump-nav IntersectionObserver
+  $effect(() => {
+    if (!labelDetailEl) return;
+    if (jumpObserver) {
+      jumpObserver.disconnect();
+      jumpObserver = null;
+    }
+
+    if (jumpSections.length === 0) return;
+
+    const sectionByElement = new Map<HTMLElement, string>();
+    for (const section of jumpSections) {
+      if (section.el) {
+        sectionByElement.set(section.el, section.id);
+      }
+    }
+
+    const targets = [...sectionByElement.keys()];
+    if (targets.length === 0) return;
+
+    jumpObserver = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter(entry => entry.isIntersecting);
+        if (visible.length === 0) return;
+        visible.sort((a, b) => b.intersectionRatio - a.intersectionRatio);
+        const targetId = sectionByElement.get(visible[0].target as HTMLDivElement);
+        if (targetId) {
+          activeJumpSection = targetId;
+        }
+      },
+      {
+        root: labelDetailEl,
+        rootMargin: '-20% 0px -60% 0px',
+        threshold: [0.5]
+      }
+    );
+
+    targets.forEach(target => jumpObserver?.observe(target));
+
+    return () => {
+      jumpObserver?.disconnect();
+      jumpObserver = null;
+    };
+  });
 </script>
 
-<div class="label-detail-view">
+<div class="label-detail-view" bind:this={labelDetailEl}>
   {#if loading}
     <div class="loading-state">
       <div class="spinner"></div>
@@ -467,8 +594,28 @@
       <span>{$t('actions.back')}</span>
     </button>
 
+    <!-- Jump Nav -->
+    {#if showJumpNav}
+      <div class="jump-nav">
+        <div class="jump-nav-left">
+          <div class="jump-label">Jump to</div>
+          <div class="jump-links">
+            {#each jumpSections as section}
+              <button
+                class="jump-link"
+                class:active={activeJumpSection === section.id}
+                onclick={() => scrollToSection(section.el, section.id)}
+              >
+                {$t(section.labelKey)}
+              </button>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
+
     <!-- Header -->
-    <header class="label-header">
+    <header class="label-header section-anchor" bind:this={headerSection}>
       <div class="label-image-wrapper">
         {#if getLabelImage(pageData)}
           <img
@@ -489,7 +636,7 @@
         <h1 class="label-name">{pageData.name}</h1>
         {#if pageData.description}
           <div class="label-description" class:expanded={descriptionExpanded}>
-            <p>{@html pageData.description}</p>
+            {@html pageData.description}
           </div>
           <button class="read-more-btn" onclick={() => descriptionExpanded = !descriptionExpanded}>
             {descriptionExpanded ? $t('label.readLess') : $t('label.readMore')}
@@ -498,22 +645,22 @@
       </div>
     </header>
 
-    <!-- Popular Tracks -->
+    <!-- Popular Tracks (mirrors ArtistDetailView exactly) -->
     {#if topTracks.length > 0}
-      <div class="section popular-tracks-section">
+      <div class="top-tracks-section section-anchor" bind:this={popularTracksSection}>
         <div class="section-header">
           <div class="section-header-left">
             <h2 class="section-title">{$t('label.popularTracks')}</h2>
           </div>
           <div class="section-header-actions">
-            <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title={$t('actions.play')}>
+            <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
               <Play size={20} fill="currentColor" color="currentColor" />
             </button>
             <div class="context-menu-wrapper">
               <button
                 class="action-btn-circle"
                 onclick={() => showTracksContextMenu = !showTracksContextMenu}
-                title={$t('actions.moreOptions')}
+                title="More options"
               >
                 <MoreHorizontal size={18} />
               </button>
@@ -546,6 +693,7 @@
               class:playing={isActiveTrack}
               role="button"
               tabindex="0"
+              data-track-id={track.id}
               onclick={() => handleTrackPlay(track, index)}
               onkeydown={(e) => e.key === 'Enter' && handleTrackPlay(track, index)}
             >
@@ -568,7 +716,7 @@
                       handleTrackPlay(track, index);
                     }
                   }}
-                  aria-label={isActiveTrack ? 'Pause' : 'Play'}
+                  aria-label={isActiveTrack ? 'Pause track' : 'Play track'}
                 >
                   <span class="play-icon" aria-hidden="true">
                     <Play size={18} />
@@ -587,27 +735,20 @@
               </div>
               <div class="track-info">
                 <div class="track-title">{track.title}</div>
-                <div class="track-meta">
-                  {#if track.performer?.name}
-                    {#if track.performer?.id && onArtistClick}
-                      <button class="track-link" type="button" onclick={(e) => { e.stopPropagation(); onArtistClick?.(track.performer!.id!); }}>
-                        {track.performer.name}
-                      </button>
-                    {:else}
-                      <span>{track.performer.name}</span>
-                    {/if}
-                  {/if}
-                  {#if track.album?.title}
-                    <span class="separator">·</span>
-                    {#if track.album?.id && onTrackGoToAlbum}
-                      <button class="track-link" type="button" onclick={(e) => { e.stopPropagation(); onTrackGoToAlbum?.(track.album!.id); }}>
-                        {track.album.title}
-                      </button>
-                    {:else}
-                      <span>{track.album.title}</span>
-                    {/if}
-                  {/if}
-                </div>
+                {#if track.album?.id && onTrackGoToAlbum}
+                  <button
+                    class="track-album track-link"
+                    type="button"
+                    onclick={(event) => {
+                      event.stopPropagation();
+                      onTrackGoToAlbum?.(track.album!.id);
+                    }}
+                  >
+                    {track.album?.title || ''}
+                  </button>
+                {:else}
+                  <div class="track-album">{track.album?.title || ''}</div>
+                {/if}
               </div>
               <div class="track-quality">
                 <QualityBadge
@@ -618,10 +759,33 @@
               </div>
               <div class="track-duration">{formatDuration(track.duration)}</div>
               <div class="track-actions">
+                {#if onTrackAddFavorite}
+                  {@const trackIsFav = checkTrackFav(track.id)}
+                  {@const trackIsToggling = checkTrackToggling(track.id)}
+                  <button
+                    class="track-favorite-btn"
+                    class:is-favorite={trackIsFav}
+                    class:is-toggling={trackIsToggling}
+                    onclick={async (e) => {
+                      e.stopPropagation();
+                      await toggleTrackFavorite(track.id);
+                    }}
+                    disabled={trackIsToggling}
+                    title={trackIsFav ? 'Remove from favorites' : 'Add to favorites'}
+                  >
+                    {#if trackIsFav}
+                      <Heart size={16} fill="var(--accent-primary)" color="var(--accent-primary)" />
+                    {:else}
+                      <Heart size={16} />
+                    {/if}
+                  </button>
+                {/if}
                 <TrackMenu
                   onPlayNow={() => handleTrackPlay(track, index)}
                   onPlayNext={onTrackPlayNext ? () => onTrackPlayNext(track) : undefined}
                   onPlayLater={onTrackPlayLater ? () => onTrackPlayLater(track) : undefined}
+                  onCreateRadio={() => createTrackRadio(track)}
+                  onAddFavorite={onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined}
                   onAddToPlaylist={onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined}
                   onGoToAlbum={track.album?.id && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.album!.id) : undefined}
                 />
@@ -629,7 +793,6 @@
             </div>
           {/each}
         </div>
-
         {#if canLoadMoreTracks}
           <button class="load-more-link" onclick={loadMoreTracks}>
             {$t('label.showMore')} <ChevronDown size={14} />
@@ -644,7 +807,7 @@
 
     <!-- Releases -->
     {#if releases.length > 0}
-      <div class="section">
+      <div class="section section-anchor" bind:this={releasesSection}>
         <HorizontalScrollRow>
           {#snippet header()}
             <h2 class="section-title">{$t('label.releases')}</h2>
@@ -687,7 +850,7 @@
 
     <!-- Critics' Picks -->
     {#if criticsPicks.length > 0}
-      <div class="section">
+      <div class="section section-anchor" bind:this={criticsPicksSection}>
         <HorizontalScrollRow title={$t('label.criticsPicks')}>
           {#snippet children()}
             {#each criticsPicks.slice(0, 20) as album (album.id)}
@@ -718,7 +881,7 @@
 
     <!-- Playlists -->
     {#if playlists.length > 0}
-      <div class="section">
+      <div class="section section-anchor" bind:this={playlistsSection}>
         <HorizontalScrollRow title={$t('label.playlists')}>
           {#snippet children()}
             {#each playlists as playlist (playlist.id)}
@@ -735,7 +898,7 @@
 
     <!-- Artists -->
     {#if artists.length > 0}
-      <div class="section">
+      <div class="section section-anchor" bind:this={artistsSection}>
         <HorizontalScrollRow title={$t('label.artists')}>
           {#snippet children()}
             {#each artists as artist}
@@ -769,7 +932,7 @@
 
     <!-- More Labels -->
     {#if moreLabels.length > 0}
-      <div class="section">
+      <div class="section section-anchor" bind:this={moreLabelsSection}>
         <HorizontalScrollRow title={$t('label.moreLabels')}>
           {#snippet children()}
             {#each moreLabels as item}
@@ -811,26 +974,13 @@
     height: 100%;
   }
 
-  .label-detail-view::-webkit-scrollbar {
-    width: 6px;
-  }
+  .label-detail-view::-webkit-scrollbar { width: 6px; }
+  .label-detail-view::-webkit-scrollbar-track { background: transparent; }
+  .label-detail-view::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 3px; }
+  .label-detail-view::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-  .label-detail-view::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .label-detail-view::-webkit-scrollbar-thumb {
-    background: var(--bg-tertiary);
-    border-radius: 3px;
-  }
-
-  .label-detail-view::-webkit-scrollbar-thumb:hover {
-    background: var(--text-muted);
-  }
-
-  /* Loading / Error states */
-  .loading-state,
-  .error-state {
+  /* Loading / Error */
+  .loading-state, .error-state {
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -839,627 +989,287 @@
     color: var(--text-muted);
     text-align: center;
   }
-
-  .loading-state p,
-  .error-state p {
-    margin: 16px 0 0 0;
-  }
-
+  .loading-state p, .error-state p { margin: 16px 0 0 0; }
   .spinner {
-    width: 32px;
-    height: 32px;
+    width: 32px; height: 32px;
     border: 3px solid var(--bg-tertiary);
     border-top-color: var(--accent-primary);
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
-
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-
+  @keyframes spin { to { transform: rotate(360deg); } }
   .retry-btn {
-    margin-top: 16px;
-    padding: 8px 24px;
-    background-color: var(--accent-primary);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
+    margin-top: 16px; padding: 8px 24px;
+    background-color: var(--accent-primary); color: white;
+    border: none; border-radius: 8px; cursor: pointer;
   }
-
-  .retry-btn:hover {
-    opacity: 0.9;
-  }
+  .retry-btn:hover { opacity: 0.9; }
 
   /* Back button */
   .back-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 14px;
-    color: var(--text-muted);
-    background: none;
-    border: none;
-    cursor: pointer;
-    margin-bottom: 24px;
-    transition: color 150ms ease;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; color: var(--text-muted);
+    background: none; border: none; cursor: pointer;
+    margin-bottom: 24px; transition: color 150ms ease;
   }
+  .back-btn:hover { color: var(--text-secondary); }
 
-  .back-btn:hover {
-    color: var(--text-secondary);
+  /* Jump Nav */
+  .jump-nav {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 24px;
+    background: var(--bg-primary);
+    border-bottom: 1px solid var(--alpha-6);
+    box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
+    margin: 0 -8px 24px -18px;
+    width: calc(100% + 26px);
   }
+  .jump-nav-left { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  .jump-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
+  .jump-links { display: flex; flex-wrap: wrap; gap: 14px; }
+  .jump-link {
+    padding: 4px 0; border: none; background: none;
+    color: var(--text-muted); font-size: 13px; cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: color 150ms ease, border-color 150ms ease;
+  }
+  .jump-link:hover { color: var(--text-secondary); }
+  .jump-link.active { color: var(--text-primary); border-bottom-color: var(--accent-primary); }
 
   /* Header */
-  .label-header {
-    display: flex;
-    gap: 24px;
-    margin-bottom: 40px;
-  }
-
+  .label-header { display: flex; gap: 24px; margin-bottom: 40px; }
   .label-image-wrapper {
-    width: 180px;
-    height: 180px;
-    border-radius: 50%;
-    overflow: hidden;
-    flex-shrink: 0;
-    background: var(--bg-tertiary);
+    width: 180px; height: 180px; border-radius: 50%;
+    overflow: hidden; flex-shrink: 0; background: var(--bg-tertiary);
   }
-
-  .label-image {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
+  .label-image { width: 100%; height: 100%; object-fit: cover; }
   .label-image-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    color: white;
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white;
   }
-
   .label-header-info {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
+    flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center;
   }
-
   .label-subtitle {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    margin-bottom: 4px;
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;
   }
-
   .label-name {
-    font-size: 32px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0 0 8px 0;
-    line-height: 1.2;
+    font-size: 32px; font-weight: 700; color: var(--text-primary);
+    margin: 0 0 8px 0; line-height: 1.2;
   }
-
   .label-description {
-    font-size: 14px;
-    color: var(--text-secondary);
-    line-height: 1.6;
-    max-height: 3.2em;
-    overflow: hidden;
-    margin-bottom: 4px;
+    font-size: 14px; color: var(--text-secondary); line-height: 1.6;
+    max-height: 3.2em; overflow: hidden; margin-bottom: 4px;
+    border: none; outline: none;
   }
-
-  .label-description.expanded {
-    max-height: none;
-  }
-
-  .label-description p {
-    margin: 0;
-  }
-
+  .label-description.expanded { max-height: none; }
+  :global(.label-description p) { margin: 0; border: none; }
+  :global(.label-description *) { border: none !important; outline: none !important; }
   .read-more-btn {
-    background: none;
-    border: none;
-    color: var(--accent-primary);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    padding: 0;
-    margin-bottom: 12px;
-    text-align: left;
-    letter-spacing: 0.05em;
+    background: none; border: none; color: var(--accent-primary);
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    padding: 0; margin-bottom: 12px; text-align: left; letter-spacing: 0.05em;
   }
+  .read-more-btn:hover { text-decoration: underline; }
 
-  .read-more-btn:hover {
-    text-decoration: underline;
-  }
-
-  /* Section layout */
-  .section {
-    margin-bottom: 8px;
-  }
-
+  /* Sections */
+  .section { margin-bottom: 8px; }
   .section-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 12px;
-    margin-bottom: 20px;
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 20px;
   }
-
-  .section-header-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .section-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin: 0;
-  }
-
-  .section-header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
+  .section-header-left { display: flex; align-items: center; gap: 12px; }
+  .section-title { font-size: 20px; font-weight: 600; color: var(--text-primary); margin: 0; }
+  .section-header-actions { display: flex; align-items: center; gap: 12px; }
   .action-btn-circle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 50%;
-    background-color: var(--bg-tertiary);
-    border: none;
-    color: var(--text-secondary);
-    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 50%;
+    background-color: var(--bg-tertiary); border: none;
+    color: var(--text-secondary); cursor: pointer;
     transition: background-color 150ms ease, color 150ms ease;
   }
-
-  .action-btn-circle:hover {
-    background-color: var(--bg-hover);
-    color: var(--text-primary);
-  }
-
-  .action-btn-circle.primary {
-    background-color: var(--accent-primary);
-    color: white;
-  }
-
-  .action-btn-circle.primary:hover {
-    opacity: 0.9;
-  }
-
+  .action-btn-circle:hover { background-color: var(--bg-hover); color: var(--text-primary); }
+  .action-btn-circle.primary { background-color: var(--accent-primary); color: white; }
+  .action-btn-circle.primary:hover { opacity: 0.9; }
   .see-all-btn {
-    background: none;
-    border: none;
-    color: var(--text-muted);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    transition: color 150ms ease;
+    background: none; border: none; color: var(--text-muted);
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    padding: 4px 8px; border-radius: 4px; transition: color 150ms ease;
   }
-
-  .see-all-btn:hover {
-    color: var(--text-primary);
-  }
+  .see-all-btn:hover { color: var(--text-primary); }
 
   /* Context menu */
-  .context-menu-wrapper {
-    position: relative;
-  }
-
-  .context-menu-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 99;
-  }
-
+  .context-menu-wrapper { position: relative; }
+  .context-menu-backdrop { position: fixed; inset: 0; z-index: 99; }
   .context-menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 8px;
-    min-width: 160px;
-    background-color: var(--bg-tertiary);
-    border-radius: 8px;
-    padding: 2px 0;
-    z-index: 100;
+    position: absolute; top: 100%; right: 0; margin-top: 8px;
+    min-width: 160px; background-color: var(--bg-tertiary);
+    border-radius: 8px; padding: 2px 0; z-index: 100;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }
-
   .context-menu-item {
-    display: block;
-    width: 100%;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    text-align: left;
-    font-size: 12px;
-    color: var(--text-secondary);
-    cursor: pointer;
+    display: block; width: 100%; padding: 8px 12px;
+    background: none; border: none; text-align: left;
+    font-size: 12px; color: var(--text-secondary); cursor: pointer;
     transition: background-color 150ms ease, color 150ms ease;
   }
-
-  .context-menu-item:hover {
-    background-color: var(--bg-hover);
-    color: var(--text-primary);
-  }
+  .context-menu-item:hover { background-color: var(--bg-hover); color: var(--text-primary); }
 
   /* Tracks */
-  .popular-tracks-section {
-    margin-bottom: 32px;
-  }
-
-  .tracks-list {
-    display: flex;
-    flex-direction: column;
-  }
-
+  .top-tracks-section { margin-bottom: 32px; }
+  .tracks-list { display: flex; flex-direction: column; }
   .track-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    text-align: left;
-    width: 100%;
-    transition: background-color 150ms ease;
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 12px; background: none; border: none;
+    border-radius: 8px; cursor: pointer; text-align: left;
+    width: 100%; transition: background-color 150ms ease;
   }
-
-  .track-row:hover {
-    background-color: var(--bg-tertiary);
-  }
-
-  .track-number {
-    width: 24px;
-    font-size: 14px;
-    color: var(--text-muted);
-    text-align: center;
-  }
-
+  .track-row:hover { background-color: var(--bg-tertiary); }
+  .track-number { width: 24px; font-size: 14px; color: var(--text-muted); text-align: center; }
   .track-artwork {
-    width: 40px;
-    height: 40px;
-    border-radius: 4px;
-    overflow: hidden;
-    flex-shrink: 0;
-    position: relative;
+    width: 40px; height: 40px; border-radius: 4px;
+    overflow: hidden; flex-shrink: 0; position: relative;
   }
-
   .track-artwork img {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    z-index: 1;
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; z-index: 1;
   }
-
   .track-artwork-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: var(--bg-tertiary);
-    color: var(--text-muted);
+    width: 100%; height: 100%; display: flex;
+    align-items: center; justify-content: center;
+    background-color: var(--bg-tertiary); color: var(--text-muted);
   }
-
   .track-play-overlay {
-    position: absolute;
-    inset: 0;
-    display: none;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
-    border: none;
-    cursor: pointer;
-    transition: background 150ms ease;
-    z-index: 2;
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.6); border: none;
+    cursor: pointer; transition: background 150ms ease; z-index: 2;
   }
+  .track-row:hover .track-play-overlay { display: flex; }
+  .track-row.playing .track-play-overlay { display: flex; }
+  .track-play-overlay:hover { background: rgba(0, 0, 0, 0.75); }
+  .track-play-overlay .playing-indicator, .track-play-overlay .pause-icon { display: none; }
+  .track-row.playing .track-play-overlay .play-icon { display: none; }
+  .track-row.playing .track-play-overlay .playing-indicator { display: flex; }
+  .track-row.playing:hover .track-play-overlay .playing-indicator { display: none; }
+  .track-row.playing:hover .track-play-overlay .pause-icon { display: inline-flex; }
 
-  .track-row:hover .track-play-overlay {
-    display: flex;
-  }
-
-  .track-row.playing .track-play-overlay {
-    display: flex;
-  }
-
-  .track-play-overlay:hover {
-    background: rgba(0, 0, 0, 0.75);
-  }
-
-  .track-play-overlay .playing-indicator,
-  .track-play-overlay .pause-icon {
-    display: none;
-  }
-
-  .track-row.playing .track-play-overlay .play-icon {
-    display: none;
-  }
-
-  .track-row.playing .track-play-overlay .playing-indicator {
-    display: flex;
-  }
-
-  .track-row.playing:hover .track-play-overlay .playing-indicator {
-    display: none;
-  }
-
-  .track-row.playing:hover .track-play-overlay .pause-icon {
-    display: inline-flex;
-  }
-
-  .playing-indicator {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-  }
-
+  .playing-indicator { display: flex; align-items: center; gap: 2px; }
   .playing-indicator .bar {
-    width: 3px;
-    background-color: var(--accent-primary);
-    border-radius: 9999px;
-    transform-origin: bottom;
+    width: 3px; background-color: var(--accent-primary);
+    border-radius: 9999px; transform-origin: bottom;
     animation: label-equalize 1s ease-in-out infinite;
   }
-
-  .playing-indicator .bar:nth-child(1) {
-    height: 10px;
-  }
-
-  .playing-indicator .bar:nth-child(2) {
-    height: 14px;
-    animation-delay: 0.15s;
-  }
-
-  .playing-indicator .bar:nth-child(3) {
-    height: 8px;
-    animation-delay: 0.3s;
-  }
-
+  .playing-indicator .bar:nth-child(1) { height: 10px; }
+  .playing-indicator .bar:nth-child(2) { height: 14px; animation-delay: 0.15s; }
+  .playing-indicator .bar:nth-child(3) { height: 8px; animation-delay: 0.3s; }
   @keyframes label-equalize {
-    0%, 100% {
-      transform: scaleY(0.5);
-      opacity: 0.7;
-    }
-    50% {
-      transform: scaleY(1);
-      opacity: 1;
-    }
+    0%, 100% { transform: scaleY(0.5); opacity: 0.7; }
+    50% { transform: scaleY(1); opacity: 1; }
   }
 
-  .track-info {
-    flex: 1;
-    min-width: 0;
-  }
-
+  .track-info { flex: 1; min-width: 0; }
   .track-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    font-size: 14px; font-weight: 500; color: var(--text-primary);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-
-  .track-meta {
-    font-size: 12px;
-    color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+  .track-album {
+    font-size: 12px; color: var(--text-muted);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-
-  .track-meta .separator {
-    color: var(--text-muted);
-    opacity: 0.5;
-  }
-
   .track-link {
-    background: none;
-    border: none;
-    padding: 0;
-    text-align: left;
-    cursor: pointer;
-    color: inherit;
-    font-size: inherit;
+    background: none; border: none; padding: 0; text-align: left;
+    cursor: pointer; color: var(--text-muted); font-size: 12px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    display: block; max-width: 100%;
   }
-
-  .track-link:hover {
-    color: var(--text-primary);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-
-  .track-quality {
-    display: flex;
-    align-items: center;
-  }
-
-  .track-duration {
-    font-size: 13px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-  }
-
-  .track-actions {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-left: 8px;
-  }
-
-  .load-more-link {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 4px;
-    width: 100%;
-    padding: 16px;
-    background: none;
-    border: none;
-    text-align: center;
-    font-size: 13px;
-    color: var(--text-muted);
-    cursor: pointer;
+  .track-link:hover { color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; }
+  .track-quality { display: flex; align-items: center; }
+  .track-duration { font-size: 13px; color: var(--text-muted); font-family: var(--font-mono); }
+  .track-actions { display: flex; align-items: center; gap: 4px; margin-left: 8px; }
+  .track-favorite-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border: none; background: none;
+    color: var(--text-muted); cursor: pointer; border-radius: 50%;
     transition: color 150ms ease;
   }
-
-  .load-more-link:hover {
-    color: var(--text-primary);
+  .track-favorite-btn:hover { color: var(--text-primary); }
+  .track-favorite-btn.is-favorite { color: var(--accent-primary); }
+  .track-favorite-btn.is-toggling { opacity: 0.5; pointer-events: none; }
+  .load-more-link {
+    display: flex; align-items: center; justify-content: center;
+    gap: 4px; width: 100%; padding: 16px;
+    background: none; border: none; text-align: center;
+    font-size: 13px; color: var(--text-muted); cursor: pointer;
+    transition: color 150ms ease;
   }
+  .load-more-link:hover { color: var(--text-primary); }
 
-  /* Artist cards (matches SearchView style) */
+  /* Artist cards (SearchView style) */
   .artist-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    padding: 16px;
-    background-color: var(--bg-secondary);
-    border: none;
-    border-radius: 12px;
-    cursor: pointer;
+    display: flex; flex-direction: column; align-items: center;
+    text-align: center; padding: 16px;
+    background-color: var(--bg-secondary); border: none;
+    border-radius: 12px; cursor: pointer;
     transition: background-color 150ms ease;
-    width: 160px;
-    height: 220px;
-    flex-shrink: 0;
+    width: 160px; height: 220px; flex-shrink: 0;
   }
-
-  .artist-card:hover {
-    background-color: var(--bg-tertiary);
-  }
-
+  .artist-card:hover { background-color: var(--bg-tertiary); }
   .artist-image-wrapper {
-    position: relative;
-    width: 120px;
-    height: 120px;
-    min-height: 120px;
-    border-radius: 50%;
-    margin-bottom: 12px;
-    flex-shrink: 0;
-    overflow: hidden;
+    position: relative; width: 120px; height: 120px; min-height: 120px;
+    border-radius: 50%; margin-bottom: 12px; flex-shrink: 0; overflow: hidden;
   }
-
   .artist-image-placeholder {
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    width: 100%; height: 100%; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
     background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
-    color: var(--text-muted);
-    flex-shrink: 0;
+    color: var(--text-muted); flex-shrink: 0;
   }
-
   .artist-image {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: 50%;
-    object-fit: cover;
-    z-index: 1;
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    border-radius: 50%; object-fit: cover; z-index: 1;
   }
-
   .artist-name {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-    width: 100%;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    line-height: 1.3;
+    font-size: 14px; font-weight: 500; color: var(--text-primary);
+    margin-bottom: 4px; width: 100%; overflow: hidden;
+    text-overflow: ellipsis; display: -webkit-box;
+    -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 1.3;
   }
 
-  /* Label cards */
+  /* Label cards (round) */
   .label-card {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 8px;
-    width: 140px;
-    flex-shrink: 0;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 8px;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 8px; width: 140px; flex-shrink: 0;
+    background: none; border: none; cursor: pointer;
+    padding: 8px; border-radius: 8px;
     transition: background-color 150ms ease;
   }
-
-  .label-card:hover {
-    background-color: var(--bg-tertiary);
-  }
-
+  .label-card:hover { background-color: var(--bg-tertiary); }
   .label-card-image-wrapper {
-    width: 120px;
-    height: 120px;
-    border-radius: 12px;
-    overflow: hidden;
-    position: relative;
-    background: var(--bg-tertiary);
+    width: 120px; height: 120px; border-radius: 50%;
+    overflow: hidden; position: relative; background: var(--bg-tertiary);
   }
-
   .label-card-image-placeholder {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
-    color: white;
+    width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%); color: white;
   }
-
   .label-card-image {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    z-index: 1;
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; z-index: 1;
   }
-
   .label-card-name {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-primary);
-    text-align: center;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    width: 100%;
+    font-size: 13px; font-weight: 500; color: var(--text-primary);
+    text-align: center; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; width: 100%;
   }
-
-  .spacer {
-    width: 8px;
-    flex-shrink: 0;
-  }
+  .spacer { width: 8px; flex-shrink: 0; }
 </style>

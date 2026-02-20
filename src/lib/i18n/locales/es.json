@@ -86,6 +86,8 @@
   },
   "label": {
     "title": "Sello",
+    "about": "Acerca de",
+    "otherLabels": "Otros sellos",
     "popularTracks": "Canciones populares",
     "releases": "Lanzamientos",
     "criticsPicks": "Selección de la crítica",

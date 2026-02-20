@@ -3569,6 +3569,7 @@
           onTrackPlayNext={queueQobuzTrackNext}
           onTrackPlayLater={queueQobuzTrackLater}
           onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackAddFavorite={handleAddToFavorites}
           onTrackGoToAlbum={handleAlbumClick}
           activeTrackId={currentTrack?.id ?? null}
           isPlaybackActive={isPlaying}

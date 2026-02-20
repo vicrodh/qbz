@@ -83,6 +83,8 @@
   },
   "label": {
     "title": "Label",
+    "about": "Über",
+    "otherLabels": "Weitere Labels",
     "popularTracks": "Beliebte Titel",
     "releases": "Veröffentlichungen",
     "criticsPicks": "Kritiker-Auswahl",

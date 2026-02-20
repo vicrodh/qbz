@@ -86,6 +86,8 @@
   },
   "label": {
     "title": "Label",
+    "about": "About",
+    "otherLabels": "Other labels",
     "popularTracks": "Popular Tracks",
     "releases": "Releases",
     "criticsPicks": "Critics' Picks",
