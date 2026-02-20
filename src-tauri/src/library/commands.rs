@@ -704,6 +704,32 @@ pub async fn library_scan_impl(state: State<'_, LibraryState>) -> Result<(), Str
         }
     }
 
+    // Clean up tracks whose files no longer exist on disk
+    {
+        let mut progress = state.scan_progress.lock().await;
+        progress.current_file = Some("Cleaning up missing files...".to_string());
+    }
+    {
+        let guard__ = state.db.lock().await;
+        if let Some(db) = guard__.as_ref() {
+            if let Ok(tracks) = db.get_all_track_paths() {
+                let missing_ids: Vec<i64> = tracks
+                    .iter()
+                    .filter(|(_, path)| !std::path::Path::new(path).exists())
+                    .map(|(id, _)| *id)
+                    .collect();
+                if !missing_ids.is_empty() {
+                    log::info!("Removing {} tracks with missing files", missing_ids.len());
+                    for chunk in missing_ids.chunks(500) {
+                        if let Err(e) = db.delete_tracks_by_ids(chunk) {
+                            log::error!("Failed to delete missing tracks: {}", e);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Mark complete
     {
         let mut progress = state.scan_progress.lock().await;
@@ -1075,16 +1101,42 @@ pub async fn library_scan_folder_impl(
         }
     }
 
-    // Update folder scan time
+    // Clean up tracks in this folder whose files no longer exist on disk
     {
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map(|d| d.as_secs() as i64)
-            .unwrap_or(0);
+        let mut progress = state.scan_progress.lock().await;
+        progress.current_file = Some("Cleaning up missing files...".to_string());
+    }
+    {
         let guard__ = state.db.lock().await;
         let db = guard__
             .as_ref()
             .ok_or("No active session - please log in")?;
+        if let Ok(tracks) = db.get_all_track_paths() {
+            let folder_prefix = if folder.path.ends_with('/') {
+                folder.path.clone()
+            } else {
+                format!("{}/", folder.path)
+            };
+            let missing_ids: Vec<i64> = tracks
+                .iter()
+                .filter(|(_, path)| path.starts_with(&folder_prefix) && !std::path::Path::new(path).exists())
+                .map(|(id, _)| *id)
+                .collect();
+            if !missing_ids.is_empty() {
+                log::info!("Removing {} tracks with missing files from folder {}", missing_ids.len(), folder.path);
+                for chunk in missing_ids.chunks(500) {
+                    if let Err(e) = db.delete_tracks_by_ids(chunk) {
+                        log::error!("Failed to delete missing tracks: {}", e);
+                    }
+                }
+            }
+        }
+
+        // Update folder scan time
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or(0);
         let _ = db.update_folder_scan_time(&folder.path, now);
     }
 
