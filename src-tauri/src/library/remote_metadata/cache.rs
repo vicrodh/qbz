@@ -95,11 +95,7 @@ impl RemoteMetadataCache {
         let cache = self.search_cache.read().await;
         if let Some(entry) = cache.get(&key) {
             if !entry.is_expired() {
-                log::debug!(
-                    "Cache hit for search: {} {:?}",
-                    provider,
-                    query
-                );
+                log::debug!("Cache hit for search: {} {:?}", provider, query);
                 return Some(entry.data.clone());
             }
         }
@@ -140,11 +136,7 @@ impl RemoteMetadataCache {
         let cache = self.metadata_cache.read().await;
         if let Some(entry) = cache.get(&key) {
             if !entry.is_expired() {
-                log::debug!(
-                    "Cache hit for metadata: {} {}",
-                    provider,
-                    provider_id
-                );
+                log::debug!("Cache hit for metadata: {} {}", provider, provider_id);
                 return Some(entry.data.clone());
             }
         }

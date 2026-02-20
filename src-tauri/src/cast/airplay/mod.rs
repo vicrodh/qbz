@@ -6,8 +6,8 @@ pub mod commands;
 
 // Re-export from qbz-cast
 pub use qbz_cast::{
-    AirPlayConnection, AirPlayMetadata, AirPlayStatus, AirPlayDiscovery, DiscoveredAirPlayDevice,
-    AirPlayError,
+    AirPlayConnection, AirPlayDiscovery, AirPlayError, AirPlayMetadata, AirPlayStatus,
+    DiscoveredAirPlayDevice,
 };
 
 // Re-export Tauri command state

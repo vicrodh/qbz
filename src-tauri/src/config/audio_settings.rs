@@ -399,11 +399,8 @@ impl AudioSettingsStore {
             .map_err(|e| format!("Failed to get device sample rate limits: {}", e))?;
 
         match json {
-            Some(s) if !s.is_empty() => {
-                serde_json::from_str(&s).map_err(|e| {
-                    format!("Failed to parse device sample rate limits: {}", e)
-                })
-            }
+            Some(s) if !s.is_empty() => serde_json::from_str(&s)
+                .map_err(|e| format!("Failed to parse device sample rate limits: {}", e)),
             _ => Ok(HashMap::new()),
         }
     }

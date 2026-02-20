@@ -94,19 +94,19 @@ fn derive_key() -> [u8; 32] {
 /// Encrypt credentials using AES-256-GCM
 fn encrypt_credentials(credentials: &QobuzCredentials) -> Result<String, String> {
     let key = derive_key();
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("Failed to create cipher: {}", e))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
 
     // Generate random nonce
-    let nonce_bytes: [u8; 12] = aes_gcm::aead::generic_array::GenericArray::from(
-        rand::random::<[u8; 12]>()
-    ).into();
+    let nonce_bytes: [u8; 12] =
+        aes_gcm::aead::generic_array::GenericArray::from(rand::random::<[u8; 12]>()).into();
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     let json = serde_json::to_string(credentials)
         .map_err(|e| format!("Failed to serialize credentials: {}", e))?;
 
-    let ciphertext = cipher.encrypt(nonce, json.as_bytes())
+    let ciphertext = cipher
+        .encrypt(nonce, json.as_bytes())
         .map_err(|e| format!("Encryption failed: {}", e))?;
 
     let encrypted = EncryptedCredentials {
@@ -125,28 +125,33 @@ fn decrypt_credentials(encrypted_json: &str) -> Result<QobuzCredentials, String>
         .map_err(|e| format!("Failed to parse encrypted data: {}", e))?;
 
     if encrypted.version != 1 {
-        return Err(format!("Unsupported encryption version: {}", encrypted.version));
+        return Err(format!(
+            "Unsupported encryption version: {}",
+            encrypted.version
+        ));
     }
 
     let key = derive_key();
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("Failed to create cipher: {}", e))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
 
-    let nonce_bytes = BASE64.decode(&encrypted.nonce)
+    let nonce_bytes = BASE64
+        .decode(&encrypted.nonce)
         .map_err(|e| format!("Failed to decode nonce: {}", e))?;
     let nonce = Nonce::from_slice(&nonce_bytes);
 
-    let ciphertext = BASE64.decode(&encrypted.ciphertext)
+    let ciphertext = BASE64
+        .decode(&encrypted.ciphertext)
         .map_err(|e| format!("Failed to decode ciphertext: {}", e))?;
 
-    let plaintext = cipher.decrypt(nonce, ciphertext.as_ref())
+    let plaintext = cipher
+        .decrypt(nonce, ciphertext.as_ref())
         .map_err(|_| "Decryption failed (wrong key or corrupted data)".to_string())?;
 
     let json = String::from_utf8(plaintext)
         .map_err(|e| format!("Failed to decode decrypted data: {}", e))?;
 
-    serde_json::from_str(&json)
-        .map_err(|e| format!("Failed to parse credentials: {}", e))
+    serde_json::from_str(&json).map_err(|e| format!("Failed to parse credentials: {}", e))
 }
 
 /// Legacy XOR deobfuscation (for migration only)
@@ -163,10 +168,11 @@ fn load_legacy_credentials(path: &PathBuf) -> Result<Option<QobuzCredentials>, S
         return Ok(None);
     }
 
-    let encoded = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read legacy file: {}", e))?;
+    let encoded =
+        fs::read_to_string(path).map_err(|e| format!("Failed to read legacy file: {}", e))?;
 
-    let obfuscated = BASE64.decode(encoded.trim())
+    let obfuscated = BASE64
+        .decode(encoded.trim())
         .map_err(|e| format!("Failed to decode legacy data: {}", e))?;
 
     let json_bytes = legacy_deobfuscate(&obfuscated);
@@ -190,8 +196,7 @@ fn save_to_fallback(credentials: &QobuzCredentials) -> Result<(), String> {
 
     let encrypted = encrypt_credentials(credentials)?;
 
-    fs::write(&path, encrypted)
-        .map_err(|e| format!("Failed to write credentials file: {}", e))?;
+    fs::write(&path, encrypted).map_err(|e| format!("Failed to write credentials file: {}", e))?;
 
     log::info!("Credentials saved to encrypted fallback file");
     Ok(())
@@ -235,7 +240,9 @@ fn load_from_fallback() -> Result<Option<QobuzCredentials>, String> {
                         if let Ok(Some(creds)) = load_legacy_credentials(p) {
                             // Save in new format
                             if save_to_fallback(&creds).is_ok() {
-                                log::info!("Successfully migrated credentials to new encrypted format");
+                                log::info!(
+                                    "Successfully migrated credentials to new encrypted format"
+                                );
                                 return Ok(Some(creds));
                             }
                         }
@@ -247,8 +254,8 @@ fn load_from_fallback() -> Result<Option<QobuzCredentials>, String> {
         return Ok(None);
     }
 
-    let content = fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read credentials file: {}", e))?;
+    let content =
+        fs::read_to_string(&path).map_err(|e| format!("Failed to read credentials file: {}", e))?;
 
     // Check if it's the new format or legacy
     if content.trim().starts_with('{') && content.contains("\"version\"") {
@@ -364,20 +371,18 @@ pub fn has_saved_credentials() -> bool {
 
     // Check keyring
     match Entry::new(SERVICE_NAME, QOBUZ_CREDENTIALS_KEY) {
-        Ok(entry) => {
-            match entry.get_password() {
-                Ok(_) => {
-                    log::info!("Found credentials in system keyring");
-                    return true;
-                }
-                Err(keyring::Error::NoEntry) => {
-                    log::info!("No credentials in keyring (NoEntry)");
-                }
-                Err(e) => {
-                    log::warn!("Keyring check failed: {}", e);
-                }
+        Ok(entry) => match entry.get_password() {
+            Ok(_) => {
+                log::info!("Found credentials in system keyring");
+                return true;
             }
-        }
+            Err(keyring::Error::NoEntry) => {
+                log::info!("No credentials in keyring (NoEntry)");
+            }
+            Err(e) => {
+                log::warn!("Keyring check failed: {}", e);
+            }
+        },
         Err(e) => {
             log::warn!("Keyring not available: {}", e);
         }

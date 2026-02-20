@@ -48,10 +48,7 @@ pub fn get_last_user_id() -> Option<u64> {
 ///
 /// This is a legacy command - now delegates to session_lifecycle::activate_session().
 #[tauri::command]
-pub async fn activate_user_session(
-    app: tauri::AppHandle,
-    user_id: u64,
-) -> Result<(), String> {
+pub async fn activate_user_session(app: tauri::AppHandle, user_id: u64) -> Result<(), String> {
     log::info!("[Legacy] activate_user_session called - delegating to session_lifecycle");
     crate::session_lifecycle::activate_session(&app, user_id).await
 }
@@ -61,9 +58,7 @@ pub async fn activate_user_session(
 /// Tears down all per-user stores, closing database connections.
 /// This is a legacy command - now delegates to session_lifecycle::deactivate_session().
 #[tauri::command]
-pub async fn deactivate_user_session(
-    app: tauri::AppHandle,
-) -> Result<(), String> {
+pub async fn deactivate_user_session(app: tauri::AppHandle) -> Result<(), String> {
     log::info!("[Legacy] deactivate_user_session called - delegating to session_lifecycle");
     crate::session_lifecycle::deactivate_session(&app).await
 }

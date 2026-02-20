@@ -8,9 +8,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use qbz_integrations::{
-    LastFmClient,
-    ListenBrainzClient, ListenBrainzConfig,
-    MusicBrainzClient, MusicBrainzConfig,
+    LastFmClient, ListenBrainzClient, ListenBrainzConfig, MusicBrainzClient, MusicBrainzConfig,
 };
 
 /// V2 ListenBrainz state wrapper for Tauri
@@ -31,7 +29,12 @@ impl ListenBrainzV2State {
     }
 
     /// Initialize with saved credentials
-    pub async fn init_with_credentials(&self, token: Option<String>, user_name: Option<String>, enabled: bool) {
+    pub async fn init_with_credentials(
+        &self,
+        token: Option<String>,
+        user_name: Option<String>,
+        enabled: bool,
+    ) {
         let config = ListenBrainzConfig {
             enabled,
             token: token.clone(),
@@ -136,7 +139,11 @@ impl LastFmV2State {
 
     /// Get session key for persistence
     pub async fn get_session_key(&self) -> Option<String> {
-        self.client.lock().await.session_key().map(|s| s.to_string())
+        self.client
+            .lock()
+            .await
+            .session_key()
+            .map(|s| s.to_string())
     }
 
     /// Store pending token during auth flow
@@ -157,6 +164,6 @@ impl Default for LastFmV2State {
 }
 
 // Re-export types for commands
+pub use qbz_integrations::lastfm::LastFmSession as LfSession;
 pub use qbz_integrations::listenbrainz::ListenBrainzStatus as LbStatus;
 pub use qbz_integrations::listenbrainz::UserInfo;
-pub use qbz_integrations::lastfm::LastFmSession as LfSession;

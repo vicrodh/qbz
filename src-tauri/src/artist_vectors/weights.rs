@@ -9,7 +9,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelationshipWeights {
     // === MusicBrainz artist-to-artist relationships ===
-
     /// Weight for band membership (artist was/is member of group)
     /// Strongest connection - same creative unit
     pub member_of_band: f32,
@@ -24,7 +23,6 @@ pub struct RelationshipWeights {
     pub founder: f32,
 
     // === MusicBrainz recording/release relationships ===
-
     /// Weight for performer credit on a recording
     pub performer: f32,
 
@@ -41,17 +39,14 @@ pub struct RelationshipWeights {
     pub engineer: f32,
 
     // === Qobuz relationships ===
-
     /// Weight for Qobuz similar artists
     pub qobuz_similar: f32,
 
     // === Tag-based relationships ===
-
     /// Weight for shared MusicBrainz tags (genres)
     pub shared_tag: f32,
 
     // === Behavioral relationships ===
-
     /// Weight for user listening affinity (artists played together)
     pub user_affinity: f32,
 }
@@ -115,7 +110,7 @@ impl RelationshipWeights {
             producer: 0.3,
             conductor: 0.3,
             engineer: 0.2,
-            qobuz_similar: 1.0,  // Prioritize Qobuz similarity
+            qobuz_similar: 1.0, // Prioritize Qobuz similarity
             shared_tag: 0.5,
             user_affinity: 0.6,
         }
@@ -133,8 +128,12 @@ impl RelationshipWeights {
             "collaboration" | "collaborated" | "collaborator" => self.collaboration,
 
             // Performance credits
-            "performer" | "vocal" | "instrument" | "performing orchestra"
-            | "orchestra" | "chorus master" => self.performer,
+            "performer"
+            | "vocal"
+            | "instrument"
+            | "performing orchestra"
+            | "orchestra"
+            | "chorus master" => self.performer,
 
             // Composition
             "composer" | "writer" | "lyricist" | "librettist" | "arranger" => self.composer,

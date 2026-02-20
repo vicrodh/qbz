@@ -226,7 +226,11 @@ fn open_plex_cache_db() -> Result<Connection, String> {
     .map_err(|e| format!("Failed to initialize Plex cache schema: {}", e))?;
 
     // Migration: add track_number, disc_number, album_key columns if missing
-    for col in &["track_number INTEGER", "disc_number INTEGER", "album_key TEXT"] {
+    for col in &[
+        "track_number INTEGER",
+        "disc_number INTEGER",
+        "album_key TEXT",
+    ] {
         let stmt = format!("ALTER TABLE plex_cache_tracks ADD COLUMN {col}");
         let _ = conn.execute(&stmt, []);
     }
@@ -262,9 +266,17 @@ fn open_plex_cache_db() -> Result<Connection, String> {
 
             for (rating_key, artist_raw, album_raw) in &rows {
                 let artist = decode_xml_entities(artist_raw.trim());
-                let artist = if artist.is_empty() { "Unknown Artist".to_string() } else { artist };
+                let artist = if artist.is_empty() {
+                    "Unknown Artist".to_string()
+                } else {
+                    artist
+                };
                 let album = decode_xml_entities(album_raw.trim());
-                let album = if album.is_empty() { "Unknown Album".to_string() } else { album };
+                let album = if album.is_empty() {
+                    "Unknown Album".to_string()
+                } else {
+                    album
+                };
                 let album = normalize_album_title(Some(&artist), &album);
                 let key = plex_album_key(&artist, &album);
                 let _ = conn.execute(
@@ -1313,9 +1325,17 @@ pub fn plex_cache_save_tracks(
             .or_else(|| saved.and_then(|s| s.2));
 
         // Compute album_key for this track
-        let track_artist = track.artist.as_deref().map(|v| v.trim()).filter(|v| !v.is_empty())
+        let track_artist = track
+            .artist
+            .as_deref()
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
             .unwrap_or("Unknown Artist");
-        let track_album_raw = track.album.as_deref().map(|v| v.trim()).filter(|v| !v.is_empty())
+        let track_album_raw = track
+            .album
+            .as_deref()
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
             .unwrap_or("Unknown Album");
         let track_album_normalized = normalize_album_title(Some(track_artist), track_album_raw);
         let track_album_key = plex_album_key(track_artist, &track_album_normalized);

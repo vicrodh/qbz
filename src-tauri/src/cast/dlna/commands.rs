@@ -5,11 +5,12 @@ use tauri::State;
 use tokio::sync::Mutex;
 
 use crate::api::models::Quality;
-use crate::AppState;
 use crate::cast::dlna::{
-    DiscoveredDlnaDevice, DlnaConnection, DlnaDiscovery, DlnaError, DlnaMetadata, DlnaPositionInfo, DlnaStatus,
+    DiscoveredDlnaDevice, DlnaConnection, DlnaDiscovery, DlnaError, DlnaMetadata, DlnaPositionInfo,
+    DlnaStatus,
 };
 use crate::cast::MediaServer;
+use crate::AppState;
 
 /// DLNA state shared across commands
 pub struct DlnaState {
@@ -46,10 +47,7 @@ impl DlnaState {
 #[tauri::command]
 pub async fn dlna_start_discovery(state: State<'_, DlnaState>) -> Result<(), String> {
     let mut discovery = state.discovery.lock().await;
-    discovery
-        .start_discovery()
-        .await
-        .map_err(|e| e.to_string())
+    discovery.start_discovery().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -78,7 +76,9 @@ pub async fn dlna_connect(device_id: String, state: State<'_, DlnaState>) -> Res
             .map_err(|e| e.to_string())?
     };
 
-    let connection = DlnaConnection::connect(device).await.map_err(|e| e.to_string())?;
+    let connection = DlnaConnection::connect(device)
+        .await
+        .map_err(|e| e.to_string())?;
     let mut state_connection = state.connection.lock().await;
     *state_connection = Some(connection);
     Ok(())
@@ -97,7 +97,9 @@ pub async fn dlna_disconnect(state: State<'_, DlnaState>) -> Result<(), String> 
 #[tauri::command]
 pub async fn dlna_get_status(state: State<'_, DlnaState>) -> Result<DlnaStatus, String> {
     let connection = state.connection.lock().await;
-    let conn = connection.as_ref().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_ref()
+        .ok_or_else(|| "Not connected".to_string())?;
     Ok(conn.get_status())
 }
 
@@ -105,7 +107,9 @@ pub async fn dlna_get_status(state: State<'_, DlnaState>) -> Result<DlnaStatus, 
 #[tauri::command]
 pub async fn dlna_get_position(state: State<'_, DlnaState>) -> Result<DlnaPositionInfo, String> {
     let connection = state.connection.lock().await;
-    let conn = connection.as_ref().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_ref()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.get_position_info().await.map_err(|e| e.to_string())
 }
 
@@ -120,7 +124,7 @@ pub async fn dlna_play_track(
     app_state: State<'_, AppState>,
 ) -> Result<(), String> {
     log::info!("DLNA: dlna_play_track called for track_id={}", track_id);
-    
+
     // Get stream URL from Qobuz
     let stream_url = {
         let client = app_state.client.read().await;
@@ -149,11 +153,16 @@ pub async fn dlna_play_track(
     };
 
     // Ensure media server is started (lazy init)
-    dlna_state.ensure_media_server().await.map_err(|e| e.to_string())?;
+    dlna_state
+        .ensure_media_server()
+        .await
+        .map_err(|e| e.to_string())?;
 
     let url = {
         let mut server_guard = dlna_state.media_server.lock().await;
-        let server = server_guard.as_mut().ok_or("Media server not initialized")?;
+        let server = server_guard
+            .as_mut()
+            .ok_or("Media server not initialized")?;
         server.register_audio(track_id, audio_data, &content_type);
         let url = match target_ip.as_deref() {
             Some(ip) => server.get_audio_url_for_target(track_id, ip),
@@ -162,20 +171,30 @@ pub async fn dlna_play_track(
         url.ok_or_else(|| "Failed to build media URL".to_string())?
     };
 
-    log::info!("DLNA: Playing track {} via MediaServer URL: {}", track_id, url);
+    log::info!(
+        "DLNA: Playing track {} via MediaServer URL: {}",
+        track_id,
+        url
+    );
     log::info!("DLNA: Content-Type from Qobuz: {}", content_type);
 
     // Load media on DLNA device
     {
         let mut connection = dlna_state.connection.lock().await;
-        let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
-        conn.load_media(&url, &metadata, &content_type).await.map_err(|e| e.to_string())?;
+        let conn = connection
+            .as_mut()
+            .ok_or_else(|| "Not connected".to_string())?;
+        conn.load_media(&url, &metadata, &content_type)
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     // Start playback
     {
         let mut connection = dlna_state.connection.lock().await;
-        let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+        let conn = connection
+            .as_mut()
+            .ok_or_else(|| "Not connected".to_string())?;
         conn.play().await.map_err(|e| e.to_string())?;
     }
 
@@ -197,35 +216,45 @@ pub async fn dlna_load_media(
 #[tauri::command]
 pub async fn dlna_play(state: State<'_, DlnaState>) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_mut()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.play().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn dlna_pause(state: State<'_, DlnaState>) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_mut()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.pause().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn dlna_stop(state: State<'_, DlnaState>) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_mut()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.stop().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn dlna_seek(position_secs: u64, state: State<'_, DlnaState>) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_mut()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.seek(position_secs).await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn dlna_set_volume(volume: f32, state: State<'_, DlnaState>) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_mut()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.set_volume(volume).await.map_err(|e| e.to_string())
 }
 

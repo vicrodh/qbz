@@ -29,9 +29,7 @@ impl AirPlayState {
 #[tauri::command]
 pub async fn airplay_start_discovery(state: State<'_, AirPlayState>) -> Result<(), String> {
     let mut discovery = state.discovery.lock().await;
-    discovery
-        .start_discovery()
-        .map_err(|e| e.to_string())
+    discovery.start_discovery().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -51,7 +49,10 @@ pub async fn airplay_get_devices(
 // === Connection ===
 
 #[tauri::command]
-pub async fn airplay_connect(device_id: String, state: State<'_, AirPlayState>) -> Result<(), String> {
+pub async fn airplay_connect(
+    device_id: String,
+    state: State<'_, AirPlayState>,
+) -> Result<(), String> {
     let device = {
         let discovery = state.discovery.lock().await;
         discovery
@@ -79,7 +80,9 @@ pub async fn airplay_disconnect(state: State<'_, AirPlayState>) -> Result<(), St
 #[tauri::command]
 pub async fn airplay_get_status(state: State<'_, AirPlayState>) -> Result<AirPlayStatus, String> {
     let connection = state.connection.lock().await;
-    let conn = connection.as_ref().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_ref()
+        .ok_or_else(|| "Not connected".to_string())?;
     Ok(conn.get_status())
 }
 
@@ -91,34 +94,44 @@ pub async fn airplay_load_media(
     state: State<'_, AirPlayState>,
 ) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_mut()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.load_media(metadata).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn airplay_play(state: State<'_, AirPlayState>) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_mut()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.play().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn airplay_pause(state: State<'_, AirPlayState>) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_mut()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.pause().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn airplay_stop(state: State<'_, AirPlayState>) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_mut()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.stop().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn airplay_set_volume(volume: f32, state: State<'_, AirPlayState>) -> Result<(), String> {
     let mut connection = state.connection.lock().await;
-    let conn = connection.as_mut().ok_or_else(|| "Not connected".to_string())?;
+    let conn = connection
+        .as_mut()
+        .ok_or_else(|| "Not connected".to_string())?;
     conn.set_volume(volume).map_err(|e| e.to_string())
 }

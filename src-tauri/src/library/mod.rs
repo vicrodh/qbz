@@ -9,33 +9,62 @@ pub mod remote_metadata;
 
 // Re-export everything from qbz-library
 pub use qbz_library::{
+    apply_sidecar_to_track,
+    clear_thumbnails,
+    cue_to_tracks,
+    delete_album_sidecar,
+    // Thumbnails
+    generate_thumbnail,
+    generate_thumbnail_from_bytes,
+    get_artwork_cache_dir,
+    get_cache_size,
+    // Utility functions
+    get_db_path,
+    get_or_generate_thumbnail,
+    get_thumbnail_path,
+    get_thumbnails_dir,
+    read_album_sidecar,
+    sidecar_path,
+    thumbnail_exists,
+    write_album_sidecar,
+    // Tag sidecar
+    AlbumMetadataOverride,
+    AlbumSettings,
+    AlbumTagSidecar,
+    AlbumTrackUpdate,
+    ArtistImageInfo,
+    // Models
+    AudioFormat,
+    AudioProperties,
+    // CUE Parser
+    CueParser,
+    CueSheet,
+    CueTime,
+    CueTrack,
+    // Database
+    LibraryDatabase,
     // Errors
     LibraryError,
-    // Models
-    AudioFormat, LocalTrack, LocalAlbum, LocalArtist,
-    PlaylistLocalTrack, ScanProgress, ScanStatus, ScanError,
-    AudioProperties, AlbumSettings, ArtistImageInfo,
+    LibraryFolder,
     // Scanner
-    LibraryScanner, ScanResult,
+    LibraryScanner,
+    LibraryStats,
+    LocalAlbum,
+    LocalArtist,
+    LocalContentStatus,
+    LocalTrack,
     // Metadata
     MetadataExtractor,
-    // CUE Parser
-    CueParser, CueSheet, CueTrack, CueTime, cue_to_tracks,
-    // Database
-    LibraryDatabase, LibraryFolder, LibraryStats,
-    AlbumTrackUpdate, TrackMetadataUpdateFull,
-    PlaylistFolder, PlaylistSettings, PlaylistStats,
-    LocalContentStatus,
-    // Thumbnails
-    generate_thumbnail, generate_thumbnail_from_bytes,
-    get_thumbnail_path, get_thumbnails_dir, thumbnail_exists,
-    get_or_generate_thumbnail, clear_thumbnails, get_cache_size,
-    // Tag sidecar
-    AlbumMetadataOverride, TrackMetadataOverride, AlbumTagSidecar,
-    sidecar_path, read_album_sidecar, write_album_sidecar,
-    delete_album_sidecar, apply_sidecar_to_track,
-    // Utility functions
-    get_db_path, get_artwork_cache_dir,
+    PlaylistFolder,
+    PlaylistLocalTrack,
+    PlaylistSettings,
+    PlaylistStats,
+    ScanError,
+    ScanProgress,
+    ScanResult,
+    ScanStatus,
+    TrackMetadataOverride,
+    TrackMetadataUpdateFull,
 };
 
 // Backwards compatibility: re-export as modules
@@ -45,41 +74,23 @@ pub mod database {
 
 pub mod thumbnails {
     pub use qbz_library::{
-        generate_thumbnail, generate_thumbnail_from_bytes,
-        get_thumbnail_path, get_thumbnails_dir, thumbnail_exists,
-        get_or_generate_thumbnail, clear_thumbnails, get_cache_size,
+        clear_thumbnails, generate_thumbnail, generate_thumbnail_from_bytes, get_cache_size,
+        get_or_generate_thumbnail, get_thumbnail_path, get_thumbnails_dir, thumbnail_exists,
     };
 }
 
 // Re-export commands::LibraryState for compatibility
 pub use commands::LibraryState;
 pub use commands::{
-    LibraryAlbumMetadataUpdateRequest,
-    CleanupResult,
-    library_add_folder,
-    library_cleanup_missing_files,
-    library_fetch_missing_artwork,
-    library_get_album_tracks,
-    library_get_artists,
-    library_get_folders,
-    library_get_folders_with_metadata,
-    library_scan_impl,
-    library_get_scan_progress,
-    library_get_stats,
-    library_get_thumbnail,
-    library_get_thumbnails_cache_size,
-    library_get_tracks_by_ids,
-    library_search,
-    library_stop_scan_impl,
-    library_scan_folder_impl,
-    library_clear_impl,
-    playlist_get_custom_order,
-    playlist_get_tracks_with_local_copies,
-    playlist_has_custom_order,
-    update_playlist_folder,
-    library_update_album_metadata_impl,
-    library_write_album_metadata_to_files_impl,
-    library_refresh_album_metadata_from_files_impl,
+    library_add_folder, library_cleanup_missing_files, library_clear_impl,
+    library_fetch_missing_artwork, library_get_album_tracks, library_get_artists,
+    library_get_folders, library_get_folders_with_metadata, library_get_scan_progress,
+    library_get_stats, library_get_thumbnail, library_get_thumbnails_cache_size,
+    library_get_tracks_by_ids, library_refresh_album_metadata_from_files_impl,
+    library_scan_folder_impl, library_scan_impl, library_search, library_stop_scan_impl,
+    library_update_album_metadata_impl, library_write_album_metadata_to_files_impl,
+    playlist_get_custom_order, playlist_get_tracks_with_local_copies, playlist_has_custom_order,
+    update_playlist_folder, CleanupResult, LibraryAlbumMetadataUpdateRequest,
 };
 
 use std::path::Path;

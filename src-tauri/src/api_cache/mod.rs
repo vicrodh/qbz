@@ -171,7 +171,11 @@ impl ApiCache {
     // ============ Album Cache ============
 
     /// Get a cached album if it exists and hasn't expired
-    pub fn get_album(&self, album_id: &str, ttl_secs: Option<i64>) -> Result<Option<String>, String> {
+    pub fn get_album(
+        &self,
+        album_id: &str,
+        ttl_secs: Option<i64>,
+    ) -> Result<Option<String>, String> {
         let ttl = ttl_secs.unwrap_or(DEFAULT_TTL_SECS);
         let min_fetched_at = Self::current_timestamp() - ttl;
 
@@ -201,7 +205,11 @@ impl ApiCache {
     }
 
     /// Get multiple cached albums at once
-    pub fn get_albums(&self, album_ids: &[String], ttl_secs: Option<i64>) -> Result<Vec<(String, String)>, String> {
+    pub fn get_albums(
+        &self,
+        album_ids: &[String],
+        ttl_secs: Option<i64>,
+    ) -> Result<Vec<(String, String)>, String> {
         if album_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -227,7 +235,8 @@ impl ApiCache {
             .collect();
         params_vec.push(Box::new(min_fetched_at));
 
-        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
 
         let rows = stmt
             .query_map(params_refs.as_slice(), |row| {
@@ -243,7 +252,11 @@ impl ApiCache {
     }
 
     /// Get multiple cached tracks at once
-    pub fn get_tracks(&self, track_ids: &[u64], ttl_secs: Option<i64>) -> Result<Vec<(u64, String)>, String> {
+    pub fn get_tracks(
+        &self,
+        track_ids: &[u64],
+        ttl_secs: Option<i64>,
+    ) -> Result<Vec<(u64, String)>, String> {
         if track_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -268,7 +281,8 @@ impl ApiCache {
             .collect();
         params_vec.push(Box::new(min_fetched_at));
 
-        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
 
         let rows = stmt
             .query_map(params_refs.as_slice(), |row| {
@@ -284,7 +298,12 @@ impl ApiCache {
     }
 
     /// Get multiple cached artists at once (for a specific locale)
-    pub fn get_artists(&self, artist_ids: &[u64], locale: &str, ttl_secs: Option<i64>) -> Result<Vec<(u64, String)>, String> {
+    pub fn get_artists(
+        &self,
+        artist_ids: &[u64],
+        locale: &str,
+        ttl_secs: Option<i64>,
+    ) -> Result<Vec<(u64, String)>, String> {
         if artist_ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -310,7 +329,8 @@ impl ApiCache {
         params_vec.push(Box::new(locale.to_string()));
         params_vec.push(Box::new(min_fetched_at));
 
-        let params_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
 
         let rows = stmt
             .query_map(params_refs.as_slice(), |row| {
@@ -328,7 +348,12 @@ impl ApiCache {
     // ============ Artist Cache ============
 
     /// Get a cached artist if it exists and hasn't expired
-    pub fn get_artist(&self, artist_id: u64, locale: &str, ttl_secs: Option<i64>) -> Result<Option<String>, String> {
+    pub fn get_artist(
+        &self,
+        artist_id: u64,
+        locale: &str,
+        ttl_secs: Option<i64>,
+    ) -> Result<Option<String>, String> {
         let ttl = ttl_secs.unwrap_or(DEFAULT_TTL_SECS);
         let min_fetched_at = Self::current_timestamp() - ttl;
 
@@ -360,7 +385,11 @@ impl ApiCache {
     // ============ Track Cache ============
 
     /// Get a cached track if it exists and hasn't expired
-    pub fn get_track(&self, track_id: u64, ttl_secs: Option<i64>) -> Result<Option<String>, String> {
+    pub fn get_track(
+        &self,
+        track_id: u64,
+        ttl_secs: Option<i64>,
+    ) -> Result<Option<String>, String> {
         let ttl = ttl_secs.unwrap_or(DEFAULT_TTL_SECS);
         let min_fetched_at = Self::current_timestamp() - ttl;
 
@@ -476,8 +505,12 @@ impl ApiCache {
                 params![locale],
             )
             .map_err(|e| format!("Failed to clear cached artists by locale: {}", e))?;
-        
-        log::info!("Cleared {} cached artist(s) for locale '{}'", deleted, locale);
+
+        log::info!(
+            "Cleared {} cached artist(s) for locale '{}'",
+            deleted,
+            locale
+        );
         Ok(deleted)
     }
 
@@ -487,7 +520,7 @@ impl ApiCache {
             .conn
             .execute("DELETE FROM cached_artists", [])
             .map_err(|e| format!("Failed to clear all cached artists: {}", e))?;
-        
+
         log::info!("Cleared {} cached artist(s)", deleted);
         Ok(deleted)
     }

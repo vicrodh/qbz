@@ -141,7 +141,10 @@ impl MusicBrainzClient {
     }
 
     /// Search recordings by ISRC
-    pub async fn search_recording_by_isrc(&self, isrc: &str) -> Result<RecordingSearchResponse, String> {
+    pub async fn search_recording_by_isrc(
+        &self,
+        isrc: &str,
+    ) -> Result<RecordingSearchResponse, String> {
         if !self.is_enabled().await {
             return Err("MusicBrainz integration is disabled".to_string());
         }
@@ -258,7 +261,10 @@ impl MusicBrainzClient {
     }
 
     /// Get artist details with relationships
-    pub async fn get_artist_with_relations(&self, mbid: &str) -> Result<ArtistFullResponse, String> {
+    pub async fn get_artist_with_relations(
+        &self,
+        mbid: &str,
+    ) -> Result<ArtistFullResponse, String> {
         if !self.is_enabled().await {
             return Err("MusicBrainz integration is disabled".to_string());
         }
@@ -266,10 +272,7 @@ impl MusicBrainzClient {
         self.rate_limiter.wait().await;
 
         let base_url = self.base_url().await;
-        let url = format!(
-            "{}/artist/{}?inc=artist-rels&fmt=json",
-            base_url, mbid
-        );
+        let url = format!("{}/artist/{}?inc=artist-rels&fmt=json", base_url, mbid);
 
         log::debug!("MusicBrainz artist lookup with relations: {}", mbid);
 
@@ -293,7 +296,10 @@ impl MusicBrainzClient {
     }
 
     /// Search releases by barcode (UPC/EAN)
-    pub async fn search_release_by_barcode(&self, barcode: &str) -> Result<ReleaseSearchResponse, String> {
+    pub async fn search_release_by_barcode(
+        &self,
+        barcode: &str,
+    ) -> Result<ReleaseSearchResponse, String> {
         if !self.is_enabled().await {
             return Err("MusicBrainz integration is disabled".to_string());
         }
@@ -408,7 +414,10 @@ impl MusicBrainzClient {
 
     /// Get full release details including tracks
     /// Fetches media, recordings, artist credits, labels, and tags
-    pub async fn get_release_with_tracks(&self, release_id: &str) -> Result<ReleaseFullResponse, String> {
+    pub async fn get_release_with_tracks(
+        &self,
+        release_id: &str,
+    ) -> Result<ReleaseFullResponse, String> {
         if !self.is_enabled().await {
             return Err("MusicBrainz integration is disabled".to_string());
         }

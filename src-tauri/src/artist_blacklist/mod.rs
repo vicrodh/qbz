@@ -93,37 +93,52 @@ impl BlacklistState {
     }
 
     /// Add an artist to the blacklist
-    pub fn add(&self, artist_id: u64, artist_name: &str, notes: Option<&str>) -> Result<(), String> {
+    pub fn add(
+        &self,
+        artist_id: u64,
+        artist_name: &str,
+        notes: Option<&str>,
+    ) -> Result<(), String> {
         let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
-        guard.as_ref().ok_or("No active session - please log in")?
+        guard
+            .as_ref()
+            .ok_or("No active session - please log in")?
             .add(artist_id, artist_name, notes)
     }
 
     /// Remove an artist from the blacklist
     pub fn remove(&self, artist_id: u64) -> Result<(), String> {
         let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
-        guard.as_ref().ok_or("No active session - please log in")?
+        guard
+            .as_ref()
+            .ok_or("No active session - please log in")?
             .remove(artist_id)
     }
 
     /// Get all blacklisted artists
     pub fn get_all(&self) -> Result<Vec<BlacklistedArtist>, String> {
         let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
-        guard.as_ref().ok_or("No active session - please log in")?
+        guard
+            .as_ref()
+            .ok_or("No active session - please log in")?
             .get_all()
     }
 
     /// Set enabled state
     pub fn set_enabled(&self, enabled: bool) -> Result<(), String> {
         let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
-        guard.as_ref().ok_or("No active session - please log in")?
+        guard
+            .as_ref()
+            .ok_or("No active session - please log in")?
             .set_enabled(enabled)
     }
 
     /// Get blacklist settings
     pub fn get_settings(&self) -> Result<BlacklistSettings, String> {
         let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
-        Ok(guard.as_ref().ok_or("No active session - please log in")?
+        Ok(guard
+            .as_ref()
+            .ok_or("No active session - please log in")?
             .get_settings())
     }
 
@@ -139,7 +154,9 @@ impl BlacklistState {
     /// Clear all blacklisted artists
     pub fn clear_all(&self) -> Result<(), String> {
         let guard = self.service.lock().map_err(|_| "Failed to acquire lock")?;
-        guard.as_ref().ok_or("No active session - please log in")?
+        guard
+            .as_ref()
+            .ok_or("No active session - please log in")?
             .clear_all()
     }
 }

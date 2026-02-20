@@ -1,10 +1,10 @@
+use chrono::Utc;
+use md5::{Digest, Md5};
 use rusqlite::{params, Connection, Result};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use chrono::Utc;
-use md5::{Md5, Digest};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FavoritesPreferences {
@@ -111,10 +111,7 @@ impl FavoritesPreferencesStore {
             return Ok(trimmed.to_string());
         }
 
-        let extension = source
-            .extension()
-            .and_then(|e| e.to_str())
-            .unwrap_or("png");
+        let extension = source.extension().and_then(|e| e.to_str()).unwrap_or("png");
 
         let mut hasher = Md5::new();
         hasher.update(trimmed.as_bytes());
@@ -143,17 +140,23 @@ impl FavoritesPreferencesStore {
             let icon_background: Option<String> = row.get(2)?;
             let tab_order_str: String = row.get(3)?;
 
-            let custom_icon_path = custom_icon_path
-                .and_then(|value| if value.trim().is_empty() { None } else { Some(value) });
-
-            let tab_order: Vec<String> = serde_json::from_str(&tab_order_str).unwrap_or_else(|_| {
-                vec![
-                    "tracks".to_string(),
-                    "albums".to_string(),
-                    "artists".to_string(),
-                    "playlists".to_string(),
-                ]
+            let custom_icon_path = custom_icon_path.and_then(|value| {
+                if value.trim().is_empty() {
+                    None
+                } else {
+                    Some(value)
+                }
             });
+
+            let tab_order: Vec<String> =
+                serde_json::from_str(&tab_order_str).unwrap_or_else(|_| {
+                    vec![
+                        "tracks".to_string(),
+                        "albums".to_string(),
+                        "artists".to_string(),
+                        "playlists".to_string(),
+                    ]
+                });
 
             Ok(FavoritesPreferences {
                 custom_icon_path,
@@ -191,7 +194,10 @@ impl FavoritesPreferencesStore {
         }
     }
 
-    pub fn save_preferences(&self, mut prefs: FavoritesPreferences) -> Result<FavoritesPreferences, String> {
+    pub fn save_preferences(
+        &self,
+        mut prefs: FavoritesPreferences,
+    ) -> Result<FavoritesPreferences, String> {
         if let Some(path) = prefs.custom_icon_path.clone() {
             let resolved = self.normalize_custom_icon_path(path)?;
             if resolved.is_empty() {
@@ -234,14 +240,18 @@ impl FavoritesPreferencesState {
 
     pub fn init_at(&self, base_dir: &Path) -> Result<(), String> {
         let new_store = FavoritesPreferencesStore::new_at(base_dir)?;
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock favorites preferences store".to_string())?;
         *guard = Some(new_store);
         Ok(())
     }
 
     pub fn teardown(&self) -> Result<(), String> {
-        let mut guard = self.store.lock()
+        let mut guard = self
+            .store
+            .lock()
             .map_err(|_| "Failed to lock favorites preferences store".to_string())?;
         *guard = None;
         Ok(())
@@ -308,8 +318,13 @@ pub fn load_preferences(conn: &Connection) -> Result<FavoritesPreferences> {
         let icon_background: Option<String> = row.get(2)?;
         let tab_order_str: String = row.get(3)?;
 
-        let custom_icon_path = custom_icon_path
-            .and_then(|value| if value.trim().is_empty() { None } else { Some(value) });
+        let custom_icon_path = custom_icon_path.and_then(|value| {
+            if value.trim().is_empty() {
+                None
+            } else {
+                Some(value)
+            }
+        });
 
         let tab_order: Vec<String> = serde_json::from_str(&tab_order_str).unwrap_or_else(|_| {
             vec![

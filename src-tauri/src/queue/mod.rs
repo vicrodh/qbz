@@ -261,7 +261,11 @@ impl QueueManager {
                 state.current_index = Some(curr_idx - 1);
             } else if index == curr_idx {
                 if curr_idx >= state.tracks.len() {
-                    state.current_index = if state.tracks.is_empty() { None } else { Some(state.tracks.len() - 1) };
+                    state.current_index = if state.tracks.is_empty() {
+                        None
+                    } else {
+                        Some(state.tracks.len() - 1)
+                    };
                 }
             }
         }
@@ -298,7 +302,11 @@ impl QueueManager {
             return None;
         }
 
-        log::info!("remove_upcoming_track: upcoming_index={} -> actual_index={}", upcoming_index, actual_index);
+        log::info!(
+            "remove_upcoming_track: upcoming_index={} -> actual_index={}",
+            upcoming_index,
+            actual_index
+        );
 
         let removed = state.tracks.remove(actual_index);
 
@@ -308,7 +316,11 @@ impl QueueManager {
                 state.current_index = Some(curr_idx - 1);
             } else if actual_index == curr_idx {
                 if curr_idx >= state.tracks.len() {
-                    state.current_index = if state.tracks.is_empty() { None } else { Some(state.tracks.len() - 1) };
+                    state.current_index = if state.tracks.is_empty() {
+                        None
+                    } else {
+                        Some(state.tracks.len() - 1)
+                    };
                 }
             }
         }
@@ -379,7 +391,9 @@ impl QueueManager {
     /// Get current track
     pub fn current_track(&self) -> Option<QueueTrack> {
         let state = self.state.lock().unwrap();
-        state.current_index.and_then(|idx| state.tracks.get(idx).cloned())
+        state
+            .current_index
+            .and_then(|idx| state.tracks.get(idx).cloned())
     }
 
     /// Get next track without advancing
@@ -390,7 +404,9 @@ impl QueueManager {
         }
 
         if state.repeat == RepeatMode::One {
-            return state.current_index.and_then(|idx| state.tracks.get(idx).cloned());
+            return state
+                .current_index
+                .and_then(|idx| state.tracks.get(idx).cloned());
         }
 
         let next_idx = if state.shuffle {
@@ -480,7 +496,9 @@ impl QueueManager {
         }
 
         if state.repeat == RepeatMode::One {
-            return state.current_index.and_then(|idx| state.tracks.get(idx).cloned());
+            return state
+                .current_index
+                .and_then(|idx| state.tracks.get(idx).cloned());
         }
 
         let next_idx = if state.shuffle {
@@ -613,18 +631,24 @@ impl QueueManager {
     pub fn get_state(&self) -> QueueState {
         let state = self.state.lock().unwrap();
 
-        let current_track = state.current_index.and_then(|idx| state.tracks.get(idx).cloned());
+        let current_track = state
+            .current_index
+            .and_then(|idx| state.tracks.get(idx).cloned());
 
         // Get upcoming tracks (after current)
         let upcoming: Vec<QueueTrack> = if let Some(curr_idx) = state.current_index {
             if state.shuffle {
-                state.shuffle_order.iter()
+                state
+                    .shuffle_order
+                    .iter()
                     .skip(state.shuffle_position + 1)
                     .take(20)
                     .filter_map(|&idx| state.tracks.get(idx).cloned())
                     .collect()
             } else {
-                state.tracks.iter()
+                state
+                    .tracks
+                    .iter()
                     .skip(curr_idx + 1)
                     .take(20)
                     .cloned()
@@ -635,7 +659,9 @@ impl QueueManager {
         };
 
         // Get history tracks (recent first)
-        let history_tracks: Vec<QueueTrack> = state.history.iter()
+        let history_tracks: Vec<QueueTrack> = state
+            .history
+            .iter()
             .rev()
             .take(10)
             .filter_map(|&idx| state.tracks.get(idx).cloned())
@@ -757,7 +783,15 @@ mod tests {
         let result = queue.move_track(0, 3);
 
         assert!(result, "move_track should succeed");
-        assert_eq!(queue.get_state().upcoming.iter().map(|track| track.id).collect::<Vec<u64>>(), vec![2, 3, 1, 4, 5]);
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![2, 3, 1, 4, 5]
+        );
     }
 
     #[test]
@@ -773,7 +807,15 @@ mod tests {
         let result = queue.move_track(0, 3);
 
         assert!(result, "move_track should succeed");
-        assert_eq!(queue.get_state().upcoming.iter().map(|track| track.id).collect::<Vec<u64>>(), vec![3, 4, 2, 5]);
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![3, 4, 2, 5]
+        );
     }
 
     #[test]
@@ -787,7 +829,15 @@ mod tests {
         let result = queue.move_track(3, 0);
 
         assert!(result, "move_track should succeed");
-        assert_eq!(queue.get_state().upcoming.iter().map(|track| track.id).collect::<Vec<u64>>(), vec![4, 1, 2, 3, 5]);
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![4, 1, 2, 3, 5]
+        );
     }
 
     #[test]
@@ -802,7 +852,15 @@ mod tests {
         let result = queue.move_track(3, 0);
 
         assert!(result, "move_track should succeed");
-        assert_eq!(queue.get_state().upcoming.iter().map(|track| track.id).collect::<Vec<u64>>(), vec![5, 2, 3, 4]);
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![5, 2, 3, 4]
+        );
     }
 
     #[test]
@@ -816,7 +874,15 @@ mod tests {
         let result = queue.move_track(2, 3);
 
         assert!(result, "move_track should succeed");
-        assert_eq!(queue.get_state().upcoming.iter().map(|track| track.id).collect::<Vec<u64>>(), vec![1, 2, 3, 4, 5]);
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![1, 2, 3, 4, 5]
+        );
     }
 
     #[test]
@@ -831,6 +897,14 @@ mod tests {
         let result = queue.move_track(0, 1);
 
         assert!(result, "move_track should succeed");
-        assert_eq!(queue.get_state().upcoming.iter().map(|track| track.id).collect::<Vec<u64>>(), vec![2, 3, 4, 5]);
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![2, 3, 4, 5]
+        );
     }
 }

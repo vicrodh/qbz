@@ -2,10 +2,8 @@
 //!
 //! Handles complete metadata retrieval from Qobuz API and writing to FLAC tags.
 
+use lofty::{Accessor, AudioFile, ItemKey, Picture, PictureType, Tag, TagExt, TaggedFileExt};
 use serde::{Deserialize, Serialize};
-use lofty::{
-    Accessor, AudioFile, ItemKey, Picture, PictureType, Tag, TagExt, TaggedFileExt,
-};
 use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,10 +38,7 @@ pub async fn fetch_complete_metadata(
         .map_err(|e| format!("Failed to fetch track: {}", e))?;
 
     let album = if let Some(album_obj) = &track.album {
-        qobuz_client
-            .get_album(&album_obj.id)
-            .await
-            .ok()
+        qobuz_client.get_album(&album_obj.id).await.ok()
     } else {
         None
     };
@@ -68,23 +63,30 @@ pub async fn fetch_complete_metadata(
         .and_then(|a| a.release_date_original.as_ref())
         .and_then(|date_str| {
             // Parse YYYY-MM-DD or YYYY format
-            date_str.split('-').next()
+            date_str
+                .split('-')
+                .next()
                 .and_then(|year_str| year_str.parse::<u32>().ok())
         });
 
     let artwork_url = album
         .as_ref()
         .and_then(|a| a.image.large.clone())
-        .or_else(|| {
-            track.album.as_ref()
-                .and_then(|a| a.image.large.clone())
-        });
+        .or_else(|| track.album.as_ref().and_then(|a| a.image.large.clone()));
 
     Ok(CompleteTrackMetadata {
         track_id,
         title: track.title,
-        artist: track.performer.as_ref().map(|p| p.name.clone()).unwrap_or_default(),
-        album: track.album.as_ref().map(|a| a.title.clone()).unwrap_or_default(),
+        artist: track
+            .performer
+            .as_ref()
+            .map(|p| p.name.clone())
+            .unwrap_or_default(),
+        album: track
+            .album
+            .as_ref()
+            .map(|a| a.title.clone())
+            .unwrap_or_default(),
         album_artist,
         track_number: Some(track.track_number),
         disc_number: track.media_number,
@@ -100,15 +102,12 @@ pub async fn fetch_complete_metadata(
 }
 
 /// Write metadata tags to a FLAC file
-pub fn write_flac_tags(
-    file_path: &str,
-    metadata: &CompleteTrackMetadata,
-) -> Result<(), String> {
+pub fn write_flac_tags(file_path: &str, metadata: &CompleteTrackMetadata) -> Result<(), String> {
     log::info!("Writing FLAC tags to: {}", file_path);
 
     let path = Path::new(file_path);
-    let mut tagged_file = lofty::read_from_path(path)
-        .map_err(|e| format!("Failed to read FLAC file: {}", e))?;
+    let mut tagged_file =
+        lofty::read_from_path(path).map_err(|e| format!("Failed to read FLAC file: {}", e))?;
 
     let tag = match tagged_file.primary_tag_mut() {
         Some(primary_tag) => primary_tag,
@@ -172,10 +171,7 @@ pub fn write_flac_tags(
 }
 
 /// Download and embed artwork in FLAC file
-pub async fn embed_artwork(
-    file_path: &str,
-    artwork_url: &str,
-) -> Result<(), String> {
+pub async fn embed_artwork(file_path: &str, artwork_url: &str) -> Result<(), String> {
     log::info!("Embedding artwork from: {}", artwork_url);
 
     // Download artwork
@@ -207,8 +203,8 @@ pub async fn embed_artwork(
 
     // Read file
     let path = Path::new(file_path);
-    let mut tagged_file = lofty::read_from_path(path)
-        .map_err(|e| format!("Failed to read FLAC file: {}", e))?;
+    let mut tagged_file =
+        lofty::read_from_path(path).map_err(|e| format!("Failed to read FLAC file: {}", e))?;
 
     // Add picture to primary tag
     if let Some(tag) = tagged_file.primary_tag_mut() {
@@ -232,7 +228,7 @@ pub async fn embed_artwork(
 pub fn sanitize_filename(name: &str) -> String {
     // Remove or replace invalid characters
     let invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|'];
-    
+
     let mut sanitized = name
         .chars()
         .map(|c| {
@@ -269,14 +265,11 @@ pub fn sanitize_filename(name: &str) -> String {
 }
 
 /// Download and save album cover art as a file
-pub async fn save_album_artwork(
-    album_dir: &Path,
-    artwork_url: &str,
-) -> Result<(), String> {
+pub async fn save_album_artwork(album_dir: &Path, artwork_url: &str) -> Result<(), String> {
     log::info!("Downloading album artwork to: {:?}", album_dir);
 
     let cover_path = album_dir.join("cover.jpg");
-    
+
     // Skip if cover already exists
     if cover_path.exists() {
         log::debug!("Cover art already exists at {:?}", cover_path);
@@ -364,8 +357,7 @@ pub fn organize_cached_file(
     };
 
     // Move file
-    std::fs::rename(temp, &final_path)
-        .map_err(|e| format!("Failed to move file: {}", e))?;
+    std::fs::rename(temp, &final_path).map_err(|e| format!("Failed to move file: {}", e))?;
 
     Ok(final_path.to_string_lossy().to_string())
 }

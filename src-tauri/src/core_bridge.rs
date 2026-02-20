@@ -10,14 +10,14 @@
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings, VisualizerTap};
 use qbz_core::QbzCore;
 use qbz_models::{
     Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
     GenreInfo, LabelDetail, PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState,
     QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
-use qbz_player::{Player, PlaybackState};
-use qbz_audio::{AudioSettings, AudioDiagnostic, VisualizerTap, settings::AudioSettingsStore};
+use qbz_player::{PlaybackState, Player};
 
 use crate::tauri_adapter::TauriAdapter;
 
@@ -35,14 +35,18 @@ impl CoreBridge {
     /// Loads audio settings from qbz_audio::AudioSettingsStore, creates a Player
     /// from qbz-player crate, and passes it to QbzCore.
     /// This is the V2 architecture - playback goes through QbzCore.
-    pub async fn new(adapter: TauriAdapter, visualizer_tap: Option<VisualizerTap>) -> Result<Self, String> {
+    pub async fn new(
+        adapter: TauriAdapter,
+        visualizer_tap: Option<VisualizerTap>,
+    ) -> Result<Self, String> {
         // Load audio settings using qbz_audio store
         let (device_name, audio_settings) = AudioSettingsStore::new()
             .ok()
             .and_then(|store| {
-                store.get_settings().ok().map(|settings| {
-                    (settings.output_device.clone(), settings)
-                })
+                store
+                    .get_settings()
+                    .ok()
+                    .map(|settings| (settings.output_device.clone(), settings))
             })
             .unwrap_or_else(|| {
                 log::info!("[CoreBridge] No saved audio settings, using defaults");
@@ -83,7 +87,10 @@ impl CoreBridge {
 
     /// Login with email and password
     pub async fn login(&self, email: &str, password: &str) -> Result<UserSession, String> {
-        self.core.login(email, password).await.map_err(|e| e.to_string())
+        self.core
+            .login(email, password)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     /// Logout current user
@@ -219,17 +226,26 @@ impl CoreBridge {
 
     /// Get album by ID
     pub async fn get_album(&self, album_id: &str) -> Result<Album, String> {
-        self.core.get_album(album_id).await.map_err(|e| e.to_string())
+        self.core
+            .get_album(album_id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     /// Get track by ID
     pub async fn get_track(&self, track_id: u64) -> Result<Track, String> {
-        self.core.get_track(track_id).await.map_err(|e| e.to_string())
+        self.core
+            .get_track(track_id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     /// Get artist by ID
     pub async fn get_artist(&self, artist_id: u64) -> Result<Artist, String> {
-        self.core.get_artist(artist_id).await.map_err(|e| e.to_string())
+        self.core
+            .get_artist(artist_id)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     // ==================== Favorites ====================
@@ -491,7 +507,10 @@ impl CoreBridge {
         track_id: u64,
         quality: Quality,
     ) -> Result<StreamUrl, String> {
-        self.core.get_stream_url(track_id, quality).await.map_err(|e| e.to_string())
+        self.core
+            .get_stream_url(track_id, quality)
+            .await
+            .map_err(|e| e.to_string())
     }
 
     // ==================== Playback Commands ====================
@@ -549,10 +568,9 @@ impl CoreBridgeState {
 
     /// Get the bridge (panics if not initialized)
     pub async fn get(&self) -> impl std::ops::Deref<Target = CoreBridge> + '_ {
-        tokio::sync::RwLockReadGuard::map(
-            self.0.read().await,
-            |opt| opt.as_ref().expect("CoreBridge not initialized")
-        )
+        tokio::sync::RwLockReadGuard::map(self.0.read().await, |opt| {
+            opt.as_ref().expect("CoreBridge not initialized")
+        })
     }
 
     /// Try to get the bridge, returns None if not initialized yet
@@ -560,7 +578,9 @@ impl CoreBridgeState {
     pub async fn try_get(&self) -> Option<impl std::ops::Deref<Target = CoreBridge> + '_> {
         let guard = self.0.read().await;
         if guard.is_some() {
-            Some(tokio::sync::RwLockReadGuard::map(guard, |opt| opt.as_ref().unwrap()))
+            Some(tokio::sync::RwLockReadGuard::map(guard, |opt| {
+                opt.as_ref().unwrap()
+            }))
         } else {
             None
         }

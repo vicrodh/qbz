@@ -91,7 +91,10 @@ impl StreamFetcher {
 
             // Emit progress event every 2% change AND at least 200ms apart (always emit 100%)
             let elapsed = last_emit_time.elapsed();
-            if progress != last_progress && (progress - last_progress >= 2 || progress == 100) && (elapsed >= MIN_EMIT_INTERVAL || progress == 100) {
+            if progress != last_progress
+                && (progress - last_progress >= 2 || progress == 100)
+                && (elapsed >= MIN_EMIT_INTERVAL || progress == 100)
+            {
                 last_progress = progress;
                 last_emit_time = Instant::now();
 
@@ -127,11 +130,7 @@ impl StreamFetcher {
         std::fs::rename(&temp_path, dest_path)
             .map_err(|e| format!("Failed to move temp file: {}", e))?;
 
-        log::info!(
-            "Caching complete for track {}: {} bytes",
-            track_id,
-            cached
-        );
+        log::info!("Caching complete for track {}: {} bytes", track_id, cached);
 
         Ok(cached)
     }
@@ -164,4 +163,3 @@ impl Default for StreamFetcher {
         Self::new()
     }
 }
-

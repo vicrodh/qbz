@@ -11,10 +11,4 @@
 //! 2. When loading, check memory -> disk -> network
 
 // Re-export everything from qbz-cache
-pub use qbz_cache::{
-    AudioCache,
-    CachedTrack,
-    CacheStats,
-    PlaybackCache,
-    PlaybackCacheStats,
-};
+pub use qbz_cache::{AudioCache, CacheStats, CachedTrack, PlaybackCache, PlaybackCacheStats};

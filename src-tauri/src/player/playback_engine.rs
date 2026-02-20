@@ -16,26 +16,24 @@ use std::time::Duration;
 /// Unified playback engine
 pub enum PlaybackEngine {
     /// Rodio-based (PipeWire, Pulse, ALSA via CPAL)
-    Rodio {
-        sink: Sink,
-    },
+    Rodio { sink: Sink },
     /// Direct ALSA (hw: devices, bit-perfect)
     AlsaDirect {
         stream: Arc<AlsaDirectStream>,
         is_playing: Arc<AtomicBool>,
-        should_stop: Arc<AtomicBool>,  // Separate flag for full stop vs pause
+        should_stop: Arc<AtomicBool>, // Separate flag for full stop vs pause
         position_frames: Arc<AtomicU64>,
         duration_frames: Arc<AtomicU64>,
         playback_thread: Option<thread::JoinHandle<()>>,
-        hardware_volume: bool,  // Use ALSA mixer for volume control
+        hardware_volume: bool, // Use ALSA mixer for volume control
     },
 }
 
 impl PlaybackEngine {
     /// Create Rodio engine
     pub fn new_rodio(stream_handle: &OutputStreamHandle) -> Result<Self, String> {
-        let sink = Sink::try_new(stream_handle)
-            .map_err(|e| format!("Failed to create Sink: {}", e))?;
+        let sink =
+            Sink::try_new(stream_handle).map_err(|e| format!("Failed to create Sink: {}", e))?;
 
         Ok(Self::Rodio { sink })
     }
@@ -132,7 +130,10 @@ impl PlaybackEngine {
 
                         if buffer_f32.is_empty() {
                             // End of stream
-                            log::info!("[ALSA Direct Engine] Stream ended (total frames: {})", total_frames);
+                            log::info!(
+                                "[ALSA Direct Engine] Stream ended (total frames: {})",
+                                total_frames
+                            );
                             natural_end = true;
                             break 'playback;
                         }
@@ -229,7 +230,11 @@ impl PlaybackEngine {
     pub fn set_volume(&self, volume: f32) {
         match self {
             Self::Rodio { sink } => sink.set_volume(volume),
-            Self::AlsaDirect { stream, hardware_volume, .. } => {
+            Self::AlsaDirect {
+                stream,
+                hardware_volume,
+                ..
+            } => {
                 if *hardware_volume {
                     // Try hardware mixer control
                     #[cfg(target_os = "linux")]
@@ -240,7 +245,9 @@ impl PlaybackEngine {
                     }
                 } else {
                     // Hardware volume disabled - volume control is handled by DAC/amplifier
-                    log::debug!("[ALSA Direct Engine] Hardware volume control disabled (use DAC/amplifier)");
+                    log::debug!(
+                        "[ALSA Direct Engine] Hardware volume control disabled (use DAC/amplifier)"
+                    );
                 }
             }
         }

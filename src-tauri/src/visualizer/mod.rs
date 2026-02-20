@@ -5,8 +5,8 @@
 //! on a dedicated thread.
 
 mod fft_processor;
+pub use fft_processor::{start_visualizer_thread, VisualizerState};
 pub use qbz_audio::{RingBuffer, TappedSource, VisualizerTap};
-pub use fft_processor::{VisualizerState, start_visualizer_thread};
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
@@ -60,7 +60,10 @@ impl Visualizer {
     /// Enable or disable visualization
     pub fn set_enabled(&self, enabled: bool) {
         self.tap.set_enabled(enabled);
-        log::info!("Visualizer {}", if enabled { "enabled" } else { "disabled" });
+        log::info!(
+            "Visualizer {}",
+            if enabled { "enabled" } else { "disabled" }
+        );
     }
 
     /// Check if visualization is enabled

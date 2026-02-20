@@ -93,7 +93,9 @@ impl OfflineCacheDb {
 
     /// Insert multiple tracks in a single transaction (batch queuing)
     pub fn insert_tracks_batch(&self, tracks: &[(&TrackCacheInfo, String)]) -> Result<(), String> {
-        let tx = self.conn.unchecked_transaction()
+        let tx = self
+            .conn
+            .unchecked_transaction()
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
         {
@@ -115,7 +117,8 @@ impl OfflineCacheDb {
                     info.quality,
                     info.bit_depth.map(|v| v as i64),
                     info.sample_rate,
-                ]).map_err(|e| format!("Failed to insert track {}: {}", info.track_id, e))?;
+                ])
+                .map_err(|e| format!("Failed to insert track {}: {}", info.track_id, e))?;
             }
         }
 

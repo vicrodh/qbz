@@ -24,7 +24,8 @@ fn load_tray_icon() -> Image<'static> {
     // In Flatpak, try to use the installed icon file first
     // This works better with StatusNotifierItem/libayatana-appindicator
     if is_flatpak() {
-        let icon_path = PathBuf::from("/app/share/icons/hicolor/32x32/apps/com.blitzkriegfc.qbz.png");
+        let icon_path =
+            PathBuf::from("/app/share/icons/hicolor/32x32/apps/com.blitzkriegfc.qbz.png");
         if icon_path.exists() {
             log::info!("Flatpak detected, loading tray icon from: {:?}", icon_path);
             if let Ok(icon_data) = std::fs::read(&icon_path) {
@@ -39,8 +40,7 @@ fn load_tray_icon() -> Image<'static> {
     }
 
     // Default: decode embedded PNG
-    let img = image::load_from_memory(TRAY_ICON_PNG)
-        .expect("Failed to decode tray icon PNG");
+    let img = image::load_from_memory(TRAY_ICON_PNG).expect("Failed to decode tray icon PNG");
     let (width, height) = img.dimensions();
     let rgba = img.into_rgba8().into_raw();
     Image::new_owned(rgba, width, height)

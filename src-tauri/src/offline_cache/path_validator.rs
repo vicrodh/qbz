@@ -2,9 +2,9 @@
 //!
 //! Handles path validation, permission checking, and mount status verification.
 
+use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
-use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum PathStatus {
@@ -116,10 +116,7 @@ pub struct MoveReport {
 }
 
 /// Move cached files from old path to new path
-pub fn move_cached_files_to_new_path(
-    old_root: &str,
-    new_root: &str,
-) -> Result<MoveReport, String> {
+pub fn move_cached_files_to_new_path(old_root: &str, new_root: &str) -> Result<MoveReport, String> {
     let old_path = Path::new(old_root);
     let new_path = Path::new(new_root);
 
@@ -130,8 +127,7 @@ pub fn move_cached_files_to_new_path(
     }
 
     // Create new root if it doesn't exist
-    fs::create_dir_all(new_path)
-        .map_err(|e| format!("Failed to create new directory: {}", e))?;
+    fs::create_dir_all(new_path).map_err(|e| format!("Failed to create new directory: {}", e))?;
 
     let mut report = MoveReport {
         total_files: 0,
@@ -153,8 +149,7 @@ pub fn move_cached_files_to_new_path(
 
         // Create parent directories in new location
         if let Some(parent) = new_file.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
+            fs::create_dir_all(parent).map_err(|e| format!("Failed to create directory: {}", e))?;
         }
 
         // Move file
@@ -164,7 +159,9 @@ pub fn move_cached_files_to_new_path(
             }
             Err(e) => {
                 log::warn!("Failed to move file {:?}: {}", old_file, e);
-                report.failed_files.push(old_file.to_string_lossy().to_string());
+                report
+                    .failed_files
+                    .push(old_file.to_string_lossy().to_string());
             }
         }
     }
@@ -180,8 +177,7 @@ fn collect_flac_files(dir: &Path) -> Result<Vec<PathBuf>, String> {
         return Ok(files);
     }
 
-    let entries = fs::read_dir(dir)
-        .map_err(|e| format!("Failed to read directory: {}", e))?;
+    let entries = fs::read_dir(dir).map_err(|e| format!("Failed to read directory: {}", e))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| format!("Failed to read entry: {}", e))?;
@@ -213,7 +209,9 @@ const CACHE_DURATION: Duration = Duration::from_secs(30);
 
 /// Check mount status with caching (30s cache)
 pub fn is_offline_root_available(path: &str) -> Result<bool, String> {
-    let mut cache = MOUNT_CACHE.lock().map_err(|e| format!("Cache lock error: {}", e))?;
+    let mut cache = MOUNT_CACHE
+        .lock()
+        .map_err(|e| format!("Cache lock error: {}", e))?;
 
     if let Some(cached) = cache.as_ref() {
         if cached.path == path {

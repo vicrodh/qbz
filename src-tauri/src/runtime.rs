@@ -359,7 +359,10 @@ pub enum RuntimeEvent {
     /// Runtime initialized (client ready)
     RuntimeInitialized,
     /// Authentication state changed
-    AuthChanged { logged_in: bool, user_id: Option<u64> },
+    AuthChanged {
+        logged_in: bool,
+        user_id: Option<u64>,
+    },
     /// Per-user session activated
     UserSessionActivated { user_id: u64 },
     /// Per-user session deactivated

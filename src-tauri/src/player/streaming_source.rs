@@ -185,17 +185,17 @@ impl BufferedMediaSource {
     /// Returns error if download fails before initial buffer is filled.
     pub fn wait_for_initial_buffer(&self) -> IoResult<()> {
         let (lock, cvar) = &*self.state;
-        let mut state = lock.lock().map_err(|_| {
-            IoError::new(ErrorKind::Other, "Failed to acquire buffer lock")
-        })?;
+        let mut state = lock
+            .lock()
+            .map_err(|_| IoError::new(ErrorKind::Other, "Failed to acquire buffer lock"))?;
 
         while state.data.len() < self.config.initial_buffer_bytes
             && !state.download_complete
             && state.download_error.is_none()
         {
-            state = cvar.wait(state).map_err(|_| {
-                IoError::new(ErrorKind::Other, "Condition variable wait failed")
-            })?;
+            state = cvar
+                .wait(state)
+                .map_err(|_| IoError::new(ErrorKind::Other, "Condition variable wait failed"))?;
         }
 
         if let Some(ref err) = state.download_error {
@@ -297,9 +297,9 @@ impl Read for BufferedMediaSource {
         use std::sync::atomic::Ordering;
 
         let (lock, cvar) = &*self.state;
-        let mut state = lock.lock().map_err(|_| {
-            IoError::new(ErrorKind::Other, "Failed to acquire buffer lock")
-        })?;
+        let mut state = lock
+            .lock()
+            .map_err(|_| IoError::new(ErrorKind::Other, "Failed to acquire buffer lock"))?;
 
         let read_pos = self.read_pos.load(Ordering::SeqCst) as usize;
 
@@ -308,9 +308,9 @@ impl Read for BufferedMediaSource {
             && !state.download_complete
             && state.download_error.is_none()
         {
-            state = cvar.wait(state).map_err(|_| {
-                IoError::new(ErrorKind::Other, "Condition variable wait failed")
-            })?;
+            state = cvar
+                .wait(state)
+                .map_err(|_| IoError::new(ErrorKind::Other, "Condition variable wait failed"))?;
         }
 
         // Check for errors
@@ -327,7 +327,8 @@ impl Read for BufferedMediaSource {
         let available = state.data.len() - read_pos;
         let to_read = buf.len().min(available);
         buf[..to_read].copy_from_slice(&state.data[read_pos..read_pos + to_read]);
-        self.read_pos.store((read_pos + to_read) as u64, Ordering::SeqCst);
+        self.read_pos
+            .store((read_pos + to_read) as u64, Ordering::SeqCst);
 
         Ok(to_read)
     }
@@ -338,9 +339,9 @@ impl Seek for BufferedMediaSource {
         use std::sync::atomic::Ordering;
 
         let (lock, cvar) = &*self.state;
-        let mut state = lock.lock().map_err(|_| {
-            IoError::new(ErrorKind::Other, "Failed to acquire buffer lock")
-        })?;
+        let mut state = lock
+            .lock()
+            .map_err(|_| IoError::new(ErrorKind::Other, "Failed to acquire buffer lock"))?;
 
         let current_pos = self.read_pos.load(Ordering::SeqCst) as i64;
 
@@ -377,9 +378,9 @@ impl Seek for BufferedMediaSource {
             && !state.download_complete
             && state.download_error.is_none()
         {
-            state = cvar.wait(state).map_err(|_| {
-                IoError::new(ErrorKind::Other, "Condition variable wait failed")
-            })?;
+            state = cvar
+                .wait(state)
+                .map_err(|_| IoError::new(ErrorKind::Other, "Condition variable wait failed"))?;
         }
 
         if let Some(ref err) = state.download_error {
@@ -515,9 +516,7 @@ impl IncrementalStreamingSource {
     /// The BufferedMediaSource should already have its initial buffer filled.
     ///
     /// Returns the source along with detected sample_rate and channels.
-    pub fn new(
-        buffered_source: Arc<BufferedMediaSource>,
-    ) -> Result<Self, String> {
+    pub fn new(buffered_source: Arc<BufferedMediaSource>) -> Result<Self, String> {
         // Create a reader from the buffered source
         let reader = buffered_source.create_reader();
         let media_source = Box::new(reader) as Box<dyn MediaSource>;
@@ -548,10 +547,7 @@ impl IncrementalStreamingSource {
         let sample_rate = codec_params
             .sample_rate
             .ok_or_else(|| "No sample rate in codec params".to_string())?;
-        let channels = codec_params
-            .channels
-            .map(|c| c.count() as u16)
-            .unwrap_or(2);
+        let channels = codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
 
         let decoder = get_codecs()
             .make(&codec_params, &DecoderOptions::default())
@@ -603,7 +599,9 @@ impl IncrementalStreamingSource {
         while self.sample_queue.len() < min_samples {
             let packet = match self.format.next_packet() {
                 Ok(packet) => packet,
-                Err(SymphoniaError::IoError(ref e)) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                Err(SymphoniaError::IoError(ref e))
+                    if e.kind() == std::io::ErrorKind::WouldBlock =>
+                {
                     // Not enough data buffered yet - wait briefly and retry
                     // This happens when playback catches up with download
                     std::thread::sleep(Duration::from_millis(5));
@@ -636,7 +634,8 @@ impl IncrementalStreamingSource {
                     sample_buf.copy_interleaved_ref(audio_buf);
 
                     // Add samples to queue
-                    self.sample_queue.extend(sample_buf.samples().iter().copied());
+                    self.sample_queue
+                        .extend(sample_buf.samples().iter().copied());
                     self.packets_decoded += 1;
                 }
                 Err(SymphoniaError::DecodeError(e)) => {

@@ -176,17 +176,26 @@ async fn fetch_lrclib_get(
     }
 
     // Get raw text first for debugging
-    let text = response.text().await
+    let text = response
+        .text()
+        .await
         .map_err(|e| format!("LRCLIB get response text failed: {}", e))?;
 
     // Log if syncedLyrics is present in raw response
     let has_synced = text.contains("syncedLyrics") && !text.contains("\"syncedLyrics\":null");
-    println!("[Lyrics] LRCLIB get raw response has syncedLyrics: {}, len: {}", has_synced, text.len());
+    println!(
+        "[Lyrics] LRCLIB get raw response has syncedLyrics: {}, len: {}",
+        has_synced,
+        text.len()
+    );
 
     let item: LrclibItem = serde_json::from_str(&text)
         .map_err(|e| format!("LRCLIB get response parse failed: {}", e))?;
 
-    println!("[Lyrics] LRCLIB parsed - synced_lyrics present: {}", item.synced_lyrics.is_some());
+    println!(
+        "[Lyrics] LRCLIB parsed - synced_lyrics present: {}",
+        item.synced_lyrics.is_some()
+    );
 
     Ok(Some(item))
 }
@@ -199,10 +208,7 @@ async fn fetch_lrclib_search(
     let response = client
         .get("https://lrclib.net/api/search")
         .header("User-Agent", "QBZ-Nix/1.0 (https://github.com/qbz-nix)")
-        .query(&[
-            ("track_name", title),
-            ("artist_name", artist),
-        ])
+        .query(&[("track_name", title), ("artist_name", artist)])
         .send()
         .await
         .map_err(|e| format!("LRCLIB search request failed: {}", e))?;
@@ -258,9 +264,19 @@ fn pick_best_match(
             }
         }
 
-        if item.synced_lyrics.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false) {
+        if item
+            .synced_lyrics
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false)
+        {
             score += 2;
-        } else if item.plain_lyrics.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false) {
+        } else if item
+            .plain_lyrics
+            .as_ref()
+            .map(|s| !s.trim().is_empty())
+            .unwrap_or(false)
+        {
             score += 1;
         }
 

@@ -70,16 +70,20 @@ impl SongLinkClient {
 
         if !deezer_response.status().is_success() {
             return Err(ShareError::OdesliError(format!(
-                "Deezer API returned {} for ISRC {}", deezer_response.status(), isrc
+                "Deezer API returned {} for ISRC {}",
+                deezer_response.status(),
+                isrc
             )));
         }
 
-        let body: serde_json::Value = deezer_response.json().await
-            .map_err(|e| ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e)))?;
+        let body: serde_json::Value = deezer_response.json().await.map_err(|e| {
+            ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e))
+        })?;
 
         if body.get("error").is_some() {
             return Err(ShareError::OdesliError(format!(
-                "Could not find track with ISRC {} on Deezer", isrc
+                "Could not find track with ISRC {} on Deezer",
+                isrc
             )));
         }
 
@@ -95,11 +99,13 @@ impl SongLinkClient {
         let result = SongLinkResponse {
             page_url,
             title: body.get("title").and_then(|v| v.as_str()).map(String::from),
-            artist: body.get("artist")
+            artist: body
+                .get("artist")
                 .and_then(|a| a.get("name"))
                 .and_then(|v| v.as_str())
                 .map(String::from),
-            thumbnail_url: body.get("album")
+            thumbnail_url: body
+                .get("album")
                 .and_then(|a| a.get("cover_xl"))
                 .and_then(|v| v.as_str())
                 .map(String::from),
@@ -130,16 +136,20 @@ impl SongLinkClient {
 
         if !deezer_response.status().is_success() {
             return Err(ShareError::OdesliError(format!(
-                "Deezer API returned {} for UPC {}", deezer_response.status(), upc
+                "Deezer API returned {} for UPC {}",
+                deezer_response.status(),
+                upc
             )));
         }
 
-        let body: serde_json::Value = deezer_response.json().await
-            .map_err(|e| ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e)))?;
+        let body: serde_json::Value = deezer_response.json().await.map_err(|e| {
+            ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e))
+        })?;
 
         if body.get("error").is_some() {
             return Err(ShareError::OdesliError(format!(
-                "Could not find album with UPC {} on Deezer", upc
+                "Could not find album with UPC {} on Deezer",
+                upc
             )));
         }
 
@@ -155,11 +165,15 @@ impl SongLinkClient {
         let result = SongLinkResponse {
             page_url,
             title: body.get("title").and_then(|v| v.as_str()).map(String::from),
-            artist: body.get("artist")
+            artist: body
+                .get("artist")
                 .and_then(|a| a.get("name"))
                 .and_then(|v| v.as_str())
                 .map(String::from),
-            thumbnail_url: body.get("cover_xl").and_then(|v| v.as_str()).map(String::from),
+            thumbnail_url: body
+                .get("cover_xl")
+                .and_then(|v| v.as_str())
+                .map(String::from),
             platforms: HashMap::new(),
             identifier: upc.to_string(),
             content_type: ContentType::Album.as_str().to_string(),
@@ -170,7 +184,11 @@ impl SongLinkClient {
     }
 
     /// Get song.link URL by URL (fallback when ISRC/UPC are missing)
-    pub async fn get_by_url(&self, url: &str, content_type: ContentType) -> Result<SongLinkResponse, ShareError> {
+    pub async fn get_by_url(
+        &self,
+        url: &str,
+        content_type: ContentType,
+    ) -> Result<SongLinkResponse, ShareError> {
         let cache_key = format!("url:{}", url);
 
         if let Some(cached) = self.get_from_cache(&cache_key) {
@@ -193,7 +211,8 @@ impl SongLinkClient {
             // Provide a friendlier message for common errors
             if status.as_u16() == 400 && text.contains("could_not_resolve_entity") {
                 return Err(ShareError::OdesliError(
-                    "Track not found on any supported platform. Try a track with an ISRC code.".to_string()
+                    "Track not found on any supported platform. Try a track with an ISRC code."
+                        .to_string(),
                 ));
             }
             return Err(ShareError::OdesliError(format!(

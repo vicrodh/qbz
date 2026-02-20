@@ -6,8 +6,8 @@ pub mod commands;
 
 // Re-export from qbz-cast
 pub use qbz_cast::{
-    DlnaConnection, DlnaMetadata, DlnaPositionInfo, DlnaStatus, DlnaDiscovery,
-    DiscoveredDlnaDevice, DlnaError,
+    DiscoveredDlnaDevice, DlnaConnection, DlnaDiscovery, DlnaError, DlnaMetadata, DlnaPositionInfo,
+    DlnaStatus,
 };
 
 // Re-export Tauri command state

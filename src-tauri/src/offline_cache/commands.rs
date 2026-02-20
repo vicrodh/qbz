@@ -6,12 +6,12 @@ use tauri::{AppHandle, Emitter, State};
 use crate::api::models::Quality;
 use crate::AppState;
 
-use crate::offline_cache::OfflineCacheState;
-use crate::offline_cache::metadata::{fetch_complete_metadata, write_flac_tags, embed_artwork, organize_cached_file, save_album_artwork};
-use super::{
-    CachedTrackInfo, OfflineCacheStats, OfflineCacheStatus,
-    TrackCacheInfo,
+use super::{CachedTrackInfo, OfflineCacheStats, OfflineCacheStatus, TrackCacheInfo};
+use crate::offline_cache::metadata::{
+    embed_artwork, fetch_complete_metadata, organize_cached_file, save_album_artwork,
+    write_flac_tags,
 };
+use crate::offline_cache::OfflineCacheState;
 
 /// Post-process a cached track: fetch metadata, tag FLAC, embed artwork, organize files
 async fn post_process_cached_track(
@@ -25,21 +25,20 @@ async fn post_process_cached_track(
 
     // 1. Fetch complete metadata from Qobuz
     let metadata = fetch_complete_metadata(track_id, qobuz_client).await?;
-    
+
     // 2. Write FLAC tags
-    write_flac_tags(current_path, &metadata)
-        .map_err(|e| format!("Failed to write tags: {}", e))?;
-    
+    write_flac_tags(current_path, &metadata).map_err(|e| format!("Failed to write tags: {}", e))?;
+
     // 3. Embed artwork if available
     if let Some(artwork_url) = &metadata.artwork_url {
         if let Err(e) = embed_artwork(current_path, artwork_url).await {
             log::warn!("Failed to embed artwork for track {}: {}", track_id, e);
         }
     }
-    
+
     // 4. Organize file into artist/album structure
     let new_path = organize_cached_file(track_id, current_path, offline_root, &metadata)?;
-    
+
     // 5. Download and save album cover art as cover.jpg
     let artwork_path = if let Some(artwork_url) = &metadata.artwork_url {
         // Extract album directory from the new_path
@@ -49,7 +48,7 @@ async fn post_process_cached_track(
                     let cover_path = parent_dir.join("cover.jpg").to_string_lossy().to_string();
                     log::info!("Album artwork saved for track {}: {}", track_id, cover_path);
                     Some(cover_path)
-                },
+                }
                 Err(e) => {
                     log::warn!("Failed to save album artwork for track {}: {}", track_id, e);
                     None
@@ -62,7 +61,7 @@ async fn post_process_cached_track(
         log::warn!("No artwork URL available for track {}", track_id);
         None
     };
-    
+
     // 6. Extract audio properties from FLAC file
     use lofty::AudioFile;
     let (bit_depth, sample_rate) = match lofty::read_from_path(&new_path) {
@@ -73,19 +72,25 @@ async fn post_process_cached_track(
             (bit_depth, sample_rate)
         }
         Err(e) => {
-            log::warn!("Failed to read audio properties for track {}: {}", track_id, e);
+            log::warn!(
+                "Failed to read audio properties for track {}: {}",
+                track_id,
+                e
+            );
             (None, None)
         }
     };
-    
+
     // 7. ALWAYS insert into local library DB (visibility controlled by toggle)
     let lib_opt__ = library_db.lock().await;
-    let lib_guard = lib_opt__.as_ref().ok_or("No active session - please log in")?;
-    
+    let lib_guard = lib_opt__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
     // Generate album_group_key: album|album_artist
     let album_artist = metadata.album_artist.as_ref().unwrap_or(&metadata.artist);
     let album_group_key = format!("{}|{}", metadata.album, album_artist);
-    
+
     match lib_guard.insert_qobuz_cached_track_with_grouping(
         track_id,
         &metadata.title,
@@ -103,10 +108,15 @@ async fn post_process_cached_track(
         sample_rate,
         artwork_path.as_deref(),
     ) {
-        Ok(_) => log::info!("Track {} inserted to local library DB with group key: {}, artwork: {:?}", track_id, album_group_key, artwork_path),
+        Ok(_) => log::info!(
+            "Track {} inserted to local library DB with group key: {}, artwork: {:?}",
+            track_id,
+            album_group_key,
+            artwork_path
+        ),
         Err(e) => log::error!("Failed to insert track {} to library DB: {}", track_id, e),
     }
-    
+
     log::info!("Track {} organized to: {}", track_id, new_path);
     Ok(new_path)
 }
@@ -128,7 +138,12 @@ pub async fn cache_track_for_offline(
     library_state: State<'_, crate::library::commands::LibraryState>,
     app_handle: AppHandle,
 ) -> Result<(), String> {
-    log::info!("Command: cache_track_for_offline {} - {} by {}", track_id, title, artist);
+    log::info!(
+        "Command: cache_track_for_offline {} - {} by {}",
+        track_id,
+        title,
+        artist
+    );
 
     let track_info = TrackCacheInfo {
         track_id,
@@ -149,7 +164,9 @@ pub async fn cache_track_for_offline(
     // Insert into database as queued
     {
         let guard__ = cache_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         db.insert_track(&track_info, &file_path_str)?;
     }
 
@@ -167,7 +184,11 @@ pub async fn cache_track_for_offline(
         let _permit = match semaphore.acquire_owned().await {
             Ok(permit) => permit,
             Err(err) => {
-                log::error!("Failed to acquire cache slot for track {}: {}", track_id, err);
+                log::error!(
+                    "Failed to acquire cache slot for track {}: {}",
+                    track_id,
+                    err
+                );
                 if let Some(db_guard) = db.lock().await.as_ref() {
                     let _ = db_guard.update_status(
                         track_id,
@@ -175,10 +196,13 @@ pub async fn cache_track_for_offline(
                         Some("Failed to start caching"),
                     );
                 }
-                let _ = app.emit("offline:caching_failed", serde_json::json!({
-                    "trackId": track_id,
-                    "error": "Failed to acquire cache slot"
-                }));
+                let _ = app.emit(
+                    "offline:caching_failed",
+                    serde_json::json!({
+                        "trackId": track_id,
+                        "error": "Failed to acquire cache slot"
+                    }),
+                );
                 return;
             }
         };
@@ -190,9 +214,12 @@ pub async fn cache_track_for_offline(
             }
         }
 
-        let _ = app.emit("offline:caching_started", serde_json::json!({
-            "trackId": track_id
-        }));
+        let _ = app.emit(
+            "offline:caching_started",
+            serde_json::json!({
+                "trackId": track_id
+            }),
+        );
 
         // Get stream URL with highest quality available
         let stream_url = {
@@ -213,10 +240,13 @@ pub async fn cache_track_for_offline(
                         Some(&format!("Failed to get stream URL: {}", e)),
                     );
                 }
-                let _ = app.emit("offline:caching_failed", serde_json::json!({
-                    "trackId": track_id,
-                    "error": e.to_string()
-                }));
+                let _ = app.emit(
+                    "offline:caching_failed",
+                    serde_json::json!({
+                        "trackId": track_id,
+                        "error": e.to_string()
+                    }),
+                );
                 return;
             }
         };
@@ -234,10 +264,13 @@ pub async fn cache_track_for_offline(
                     }
                 }
 
-                let _ = app.emit("offline:caching_completed", serde_json::json!({
-                    "trackId": track_id,
-                    "size": size
-                }));
+                let _ = app.emit(
+                    "offline:caching_completed",
+                    serde_json::json!({
+                        "trackId": track_id,
+                        "size": size
+                    }),
+                );
 
                 // Post-processing: metadata, tagging, artwork, organization
                 log::info!("Starting post-processing for cached track {}", track_id);
@@ -250,7 +283,9 @@ pub async fn cache_track_for_offline(
                     &offline_root,
                     &*qobuz_client,
                     library_db.clone(),
-                ).await {
+                )
+                .await
+                {
                     Ok(new_path) => {
                         // Update database with new path
                         if let Some(db_guard) = db.lock().await.as_ref() {
@@ -259,13 +294,20 @@ pub async fn cache_track_for_offline(
                             }
                         }
 
-                        let _ = app.emit("offline:caching_processed", serde_json::json!({
-                            "trackId": track_id,
-                            "path": new_path
-                        }));
+                        let _ = app.emit(
+                            "offline:caching_processed",
+                            serde_json::json!({
+                                "trackId": track_id,
+                                "path": new_path
+                            }),
+                        );
                     }
                     Err(e) => {
-                        log::error!("Post-processing failed for cached track {}: {}", track_id, e);
+                        log::error!(
+                            "Post-processing failed for cached track {}: {}",
+                            track_id,
+                            e
+                        );
                         // File still exists and is playable, just not organized
                     }
                 }
@@ -275,10 +317,13 @@ pub async fn cache_track_for_offline(
                 if let Some(db_guard) = db.lock().await.as_ref() {
                     let _ = db_guard.update_status(track_id, OfflineCacheStatus::Failed, Some(&e));
                 }
-                let _ = app.emit("offline:caching_failed", serde_json::json!({
-                    "trackId": track_id,
-                    "error": e
-                }));
+                let _ = app.emit(
+                    "offline:caching_failed",
+                    serde_json::json!({
+                        "trackId": track_id,
+                        "error": e
+                    }),
+                );
             }
         }
     });
@@ -293,7 +338,9 @@ pub async fn is_track_cached(
     cache_state: State<'_, OfflineCacheState>,
 ) -> Result<bool, String> {
     let guard__ = cache_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.is_cached(track_id)
 }
 
@@ -304,7 +351,9 @@ pub async fn get_cached_track_path(
     cache_state: State<'_, OfflineCacheState>,
 ) -> Result<Option<String>, String> {
     let guard__ = cache_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_file_path(track_id)
 }
 
@@ -315,7 +364,9 @@ pub async fn get_cached_track(
     cache_state: State<'_, OfflineCacheState>,
 ) -> Result<Option<CachedTrackInfo>, String> {
     let guard__ = cache_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_track(track_id)
 }
 
@@ -325,7 +376,9 @@ pub async fn get_cached_tracks(
     cache_state: State<'_, OfflineCacheState>,
 ) -> Result<Vec<CachedTrackInfo>, String> {
     let guard__ = cache_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_all_tracks()
 }
 
@@ -336,7 +389,9 @@ pub async fn get_offline_cache_stats(
 ) -> Result<OfflineCacheStats, String> {
     let limit = *cache_state.limit_bytes.lock().await;
     let guard__ = cache_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.get_stats(&cache_state.get_cache_path(), limit)
 }
 
@@ -351,15 +406,16 @@ pub async fn remove_cached_track(
 
     {
         let guard__ = cache_state.db.lock().await;
-        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
 
         // Get file path and delete from DB
         if let Some(file_path) = db.delete_track(track_id)? {
             // Delete the actual file
             let path = std::path::Path::new(&file_path);
             if path.exists() {
-                std::fs::remove_file(path)
-                    .map_err(|e| format!("Failed to delete file: {}", e))?;
+                std::fs::remove_file(path).map_err(|e| format!("Failed to delete file: {}", e))?;
             }
 
             // Clean up empty album folder (and artist folder if also empty)
@@ -371,7 +427,9 @@ pub async fn remove_cached_track(
 
     // Also remove from library if it was added
     let guard__ = library_state.db.lock().await;
-    let library_db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let library_db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     let _ = library_db.remove_qobuz_cached_track(track_id);
 
     Ok(())
@@ -401,7 +459,8 @@ fn cleanup_empty_folder(folder: &std::path::Path, cache_root: &std::path::Path) 
 
         // If folder only contains non-audio files (like cover.jpg), delete the whole folder
         let has_audio_files = entries.iter().any(|e| {
-            e.path().extension()
+            e.path()
+                .extension()
                 .map(|ext| ext == "flac" || ext == "mp3" || ext == "wav" || ext == "m4a")
                 .unwrap_or(false)
         });
@@ -431,7 +490,9 @@ pub async fn purge_all_cached_files(
 ) -> Result<(), String> {
     let paths = {
         let guard__ = cache_state.db.lock().await;
-        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         db.clear_all()?
     };
 
@@ -476,7 +537,9 @@ pub async fn purge_all_cached_files(
 
     // Remove all Qobuz cached tracks from library
     let guard__ = library_state.db.lock().await;
-    let library_db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let library_db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     let removed_count = library_db
         .remove_all_qobuz_cached_tracks()
         .map_err(|e| format!("Failed to remove cached tracks from library: {}", e))?;
@@ -534,7 +597,9 @@ pub async fn open_album_folder(
     log::info!("Command: open_album_folder for album_id: {}", album_id);
 
     let guard__ = cache_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
 
     // Get tracks for this album
     let tracks = db.get_all_tracks()?;
@@ -549,9 +614,10 @@ pub async fn open_album_folder(
 
     // Get the first track's path and extract the album directory
     let first_track_id = album_tracks[0].track_id;
-    let file_path = db.get_file_path(first_track_id)?
+    let file_path = db
+        .get_file_path(first_track_id)?
         .ok_or_else(|| "Track file path not found".to_string())?;
-    
+
     let track_path = std::path::Path::new(&file_path);
     let album_dir = track_path
         .parent()
@@ -576,10 +642,13 @@ pub async fn open_track_folder(
     log::info!("Command: open_track_folder for track_id: {}", track_id);
 
     let guard__ = cache_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
 
     // Get the track's file path
-    let file_path = db.get_file_path(track_id)?
+    let file_path = db
+        .get_file_path(track_id)?
         .ok_or_else(|| "Track file path not found - track may not be cached".to_string())?;
 
     let track_path = std::path::Path::new(&file_path);
@@ -604,7 +673,9 @@ pub async fn check_album_fully_cached(
     cache_state: State<'_, OfflineCacheState>,
 ) -> Result<bool, String> {
     let guard__ = cache_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
 
     // Get all tracks for this album
     let tracks = db.get_all_tracks()?;
@@ -628,12 +699,11 @@ pub async fn check_album_fully_cached(
 }
 
 /// Evict tracks if cache exceeds limit (LRU policy)
-async fn evict_if_needed(
-    cache_state: &OfflineCacheState,
-    limit_bytes: u64,
-) -> Result<(), String> {
+async fn evict_if_needed(cache_state: &OfflineCacheState, limit_bytes: u64) -> Result<(), String> {
     let guard__ = cache_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     let stats = db.get_stats(&cache_state.get_cache_path(), Some(limit_bytes))?;
 
     if stats.total_size_bytes <= limit_bytes {
@@ -679,12 +749,19 @@ pub async fn check_offline_root_mounted(
 ) -> Result<bool, String> {
     log::info!("Command: check_offline_root_mounted");
 
-    let root_path = cache_state.cache_dir.read().unwrap().to_string_lossy().to_string();
+    let root_path = cache_state
+        .cache_dir
+        .read()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
     super::path_validator::is_offline_root_available(&root_path)
 }
 
 #[tauri::command]
-pub async fn validate_offline_path(path: String) -> Result<super::path_validator::PathValidationResult, String> {
+pub async fn validate_offline_path(
+    path: String,
+) -> Result<super::path_validator::PathValidationResult, String> {
     log::info!("Command: validate_offline_path: {}", path);
     super::path_validator::validate_path(&path)
 }
@@ -696,7 +773,12 @@ pub async fn move_offline_cache_to_path(
 ) -> Result<super::path_validator::MoveReport, String> {
     log::info!("Command: move_offline_cache_to_path: {}", new_path);
 
-    let old_path = cache_state.cache_dir.read().unwrap().to_string_lossy().to_string();
+    let old_path = cache_state
+        .cache_dir
+        .read()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
     super::path_validator::move_cached_files_to_new_path(&old_path, &new_path)
 }
 
@@ -710,13 +792,11 @@ pub async fn detect_legacy_cached_files(
     let tracks_dir = cache_state.cache_dir.read().unwrap().join("tracks");
 
     match super::detect_legacy_cached_files(&tracks_dir) {
-        Ok(track_ids) => {
-            Ok(super::MigrationStatus {
-                has_legacy_files: !track_ids.is_empty(),
-                total_tracks: track_ids.len(),
-                ..Default::default()
-            })
-        }
+        Ok(track_ids) => Ok(super::MigrationStatus {
+            has_legacy_files: !track_ids.is_empty(),
+            total_tracks: track_ids.len(),
+            ..Default::default()
+        }),
         Err(e) => Err(e),
     }
 }
@@ -751,7 +831,8 @@ pub async fn start_legacy_migration(
             offline_root,
             qobuz_client,
             library_db,
-        ).await;
+        )
+        .await;
 
         let _ = app_complete.emit("migration:complete", status);
     });
@@ -771,7 +852,9 @@ pub async fn sync_offline_cache_to_library(
     // Get ready tracks from cache (scoped to drop lock before library access)
     let ready_tracks = {
         let guard__ = cache_state.db.lock().await;
-        let cache_db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let cache_db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         cache_db.get_ready_tracks_for_sync()?
     };
 
@@ -782,7 +865,9 @@ pub async fn sync_offline_cache_to_library(
     // Process tracks with library lock (scoped)
     {
         let guard__ = library_state.db.lock().await;
-        let library_db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let library_db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
 
         for track in ready_tracks {
             // Check if track already exists in library
@@ -803,7 +888,11 @@ pub async fn sync_offline_cache_to_library(
                         track.sample_rate,
                     ) {
                         Ok(_) => {
-                            log::info!("Synced track {} to library: {}", track.track_id, track.title);
+                            log::info!(
+                                "Synced track {} to library: {}",
+                                track.track_id,
+                                track.title
+                            );
                             synced += 1;
                         }
                         Err(e) => {
@@ -822,7 +911,9 @@ pub async fn sync_offline_cache_to_library(
 
     log::info!(
         "Sync complete: {} synced, {} already present, {} errors",
-        synced, already_present, errors
+        synced,
+        already_present,
+        errors
     );
 
     Ok(SyncResult {

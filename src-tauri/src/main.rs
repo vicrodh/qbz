@@ -108,15 +108,13 @@ fn main() {
     // CLI flag: --reset-dmabuf — resets the developer force_dmabuf setting and exits
     if std::env::args().any(|a| a == "--reset-dmabuf") {
         match qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new() {
-            Ok(store) => {
-                match store.set_force_dmabuf(false) {
-                    Ok(()) => {
-                        eprintln!("[QBZ] Developer force_dmabuf has been reset to false.");
-                        eprintln!("[QBZ] You can now start QBZ normally.");
-                    }
-                    Err(e) => eprintln!("[QBZ] Failed to reset force_dmabuf: {}", e),
+            Ok(store) => match store.set_force_dmabuf(false) {
+                Ok(()) => {
+                    eprintln!("[QBZ] Developer force_dmabuf has been reset to false.");
+                    eprintln!("[QBZ] You can now start QBZ normally.");
                 }
-            }
+                Err(e) => eprintln!("[QBZ] Failed to reset force_dmabuf: {}", e),
+            },
             Err(e) => eprintln!("[QBZ] Failed to open developer settings: {}", e),
         }
         return;
@@ -178,22 +176,28 @@ fn main() {
         // Graphics settings from DB (force_x11, scaling)
         // Track if we're using fallback defaults (for UI visibility)
         let mut graphics_using_fallback = false;
-        let graphics_db = match qbz_nix_lib::config::graphics_settings::GraphicsSettingsStore::new() {
-            Ok(store) => match store.get_settings() {
-                Ok(settings) => Some(settings),
-                Err(e) => {
-                    graphics_using_fallback = true;
-                    eprintln!("[QBZ] WARNING: Graphics settings read failed: {}. Using safe defaults.", e);
-                    qbz_nix_lib::logging::log_startup(&format!(
+        let graphics_db = match qbz_nix_lib::config::graphics_settings::GraphicsSettingsStore::new()
+        {
+            Ok(store) => {
+                match store.get_settings() {
+                    Ok(settings) => Some(settings),
+                    Err(e) => {
+                        graphics_using_fallback = true;
+                        eprintln!("[QBZ] WARNING: Graphics settings read failed: {}. Using safe defaults.", e);
+                        qbz_nix_lib::logging::log_startup(&format!(
                         "[QBZ] Graphics settings unavailable ({}), using safe defaults. If experiencing lag, run: qbz --reset-graphics",
                         e
                     ));
-                    None
+                        None
+                    }
                 }
-            },
+            }
             Err(e) => {
                 graphics_using_fallback = true;
-                eprintln!("[QBZ] WARNING: Graphics settings store unavailable: {}. Using safe defaults.", e);
+                eprintln!(
+                    "[QBZ] WARNING: Graphics settings store unavailable: {}. Using safe defaults.",
+                    e
+                );
                 qbz_nix_lib::logging::log_startup(&format!(
                     "[QBZ] Graphics settings store unavailable ({}), using safe defaults. If experiencing lag, run: qbz --reset-graphics",
                     e
@@ -207,40 +211,47 @@ fn main() {
         // opt-out that disables all GPU compositing and DMA-BUF everywhere.
         let hardware_accel = match std::env::var("QBZ_HARDWARE_ACCEL").as_deref() {
             Ok("0") => {
-                qbz_nix_lib::logging::log_startup("[QBZ] Env override: QBZ_HARDWARE_ACCEL=0 (all GPU rendering disabled)");
+                qbz_nix_lib::logging::log_startup(
+                    "[QBZ] Env override: QBZ_HARDWARE_ACCEL=0 (all GPU rendering disabled)",
+                );
                 false
             }
             // "1" is the default behavior, log only if explicitly set
             Ok("1") => {
-                qbz_nix_lib::logging::log_startup("[QBZ] Env override: QBZ_HARDWARE_ACCEL=1 (full GPU, all safety bypassed)");
+                qbz_nix_lib::logging::log_startup(
+                    "[QBZ] Env override: QBZ_HARDWARE_ACCEL=1 (full GPU, all safety bypassed)",
+                );
                 true
             }
             _ => true, // Default: hardware acceleration ON (v1.1.9 behavior)
         };
 
         // Developer settings: force_dmabuf override (from Settings > Developer Mode)
-        let dev_force_dmabuf = match qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new() {
-            Ok(store) => match store.get_settings() {
-                Ok(settings) => settings.force_dmabuf,
-                Err(e) => {
-                    qbz_nix_lib::logging::log_startup(&format!(
+        let dev_force_dmabuf =
+            match qbz_nix_lib::config::developer_settings::DeveloperSettingsStore::new() {
+                Ok(store) => match store.get_settings() {
+                    Ok(settings) => settings.force_dmabuf,
+                    Err(e) => {
+                        qbz_nix_lib::logging::log_startup(&format!(
                         "[QBZ] Developer settings read failed ({}), force_dmabuf defaulting to false",
                         e
                     ));
-                    false
-                }
-            },
-            Err(e) => {
-                qbz_nix_lib::logging::log_startup(&format!(
+                        false
+                    }
+                },
+                Err(e) => {
+                    qbz_nix_lib::logging::log_startup(&format!(
                     "[QBZ] Developer settings store unavailable ({}), force_dmabuf defaulting to false",
                     e
                 ));
-                false
-            }
-        };
+                    false
+                }
+            };
         if dev_force_dmabuf {
             std::env::set_var("QBZ_FORCE_DMABUF", "1");
-            qbz_nix_lib::logging::log_startup("[QBZ] Developer override: force_dmabuf=true (from settings)");
+            qbz_nix_lib::logging::log_startup(
+                "[QBZ] Developer override: force_dmabuf=true (from settings)",
+            );
             qbz_nix_lib::logging::log_startup("[QBZ] To reset: run `qbz --reset-dmabuf`");
         }
 
@@ -273,7 +284,9 @@ fn main() {
         // Log graphics configuration summary (helps debug performance issues)
         if graphics_using_fallback {
             eprintln!("[QBZ] WARNING: Running with fallback graphics settings. Performance may be degraded.");
-            eprintln!("[QBZ] To fix: run 'qbz --reset-graphics' or check ~/.local/share/qbz/settings.db");
+            eprintln!(
+                "[QBZ] To fix: run 'qbz --reset-graphics' or check ~/.local/share/qbz/settings.db"
+            );
         }
         qbz_nix_lib::logging::log_startup(&format!(
             "[QBZ] Graphics config: wayland={}, nvidia={}, force_x11={}, hw_accel={}, fallback={}",
@@ -294,7 +307,9 @@ fn main() {
         // LIBGL_ALWAYS_SOFTWARE=1 forces Mesa to use llvmpipe for all GL contexts.
         // Only for VMs or explicit user request.
         if force_software {
-            qbz_nix_lib::logging::log_startup("[QBZ] User override: forcing software rendering (QBZ_SOFTWARE_RENDER=1)");
+            qbz_nix_lib::logging::log_startup(
+                "[QBZ] User override: forcing software rendering (QBZ_SOFTWARE_RENDER=1)",
+            );
             std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
         } else if is_vm {
             qbz_nix_lib::logging::log_startup("[QBZ] Virtual machine detected: enabling software rendering (LIBGL_ALWAYS_SOFTWARE=1)");
@@ -325,7 +340,13 @@ fn main() {
             Ok("x11") if is_wayland => "X11 (XWayland)",
             Ok("x11") => "X11",
             Ok("wayland") => "Wayland",
-            _ => if is_wayland { "Wayland" } else { "X11" },
+            _ => {
+                if is_wayland {
+                    "Wayland"
+                } else {
+                    "X11"
+                }
+            }
         };
         qbz_nix_lib::logging::log_startup(&format!("[QBZ] Display server: {}", effective_display));
 
@@ -347,8 +368,12 @@ fn main() {
         //   4. Auto-detection (Wayland/NVIDIA)
         if !hardware_accel {
             // Nuclear opt-out: disable all GPU compositing and DMA-BUF
-            qbz_nix_lib::logging::log_startup("[QBZ] Hardware acceleration disabled: all GPU rendering off");
-            qbz_nix_lib::logging::log_startup("[QBZ] To restore: unset QBZ_HARDWARE_ACCEL or set to 1");
+            qbz_nix_lib::logging::log_startup(
+                "[QBZ] Hardware acceleration disabled: all GPU rendering off",
+            );
+            qbz_nix_lib::logging::log_startup(
+                "[QBZ] To restore: unset QBZ_HARDWARE_ACCEL or set to 1",
+            );
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
         } else if std::env::var("QBZ_HARDWARE_ACCEL").as_deref() == Ok("1") {
@@ -362,28 +387,38 @@ fn main() {
             // Only applies to native Wayland (not force_x11/XWayland).
             if is_wayland && !force_x11 {
                 std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-                qbz_nix_lib::logging::log_startup("[QBZ] Wayland: compositing mode disabled (prevents protocol errors)");
+                qbz_nix_lib::logging::log_startup(
+                    "[QBZ] Wayland: compositing mode disabled (prevents protocol errors)",
+                );
             }
 
             // DMA-BUF renderer control
             if force_dmabuf {
-                qbz_nix_lib::logging::log_startup("[QBZ] User override: DMA-BUF renderer forced ON (QBZ_FORCE_DMABUF=1)");
+                qbz_nix_lib::logging::log_startup(
+                    "[QBZ] User override: DMA-BUF renderer forced ON (QBZ_FORCE_DMABUF=1)",
+                );
             } else if disable_dmabuf {
-                qbz_nix_lib::logging::log_startup("[QBZ] User override: DMA-BUF renderer forced OFF (QBZ_DISABLE_DMABUF=1)");
+                qbz_nix_lib::logging::log_startup(
+                    "[QBZ] User override: DMA-BUF renderer forced OFF (QBZ_DISABLE_DMABUF=1)",
+                );
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
             } else if is_wayland && !force_x11 {
                 // Wayland: disable DMA-BUF for ALL GPUs. Prevents:
                 //   - NVIDIA Error 71 (protocol error)
                 //   - Intel Arc EGL crash (Could not create default EGL display)
                 // This is an improvement over v1.1.9 which only covered NVIDIA.
-                qbz_nix_lib::logging::log_startup("[QBZ] Wayland: DMA-BUF renderer disabled (prevents EGL crashes)");
+                qbz_nix_lib::logging::log_startup(
+                    "[QBZ] Wayland: DMA-BUF renderer disabled (prevents EGL crashes)",
+                );
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
             } else if has_nvidia {
                 // X11 + NVIDIA: disable DMA-BUF only (keeps full compositing)
                 qbz_nix_lib::logging::log_startup("[QBZ] NVIDIA on X11: DMA-BUF renderer disabled");
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
             } else {
-                qbz_nix_lib::logging::log_startup("[QBZ] Using default WebKit renderer (full hardware acceleration)");
+                qbz_nix_lib::logging::log_startup(
+                    "[QBZ] Using default WebKit renderer (full hardware acceleration)",
+                );
             }
         }
 

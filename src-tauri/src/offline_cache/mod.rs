@@ -9,20 +9,22 @@
 pub mod commands;
 pub mod db;
 pub mod downloader;
-pub mod path_validator;
 pub mod metadata;
 pub mod migration;
+pub mod path_validator;
 
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::{Arc, RwLock};
 use tokio::sync::{Mutex, Semaphore};
-use serde::{Deserialize, Serialize};
 
 pub use db::OfflineCacheDb;
 pub use downloader::StreamFetcher;
+pub use metadata::{sanitize_filename, CompleteTrackMetadata};
+pub use migration::{
+    detect_legacy_cached_files, migrate_legacy_cached_files, MigrationError, MigrationStatus,
+};
 pub use path_validator::{is_offline_root_available, validate_path, PathStatus};
-pub use metadata::{CompleteTrackMetadata, sanitize_filename};
-pub use migration::{MigrationStatus, MigrationError, detect_legacy_cached_files, migrate_legacy_cached_files};
 
 /// Cache status for a track in offline storage
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -219,7 +221,10 @@ impl OfflineCacheState {
             .map_err(|e| format!("Failed to open download library connection: {}", e))?;
         let mut guard = self.library_db.lock().await;
         *guard = Some(lib_db);
-        log::info!("Offline cache: separate library DB connection opened at {:?}", db_path);
+        log::info!(
+            "Offline cache: separate library DB connection opened at {:?}",
+            db_path
+        );
         Ok(())
     }
 

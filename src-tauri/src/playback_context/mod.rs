@@ -10,8 +10,8 @@
 //! - Artist Top Songs: next ranked track
 //! - Single track: no context, playback ends when track finishes
 
-use std::sync::Mutex;
 use serde::{Deserialize, Serialize};
+use std::sync::Mutex;
 
 /// Type of playback context
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -154,7 +154,10 @@ impl ContextManager {
     pub fn set_context(&self, context: PlaybackContext) {
         let mut current = self.current.lock().unwrap();
         *current = Some(context);
-        log::info!("Playback context set: {:?}", current.as_ref().map(|c| &c.label));
+        log::info!(
+            "Playback context set: {:?}",
+            current.as_ref().map(|c| &c.label)
+        );
     }
 
     /// Clear the current context (for single track playback)
@@ -181,7 +184,7 @@ impl ContextManager {
             .unwrap()
             .as_ref()
             .and_then(|ctx| ctx.next_track_id())
-        }
+    }
 
     /// Get multiple upcoming track IDs from the current context
     pub fn upcoming_track_ids(&self, count: usize) -> Vec<u64> {
@@ -224,7 +227,11 @@ impl ContextManager {
         if let Some(ctx) = current.as_mut() {
             let count = new_track_ids.len();
             ctx.track_ids.extend(new_track_ids);
-            log::debug!("Appended {} track IDs to context (total: {})", count, ctx.track_ids.len());
+            log::debug!(
+                "Appended {} track IDs to context (total: {})",
+                count,
+                ctx.track_ids.len()
+            );
         }
     }
 }

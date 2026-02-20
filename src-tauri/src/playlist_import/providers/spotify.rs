@@ -35,9 +35,7 @@ pub fn parse_playlist_id(url: &str) -> Option<String> {
     None
 }
 
-pub async fn fetch_playlist(
-    playlist_id: &str,
-) -> Result<ImportPlaylist, PlaylistImportError> {
+pub async fn fetch_playlist(playlist_id: &str) -> Result<ImportPlaylist, PlaylistImportError> {
     // Try API with token, retry once with fresh token on failure
     for attempt in 1..=2 {
         match get_app_token().await {
@@ -59,7 +57,9 @@ pub async fn fetch_playlist(
         }
     }
 
-    log::warn!("Spotify: API failed after 2 attempts, falling back to embed (limited to ~100 tracks)");
+    log::warn!(
+        "Spotify: API failed after 2 attempts, falling back to embed (limited to ~100 tracks)"
+    );
     fetch_playlist_from_embed(playlist_id).await
 }
 
@@ -99,7 +99,11 @@ async fn fetch_playlist_with_token(
         .and_then(|v| v.as_u64())
         .unwrap_or(0) as usize;
 
-    log::info!("Spotify: playlist '{}' reports {} tracks", name, expected_total);
+    log::info!(
+        "Spotify: playlist '{}' reports {} tracks",
+        name,
+        expected_total
+    );
 
     let mut tracks = Vec::new();
     let mut offset = 0u32;
@@ -127,7 +131,9 @@ async fn fetch_playlist_with_token(
         let items = response
             .get("items")
             .and_then(|v| v.as_array())
-            .ok_or_else(|| PlaylistImportError::Parse("Spotify tracks missing items".to_string()))?;
+            .ok_or_else(|| {
+                PlaylistImportError::Parse("Spotify tracks missing items".to_string())
+            })?;
 
         for item in items {
             let track = match item.get("track") {
@@ -146,9 +152,7 @@ async fn fetch_playlist_with_token(
                 .and_then(|v| v.get("name"))
                 .and_then(|v| v.as_str())
                 .map(|v| v.to_string());
-            let duration_ms = track
-                .get("duration_ms")
-                .and_then(|v| v.as_u64());
+            let duration_ms = track.get("duration_ms").and_then(|v| v.as_u64());
             let isrc = track
                 .get("external_ids")
                 .and_then(|v| v.get("isrc"))
@@ -176,15 +180,9 @@ async fn fetch_playlist_with_token(
         }
 
         // Use both "next" field and total count to decide pagination
-        let has_next = response
-            .get("next")
-            .map(|v| !v.is_null())
-            .unwrap_or(false);
+        let has_next = response.get("next").map(|v| !v.is_null()).unwrap_or(false);
 
-        let response_total = response
-            .get("total")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0) as usize;
+        let response_total = response.get("total").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
 
         log::debug!(
             "Spotify: page offset={}, got {} items, total so far={}, response.total={}, has_next={}",
@@ -198,7 +196,10 @@ async fn fetch_playlist_with_token(
 
         // Safety: also stop if the page returned 0 items to prevent infinite loop
         if items.is_empty() {
-            log::warn!("Spotify: empty page at offset {}, stopping pagination", offset);
+            log::warn!(
+                "Spotify: empty page at offset {}, stopping pagination",
+                offset
+            );
             break;
         }
 
@@ -227,7 +228,9 @@ async fn fetch_playlist_with_token(
     })
 }
 
-async fn fetch_playlist_from_embed(playlist_id: &str) -> Result<ImportPlaylist, PlaylistImportError> {
+async fn fetch_playlist_from_embed(
+    playlist_id: &str,
+) -> Result<ImportPlaylist, PlaylistImportError> {
     let url = format!("https://open.spotify.com/embed/playlist/{}", playlist_id);
     let html = reqwest::get(&url)
         .await
@@ -236,11 +239,12 @@ async fn fetch_playlist_from_embed(playlist_id: &str) -> Result<ImportPlaylist, 
         .await
         .map_err(|e| PlaylistImportError::Http(e.to_string()))?;
 
-    let json_text = extract_script(&html, "__NEXT_DATA__")
-        .ok_or_else(|| PlaylistImportError::Parse("Spotify embed missing __NEXT_DATA__".to_string()))?;
+    let json_text = extract_script(&html, "__NEXT_DATA__").ok_or_else(|| {
+        PlaylistImportError::Parse("Spotify embed missing __NEXT_DATA__".to_string())
+    })?;
 
-    let data: Value = serde_json::from_str(&json_text)
-        .map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
+    let data: Value =
+        serde_json::from_str(&json_text).map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
 
     let entity = data
         .get("props")
@@ -274,15 +278,16 @@ async fn fetch_playlist_from_embed(playlist_id: &str) -> Result<ImportPlaylist, 
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown")
             .to_string();
-        let duration_ms = track
-            .get("duration")
-            .and_then(|v| v.as_u64());
-        let uri = track
-            .get("uri")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
-        let provider_id = uri.split(':').last().filter(|v| !v.is_empty()).map(|v| v.to_string());
-        let provider_url = provider_id.as_ref().map(|id| format!("https://open.spotify.com/track/{}", id));
+        let duration_ms = track.get("duration").and_then(|v| v.as_u64());
+        let uri = track.get("uri").and_then(|v| v.as_str()).unwrap_or("");
+        let provider_id = uri
+            .split(':')
+            .last()
+            .filter(|v| !v.is_empty())
+            .map(|v| v.to_string());
+        let provider_url = provider_id
+            .as_ref()
+            .map(|id| format!("https://open.spotify.com/track/{}", id));
 
         tracks.push(ImportTrack {
             title,

@@ -7,7 +7,10 @@ use qbz_nix_lib::{api::QobuzClient, credentials};
 // These tests must never print credentials or tokens.
 
 fn live_tests_enabled() -> bool {
-    matches!(std::env::var("QBZ_RUN_QOBUZ_LIVE_TESTS").as_deref(), Ok("1"))
+    matches!(
+        std::env::var("QBZ_RUN_QOBUZ_LIVE_TESTS").as_deref(),
+        Ok("1")
+    )
 }
 
 #[tokio::test]
@@ -17,8 +20,7 @@ async fn qobuz_login_and_favorites_smoke() {
         return;
     }
 
-    let Some(creds) = credentials::load_qobuz_credentials()
-        .expect("Failed to load credentials")
+    let Some(creds) = credentials::load_qobuz_credentials().expect("Failed to load credentials")
     else {
         return;
     };
@@ -37,4 +39,3 @@ async fn qobuz_login_and_favorites_smoke() {
         .await
         .expect("get_favorites failed");
 }
-

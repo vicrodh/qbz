@@ -24,24 +24,35 @@ impl UserDataPaths {
 
     /// Set the current user after login
     pub fn set_user(&self, user_id: u64) {
-        *self.user_id.write().expect("UserDataPaths write lock poisoned") = Some(user_id);
+        *self
+            .user_id
+            .write()
+            .expect("UserDataPaths write lock poisoned") = Some(user_id);
         log::info!("UserDataPaths: active user set to {}", user_id);
     }
 
     /// Clear the current user on logout
     pub fn clear_user(&self) {
-        *self.user_id.write().expect("UserDataPaths write lock poisoned") = None;
+        *self
+            .user_id
+            .write()
+            .expect("UserDataPaths write lock poisoned") = None;
         log::info!("UserDataPaths: active user cleared");
     }
 
     /// Get the current user ID, if set
     pub fn current_user_id(&self) -> Option<u64> {
-        *self.user_id.read().expect("UserDataPaths read lock poisoned")
+        *self
+            .user_id
+            .read()
+            .expect("UserDataPaths read lock poisoned")
     }
 
     /// Get the user-scoped data directory: ~/.local/share/qbz/users/{uid}/
     pub fn user_data_dir(&self) -> Result<PathBuf, String> {
-        let uid = self.user_id.read()
+        let uid = self
+            .user_id
+            .read()
             .map_err(|e| format!("UserDataPaths read lock error: {}", e))?
             .ok_or("No active user - please log in")?;
 
@@ -56,7 +67,9 @@ impl UserDataPaths {
 
     /// Get the user-scoped cache directory: ~/.cache/qbz/users/{uid}/
     pub fn user_cache_dir(&self) -> Result<PathBuf, String> {
-        let uid = self.user_id.read()
+        let uid = self
+            .user_id
+            .read()
             .map_err(|e| format!("UserDataPaths read lock error: {}", e))?
             .ok_or("No active user - please log in")?;
 

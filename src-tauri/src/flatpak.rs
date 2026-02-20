@@ -3,8 +3,8 @@
 //! Detects when QBZ is running inside a Flatpak sandbox
 //! and provides sandbox-specific utilities.
 
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Check if QBZ is running inside a Flatpak sandbox
 pub fn is_flatpak() -> bool {
@@ -24,8 +24,7 @@ pub fn migrate_app_id_data() -> Result<bool, String> {
         // dirs::config_dir() returns ~/.var/app/com.blitzfc.qbz/config/ (new sandbox)
         // We need to access ~/.var/app/com.blitzkriegfc.qbz/ (old sandbox) which is outside our current sandbox
 
-        let home = std::env::var("HOME")
-            .map_err(|_| "Could not determine HOME directory")?;
+        let home = std::env::var("HOME").map_err(|_| "Could not determine HOME directory")?;
         let home_path = PathBuf::from(home);
 
         let old_sandbox = home_path.join(".var/app/com.blitzkriegfc.qbz");
@@ -75,8 +74,7 @@ pub fn migrate_app_id_data() -> Result<bool, String> {
 
     if old_data.exists() && !new_data.exists() {
         log::info!("Migrating data: {:?} → {:?}", old_data, new_data);
-        copy_dir_all(&old_data, &new_data)
-            .map_err(|e| format!("Failed to migrate data: {}", e))?;
+        copy_dir_all(&old_data, &new_data).map_err(|e| format!("Failed to migrate data: {}", e))?;
         migrated = true;
     }
 

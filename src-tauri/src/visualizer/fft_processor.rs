@@ -3,17 +3,17 @@
 //! Runs on a dedicated thread, completely separate from audio playback.
 //! Uses spectrum-analyzer crate for efficient FFT computation.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use qbz_audio::SpectralAnalyzer;
-use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
 use spectrum_analyzer::scaling::divide_by_N_sqrt;
 use spectrum_analyzer::windows::hann_window;
+use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
 use tauri::{AppHandle, Emitter};
 
-use super::{NUM_BARS, FFT_SIZE, TARGET_FPS, RingBuffer};
+use super::{RingBuffer, FFT_SIZE, NUM_BARS, TARGET_FPS};
 
 /// Shared state for the visualizer thread
 pub struct VisualizerState {
@@ -128,16 +128,14 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
                         if new > smoothed[i] {
                             smoothed[i] = smoothed[i] * 0.3 + new * 0.7; // Fast attack
                         } else {
-                            smoothed[i] = smoothed[i] * SMOOTHING + new * (1.0 - SMOOTHING); // Slow decay
+                            smoothed[i] = smoothed[i] * SMOOTHING + new * (1.0 - SMOOTHING);
+                            // Slow decay
                         }
                         output[i] = smoothed[i];
                     }
 
                     // Send to frontend as binary data
-                    let bytes: Vec<u8> = output
-                        .iter()
-                        .flat_map(|f| f.to_le_bytes())
-                        .collect();
+                    let bytes: Vec<u8> = output.iter().flat_map(|f| f.to_le_bytes()).collect();
 
                     let _ = app_handle.emit("viz:data", bytes);
 
@@ -163,17 +161,17 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
                         let compressed = (rms * 6.0).powf(0.5).clamp(0.0, 1.0);
                         // Smooth: fast attack, slow decay
                         if compressed > smoothed_energy[band_idx] {
-                            smoothed_energy[band_idx] = smoothed_energy[band_idx] * 0.2 + compressed * 0.8;
+                            smoothed_energy[band_idx] =
+                                smoothed_energy[band_idx] * 0.2 + compressed * 0.8;
                         } else {
-                            smoothed_energy[band_idx] = smoothed_energy[band_idx] * 0.85 + compressed * 0.15;
+                            smoothed_energy[band_idx] =
+                                smoothed_energy[band_idx] * 0.85 + compressed * 0.15;
                         }
                         energy_bands[band_idx] = smoothed_energy[band_idx];
                     }
 
-                    let energy_bytes: Vec<u8> = energy_bands
-                        .iter()
-                        .flat_map(|f| f.to_le_bytes())
-                        .collect();
+                    let energy_bytes: Vec<u8> =
+                        energy_bands.iter().flat_map(|f| f.to_le_bytes()).collect();
                     let _ = app_handle.emit("viz:energy", energy_bytes);
 
                     // --- Transient Detection: detect sharp RMS jumps ---
@@ -192,7 +190,11 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
                                     cnt += 1;
                                 }
                             }
-                            let band_rms = if cnt > 0 { (sum_sq / cnt as f32).sqrt() } else { 0.0 };
+                            let band_rms = if cnt > 0 {
+                                (sum_sq / cnt as f32).sqrt()
+                            } else {
+                                0.0
+                            };
                             // Bass/sub-bass weighted 2x for beat detection
                             let weight = if band_idx < 2 { 2.0 } else { 1.0 };
                             raw_sum += (band_rms * 6.0).powf(0.5).clamp(0.0, 1.0) * weight;
@@ -227,13 +229,11 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
             let step = stereo_pairs / WAVEFORM_POINTS; // 512/256 = 2
             for i in 0..WAVEFORM_POINTS {
                 let base = i * step * 2; // index into interleaved buffer
-                waveform_buf[i] = samples[base];                          // L
-                waveform_buf[WAVEFORM_POINTS + i] = samples[base + 1];    // R
+                waveform_buf[i] = samples[base]; // L
+                waveform_buf[WAVEFORM_POINTS + i] = samples[base + 1]; // R
             }
-            let waveform_bytes: Vec<u8> = waveform_buf
-                .iter()
-                .flat_map(|f| f.to_le_bytes())
-                .collect();
+            let waveform_bytes: Vec<u8> =
+                waveform_buf.iter().flat_map(|f| f.to_le_bytes()).collect();
             let _ = app_handle.emit("viz:waveform", waveform_bytes);
         }
 
@@ -293,11 +293,7 @@ fn map_to_log_bars(spectrum: &spectrum_analyzer::FrequencySpectrum, output: &mut
         }
 
         // Average magnitude for this bar
-        let avg = if count > 0 {
-            sum / count as f32
-        } else {
-            0.0
-        };
+        let avg = if count > 0 { sum / count as f32 } else { 0.0 };
 
         // Apply dynamic range compression and normalize
         // This makes quiet passages more visible while preventing clipping

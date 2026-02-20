@@ -72,7 +72,8 @@ pub fn parse_performers(performers_str: &str) -> Vec<Performer> {
 ///
 /// Returns a map where keys are role names and values are lists of performer names
 pub fn group_by_role(performers: &[Performer]) -> std::collections::HashMap<String, Vec<String>> {
-    let mut grouped: std::collections::HashMap<String, Vec<String>> = std::collections::HashMap::new();
+    let mut grouped: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
 
     for performer in performers {
         for role in &performer.roles {
@@ -130,7 +131,10 @@ mod tests {
     fn test_group_by_role() {
         let performers = vec![
             Performer::new("John".to_string(), vec!["Saxophone".to_string()]),
-            Performer::new("Jane".to_string(), vec!["Saxophone".to_string(), "Vocals".to_string()]),
+            Performer::new(
+                "Jane".to_string(),
+                vec!["Saxophone".to_string(), "Vocals".to_string()],
+            ),
         ];
         let grouped = group_by_role(&performers);
         assert_eq!(grouped.get("Saxophone").unwrap().len(), 2);

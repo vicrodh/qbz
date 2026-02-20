@@ -36,9 +36,7 @@ pub fn parse_playlist_id(url: &str) -> Option<String> {
     None
 }
 
-pub async fn fetch_playlist(
-    playlist_id: &str,
-) -> Result<ImportPlaylist, PlaylistImportError> {
+pub async fn fetch_playlist(playlist_id: &str) -> Result<ImportPlaylist, PlaylistImportError> {
     let token = get_app_token().await?;
     let country_code = env::var("TIDAL_COUNTRY_CODE").unwrap_or_else(|_| "US".to_string());
 
@@ -53,10 +51,16 @@ pub async fn fetch_playlist(
         .map_err(|e| PlaylistImportError::Http(e.to_string()))?;
 
     let status = resp.status();
-    let body = resp.text().await.map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
 
     if !status.is_success() {
-        return Err(PlaylistImportError::Http(format!("Tidal playlist fetch failed: {} - {}", status, body)));
+        return Err(PlaylistImportError::Http(format!(
+            "Tidal playlist fetch failed: {} - {}",
+            status, body
+        )));
     }
 
     let meta: Value = serde_json::from_str(&body)
@@ -115,10 +119,16 @@ async fn fetch_track_ids(
             .map_err(|e| PlaylistImportError::Http(e.to_string()))?;
 
         let status = resp.status();
-        let body = resp.text().await.map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
 
         if !status.is_success() {
-            return Err(PlaylistImportError::Http(format!("Tidal track IDs fetch failed: {} - {}", status, body)));
+            return Err(PlaylistImportError::Http(format!(
+                "Tidal track IDs fetch failed: {} - {}",
+                status, body
+            )));
         }
 
         let response: Value = serde_json::from_str(&body)
@@ -179,10 +189,16 @@ async fn fetch_tracks_by_ids(
             .map_err(|e| PlaylistImportError::Http(e.to_string()))?;
 
         let status = resp.status();
-        let body = resp.text().await.map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
 
         if !status.is_success() {
-            return Err(PlaylistImportError::Http(format!("Tidal tracks fetch failed: {} - {}", status, body)));
+            return Err(PlaylistImportError::Http(format!(
+                "Tidal tracks fetch failed: {} - {}",
+                status, body
+            )));
         }
 
         let response: Value = serde_json::from_str(&body)

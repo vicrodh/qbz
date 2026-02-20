@@ -24,20 +24,28 @@ use crate::user_data::UserDataPaths;
 /// Note: This is the core logic extracted from `activate_user_session` command.
 /// It can be called from runtime_bootstrap, v2_login, or the command itself.
 pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<(), String> {
-    log::info!("[SessionLifecycle] Activating session for user_id={}", user_id);
+    log::info!(
+        "[SessionLifecycle] Activating session for user_id={}",
+        user_id
+    );
 
     // Get all required states from AppHandle
     let user_paths = app.state::<UserDataPaths>();
     let session_store = app.state::<crate::session_store::SessionStoreState>();
     let favorites_cache = app.state::<crate::config::favorites_cache::FavoritesCacheState>();
-    let subscription_state = app.state::<crate::config::subscription_state::SubscriptionStateState>();
-    let playback_prefs = app.state::<crate::config::playback_preferences::PlaybackPreferencesState>();
-    let favorites_prefs = app.state::<crate::config::favorites_preferences::FavoritesPreferencesState>();
+    let subscription_state =
+        app.state::<crate::config::subscription_state::SubscriptionStateState>();
+    let playback_prefs =
+        app.state::<crate::config::playback_preferences::PlaybackPreferencesState>();
+    let favorites_prefs =
+        app.state::<crate::config::favorites_preferences::FavoritesPreferencesState>();
     let download_settings = app.state::<crate::config::download_settings::DownloadSettingsState>();
     let audio_settings = app.state::<crate::config::audio_settings::AudioSettingsState>();
     let tray_settings = app.state::<crate::config::tray_settings::TraySettingsState>();
-    let remote_control_settings = app.state::<crate::config::remote_control_settings::RemoteControlSettingsState>();
-    let allowed_origins = app.state::<crate::config::remote_control_settings::AllowedOriginsState>();
+    let remote_control_settings =
+        app.state::<crate::config::remote_control_settings::RemoteControlSettingsState>();
+    let allowed_origins =
+        app.state::<crate::config::remote_control_settings::AllowedOriginsState>();
     // NOTE: legal_settings is GLOBAL - not per-user, not initialized/torn down here
     let updates = app.state::<crate::updates::UpdatesState>();
     let library = app.state::<crate::library::commands::LibraryState>();
@@ -106,7 +114,9 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
         let user_name = legacy_client.get_user_name().await;
         let enabled = legacy_client.is_enabled().await;
         drop(legacy_client);
-        listenbrainz_v2.init_with_credentials(token, user_name, enabled).await;
+        listenbrainz_v2
+            .init_with_credentials(token, user_name, enabled)
+            .await;
         log::info!("[SessionLifecycle] ListenBrainz V2 state synced from legacy");
     }
 
@@ -126,11 +136,18 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     // Type-alias states (per-user settings)
     // NOTE: LegalSettingsState is GLOBAL (not per-user) - initialized at app startup
     use crate::config::{
-        subscription_state::SubscriptionStateStore,
-        download_settings::DownloadSettingsStore,
+        download_settings::DownloadSettingsStore, subscription_state::SubscriptionStateStore,
     };
-    crate::commands::user_session::init_type_alias_state(&*subscription_state, &data_dir, SubscriptionStateStore::new_at)?;
-    crate::commands::user_session::init_type_alias_state(&*download_settings, &data_dir, DownloadSettingsStore::new_at)?;
+    crate::commands::user_session::init_type_alias_state(
+        &*subscription_state,
+        &data_dir,
+        SubscriptionStateStore::new_at,
+    )?;
+    crate::commands::user_session::init_type_alias_state(
+        &*download_settings,
+        &data_dir,
+        DownloadSettingsStore::new_at,
+    )?;
 
     // Cache-dir stores
     offline_cache.init_at(&cache_dir).await?;
@@ -144,8 +161,11 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
         .as_secs() as i64;
 
     let should_purge = {
-        let guard = subscription_state.lock().map_err(|e| format!("Lock error: {}", e))?;
-        guard.as_ref()
+        let guard = subscription_state
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        guard
+            .as_ref()
             .and_then(|s| s.should_purge_offline_cache(now).ok())
             .unwrap_or(false)
     };
@@ -155,10 +175,14 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
         if let Err(e) = crate::offline_cache::commands::purge_all_cached_files(
             offline_cache.inner(),
             library.inner(),
-        ).await {
+        )
+        .await
+        {
             log::error!("[SessionLifecycle] Failed to purge offline cache: {}", e);
         } else {
-            let guard = subscription_state.lock().map_err(|e| format!("Lock error: {}", e))?;
+            let guard = subscription_state
+                .lock()
+                .map_err(|e| format!("Lock error: {}", e))?;
             if let Some(store) = guard.as_ref() {
                 let _ = store.mark_offline_cache_purged(now);
             }
@@ -171,9 +195,7 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     }
 
     // Start visualizer FFT thread (idempotent)
-    app.state::<crate::AppState>()
-        .visualizer
-        .start(app.clone());
+    app.state::<crate::AppState>().visualizer.start(app.clone());
 
     // Start remote control API server if enabled
     let app_clone = app.clone();
@@ -184,12 +206,21 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
     });
 
     // Update runtime state to reflect session activation
-    runtime_manager.manager().set_session_activated(true, user_id).await;
+    runtime_manager
+        .manager()
+        .set_session_activated(true, user_id)
+        .await;
 
     // Emit event for clients
-    let _ = app.emit("runtime:event", RuntimeEvent::UserSessionActivated { user_id });
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::UserSessionActivated { user_id },
+    );
 
-    log::info!("[SessionLifecycle] Session activated for user_id={}", user_id);
+    log::info!(
+        "[SessionLifecycle] Session activated for user_id={}",
+        user_id
+    );
     Ok(())
 }
 
@@ -203,14 +234,19 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
     let user_paths = app.state::<UserDataPaths>();
     let session_store = app.state::<crate::session_store::SessionStoreState>();
     let favorites_cache = app.state::<crate::config::favorites_cache::FavoritesCacheState>();
-    let subscription_state = app.state::<crate::config::subscription_state::SubscriptionStateState>();
-    let playback_prefs = app.state::<crate::config::playback_preferences::PlaybackPreferencesState>();
-    let favorites_prefs = app.state::<crate::config::favorites_preferences::FavoritesPreferencesState>();
+    let subscription_state =
+        app.state::<crate::config::subscription_state::SubscriptionStateState>();
+    let playback_prefs =
+        app.state::<crate::config::playback_preferences::PlaybackPreferencesState>();
+    let favorites_prefs =
+        app.state::<crate::config::favorites_preferences::FavoritesPreferencesState>();
     let download_settings = app.state::<crate::config::download_settings::DownloadSettingsState>();
     let audio_settings = app.state::<crate::config::audio_settings::AudioSettingsState>();
     let tray_settings = app.state::<crate::config::tray_settings::TraySettingsState>();
-    let remote_control_settings = app.state::<crate::config::remote_control_settings::RemoteControlSettingsState>();
-    let allowed_origins = app.state::<crate::config::remote_control_settings::AllowedOriginsState>();
+    let remote_control_settings =
+        app.state::<crate::config::remote_control_settings::RemoteControlSettingsState>();
+    let allowed_origins =
+        app.state::<crate::config::remote_control_settings::AllowedOriginsState>();
     // NOTE: legal_settings is GLOBAL - not per-user, not initialized/torn down here
     let updates = app.state::<crate::updates::UpdatesState>();
     let library = app.state::<crate::library::commands::LibraryState>();
@@ -268,7 +304,10 @@ pub async fn deactivate_session(app: &tauri::AppHandle) -> Result<(), String> {
 
     // Update runtime state - clear BOTH auth and session
     runtime_manager.manager().set_legacy_auth(false, None).await;
-    runtime_manager.manager().set_session_activated(false, 0).await;
+    runtime_manager
+        .manager()
+        .set_session_activated(false, 0)
+        .await;
     runtime_manager.manager().set_corebridge_auth(false).await;
 
     // Emit event for clients
@@ -309,7 +348,8 @@ pub async fn activate_offline_session(app: &tauri::AppHandle) -> Result<(), Stri
     let offline = app.state::<crate::offline::OfflineState>();
     let offline_cache = app.state::<crate::offline_cache::OfflineCacheState>();
     let audio_settings = app.state::<crate::config::audio_settings::AudioSettingsState>();
-    let playback_prefs = app.state::<crate::config::playback_preferences::PlaybackPreferencesState>();
+    let playback_prefs =
+        app.state::<crate::config::playback_preferences::PlaybackPreferencesState>();
 
     library.init_at(&data_dir).await?;
     offline.init_at(&data_dir)?;
@@ -321,10 +361,18 @@ pub async fn activate_offline_session(app: &tauri::AppHandle) -> Result<(), Stri
     // Mark session as activated for offline use
     // Note: legacy_auth remains false, corebridge_auth remains false
     // But session_activated is true so queue commands work
-    runtime_manager.manager().set_session_activated(true, OFFLINE_USER_ID).await;
+    runtime_manager
+        .manager()
+        .set_session_activated(true, OFFLINE_USER_ID)
+        .await;
 
     // Emit event
-    let _ = app.emit("runtime:event", RuntimeEvent::UserSessionActivated { user_id: OFFLINE_USER_ID });
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::UserSessionActivated {
+            user_id: OFFLINE_USER_ID,
+        },
+    );
 
     log::info!("[SessionLifecycle] Offline session activated");
     Ok(())

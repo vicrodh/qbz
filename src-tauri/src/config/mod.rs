@@ -12,121 +12,71 @@
 pub mod audio_settings;
 pub mod developer_settings;
 pub mod download_settings;
-pub mod graphics_settings;
-pub mod playback_preferences;
-pub mod favorites_preferences;
 pub mod favorites_cache;
+pub mod favorites_preferences;
+pub mod graphics_settings;
+pub mod legal_settings;
+pub mod playback_preferences;
+pub mod remote_control_settings;
 pub mod subscription_state;
 pub mod tray_settings;
 pub mod window_settings;
-pub mod legal_settings;
-pub mod remote_control_settings;
 
 pub use audio_settings::{
-    AudioSettings,
-    AudioSettingsState,
-    get_audio_settings,
-    set_audio_output_device,
-    set_audio_exclusive_mode,
-    set_audio_dac_passthrough,
-    set_audio_sample_rate,
-    reset_audio_settings,
+    get_audio_settings, reset_audio_settings, set_audio_dac_passthrough, set_audio_exclusive_mode,
+    set_audio_output_device, set_audio_sample_rate, AudioSettings, AudioSettingsState,
 };
 
 pub use download_settings::{
-    DownloadSettings,
-    DownloadSettingsState,
-    get_download_settings,
-    set_download_root,
-    set_show_downloads_in_library,
-    validate_download_root,
+    get_download_settings, set_download_root, set_show_downloads_in_library,
+    validate_download_root, DownloadSettings, DownloadSettingsState,
 };
 
 pub use playback_preferences::{
-    AutoplayMode,
-    PlaybackPreferences,
+    get_playback_preferences, set_autoplay_mode, AutoplayMode, PlaybackPreferences,
     PlaybackPreferencesState,
-    get_playback_preferences,
-    set_autoplay_mode,
 };
 
 pub use favorites_preferences::{
-    FavoritesPreferences,
+    get_favorites_preferences, save_favorites_preferences, FavoritesPreferences,
     FavoritesPreferencesState,
-    get_favorites_preferences,
-    save_favorites_preferences,
 };
 
 pub use subscription_state::{
-    SubscriptionState,
-    SubscriptionStateState,
-    SubscriptionStateStore,
-    create_subscription_state,
-    create_empty_subscription_state,
+    create_empty_subscription_state, create_subscription_state, SubscriptionState,
+    SubscriptionStateState, SubscriptionStateStore,
 };
 
 pub use tray_settings::{
-    TraySettings,
+    get_tray_settings, set_close_to_tray, set_enable_tray, set_minimize_to_tray, TraySettings,
     TraySettingsState,
-    get_tray_settings,
-    set_enable_tray,
-    set_minimize_to_tray,
-    set_close_to_tray,
 };
 
 pub use favorites_cache::{
-    FavoritesCacheState,
-    get_cached_favorite_tracks,
-    get_cached_favorite_albums,
-    get_cached_favorite_artists,
-    cache_favorite_track,
-    uncache_favorite_track,
-    cache_favorite_album,
-    uncache_favorite_album,
-    cache_favorite_artist,
-    uncache_favorite_artist,
-    sync_cached_favorite_tracks,
-    sync_cached_favorite_albums,
-    sync_cached_favorite_artists,
-    clear_favorites_cache,
+    cache_favorite_album, cache_favorite_artist, cache_favorite_track, clear_favorites_cache,
+    get_cached_favorite_albums, get_cached_favorite_artists, get_cached_favorite_tracks,
+    sync_cached_favorite_albums, sync_cached_favorite_artists, sync_cached_favorite_tracks,
+    uncache_favorite_album, uncache_favorite_artist, uncache_favorite_track, FavoritesCacheState,
 };
 
 pub use legal_settings::{
-    LegalSettings,
-    LegalSettingsState,
-    LegalSettingsStore,
-    get_legal_settings,
-    get_qobuz_tos_accepted,
-    set_qobuz_tos_accepted,
+    get_legal_settings, get_qobuz_tos_accepted, set_qobuz_tos_accepted, LegalSettings,
+    LegalSettingsState, LegalSettingsStore,
 };
 
 pub use remote_control_settings::{
-    RemoteControlSettings,
-    RemoteControlSettingsState,
-    AllowedOrigin,
-    AllowedOriginsState,
+    AllowedOrigin, AllowedOriginsState, RemoteControlSettings, RemoteControlSettingsState,
 };
 
 pub use developer_settings::{
-    DeveloperSettings,
-    DeveloperSettingsState,
-    get_developer_settings,
-    set_developer_force_dmabuf,
+    get_developer_settings, set_developer_force_dmabuf, DeveloperSettings, DeveloperSettingsState,
 };
 
 pub use graphics_settings::{
-    GraphicsSettings,
-    GraphicsSettingsState,
-    get_graphics_settings,
-    set_hardware_acceleration,
-    set_force_x11,
-    set_gdk_scale,
-    set_gdk_dpi_scale,
+    get_graphics_settings, set_force_x11, set_gdk_dpi_scale, set_gdk_scale,
+    set_hardware_acceleration, GraphicsSettings, GraphicsSettingsState,
 };
 
 pub use window_settings::{
-    WindowSettings,
-    WindowSettingsState,
-    get_window_settings,
-    set_use_system_titlebar,
+    get_window_settings, set_use_system_titlebar, WindowSettings, WindowSettingsState,
 };

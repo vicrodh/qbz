@@ -49,7 +49,11 @@ pub struct RadioPoolBuilder<'a> {
 
 impl<'a> RadioPoolBuilder<'a> {
     pub fn new(db: &'a RadioDb, client: &'a QobuzClient, options: BuildRadioOptions) -> Self {
-        Self { db, client, options }
+        Self {
+            db,
+            client,
+            options,
+        }
     }
 
     fn is_qobuz_owned(owner_name: &str) -> bool {
@@ -89,15 +93,23 @@ impl<'a> RadioPoolBuilder<'a> {
             self.options.reseed_every,
         )?;
 
-        self.build_pool_for_seed_artist(&session.id, artist_id).await?;
+        self.build_pool_for_seed_artist(&session.id, artist_id)
+            .await?;
 
         Ok(session)
     }
 
-    pub async fn create_track_radio(&self, track_id: u64, artist_id: u64) -> Result<RadioSession, String> {
+    pub async fn create_track_radio(
+        &self,
+        track_id: u64,
+        artist_id: u64,
+    ) -> Result<RadioSession, String> {
         let rng_seed = Self::derive_rng_seed(self.options.rng_seed, track_id);
         let session = self.db.create_session(
-            RadioSeed::Track { track_id, artist_id },
+            RadioSeed::Track {
+                track_id,
+                artist_id,
+            },
             rng_seed,
             self.options.artist_spacing,
             self.options.reseed_every,
@@ -115,12 +127,17 @@ impl<'a> RadioPoolBuilder<'a> {
                 .insert_pool_track(&session.id, track.id, track_artist_id, "seed_track", 0)?;
         }
 
-        self.build_pool_for_seed_artist(&session.id, artist_id).await?;
+        self.build_pool_for_seed_artist(&session.id, artist_id)
+            .await?;
 
         Ok(session)
     }
 
-    async fn build_pool_for_seed_artist(&self, session_id: &str, seed_artist_id: u64) -> Result<(), String> {
+    async fn build_pool_for_seed_artist(
+        &self,
+        session_id: &str,
+        seed_artist_id: u64,
+    ) -> Result<(), String> {
         // 1) Curated artist playlists (distance 1)
         let artist_detail = self
             .client
@@ -143,10 +160,7 @@ impl<'a> RadioPoolBuilder<'a> {
                 .await
                 .map_err(|e| format!("Failed to fetch playlist {}: {}", playlist.id, e))?;
 
-            let tracks = playlist
-                .tracks
-                .map(|t| t.items)
-                .unwrap_or_default();
+            let tracks = playlist.tracks.map(|t| t.items).unwrap_or_default();
 
             for t in tracks.into_iter().take(self.options.playlist_track_limit) {
                 if !Self::is_music_track(&t) {
@@ -181,7 +195,8 @@ impl<'a> RadioPoolBuilder<'a> {
             .await
             .map_err(|e| format!("Failed to fetch similar artists: {}", e))?;
 
-        let mut first_degree_artist_ids: Vec<u64> = similar.items.into_iter().map(|a| a.id).collect();
+        let mut first_degree_artist_ids: Vec<u64> =
+            similar.items.into_iter().map(|a| a.id).collect();
         first_degree_artist_ids.retain(|id| *id != 0 && *id != seed_artist_id);
         first_degree_artist_ids.sort();
         first_degree_artist_ids.dedup();
@@ -204,7 +219,9 @@ impl<'a> RadioPoolBuilder<'a> {
 
         // 4) Second-degree expansion (distance 2, bounded)
         let pool_size = self.db.pool_size(session_id)?;
-        if pool_size < self.options.min_pool_size_for_second_degree && self.options.second_degree_artist_limit > 0 {
+        if pool_size < self.options.min_pool_size_for_second_degree
+            && self.options.second_degree_artist_limit > 0
+        {
             let mut added = 0u32;
 
             for base_artist_id in first_degree_artist_ids.into_iter().take(2) {
@@ -230,14 +247,21 @@ impl<'a> RadioPoolBuilder<'a> {
                         .client
                         .get_artist_tracks(a.id, self.options.second_degree_tracks_limit, 0)
                         .await
-                        .map_err(|e| format!("Failed to fetch second-degree artist tracks: {}", e))?;
+                        .map_err(|e| {
+                            format!("Failed to fetch second-degree artist tracks: {}", e)
+                        })?;
                     for t in tracks.items {
                         if !Self::is_music_track(&t) {
                             continue;
                         }
                         let artist_id = Self::track_artist_id(&t, a.id);
-                        self.db
-                            .insert_pool_track(session_id, t.id, artist_id, "second_degree", 2)?;
+                        self.db.insert_pool_track(
+                            session_id,
+                            t.id,
+                            artist_id,
+                            "second_degree",
+                            2,
+                        )?;
                     }
 
                     added += 1;

@@ -34,8 +34,8 @@ pub mod models;
 pub use cache::{ListenBrainzCache, ListenBrainzCacheState, QueueStats};
 pub use client::{ListenBrainzClient, ListenBrainzConfig};
 pub use models::{
-    AdditionalInfo, Listen, ListenBrainzStatus, ListenType, QueuedListen,
-    SubmitListensPayload, TrackMetadata, UserInfo,
+    AdditionalInfo, Listen, ListenBrainzStatus, ListenType, QueuedListen, SubmitListensPayload,
+    TrackMetadata, UserInfo,
 };
 
 use std::path::Path;

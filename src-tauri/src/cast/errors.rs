@@ -2,4 +2,4 @@
 //!
 //! Re-exported from qbz-cast crate.
 
-pub use qbz_cast::{CastError, AirPlayError, DlnaError};
+pub use qbz_cast::{AirPlayError, CastError, DlnaError};

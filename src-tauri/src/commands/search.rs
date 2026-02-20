@@ -2,7 +2,11 @@
 
 use tauri::State;
 
-use crate::api::{endpoints, endpoints::paths, Album, Artist, ArtistAlbums, DiscoverAlbum, DiscoverData, DiscoverResponse, DiscoverPlaylistsResponse, LabelDetail, PageArtistResponse, Playlist, PlaylistTag, ReleasesGridResponse, SearchResultsPage, Track, TracksContainer};
+use crate::api::{
+    endpoints, endpoints::paths, Album, Artist, ArtistAlbums, DiscoverAlbum, DiscoverData,
+    DiscoverPlaylistsResponse, DiscoverResponse, LabelDetail, PageArtistResponse, Playlist,
+    PlaylistTag, ReleasesGridResponse, SearchResultsPage, Track, TracksContainer,
+};
 use crate::api_cache::ApiCacheState;
 use crate::artist_blacklist::BlacklistState;
 use crate::AppState;
@@ -39,18 +43,28 @@ pub async fn search_albums(
     let mut results = {
         let client = state.client.read().await;
         client
-            .search_albums(&query, limit.unwrap_or(20), offset.unwrap_or(0), search_type.as_deref())
+            .search_albums(
+                &query,
+                limit.unwrap_or(20),
+                offset.unwrap_or(0),
+                search_type.as_deref(),
+            )
             .await
             .map_err(|e| e.to_string())?
     };
 
     // Filter out albums from blacklisted artists
     let original_count = results.items.len();
-    results.items.retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+    results
+        .items
+        .retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
 
     let filtered_count = original_count - results.items.len();
     if filtered_count > 0 {
-        log::debug!("[Blacklist] Filtered {} albums from search results", filtered_count);
+        log::debug!(
+            "[Blacklist] Filtered {} albums from search results",
+            filtered_count
+        );
         results.total = results.total.saturating_sub(filtered_count as u32);
     }
 
@@ -69,7 +83,12 @@ pub async fn search_tracks(
     let mut results = {
         let client = state.client.read().await;
         client
-            .search_tracks(&query, limit.unwrap_or(20), offset.unwrap_or(0), search_type.as_deref())
+            .search_tracks(
+                &query,
+                limit.unwrap_or(20),
+                offset.unwrap_or(0),
+                search_type.as_deref(),
+            )
             .await
             .map_err(|e| e.to_string())?
     };
@@ -86,7 +105,10 @@ pub async fn search_tracks(
 
     let filtered_count = original_count - results.items.len();
     if filtered_count > 0 {
-        log::debug!("[Blacklist] Filtered {} tracks from search results", filtered_count);
+        log::debug!(
+            "[Blacklist] Filtered {} tracks from search results",
+            filtered_count
+        );
         // Adjust total to reflect filtered count (approximate)
         results.total = results.total.saturating_sub(filtered_count as u32);
     }
@@ -106,18 +128,28 @@ pub async fn search_artists(
     let mut results = {
         let client = state.client.read().await;
         client
-            .search_artists(&query, limit.unwrap_or(20), offset.unwrap_or(0), search_type.as_deref())
+            .search_artists(
+                &query,
+                limit.unwrap_or(20),
+                offset.unwrap_or(0),
+                search_type.as_deref(),
+            )
             .await
             .map_err(|e| e.to_string())?
     };
 
     // Filter out blacklisted artists
     let original_count = results.items.len();
-    results.items.retain(|artist| !blacklist_state.is_blacklisted(artist.id));
+    results
+        .items
+        .retain(|artist| !blacklist_state.is_blacklisted(artist.id));
 
     let filtered_count = original_count - results.items.len();
     if filtered_count > 0 {
-        log::debug!("[Blacklist] Filtered {} artists from search results", filtered_count);
+        log::debug!(
+            "[Blacklist] Filtered {} artists from search results",
+            filtered_count
+        );
         results.total = results.total.saturating_sub(filtered_count as u32);
     }
 
@@ -141,13 +173,15 @@ pub async fn search_all(
         client
             .get_http()
             .get(&url)
-            .header("X-App-Id", client.app_id().await.map_err(|e| e.to_string())?)
-            .header("X-User-Auth-Token", client.auth_token().await.map_err(|e| e.to_string())?)
-            .query(&[
-                ("query", query.as_str()),
-                ("limit", "30"),
-                ("offset", "0"),
-            ])
+            .header(
+                "X-App-Id",
+                client.app_id().await.map_err(|e| e.to_string())?,
+            )
+            .header(
+                "X-User-Auth-Token",
+                client.auth_token().await.map_err(|e| e.to_string())?,
+            )
+            .query(&[("query", query.as_str()), ("limit", "30"), ("offset", "0")])
             .send()
             .await
             .map_err(|e| format!("Request failed: {}", e))?
@@ -160,25 +194,45 @@ pub async fn search_all(
     let albums: SearchResultsPage<Album> = response
         .get("albums")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_else(|| SearchResultsPage { items: vec![], total: 0, offset: 0, limit: 30 });
+        .unwrap_or_else(|| SearchResultsPage {
+            items: vec![],
+            total: 0,
+            offset: 0,
+            limit: 30,
+        });
 
     // Parse tracks
     let mut tracks: SearchResultsPage<Track> = response
         .get("tracks")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_else(|| SearchResultsPage { items: vec![], total: 0, offset: 0, limit: 30 });
+        .unwrap_or_else(|| SearchResultsPage {
+            items: vec![],
+            total: 0,
+            offset: 0,
+            limit: 30,
+        });
 
     // Parse artists
     let mut artists: SearchResultsPage<Artist> = response
         .get("artists")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_else(|| SearchResultsPage { items: vec![], total: 0, offset: 0, limit: 30 });
+        .unwrap_or_else(|| SearchResultsPage {
+            items: vec![],
+            total: 0,
+            offset: 0,
+            limit: 30,
+        });
 
     // Parse playlists
     let playlists: SearchResultsPage<Playlist> = response
         .get("playlists")
         .and_then(|v| serde_json::from_value(v.clone()).ok())
-        .unwrap_or_else(|| SearchResultsPage { items: vec![], total: 0, offset: 0, limit: 30 });
+        .unwrap_or_else(|| SearchResultsPage {
+            items: vec![],
+            total: 0,
+            offset: 0,
+            limit: 30,
+        });
 
     // Parse most_popular - find the first non-blacklisted item
     let most_popular: Option<MostPopularItem> = response
@@ -245,7 +299,9 @@ pub async fn search_all(
     // Filter albums from blacklisted artists
     let original_album_count = albums.items.len();
     let mut albums = albums;
-    albums.items.retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+    albums
+        .items
+        .retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
     let filtered_albums = original_album_count - albums.items.len();
     if filtered_albums > 0 {
         albums.total = albums.total.saturating_sub(filtered_albums as u32);
@@ -267,7 +323,9 @@ pub async fn search_all(
 
     // Filter blacklisted artists
     let original_artist_count = artists.items.len();
-    artists.items.retain(|artist| !blacklist_state.is_blacklisted(artist.id));
+    artists
+        .items
+        .retain(|artist| !blacklist_state.is_blacklisted(artist.id));
     let filtered_artists = original_artist_count - artists.items.len();
     if filtered_artists > 0 {
         artists.total = artists.total.saturating_sub(filtered_artists as u32);
@@ -302,7 +360,9 @@ pub async fn get_album(
     // Check cache first
     {
         let guard__ = cache_state.cache.lock().await;
-        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+        let cache = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         match cache.get_album(&album_id, None) {
             Ok(Some(cached_data)) => {
                 log::debug!("Cache hit for album {}", album_id);
@@ -320,13 +380,18 @@ pub async fn get_album(
     log::debug!("Cache miss for album {}, fetching from API", album_id);
     let album = {
         let client = state.client.read().await;
-        client.get_album(&album_id).await.map_err(|e| e.to_string())?
+        client
+            .get_album(&album_id)
+            .await
+            .map_err(|e| e.to_string())?
     };
 
     // Cache the result
     {
         let guard__ = cache_state.cache.lock().await;
-        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+        let cache = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&album)
             .map_err(|e| format!("Failed to serialize album: {}", e))?;
         let _ = cache.set_album(&album_id, &json);
@@ -347,7 +412,12 @@ pub async fn get_featured_albums(
     let result = {
         let client = state.client.read().await;
         client
-            .get_featured_albums(&featured_type, limit.unwrap_or(12), offset.unwrap_or(0), genre_id)
+            .get_featured_albums(
+                &featured_type,
+                limit.unwrap_or(12),
+                offset.unwrap_or(0),
+                genre_id,
+            )
             .await
             .map_err(|e| e.to_string())?
     };
@@ -363,7 +433,9 @@ pub async fn get_track(
     // Check cache first
     {
         let guard__ = cache_state.cache.lock().await;
-        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+        let cache = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         match cache.get_track(track_id, None) {
             Ok(Some(cached_data)) => {
                 log::debug!("Cache hit for track {}", track_id);
@@ -381,13 +453,18 @@ pub async fn get_track(
     log::debug!("Cache miss for track {}, fetching from API", track_id);
     let track = {
         let client = state.client.read().await;
-        client.get_track(track_id).await.map_err(|e| e.to_string())?
+        client
+            .get_track(track_id)
+            .await
+            .map_err(|e| e.to_string())?
     };
 
     // Cache the result
     {
         let guard__ = cache_state.cache.lock().await;
-        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+        let cache = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&track)
             .map_err(|e| format!("Failed to serialize track: {}", e))?;
         let _ = cache.set_track(track_id, &json);
@@ -414,7 +491,9 @@ pub async fn get_artist(
     // Check cache first
     {
         let guard__ = cache_state.cache.lock().await;
-        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+        let cache = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         if let Some(cached_data) = cache.get_artist(artist_id, &locale, None)? {
             log::debug!("Cache hit for artist {} (locale: {})", artist_id, locale);
             return serde_json::from_str(&cached_data)
@@ -423,7 +502,11 @@ pub async fn get_artist(
     }
 
     // Cache miss - fetch from API
-    log::debug!("Cache miss for artist {} (locale: {}), fetching from API", artist_id, locale);
+    log::debug!(
+        "Cache miss for artist {} (locale: {}), fetching from API",
+        artist_id,
+        locale
+    );
     let client = state.client.read().await;
     let artist = client
         .get_artist(artist_id, true)
@@ -433,7 +516,9 @@ pub async fn get_artist(
     // Cache the result
     {
         let guard__ = cache_state.cache.lock().await;
-        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+        let cache = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&artist)
             .map_err(|e| format!("Failed to serialize artist: {}", e))?;
         cache.set_artist(artist_id, &locale, &json)?;
@@ -458,16 +543,26 @@ pub async fn get_artist_basic(
     // Check cache first (reuse same cache - basic response works for both)
     {
         let guard__ = cache_state.cache.lock().await;
-        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+        let cache = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         if let Some(cached_data) = cache.get_artist(artist_id, &locale, None)? {
-            log::debug!("Cache hit for artist_basic {} (locale: {})", artist_id, locale);
+            log::debug!(
+                "Cache hit for artist_basic {} (locale: {})",
+                artist_id,
+                locale
+            );
             return serde_json::from_str(&cached_data)
                 .map_err(|e| format!("Failed to parse cached artist: {}", e));
         }
     }
 
     // Cache miss - fetch from API (without albums - much faster)
-    log::debug!("Cache miss for artist_basic {} (locale: {}), fetching from API", artist_id, locale);
+    log::debug!(
+        "Cache miss for artist_basic {} (locale: {}), fetching from API",
+        artist_id,
+        locale
+    );
     let artist = {
         let client = state.client.read().await;
         client
@@ -479,7 +574,9 @@ pub async fn get_artist_basic(
     // Cache the result
     {
         let guard__ = cache_state.cache.lock().await;
-        let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+        let cache = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         let json = serde_json::to_string(&artist)
             .map_err(|e| format!("Failed to serialize artist: {}", e))?;
         cache.set_artist(artist_id, &locale, &json)?;
@@ -577,7 +674,9 @@ pub async fn get_similar_artists(
 
     // Filter out blacklisted artists
     let original_count = results.items.len();
-    results.items.retain(|artist| !blacklist_state.is_blacklisted(artist.id));
+    results
+        .items
+        .retain(|artist| !blacklist_state.is_blacklisted(artist.id));
 
     let filtered_count = original_count - results.items.len();
     if filtered_count > 0 {
@@ -638,7 +737,10 @@ pub async fn get_genres(
     }
 
     // Cache miss - fetch from API
-    log::debug!("Cache miss for genres parent_id={:?}, fetching from API", parent_id);
+    log::debug!(
+        "Cache miss for genres parent_id={:?}, fetching from API",
+        parent_id
+    );
     let client = state.client.read().await;
     let genres = client
         .get_genres(parent_id)
@@ -685,7 +787,13 @@ pub async fn get_discover_playlists(
     offset: Option<u32>,
     state: State<'_, AppState>,
 ) -> Result<DiscoverPlaylistsResponse, String> {
-    log::debug!("Command: get_discover_playlists tag={:?} genre_ids={:?} limit={:?} offset={:?}", tag, genre_ids, limit, offset);
+    log::debug!(
+        "Command: get_discover_playlists tag={:?} genre_ids={:?} limit={:?} offset={:?}",
+        tag,
+        genre_ids,
+        limit,
+        offset
+    );
 
     let client = state.client.read().await;
     client
@@ -696,14 +804,9 @@ pub async fn get_discover_playlists(
 
 /// Get playlist tags (localized names from /playlist/getTags)
 #[tauri::command]
-pub async fn get_playlist_tags(
-    state: State<'_, AppState>,
-) -> Result<Vec<PlaylistTag>, String> {
+pub async fn get_playlist_tags(state: State<'_, AppState>) -> Result<Vec<PlaylistTag>, String> {
     let client = state.client.read().await;
-    client
-        .get_playlist_tags()
-        .await
-        .map_err(|e| e.to_string())
+    client.get_playlist_tags().await.map_err(|e| e.to_string())
 }
 
 /// Get discover albums from a browse endpoint (newReleases, idealDiscography, mostStreamed)
@@ -727,12 +830,19 @@ pub async fn get_discover_albums(
 
     log::debug!(
         "Command: get_discover_albums type={} offset={:?} limit={:?}",
-        endpoint_type, offset, limit
+        endpoint_type,
+        offset,
+        limit
     );
 
     let client = state.client.read().await;
     client
-        .get_discover_albums(endpoint, genre_ids, offset.unwrap_or(0), limit.unwrap_or(50))
+        .get_discover_albums(
+            endpoint,
+            genre_ids,
+            offset.unwrap_or(0),
+            limit.unwrap_or(50),
+        )
         .await
         .map_err(|e| e.to_string())
 }
@@ -765,7 +875,10 @@ pub async fn get_releases_grid(
 ) -> Result<ReleasesGridResponse, String> {
     log::debug!(
         "Command: get_releases_grid {} type={} limit={:?} offset={:?}",
-        artist_id, release_type, limit, offset
+        artist_id,
+        release_type,
+        limit,
+        offset
     );
 
     let client = state.client.read().await;

@@ -67,14 +67,25 @@ impl TauriAdapter {
                     log::error!("Failed to emit legacy auth:logged-out: {}", e);
                 }
             }
-            CoreEvent::Error { code, message, recoverable } => {
+            CoreEvent::Error {
+                code,
+                message,
+                recoverable,
+            } => {
                 #[derive(serde::Serialize, Clone)]
                 struct LegacyError<'a> {
                     code: &'a str,
                     message: &'a str,
                     recoverable: bool,
                 }
-                if let Err(e) = self.app_handle.emit("error", LegacyError { code, message, recoverable: *recoverable }) {
+                if let Err(e) = self.app_handle.emit(
+                    "error",
+                    LegacyError {
+                        code,
+                        message,
+                        recoverable: *recoverable,
+                    },
+                ) {
                     log::error!("Failed to emit legacy error: {}", e);
                 }
             }
