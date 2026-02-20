@@ -553,6 +553,7 @@
   let outputDevice = $state('System Default');
   let exclusiveMode = $state(false);
   let dacPassthrough = $state(false);
+  let pwForceBitperfect = $state(false);
   let selectedBackend = $state<string>('Auto');
   let selectedAlsaPlugin = $state<string>('hw (Direct Hardware)');
   let alsaHardwareVolume = $state(false);
@@ -2023,6 +2024,7 @@
     limit_quality_to_device: boolean;
     device_max_sample_rate: number | null;
     gapless_enabled: boolean;
+    pw_force_bitperfect: boolean;
   }
 
   interface BackendInfo {
@@ -2167,6 +2169,7 @@
       }
       exclusiveMode = settings.exclusive_mode;
       dacPassthrough = settings.dac_passthrough;
+      pwForceBitperfect = settings.pw_force_bitperfect;
 
       // Load backend and plugin settings
       if (settings.backend_type) {
@@ -2285,6 +2288,13 @@
       console.log('[Audio] Disabled gapless playback (not compatible with DAC Passthrough)');
     }
 
+    // Disabling DAC Passthrough also disables PW force bit-perfect
+    if (!enabled && pwForceBitperfect) {
+      pwForceBitperfect = false;
+      await invoke('v2_set_audio_pw_force_bitperfect', { enabled: false });
+      console.log('[Audio] Disabled PW force bit-perfect (requires DAC Passthrough)');
+    }
+
     try {
       await invoke('v2_set_audio_dac_passthrough', { enabled });
 
@@ -2297,6 +2307,25 @@
     }
   }
 
+  async function handlePwForceBitperfectChange(enabled: boolean) {
+    pwForceBitperfect = enabled;
+
+    // Auto-enable DAC Passthrough when turning on bit-perfect
+    if (enabled && !dacPassthrough) {
+      await handleDacPassthroughChange(true);
+    }
+
+    try {
+      await invoke('v2_set_audio_pw_force_bitperfect', { enabled });
+
+      const deviceName = getCurrentDeviceSinkName();
+      await reinitAndResume(deviceName);
+      console.log('[Audio] PW force bit-perfect changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change PW force bit-perfect:', err);
+    }
+  }
+
   async function handleBackendChange(backendName: string) {
     selectedBackend = backendName;
 
@@ -2305,8 +2334,13 @@
     const backendType = backendName === 'Auto' ? null : backend?.backend_type ?? null;
 
     // Auto-disable incompatible features
-    // DAC Passthrough only works with PipeWire
+    // DAC Passthrough and PW force bit-perfect only work with PipeWire
     if (backendName !== 'PipeWire') {
+      if (pwForceBitperfect) {
+        pwForceBitperfect = false;
+        await invoke('v2_set_audio_pw_force_bitperfect', { enabled: false });
+        console.log('[Audio] Disabled PW force bit-perfect (only compatible with PipeWire)');
+      }
       if (dacPassthrough) {
         dacPassthrough = false;
         await invoke('v2_set_audio_dac_passthrough', { enabled: false });
@@ -2851,6 +2885,7 @@
       outputDevice = 'System Default';
       exclusiveMode = false;
       dacPassthrough = false;
+      pwForceBitperfect = false;
       selectedBackend = 'Auto';
       selectedAlsaPlugin = 'hw (Direct Hardware)';
       alsaHardwareVolume = false;
@@ -3310,6 +3345,18 @@
         <strong>{$t('settings.audio.flatpakRecommended')}</strong> {$t('settings.audio.flatpakRecommendedDesc')}
       </div>
     </div>
+    {/if}
+    {#if dacPassthrough && selectedBackend === 'PipeWire'}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.pwForceBitperfect')}</span>
+        <span class="setting-desc">{$t('settings.audio.pwForceBitperfectDesc')}</span>
+      </div>
+      <Toggle enabled={pwForceBitperfect} onchange={handlePwForceBitperfectChange} />
+    </div>
+    {#if pwForceBitperfect}
+    <small class="setting-note">{$t('settings.audio.pwForceBitperfectNote')}</small>
+    {/if}
     {/if}
     <div class="setting-row">
       <span class="setting-label">{$t('settings.audio.currentSampleRate')}</span>

@@ -112,6 +112,9 @@ pub struct BackendConfig {
 
     /// Exclusive mode flag
     pub exclusive_mode: bool,
+
+    /// When true, force PipeWire clock.force-quantum for bit-perfect playback
+    pub pw_force_bitperfect: bool,
 }
 
 /// Result type for backend operations

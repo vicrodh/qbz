@@ -4966,6 +4966,7 @@ pub async fn v2_reinit_audio_device(
                     normalization_enabled: fresh_settings.normalization_enabled,
                     normalization_target_lufs: fresh_settings.normalization_target_lufs,
                     gapless_enabled: fresh_settings.gapless_enabled,
+                    pw_force_bitperfect: fresh_settings.pw_force_bitperfect,
                 };
                 let _ = player.reload_settings(qbz_settings);
             }
@@ -5233,6 +5234,21 @@ pub fn v2_set_audio_dac_passthrough(
         .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
     let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
     store.set_dac_passthrough(enabled).map_err(RuntimeError::Internal)
+}
+
+/// Set PipeWire force bit-perfect mode (V2)
+#[tauri::command]
+pub fn v2_set_audio_pw_force_bitperfect(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] set_audio_pw_force_bitperfect: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard.as_ref().ok_or(RuntimeError::UserSessionNotActivated)?;
+    store.set_pw_force_bitperfect(enabled).map_err(RuntimeError::Internal)
 }
 
 /// Set preferred sample rate (V2)

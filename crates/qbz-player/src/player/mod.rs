@@ -460,6 +460,7 @@ fn try_init_stream_with_backend(
         channels,
         exclusive_mode: audio_settings.exclusive_mode,
         alsa_plugin: audio_settings.alsa_plugin,
+        pw_force_bitperfect: audio_settings.pw_force_bitperfect,
     };
 
     // For ALSA backend with hw: devices, try direct ALSA first (Linux only)
@@ -1720,6 +1721,10 @@ impl Player {
                         // Drop the stream to release the device and stop background CPU use.
                         drop(stream_opt.take());
                         *pause_suspend_deadline = None;
+                        // Reset PipeWire clock if bit-perfect was active
+                        if thread_settings.lock().ok().map(|s| s.pw_force_bitperfect).unwrap_or(false) {
+                            qbz_audio::pipewire_backend::PipeWireBackend::reset_pipewire_clock();
+                        }
                         log::info!("Audio thread: stopped");
                     }
                     AudioCommand::SetVolume(volume) => {
@@ -2088,6 +2093,10 @@ impl Player {
                                 }
                                 drop(stream_opt.take());
                                 pause_suspend_deadline = None;
+                                // Reset PipeWire clock if bit-perfect was active
+                                if thread_settings.lock().ok().map(|s| s.pw_force_bitperfect).unwrap_or(false) {
+                                    qbz_audio::pipewire_backend::PipeWireBackend::reset_pipewire_clock();
+                                }
                                 log::info!("Audio thread: suspended stream after pause");
                                 continue;
                             }

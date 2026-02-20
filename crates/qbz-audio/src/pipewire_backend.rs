@@ -21,11 +21,34 @@ pub struct PipeWireBackend {
     host: rodio::cpal::Host,
 }
 
+/// Calculate the optimal PipeWire quantum for a given sample rate.
+/// Returns a power-of-2 value matching common audio interface expectations.
+fn quantum_for_sample_rate(sample_rate: u32) -> u32 {
+    match sample_rate {
+        r if r <= 48000 => 1024,
+        r if r <= 96000 => 2048,
+        r if r <= 192000 => 4096,
+        _ => 8192,
+    }
+}
+
 impl PipeWireBackend {
     pub fn new() -> BackendResult<Self> {
         Ok(Self {
             host: rodio::cpal::default_host(),
         })
+    }
+
+    /// Reset PipeWire clock.force-rate and clock.force-quantum to 0.
+    /// Call this when playback stops so other apps aren't stuck at a forced rate.
+    pub fn reset_pipewire_clock() {
+        log::info!("[PipeWire Backend] Resetting clock.force-rate and clock.force-quantum to 0");
+        let _ = Command::new("pw-metadata")
+            .args(["-n", "settings", "0", "clock.force-rate", "0"])
+            .output();
+        let _ = Command::new("pw-metadata")
+            .args(["-n", "settings", "0", "clock.force-quantum", "0"])
+            .output();
     }
 
     /// Parse pactl output to get device list with pretty names
@@ -191,6 +214,28 @@ impl AudioBackend for PipeWireBackend {
             }
             Err(e) => {
                 log::warn!("[PipeWire Backend] Error executing pw-metadata: {}", e);
+            }
+        }
+
+        // Force quantum if bit-perfect mode is enabled
+        if config.pw_force_bitperfect {
+            let quantum = quantum_for_sample_rate(config.sample_rate);
+            log::info!("[PipeWire Backend] Forcing quantum to {} via pw-metadata (bit-perfect)", quantum);
+            let quantum_result = Command::new("pw-metadata")
+                .args(["-n", "settings", "0", "clock.force-quantum", &quantum.to_string()])
+                .output();
+
+            match quantum_result {
+                Ok(output) if output.status.success() => {
+                    log::info!("[PipeWire Backend] Quantum forced to {}", quantum);
+                }
+                Ok(output) => {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::warn!("[PipeWire Backend] Failed to force quantum: {}", stderr);
+                }
+                Err(e) => {
+                    log::warn!("[PipeWire Backend] Error executing pw-metadata for quantum: {}", e);
+                }
             }
         }
 

@@ -479,6 +479,7 @@ fn try_init_stream_with_backend(
         channels,
         exclusive_mode: audio_settings.exclusive_mode,
         alsa_plugin: audio_settings.alsa_plugin,
+        pw_force_bitperfect: audio_settings.pw_force_bitperfect,
     };
 
     // For ALSA backend with hw: devices, try direct ALSA first (Linux only)
