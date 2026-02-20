@@ -147,6 +147,23 @@
           </button>
         </div>
 
+        <!-- Contributors -->
+        <div class="info-section">
+          <h3>Contributors</h3>
+          <div class="contributors">
+            <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/vorce')}>
+              <img src="https://github.com/vorce.png?size=28" alt="vorce" class="contributor-avatar" />
+              vorce
+              <ExternalLink size={10} />
+            </button>
+            <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/boxdot')}>
+              <img src="https://github.com/boxdot.png?size=28" alt="boxdot" class="contributor-avatar" />
+              boxdot
+              <ExternalLink size={10} />
+            </button>
+          </div>
+        </div>
+
         <!-- Signature -->
         <div class="signature">
           <p>
@@ -361,6 +378,41 @@
 
   .author-link :global(svg) {
     opacity: 0.5;
+  }
+
+  .contributors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .contributor-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px 5px 5px;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 20px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .contributor-link:hover {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+  }
+
+  .contributor-link :global(svg) {
+    opacity: 0.4;
+  }
+
+  .contributor-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
   }
 
   .signature {
