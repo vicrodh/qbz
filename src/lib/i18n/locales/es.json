@@ -1682,6 +1682,7 @@
   "yourMixes": {
     "title": "DailyQ",
     "subtitle": "Basado en tus escuchas recientes.",
+    "cardDesc": "Eleva tu dia con una seleccion personalizada de musica.",
     "actions": {
       "saveAsPlaylist": "Guardar como playlist"
     },
@@ -1715,7 +1716,8 @@
   },
   "weeklyMixes": {
     "title": "WeeklyQ",
-    "subtitle": "Basado en tus escuchas semanales."
+    "subtitle": "Basado en tus escuchas semanales.",
+    "cardDesc": "Un viaje semanal con un mix fresco <strong>cada viernes</strong>."
   },
   "linkResolver": {
     "title": "Abrir enlace de Qobuz",

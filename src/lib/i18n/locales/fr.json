@@ -1485,5 +1485,15 @@
     "go": "Aller",
     "resolving": "Resolution...",
     "invalidLink": "Lien Qobuz invalide ou non pris en charge."
+  },
+  "yourMixes": {
+    "title": "DailyQ",
+    "subtitle": "Base sur vos ecoutes recentes.",
+    "cardDesc": "Sublimez votre journee avec une selection musicale personnalisee."
+  },
+  "weeklyMixes": {
+    "title": "WeeklyQ",
+    "subtitle": "Base sur vos ecoutes hebdomadaires.",
+    "cardDesc": "Un voyage hebdomadaire avec un mix frais <strong>chaque vendredi</strong>."
   }
 }

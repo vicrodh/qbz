@@ -1461,20 +1461,14 @@
               <span class="mix-card-badge">qobuz</span>
               <span class="mix-card-name">DailyQ</span>
             </div>
-            <div class="mix-card-info">
-              <div class="mix-card-title">{$t('yourMixes.title')}</div>
-              <div class="mix-card-owner">Qobuz</div>
-            </div>
+            <p class="mix-card-desc">{$t('yourMixes.cardDesc')}</p>
           </button>
           <button class="mix-card" onclick={() => onNavigateWeeklyQ?.()}>
             <div class="mix-card-artwork mix-gradient-weekly">
               <span class="mix-card-badge">qobuz</span>
               <span class="mix-card-name">WeeklyQ</span>
             </div>
-            <div class="mix-card-info">
-              <div class="mix-card-title">{$t('weeklyMixes.title')}</div>
-              <div class="mix-card-owner">Qobuz</div>
-            </div>
+            <p class="mix-card-desc">{@html $t('weeklyMixes.cardDesc')}</p>
           </button>
         </div>
       </div>
@@ -1878,8 +1872,9 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    justify-content: flex-end;
-    padding: 12px;
+    justify-content: flex-start;
+    padding: 14px;
+    gap: 4px;
     box-sizing: border-box;
   }
 
@@ -1914,22 +1909,17 @@
     text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
   }
 
-  .mix-card-title {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-    line-height: 1.4;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    margin-bottom: 2px;
-  }
-
-  .mix-card-owner {
+  .mix-card-desc {
     font-size: 12px;
     font-weight: 400;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     line-height: 1.4;
+    margin: 0;
+  }
+
+  .mix-card-desc :global(strong) {
+    font-weight: 600;
+    color: var(--text-primary);
   }
 
 </style>

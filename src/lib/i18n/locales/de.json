@@ -1485,5 +1485,15 @@
     "go": "Los",
     "resolving": "Wird aufgeloest...",
     "invalidLink": "Ungueltiger oder nicht unterstuetzter Qobuz-Link."
+  },
+  "yourMixes": {
+    "title": "DailyQ",
+    "subtitle": "Basierend auf deinem letzten Hoerverlauf.",
+    "cardDesc": "Bereichere deinen Tag mit einer personalisierten Musikauswahl."
+  },
+  "weeklyMixes": {
+    "title": "WeeklyQ",
+    "subtitle": "Basierend auf deinem woechentlichen Hoerverlauf.",
+    "cardDesc": "Eine woechentliche Reise mit einem frischen Mix <strong>jeden Freitag</strong>."
   }
 }
