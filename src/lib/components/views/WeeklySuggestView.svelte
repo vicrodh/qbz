@@ -1,7 +1,7 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
-  import { ListPlus, Play, RefreshCw, Shuffle, Sparkles } from 'lucide-svelte';
+  import { ListPlus, Play, RefreshCw, Search, Shuffle, X } from 'lucide-svelte';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import TrackRow from '$lib/components/TrackRow.svelte';
   import { t } from '$lib/i18n';
@@ -266,13 +266,7 @@
   <div class="playlist-header">
     <div class="artwork-container">
       <div class="artwork">
-        {#if result && result.tracks.items.length > 0}
-          <img src={getQobuzImage(result.tracks.items[0].album?.image)} alt={$t('weeklyMixes.title')} />
-        {:else}
-          <div class="placeholder-art">
-            <Sparkles size={34} />
-          </div>
-        {/if}
+        <video src="/video/weeklyq.mp4" autoplay loop muted playsinline></video>
       </div>
     </div>
 
@@ -292,17 +286,17 @@
       </div>
 
       <div class="actions">
-        <button class="action-btn-circle primary" onclick={() => generateDailyQ('none')} disabled={loading} title={$t('actions.refresh')}>
-          <RefreshCw size={16} />
-        </button>
-        <button class="action-btn-circle" onclick={openSaveAsPlaylist} disabled={loading || !result || result.tracks.items.length === 0} title={$t('yourMixes.actions.saveAsPlaylist')}>
-          <ListPlus size={16} />
-        </button>
-        <button class="action-btn-circle" onclick={handlePlayAll} disabled={loading || filteredTracks.length === 0} title={$t('actions.playNow')}>
-          <Play size={16} />
+        <button class="action-btn-circle primary" onclick={handlePlayAll} disabled={loading || filteredTracks.length === 0} title={$t('actions.playNow')}>
+          <Play size={20} fill="currentColor" color="currentColor" />
         </button>
         <button class="action-btn-circle" onclick={handleShuffle} disabled={loading || filteredTracks.length === 0} title={$t('actions.shuffle')}>
-          <Shuffle size={16} />
+          <Shuffle size={18} />
+        </button>
+        <button class="action-btn-circle" onclick={openSaveAsPlaylist} disabled={loading || !result || result.tracks.items.length === 0} title={$t('yourMixes.actions.saveAsPlaylist')}>
+          <ListPlus size={18} />
+        </button>
+        <button class="action-btn-circle" onclick={() => generateDailyQ('none')} disabled={loading} title={$t('actions.refresh')}>
+          <RefreshCw size={18} />
         </button>
       </div>
     </div>
@@ -314,12 +308,18 @@
 
   <div class="track-controls">
     <div class="search-container">
+      <Search size={16} class="search-icon" />
       <input
         type="text"
         placeholder={$t('placeholders.searchInPlaylist')}
         bind:value={searchQuery}
         class="search-input"
       />
+      {#if searchQuery}
+        <button class="search-clear" onclick={() => searchQuery = ''}>
+          <X size={14} />
+        </button>
+      {/if}
     </div>
   </div>
 
@@ -330,11 +330,13 @@
   {:else if result}
     <div class="track-list">
       <div class="track-list-header">
-        <span class="col-number">#</span>
-        <span class="col-title">{$t('common.title')}</span>
-        <span class="col-album">{$t('purchases.sort.album')}</span>
-        <span class="col-duration">{$t('album.duration')}</span>
-        <span class="col-quality">{$t('album.quality')}</span>
+        <div class="col-number">#</div>
+        <div class="col-artwork"></div>
+        <div class="col-title">{$t('common.title')}</div>
+        <div class="col-album">{$t('purchases.sort.album')}</div>
+        <div class="col-duration">{$t('album.duration')}</div>
+        <div class="col-quality">{$t('album.quality')}</div>
+        <div class="col-spacer"></div>
       </div>
 
       {#each filteredTracks as track, index}
@@ -373,103 +375,84 @@
 
 <style>
   .dailyq-view {
-    padding: 20px;
+    padding: 24px;
     color: var(--text-primary);
   }
 
   .playlist-header {
-    display: grid;
-    grid-template-columns: 200px 1fr;
-    gap: 18px;
-    margin-bottom: 16px;
-    align-items: end;
+    display: flex;
+    gap: 32px;
+    margin-bottom: 32px;
   }
 
   .artwork-container {
-    width: 200px;
-    height: 200px;
+    flex-shrink: 0;
   }
 
   .artwork {
-    width: 100%;
-    height: 100%;
+    width: 186px;
+    height: 186px;
+    position: relative;
     border-radius: 8px;
     overflow: hidden;
-    background: var(--bg-secondary);
+    background-color: var(--bg-tertiary);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   }
 
-  .artwork img {
+  .artwork video {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
 
-  .placeholder-art {
-    width: 100%;
-    height: 100%;
+  .metadata {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
+    flex-direction: column;
+    justify-content: flex-end;
+    min-width: 0;
   }
 
   .playlist-label {
-    font-size: 11px;
+    font-size: 12px;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
     color: var(--text-muted);
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
   }
 
   .playlist-title {
-    margin: 4px 0;
-    font-size: 2rem;
+    font-size: 24px;
+    font-weight: 700;
+    color: var(--text-primary);
+    margin: 0 0 8px 0;
+    line-height: 1.2;
   }
 
   .playlist-description {
-    margin: 0;
-    color: var(--text-muted);
+    font-size: 14px;
+    color: var(--text-secondary);
+    margin: 0 0 12px 0;
+    line-height: 1.4;
   }
 
   .playlist-info {
-    margin-top: 8px;
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
     color: var(--text-secondary);
-    font-size: 0.9rem;
+    margin-bottom: 24px;
   }
 
   .separator {
-    opacity: 0.7;
+    color: var(--text-muted);
   }
 
   .actions {
-    margin-top: 12px;
     display: flex;
-    gap: 8px;
-  }
-
-  .action-btn-circle {
-    width: 34px;
-    height: 34px;
-    border-radius: 9999px;
-    border: 1px solid var(--border-color);
-    background: var(--surface-2);
-    color: var(--text-primary);
-    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
-  }
-
-  .action-btn-circle.primary {
-    background: var(--accent-primary, #f5a524);
-    border-color: var(--accent-primary, #f5a524);
-    color: #000;
-  }
-
-  .action-btn-circle:disabled {
-    opacity: 0.5;
-    cursor: default;
+    gap: 12px;
   }
 
   .error {
@@ -478,39 +461,110 @@
   }
 
   .track-controls {
-    margin-bottom: 10px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-top: 24px;
+    margin-bottom: 16px;
+  }
+
+  .search-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 8px 12px;
+    flex: 1;
+    max-width: 300px;
+  }
+
+  .search-container :global(.search-icon) {
+    color: var(--text-muted);
+    flex-shrink: 0;
   }
 
   .search-input {
-    width: 100%;
-    max-width: 320px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--surface-2);
+    flex: 1;
+    background: none;
+    border: none;
     color: var(--text-primary);
-    padding: 8px 10px;
-    font: inherit;
+    font-size: 14px;
+    outline: none;
+  }
+
+  .search-input::placeholder {
+    color: var(--text-muted);
+  }
+
+  .search-clear {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .search-clear:hover {
+    color: var(--text-primary);
   }
 
   .track-list {
-    border-top: 1px solid var(--border-color);
+    margin-top: 24px;
   }
 
   .track-list-header {
-    display: grid;
-    grid-template-columns: 64px 1fr 1fr 92px 92px;
-    gap: 12px;
-    padding: 8px 16px;
-    color: var(--text-muted);
-    font-size: 11px;
-    letter-spacing: 0.06em;
+    width: 100%;
+    height: 40px;
+    padding: 0 16px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
     text-transform: uppercase;
+    color: #666666;
+    font-weight: 400;
+    box-sizing: border-box;
+    border-bottom: 1px solid var(--bg-tertiary);
+    margin-bottom: 8px;
   }
 
-  .col-number,
-  .col-duration,
-  .col-quality {
+  .col-number {
+    width: 48px;
     text-align: center;
+  }
+
+  .col-artwork {
+    width: 36px;
+    flex-shrink: 0;
+  }
+
+  .col-title {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .col-album {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .col-duration {
+    width: 80px;
+    text-align: center;
+  }
+
+  .col-quality {
+    width: 80px;
+    text-align: center;
+  }
+
+  .col-spacer {
+    width: 28px;
   }
 
   .empty {
@@ -523,17 +577,17 @@
 
   @media (max-width: 760px) {
     .playlist-header {
-      grid-template-columns: 1fr;
-      align-items: start;
+      flex-direction: column;
+      gap: 16px;
     }
 
-    .artwork-container {
-      width: 140px;
-      height: 140px;
+    .artwork {
+      width: 160px;
+      height: 160px;
     }
 
     .playlist-title {
-      font-size: 1.6rem;
+      font-size: 20px;
     }
 
     .track-list-header {
