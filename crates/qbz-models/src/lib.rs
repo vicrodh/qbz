@@ -42,7 +42,8 @@ pub use playback::{PlaybackState, PlaybackStatus, QueueState, QueueTrack, Repeat
 pub use traits::{FrontendAdapter, LoggingAdapter, NoOpAdapter};
 pub use types::{
     Album, AlbumSummary, Artist, ArtistAlbums, ArtistBiography, Favorites, Genre, GenreInfo,
-    GenreListContainer, GenreListResponse, ImageSet, Label, LabelDetail, Playlist,
+    GenreListContainer, GenreListResponse, ImageSet, Label, LabelDetail,
+    LabelExploreResponse, LabelPageContainer, LabelPageData, LabelPageGenericList, Playlist,
     PlaylistDuplicateResult, PlaylistGenre, PlaylistOwner, PlaylistWithTrackIds, Quality,
     SearchResults, SearchResultsPage, StreamRestriction, StreamUrl, Track, TracksContainer,
     UserSession,

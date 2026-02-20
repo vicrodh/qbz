@@ -445,6 +445,47 @@ pub struct LabelDetail {
     pub albums_count: Option<u32>,
 }
 
+// ============ Label Page Types (/label/page) ============
+
+/// Top-level response from /label/page
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelPageData {
+    pub id: u64,
+    pub name: String,
+    pub description: Option<String>,
+    #[serde(default)]
+    pub image: Option<serde_json::Value>,
+    #[serde(default)]
+    pub releases: Option<Vec<LabelPageContainer>>,
+    #[serde(default)]
+    pub playlists: Option<LabelPageGenericList>,
+    #[serde(default)]
+    pub top_tracks: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub top_artists: Option<LabelPageGenericList>,
+}
+
+/// A container within label page (e.g. releases category)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelPageContainer {
+    pub id: Option<String>,
+    pub data: Option<LabelPageGenericList>,
+}
+
+/// Generic list with has_more and items
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelPageGenericList {
+    pub has_more: Option<bool>,
+    pub items: Option<Vec<serde_json::Value>>,
+}
+
+/// Response from /label/explore
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelExploreResponse {
+    pub has_more: Option<bool>,
+    pub items: Option<Vec<serde_json::Value>>,
+}
+
 /// Genre model (basic, used in album responses)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Genre {

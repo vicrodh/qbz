@@ -981,6 +981,8 @@ pub fn run() {
             commands_v2::v2_get_similar_artists,
             commands_v2::v2_get_artist_with_albums,
             commands_v2::v2_get_label,
+            commands_v2::v2_get_label_page,
+            commands_v2::v2_get_label_explore,
             commands_v2::v2_pause_playback,
             commands_v2::v2_resume_playback,
             commands_v2::v2_stop_playback,

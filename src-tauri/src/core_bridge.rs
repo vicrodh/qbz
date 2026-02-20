@@ -14,7 +14,8 @@ use qbz_audio::{settings::AudioSettingsStore, AudioDiagnostic, AudioSettings, Vi
 use qbz_core::QbzCore;
 use qbz_models::{
     Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
-    GenreInfo, LabelDetail, PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState,
+    GenreInfo, LabelDetail, LabelExploreResponse, LabelPageData, PageArtistResponse, Playlist,
+    PlaylistTag, Quality, QueueState,
     QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{PlaybackState, Player};
@@ -495,6 +496,26 @@ impl CoreBridge {
     ) -> Result<LabelDetail, String> {
         self.core
             .get_label(label_id, limit, offset)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get label page (aggregated: top tracks, releases, playlists, artists)
+    pub async fn get_label_page(&self, label_id: u64) -> Result<LabelPageData, String> {
+        self.core
+            .get_label_page(label_id)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
+    /// Get label explore (discover more labels)
+    pub async fn get_label_explore(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelExploreResponse, String> {
+        self.core
+            .get_label_explore(limit, offset)
             .await
             .map_err(|e| e.to_string())
     }

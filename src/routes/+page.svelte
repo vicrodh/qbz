@@ -315,6 +315,7 @@
   import ArtistDetailView from '$lib/components/views/ArtistDetailView.svelte';
   import MusicianPageView from '$lib/components/views/MusicianPageView.svelte';
   import LabelView from '$lib/components/views/LabelView.svelte';
+  import LabelReleasesView from '$lib/components/views/LabelReleasesView.svelte';
   import PlaylistDetailView from '$lib/components/views/PlaylistDetailView.svelte';
   import FavoritesView from '$lib/components/views/FavoritesView.svelte';
   import LocalLibraryView from '$lib/components/views/LocalLibraryView.svelte';
@@ -793,6 +794,11 @@
   function handleLabelClick(labelId: number, labelName?: string) {
     selectedLabel = { id: labelId, name: labelName || '' };
     navigateTo('label');
+  }
+
+  function handleNavigateLabelReleases(labelId: number, labelName: string) {
+    selectedLabel = { id: labelId, name: labelName };
+    navigateTo('label-releases');
   }
 
   /**
@@ -3540,6 +3546,35 @@
         />
       {:else if activeView === 'label' && selectedLabel}
         <LabelView
+          labelId={selectedLabel.id}
+          labelName={selectedLabel.name}
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
+          onLabelClick={handleLabelClick}
+          onNavigateReleases={handleNavigateLabelReleases}
+          onPlaylistClick={selectPlaylist}
+          onTrackPlay={handleDisplayTrackPlay}
+          onTrackPlayNext={queueQobuzTrackNext}
+          onTrackPlayLater={queueQobuzTrackLater}
+          onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackGoToAlbum={handleAlbumClick}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'label-releases' && selectedLabel}
+        <LabelReleasesView
           labelId={selectedLabel.id}
           labelName={selectedLabel.name}
           onBack={navGoBack}

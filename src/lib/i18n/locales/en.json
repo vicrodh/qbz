@@ -84,6 +84,20 @@
     "noPlaylistsFor": "No playlists found for \"{query}\"",
     "viewMore": "View more"
   },
+  "label": {
+    "title": "Label",
+    "popularTracks": "Popular Tracks",
+    "releases": "Releases",
+    "criticsPicks": "Critics' Picks",
+    "playlists": "Playlists",
+    "artists": "Artists",
+    "moreLabels": "More labels",
+    "readMore": "READ MORE",
+    "readLess": "READ LESS",
+    "seeAll": "See all",
+    "showMore": "Show more",
+    "showLess": "Show less"
+  },
   "library": {
     "title": "Local Library",
     "browse": "Browse Library",

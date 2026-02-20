@@ -11,7 +11,8 @@ use tokio::sync::RwLock;
 
 use qbz_models::{
     Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
-    GenreInfo, LabelDetail, PageArtistResponse, Playlist, PlaylistTag, Quality, QueueState,
+    GenreInfo, LabelDetail, LabelExploreResponse, LabelPageData, PageArtistResponse, Playlist,
+    PlaylistTag, Quality, QueueState,
     QueueTrack as CoreQueueTrack, RepeatMode, SearchResultsPage, Track, UserSession,
 };
 
@@ -6450,6 +6451,49 @@ pub async fn v2_get_label(
     let bridge = bridge.get().await;
     bridge
         .get_label(labelId, limit, offset)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get label page (aggregated: top tracks, releases, playlists, artists)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_label_page(
+    labelId: u64,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<LabelPageData, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    log::info!("[V2] get_label_page: {}", labelId);
+    let bridge = bridge.get().await;
+    bridge
+        .get_label_page(labelId)
+        .await
+        .map_err(RuntimeError::Internal)
+}
+
+/// Get label explore (discover more labels)
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_label_explore(
+    limit: u32,
+    offset: u32,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<LabelExploreResponse, RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    log::info!("[V2] get_label_explore: limit={} offset={}", limit, offset);
+    let bridge = bridge.get().await;
+    bridge
+        .get_label_explore(limit, offset)
         .await
         .map_err(RuntimeError::Internal)
 }

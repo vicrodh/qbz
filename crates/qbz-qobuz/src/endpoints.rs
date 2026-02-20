@@ -44,6 +44,8 @@ pub mod paths {
 
     // Label
     pub const LABEL_GET: &str = "/label/get";
+    pub const LABEL_PAGE: &str = "/label/page";
+    pub const LABEL_EXPLORE: &str = "/label/explore";
 
     // Genre
     pub const GENRE_LIST: &str = "/genre/list";

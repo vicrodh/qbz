@@ -8,7 +8,8 @@ use tokio::sync::RwLock;
 
 use qbz_models::{
     Album, Artist, CoreEvent, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse,
-    DiscoverResponse, FrontendAdapter, GenreInfo, LabelDetail, PageArtistResponse, Playlist,
+    DiscoverResponse, FrontendAdapter, GenreInfo, LabelDetail, LabelExploreResponse,
+    LabelPageData, PageArtistResponse, Playlist,
     PlaylistTag, Quality, QueueState, QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
 };
 use qbz_player::{Player, PlaybackState, QueueManager};
@@ -730,6 +731,32 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
 
         client
             .get_label(label_id, limit, offset)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get label page (aggregated: top tracks, releases, playlists, artists)
+    pub async fn get_label_page(&self, label_id: u64) -> Result<LabelPageData, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_label_page(label_id)
+            .await
+            .map_err(CoreError::Api)
+    }
+
+    /// Get label explore (discover more labels)
+    pub async fn get_label_explore(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelExploreResponse, CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+
+        client
+            .get_label_explore(limit, offset)
             .await
             .map_err(CoreError::Api)
     }

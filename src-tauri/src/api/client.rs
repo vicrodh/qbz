@@ -1168,6 +1168,49 @@ impl QobuzClient {
         Ok(playlist)
     }
 
+    /// Get label page (aggregated: top tracks, releases, playlists, artists)
+    pub async fn get_label_page(&self, label_id: u64) -> Result<LabelPageData> {
+        let url = endpoints::build_url(paths::LABEL_PAGE);
+
+        log::debug!("[API] get_label_page({})", label_id);
+        let response: serde_json::Value = self
+            .http
+            .get(&url)
+            .headers(self.api_headers().await?)
+            .query(&[("label_id", label_id.to_string())])
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Get label explore (discover more labels)
+    pub async fn get_label_explore(
+        &self,
+        limit: u32,
+        offset: u32,
+    ) -> Result<LabelExploreResponse> {
+        let url = endpoints::build_url(paths::LABEL_EXPLORE);
+
+        log::debug!("[API] get_label_explore(limit={}, offset={})", limit, offset);
+        let response: serde_json::Value = self
+            .http
+            .get(&url)
+            .headers(self.api_headers().await?)
+            .query(&[
+                ("limit", limit.to_string()),
+                ("offset", offset.to_string()),
+            ])
+            .send()
+            .await?
+            .json()
+            .await?;
+
+        Ok(serde_json::from_value(response)?)
+    }
+
     /// Get label by ID with albums
     pub async fn get_label(&self, label_id: u64, limit: u32, offset: u32) -> Result<LabelDetail> {
         let url = endpoints::build_url(paths::LABEL_GET);

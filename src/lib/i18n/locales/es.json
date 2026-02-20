@@ -84,6 +84,20 @@
     "noPlaylistsFor": "No se encontraron listas para \"{query}\"",
     "viewMore": "Ver más"
   },
+  "label": {
+    "title": "Sello",
+    "popularTracks": "Canciones populares",
+    "releases": "Lanzamientos",
+    "criticsPicks": "Selección de la crítica",
+    "playlists": "Playlists",
+    "artists": "Artistas",
+    "moreLabels": "Más sellos",
+    "readMore": "LEER MÁS",
+    "readLess": "LEER MENOS",
+    "seeAll": "Ver todo",
+    "showMore": "Ver más",
+    "showLess": "Ver menos"
+  },
   "library": {
     "title": "Biblioteca Local",
     "browse": "Explorar Biblioteca",
