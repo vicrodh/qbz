@@ -107,6 +107,9 @@
   let artists = $state<Record<string, unknown>[]>([]);
   let moreLabels = $state<LabelExploreItem[]>([]);
 
+  // Artist image cache (fetched via v2_get_artist)
+  let artistImageMap = $state<Map<number, string>>(new Map());
+
   // Track expand state (like ArtistDetailView: 5 → 20 → 50)
   let visibleTracksCount = $state(5);
   let showTracksContextMenu = $state(false);
@@ -338,6 +341,27 @@
     }
   }
 
+  async function loadArtistImages(artistList: Record<string, unknown>[]) {
+    // Fetch images for artists that don't have them from the label page data
+    const fetches = artistList.map(async (artist) => {
+      const id = artist.id as number;
+      // Skip if we already have a local image from the label page data
+      if (getArtistImageUrl(artist)) return;
+      try {
+        const detail = await invoke<{ image?: { small?: string; thumbnail?: string; large?: string } }>(
+          'v2_get_artist', { artistId: id }
+        );
+        const url = detail?.image?.large || detail?.image?.thumbnail || detail?.image?.small;
+        if (url) {
+          artistImageMap = new Map([...artistImageMap, [id, url]]);
+        }
+      } catch {
+        // Silently skip — placeholder will show
+      }
+    });
+    await Promise.allSettled(fetches);
+  }
+
   // Track playback — mirrors ArtistDetailView exactly
   function buildTopTracksQueue(tracks: Track[]) {
     return tracks.map((track) => ({
@@ -473,6 +497,9 @@
   }
 
   function getArtistImageUrl(artist: Record<string, unknown>): string | null {
+    // 0. Check fetched image cache
+    const cached = artistImageMap.get(artist.id as number);
+    if (cached) return cached;
     // 1. image object (most common in search results)
     const image = artist.image as Record<string, string> | null | undefined;
     if (image && typeof image === 'object') {
@@ -576,6 +603,7 @@
     artists = [];
     moreLabels = [];
     labelDescription = null;
+    artistImageMap = new Map();
     loadLabelPage();
     loadLabelAlbumsAndDescription();
     loadMoreLabels();
@@ -585,6 +613,13 @@
   $effect(() => {
     if (releases.length > 0) {
       loadAllAlbumDownloadStatuses(releases);
+    }
+  });
+
+  // Fetch artist images when artists are loaded
+  $effect(() => {
+    if (artists.length > 0) {
+      loadArtistImages(artists);
     }
   });
 
@@ -1147,7 +1182,8 @@
   .read-more-btn:hover { text-decoration: underline; }
 
   /* Sections */
-  .section { margin-bottom: 8px; }
+  .section-anchor { scroll-margin-top: 56px; }
+  .section { margin-bottom: 28px; }
   .section-header {
     display: flex; align-items: center; justify-content: space-between;
     gap: 12px; margin-bottom: 20px;
@@ -1190,7 +1226,7 @@
   .context-menu-item:hover { background-color: var(--bg-hover); color: var(--text-primary); }
 
   /* Tracks */
-  .top-tracks-section { margin-bottom: 32px; }
+  .top-tracks-section { margin-bottom: 48px; }
   .tracks-list { display: flex; flex-direction: column; }
   .track-row {
     display: flex; align-items: center; gap: 12px;
