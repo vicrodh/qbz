@@ -17,6 +17,103 @@ where
     Ok(serde_json::from_value(value).ok())
 }
 
+fn lenient_page<'de, D, T>(deserializer: D) -> Result<SearchResultsPage<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    if value.is_null() {
+        return Ok(SearchResultsPage {
+            items: Vec::new(),
+            total: 0,
+            offset: 0,
+            limit: 0,
+        });
+    }
+    Ok(serde_json::from_value(value).unwrap_or(SearchResultsPage {
+        items: Vec::new(),
+        total: 0,
+        offset: 0,
+        limit: 0,
+    }))
+}
+
+fn lenient_page_flexible<'de, D, T>(deserializer: D) -> Result<SearchResultsPage<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    if value.is_null() {
+        return Ok(SearchResultsPage {
+            items: Vec::new(),
+            total: 0,
+            offset: 0,
+            limit: 0,
+        });
+    }
+
+    let items: Vec<T> = value
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| serde_json::from_value::<T>(item.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let limit = value
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .unwrap_or(items.len() as u32);
+
+    let offset = value
+        .get("offset")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .unwrap_or(0);
+
+    let total = value
+        .get("total")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .unwrap_or(items.len() as u32);
+
+    Ok(SearchResultsPage {
+        items,
+        total,
+        offset,
+        limit,
+    })
+}
+
+fn deserialize_string_id<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::String(v) => v,
+        serde_json::Value::Number(v) => v.to_string(),
+        _ => String::new(),
+    })
+}
+
+fn deserialize_u64_id<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::Number(v) => v.as_u64().unwrap_or(0),
+        serde_json::Value::String(v) => v.parse::<u64>().unwrap_or(0),
+        _ => 0,
+    })
+}
+
 fn serde_true() -> bool {
     true
 }
@@ -396,17 +493,40 @@ pub struct SearchResultsPage<T> {
     pub limit: u32,
 }
 
+impl<T> Default for SearchResultsPage<T> {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            total: 0,
+            offset: 0,
+            limit: 0,
+        }
+    }
+}
+
 // ============ Purchases API Models ============
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PurchaseResponse {
+    #[serde(default, deserialize_with = "lenient_page")]
     pub albums: SearchResultsPage<PurchaseAlbum>,
+    #[serde(default, deserialize_with = "lenient_page")]
     pub tracks: SearchResultsPage<PurchaseTrack>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchaseIdsResponse {
+    #[serde(default, deserialize_with = "lenient_page")]
+    pub albums: SearchResultsPage<serde_json::Value>,
+    #[serde(default, deserialize_with = "lenient_page")]
+    pub tracks: SearchResultsPage<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PurchaseAlbum {
+    #[serde(default, deserialize_with = "deserialize_string_id")]
     pub id: String,
+    #[serde(default)]
     pub title: String,
     #[serde(default)]
     pub artist: Artist,
@@ -434,13 +554,15 @@ pub struct PurchaseAlbum {
     pub downloaded: bool,
     #[serde(default, deserialize_with = "lenient_option")]
     pub purchased_at: Option<i64>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "lenient_option")]
     pub tracks: Option<SearchResultsPage<PurchaseTrack>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PurchaseTrack {
+    #[serde(default, deserialize_with = "deserialize_u64_id")]
     pub id: u64,
+    #[serde(default)]
     pub title: String,
     #[serde(default)]
     pub track_number: u32,
@@ -464,6 +586,55 @@ pub struct PurchaseTrack {
     pub downloaded: bool,
     #[serde(default, deserialize_with = "lenient_option")]
     pub purchased_at: Option<i64>,
+}
+
+// ============ Dynamic Suggest API Models ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicSuggestRequest {
+    pub limit: u32,
+    #[serde(default)]
+    pub listened_tracks_ids: Vec<u64>,
+    #[serde(default)]
+    pub track_to_analysed: Vec<DynamicTrackToAnalyse>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicTrackToAnalyse {
+    pub track_id: u64,
+    pub artist_id: u64,
+    pub genre_id: u64,
+    pub label_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicSuggestResponse {
+    #[serde(default)]
+    pub algorithm: String,
+    #[serde(default, deserialize_with = "lenient_page_flexible")]
+    pub tracks: SearchResultsPage<DynamicSuggestTrack>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicSuggestTrack {
+    #[serde(default, deserialize_with = "deserialize_u64_id")]
+    pub id: u64,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub duration: Option<u32>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub performer: Option<Artist>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub album: Option<AlbumSummary>,
+    #[serde(default)]
+    pub hires: bool,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub maximum_sampling_rate: Option<f64>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub maximum_bit_depth: Option<u32>,
+    #[serde(default = "serde_true")]
+    pub streamable: bool,
 }
 
 /// Favorites container
