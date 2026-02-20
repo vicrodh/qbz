@@ -114,6 +114,7 @@
 
   // Description expand
   let descriptionExpanded = $state(false);
+  let labelDescription = $state<string | null>(null);
 
   // Favorites reactivity
   let trackFavoritesVersion = $state(0);
@@ -256,6 +257,11 @@
 
       console.log('[LabelView] Raw label page data:', JSON.stringify(result).slice(0, 500));
 
+      // Set description from page data
+      if (result.description) {
+        labelDescription = result.description;
+      }
+
       // Parse top tracks
       if (result.top_tracks && result.top_tracks.length > 0) {
         topTracks = parseTopTracks(result.top_tracks as Record<string, unknown>[]);
@@ -314,6 +320,23 @@
     }
   }
 
+  async function loadLabelDescription() {
+    // Fallback: fetch description from v2_get_label if label/page didn't include it
+    try {
+      const detail = await invoke<{ description?: string }>('v2_get_label', {
+        labelId,
+        limit: 1,
+        offset: 0
+      });
+      if (detail?.description) {
+        labelDescription = detail.description;
+        console.log('[LabelView] Description loaded from v2_get_label fallback');
+      }
+    } catch (err) {
+      console.error('[LabelView] Failed to load label description fallback:', err);
+    }
+  }
+
   async function loadMoreLabels() {
     try {
       const result = await invoke<{ has_more?: boolean; items?: LabelExploreItem[] }>(
@@ -346,30 +369,37 @@
   }
 
   async function handleTrackPlay(track: Track, trackIndex?: number) {
-    if (topTracks.length > 0) {
-      const trackIds = topTracks.map((trk) => trk.id);
-      const index = trackIndex !== undefined ? trackIndex : trackIds.indexOf(track.id);
+    console.log('[LabelView] handleTrackPlay called:', { trackId: track.id, title: track.title, trackIndex });
 
-      if (index >= 0) {
-        await setPlaybackContext(
-          'label_top',
-          labelId.toString(),
-          pageData?.name || labelName,
-          'qobuz',
-          trackIds,
-          index
-        );
-        console.log(`[LabelView] Context created: "${pageData?.name}" top tracks, ${trackIds.length} tracks, starting at ${index}`);
-        try {
+    // Set context and queue — wrapped in try-catch so playback still starts even if context fails
+    try {
+      if (topTracks.length > 0) {
+        const trackIds = topTracks.map((trk) => trk.id);
+        const index = trackIndex !== undefined ? trackIndex : trackIds.indexOf(track.id);
+
+        if (index >= 0) {
+          await setPlaybackContext(
+            'label_top',
+            labelId.toString(),
+            pageData?.name || labelName,
+            'qobuz',
+            trackIds,
+            index
+          );
+          console.log(`[LabelView] Context set: "${pageData?.name}" top tracks, ${trackIds.length} tracks, index ${index}`);
+
           const queueTracks = buildTopTracksQueue(topTracks);
           await invoke('v2_set_queue', { tracks: queueTracks, startIndex: index });
-        } catch (err) {
-          console.error('Failed to set queue:', err);
+          console.log('[LabelView] Queue set successfully');
         }
       }
+    } catch (err) {
+      console.error('[LabelView] Failed to set context/queue (continuing to play):', err);
     }
 
+    // Always fire play — even if context/queue setup failed
     if (onTrackPlay) {
+      console.log('[LabelView] Calling onTrackPlay with track:', track.id);
       onTrackPlay({
         id: track.id,
         title: track.title,
@@ -385,12 +415,22 @@
         artistId: track.performer?.id,
         isrc: track.isrc,
       });
+    } else {
+      console.warn('[LabelView] onTrackPlay is not defined!');
     }
   }
 
   async function handlePlayAllTracks() {
-    if (topTracks.length === 0 || !onTrackPlay) return;
-    await handleTrackPlay(topTracks[0], 0);
+    if (topTracks.length === 0) return;
+    if (!onTrackPlay) {
+      console.warn('[LabelView] handlePlayAllTracks: onTrackPlay is not defined!');
+      return;
+    }
+    try {
+      await handleTrackPlay(topTracks[0], 0);
+    } catch (err) {
+      console.error('[LabelView] handlePlayAllTracks failed:', err);
+    }
   }
 
   function handlePlayAllTracksNext() {
@@ -493,7 +533,10 @@
   }
 
   onMount(() => {
-    loadLabelPage();
+    loadLabelPage().then(() => {
+      // If page data didn't include description, fetch it separately
+      if (!labelDescription) loadLabelDescription();
+    });
     loadMoreLabels();
     unsubFavorites = subscribeFavorites(() => {
       trackFavoritesVersion++;
@@ -518,7 +561,10 @@
     playlists = [];
     artists = [];
     moreLabels = [];
-    loadLabelPage();
+    labelDescription = null;
+    loadLabelPage().then(() => {
+      if (!labelDescription) loadLabelDescription();
+    });
     loadMoreLabels();
   });
 
@@ -594,26 +640,6 @@
       <span>{$t('actions.back')}</span>
     </button>
 
-    <!-- Jump Nav -->
-    {#if showJumpNav}
-      <div class="jump-nav">
-        <div class="jump-nav-left">
-          <div class="jump-label">Jump to</div>
-          <div class="jump-links">
-            {#each jumpSections as section}
-              <button
-                class="jump-link"
-                class:active={activeJumpSection === section.id}
-                onclick={() => scrollToSection(section.el, section.id)}
-              >
-                {$t(section.labelKey)}
-              </button>
-            {/each}
-          </div>
-        </div>
-      </div>
-    {/if}
-
     <!-- Header -->
     <header class="label-header section-anchor" bind:this={headerSection}>
       <div class="label-image-wrapper">
@@ -634,9 +660,9 @@
       <div class="label-header-info">
         <div class="label-subtitle">{$t('label.title')}</div>
         <h1 class="label-name">{pageData.name}</h1>
-        {#if pageData.description}
+        {#if labelDescription}
           <div class="label-description" class:expanded={descriptionExpanded}>
-            {@html pageData.description}
+            {@html labelDescription}
           </div>
           <button class="read-more-btn" onclick={() => descriptionExpanded = !descriptionExpanded}>
             {descriptionExpanded ? $t('label.readLess') : $t('label.readMore')}
@@ -644,6 +670,26 @@
         {/if}
       </div>
     </header>
+
+    <!-- Jump Nav (below header, sticky on scroll) -->
+    {#if showJumpNav}
+      <div class="jump-nav">
+        <div class="jump-nav-left">
+          <div class="jump-label">Jump to</div>
+          <div class="jump-links">
+            {#each jumpSections as section}
+              <button
+                class="jump-link"
+                class:active={activeJumpSection === section.id}
+                onclick={() => scrollToSection(section.el, section.id)}
+              >
+                {$t(section.labelKey)}
+              </button>
+            {/each}
+          </div>
+        </div>
+      </div>
+    {/if}
 
     <!-- Popular Tracks (mirrors ArtistDetailView exactly) -->
     {#if topTracks.length > 0}
@@ -1027,8 +1073,8 @@
     background: var(--bg-primary);
     border-bottom: 1px solid var(--alpha-6);
     box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
-    margin: 0 -8px 24px -18px;
-    width: calc(100% + 26px);
+    margin: 0 -8px 24px -24px;
+    width: calc(100% + 32px);
   }
   .jump-nav-left { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
   .jump-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; }
