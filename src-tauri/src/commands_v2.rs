@@ -1451,12 +1451,15 @@ pub enum MusicLinkResult {
 /// Resolve a cross-platform music link to a Qobuz navigation action.
 ///
 /// Accepts URLs from Qobuz, Spotify, Apple Music, Tidal, Deezer, song.link, and album.link.
-/// For non-Qobuz tracks/albums, uses the Odesli API to find the Qobuz equivalent.
+/// For non-Qobuz tracks/albums, uses the Odesli API to identify the content, then searches
+/// Qobuz by title+artist to find the equivalent album.
 /// For playlists, returns `PlaylistDetected` so the frontend can redirect to the importer.
 #[tauri::command]
 pub async fn v2_resolve_music_link(
     url: String,
     state: State<'_, AppState>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
 ) -> Result<MusicLinkResult, RuntimeError> {
     use crate::playlist_import::providers::{detect_music_resource, MusicResource};
 
@@ -1494,50 +1497,111 @@ pub async fn v2_resolve_music_link(
         }),
 
         MusicResource::Track { provider, url: source_url } => {
-            resolve_via_odesli(&state.songlink, &source_url, Some(&provider)).await
+            resolve_via_odesli_and_search(
+                &state.songlink, &source_url, Some(&provider), true, &bridge, &runtime,
+            ).await
         }
 
         MusicResource::Album { provider, url: source_url } => {
-            resolve_via_odesli(&state.songlink, &source_url, Some(&provider)).await
+            resolve_via_odesli_and_search(
+                &state.songlink, &source_url, Some(&provider), false, &bridge, &runtime,
+            ).await
         }
 
         MusicResource::SongLink { url: source_url } => {
-            resolve_via_odesli(&state.songlink, &source_url, None).await
+            resolve_via_odesli_and_search(
+                &state.songlink, &source_url, None, false, &bridge, &runtime,
+            ).await
         }
     }
 }
 
-/// Use the Odesli API to find the Qobuz equivalent of a cross-platform URL,
-/// then parse the Qobuz URL into a ResolvedLink.
-async fn resolve_via_odesli(
+/// Use the Odesli API to identify a cross-platform URL (title/artist),
+/// then search Qobuz to find the matching album.
+///
+/// Odesli does NOT include Qobuz in its platform map, so we extract metadata
+/// and perform a Qobuz catalog search instead.
+async fn resolve_via_odesli_and_search(
     songlink: &crate::share::SongLinkClient,
     url: &str,
     provider: Option<&crate::playlist_import::providers::MusicProvider>,
+    is_track: bool,
+    bridge: &State<'_, CoreBridgeState>,
+    runtime: &State<'_, RuntimeManagerState>,
 ) -> Result<MusicLinkResult, RuntimeError> {
     let provider_name = provider.map(|p| format!("{:?}", p));
 
-    // Call Odesli API — it accepts any supported music URL
+    // 1. Call Odesli API to identify the content
     let response = songlink
         .get_by_url(url, crate::share::ContentType::Track)
         .await
         .map_err(|e| RuntimeError::Internal(format!("Odesli API error: {}", e)))?;
 
-    // Look for a Qobuz URL in the platforms map
-    let qobuz_url = response.platforms.get("qobuz");
+    let title = response.title.as_deref().unwrap_or("").trim();
+    let artist = response.artist.as_deref().unwrap_or("").trim();
 
-    match qobuz_url {
-        Some(qobuz_url) => {
-            let resolved = qbz_qobuz::resolve_link(qobuz_url)
-                .map_err(|e| RuntimeError::Internal(format!("Failed to parse Qobuz URL from Odesli: {}", e)))?;
-            Ok(MusicLinkResult::Resolved {
-                link: resolved,
-                provider: provider_name,
-            })
-        }
-        None => Ok(MusicLinkResult::NotOnQobuz {
+    if title.is_empty() {
+        return Ok(MusicLinkResult::NotOnQobuz {
             provider: provider_name,
-        }),
+        });
     }
+
+    log::info!(
+        "Link resolver: Odesli identified '{}' by '{}', searching Qobuz...",
+        title, artist
+    );
+
+    // 2. Search Qobuz using title + artist
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+
+    let query = if artist.is_empty() {
+        title.to_string()
+    } else {
+        format!("{} {}", title, artist)
+    };
+
+    let bridge = bridge.get().await;
+
+    if is_track {
+        // Search tracks, navigate to the track's album
+        let results = bridge
+            .search_tracks(&query, 5, 0, None)
+            .await
+            .map_err(RuntimeError::Internal)?;
+
+        if let Some(track) = results.items.first() {
+            log::info!("Link resolver: found Qobuz track id={}", track.id);
+            return Ok(MusicLinkResult::Resolved {
+                link: qbz_qobuz::ResolvedLink::OpenTrack(track.id),
+                provider: provider_name,
+            });
+        }
+    }
+
+    // Search albums (also as fallback for tracks)
+    let results = bridge
+        .search_albums(&query, 5, 0, None)
+        .await
+        .map_err(RuntimeError::Internal)?;
+
+    if let Some(album) = results.items.first() {
+        log::info!("Link resolver: found Qobuz album id={}", album.id);
+        return Ok(MusicLinkResult::Resolved {
+            link: qbz_qobuz::ResolvedLink::OpenAlbum(album.id.clone()),
+            provider: provider_name,
+        });
+    }
+
+    log::info!(
+        "Link resolver: '{}' by '{}' not found on Qobuz",
+        title, artist
+    );
+    Ok(MusicLinkResult::NotOnQobuz {
+        provider: provider_name,
+    })
 }
 
 #[tauri::command]
