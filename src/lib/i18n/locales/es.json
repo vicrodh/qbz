@@ -1677,7 +1677,11 @@
       "list": "Vista de lista",
       "grid": "Vista de cuadricula"
     },
-    "regionNotice": "La disponibilidad de Compras depende de tu cuenta y region de Qobuz. Si no aparece disponible, puede ser esperado."
+    "regionNotice": "La disponibilidad de Compras depende de tu cuenta y region de Qobuz. Si no aparece disponible, puede ser esperado.",
+    "errors": {
+      "noAlbum": "No se puede descargar: la pista no tiene album asociado.",
+      "noFormats": "No hay formatos de descarga disponibles para esta pista."
+    }
   },
   "yourMixes": {
     "title": "DailyQ",

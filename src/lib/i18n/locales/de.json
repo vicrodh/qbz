@@ -1477,7 +1477,11 @@
       "list": "Listenansicht",
       "grid": "Rasteransicht"
     },
-    "regionNotice": "Die Verfügbarkeit von Käufen hängt von deinem Qobuz-Konto und deiner Region ab. Wenn es nicht verfügbar ist, kann das erwartet sein."
+    "regionNotice": "Die Verfügbarkeit von Käufen hängt von deinem Qobuz-Konto und deiner Region ab. Wenn es nicht verfügbar ist, kann das erwartet sein.",
+    "errors": {
+      "noAlbum": "Download nicht moeglich: Titel hat kein zugehoeriges Album.",
+      "noFormats": "Keine Download-Formate fuer diesen Titel verfuegbar."
+    }
   },
   "linkResolver": {
     "title": "Qobuz-Link oeffnen",

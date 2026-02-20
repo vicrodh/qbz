@@ -1677,7 +1677,11 @@
       "list": "List view",
       "grid": "Grid view"
     },
-    "regionNotice": "Purchases availability depends on your Qobuz account and region. If unavailable, this may be expected."
+    "regionNotice": "Purchases availability depends on your Qobuz account and region. If unavailable, this may be expected.",
+    "errors": {
+      "noAlbum": "Cannot download: track has no associated album.",
+      "noFormats": "No download formats available for this track."
+    }
   },
   "yourMixes": {
     "title": "DailyQ",

@@ -2,12 +2,13 @@
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
   import {
-    Search, X, Download, Music, Disc3, ShoppingBag,
+    Search, X, Download, Check, Loader2, Music, Disc3, ShoppingBag,
     ChevronDown, LayoutGrid, List
   } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import QualityBadge from '../QualityBadge.svelte';
-  import { getPurchasesByType, getPurchaseIds, searchPurchases, getDownloadedTrackIds } from '$lib/services/purchases';
+  import { getPurchasesByType, getPurchaseIds, searchPurchases, getDownloadedTrackIds, getFormats, downloadTrack, markTrackDownloaded } from '$lib/services/purchases';
+  import { showToast } from '$lib/stores/toastStore';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import {
     getHideUnavailable, setHideUnavailable,
@@ -375,6 +376,56 @@
       bitDepth: track.maximum_bit_depth,
       samplingRate: track.maximum_sampling_rate,
     };
+  }
+
+  let trackDownloadStatuses = $state<Map<number, 'downloading' | 'complete' | 'failed'>>(new Map());
+
+  function getTrackDownloadStatus(trackId: number): 'downloading' | 'complete' | 'failed' | null {
+    return trackDownloadStatuses.get(trackId) || null;
+  }
+
+  async function handleTrackDownload(event: MouseEvent, track: PurchasedTrack) {
+    event.stopPropagation();
+
+    if (!track.album?.id) {
+      showToast(get(t)('purchases.errors.noAlbum'), 'error');
+      return;
+    }
+
+    try {
+      const formats = await getFormats(track.album.id);
+      if (formats.length === 0) {
+        showToast(get(t)('purchases.errors.noFormats'), 'error');
+        return;
+      }
+
+      const { open } = await import('@tauri-apps/plugin-dialog');
+      const { audioDir } = await import('@tauri-apps/api/path');
+      const defaultPath = await audioDir();
+      const dest = await open({
+        directory: true,
+        multiple: false,
+        defaultPath,
+        title: get(t)('purchases.chooseFolder'),
+      });
+
+      if (!dest || typeof dest !== 'string') return;
+
+      trackDownloadStatuses.set(track.id, 'downloading');
+      trackDownloadStatuses = new Map(trackDownloadStatuses);
+
+      const filePath = await downloadTrack(track.id, formats[0].id, dest);
+      await markTrackDownloaded(track.id, track.album.id, filePath).catch(() => {});
+
+      trackDownloadStatuses.set(track.id, 'complete');
+      trackDownloadStatuses = new Map(trackDownloadStatuses);
+      downloadedTrackIds.add(track.id);
+      downloadedTrackIds = new Set(downloadedTrackIds);
+    } catch (err) {
+      trackDownloadStatuses.set(track.id, 'failed');
+      trackDownloadStatuses = new Map(trackDownloadStatuses);
+      console.error('Track download error:', err);
+    }
   }
 
   $effect(() => {
@@ -819,11 +870,14 @@
           {/if}
           <div class="tracks-list">
             {#each group.items as track (track.id)}
+              {@const dlStatus = getTrackDownloadStatus(track.id)}
+              {@const isDownloaded = track.downloaded || dlStatus === 'complete'}
               <div
                 class="track-row"
                 class:active={activeTrackId === track.id}
                 class:playing={activeTrackId === track.id && isPlaybackActive}
                 class:clickable={track.streamable && !!onTrackPlay}
+                class:downloaded={isDownloaded}
                 onclick={() => track.streamable && onTrackPlay?.(toDisplayTrack(track))}
                 role={track.streamable && onTrackPlay ? 'button' : undefined}
                 tabindex={track.streamable && onTrackPlay ? 0 : undefined}
@@ -846,7 +900,7 @@
                   <span class="track-meta">
                     <button
                       class="artist-link"
-                      onclick={() => onArtistClick?.(track.performer.id)}
+                      onclick={(e) => { e.stopPropagation(); onArtistClick?.(track.performer.id); }}
                     >
                       {track.performer.name}
                     </button>
@@ -867,9 +921,19 @@
                 <div class="track-date">
                   {formatPurchaseDate(track.purchased_at)}
                 </div>
-                <button class="download-btn" title={$t('purchases.downloadTrack')}>
-                  <Download size={14} />
-                </button>
+                {#if dlStatus === 'complete' || isDownloaded}
+                  <span class="download-done"><Check size={14} /></span>
+                {:else if dlStatus === 'downloading'}
+                  <span class="download-active"><Loader2 size={14} class="spin" /></span>
+                {:else if dlStatus === 'failed'}
+                  <button class="download-btn failed" onclick={(e) => handleTrackDownload(e, track)} title={$t('purchases.failed')}>
+                    <Download size={14} />
+                  </button>
+                {:else}
+                  <button class="download-btn" onclick={(e) => handleTrackDownload(e, track)} title={$t('purchases.downloadTrack')}>
+                    <Download size={14} />
+                  </button>
+                {/if}
               </div>
             {/each}
           </div>
@@ -1685,5 +1749,38 @@
     background: var(--accent-primary);
     color: #fff;
     border-color: var(--accent-primary);
+  }
+
+  .download-btn.failed {
+    border-color: var(--error, #f44336);
+    color: var(--error, #f44336);
+  }
+
+  .download-done {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    color: var(--success, #4caf50);
+  }
+
+  .download-active {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    color: var(--accent-primary);
+  }
+
+  :global(.spin) {
+    animation: spin 1s linear infinite;
+  }
+
+  .track-row.downloaded {
+    opacity: 0.6;
   }
 </style>
