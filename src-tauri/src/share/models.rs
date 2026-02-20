@@ -47,7 +47,8 @@ pub struct PlatformLink {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Entity {
-    /// The unique ID
+    /// The unique ID (can be a string or number in the API response)
+    #[serde(deserialize_with = "deserialize_string_or_number")]
     pub id: String,
 
     /// Type: "song", "album"
@@ -114,4 +115,37 @@ impl ContentType {
             ContentType::Album => "album",
         }
     }
+}
+
+/// Deserialize a JSON value that may be a string or a number into a String.
+/// Bandcamp's Odesli entities return numeric IDs while others return strings.
+fn deserialize_string_or_number<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de;
+
+    struct StringOrNumber;
+
+    impl<'de> de::Visitor<'de> for StringOrNumber {
+        type Value = String;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("a string or number")
+        }
+
+        fn visit_str<E: de::Error>(self, v: &str) -> Result<String, E> {
+            Ok(v.to_string())
+        }
+
+        fn visit_u64<E: de::Error>(self, v: u64) -> Result<String, E> {
+            Ok(v.to_string())
+        }
+
+        fn visit_i64<E: de::Error>(self, v: i64) -> Result<String, E> {
+            Ok(v.to_string())
+        }
+    }
+
+    deserializer.deserialize_any(StringOrNumber)
 }

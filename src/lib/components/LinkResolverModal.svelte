@@ -88,9 +88,11 @@
           error = $t('linkResolver.notOnQobuz');
           break;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Link resolve error:', err);
-      error = $t('linkResolver.invalidLink');
+      // Show the actual backend error for debugging, fallback to generic message
+      const backendMsg = typeof err === 'string' ? err : err?.message || err?.Internal || JSON.stringify(err);
+      error = backendMsg || $t('linkResolver.invalidLink');
     } finally {
       resolving = false;
     }
