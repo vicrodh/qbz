@@ -309,7 +309,7 @@
     if (queueIndex < 0) return;
 
     await setPlaybackContext(
-      'home_list',
+      'weekly_q',
       'weeklyq',
       'WeeklyQ',
       'qobuz',
