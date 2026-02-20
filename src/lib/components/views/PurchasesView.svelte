@@ -7,7 +7,8 @@
   } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import QualityBadge from '../QualityBadge.svelte';
-  import { getPurchasesByType, getPurchaseIds, searchPurchases, getDownloadedTrackIds, getFormats, downloadTrack, markTrackDownloaded } from '$lib/services/purchases';
+  import { getPurchasesByType, getPurchaseIds, searchPurchases, getDownloadedTrackIds, getFormats } from '$lib/services/purchases';
+  import { allTrackStatuses, startTrackDownload } from '$lib/stores/purchaseDownloadStore';
   import { showToast } from '$lib/stores/toastStore';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import {
@@ -378,10 +379,8 @@
     };
   }
 
-  let trackDownloadStatuses = $state<Map<number, 'downloading' | 'complete' | 'failed'>>(new Map());
-
   function getTrackDownloadStatus(trackId: number): 'downloading' | 'complete' | 'failed' | null {
-    return trackDownloadStatuses.get(trackId) || null;
+    return $allTrackStatuses[trackId] || null;
   }
 
   async function handleTrackDownload(event: MouseEvent, track: PurchasedTrack) {
@@ -411,19 +410,8 @@
 
       if (!dest || typeof dest !== 'string') return;
 
-      trackDownloadStatuses.set(track.id, 'downloading');
-      trackDownloadStatuses = new Map(trackDownloadStatuses);
-
-      const filePath = await downloadTrack(track.id, formats[0].id, dest);
-      await markTrackDownloaded(track.id, track.album.id, filePath).catch(() => {});
-
-      trackDownloadStatuses.set(track.id, 'complete');
-      trackDownloadStatuses = new Map(trackDownloadStatuses);
-      downloadedTrackIds.add(track.id);
-      downloadedTrackIds = new Set(downloadedTrackIds);
+      startTrackDownload(track.album.id, track.id, formats[0].id, dest);
     } catch (err) {
-      trackDownloadStatuses.set(track.id, 'failed');
-      trackDownloadStatuses = new Map(trackDownloadStatuses);
       console.error('Track download error:', err);
     }
   }

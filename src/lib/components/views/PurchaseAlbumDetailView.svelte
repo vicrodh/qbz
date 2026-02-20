@@ -6,9 +6,11 @@
   import QualityBadge from '../QualityBadge.svelte';
   import Dropdown from '../Dropdown.svelte';
   import ViewTransition from '../ViewTransition.svelte';
-  import { getAlbumDetail, getFormats, downloadAlbum, downloadTrack, markTrackDownloaded } from '$lib/services/purchases';
+  import { getAlbumDetail, getFormats } from '$lib/services/purchases';
+  import { purchaseDownloads, startAlbumDownload, startTrackDownload } from '$lib/stores/purchaseDownloadStore';
+  import type { TrackDownloadStatus } from '$lib/stores/purchaseDownloadStore';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
-  import type { PurchasedAlbum, PurchasedTrack, PurchaseFormatOption, PurchaseDownloadProgress } from '$lib/types/purchases';
+  import type { PurchasedAlbum, PurchasedTrack, PurchaseFormatOption } from '$lib/types/purchases';
   import type { DisplayTrack } from '$lib/types';
 
   interface Props {
@@ -37,10 +39,11 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
 
-  // Download state
-  let downloadStatuses = $state<Map<number, PurchaseDownloadProgress['status']>>(new Map());
-  let isDownloadingAll = $state(false);
-  let allComplete = $state(false);
+  // Download state (from persistent store — survives navigation)
+  const albumDlState = $derived($purchaseDownloads[albumId] ?? null);
+  const downloadStatuses = $derived(albumDlState?.trackStatuses ?? {});
+  const isDownloadingAll = $derived(albumDlState?.isDownloadingAll ?? false);
+  const allComplete = $derived(albumDlState?.allComplete ?? false);
 
   function formatPurchaseDate(ts?: number): string {
     if (!ts) return '';
@@ -69,8 +72,8 @@
     if (fmt) selectedFormatId = fmt.id;
   }
 
-  function getTrackStatus(trackId: number): PurchaseDownloadProgress['status'] | null {
-    return downloadStatuses.get(trackId) || null;
+  function getTrackStatus(trackId: number): TrackDownloadStatus | null {
+    return downloadStatuses[trackId] || null;
   }
 
   function groupByDisc(trackList: PurchasedTrack[]): Map<number, PurchasedTrack[]> {
@@ -109,6 +112,7 @@
   }
 
   async function promptForFolder(action: 'all' | number) {
+    if (!album || selectedFormatId === null) return;
     try {
       const { open } = await import('@tauri-apps/plugin-dialog');
       const { audioDir } = await import('@tauri-apps/api/path');
@@ -120,47 +124,15 @@
         title: get(t)('purchases.chooseFolder'),
       });
       if (dest && typeof dest === 'string') {
-        await executeDownload(action, dest);
+        if (action === 'all') {
+          const trackIds = (album.tracks?.items || []).map((track) => track.id);
+          startAlbumDownload(albumId, trackIds, selectedFormatId, dest);
+        } else {
+          startTrackDownload(albumId, action, selectedFormatId, dest);
+        }
       }
     } catch (err) {
       console.error('Folder picker error:', err);
-    }
-  }
-
-  async function executeDownload(action: 'all' | number, destination: string) {
-    if (!album || selectedFormatId === null) return;
-
-    if (action === 'all') {
-      isDownloadingAll = true;
-      const trackItems = album.tracks?.items || [];
-      for (const track of trackItems) {
-        downloadStatuses.set(track.id, 'downloading');
-        downloadStatuses = new Map(downloadStatuses);
-        try {
-          const filePath = await downloadTrack(track.id, selectedFormatId, destination);
-          downloadStatuses.set(track.id, 'complete');
-          await markTrackDownloaded(track.id, album.id, filePath).catch(() => {});
-        } catch {
-          downloadStatuses.set(track.id, 'failed');
-        }
-        downloadStatuses = new Map(downloadStatuses);
-      }
-      isDownloadingAll = false;
-      const allDone = trackItems.every(
-        (track) => downloadStatuses.get(track.id) === 'complete'
-      );
-      if (allDone) allComplete = true;
-    } else {
-      downloadStatuses.set(action, 'downloading');
-      downloadStatuses = new Map(downloadStatuses);
-      try {
-        const filePath = await downloadTrack(action, selectedFormatId, destination);
-        downloadStatuses.set(action, 'complete');
-        await markTrackDownloaded(action, album.id, filePath).catch(() => {});
-      } catch {
-        downloadStatuses.set(action, 'failed');
-      }
-      downloadStatuses = new Map(downloadStatuses);
     }
   }
 
@@ -189,7 +161,7 @@
   );
   const isMultiDisc = $derived(discGroups.size > 1);
   const completedCount = $derived(
-    Array.from(downloadStatuses.values()).filter((s) => s === 'complete').length
+    Object.values(downloadStatuses).filter((s) => s === 'complete').length
   );
   const totalTracks = $derived(album?.tracks?.items?.length || 0);
   const totalDurationSeconds = $derived(
