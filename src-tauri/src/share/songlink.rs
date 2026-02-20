@@ -10,7 +10,7 @@ use super::errors::ShareError;
 use super::models::{ContentType, OdesliResponse, SongLinkResponse};
 
 const ODESLI_API_URL: &str = "https://api.song.link/v1-alpha.1/links";
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const CACHE_TTL: Duration = Duration::from_secs(3600); // 1 hour
 
 /// Cached entry with TTL
@@ -42,6 +42,7 @@ impl SongLinkClient {
         Self {
             client: Client::builder()
                 .timeout(REQUEST_TIMEOUT)
+                .connect_timeout(Duration::from_secs(5))
                 .build()
                 .unwrap_or_default(),
             cache: Mutex::new(HashMap::new()),
@@ -49,7 +50,7 @@ impl SongLinkClient {
     }
 
     /// Get song.link URL for a track by ISRC
-    /// Qobuz isn't supported by Odesli, so we resolve ISRC → Deezer track URL → Odesli.
+    /// Qobuz isn't supported by Odesli, so we resolve ISRC → Deezer track ID → Odesli.
     /// Deezer's free API supports ISRC lookup without authentication.
     pub async fn get_by_isrc(&self, isrc: &str) -> Result<SongLinkResponse, ShareError> {
         let cache_key = format!("isrc:{}", isrc);
@@ -60,7 +61,7 @@ impl SongLinkClient {
             return Ok(cached);
         }
 
-        // Step 1: Resolve ISRC to a real Deezer track URL via Deezer's free API
+        // Step 1: Resolve ISRC to a Deezer track ID via Deezer's free API
         let deezer_api_url = format!("https://api.deezer.com/2.0/track/isrc:{}", isrc);
         log::info!("Resolving ISRC {} via Deezer API", isrc);
 
@@ -70,43 +71,40 @@ impl SongLinkClient {
             .send()
             .await?;
 
-        let deezer_track_url = if deezer_response.status().is_success() {
+        let deezer_id: Option<u64> = if deezer_response.status().is_success() {
             let body: serde_json::Value = deezer_response.json().await
                 .map_err(|e| ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e)))?;
 
-            // Check for Deezer error response (they return 200 with {"error": {...}})
             if body.get("error").is_some() {
                 log::warn!("Deezer ISRC lookup returned error for {}", isrc);
                 None
             } else {
-                body.get("link")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string())
+                body.get("id").and_then(|v| v.as_u64())
             }
         } else {
             log::warn!("Deezer API returned {} for ISRC {}", deezer_response.status(), isrc);
             None
         };
 
-        let track_url = match deezer_track_url {
-            Some(url) => {
-                log::info!("Resolved ISRC {} to Deezer URL: {}", isrc, url);
-                url
-            }
-            None => {
-                return Err(ShareError::OdesliError(format!(
-                    "Could not find track with ISRC {} on any supported platform", isrc
-                )));
-            }
-        };
+        let deezer_id = deezer_id.ok_or_else(|| {
+            ShareError::OdesliError(format!(
+                "Could not find track with ISRC {} on Deezer", isrc
+            ))
+        })?;
 
-        // Step 2: Pass the real Deezer URL to Odesli
-        log::info!("Fetching song.link for Deezer URL: {}", track_url);
+        log::info!("Resolved ISRC {} to Deezer ID: {}", isrc, deezer_id);
 
+        // Step 2: Query Odesli with platform+type+id (faster than URL resolution)
+        let id_str = deezer_id.to_string();
         let response = self
             .client
             .get(ODESLI_API_URL)
-            .query(&[("url", &track_url), ("userCountry", &"US".to_string())])
+            .query(&[
+                ("platform", "deezer"),
+                ("type", "song"),
+                ("id", &id_str),
+                ("userCountry", "US"),
+            ])
             .send()
             .await?;
 
@@ -129,6 +127,7 @@ impl SongLinkClient {
     }
 
     /// Get song.link URL for an album by UPC
+    /// Resolves UPC → Deezer album ID → Odesli (Odesli no longer accepts ?upc= directly).
     pub async fn get_by_upc(&self, upc: &str) -> Result<SongLinkResponse, ShareError> {
         let cache_key = format!("upc:{}", upc);
 
@@ -138,12 +137,50 @@ impl SongLinkClient {
             return Ok(cached);
         }
 
-        log::info!("Fetching song.link for UPC: {}", upc);
+        // Step 1: Resolve UPC to a Deezer album ID
+        let deezer_api_url = format!("https://api.deezer.com/2.0/album/upc:{}", upc);
+        log::info!("Resolving UPC {} via Deezer API", upc);
 
+        let deezer_response = self
+            .client
+            .get(&deezer_api_url)
+            .send()
+            .await?;
+
+        let deezer_id: Option<u64> = if deezer_response.status().is_success() {
+            let body: serde_json::Value = deezer_response.json().await
+                .map_err(|e| ShareError::OdesliError(format!("Failed to parse Deezer response: {}", e)))?;
+
+            if body.get("error").is_some() {
+                log::warn!("Deezer UPC lookup returned error for {}", upc);
+                None
+            } else {
+                body.get("id").and_then(|v| v.as_u64())
+            }
+        } else {
+            log::warn!("Deezer API returned {} for UPC {}", deezer_response.status(), upc);
+            None
+        };
+
+        let deezer_id = deezer_id.ok_or_else(|| {
+            ShareError::OdesliError(format!(
+                "Could not find album with UPC {} on Deezer", upc
+            ))
+        })?;
+
+        log::info!("Resolved UPC {} to Deezer album ID: {}", upc, deezer_id);
+
+        // Step 2: Query Odesli with platform+type+id
+        let id_str = deezer_id.to_string();
         let response = self
             .client
             .get(ODESLI_API_URL)
-            .query(&[("upc", upc), ("userCountry", "US")])
+            .query(&[
+                ("platform", "deezer"),
+                ("type", "album"),
+                ("id", &id_str),
+                ("userCountry", "US"),
+            ])
             .send()
             .await?;
 
