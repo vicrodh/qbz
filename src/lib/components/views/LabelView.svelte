@@ -5,7 +5,7 @@
   import { t } from '$lib/i18n';
   import AlbumCard from '../AlbumCard.svelte';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
-  import SearchPlaylistCard from '../SearchPlaylistCard.svelte';
+  import QobuzPlaylistCard from '../QobuzPlaylistCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
   import QualityBadge from '../QualityBadge.svelte';
   import { setPlaybackContext } from '$lib/stores/playbackContextStore';
@@ -17,7 +17,6 @@
     toggleTrackFavorite
   } from '$lib/stores/favoritesStore';
   import type { QobuzAlbum, LabelPageData, LabelExploreItem, DisplayTrack } from '$lib/types';
-  import type { Playlist } from '$lib/stores/searchState';
 
   interface Track {
     id: number;
@@ -104,7 +103,7 @@
   let topTracks = $state<Track[]>([]);
   let releases = $state<QobuzAlbum[]>([]);
   let criticsPicks = $state<QobuzAlbum[]>([]);
-  let playlists = $state<Playlist[]>([]);
+  let playlists = $state<Record<string, unknown>[]>([]);
   let artists = $state<Record<string, unknown>[]>([]);
   let moreLabels = $state<LabelExploreItem[]>([]);
 
@@ -304,13 +303,14 @@
 
       // Parse playlists
       if (result.playlists?.items && result.playlists.items.length > 0) {
-        playlists = result.playlists.items as unknown as Playlist[];
-        console.log(`[LabelView] Parsed ${playlists.length} playlists`);
+        playlists = result.playlists.items as Record<string, unknown>[];
+        console.log(`[LabelView] Parsed ${playlists.length} playlists, first:`, JSON.stringify(playlists[0]).slice(0, 300));
       }
 
       // Parse artists
       if (result.top_artists?.items && result.top_artists.items.length > 0) {
         artists = result.top_artists.items as Record<string, unknown>[];
+        console.log(`[LabelView] Parsed ${artists.length} artists, first:`, JSON.stringify(artists[0]).slice(0, 300));
       }
     } catch (e) {
       console.error('Failed to load label page:', e);
@@ -485,11 +485,17 @@
   }
 
   function getArtistImageUrl(artist: Record<string, unknown>): string | null {
-    const image = artist.image as Record<string, string> | undefined;
-    if (image) {
-      const url = image.large || image.thumbnail || image.small;
+    // 1. image object (most common in search results)
+    const image = artist.image as Record<string, string> | null | undefined;
+    if (image && typeof image === 'object') {
+      const url = image.large || image.extralarge || image.medium || image.thumbnail || image.small;
       if (url) return url;
     }
+    // 2. picture field (string URL, some endpoints)
+    if (typeof artist.picture === 'string' && artist.picture) {
+      return artist.picture;
+    }
+    // 3. images.portrait hash (artist page format)
     const images = artist.images as Record<string, unknown> | undefined;
     if (images) {
       const portrait = images.portrait as Record<string, string> | undefined;
@@ -498,6 +504,28 @@
       }
     }
     return null;
+  }
+
+  function getPlaylistImage(playlist: Record<string, unknown>): string {
+    // 1. image.rectangle (discover/label page format)
+    const image = playlist.image as Record<string, unknown> | null | undefined;
+    if (image && typeof image === 'object') {
+      if (typeof image.rectangle === 'string' && image.rectangle) return image.rectangle;
+      const covers = image.covers as string[] | undefined;
+      if (covers?.length) return covers[0];
+      // Try size-based keys
+      if (typeof image.large === 'string' && image.large) return image.large as string;
+      if (typeof image.thumbnail === 'string' && image.thumbnail) return image.thumbnail as string;
+      if (typeof image.small === 'string' && image.small) return image.small as string;
+    }
+    // 2. images300/images150/images arrays (search format)
+    const images300 = playlist.images300 as string[] | undefined;
+    if (images300?.length) return images300[0];
+    const images150 = playlist.images150 as string[] | undefined;
+    if (images150?.length) return images150[0];
+    const imagesArr = playlist.images as string[] | undefined;
+    if (imagesArr?.length) return imagesArr[0];
+    return '';
   }
 
   function getArtistName(artist: Record<string, unknown>): string {
@@ -931,9 +959,15 @@
         <HorizontalScrollRow title={$t('label.playlists')}>
           {#snippet children()}
             {#each playlists as playlist (playlist.id)}
-              <SearchPlaylistCard
-                {playlist}
-                onclick={() => onPlaylistClick?.(playlist.id)}
+              <QobuzPlaylistCard
+                playlistId={playlist.id as number}
+                name={String(playlist.name || '')}
+                owner={(playlist.owner as Record<string, unknown>)?.name as string || 'Qobuz'}
+                image={getPlaylistImage(playlist)}
+                trackCount={playlist.tracks_count as number | undefined}
+                duration={playlist.duration as number | undefined}
+                genre={(playlist.genres as { name: string }[])?.[0]?.name}
+                onclick={() => onPlaylistClick?.(playlist.id as number)}
               />
             {/each}
             <div class="spacer"></div>
@@ -1013,6 +1047,7 @@
 <style>
   .label-detail-view {
     padding: 24px;
+    padding-top: 0;
     padding-left: 18px;
     padding-right: 8px;
     padding-bottom: 100px;
@@ -1056,7 +1091,7 @@
     display: flex; align-items: center; gap: 8px;
     font-size: 14px; color: var(--text-muted);
     background: none; border: none; cursor: pointer;
-    margin-bottom: 24px; transition: color 150ms ease;
+    margin-top: 24px; margin-bottom: 24px; transition: color 150ms ease;
   }
   .back-btn:hover { color: var(--text-secondary); }
 
