@@ -111,6 +111,12 @@
     return `${mins}m`;
   }
 
+  function qualityFolderName(formatId: number): string {
+    const fmt = formats.find((f) => f.id === formatId);
+    if (!fmt) return '';
+    return fmt.label.replace(/\//g, '-').trim();
+  }
+
   async function promptForFolder(action: 'all' | number) {
     if (!album || selectedFormatId === null) return;
     try {
@@ -124,11 +130,13 @@
         title: get(t)('purchases.chooseFolder'),
       });
       if (dest && typeof dest === 'string') {
+        const qualityDir = qualityFolderName(selectedFormatId);
+        const finalDest = qualityDir ? `${dest}/${qualityDir}` : dest;
         if (action === 'all') {
           const trackIds = (album.tracks?.items || []).map((track) => track.id);
-          startAlbumDownload(albumId, trackIds, selectedFormatId, dest);
+          startAlbumDownload(albumId, trackIds, selectedFormatId, finalDest);
         } else {
-          startTrackDownload(albumId, action, selectedFormatId, dest);
+          startTrackDownload(albumId, action, selectedFormatId, finalDest);
         }
       }
     } catch (err) {

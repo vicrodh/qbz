@@ -410,7 +410,9 @@
 
       if (!dest || typeof dest !== 'string') return;
 
-      startTrackDownload(track.album.id, track.id, formats[0].id, dest);
+      const qualityDir = formats[0].label.replace(/\//g, '-').trim();
+      const finalDest = qualityDir ? `${dest}/${qualityDir}` : dest;
+      startTrackDownload(track.album.id, track.id, formats[0].id, finalDest);
     } catch (err) {
       console.error('Track download error:', err);
     }
