@@ -1872,9 +1872,8 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
+    justify-content: flex-end;
     padding: 14px;
-    gap: 4px;
     box-sizing: border-box;
   }
 
@@ -1899,6 +1898,7 @@
     font-weight: 500;
     color: rgba(255, 255, 255, 0.7);
     letter-spacing: 0.02em;
+    margin-bottom: 6px;
   }
 
   .mix-card-name {
@@ -1915,6 +1915,7 @@
     color: var(--text-secondary);
     line-height: 1.4;
     margin: 0;
+    min-height: calc(3 * 1.4 * 12px);
   }
 
   .mix-card-desc :global(strong) {
