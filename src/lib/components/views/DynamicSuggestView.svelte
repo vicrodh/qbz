@@ -409,13 +409,17 @@
       radial-gradient(ellipse at 20% 80%, rgba(255, 140, 0, 0.5) 0%, transparent 60%),
       linear-gradient(135deg, #e8a020 0%, #d4781a 30%, #c45e18 60%, #a04010 100%);
     background-size: 200% 200%;
-    animation: silk-shift 10s ease-in-out infinite alternate;
+    animation: silk-shift 25s ease-in-out infinite alternate;
   }
 
   @keyframes silk-shift {
     0%   { background-position: 0% 0%; }
-    50%  { background-position: 100% 50%; }
-    100% { background-position: 30% 100%; }
+    14%  { background-position: 80% 25%; }
+    31%  { background-position: 20% 70%; }
+    47%  { background-position: 95% 40%; }
+    62%  { background-position: 10% 90%; }
+    78%  { background-position: 65% 15%; }
+    100% { background-position: 35% 60%; }
   }
 
   .metadata {
