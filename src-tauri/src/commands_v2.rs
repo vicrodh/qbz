@@ -1509,8 +1509,10 @@ pub async fn v2_resolve_music_link(
         }
 
         MusicResource::SongLink { url: source_url } => {
+            // song.link URLs: try to detect track vs album from the URL format
+            let is_track_hint = source_url.contains("song.link/");
             resolve_via_odesli_and_search(
-                &state.songlink, &source_url, None, false, &bridge, &runtime,
+                &state.songlink, &source_url, None, is_track_hint, &bridge, &runtime,
             ).await
         }
     }
@@ -1531,11 +1533,21 @@ async fn resolve_via_odesli_and_search(
 ) -> Result<MusicLinkResult, RuntimeError> {
     let provider_name = provider.map(|p| format!("{:?}", p));
 
-    // 1. Call Odesli API to identify the content
-    let response = songlink
+    // 1. Call Odesli API to identify the content (with one retry for transient errors)
+    let response = match songlink
         .get_by_url(url, crate::share::ContentType::Track)
         .await
-        .map_err(|e| RuntimeError::Internal(format!("Odesli API error: {}", e)))?;
+    {
+        Ok(r) => r,
+        Err(first_err) => {
+            log::warn!("Link resolver: Odesli first attempt failed: {}, retrying...", first_err);
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            songlink
+                .get_by_url(url, crate::share::ContentType::Track)
+                .await
+                .map_err(|e| RuntimeError::Internal(format!("Odesli API error: {}", e)))?
+        }
+    };
 
     let title = response.title.as_deref().unwrap_or("").trim();
     let artist = response.artist.as_deref().unwrap_or("").trim();
