@@ -4360,13 +4360,21 @@ pub async fn v2_get_queue_state(
     Ok(bridge.get_queue_state().await)
 }
 
+/// Full queue snapshot for session persistence (no caps on track count)
+#[derive(serde::Serialize)]
+pub struct AllQueueTracksResponse {
+    pub tracks: Vec<CoreQueueTrack>,
+    pub current_index: Option<usize>,
+}
+
 /// Get all queue tracks and current index (for session persistence, no caps)
 #[tauri::command]
 pub async fn v2_get_all_queue_tracks(
     bridge: State<'_, CoreBridgeState>,
-) -> Result<(Vec<CoreQueueTrack>, Option<usize>), RuntimeError> {
+) -> Result<AllQueueTracksResponse, RuntimeError> {
     let bridge = bridge.get().await;
-    Ok(bridge.get_all_queue_tracks().await)
+    let (tracks, current_index) = bridge.get_all_queue_tracks().await;
+    Ok(AllQueueTracksResponse { tracks, current_index })
 }
 
 /// Get currently selected queue track (V2)

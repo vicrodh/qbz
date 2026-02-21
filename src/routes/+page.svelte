@@ -2665,7 +2665,9 @@
       }
 
       // Get ALL queue tracks from backend (uncapped, for full persistence)
-      const [tracks, currentIndex] = await invoke<[BackendQueueTrack[], number | null]>('v2_get_all_queue_tracks');
+      const snapshot = await invoke<{ tracks: BackendQueueTrack[]; current_index: number | null }>('v2_get_all_queue_tracks');
+      const tracks = snapshot.tracks;
+      const currentIndex = snapshot.current_index;
 
       const allTracks: PersistedQueueTrack[] = tracks.map(track => ({
         id: track.id,
@@ -2720,7 +2722,17 @@
     };
   });
 
-  // Periodic full session save during playback (every 30 seconds)
+  // Debounced full session save (coalesces rapid state changes into a single save)
+  let sessionSaveDebounce: ReturnType<typeof setTimeout> | null = null;
+  function debouncedFullSessionSave() {
+    if (sessionSaveDebounce) clearTimeout(sessionSaveDebounce);
+    sessionSaveDebounce = setTimeout(() => {
+      sessionSaveDebounce = null;
+      saveSessionBeforeClose();
+    }, 2000);
+  }
+
+  // Periodic full session save during playback
   let sessionSaveInterval: ReturnType<typeof setInterval> | null = null;
 
   $effect(() => {
@@ -2729,7 +2741,7 @@
       if (!sessionSaveInterval) {
         sessionSaveInterval = setInterval(() => {
           saveSessionBeforeClose();
-        }, 60000); // Save every 60 seconds (reduced from 30s to lower IPC overhead)
+        }, 15000); // Save every 15 seconds during playback
       }
     } else {
       if (sessionSaveInterval) {
@@ -2921,6 +2933,7 @@
     });
 
     // Subscribe to player state changes
+    let prevTrackId: number | null = null;
     const unsubscribePlayer = subscribePlayer(() => {
       const playerState = getPlayerState();
       const wasPlaying = isPlaying;
@@ -2940,6 +2953,16 @@
       // Flush position save immediately when pausing
       if (wasPlaying && !isPlaying && currentTrack && currentTime > 0) {
         flushPositionSave(Math.floor(currentTime));
+      }
+
+      // Full session save on track change or pause (debounced 2s)
+      const trackId = currentTrack?.id ?? null;
+      if (trackId !== prevTrackId) {
+        prevTrackId = trackId;
+        if (trackId !== null) debouncedFullSessionSave();
+      }
+      if (wasPlaying && !isPlaying && currentTrack) {
+        debouncedFullSessionSave();
       }
 
       // MiniPlayer IPC - DISABLED: incomplete feature, causes unnecessary IPC overhead
