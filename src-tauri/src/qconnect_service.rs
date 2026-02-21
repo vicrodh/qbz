@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use async_trait::async_trait;
 use qconnect_app::{
@@ -12,6 +12,7 @@ use serde_json::Value;
 use tauri::async_runtime::JoinHandle;
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::{Mutex, RwLock};
+use uuid::Uuid;
 
 use crate::{
     core_bridge::{CoreBridge, CoreBridgeState},
@@ -25,6 +26,12 @@ const PLAYING_STATE_PLAYING: i32 = 2;
 const PLAYING_STATE_PAUSED: i32 = 3;
 const QCONNECT_QWS_TOKEN_KIND: &str = "jwt_qws";
 const QCONNECT_QWS_CREATE_TOKEN_PATH: &str = "/qws/createToken";
+const DEFAULT_QCONNECT_DEVICE_NAME: &str = "QBZ Desktop";
+const DEFAULT_QCONNECT_DEVICE_BRAND: &str = "QBZ";
+const DEFAULT_QCONNECT_DEVICE_MODEL: &str = "QBZ";
+const DEFAULT_QCONNECT_DEVICE_TYPE: i32 = 5;
+const DEFAULT_QCONNECT_SOFTWARE_PREFIX: &str = "qbz";
+static QCONNECT_DEVICE_UUID: OnceLock<String> = OnceLock::new();
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QconnectConnectOptions {
@@ -344,14 +351,23 @@ impl QconnectServiceState {
             }
         });
 
-        guard.last_error = None;
-        guard.runtime = Some(QconnectRuntime {
+        let runtime = QconnectRuntime {
             app,
             config,
             event_loop,
-        });
+        };
+        let runtime_app = Arc::clone(&runtime.app);
+        guard.last_error = None;
+        guard.runtime = Some(runtime);
 
         drop(guard);
+        if let Err(err) = bootstrap_remote_presence(&runtime_app).await {
+            let _ = self.disconnect().await;
+            let mut guard = self.inner.lock().await;
+            guard.last_error = Some(format!("qconnect bootstrap failed: {err}"));
+            return Err(format!("qconnect bootstrap failed: {err}"));
+        }
+
         Ok(self.status().await)
     }
 
@@ -517,6 +533,103 @@ async fn apply_renderer_command_to_corebridge(
 
 fn normalize_volume_to_fraction(volume: i32) -> f32 {
     volume.clamp(0, 100) as f32 / 100.0
+}
+
+async fn bootstrap_remote_presence(
+    app: &Arc<QconnectApp<NativeWsTransport, TauriQconnectEventSink>>,
+) -> Result<(), String> {
+    let join_payload = serde_json::to_value(QconnectJoinSessionRequest {
+        session_uuid: None,
+        device_info: Some(default_qconnect_device_info()),
+    })
+    .map_err(|err| format!("serialize join_session bootstrap payload: {err}"))?;
+
+    let join_command = app
+        .build_queue_command(QueueCommandType::CtrlSrvrJoinSession, join_payload)
+        .await;
+    let join_action_uuid = app
+        .send_queue_command(join_command)
+        .await
+        .map_err(|err| format!("send bootstrap join_session failed: {err}"))?;
+
+    // JoinSession typically responds with session/renderer controller events that are not part of
+    // queue reducer correlation. Drop pending slot so queue operations are not blocked for 10s.
+    clear_pending_if_matches(app, &join_action_uuid).await;
+
+    let ask_queue_command = app
+        .build_queue_command(
+            QueueCommandType::CtrlSrvrAskForQueueState,
+            Value::Object(Default::default()),
+        )
+        .await;
+    app.send_queue_command(ask_queue_command)
+        .await
+        .map_err(|err| format!("send bootstrap ask_for_queue_state failed: {err}"))?;
+
+    Ok(())
+}
+
+async fn clear_pending_if_matches(
+    app: &Arc<QconnectApp<NativeWsTransport, TauriQconnectEventSink>>,
+    action_uuid: &str,
+) {
+    let state_handle = app.state_handle();
+    let mut state = state_handle.lock().await;
+    let pending_matches = state
+        .pending
+        .current()
+        .map(|pending| pending.uuid == action_uuid)
+        .unwrap_or(false);
+    if pending_matches {
+        state.pending.clear();
+    }
+}
+
+fn default_qconnect_device_info() -> QconnectDeviceInfoPayload {
+    let friendly_name = std::env::var("QBZ_QCONNECT_DEVICE_NAME")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_QCONNECT_DEVICE_NAME.to_string());
+    let brand = std::env::var("QBZ_QCONNECT_DEVICE_BRAND")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_QCONNECT_DEVICE_BRAND.to_string());
+    let model = std::env::var("QBZ_QCONNECT_DEVICE_MODEL")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| DEFAULT_QCONNECT_DEVICE_MODEL.to_string());
+    let software_version = std::env::var("QBZ_QCONNECT_SOFTWARE_VERSION")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| format!("{DEFAULT_QCONNECT_SOFTWARE_PREFIX}/{}", env!("CARGO_PKG_VERSION")));
+    let device_type = std::env::var("QBZ_QCONNECT_DEVICE_TYPE")
+        .ok()
+        .and_then(|value| value.trim().parse::<i32>().ok())
+        .unwrap_or(DEFAULT_QCONNECT_DEVICE_TYPE);
+
+    QconnectDeviceInfoPayload {
+        device_uuid: Some(resolve_qconnect_device_uuid()),
+        friendly_name: Some(friendly_name),
+        brand: Some(brand),
+        model: Some(model),
+        serial_number: None,
+        device_type: Some(device_type),
+        software_version: Some(software_version),
+    }
+}
+
+fn resolve_qconnect_device_uuid() -> String {
+    if let Some(explicit) = std::env::var("QBZ_QCONNECT_DEVICE_UUID")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+    {
+        return explicit;
+    }
+
+    QCONNECT_DEVICE_UUID
+        .get_or_init(|| Uuid::new_v4().to_string())
+        .clone()
 }
 
 #[tauri::command]
