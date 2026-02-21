@@ -50,6 +50,7 @@ pub mod user_data;
 pub mod visualizer;
 
 use std::sync::Arc;
+use rustls::crypto::{aws_lc_rs, CryptoProvider};
 use tauri::{Emitter, Manager};
 use tokio::sync::{Mutex, RwLock};
 
@@ -163,6 +164,12 @@ pub fn run() {
     // Load .env file if present (for development)
     // Silently ignore if not found (production builds use compile-time env vars)
     dotenvy::dotenv().ok();
+
+    // rustls 0.23 requires an explicit process-level crypto provider when
+    // multiple provider features are present in the dependency graph.
+    if CryptoProvider::get_default().is_none() {
+        let _ = aws_lc_rs::default_provider().install_default();
+    }
 
     // Initialize logging with TeeWriter (captures to ring buffer + stderr)
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
