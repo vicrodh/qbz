@@ -12,6 +12,7 @@ let isQueueOpen = false;
 let isFullScreenOpen = false;
 let isFocusModeOpen = false;
 let isCastPickerOpen = false;
+let isQconnectPanelOpen = false;
 
 // Playlist modal states
 let isPlaylistModalOpen = false;
@@ -126,6 +127,27 @@ export function toggleCastPicker(): void {
   notifyListeners();
 }
 
+// ============ Qobuz Connect Panel ============
+
+export function getQconnectPanelOpen(): boolean {
+  return isQconnectPanelOpen;
+}
+
+export function openQconnectPanel(): void {
+  isQconnectPanelOpen = true;
+  notifyListeners();
+}
+
+export function closeQconnectPanel(): void {
+  isQconnectPanelOpen = false;
+  notifyListeners();
+}
+
+export function toggleQconnectPanel(): void {
+  isQconnectPanelOpen = !isQconnectPanelOpen;
+  notifyListeners();
+}
+
 // ============ Playlist Modal ============
 
 export function getPlaylistModalOpen(): boolean {
@@ -198,6 +220,10 @@ export function handleEscapeKey(): boolean {
     closeCastPicker();
     return true;
   }
+  if (isQconnectPanelOpen) {
+    closeQconnectPanel();
+    return true;
+  }
   if (isPlaylistModalOpen) {
     closePlaylistModal();
     return true;
@@ -216,6 +242,7 @@ export interface UIState {
   isFullScreenOpen: boolean;
   isFocusModeOpen: boolean;
   isCastPickerOpen: boolean;
+  isQconnectPanelOpen: boolean;
   isPlaylistModalOpen: boolean;
   playlistModalMode: 'create' | 'edit' | 'addTrack';
   playlistModalTrackIds: number[];
@@ -229,6 +256,7 @@ export function getUIState(): UIState {
     isFullScreenOpen,
     isFocusModeOpen,
     isCastPickerOpen,
+    isQconnectPanelOpen,
     isPlaylistModalOpen,
     playlistModalMode,
     playlistModalTrackIds,

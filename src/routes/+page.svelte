@@ -65,6 +65,8 @@
     toggleFocusMode,
     openCastPicker,
     closeCastPicker,
+    openQconnectPanel,
+    closeQconnectPanel,
     openPlaylistModal,
     closePlaylistModal,
     openPlaylistImport,
@@ -203,6 +205,34 @@
     last_error?: string | null;
   };
 
+  type QconnectQueueSnapshot = {
+    version: { major: number; minor: number };
+    queue_items: Array<unknown>;
+    shuffle_mode: boolean;
+    autoplay_mode: boolean;
+    autoplay_items: Array<unknown>;
+  };
+
+  type QconnectRendererSnapshot = {
+    playing_state?: number | null;
+    volume?: number | null;
+    muted?: boolean | null;
+  };
+
+  type QconnectAdmissionBlockedEvent = {
+    command_type: string;
+    origin: string;
+    reason: string;
+    handoff_intent: 'continue_locally' | 'send_to_connect';
+  };
+
+  type QconnectDiagnosticsEntry = {
+    ts: number;
+    level: 'info' | 'warn' | 'error';
+    channel: string;
+    message: string;
+  };
+
   const MEDIA_SEEK_FALLBACK_SECS = 10;
 
   // Types
@@ -316,6 +346,7 @@
   import Sidebar from '$lib/components/Sidebar.svelte';
   import AboutModal from '$lib/components/AboutModal.svelte';
   import NowPlayingBar from '$lib/components/NowPlayingBar.svelte';
+  import QconnectPanel from '$lib/components/QconnectPanel.svelte';
   import Toast from '$lib/components/Toast.svelte';
 
   // Views
@@ -579,8 +610,21 @@
 
   // Cast State
   let isCastConnected = $state(false);
+  let isQconnectPanelOpen = $state(false);
   let isQobuzConnectConnected = $state(false);
   let qobuzConnectBusy = $state(false);
+  let qobuzConnectRefreshBusy = $state(false);
+  let qobuzConnectStatus = $state<QconnectConnectionStatus>({
+    running: false,
+    transport_connected: false,
+    endpoint_url: null,
+    last_error: null
+  });
+  let qobuzConnectQueueSnapshot = $state<QconnectQueueSnapshot | null>(null);
+  let qobuzConnectRendererSnapshot = $state<QconnectRendererSnapshot | null>(null);
+  let qobuzConnectDiagnosticsLogs = $state<QconnectDiagnosticsEntry[]>([]);
+  const showQconnectDevDiagnostics = import.meta.env.DEV;
+  const QCONNECT_DIAGNOSTIC_LOG_LIMIT = 200;
 
   // Playlist Modal State (from uiStore subscription)
   let isPlaylistModalOpen = $state(false);
@@ -654,12 +698,89 @@
     }
   }
 
+  function pushQobuzConnectDiagnostic(
+    channel: string,
+    level: 'info' | 'warn' | 'error',
+    payload: unknown
+  ): void {
+    const normalized = typeof payload === 'string'
+      ? payload
+      : (() => {
+          try {
+            return JSON.stringify(payload);
+          } catch {
+            return String(payload);
+          }
+        })();
+
+    qobuzConnectDiagnosticsLogs = [
+      {
+        ts: Date.now(),
+        level,
+        channel,
+        message: normalized
+      },
+      ...qobuzConnectDiagnosticsLogs
+    ].slice(0, QCONNECT_DIAGNOSTIC_LOG_LIMIT);
+  }
+
+  function clearQobuzConnectDiagnostics(): void {
+    qobuzConnectDiagnosticsLogs = [];
+  }
+
+  function qobuzConnectAdmissionReasonKey(reason: string): string {
+    if (reason === 'local_library_tracks_never_enter_remote_qconnect_queue') {
+      return 'qconnect.admissionBlockedLocalLibrary';
+    }
+    if (reason === 'plex_tracks_never_enter_remote_qconnect_queue') {
+      return 'qconnect.admissionBlockedPlex';
+    }
+    return 'qconnect.admissionBlockedUnknown';
+  }
+
   async function refreshQobuzConnectStatus(): Promise<void> {
     try {
       const status = await invoke<QconnectConnectionStatus>('v2_qconnect_status');
+      qobuzConnectStatus = status;
       isQobuzConnectConnected = Boolean(status.transport_connected);
     } catch {
+      qobuzConnectStatus = {
+        running: false,
+        transport_connected: false,
+        endpoint_url: null,
+        last_error: null
+      };
       isQobuzConnectConnected = false;
+    }
+  }
+
+  async function refreshQobuzConnectSnapshots(): Promise<void> {
+    if (!isQobuzConnectConnected) {
+      qobuzConnectQueueSnapshot = null;
+      qobuzConnectRendererSnapshot = null;
+      return;
+    }
+
+    try {
+      const [queueSnapshot, rendererSnapshot] = await Promise.all([
+        invoke<QconnectQueueSnapshot>('v2_qconnect_queue_snapshot'),
+        invoke<QconnectRendererSnapshot>('v2_qconnect_renderer_snapshot')
+      ]);
+      qobuzConnectQueueSnapshot = queueSnapshot;
+      qobuzConnectRendererSnapshot = rendererSnapshot;
+    } catch (err) {
+      pushQobuzConnectDiagnostic('snapshot', 'warn', err);
+    }
+  }
+
+  async function refreshQobuzConnectRuntimeState(): Promise<void> {
+    if (qobuzConnectRefreshBusy) return;
+    qobuzConnectRefreshBusy = true;
+    try {
+      await refreshQobuzConnectStatus();
+      await refreshQobuzConnectSnapshots();
+    } finally {
+      qobuzConnectRefreshBusy = false;
     }
   }
 
@@ -674,10 +795,16 @@
       }
     } catch (err) {
       console.error('Qobuz Connect toggle failed:', err);
+      pushQobuzConnectDiagnostic('toggle', 'error', err);
     } finally {
-      await refreshQobuzConnectStatus();
+      await refreshQobuzConnectRuntimeState();
       qobuzConnectBusy = false;
     }
+  }
+
+  function openQobuzConnectPanelFromNowPlaying(): void {
+    openQconnectPanel();
+    void refreshQobuzConnectRuntimeState();
   }
 
   // Navigation wrapper (keeps debug logging)
@@ -2929,9 +3056,13 @@
   onMount(() => {
     // Bootstrap app (theme, mouse nav, Last.fm restore)
     const { cleanup: cleanupBootstrap } = bootstrapApp();
-    void refreshQobuzConnectStatus();
+    void refreshQobuzConnectRuntimeState();
     const qobuzConnectStatusInterval = setInterval(() => {
-      void refreshQobuzConnectStatus();
+      if (isQconnectPanelOpen || isQobuzConnectConnected) {
+        void refreshQobuzConnectRuntimeState();
+      } else {
+        void refreshQobuzConnectStatus();
+      }
     }, 5000);
 
     // Keyboard navigation
@@ -3039,6 +3170,7 @@
       isFullScreenOpen = uiState.isFullScreenOpen;
       isFocusModeOpen = uiState.isFocusModeOpen;
       isCastPickerOpen = uiState.isCastPickerOpen;
+      isQconnectPanelOpen = uiState.isQconnectPanelOpen;
       isPlaylistModalOpen = uiState.isPlaylistModalOpen;
       playlistModalMode = uiState.playlistModalMode;
       playlistModalTrackIds = uiState.playlistModalTrackIds;
@@ -3320,6 +3452,9 @@
     let unlistenTrayPrevious: UnlistenFn | null = null;
     let unlistenMediaControls: UnlistenFn | null = null;
     let unlistenLinkResolved: UnlistenFn | null = null;
+    let unlistenQconnectEvent: UnlistenFn | null = null;
+    let unlistenQconnectError: UnlistenFn | null = null;
+    let unlistenQconnectAdmissionBlocked: UnlistenFn | null = null;
 
     (async () => {
       const unlisten1 = await listen('tray:play_pause', () => {
@@ -3416,6 +3551,30 @@
       });
       if (disposed) { unlisten5(); return; }
       unlistenLinkResolved = unlisten5;
+
+      const unlisten6 = await listen('qconnect:event', (event) => {
+        pushQobuzConnectDiagnostic('qconnect:event', 'info', event.payload);
+        void refreshQobuzConnectRuntimeState();
+      });
+      if (disposed) { unlisten6(); return; }
+      unlistenQconnectEvent = unlisten6;
+
+      const unlisten7 = await listen<string>('qconnect:error', (event) => {
+        pushQobuzConnectDiagnostic('qconnect:error', 'error', event.payload);
+        qobuzConnectStatus = {
+          ...qobuzConnectStatus,
+          last_error: event.payload
+        };
+      });
+      if (disposed) { unlisten7(); return; }
+      unlistenQconnectError = unlisten7;
+
+      const unlisten8 = await listen<QconnectAdmissionBlockedEvent>('qconnect:admission_blocked', (event) => {
+        pushQobuzConnectDiagnostic('qconnect:admission_blocked', 'warn', event.payload);
+        showToast($t(qobuzConnectAdmissionReasonKey(event.payload.reason)), 'warning');
+      });
+      if (disposed) { unlisten8(); return; }
+      unlistenQconnectAdmissionBlocked = unlisten8;
     })();
 
     return () => {
@@ -3427,6 +3586,9 @@
       unlistenTrayPrevious?.();
       unlistenMediaControls?.();
       unlistenLinkResolved?.();
+      unlistenQconnectEvent?.();
+      unlistenQconnectError?.();
+      unlistenQconnectAdmissionBlocked?.();
       // Save session before cleanup
       saveSessionBeforeClose();
       cleanupBootstrap();
@@ -4249,7 +4411,7 @@
         onOpenFullScreen={openFullScreen}
         onCast={openCastPicker}
         {isCastConnected}
-        onQobuzConnect={handleQobuzConnectButton}
+        onQobuzConnect={openQobuzConnectPanelFromNowPlaying}
         {isQobuzConnectConnected}
         onToggleLyrics={toggleLyricsSidebar}
         lyricsActive={lyricsSidebarVisible}
@@ -4286,7 +4448,7 @@
         onOpenFullScreen={openFullScreen}
         onCast={openCastPicker}
         {isCastConnected}
-        onQobuzConnect={handleQobuzConnectButton}
+        onQobuzConnect={openQobuzConnectPanelFromNowPlaying}
         {isQobuzConnectConnected}
         queueOpen={isQueueOpen}
         {volume}
@@ -4500,6 +4662,19 @@
     <CastPicker
       isOpen={isCastPickerOpen}
       onClose={closeCastPicker}
+    />
+
+    <QconnectPanel
+      isOpen={isQconnectPanelOpen}
+      onClose={closeQconnectPanel}
+      status={qobuzConnectStatus}
+      busy={qobuzConnectBusy}
+      onToggleConnection={handleQobuzConnectButton}
+      queueSnapshot={qobuzConnectQueueSnapshot}
+      rendererSnapshot={qobuzConnectRendererSnapshot}
+      showDevDiagnostics={showQconnectDevDiagnostics}
+      diagnosticsLogs={qobuzConnectDiagnosticsLogs}
+      onClearDiagnostics={clearQobuzConnectDiagnostics}
     />
 
 
