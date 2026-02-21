@@ -4337,21 +4337,28 @@ pub async fn v2_create_album_radio(
         .await
         .map_err(|e| format!("Failed to fetch album radio: {}", e))?;
 
-    let tracks: Vec<crate::api::Track> = radio_response
-        .tracks
-        .items
-        .into_iter()
-        .filter(|track| {
+    // The radio endpoint returns partial track objects (missing performer, etc.).
+    // Extract IDs and fetch full track data individually, same as artist/track radio.
+    let track_ids: Vec<u64> = radio_response.tracks.items.iter().map(|t| t.id).collect();
+
+    if track_ids.is_empty() {
+        return Err("No radio tracks returned for this album".to_string());
+    }
+
+    let mut tracks = Vec::new();
+    for track_id in track_ids {
+        if let Ok(track) = client.get_track(track_id).await {
             if let Some(ref performer) = track.performer {
-                !blacklist_state.is_blacklisted(performer.id)
-            } else {
-                true
+                if blacklist_state.is_blacklisted(performer.id) {
+                    continue;
+                }
             }
-        })
-        .collect();
+            tracks.push(track);
+        }
+    }
 
     if tracks.is_empty() {
-        return Err("No radio tracks returned for this album".to_string());
+        return Err("Failed to fetch any radio tracks".to_string());
     }
 
     let queue_tracks: Vec<CoreQueueTrack> =
