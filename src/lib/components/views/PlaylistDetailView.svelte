@@ -164,6 +164,8 @@
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
+    onTrackCreateQbzRadio?: (trackId: number, trackTitle: string, artistId?: number) => void;
+    onTrackCreateQobuzRadio?: (trackId: number, trackTitle: string) => void;
     getTrackOfflineCacheStatus?: (trackId: number) => { status: OfflineCacheStatus; progress: number };
     downloadStateVersion?: number;
     onLocalTrackPlay?: (track: LocalLibraryTrack) => void;
@@ -193,6 +195,8 @@
     onTrackDownload,
     onTrackRemoveDownload,
     onTrackReDownload,
+    onTrackCreateQbzRadio,
+    onTrackCreateQobuzRadio,
     getTrackOfflineCacheStatus,
     downloadStateVersion,
     onLocalTrackPlay,
@@ -2263,6 +2267,8 @@
                 onPlayNow: () => handleTrackClick(track, idx),
                 onPlayNext: track.isLocal ? () => handleTrackPlayNext(track) : (onTrackPlayNext ? () => onTrackPlayNext(track) : undefined),
                 onPlayLater: track.isLocal ? () => handleTrackPlayLater(track) : (onTrackPlayLater ? () => onTrackPlayLater(track) : undefined),
+                onCreateQbzRadio: !track.isLocal && onTrackCreateQbzRadio ? () => onTrackCreateQbzRadio(track.id, track.title, track.artistId) : undefined,
+                onCreateQobuzRadio: !track.isLocal && onTrackCreateQobuzRadio ? () => onTrackCreateQobuzRadio(track.id, track.title) : undefined,
                 onAddToPlaylist: !track.isLocal && onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined,
                 onRemoveFromPlaylist: () => removeTrackFromPlaylist(track),
                 onShareQobuz: !track.isLocal && onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,

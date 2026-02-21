@@ -58,6 +58,8 @@
     onGoToArtist?: (artistId: number) => void;
     onShowInfo?: (trackId: number) => void;
     onReDownload?: (track: Track) => void;
+    onCreateQbzRadio?: (trackId: number, trackTitle: string, artistId?: number) => void;
+    onCreateQobuzRadio?: (trackId: number, trackTitle: string) => void;
     // For getting artist/album IDs from non-local tracks
     getArtistId?: (track: Track) => number | undefined;
     getAlbumId?: (track: Track) => string | undefined;
@@ -101,6 +103,8 @@
     onGoToArtist,
     onShowInfo,
     onReDownload,
+    onCreateQbzRadio,
+    onCreateQobuzRadio,
     getArtistId,
     getAlbumId,
   }: Props = $props();
@@ -347,6 +351,8 @@
               onPlayNow: () => onTrackPlay(item.track),
               onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(item.track) : undefined,
               onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(item.track) : undefined,
+              onCreateQbzRadio: !isLocal && onCreateQbzRadio ? () => onCreateQbzRadio(trackId, getTrackTitle(item.track), artistId) : undefined,
+              onCreateQobuzRadio: !isLocal && onCreateQobuzRadio ? () => onCreateQobuzRadio(trackId, getTrackTitle(item.track)) : undefined,
               onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(trackId) : undefined,
               onShareQobuz: onShareQobuz ? () => onShareQobuz(trackId) : undefined,
               onShareSonglink: onShareSonglink ? () => onShareSonglink(item.track) : undefined,

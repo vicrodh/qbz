@@ -101,6 +101,8 @@
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
+    onTrackCreateQbzRadio?: (trackId: number, trackTitle: string, artistId?: number) => void;
+    onTrackCreateQobuzRadio?: (trackId: number, trackTitle: string) => void;
     getTrackOfflineCacheStatus?: (trackId: number) => { status: OfflineCacheStatus; progress: number };
     onPlaylistSelect?: (playlistId: number) => void;
     onPlaylistPlay?: (playlistId: number) => void;
@@ -158,6 +160,8 @@
     onTrackDownload,
     onTrackRemoveDownload,
     onTrackReDownload,
+    onTrackCreateQbzRadio,
+    onTrackCreateQobuzRadio,
     getTrackOfflineCacheStatus,
     onPlaylistSelect,
     onPlaylistPlay,
@@ -1581,6 +1585,8 @@
               onGoToArtist={onTrackGoToArtist}
               onShowInfo={onTrackShowInfo}
               onReDownload={onTrackReDownload ? (trk) => onTrackReDownload(buildDisplayTrackFromFavorite(trk)) : undefined}
+              onCreateQbzRadio={onTrackCreateQbzRadio}
+              onCreateQobuzRadio={onTrackCreateQobuzRadio}
             />
           </div>
         </div>

@@ -1908,6 +1908,69 @@
     }
   }
 
+  // Create QBZ track radio (used by PlaylistDetailView, FavoritesView, etc.)
+  async function handleCreateQbzTrackRadio(trackId: number, trackTitle: string, artistId?: number) {
+    try {
+      await invoke<string>('v2_create_track_radio', {
+        trackId,
+        trackName: trackTitle,
+        artistId: artistId ?? 0
+      });
+
+      const firstTrack = await playQueueIndex(0);
+      if (firstTrack) {
+        playTrack({
+          id: firstTrack.id,
+          title: firstTrack.title,
+          artist: firstTrack.artist,
+          album: firstTrack.album,
+          artwork: firstTrack.artwork_url || '',
+          duration: firstTrack.duration_secs,
+          quality: firstTrack.bit_depth && firstTrack.sample_rate
+            ? `${firstTrack.bit_depth}bit/${firstTrack.sample_rate}kHz`
+            : firstTrack.hires ? 'Hi-Res' : '-',
+          bitDepth: firstTrack.bit_depth ?? undefined,
+          samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to create QBZ track radio:', err);
+    }
+  }
+
+  // Create Qobuz track radio (used by PlaylistDetailView, FavoritesView, etc.)
+  async function handleCreateQobuzTrackRadio(trackId: number, trackTitle: string) {
+    try {
+      await invoke<string>('v2_create_qobuz_track_radio', {
+        trackId,
+        trackName: trackTitle
+      });
+
+      const firstTrack = await playQueueIndex(0);
+      if (firstTrack) {
+        playTrack({
+          id: firstTrack.id,
+          title: firstTrack.title,
+          artist: firstTrack.artist,
+          album: firstTrack.album,
+          artwork: firstTrack.artwork_url || '',
+          duration: firstTrack.duration_secs,
+          quality: firstTrack.bit_depth && firstTrack.sample_rate
+            ? `${firstTrack.bit_depth}bit/${firstTrack.sample_rate}kHz`
+            : firstTrack.hires ? 'Hi-Res' : '-',
+          bitDepth: firstTrack.bit_depth ?? undefined,
+          samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to create Qobuz track radio:', err);
+    }
+  }
+
   // Add all album tracks next in queue (after current track)
   async function handleAddAlbumToQueueNext() {
     if (!selectedAlbum?.tracks?.length) return;
@@ -3759,6 +3822,8 @@
           onTrackDownload={handleDisplayTrackDownload}
           onTrackRemoveDownload={handleTrackRemoveDownload}
           onTrackReDownload={handleDisplayTrackDownload}
+          onTrackCreateQbzRadio={handleCreateQbzTrackRadio}
+          onTrackCreateQobuzRadio={handleCreateQobuzTrackRadio}
           getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
           {downloadStateVersion}
           onLocalTrackPlay={handleLocalTrackPlay}
@@ -3813,6 +3878,8 @@
             onTrackDownload={handleDisplayTrackDownload}
             onTrackRemoveDownload={handleTrackRemoveDownload}
             onTrackReDownload={handleDisplayTrackDownload}
+            onTrackCreateQbzRadio={handleCreateQbzTrackRadio}
+            onTrackCreateQobuzRadio={handleCreateQobuzTrackRadio}
             getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
             onPlaylistSelect={selectPlaylist}
             onPlaylistPlay={playPlaylistById}

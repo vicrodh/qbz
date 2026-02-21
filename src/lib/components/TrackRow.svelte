@@ -51,6 +51,8 @@
     onPlayFromHere?: () => void;
     onPlayNext?: () => void;
     onPlayLater?: () => void;
+    onCreateQbzRadio?: () => void;
+    onCreateQobuzRadio?: () => void;
     onAddToPlaylist?: () => void;
     onRemoveFromPlaylist?: () => void;
     onFindReplacement?: () => void;
@@ -300,6 +302,8 @@
       onPlayFromHere={menuActions?.onPlayFromHere}
       onPlayNext={menuActions?.onPlayNext}
       onPlayLater={menuActions?.onPlayLater}
+      onCreateQbzRadio={menuActions?.onCreateQbzRadio}
+      onCreateQobuzRadio={menuActions?.onCreateQobuzRadio}
       onAddFavorite={trackId !== undefined ? () => toggleTrackFavorite(trackId) : undefined}
       onAddToPlaylist={menuActions?.onAddToPlaylist}
       onRemoveFromPlaylist={menuActions?.onRemoveFromPlaylist}
