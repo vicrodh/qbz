@@ -16,12 +16,15 @@ use tokio::sync::{Mutex, RwLock};
 use crate::{
     core_bridge::{CoreBridge, CoreBridgeState},
     runtime::{CommandRequirement, RuntimeError, RuntimeManagerState},
+    AppState,
 };
 
 const PLAYING_STATE_UNKNOWN: i32 = 0;
 const PLAYING_STATE_STOPPED: i32 = 1;
 const PLAYING_STATE_PLAYING: i32 = 2;
 const PLAYING_STATE_PAUSED: i32 = 3;
+const QCONNECT_QWS_TOKEN_KIND: &str = "jwt_qws";
+const QCONNECT_QWS_CREATE_TOKEN_PATH: &str = "/qws/createToken";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct QconnectConnectOptions {
@@ -522,6 +525,7 @@ pub async fn v2_qconnect_connect(
     service: State<'_, QconnectServiceState>,
     core_bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
+    app_state: State<'_, AppState>,
     app_handle: AppHandle,
 ) -> Result<QconnectConnectionStatus, RuntimeError> {
     runtime
@@ -529,8 +533,9 @@ pub async fn v2_qconnect_connect(
         .check_requirements(CommandRequirement::RequiresClientInit)
         .await?;
 
-    let config =
-        resolve_transport_config(options.unwrap_or_default()).map_err(RuntimeError::Internal)?;
+    let config = resolve_transport_config(options.unwrap_or_default(), &app_state)
+        .await
+        .map_err(RuntimeError::Internal)?;
 
     service
         .connect(app_handle, core_bridge.0.clone(), config)
@@ -757,16 +762,39 @@ pub async fn v2_qconnect_renderer_snapshot(
         .map_err(RuntimeError::Internal)
 }
 
-fn resolve_transport_config(options: QconnectConnectOptions) -> Result<WsTransportConfig, String> {
-    let endpoint_url = normalize_opt_string(options.endpoint_url)
-        .or_else(|| std::env::var("QBZ_QCONNECT_WS_ENDPOINT").ok())
-        .ok_or_else(|| {
-            "QConnect endpoint_url is required (arg or QBZ_QCONNECT_WS_ENDPOINT)".to_string()
-        })?;
+async fn resolve_transport_config(
+    options: QconnectConnectOptions,
+    app_state: &AppState,
+) -> Result<WsTransportConfig, String> {
+    let mut endpoint_url = normalize_opt_string(options.endpoint_url)
+        .or_else(|| normalize_opt_string(std::env::var("QBZ_QCONNECT_WS_ENDPOINT").ok()));
 
-    let jwt_qws = normalize_opt_string(options.jwt_qws)
-        .or_else(|| std::env::var("QBZ_QCONNECT_JWT_QWS").ok())
-        .or_else(|| std::env::var("QBZ_QCONNECT_JWT").ok());
+    let mut jwt_qws = normalize_opt_string(options.jwt_qws)
+        .or_else(|| normalize_opt_string(std::env::var("QBZ_QCONNECT_JWT_QWS").ok()))
+        .or_else(|| normalize_opt_string(std::env::var("QBZ_QCONNECT_JWT").ok()));
+
+    if endpoint_url.is_none() || jwt_qws.is_none() {
+        match fetch_qconnect_transport_credentials(app_state).await {
+            Ok((discovered_endpoint, discovered_jwt_qws)) => {
+                endpoint_url = endpoint_url.or(discovered_endpoint);
+                jwt_qws = jwt_qws.or(discovered_jwt_qws);
+            }
+            Err(err) if endpoint_url.is_some() => {
+                log::warn!(
+                    "[QConnect] qws/createToken auto-discovery failed, using provided endpoint: {err}"
+                );
+            }
+            Err(err) => {
+                return Err(format!(
+                    "QConnect endpoint_url is required (arg or QBZ_QCONNECT_WS_ENDPOINT). Auto-discovery via qws/createToken failed: {err}"
+                ));
+            }
+        }
+    }
+
+    let endpoint_url = endpoint_url.ok_or_else(|| {
+        "QConnect endpoint_url is required (arg or QBZ_QCONNECT_WS_ENDPOINT)".to_string()
+    })?;
 
     let subscribe_channels = if let Some(channels) = options.subscribe_channels_hex {
         parse_subscribe_channels(channels)?
@@ -801,6 +829,84 @@ fn resolve_transport_config(options: QconnectConnectOptions) -> Result<WsTranspo
     config.subscribe_channels = subscribe_channels;
 
     Ok(config)
+}
+
+async fn fetch_qconnect_transport_credentials(
+    app_state: &AppState,
+) -> Result<(Option<String>, Option<String>), String> {
+    let client = app_state.client.read().await.clone();
+    let app_id = client
+        .app_id()
+        .await
+        .map_err(|err| format!("qws/createToken requires initialized API client: {err}"))?;
+    let user_auth_token = client
+        .auth_token()
+        .await
+        .map_err(|err| format!("qws/createToken requires authenticated user: {err}"))?;
+
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        "X-App-Id",
+        reqwest::header::HeaderValue::from_str(&app_id)
+            .map_err(|_| "invalid X-App-Id header value".to_string())?,
+    );
+    headers.insert(
+        "X-User-Auth-Token",
+        reqwest::header::HeaderValue::from_str(&user_auth_token)
+            .map_err(|_| "invalid X-User-Auth-Token header value".to_string())?,
+    );
+
+    let url = crate::api::endpoints::build_url(QCONNECT_QWS_CREATE_TOKEN_PATH);
+    let response = client
+        .get_http()
+        .post(&url)
+        .headers(headers)
+        .form(&[
+            ("jwt", QCONNECT_QWS_TOKEN_KIND),
+            ("user_auth_token_needed", "true"),
+            ("strong_auth_needed", "true"),
+        ])
+        .send()
+        .await
+        .map_err(|err| format!("qws/createToken HTTP request failed: {err}"))?;
+
+    let status = response.status();
+    let payload: Value = response
+        .json()
+        .await
+        .map_err(|err| format!("qws/createToken response decode failed: {err}"))?;
+
+    if !status.is_success() {
+        let preview = serde_json::to_string(&payload)
+            .unwrap_or_else(|_| "<unserializable>".to_string())
+            .chars()
+            .take(300)
+            .collect::<String>();
+        return Err(format!("qws/createToken status {status}: {preview}"));
+    }
+
+    let jwt_qws_payload = payload
+        .get("jwt_qws")
+        .ok_or_else(|| "qws/createToken response missing jwt_qws payload".to_string())?;
+
+    let endpoint_url = normalize_opt_string(
+        jwt_qws_payload
+            .get("endpoint")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+    );
+    let jwt_qws = normalize_opt_string(
+        jwt_qws_payload
+            .get("jwt")
+            .and_then(Value::as_str)
+            .map(ToString::to_string),
+    );
+
+    if endpoint_url.is_none() {
+        return Err("qws/createToken response missing jwt_qws.endpoint".to_string());
+    }
+
+    Ok((endpoint_url, jwt_qws))
 }
 
 fn normalize_opt_string(value: Option<String>) -> Option<String> {
