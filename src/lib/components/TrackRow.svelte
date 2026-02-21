@@ -96,6 +96,7 @@
   }: Props = $props();
 
   let isHovered = $state(false);
+  let contextMenuPos = $state<{ x: number; y: number } | null>(null);
   let favoriteFromStore = $state(false);
   let isToggling = $state(false);
 
@@ -152,6 +153,11 @@
   onmouseenter={() => (isHovered = true)}
   onmouseleave={() => (isHovered = false)}
   onclick={isBlacklisted ? undefined : onPlay}
+  oncontextmenu={(e) => {
+    if (isBlacklisted) return;
+    e.preventDefault();
+    contextMenuPos = { x: e.clientX, y: e.clientY };
+  }}
   role="button"
   tabindex={isBlacklisted ? -1 : 0}
   onkeydown={(e) => e.key === 'Enter' && !isBlacklisted && onPlay?.()}
@@ -307,6 +313,8 @@
       isTrackDownloaded={menuActions?.isTrackDownloaded}
       onReDownload={menuActions?.onReDownload}
       onRemoveDownload={menuActions?.onRemoveDownload ?? onRemoveDownload}
+      contextMenuPosition={contextMenuPos}
+      onContextMenuClosed={() => { contextMenuPos = null; }}
     />
   </div>
 </div>

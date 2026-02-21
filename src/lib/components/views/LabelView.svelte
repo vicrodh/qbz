@@ -108,6 +108,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let pageData = $state<LabelPageData | null>(null);
+  let trackContextMenu = $state<{ trackId: number; x: number; y: number } | null>(null);
 
   // Parsed sections
   let topTracks = $state<Track[]>([]);
@@ -817,6 +818,10 @@
               data-track-id={track.id}
               onclick={() => handleTrackPlay(track, index)}
               onkeydown={(e) => e.key === 'Enter' && handleTrackPlay(track, index)}
+              oncontextmenu={(e) => {
+                e.preventDefault();
+                trackContextMenu = { trackId: track.id, x: e.clientX, y: e.clientY };
+              }}
             >
               <div class="track-number">{index + 1}</div>
               <div class="track-artwork">
@@ -910,6 +915,8 @@
                   onAddFavorite={onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined}
                   onAddToPlaylist={onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined}
                   onGoToAlbum={track.album?.id && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.album!.id) : undefined}
+                  contextMenuPosition={trackContextMenu?.trackId === track.id ? { x: trackContextMenu.x, y: trackContextMenu.y } : null}
+                  onContextMenuClosed={() => { trackContextMenu = null; }}
                 />
               </div>
             </div>

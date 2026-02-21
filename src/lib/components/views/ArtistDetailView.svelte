@@ -151,6 +151,7 @@
 
   let isRadioLoading = $state(false);
   let radioDropdownOpen = $state(false);
+  let trackContextMenu = $state<{ trackId: number; x: number; y: number } | null>(null);
   let artistIsBlacklisted = $state(false);
   let isBlacklistLoading = $state(false);
   let showHideDropdown = $state(false);
@@ -1678,6 +1679,10 @@
               data-track-id={track.id}
               onclick={() => handleTrackPlay(track, index)}
               onkeydown={(e) => e.key === 'Enter' && handleTrackPlay(track, index)}
+              oncontextmenu={(e) => {
+                e.preventDefault();
+                trackContextMenu = { trackId: track.id, x: e.clientX, y: e.clientY };
+              }}
             >
               <div class="track-number">{index + 1}</div>
               <div class="track-artwork">
@@ -1775,6 +1780,8 @@
                   onShareQobuz={onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined}
                   onShareSonglink={onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined}
                   onGoToAlbum={track.album?.id && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.album!.id) : undefined}
+                  contextMenuPosition={trackContextMenu?.trackId === track.id ? { x: trackContextMenu.x, y: trackContextMenu.y } : null}
+                  onContextMenuClosed={() => { trackContextMenu = null; }}
                 />
               </div>
             </div>
