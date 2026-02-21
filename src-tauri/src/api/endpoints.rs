@@ -56,6 +56,9 @@ pub mod paths {
     // Catalog (combined search)
     pub const CATALOG_SEARCH: &str = "/catalog/search";
 
+    // Radio
+    pub const RADIO_ALBUM: &str = "/radio/album";
+
     // Discover (home page content)
     pub const DISCOVER_INDEX: &str = "/discover/index";
     pub const DISCOVER_PLAYLISTS: &str = "/discover/playlists";

@@ -678,6 +678,19 @@ pub struct DynamicSuggestTrack {
     pub streamable: bool,
 }
 
+/// Response from `/radio/album` endpoint
+#[derive(Debug, Clone, Deserialize)]
+pub struct RadioResponse {
+    #[serde(rename = "type")]
+    pub radio_type: Option<String>,
+    pub algorithm: Option<String>,
+    pub title: Option<String>,
+    pub duration: Option<u64>,
+    pub track_count: Option<u32>,
+    #[serde(default, deserialize_with = "lenient_page_flexible")]
+    pub tracks: SearchResultsPage<Track>,
+}
+
 /// Favorites container
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Favorites {

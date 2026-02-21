@@ -4311,6 +4311,69 @@ pub async fn v2_create_track_radio(
     Ok(session_id)
 }
 
+/// Create album radio using the Qobuz `/radio/album` API endpoint.
+///
+/// Unlike artist/track radio (which uses RadioPoolBuilder + RadioDb),
+/// album radio calls the Qobuz API directly — the endpoint returns
+/// recommended tracks in a single GET response.
+#[tauri::command]
+pub async fn v2_create_album_radio(
+    album_id: String,
+    album_name: String,
+    state: State<'_, AppState>,
+    blacklist_state: State<'_, BlacklistState>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<String, String> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let client = state.client.read().await.clone();
+    let radio_response = client
+        .get_radio_album(&album_id)
+        .await
+        .map_err(|e| format!("Failed to fetch album radio: {}", e))?;
+
+    let tracks: Vec<crate::api::Track> = radio_response
+        .tracks
+        .items
+        .into_iter()
+        .filter(|track| {
+            if let Some(ref performer) = track.performer {
+                !blacklist_state.is_blacklisted(performer.id)
+            } else {
+                true
+            }
+        })
+        .collect();
+
+    if tracks.is_empty() {
+        return Err("No radio tracks returned for this album".to_string());
+    }
+
+    let queue_tracks: Vec<CoreQueueTrack> =
+        tracks.iter().map(track_to_queue_track_from_api).collect();
+    let bridge = bridge.get().await;
+    bridge.set_queue(queue_tracks, Some(0)).await;
+
+    let queue_track_ids: Vec<u64> = tracks.iter().map(|track| track.id).collect();
+    let context_id = format!("album_radio_{}_{}", album_id, chrono::Utc::now().timestamp());
+    let context = PlaybackContext::new(
+        ContextType::Radio,
+        context_id.clone(),
+        album_name,
+        ContentSource::Qobuz,
+        queue_track_ids,
+        0,
+    );
+    state.context.set_context(context);
+
+    Ok(context_id)
+}
+
 fn track_to_queue_track_from_api(track: &crate::api::Track) -> CoreQueueTrack {
     let artwork_url = track
         .album

@@ -1048,6 +1048,40 @@ impl QobuzClient {
         Ok(http_response.json().await?)
     }
 
+    /// Fetch radio tracks for an album (`/radio/album`).
+    pub async fn get_radio_album(
+        &self,
+        album_id: &str,
+    ) -> Result<RadioResponse> {
+        let url = endpoints::build_url(paths::RADIO_ALBUM);
+
+        let http_response = self
+            .http
+            .get(&url)
+            .headers(self.authenticated_headers().await?)
+            .query(&[("album_id", album_id)])
+            .send()
+            .await?;
+
+        let status = http_response.status();
+        log::debug!("[API] get_radio_album({}) status={}", album_id, status);
+
+        if !status.is_success() {
+            log::error!(
+                "[API] get_radio_album({}) unexpected status={}",
+                album_id,
+                status
+            );
+            return Err(ApiError::ApiResponse(format!(
+                "get_radio_album({}) status {}",
+                album_id, status
+            )));
+        }
+
+        let response: Value = http_response.json().await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
     /// Get playlist by ID (paginates automatically to fetch all tracks)
     ///
     /// After the first page, remaining pages are fetched concurrently
