@@ -7779,6 +7779,9 @@ pub async fn v2_save_session_state(
     shuffleEnabled: bool,
     repeatMode: String,
     wasPlaying: bool,
+    lastView: Option<String>,
+    viewContextId: Option<String>,
+    viewContextType: Option<String>,
     session_state: State<'_, crate::session_store::SessionStoreState>,
 ) -> Result<(), RuntimeError> {
     let session = crate::session_store::PersistedSession {
@@ -7790,6 +7793,9 @@ pub async fn v2_save_session_state(
         repeat_mode: repeatMode,
         was_playing: wasPlaying,
         saved_at: 0, // Will be set by save_session
+        last_view: lastView.unwrap_or_else(|| "home".to_string()),
+        view_context_id: viewContextId,
+        view_context_type: viewContextType,
     };
 
     let guard = session_state
