@@ -6,12 +6,16 @@ use uuid::Uuid;
 use crate::{
     queue_command_proto::{
         AutoplayModeSetMessage, AutoplayTracksLoadedMessage, AutoplayTracksRemovedMessage,
-        QConnectMessage, QConnectMessageType, QConnectMessages, QueueClearedMessage,
-        QueueErrorMessage, QueueStateMessage, QueueTrack, QueueTrackWithContext,
-        QueueTracksAddedFromAutoplayMessage, QueueTracksAddedMessage, QueueTracksInsertedMessage,
-        QueueTracksLoadedMessage, QueueTracksRemovedMessage, QueueTracksReorderedMessage,
-        QueueVersionRef, RendererMuteVolumeMessage, RendererSetActiveMessage,
-        RendererSetLoopModeMessage, RendererSetMaxAudioQualityMessage,
+        CtrlActiveRendererChangedMessage, CtrlAddRendererMessage,
+        CtrlDeviceAudioQualityChangedMessage, CtrlFileAudioQualityChangedMessage,
+        CtrlLoopModeSetMessage, CtrlMaxAudioQualityChangedMessage, CtrlRemoveRendererMessage,
+        CtrlRendererStateUpdatedMessage, CtrlSessionStateMessage, CtrlUpdateRendererMessage,
+        CtrlVolumeChangedMessage, CtrlVolumeMutedMessage, QConnectMessage, QConnectMessageType,
+        QConnectMessages, QueueClearedMessage, QueueErrorMessage, QueueStateMessage, QueueTrack,
+        QueueTrackWithContext, QueueTracksAddedFromAutoplayMessage, QueueTracksAddedMessage,
+        QueueTracksInsertedMessage, QueueTracksLoadedMessage, QueueTracksRemovedMessage,
+        QueueTracksReorderedMessage, QueueVersionRef, RendererMuteVolumeMessage,
+        RendererSetActiveMessage, RendererSetLoopModeMessage, RendererSetMaxAudioQualityMessage,
         RendererSetShuffleModeMessage, RendererSetStateMessage, RendererSetVolumeMessage,
         ShuffleModeSetMessage,
     },
@@ -120,6 +124,83 @@ fn decode_queue_server_event(
             };
             map_tracks_added_from_autoplay(payload)?
         }
+        // Session management events (81-87, 97-101)
+        code if code == QConnectMessageType::MessageTypeSrvrCtrlSessionState as i32 => {
+            let Some(payload) = message.srvr_ctrl_session_state else {
+                return Ok(None);
+            };
+            map_session_state(payload)?
+        }
+        code if code == QConnectMessageType::MessageTypeSrvrCtrlRendererStateUpdated as i32 => {
+            let Some(payload) = message.srvr_ctrl_renderer_state_updated else {
+                return Ok(None);
+            };
+            map_ctrl_renderer_state_updated(payload)?
+        }
+        code if code == QConnectMessageType::MessageTypeSrvrCtrlAddRenderer as i32 => {
+            let Some(payload) = message.srvr_ctrl_add_renderer else {
+                return Ok(None);
+            };
+            map_add_renderer(payload)?
+        }
+        code if code == QConnectMessageType::MessageTypeSrvrCtrlUpdateRenderer as i32 => {
+            let Some(payload) = message.srvr_ctrl_update_renderer else {
+                return Ok(None);
+            };
+            map_update_renderer(payload)?
+        }
+        code if code == QConnectMessageType::MessageTypeSrvrCtrlRemoveRenderer as i32 => {
+            let Some(payload) = message.srvr_ctrl_remove_renderer else {
+                return Ok(None);
+            };
+            map_remove_renderer(payload)?
+        }
+        code if code == QConnectMessageType::MessageTypeSrvrCtrlActiveRendererChanged as i32 => {
+            let Some(payload) = message.srvr_ctrl_active_renderer_changed else {
+                return Ok(None);
+            };
+            map_active_renderer_changed(payload)?
+        }
+        code if code == QConnectMessageType::MessageTypeSrvrCtrlVolumeChanged as i32 => {
+            let Some(payload) = message.srvr_ctrl_volume_changed else {
+                return Ok(None);
+            };
+            map_ctrl_volume_changed(payload)?
+        }
+        code if code == QConnectMessageType::MessageTypeSrvrCtrlLoopModeSet as i32 => {
+            let Some(payload) = message.srvr_ctrl_loop_mode_set else {
+                return Ok(None);
+            };
+            map_ctrl_loop_mode_set(payload)?
+        }
+        code if code == QConnectMessageType::MessageTypeSrvrCtrlVolumeMuted as i32 => {
+            let Some(payload) = message.srvr_ctrl_volume_muted else {
+                return Ok(None);
+            };
+            map_ctrl_volume_muted(payload)?
+        }
+        code if code == QConnectMessageType::MessageTypeSrvrCtrlMaxAudioQualityChanged as i32 => {
+            let Some(payload) = message.srvr_ctrl_max_audio_quality_changed else {
+                return Ok(None);
+            };
+            map_ctrl_max_audio_quality_changed(payload)?
+        }
+        code if code
+            == QConnectMessageType::MessageTypeSrvrCtrlFileAudioQualityChanged as i32 =>
+        {
+            let Some(payload) = message.srvr_ctrl_file_audio_quality_changed else {
+                return Ok(None);
+            };
+            map_ctrl_file_audio_quality_changed(payload)?
+        }
+        code if code
+            == QConnectMessageType::MessageTypeSrvrCtrlDeviceAudioQualityChanged as i32 =>
+        {
+            let Some(payload) = message.srvr_ctrl_device_audio_quality_changed else {
+                return Ok(None);
+            };
+            map_ctrl_device_audio_quality_changed(payload)?
+        }
         _ => return Ok(None),
     };
 
@@ -167,6 +248,45 @@ fn resolve_queue_message_type(message: &QConnectMessage) -> Option<i32> {
         if message.srvr_ctrl_queue_tracks_added_from_autoplay.is_some() {
             return Some(
                 QConnectMessageType::MessageTypeSrvrCtrlQueueTracksAddedFromAutoplay as i32,
+            );
+        }
+        // Session management
+        if message.srvr_ctrl_session_state.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlSessionState as i32);
+        }
+        if message.srvr_ctrl_renderer_state_updated.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlRendererStateUpdated as i32);
+        }
+        if message.srvr_ctrl_add_renderer.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlAddRenderer as i32);
+        }
+        if message.srvr_ctrl_update_renderer.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlUpdateRenderer as i32);
+        }
+        if message.srvr_ctrl_remove_renderer.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlRemoveRenderer as i32);
+        }
+        if message.srvr_ctrl_active_renderer_changed.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlActiveRendererChanged as i32);
+        }
+        if message.srvr_ctrl_volume_changed.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlVolumeChanged as i32);
+        }
+        if message.srvr_ctrl_loop_mode_set.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlLoopModeSet as i32);
+        }
+        if message.srvr_ctrl_volume_muted.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlVolumeMuted as i32);
+        }
+        if message.srvr_ctrl_max_audio_quality_changed.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlMaxAudioQualityChanged as i32);
+        }
+        if message.srvr_ctrl_file_audio_quality_changed.is_some() {
+            return Some(QConnectMessageType::MessageTypeSrvrCtrlFileAudioQualityChanged as i32);
+        }
+        if message.srvr_ctrl_device_audio_quality_changed.is_some() {
+            return Some(
+                QConnectMessageType::MessageTypeSrvrCtrlDeviceAudioQualityChanged as i32,
             );
         }
         None
@@ -638,6 +758,207 @@ fn map_tracks_added_from_autoplay(
         queue_version: queue_version_opt(payload.queue_version)?,
         payload: json!({
             "queue_item_ids": queue_item_ids
+        }),
+    })
+}
+
+// --- Session management event mappers ---
+
+fn map_session_state(payload: CtrlSessionStateMessage) -> Result<QueueServerEvent, ProtocolError> {
+    let session_uuid = uuid_bytes_to_string_opt(payload.session_uuid, "session_state.session_uuid")?;
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlSessionState,
+        action_uuid: None,
+        queue_version: queue_version_opt(payload.queue_version)?,
+        payload: json!({
+            "session_uuid": session_uuid,
+            "active_renderer_id": payload.active_renderer_id,
+            "playing_state": payload.playing_state,
+            "loop_mode": payload.loop_mode
+        }),
+    })
+}
+
+fn map_ctrl_renderer_state_updated(
+    payload: CtrlRendererStateUpdatedMessage,
+) -> Result<QueueServerEvent, ProtocolError> {
+    let player_state = payload.player_state.map(|ps| {
+        json!({
+            "playing_state": ps.playing_state,
+            "buffer_state": ps.buffer_state,
+            "current_position": ps.current_position.as_ref().and_then(|pos| pos.value),
+            "duration": ps.duration,
+            "current_queue_item_id": ps.current_queue_item_id
+        })
+    });
+
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlRendererStateUpdated,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "renderer_id": payload.renderer_id,
+            "status": payload.status,
+            "player_state": player_state
+        }),
+    })
+}
+
+fn map_add_renderer(payload: CtrlAddRendererMessage) -> Result<QueueServerEvent, ProtocolError> {
+    let device_info = payload.device_info.map(|di| {
+        json!({
+            "friendly_name": di.friendly_name,
+            "brand": di.brand,
+            "model": di.model,
+            "device_type": di.device_type
+        })
+    });
+
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlAddRenderer,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "renderer_id": payload.renderer_id,
+            "device_info": device_info
+        }),
+    })
+}
+
+fn map_update_renderer(
+    payload: CtrlUpdateRendererMessage,
+) -> Result<QueueServerEvent, ProtocolError> {
+    let device_info = payload.device_info.map(|di| {
+        json!({
+            "friendly_name": di.friendly_name,
+            "brand": di.brand,
+            "model": di.model,
+            "device_type": di.device_type
+        })
+    });
+
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlUpdateRenderer,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "renderer_id": payload.renderer_id,
+            "device_info": device_info
+        }),
+    })
+}
+
+fn map_remove_renderer(
+    payload: CtrlRemoveRendererMessage,
+) -> Result<QueueServerEvent, ProtocolError> {
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlRemoveRenderer,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "renderer_id": payload.renderer_id
+        }),
+    })
+}
+
+fn map_active_renderer_changed(
+    payload: CtrlActiveRendererChangedMessage,
+) -> Result<QueueServerEvent, ProtocolError> {
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlActiveRendererChanged,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "active_renderer_id": payload.active_renderer_id
+        }),
+    })
+}
+
+fn map_ctrl_volume_changed(
+    payload: CtrlVolumeChangedMessage,
+) -> Result<QueueServerEvent, ProtocolError> {
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlVolumeChanged,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "renderer_id": payload.renderer_id,
+            "volume": payload.volume
+        }),
+    })
+}
+
+fn map_ctrl_loop_mode_set(
+    payload: CtrlLoopModeSetMessage,
+) -> Result<QueueServerEvent, ProtocolError> {
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlLoopModeSet,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "loop_mode": payload.loop_mode
+        }),
+    })
+}
+
+fn map_ctrl_volume_muted(
+    payload: CtrlVolumeMutedMessage,
+) -> Result<QueueServerEvent, ProtocolError> {
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlVolumeMuted,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "renderer_id": payload.renderer_id,
+            "value": payload.value
+        }),
+    })
+}
+
+fn map_ctrl_max_audio_quality_changed(
+    payload: CtrlMaxAudioQualityChangedMessage,
+) -> Result<QueueServerEvent, ProtocolError> {
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlMaxAudioQualityChanged,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "renderer_id": payload.renderer_id,
+            "max_audio_quality": payload.max_audio_quality,
+            "network_type": payload.network_type
+        }),
+    })
+}
+
+fn map_ctrl_file_audio_quality_changed(
+    payload: CtrlFileAudioQualityChangedMessage,
+) -> Result<QueueServerEvent, ProtocolError> {
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlFileAudioQualityChanged,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "renderer_id": payload.renderer_id,
+            "sampling_rate": payload.sampling_rate,
+            "bit_depth": payload.bit_depth,
+            "nb_channels": payload.nb_channels,
+            "audio_quality": payload.audio_quality
+        }),
+    })
+}
+
+fn map_ctrl_device_audio_quality_changed(
+    payload: CtrlDeviceAudioQualityChangedMessage,
+) -> Result<QueueServerEvent, ProtocolError> {
+    Ok(QueueServerEvent {
+        event_type: QueueEventType::SrvrCtrlDeviceAudioQualityChanged,
+        action_uuid: None,
+        queue_version: None,
+        payload: json!({
+            "renderer_id": payload.renderer_id,
+            "sampling_rate": payload.sampling_rate,
+            "bit_depth": payload.bit_depth,
+            "nb_channels": payload.nb_channels
         }),
     })
 }

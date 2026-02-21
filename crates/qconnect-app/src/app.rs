@@ -209,6 +209,18 @@ where
     }
 
     async fn apply_server_event(&self, event: QueueServerEvent) -> Result<(), QconnectAppError> {
+        // Session management events bypass the queue reducer entirely.
+        // They provide session topology info (renderers, active renderer, etc.)
+        if event.event_type.is_session_management() {
+            self.sink
+                .on_event(QconnectAppEvent::SessionManagementEvent {
+                    message_type: event.message_type().to_string(),
+                    payload: event.payload.clone(),
+                })
+                .await;
+            return Ok(());
+        }
+
         let mut completed_uuid: Option<String> = None;
         let mut canceled_uuid: Option<String> = None;
         let mut ignored_queue_error_uuid: Option<String> = None;
@@ -600,6 +612,12 @@ fn map_server_event(event: &QueueServerEvent, current: &QConnectQueueState) -> Q
                 .get("error_message")
                 .map(value_to_string)
                 .unwrap_or_else(|| "queue_error_message".to_string()),
+        },
+        // Session management events are intercepted in apply_server_event()
+        // and should never reach map_server_event(). Treat as no-op if they do.
+        _ => QueueEvent::QueueCleared {
+            action_uuid: None,
+            version: current.version,
         },
     }
 }

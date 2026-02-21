@@ -17,7 +17,7 @@ pub use feature_flags::{
 };
 pub use qconnect_core::{
     evaluate_remote_queue_admission, resolve_handoff_intent, AdmissionDecision, HandoffIntent,
-    QConnectQueueState, QConnectRendererState, RendererCommand, TrackOrigin,
+    QConnectQueueState, QConnectRendererState, QueueVersion, RendererCommand, TrackOrigin,
 };
 pub use qconnect_protocol::{QueueCommandType, RendererReport, RendererReportType};
 pub use state::QconnectRuntimeState;

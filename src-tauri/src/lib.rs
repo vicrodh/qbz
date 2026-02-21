@@ -701,6 +701,8 @@ pub fn run() {
             qconnect_service::v2_qconnect_ask_for_renderer_state,
             qconnect_service::v2_qconnect_queue_snapshot,
             qconnect_service::v2_qconnect_renderer_snapshot,
+            qconnect_service::v2_qconnect_report_playback_state,
+            qconnect_service::v2_qconnect_report_volume,
             commands_v2::v2_is_logged_in,
             commands_v2::v2_login,
             commands_v2::v2_logout,

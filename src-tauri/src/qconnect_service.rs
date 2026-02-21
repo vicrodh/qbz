@@ -306,7 +306,23 @@ struct QconnectRemoteSyncState {
 impl QconnectEventSink for TauriQconnectEventSink {
     async fn on_event(&self, event: QconnectAppEvent) {
         match &event {
+            QconnectAppEvent::SessionManagementEvent {
+                message_type,
+                payload,
+            } => {
+                log::info!(
+                    "[QConnect] Session management: {} payload={}",
+                    message_type,
+                    serde_json::to_string(payload).unwrap_or_else(|_| "?".to_string())
+                );
+            }
             QconnectAppEvent::RendererUpdated(renderer_state) => {
+                log::info!(
+                    "[QConnect] Renderer updated: playing_state={:?} volume={:?} position={:?}",
+                    renderer_state.playing_state,
+                    renderer_state.volume,
+                    renderer_state.current_position_ms,
+                );
                 let mut sync_state = self.sync_state.lock().await;
                 sync_state.last_renderer_queue_item_id = renderer_state
                     .current_track
@@ -331,6 +347,10 @@ impl QconnectEventSink for TauriQconnectEventSink {
                 }
             }
             QconnectAppEvent::RendererCommandApplied { command, state } => {
+                log::info!(
+                    "[QConnect] Renderer command applied: {:?}",
+                    command
+                );
                 if let Err(err) =
                     apply_renderer_command_to_corebridge(&self.core_bridge, command, state).await
                 {
@@ -392,6 +412,21 @@ impl QconnectServiceState {
             loop {
                 match transport_rx.recv().await {
                     Ok(event) => {
+                        match &event {
+                            qconnect_transport_ws::TransportEvent::InboundQueueServerEvent(evt) => {
+                                log::info!("[QConnect] <-- Inbound queue event: {}", evt.message_type());
+                            }
+                            qconnect_transport_ws::TransportEvent::InboundRendererServerCommand(cmd) => {
+                                log::info!("[QConnect] <-- Inbound renderer command: {} payload={}", cmd.message_type(), cmd.payload);
+                            }
+                            qconnect_transport_ws::TransportEvent::InboundFrameDecoded { cloud_message_type, payload_size } => {
+                                log::debug!("[QConnect] <-- Frame decoded: type={} size={}", cloud_message_type, payload_size);
+                            }
+                            qconnect_transport_ws::TransportEvent::TransportError { stage, message } => {
+                                log::error!("[QConnect] Transport error: stage={} message={}", stage, message);
+                            }
+                            _ => {}
+                        }
                         if let Err(err) = app_for_loop.handle_transport_event(event).await {
                             let message = format!("qconnect app transport handling error: {err}");
                             log::error!("{message}");
@@ -519,6 +554,38 @@ impl QconnectServiceState {
         };
 
         Ok(app.renderer_state_snapshot().await)
+    }
+
+    pub async fn send_renderer_report(
+        &self,
+        report: RendererReport,
+    ) -> Result<(), String> {
+        let app = {
+            let guard = self.inner.lock().await;
+            guard
+                .runtime
+                .as_ref()
+                .map(|runtime| Arc::clone(&runtime.app))
+                .ok_or_else(|| "QConnect service is not running".to_string())?
+        };
+
+        app.send_renderer_report_command(report)
+            .await
+            .map_err(|err| format!("send renderer report failed: {err}"))
+    }
+
+    pub async fn is_active(&self) -> bool {
+        let guard = self.inner.lock().await;
+        guard.runtime.is_some()
+    }
+
+    async fn get_queue_version(&self) -> qconnect_app::QueueVersion {
+        let guard = self.inner.lock().await;
+        if let Some(runtime) = &guard.runtime {
+            runtime.app.queue_state_snapshot().await.version
+        } else {
+            qconnect_app::QueueVersion::default()
+        }
     }
 }
 
@@ -1272,6 +1339,73 @@ pub async fn v2_qconnect_renderer_snapshot(
         .renderer_snapshot()
         .await
         .map_err(RuntimeError::Internal)
+}
+
+/// Report current playback state to QConnect server.
+/// Called by playback commands (play, pause, resume, stop, seek, track change).
+/// Fire-and-forget: errors are logged but do not block playback.
+#[tauri::command]
+pub async fn v2_qconnect_report_playback_state(
+    playing_state: i32,
+    current_position: Option<i32>,
+    duration: Option<i32>,
+    current_queue_item_id: Option<i32>,
+    next_queue_item_id: Option<i32>,
+    service: State<'_, QconnectServiceState>,
+) -> Result<(), RuntimeError> {
+    if !service.is_active().await {
+        return Ok(());
+    }
+
+    let queue_version = service.get_queue_version().await;
+    let report = RendererReport::new(
+        RendererReportType::RndrSrvrStateUpdated,
+        Uuid::new_v4().to_string(),
+        queue_version,
+        serde_json::json!({
+            "playing_state": playing_state,
+            "buffer_state": BUFFER_STATE_OK,
+            "current_position": current_position,
+            "duration": duration,
+            "current_queue_item_id": current_queue_item_id,
+            "next_queue_item_id": next_queue_item_id,
+            "queue_version": {
+                "major": queue_version.major,
+                "minor": queue_version.minor
+            }
+        }),
+    );
+
+    if let Err(err) = service.send_renderer_report(report).await {
+        log::warn!("[QConnect] Failed to report playback state: {err}");
+    }
+
+    Ok(())
+}
+
+/// Report volume change to QConnect server.
+#[tauri::command]
+pub async fn v2_qconnect_report_volume(
+    volume: i32,
+    service: State<'_, QconnectServiceState>,
+) -> Result<(), RuntimeError> {
+    if !service.is_active().await {
+        return Ok(());
+    }
+
+    let queue_version = service.get_queue_version().await;
+    let report = RendererReport::new(
+        RendererReportType::RndrSrvrVolumeChanged,
+        Uuid::new_v4().to_string(),
+        queue_version,
+        serde_json::json!({ "volume": volume }),
+    );
+
+    if let Err(err) = service.send_renderer_report(report).await {
+        log::warn!("[QConnect] Failed to report volume change: {err}");
+    }
+
+    Ok(())
 }
 
 async fn resolve_transport_config(

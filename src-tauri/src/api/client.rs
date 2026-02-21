@@ -1049,10 +1049,7 @@ impl QobuzClient {
     }
 
     /// Fetch radio tracks for an album (`/radio/album`).
-    pub async fn get_radio_album(
-        &self,
-        album_id: &str,
-    ) -> Result<RadioResponse> {
+    pub async fn get_radio_album(&self, album_id: &str) -> Result<RadioResponse> {
         let url = endpoints::build_url(paths::RADIO_ALBUM);
 
         let http_response = self
@@ -1083,10 +1080,7 @@ impl QobuzClient {
     }
 
     /// Fetch radio tracks for an artist (`/radio/artist`).
-    pub async fn get_radio_artist(
-        &self,
-        artist_id: &str,
-    ) -> Result<RadioResponse> {
+    pub async fn get_radio_artist(&self, artist_id: &str) -> Result<RadioResponse> {
         let url = endpoints::build_url(paths::RADIO_ARTIST);
 
         let http_response = self
@@ -1117,10 +1111,7 @@ impl QobuzClient {
     }
 
     /// Fetch radio tracks for a track (`/radio/track`).
-    pub async fn get_radio_track(
-        &self,
-        track_id: &str,
-    ) -> Result<RadioResponse> {
+    pub async fn get_radio_track(&self, track_id: &str) -> Result<RadioResponse> {
         let url = endpoints::build_url(paths::RADIO_TRACK);
 
         let http_response = self
@@ -1289,22 +1280,19 @@ impl QobuzClient {
     }
 
     /// Get label explore (discover more labels)
-    pub async fn get_label_explore(
-        &self,
-        limit: u32,
-        offset: u32,
-    ) -> Result<LabelExploreResponse> {
+    pub async fn get_label_explore(&self, limit: u32, offset: u32) -> Result<LabelExploreResponse> {
         let url = endpoints::build_url(paths::LABEL_EXPLORE);
 
-        log::debug!("[API] get_label_explore(limit={}, offset={})", limit, offset);
+        log::debug!(
+            "[API] get_label_explore(limit={}, offset={})",
+            limit,
+            offset
+        );
         let response: serde_json::Value = self
             .http
             .get(&url)
             .headers(self.api_headers().await?)
-            .query(&[
-                ("limit", limit.to_string()),
-                ("offset", offset.to_string()),
-            ])
+            .query(&[("limit", limit.to_string()), ("offset", offset.to_string())])
             .send()
             .await?
             .json()
@@ -1497,7 +1485,10 @@ impl QobuzClient {
     }
 
     /// Get all purchases for a single type by paginating through Qobuz purchases API.
-    pub async fn get_user_purchases_all_typed(&self, purchase_type: &str) -> Result<PurchaseResponse> {
+    pub async fn get_user_purchases_all_typed(
+        &self,
+        purchase_type: &str,
+    ) -> Result<PurchaseResponse> {
         let page_limit = 500u32;
         let mut offset = 0u32;
 
@@ -1555,13 +1546,21 @@ impl QobuzClient {
         Ok(PurchaseResponse {
             albums: SearchResultsPage {
                 items: all_albums,
-                total: if purchase_type == "albums" { final_total } else { 0 },
+                total: if purchase_type == "albums" {
+                    final_total
+                } else {
+                    0
+                },
                 offset: 0,
                 limit: page_limit,
             },
             tracks: SearchResultsPage {
                 items: all_tracks,
-                total: if purchase_type == "tracks" { final_total } else { 0 },
+                total: if purchase_type == "tracks" {
+                    final_total
+                } else {
+                    0
+                },
                 offset: 0,
                 limit: page_limit,
             },

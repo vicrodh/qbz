@@ -12,8 +12,8 @@ use tokio::sync::RwLock;
 use qbz_models::{
     Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
     GenreInfo, LabelDetail, LabelExploreResponse, LabelPageData, PageArtistResponse, Playlist,
-    PlaylistTag, Quality, QueueState,
-    QueueTrack as CoreQueueTrack, RepeatMode, SearchResultsPage, Track, UserSession,
+    PlaylistTag, Quality, QueueState, QueueTrack as CoreQueueTrack, RepeatMode, SearchResultsPage,
+    Track, UserSession,
 };
 
 use crate::api::models::{
@@ -1464,13 +1464,9 @@ pub enum MusicLinkResult {
         provider: Option<String>,
     },
     /// The URL is a playlist — redirect to the Playlist Importer.
-    PlaylistDetected {
-        provider: String,
-    },
+    PlaylistDetected { provider: String },
     /// The content exists on the source platform but is not available on Qobuz.
-    NotOnQobuz {
-        provider: Option<String>,
-    },
+    NotOnQobuz { provider: Option<String> },
 }
 
 /// Resolve a cross-platform music link to a Qobuz navigation action.
@@ -1502,15 +1498,14 @@ pub async fn v2_resolve_music_link(
     }
 
     // 2. Detect what kind of resource this is
-    let resource = detect_music_resource(&url).ok_or_else(|| {
-        RuntimeError::Internal("Unsupported or invalid music link".to_string())
-    })?;
+    let resource = detect_music_resource(&url)
+        .ok_or_else(|| RuntimeError::Internal("Unsupported or invalid music link".to_string()))?;
 
     match resource {
         MusicResource::Qobuz => {
             // Already handled above, but just in case
-            let resolved = qbz_qobuz::resolve_link(&url)
-                .map_err(|e| RuntimeError::Internal(e.to_string()))?;
+            let resolved =
+                qbz_qobuz::resolve_link(&url).map_err(|e| RuntimeError::Internal(e.to_string()))?;
             Ok(MusicLinkResult::Resolved {
                 link: resolved,
                 provider: None,
@@ -1521,24 +1516,48 @@ pub async fn v2_resolve_music_link(
             provider: format!("{:?}", provider),
         }),
 
-        MusicResource::Track { provider, url: source_url } => {
+        MusicResource::Track {
+            provider,
+            url: source_url,
+        } => {
             resolve_via_odesli_and_search(
-                &state.songlink, &source_url, Some(&provider), true, &bridge, &runtime,
-            ).await
+                &state.songlink,
+                &source_url,
+                Some(&provider),
+                true,
+                &bridge,
+                &runtime,
+            )
+            .await
         }
 
-        MusicResource::Album { provider, url: source_url } => {
+        MusicResource::Album {
+            provider,
+            url: source_url,
+        } => {
             resolve_via_odesli_and_search(
-                &state.songlink, &source_url, Some(&provider), false, &bridge, &runtime,
-            ).await
+                &state.songlink,
+                &source_url,
+                Some(&provider),
+                false,
+                &bridge,
+                &runtime,
+            )
+            .await
         }
 
         MusicResource::SongLink { url: source_url } => {
             // song.link URLs: try to detect track vs album from the URL format
             let is_track_hint = source_url.contains("song.link/");
             resolve_via_odesli_and_search(
-                &state.songlink, &source_url, None, is_track_hint, &bridge, &runtime,
-            ).await
+                &state.songlink,
+                &source_url,
+                None,
+                is_track_hint,
+                &bridge,
+                &runtime,
+            )
+            .await
         }
     }
 }
@@ -1564,7 +1583,11 @@ async fn resolve_via_odesli_and_search(
     let (title, artist) = if let Some(prov) = provider {
         match try_direct_platform_metadata(url, prov, is_track).await {
             Some(meta) => {
-                log::info!("Link resolver: direct API resolved '{}' by '{}'", meta.0, meta.1);
+                log::info!(
+                    "Link resolver: direct API resolved '{}' by '{}'",
+                    meta.0,
+                    meta.1
+                );
                 meta
             }
             None => {
@@ -1591,13 +1614,17 @@ async fn resolve_via_odesli_and_search(
 
     let bridge_guard = bridge.get().await;
 
-    if let Some(result) = search_qobuz_smart(
-        &*bridge_guard, &title, &artist, is_track, &provider_name,
-    ).await? {
+    if let Some(result) =
+        search_qobuz_smart(&*bridge_guard, &title, &artist, is_track, &provider_name).await?
+    {
         return Ok(result);
     }
 
-    log::info!("Link resolver: '{}' by '{}' not found on Qobuz", title, artist);
+    log::info!(
+        "Link resolver: '{}' by '{}' not found on Qobuz",
+        title,
+        artist
+    );
     Ok(MusicLinkResult::NotOnQobuz {
         provider: provider_name,
     })
@@ -1614,7 +1641,10 @@ async fn fetch_metadata_via_odesli(
     {
         Ok(r) => r,
         Err(first_err) => {
-            log::warn!("Link resolver: Odesli first attempt failed: {}, retrying...", first_err);
+            log::warn!(
+                "Link resolver: Odesli first attempt failed: {}, retrying...",
+                first_err
+            );
             tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             songlink
                 .get_by_url(url, crate::share::ContentType::Track)
@@ -1649,9 +1679,15 @@ async fn search_qobuz_smart(
 
     // Attempt 1: full query
     if is_track {
-        let results = bridge.search_tracks(&full_query, 5, 0, None).await.map_err(RuntimeError::Internal)?;
+        let results = bridge
+            .search_tracks(&full_query, 5, 0, None)
+            .await
+            .map_err(RuntimeError::Internal)?;
         if let Some(track) = results.items.first() {
-            log::info!("Link resolver: found Qobuz track id={} (full query)", track.id);
+            log::info!(
+                "Link resolver: found Qobuz track id={} (full query)",
+                track.id
+            );
             return Ok(Some(MusicLinkResult::Resolved {
                 link: qbz_qobuz::ResolvedLink::OpenTrack(track.id),
                 provider: provider_name.clone(),
@@ -1659,9 +1695,15 @@ async fn search_qobuz_smart(
         }
     }
 
-    let results = bridge.search_albums(&full_query, 5, 0, None).await.map_err(RuntimeError::Internal)?;
+    let results = bridge
+        .search_albums(&full_query, 5, 0, None)
+        .await
+        .map_err(RuntimeError::Internal)?;
     if let Some(album) = results.items.first() {
-        log::info!("Link resolver: found Qobuz album id={} (full query)", album.id);
+        log::info!(
+            "Link resolver: found Qobuz album id={} (full query)",
+            album.id
+        );
         return Ok(Some(MusicLinkResult::Resolved {
             link: qbz_qobuz::ResolvedLink::OpenAlbum(album.id.clone()),
             provider: provider_name.clone(),
@@ -1677,10 +1719,19 @@ async fn search_qobuz_smart(
             format!("{} {}", cleaned, artist)
         };
 
-        log::info!("Link resolver: retrying with cleaned query '{}'", clean_query);
-        let results = bridge.search_albums(&clean_query, 5, 0, None).await.map_err(RuntimeError::Internal)?;
+        log::info!(
+            "Link resolver: retrying with cleaned query '{}'",
+            clean_query
+        );
+        let results = bridge
+            .search_albums(&clean_query, 5, 0, None)
+            .await
+            .map_err(RuntimeError::Internal)?;
         if let Some(album) = results.items.first() {
-            log::info!("Link resolver: found Qobuz album id={} (cleaned query)", album.id);
+            log::info!(
+                "Link resolver: found Qobuz album id={} (cleaned query)",
+                album.id
+            );
             return Ok(Some(MusicLinkResult::Resolved {
                 link: qbz_qobuz::ResolvedLink::OpenAlbum(album.id.clone()),
                 provider: provider_name.clone(),
@@ -1690,8 +1741,14 @@ async fn search_qobuz_smart(
 
     // Attempt 3: search by artist name only (broad)
     if !artist.is_empty() && artist != title {
-        log::info!("Link resolver: retrying with artist-only query '{}'", artist);
-        let results = bridge.search_albums(artist, 10, 0, None).await.map_err(RuntimeError::Internal)?;
+        log::info!(
+            "Link resolver: retrying with artist-only query '{}'",
+            artist
+        );
+        let results = bridge
+            .search_albums(artist, 10, 0, None)
+            .await
+            .map_err(RuntimeError::Internal)?;
         let title_lower = title.to_ascii_lowercase();
         let cleaned_lower = clean_title(title).to_ascii_lowercase();
         for album in &results.items {
@@ -1700,7 +1757,10 @@ async fn search_qobuz_smart(
                 || cleaned_lower.contains(&album_title_lower)
                 || album_title_lower.contains(&title_lower)
             {
-                log::info!("Link resolver: found Qobuz album id={} (artist-only + title match)", album.id);
+                log::info!(
+                    "Link resolver: found Qobuz album id={} (artist-only + title match)",
+                    album.id
+                );
                 return Ok(Some(MusicLinkResult::Resolved {
                     link: qbz_qobuz::ResolvedLink::OpenAlbum(album.id.clone()),
                     provider: provider_name.clone(),
@@ -1762,7 +1822,11 @@ fn extract_entity_id(url: &str, entity_type: &str) -> Option<String> {
     let idx = url.find(&pattern)?;
     let rest = &url[idx + pattern.len()..];
     let id = rest.split(['?', '/', '#']).next()?;
-    if id.is_empty() { None } else { Some(id.to_string()) }
+    if id.is_empty() {
+        None
+    } else {
+        Some(id.to_string())
+    }
 }
 
 /// Extract Spotify ID from URL or URI.
@@ -1771,23 +1835,33 @@ fn extract_spotify_entity_id(url: &str, entity_type: &str) -> Option<String> {
     let uri_pattern = format!("spotify:{}:", entity_type);
     if let Some(rest) = url.strip_prefix(&uri_pattern) {
         let id = rest.split(['?', '/']).next()?;
-        if !id.is_empty() { return Some(id.to_string()); }
+        if !id.is_empty() {
+            return Some(id.to_string());
+        }
     }
     extract_entity_id(url, entity_type)
 }
 
 async fn try_deezer_metadata(url: &str, is_track: bool) -> Option<(String, String)> {
     let entity = if is_track { "track" } else { "album" };
-    let id = extract_entity_id(url, entity)
-        .or_else(|| if is_track { None } else { extract_entity_id(url, "track") })?;
+    let id = extract_entity_id(url, entity).or_else(|| {
+        if is_track {
+            None
+        } else {
+            extract_entity_id(url, "track")
+        }
+    })?;
     let api_url = format!("https://api.deezer.com/{}/{}", entity, id);
 
     log::debug!("Link resolver: Deezer direct API: {}", api_url);
     let data: serde_json::Value = reqwest::get(&api_url).await.ok()?.json().await.ok()?;
-    if data.get("error").is_some() { return None; }
+    if data.get("error").is_some() {
+        return None;
+    }
 
     let title = data.get("title")?.as_str()?.to_string();
-    let artist = data.get("artist")
+    let artist = data
+        .get("artist")
         .and_then(|a| a.get("name"))
         .and_then(|v| v.as_str())
         .unwrap_or("")
@@ -1805,11 +1879,16 @@ async fn try_spotify_metadata(url: &str, is_track: bool) -> Option<(String, Stri
     let data: serde_json::Value = reqwest::Client::new()
         .get(&api_url)
         .header("Authorization", format!("Bearer {}", token))
-        .send().await.ok()?
-        .json().await.ok()?;
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
 
     let title = data.get("name")?.as_str()?.to_string();
-    let artist = data.get("artists")
+    let artist = data
+        .get("artists")
         .and_then(|a| a.as_array())
         .and_then(|a| a.first())
         .and_then(|a| a.get("name"))
@@ -1834,21 +1913,28 @@ async fn try_tidal_metadata(url: &str, is_track: bool) -> Option<(String, String
     let data: serde_json::Value = reqwest::Client::new()
         .get(&api_url)
         .header("Authorization", format!("Bearer {}", token))
-        .send().await.ok()?
-        .json().await.ok()?;
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
 
-    let title = data.get("data")
+    let title = data
+        .get("data")
         .and_then(|d| d.get("attributes"))
         .and_then(|a| a.get("title"))
         .and_then(|v| v.as_str())?
         .to_string();
 
     // Artist name is in the "included" array
-    let artist = data.get("included")
+    let artist = data
+        .get("included")
         .and_then(|v| v.as_array())
-        .and_then(|arr| arr.iter().find(|item|
-            item.get("type").and_then(|v| v.as_str()) == Some("artists")
-        ))
+        .and_then(|arr| {
+            arr.iter()
+                .find(|item| item.get("type").and_then(|v| v.as_str()) == Some("artists"))
+        })
         .and_then(|item| item.get("attributes"))
         .and_then(|a| a.get("name"))
         .and_then(|v| v.as_str())
@@ -1863,13 +1949,21 @@ async fn get_proxy_token(platform: &str) -> Option<String> {
     let data: serde_json::Value = reqwest::Client::builder()
         .default_headers({
             let mut h = reqwest::header::HeaderMap::new();
-            h.insert(reqwest::header::USER_AGENT, reqwest::header::HeaderValue::from_static("QBZ/1.0.0"));
+            h.insert(
+                reqwest::header::USER_AGENT,
+                reqwest::header::HeaderValue::from_static("QBZ/1.0.0"),
+            );
             h
         })
-        .build().ok()?
+        .build()
+        .ok()?
         .get(&url)
-        .send().await.ok()?
-        .json().await.ok()?;
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
     data.get("access_token")
         .and_then(|v| v.as_str())
         .map(|v| v.to_string())
@@ -4392,7 +4486,11 @@ pub async fn v2_create_album_radio(
     bridge.set_queue(queue_tracks, Some(0)).await;
 
     let queue_track_ids: Vec<u64> = tracks.iter().map(|track| track.id).collect();
-    let context_id = format!("album_radio_{}_{}", album_id, chrono::Utc::now().timestamp());
+    let context_id = format!(
+        "album_radio_{}_{}",
+        album_id,
+        chrono::Utc::now().timestamp()
+    );
     let context = PlaybackContext::new(
         ContextType::Radio,
         context_id.clone(),
@@ -4431,7 +4529,12 @@ pub async fn v2_create_qobuz_artist_radio(
         .await
         .map_err(|e| format!("Failed to fetch artist radio: {}", e))?;
 
-    let track_ids: Vec<u64> = radio_response.tracks.items.iter().map(|track| track.id).collect();
+    let track_ids: Vec<u64> = radio_response
+        .tracks
+        .items
+        .iter()
+        .map(|track| track.id)
+        .collect();
 
     if track_ids.is_empty() {
         return Err("No radio tracks returned for this artist".to_string());
@@ -4459,7 +4562,11 @@ pub async fn v2_create_qobuz_artist_radio(
     bridge.set_queue(queue_tracks, Some(0)).await;
 
     let queue_track_ids: Vec<u64> = tracks.iter().map(|track| track.id).collect();
-    let context_id = format!("qobuz_artist_radio_{}_{}", artist_id, chrono::Utc::now().timestamp());
+    let context_id = format!(
+        "qobuz_artist_radio_{}_{}",
+        artist_id,
+        chrono::Utc::now().timestamp()
+    );
     let context = PlaybackContext::new(
         ContextType::Radio,
         context_id.clone(),
@@ -4498,7 +4605,12 @@ pub async fn v2_create_qobuz_track_radio(
         .await
         .map_err(|e| format!("Failed to fetch track radio: {}", e))?;
 
-    let fetched_ids: Vec<u64> = radio_response.tracks.items.iter().map(|track| track.id).collect();
+    let fetched_ids: Vec<u64> = radio_response
+        .tracks
+        .items
+        .iter()
+        .map(|track| track.id)
+        .collect();
 
     if fetched_ids.is_empty() {
         return Err("No radio tracks returned for this track".to_string());
@@ -4526,7 +4638,11 @@ pub async fn v2_create_qobuz_track_radio(
     bridge.set_queue(queue_tracks, Some(0)).await;
 
     let queue_track_ids: Vec<u64> = tracks.iter().map(|track| track.id).collect();
-    let context_id = format!("qobuz_track_radio_{}_{}", track_id, chrono::Utc::now().timestamp());
+    let context_id = format!(
+        "qobuz_track_radio_{}_{}",
+        track_id,
+        chrono::Utc::now().timestamp()
+    );
     let context = PlaybackContext::new(
         ContextType::Radio,
         context_id.clone(),
@@ -4603,7 +4719,10 @@ pub async fn v2_get_all_queue_tracks(
 ) -> Result<AllQueueTracksResponse, RuntimeError> {
     let bridge = bridge.get().await;
     let (tracks, current_index) = bridge.get_all_queue_tracks().await;
-    Ok(AllQueueTracksResponse { tracks, current_index })
+    Ok(AllQueueTracksResponse {
+        tracks,
+        current_index,
+    })
 }
 
 /// Get currently selected queue track (V2)

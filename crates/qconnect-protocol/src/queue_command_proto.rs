@@ -37,6 +37,13 @@ pub enum QConnectMessageType {
     MessageTypeCtrlSrvrSetAutoplayMode = 78,
     MessageTypeCtrlSrvrAutoplayLoadTracks = 79,
     MessageTypeCtrlSrvrAutoplayRemoveTracks = 80,
+    MessageTypeSrvrCtrlSessionState = 81,
+    MessageTypeSrvrCtrlRendererStateUpdated = 82,
+    MessageTypeSrvrCtrlAddRenderer = 83,
+    MessageTypeSrvrCtrlUpdateRenderer = 84,
+    MessageTypeSrvrCtrlRemoveRenderer = 85,
+    MessageTypeSrvrCtrlActiveRendererChanged = 86,
+    MessageTypeSrvrCtrlVolumeChanged = 87,
     MessageTypeSrvrCtrlQueueErrorMessage = 88,
     MessageTypeSrvrCtrlQueueCleared = 89,
     MessageTypeSrvrCtrlQueueState = 90,
@@ -46,6 +53,11 @@ pub enum QConnectMessageType {
     MessageTypeSrvrCtrlQueueTracksRemoved = 94,
     MessageTypeSrvrCtrlQueueTracksReordered = 95,
     MessageTypeSrvrCtrlShuffleModeSet = 96,
+    MessageTypeSrvrCtrlLoopModeSet = 97,
+    MessageTypeSrvrCtrlVolumeMuted = 98,
+    MessageTypeSrvrCtrlMaxAudioQualityChanged = 99,
+    MessageTypeSrvrCtrlFileAudioQualityChanged = 100,
+    MessageTypeSrvrCtrlDeviceAudioQualityChanged = 101,
     MessageTypeSrvrCtrlAutoplayModeSet = 102,
     MessageTypeSrvrCtrlAutoplayTracksLoaded = 103,
     MessageTypeSrvrCtrlAutoplayTracksRemoved = 104,
@@ -709,6 +721,145 @@ pub struct RendererMaxAudioQualityChangedMessage {
     pub network_type: Option<i32>,
 }
 
+// --- SRVR_CTRL session management messages (server → controller) ---
+
+/// Type 81: Session state after joining
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlSessionStateMessage {
+    #[prost(bytes = "vec", optional, tag = "1")]
+    pub session_uuid: Option<Vec<u8>>,
+    #[prost(int32, optional, tag = "2")]
+    pub active_renderer_id: Option<i32>,
+    #[prost(message, optional, tag = "3")]
+    pub queue_version: Option<QueueVersionRef>,
+    #[prost(int32, optional, tag = "4")]
+    pub playing_state: Option<i32>,
+    #[prost(int32, optional, tag = "5")]
+    pub loop_mode: Option<i32>,
+}
+
+/// Nested player state for CtrlRendererStateUpdatedMessage
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlRendererPlayerState {
+    #[prost(int32, optional, tag = "1")]
+    pub playing_state: Option<i32>,
+    #[prost(int32, optional, tag = "2")]
+    pub buffer_state: Option<i32>,
+    #[prost(message, optional, tag = "3")]
+    pub current_position: Option<PlaybackPositionMessage>,
+    #[prost(uint32, optional, tag = "4")]
+    pub duration: Option<u32>,
+    #[prost(int32, optional, tag = "5")]
+    pub current_queue_item_id: Option<i32>,
+}
+
+/// Type 82: Renderer state updated (controller view)
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlRendererStateUpdatedMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub renderer_id: Option<i32>,
+    #[prost(int32, optional, tag = "2")]
+    pub status: Option<i32>,
+    #[prost(message, optional, tag = "3")]
+    pub player_state: Option<CtrlRendererPlayerState>,
+}
+
+/// Type 83: New renderer added to session
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlAddRendererMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub renderer_id: Option<i32>,
+    #[prost(message, optional, tag = "2")]
+    pub device_info: Option<DeviceInfoMessage>,
+}
+
+/// Type 84: Renderer info updated
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlUpdateRendererMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub renderer_id: Option<i32>,
+    #[prost(message, optional, tag = "2")]
+    pub device_info: Option<DeviceInfoMessage>,
+}
+
+/// Type 85: Renderer removed from session
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlRemoveRendererMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub renderer_id: Option<i32>,
+}
+
+/// Type 86: Active renderer changed
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlActiveRendererChangedMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub active_renderer_id: Option<i32>,
+}
+
+/// Type 87: Volume changed on a renderer (controller view)
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlVolumeChangedMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub renderer_id: Option<i32>,
+    #[prost(uint32, optional, tag = "2")]
+    pub volume: Option<u32>,
+}
+
+/// Type 97: Loop mode set
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlLoopModeSetMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub loop_mode: Option<i32>,
+}
+
+/// Type 98: Volume muted (controller view)
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlVolumeMutedMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub renderer_id: Option<i32>,
+    #[prost(bool, optional, tag = "2")]
+    pub value: Option<bool>,
+}
+
+/// Type 99: Max audio quality changed (controller view)
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlMaxAudioQualityChangedMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub renderer_id: Option<i32>,
+    #[prost(int32, optional, tag = "2")]
+    pub max_audio_quality: Option<i32>,
+    #[prost(int32, optional, tag = "3")]
+    pub network_type: Option<i32>,
+}
+
+/// Type 100: File audio quality changed (controller view)
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlFileAudioQualityChangedMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub renderer_id: Option<i32>,
+    #[prost(uint32, optional, tag = "2")]
+    pub sampling_rate: Option<u32>,
+    #[prost(uint32, optional, tag = "3")]
+    pub bit_depth: Option<u32>,
+    #[prost(uint32, optional, tag = "4")]
+    pub nb_channels: Option<u32>,
+    #[prost(int32, optional, tag = "5")]
+    pub audio_quality: Option<i32>,
+}
+
+/// Type 101: Device audio quality changed (controller view)
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CtrlDeviceAudioQualityChangedMessage {
+    #[prost(int32, optional, tag = "1")]
+    pub renderer_id: Option<i32>,
+    #[prost(uint32, optional, tag = "2")]
+    pub sampling_rate: Option<u32>,
+    #[prost(uint32, optional, tag = "3")]
+    pub bit_depth: Option<u32>,
+    #[prost(uint32, optional, tag = "4")]
+    pub nb_channels: Option<u32>,
+}
+
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QConnectMessages {
     #[prost(uint64, optional, tag = "1")]
@@ -791,6 +942,20 @@ pub struct QConnectMessage {
     pub ctrl_srvr_autoplay_load_tracks: Option<AutoplayLoadTracksMessage>,
     #[prost(message, optional, tag = "80")]
     pub ctrl_srvr_autoplay_remove_tracks: Option<AutoplayRemoveTracksMessage>,
+    #[prost(message, optional, tag = "81")]
+    pub srvr_ctrl_session_state: Option<CtrlSessionStateMessage>,
+    #[prost(message, optional, tag = "82")]
+    pub srvr_ctrl_renderer_state_updated: Option<CtrlRendererStateUpdatedMessage>,
+    #[prost(message, optional, tag = "83")]
+    pub srvr_ctrl_add_renderer: Option<CtrlAddRendererMessage>,
+    #[prost(message, optional, tag = "84")]
+    pub srvr_ctrl_update_renderer: Option<CtrlUpdateRendererMessage>,
+    #[prost(message, optional, tag = "85")]
+    pub srvr_ctrl_remove_renderer: Option<CtrlRemoveRendererMessage>,
+    #[prost(message, optional, tag = "86")]
+    pub srvr_ctrl_active_renderer_changed: Option<CtrlActiveRendererChangedMessage>,
+    #[prost(message, optional, tag = "87")]
+    pub srvr_ctrl_volume_changed: Option<CtrlVolumeChangedMessage>,
     #[prost(message, optional, tag = "88")]
     pub srvr_ctrl_queue_error_message: Option<QueueErrorMessage>,
     #[prost(message, optional, tag = "89")]
@@ -809,6 +974,16 @@ pub struct QConnectMessage {
     pub srvr_ctrl_queue_tracks_reordered: Option<QueueTracksReorderedMessage>,
     #[prost(message, optional, tag = "96")]
     pub srvr_ctrl_shuffle_mode_set: Option<ShuffleModeSetMessage>,
+    #[prost(message, optional, tag = "97")]
+    pub srvr_ctrl_loop_mode_set: Option<CtrlLoopModeSetMessage>,
+    #[prost(message, optional, tag = "98")]
+    pub srvr_ctrl_volume_muted: Option<CtrlVolumeMutedMessage>,
+    #[prost(message, optional, tag = "99")]
+    pub srvr_ctrl_max_audio_quality_changed: Option<CtrlMaxAudioQualityChangedMessage>,
+    #[prost(message, optional, tag = "100")]
+    pub srvr_ctrl_file_audio_quality_changed: Option<CtrlFileAudioQualityChangedMessage>,
+    #[prost(message, optional, tag = "101")]
+    pub srvr_ctrl_device_audio_quality_changed: Option<CtrlDeviceAudioQualityChangedMessage>,
     #[prost(message, optional, tag = "102")]
     pub srvr_ctrl_autoplay_mode_set: Option<AutoplayModeSetMessage>,
     #[prost(message, optional, tag = "103")]

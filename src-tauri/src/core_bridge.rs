@@ -15,8 +15,8 @@ use qbz_core::QbzCore;
 use qbz_models::{
     Album, Artist, DiscoverAlbum, DiscoverData, DiscoverPlaylistsResponse, DiscoverResponse,
     GenreInfo, LabelDetail, LabelExploreResponse, LabelPageData, PageArtistResponse, Playlist,
-    PlaylistTag, Quality, QueueState,
-    QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track, UserSession,
+    PlaylistTag, Quality, QueueState, QueueTrack, RepeatMode, SearchResultsPage, StreamUrl, Track,
+    UserSession,
 };
 use qbz_player::{PlaybackState, Player};
 
@@ -107,7 +107,9 @@ impl CoreBridge {
     }
 
     /// Get all queue tracks and current index (for session persistence)
-    pub async fn get_all_queue_tracks(&self) -> (Vec<qbz_models::playback::QueueTrack>, Option<usize>) {
+    pub async fn get_all_queue_tracks(
+        &self,
+    ) -> (Vec<qbz_models::playback::QueueTrack>, Option<usize>) {
         self.core.get_all_queue_tracks().await
     }
 

@@ -17,6 +17,19 @@ pub enum QueueEventType {
     SrvrCtrlAutoplayTracksRemoved,
     SrvrCtrlQueueTracksAddedFromAutoplay,
     SrvrCtrlQueueErrorMessage,
+    // Session management events (types 81-87, 97-101)
+    SrvrCtrlSessionState,
+    SrvrCtrlRendererStateUpdated,
+    SrvrCtrlAddRenderer,
+    SrvrCtrlUpdateRenderer,
+    SrvrCtrlRemoveRenderer,
+    SrvrCtrlActiveRendererChanged,
+    SrvrCtrlVolumeChanged,
+    SrvrCtrlLoopModeSet,
+    SrvrCtrlVolumeMuted,
+    SrvrCtrlMaxAudioQualityChanged,
+    SrvrCtrlFileAudioQualityChanged,
+    SrvrCtrlDeviceAudioQualityChanged,
 }
 
 impl QueueEventType {
@@ -37,7 +50,49 @@ impl QueueEventType {
                 "MESSAGE_TYPE_SRVR_CTRL_QUEUE_TRACKS_ADDED_FROM_AUTOPLAY"
             }
             Self::SrvrCtrlQueueErrorMessage => "MESSAGE_TYPE_SRVR_CTRL_QUEUE_ERROR_MESSAGE",
+            Self::SrvrCtrlSessionState => "MESSAGE_TYPE_SRVR_CTRL_SESSION_STATE",
+            Self::SrvrCtrlRendererStateUpdated => "MESSAGE_TYPE_SRVR_CTRL_RENDERER_STATE_UPDATED",
+            Self::SrvrCtrlAddRenderer => "MESSAGE_TYPE_SRVR_CTRL_ADD_RENDERER",
+            Self::SrvrCtrlUpdateRenderer => "MESSAGE_TYPE_SRVR_CTRL_UPDATE_RENDERER",
+            Self::SrvrCtrlRemoveRenderer => "MESSAGE_TYPE_SRVR_CTRL_REMOVE_RENDERER",
+            Self::SrvrCtrlActiveRendererChanged => {
+                "MESSAGE_TYPE_SRVR_CTRL_ACTIVE_RENDERER_CHANGED"
+            }
+            Self::SrvrCtrlVolumeChanged => "MESSAGE_TYPE_SRVR_CTRL_VOLUME_CHANGED",
+            Self::SrvrCtrlLoopModeSet => "MESSAGE_TYPE_SRVR_CTRL_LOOP_MODE_SET",
+            Self::SrvrCtrlVolumeMuted => "MESSAGE_TYPE_SRVR_CTRL_VOLUME_MUTED",
+            Self::SrvrCtrlMaxAudioQualityChanged => {
+                "MESSAGE_TYPE_SRVR_CTRL_MAX_AUDIO_QUALITY_CHANGED"
+            }
+            Self::SrvrCtrlFileAudioQualityChanged => {
+                "MESSAGE_TYPE_SRVR_CTRL_FILE_AUDIO_QUALITY_CHANGED"
+            }
+            Self::SrvrCtrlDeviceAudioQualityChanged => {
+                "MESSAGE_TYPE_SRVR_CTRL_DEVICE_AUDIO_QUALITY_CHANGED"
+            }
         }
+    }
+}
+
+impl QueueEventType {
+    /// Returns true for session management events that should NOT go through
+    /// the queue reducer.
+    pub const fn is_session_management(self) -> bool {
+        matches!(
+            self,
+            Self::SrvrCtrlSessionState
+                | Self::SrvrCtrlRendererStateUpdated
+                | Self::SrvrCtrlAddRenderer
+                | Self::SrvrCtrlUpdateRenderer
+                | Self::SrvrCtrlRemoveRenderer
+                | Self::SrvrCtrlActiveRendererChanged
+                | Self::SrvrCtrlVolumeChanged
+                | Self::SrvrCtrlLoopModeSet
+                | Self::SrvrCtrlVolumeMuted
+                | Self::SrvrCtrlMaxAudioQualityChanged
+                | Self::SrvrCtrlFileAudioQualityChanged
+                | Self::SrvrCtrlDeviceAudioQualityChanged
+        )
     }
 }
 

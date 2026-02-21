@@ -25,9 +25,15 @@ pub enum MusicResource {
     /// A native Qobuz URL — resolve directly.
     Qobuz,
     /// A single track on a third-party platform.
-    Track { provider: MusicProvider, url: String },
+    Track {
+        provider: MusicProvider,
+        url: String,
+    },
     /// An album on a third-party platform.
-    Album { provider: MusicProvider, url: String },
+    Album {
+        provider: MusicProvider,
+        url: String,
+    },
     /// A playlist — should be redirected to the Playlist Importer.
     Playlist { provider: MusicProvider },
     /// A song.link / album.link / odesli.co URL — resolve via Odesli API.
@@ -50,11 +56,11 @@ pub fn detect_music_resource(url: &str) -> Option<MusicResource> {
 
     // 2. song.link / album.link / odesli.co URLs
     let lower = url.to_ascii_lowercase();
-    if lower.contains("song.link/")
-        || lower.contains("album.link/")
-        || lower.contains("odesli.co/")
+    if lower.contains("song.link/") || lower.contains("album.link/") || lower.contains("odesli.co/")
     {
-        return Some(MusicResource::SongLink { url: url.to_string() });
+        return Some(MusicResource::SongLink {
+            url: url.to_string(),
+        });
     }
 
     // 3. Per-provider detection (track/album/playlist)
