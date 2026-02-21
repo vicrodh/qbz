@@ -150,6 +150,7 @@
   }
 
   let isRadioLoading = $state(false);
+  let radioDropdownOpen = $state(false);
   let artistIsBlacklisted = $state(false);
   let isBlacklistLoading = $state(false);
   let showHideDropdown = $state(false);
@@ -626,6 +627,82 @@
     } catch (err) {
       console.error('Failed to create track radio:', err);
       // TODO: Show user-facing error toast if available
+    }
+  }
+
+  async function createQobuzArtistRadio() {
+    if (isRadioLoading) return;
+
+    isRadioLoading = true;
+    radioJustCreated = false;
+
+    try {
+      radioLoadingMessage = 'Creating Qobuz artist radio...';
+      const sessionId = await invoke<string>('v2_create_qobuz_artist_radio', {
+        artistId: artist.id,
+        artistName: artist.name
+      });
+      console.log(`[Radio] Qobuz artist radio created: ${sessionId}`);
+
+      await getPlaybackContext();
+      const firstTrack = await playQueueIndex(0);
+
+      if (firstTrack && onTrackPlay) {
+        onTrackPlay({
+          id: firstTrack.id,
+          title: firstTrack.title,
+          artist: firstTrack.artist,
+          album: firstTrack.album,
+          albumArt: firstTrack.artwork_url || '',
+          duration: formatDuration(firstTrack.duration_secs),
+          durationSeconds: firstTrack.duration_secs,
+          hires: firstTrack.hires,
+          bitDepth: firstTrack.bit_depth ?? undefined,
+          samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
+        });
+
+        radioJustCreated = true;
+        setTimeout(() => { radioJustCreated = false; }, 3000);
+      }
+    } catch (err) {
+      console.error('Failed to create Qobuz artist radio:', err);
+    } finally {
+      isRadioLoading = false;
+      radioLoadingMessage = '';
+    }
+  }
+
+  async function createQobuzTrackRadio(track: Track) {
+    try {
+      const sessionId = await invoke<string>('v2_create_qobuz_track_radio', {
+        trackId: track.id,
+        trackName: track.title
+      });
+      console.log(`[Radio] Qobuz track radio created: ${sessionId}`);
+
+      await getPlaybackContext();
+      const firstTrack = await playQueueIndex(0);
+
+      if (firstTrack && onTrackPlay) {
+        onTrackPlay({
+          id: firstTrack.id,
+          title: firstTrack.title,
+          artist: firstTrack.artist,
+          album: firstTrack.album,
+          albumArt: firstTrack.artwork_url || '',
+          duration: formatDuration(firstTrack.duration_secs),
+          durationSeconds: firstTrack.duration_secs,
+          hires: firstTrack.hires,
+          bitDepth: firstTrack.bit_depth ?? undefined,
+          samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to create Qobuz track radio:', err);
     }
   }
 
@@ -1376,12 +1453,24 @@
             class="radio-btn"
             class:loading={isRadioLoading}
             class:glow={radioJustCreated}
-            onclick={createArtistRadio}
+            onclick={() => { radioDropdownOpen = !radioDropdownOpen; }}
             disabled={isRadioLoading}
             title="Start Artist Radio"
           >
             <Radio size={24} />
           </button>
+          {#if radioDropdownOpen && !isRadioLoading}
+            <div class="radio-dropdown" role="menu">
+              <button class="radio-dropdown-item" onclick={() => { radioDropdownOpen = false; createArtistRadio(); }}>
+                QBZ Radio
+              </button>
+              <button class="radio-dropdown-item" onclick={() => { radioDropdownOpen = false; createQobuzArtistRadio(); }}>
+                Qobuz Radio
+              </button>
+            </div>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="radio-dropdown-backdrop" onclick={() => radioDropdownOpen = false}></div>
+          {/if}
           {#if isRadioLoading && radioLoadingMessage}
             {#key radioLoadingMessage}
               <span class="floating-message">{radioLoadingMessage}</span>
@@ -1679,7 +1768,8 @@
                   onPlayNow={() => handleTrackPlay(track, index)}
                   onPlayNext={onTrackPlayNext ? () => onTrackPlayNext(track) : undefined}
                   onPlayLater={onTrackPlayLater ? () => onTrackPlayLater(track) : undefined}
-                  onCreateRadio={() => createTrackRadio(track)}
+                  onCreateQbzRadio={() => createTrackRadio(track)}
+                  onCreateQobuzRadio={() => createQobuzTrackRadio(track)}
                   onAddFavorite={onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined}
                   onAddToPlaylist={onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined}
                   onShareQobuz={onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined}
@@ -2725,6 +2815,43 @@
 
   .radio-btn-wrapper {
     position: relative;
+  }
+
+  .radio-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 4px 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+    min-width: 140px;
+  }
+
+  .radio-dropdown-item {
+    width: 100%;
+    padding: 8px 14px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    text-align: left;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .radio-dropdown-item:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .radio-dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
   }
 
   .network-btn {

@@ -1587,6 +1587,9 @@
   },
   "radio": {
     "albumRadio": "Album Radio",
-    "creatingAlbumRadio": "Album-Radio wird erstellt..."
+    "creatingAlbumRadio": "Album-Radio wird erstellt...",
+    "createRadio": "Radio erstellen",
+    "qbzRadio": "QBZ Radio",
+    "qobuzRadio": "Qobuz Radio"
   }
 }

@@ -4381,6 +4381,140 @@ pub async fn v2_create_album_radio(
     Ok(context_id)
 }
 
+/// Create artist radio using the Qobuz `/radio/artist` API endpoint.
+///
+/// Like album radio, this calls the Qobuz API directly — the endpoint returns
+/// recommended tracks in a single GET response.
+#[tauri::command]
+pub async fn v2_create_qobuz_artist_radio(
+    artist_id: u64,
+    artist_name: String,
+    state: State<'_, AppState>,
+    blacklist_state: State<'_, BlacklistState>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<String, String> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let client = state.client.read().await.clone();
+    let radio_response = client
+        .get_radio_artist(&artist_id.to_string())
+        .await
+        .map_err(|e| format!("Failed to fetch artist radio: {}", e))?;
+
+    let track_ids: Vec<u64> = radio_response.tracks.items.iter().map(|track| track.id).collect();
+
+    if track_ids.is_empty() {
+        return Err("No radio tracks returned for this artist".to_string());
+    }
+
+    let mut tracks = Vec::new();
+    for track_id in track_ids {
+        if let Ok(track) = client.get_track(track_id).await {
+            if let Some(ref performer) = track.performer {
+                if blacklist_state.is_blacklisted(performer.id) {
+                    continue;
+                }
+            }
+            tracks.push(track);
+        }
+    }
+
+    if tracks.is_empty() {
+        return Err("Failed to fetch any radio tracks".to_string());
+    }
+
+    let queue_tracks: Vec<CoreQueueTrack> =
+        tracks.iter().map(track_to_queue_track_from_api).collect();
+    let bridge = bridge.get().await;
+    bridge.set_queue(queue_tracks, Some(0)).await;
+
+    let queue_track_ids: Vec<u64> = tracks.iter().map(|track| track.id).collect();
+    let context_id = format!("qobuz_artist_radio_{}_{}", artist_id, chrono::Utc::now().timestamp());
+    let context = PlaybackContext::new(
+        ContextType::Radio,
+        context_id.clone(),
+        artist_name,
+        ContentSource::Qobuz,
+        queue_track_ids,
+        0,
+    );
+    state.context.set_context(context);
+
+    Ok(context_id)
+}
+
+/// Create track radio using the Qobuz `/radio/track` API endpoint.
+///
+/// Like album radio, this calls the Qobuz API directly — the endpoint returns
+/// recommended tracks in a single GET response.
+#[tauri::command]
+pub async fn v2_create_qobuz_track_radio(
+    track_id: u64,
+    track_name: String,
+    state: State<'_, AppState>,
+    blacklist_state: State<'_, BlacklistState>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<String, String> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let client = state.client.read().await.clone();
+    let radio_response = client
+        .get_radio_track(&track_id.to_string())
+        .await
+        .map_err(|e| format!("Failed to fetch track radio: {}", e))?;
+
+    let fetched_ids: Vec<u64> = radio_response.tracks.items.iter().map(|track| track.id).collect();
+
+    if fetched_ids.is_empty() {
+        return Err("No radio tracks returned for this track".to_string());
+    }
+
+    let mut tracks = Vec::new();
+    for next_id in fetched_ids {
+        if let Ok(track) = client.get_track(next_id).await {
+            if let Some(ref performer) = track.performer {
+                if blacklist_state.is_blacklisted(performer.id) {
+                    continue;
+                }
+            }
+            tracks.push(track);
+        }
+    }
+
+    if tracks.is_empty() {
+        return Err("Failed to fetch any radio tracks".to_string());
+    }
+
+    let queue_tracks: Vec<CoreQueueTrack> =
+        tracks.iter().map(track_to_queue_track_from_api).collect();
+    let bridge = bridge.get().await;
+    bridge.set_queue(queue_tracks, Some(0)).await;
+
+    let queue_track_ids: Vec<u64> = tracks.iter().map(|track| track.id).collect();
+    let context_id = format!("qobuz_track_radio_{}_{}", track_id, chrono::Utc::now().timestamp());
+    let context = PlaybackContext::new(
+        ContextType::Radio,
+        context_id.clone(),
+        track_name,
+        ContentSource::Qobuz,
+        queue_track_ids,
+        0,
+    );
+    state.context.set_context(context);
+
+    Ok(context_id)
+}
+
 fn track_to_queue_track_from_api(track: &crate::api::Track) -> CoreQueueTrack {
     let artwork_url = track
         .album

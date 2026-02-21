@@ -499,6 +499,17 @@
     }
   }
 
+  async function createQobuzTrackRadio(track: Track) {
+    try {
+      await invoke<string>('v2_create_qobuz_track_radio', {
+        trackId: track.id,
+        trackName: track.title
+      });
+    } catch (err) {
+      console.error('Failed to create Qobuz track radio:', err);
+    }
+  }
+
   function handlePausePlayback(event: MouseEvent) {
     event.stopPropagation();
     void togglePlay();
@@ -894,7 +905,8 @@
                   onPlayNow={() => handleTrackPlay(track, index)}
                   onPlayNext={onTrackPlayNext ? () => onTrackPlayNext(track) : undefined}
                   onPlayLater={onTrackPlayLater ? () => onTrackPlayLater(track) : undefined}
-                  onCreateRadio={() => createTrackRadio(track)}
+                  onCreateQbzRadio={() => createTrackRadio(track)}
+                  onCreateQobuzRadio={() => createQobuzTrackRadio(track)}
                   onAddFavorite={onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined}
                   onAddToPlaylist={onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined}
                   onGoToAlbum={track.album?.id && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.album!.id) : undefined}

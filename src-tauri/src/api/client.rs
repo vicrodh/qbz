@@ -1082,6 +1082,74 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
+    /// Fetch radio tracks for an artist (`/radio/artist`).
+    pub async fn get_radio_artist(
+        &self,
+        artist_id: &str,
+    ) -> Result<RadioResponse> {
+        let url = endpoints::build_url(paths::RADIO_ARTIST);
+
+        let http_response = self
+            .http
+            .get(&url)
+            .headers(self.authenticated_headers().await?)
+            .query(&[("artist_id", artist_id)])
+            .send()
+            .await?;
+
+        let status = http_response.status();
+        log::debug!("[API] get_radio_artist({}) status={}", artist_id, status);
+
+        if !status.is_success() {
+            log::error!(
+                "[API] get_radio_artist({}) unexpected status={}",
+                artist_id,
+                status
+            );
+            return Err(ApiError::ApiResponse(format!(
+                "get_radio_artist({}) status {}",
+                artist_id, status
+            )));
+        }
+
+        let response: Value = http_response.json().await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
+    /// Fetch radio tracks for a track (`/radio/track`).
+    pub async fn get_radio_track(
+        &self,
+        track_id: &str,
+    ) -> Result<RadioResponse> {
+        let url = endpoints::build_url(paths::RADIO_TRACK);
+
+        let http_response = self
+            .http
+            .get(&url)
+            .headers(self.authenticated_headers().await?)
+            .query(&[("track_id", track_id)])
+            .send()
+            .await?;
+
+        let status = http_response.status();
+        log::debug!("[API] get_radio_track({}) status={}", track_id, status);
+
+        if !status.is_success() {
+            log::error!(
+                "[API] get_radio_track({}) unexpected status={}",
+                track_id,
+                status
+            );
+            return Err(ApiError::ApiResponse(format!(
+                "get_radio_track({}) status {}",
+                track_id, status
+            )));
+        }
+
+        let response: Value = http_response.json().await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
     /// Get playlist by ID (paginates automatically to fetch all tracks)
     ///
     /// After the first page, remaining pages are fetched concurrently

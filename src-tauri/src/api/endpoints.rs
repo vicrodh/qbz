@@ -58,6 +58,8 @@ pub mod paths {
 
     // Radio
     pub const RADIO_ALBUM: &str = "/radio/album";
+    pub const RADIO_ARTIST: &str = "/radio/artist";
+    pub const RADIO_TRACK: &str = "/radio/track";
 
     // Discover (home page content)
     pub const DISCOVER_INDEX: &str = "/discover/index";

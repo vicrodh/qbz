@@ -1587,6 +1587,9 @@
   },
   "radio": {
     "albumRadio": "Radio de l'album",
-    "creatingAlbumRadio": "Création de la radio de l'album..."
+    "creatingAlbumRadio": "Création de la radio de l'album...",
+    "createRadio": "Créer une radio",
+    "qbzRadio": "Radio QBZ",
+    "qobuzRadio": "Radio Qobuz"
   }
 }
