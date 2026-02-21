@@ -1763,5 +1763,9 @@
     "notOnQobuz": "Este contenido no está disponible en Qobuz.",
     "playlistDetected": "Esto es una playlist. Usa el Importador de Playlists.",
     "openPlaylistImporter": "Abrir Importador de Playlists"
+  },
+  "radio": {
+    "albumRadio": "Radio del Album",
+    "creatingAlbumRadio": "Creando radio del album..."
   }
 }

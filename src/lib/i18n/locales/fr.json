@@ -1584,5 +1584,9 @@
     "title": "WeeklyQ",
     "subtitle": "Base sur vos ecoutes hebdomadaires.",
     "cardDesc": "Un voyage hebdomadaire avec un mix frais <strong>chaque vendredi</strong>."
+  },
+  "radio": {
+    "albumRadio": "Radio de l'album",
+    "creatingAlbumRadio": "Création de la radio de l'album..."
   }
 }

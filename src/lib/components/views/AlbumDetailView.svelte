@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { t } from 'svelte-i18n';
-  import { ArrowLeft, Play, Shuffle, Heart, CloudDownload, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
@@ -100,6 +100,7 @@
     onViewArtistDiscography?: () => void;
     checkRelatedAlbumDownloaded?: (albumId: string) => Promise<boolean>;
     onShowAlbumCredits?: () => void;
+    onCreateAlbumRadio?: () => void;
   }
 
   let {
@@ -144,7 +145,8 @@
     onRelatedAlbumShareSonglink,
     onViewArtistDiscography,
     checkRelatedAlbumDownloaded,
-    onShowAlbumCredits
+    onShowAlbumCredits,
+    onCreateAlbumRadio
   }: Props = $props();
 
   let isFavorite = $state(false);
@@ -380,6 +382,15 @@
             fill={isFavorite ? 'var(--accent-primary)' : 'none'}
           />
         </button>
+        {#if onCreateAlbumRadio}
+          <button
+            class="action-btn-circle"
+            onclick={onCreateAlbumRadio}
+            title={$t('radio.albumRadio')}
+          >
+            <Radio size={18} />
+          </button>
+        {/if}
         {#if onShowAlbumCredits}
           <button
             class="action-btn-circle"

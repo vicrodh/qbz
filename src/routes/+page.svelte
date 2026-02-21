@@ -1863,6 +1863,41 @@
     showToast($t('toast.shuffleEnabled'), 'info');
   }
 
+  // Create album radio via Qobuz /radio/album API
+  async function handleCreateAlbumRadio() {
+    if (!selectedAlbum) return;
+    try {
+      const contextId = await invoke<string>('v2_create_album_radio', {
+        albumId: String(selectedAlbum.id),
+        albumName: selectedAlbum.title || 'Album Radio',
+      });
+      console.log(`[Radio] Album radio created: ${contextId}`);
+
+      // Play first track from the radio queue
+      const firstTrack = await playQueueIndex(0);
+      if (firstTrack) {
+        const quality = firstTrack.bit_depth && firstTrack.sample_rate
+          ? `${firstTrack.bit_depth}bit/${firstTrack.sample_rate}kHz`
+          : firstTrack.hires ? 'Hi-Res' : '-';
+        playTrack({
+          id: firstTrack.id,
+          title: firstTrack.title,
+          artist: firstTrack.artist,
+          album: firstTrack.album,
+          artwork: firstTrack.artwork_url || '',
+          duration: firstTrack.duration_secs,
+          quality,
+          bitDepth: firstTrack.bit_depth ?? undefined,
+          samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to create album radio:', err);
+    }
+  }
+
   // Add all album tracks next in queue (after current track)
   async function handleAddAlbumToQueueNext() {
     if (!selectedAlbum?.tracks?.length) return;
@@ -3584,6 +3619,7 @@
           onViewArtistDiscography={handleViewArtistDiscography}
           checkRelatedAlbumDownloaded={checkAlbumFullyDownloaded}
           onShowAlbumCredits={() => selectedAlbum && showAlbumCredits(selectedAlbum.id)}
+          onCreateAlbumRadio={handleCreateAlbumRadio}
         />
       {:else if activeView === 'artist' && selectedArtist}
         <ArtistDetailView
