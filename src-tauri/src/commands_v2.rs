@@ -136,6 +136,31 @@ pub struct V2SearchAllResults {
     pub most_popular: Option<V2MostPopularItem>,
 }
 
+/// Convert config AudioSettings to qbz_audio::AudioSettings.
+/// Used by v2_play_track and v2_reinit_audio_device to ensure the Player
+/// has fresh settings from the database before creating/recreating streams.
+fn convert_to_qbz_audio_settings(settings: &AudioSettings) -> qbz_audio::AudioSettings {
+    qbz_audio::AudioSettings {
+        output_device: settings.output_device.clone(),
+        exclusive_mode: settings.exclusive_mode,
+        dac_passthrough: settings.dac_passthrough,
+        preferred_sample_rate: settings.preferred_sample_rate,
+        limit_quality_to_device: settings.limit_quality_to_device,
+        device_max_sample_rate: settings.device_max_sample_rate,
+        device_sample_rate_limits: settings.device_sample_rate_limits.clone(),
+        backend_type: settings.backend_type.clone(),
+        alsa_plugin: settings.alsa_plugin.clone(),
+        alsa_hardware_volume: false,
+        stream_first_track: settings.stream_first_track,
+        stream_buffer_seconds: settings.stream_buffer_seconds,
+        streaming_only: settings.streaming_only,
+        normalization_enabled: settings.normalization_enabled,
+        normalization_target_lufs: settings.normalization_target_lufs,
+        gapless_enabled: settings.gapless_enabled,
+        pw_force_bitperfect: settings.pw_force_bitperfect,
+    }
+}
+
 /// Check that Qobuz ToS has been accepted before allowing login.
 ///
 /// This is the single enforcement point for ToS gate in backend.
@@ -5811,6 +5836,18 @@ pub async fn v2_play_track(
     let bridge_guard = bridge.get().await;
     let player = bridge_guard.player();
 
+    // Ensure Player has fresh audio settings from DB before playback.
+    // On first play after app start the audio thread holds stale settings from
+    // Player::new() — this mirrors what v2_reinit_audio_device does and prevents
+    // the stream from being created with wrong backend/device/sample-rate config.
+    if let Ok(guard) = audio_settings.store.lock() {
+        if let Some(store) = guard.as_ref() {
+            if let Ok(fresh) = store.get_settings() {
+                let _ = player.reload_settings(convert_to_qbz_audio_settings(&fresh));
+            }
+        }
+    }
+
     // Check offline cache (persistent disk cache)
     {
         let cached_path = {
@@ -5987,27 +6024,7 @@ pub async fn v2_reinit_audio_device(
                     "[V2] Reloading audio settings before reinit (backend_type: {:?})",
                     fresh_settings.backend_type
                 );
-                // Convert to qbz_audio::AudioSettings
-                let qbz_settings = qbz_audio::AudioSettings {
-                    output_device: fresh_settings.output_device.clone(),
-                    exclusive_mode: fresh_settings.exclusive_mode,
-                    dac_passthrough: fresh_settings.dac_passthrough,
-                    preferred_sample_rate: fresh_settings.preferred_sample_rate,
-                    limit_quality_to_device: fresh_settings.limit_quality_to_device,
-                    device_max_sample_rate: fresh_settings.device_max_sample_rate,
-                    device_sample_rate_limits: fresh_settings.device_sample_rate_limits.clone(),
-                    backend_type: fresh_settings.backend_type.clone(),
-                    alsa_plugin: fresh_settings.alsa_plugin.clone(),
-                    alsa_hardware_volume: false, // Not exposed in legacy UI
-                    stream_first_track: fresh_settings.stream_first_track,
-                    stream_buffer_seconds: fresh_settings.stream_buffer_seconds,
-                    streaming_only: fresh_settings.streaming_only,
-                    normalization_enabled: fresh_settings.normalization_enabled,
-                    normalization_target_lufs: fresh_settings.normalization_target_lufs,
-                    gapless_enabled: fresh_settings.gapless_enabled,
-                    pw_force_bitperfect: fresh_settings.pw_force_bitperfect,
-                };
-                let _ = player.reload_settings(qbz_settings);
+                let _ = player.reload_settings(convert_to_qbz_audio_settings(&fresh_settings));
             }
         }
     }
