@@ -677,6 +677,12 @@
         "split-suggestions": "Geteilt: Vorschläge",
         "split-queue": "Geteilt: Warteschlange"
       },
+      "startupPage": "Startseite",
+      "startupPageDesc": "Wähle welche Seite beim App-Start angezeigt wird",
+      "startupPages": {
+        "home": "Startseite",
+        "last-view": "Wo du aufgehört hast"
+      },
       "hardwareAcceleration": "Hardwarebeschleunigung (GPU)",
       "hardwareAccelerationDesc": "GPU-beschleunigtes Rendering aktivieren. Standardmäßig deaktiviert für maximale Kompatibilität. Falls QBZ nach dem Aktivieren beim Start abstürzt: QBZ_HARDWARE_ACCEL=0 qbz",
       "forceX11": "X11-Backend erzwingen (Wayland)",

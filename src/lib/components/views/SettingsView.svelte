@@ -815,6 +815,30 @@
     }
   }
 
+  // Startup page setting
+  const STARTUP_PAGE_KEYS = ['home', 'last-view'] as const;
+  let startupPage = $state(
+    getUserItem('qbz-startup-page') || 'home'
+  );
+
+  function getStartupPageOptions(): string[] {
+    return STARTUP_PAGE_KEYS.map(key => $t(`settings.appearance.startupPages.${key}`));
+  }
+
+  function getStartupPageDisplayValue(): string {
+    return $t(`settings.appearance.startupPages.${startupPage}`);
+  }
+
+  function handleStartupPageChange(displayValue: string) {
+    const options = getStartupPageOptions();
+    const index = options.indexOf(displayValue);
+    if (index >= 0) {
+      const key = STARTUP_PAGE_KEYS[index];
+      startupPage = key;
+      setUserItem('qbz-startup-page', key);
+    }
+  }
+
   // Tray settings
   let enableTray = $state(true);
   let minimizeToTray = $state(false);
@@ -3642,6 +3666,17 @@
         value={getImmersiveViewDisplayValue()}
         options={getImmersiveViewOptions()}
         onchange={handleImmersiveViewChange}
+      />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.startupPage')}</span>
+        <span class="setting-desc">{$t('settings.appearance.startupPageDesc')}</span>
+      </div>
+      <Dropdown
+        value={getStartupPageDisplayValue()}
+        options={getStartupPageOptions()}
+        onchange={handleStartupPageChange}
       />
     </div>
 

@@ -123,7 +123,11 @@
     selectPlaylist,
     getNavigationState,
     getFavoritesTabFromView,
+    getSelectedLocalAlbumId,
     isFavoritesView,
+    restoreView,
+    setRestoredPlaylistId,
+    setRestoredLocalAlbumId,
     type ViewType,
     type NavigationState,
     type FavoritesTab
@@ -269,7 +273,8 @@
     debouncedSavePosition,
     flushPositionSave,
     clearSession,
-    type PersistedQueueTrack
+    type PersistedQueueTrack,
+    type PersistedSession
   } from '$lib/services/sessionService';
 
   // MiniPlayer - DISABLED: incomplete feature, re-enable when ready
@@ -2473,15 +2478,14 @@
       console.debug('[Reco] Score training failed:', err);
     });
 
-    // DISABLED: Restore previous session if available
-    // (Temporarily disabled due to ID conflicts between local and Qobuz tracks)
-    /*
+    // Restore previous session if available
     try {
       const session = await loadSessionState();
+
+      // Restore queue + track (visual only — paused at 0:00)
       if (session && session.queue_tracks.length > 0) {
         console.log('[Session] Restoring previous session...');
 
-        // Restore queue
         const tracks: BackendQueueTrack[] = session.queue_tracks.map(trk => ({
           id: trk.id,
           title: trk.title,
@@ -2504,7 +2508,6 @@
           await invoke('v2_set_shuffle', { enabled: true });
         }
         if (session.repeat_mode !== 'off') {
-          // V2 expects capitalized mode: 'Off' | 'All' | 'One'
           const v2Mode = session.repeat_mode.charAt(0).toUpperCase() + session.repeat_mode.slice(1);
           await invoke('v2_set_repeat_mode', { mode: v2Mode });
         }
@@ -2512,62 +2515,41 @@
         // Restore volume
         playerSetVolume(Math.round(session.volume * 100));
 
-        // If there was a track playing, restore it (paused)
+        // Visual-only track restore: show in player bar paused at 0:00
         if (session.current_index !== null && tracks[session.current_index]) {
           const track = tracks[session.current_index];
-          showToast(`Restored: ${track.title}`, 'info');
 
-          // Fetch full track info from Qobuz to get albumId, artistId, and quality
-          try {
-            const fullTrack = await invoke<QobuzTrack>('v2_get_track', { trackId: track.id });
-            const artwork = fullTrack.album?.image?.large || fullTrack.album?.image?.thumbnail || track.artwork_url || '';
-            const quality = fullTrack.hires_streamable
-              ? `${fullTrack.maximum_bit_depth ?? 24}/${fullTrack.maximum_sampling_rate ?? 96}`
-              : 'CD';
+          // Use cached data for instant display (no network fetch needed)
+          const quality = track.hires
+            ? `${track.bit_depth ?? 24}/${track.sample_rate ? track.sample_rate / 1000 : 96}`
+            : 'CD';
+          setCurrentTrack({
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            artwork: track.artwork_url || '',
+            duration: track.duration_secs,
+            quality,
+            bitDepth: track.bit_depth ?? undefined,
+            samplingRate: track.sample_rate ?? undefined,
+          });
 
-            setCurrentTrack({
-              id: track.id,
-              title: fullTrack.title || track.title,
-              artist: fullTrack.performer?.name || track.artist,
-              album: fullTrack.album?.title || track.album,
-              artwork,
-              duration: track.duration_secs,
-              quality,
-              bitDepth: fullTrack.maximum_bit_depth,
-              samplingRate: fullTrack.maximum_sampling_rate,
-              albumId: fullTrack.album?.id,
-              artistId: fullTrack.performer?.id,
-            });
-          } catch (fetchErr) {
-            console.warn('[Session] Failed to fetch track details, using cached data:', fetchErr);
-            // Fallback to cached data without albumId/artistId
-            const quality = track.hires
-              ? `${track.bit_depth ?? 24}/${track.sample_rate ? track.sample_rate / 1000 : 96}`
-              : 'CD';
-            setCurrentTrack({
-              id: track.id,
-              title: track.title,
-              artist: track.artist,
-              album: track.album,
-              artwork: track.artwork_url || '',
-              duration: track.duration_secs,
-              quality,
-              bitDepth: track.bit_depth ?? undefined,
-              samplingRate: track.sample_rate ?? undefined,
-            });
-          }
-
-          // Mark that this track needs to be loaded when user presses play
-          setPendingSessionRestore(track.id, session.current_position_secs);
-          console.log(`[Session] Track ${track.id} pending load, will resume at ${session.current_position_secs}s`);
+          // First play will load a fresh stream instead of seeking
+          setPendingSessionRestore(track.id, 0);
+          console.log(`[Session] Track ${track.id} restored visually (paused at 0:00)`);
         }
 
         console.log('[Session] Session restored successfully');
       }
+
+      // Restore last page (opt-in via settings)
+      if (session) {
+        restoreLastView(session);
+      }
     } catch (err) {
       console.error('[Session] Failed to restore session:', err);
     }
-    */
   }
 
   async function handleLogout() {
@@ -2601,18 +2583,93 @@
     }
   }
 
+  // Restore last page from session (opt-in via settings)
+  function restoreLastView(session: PersistedSession) {
+    const startupPage = getUserItem('qbz-startup-page') || 'home';
+    if (startupPage !== 'last-view') return;
+
+    const view = session.last_view as ViewType;
+    if (!view || view === 'home') return;
+
+    const contextId = session.view_context_id;
+    const contextType = session.view_context_type;
+
+    // Views that require context data to be fetched
+    switch (view) {
+      case 'album':
+        if (contextId) {
+          handleAlbumClick(contextId);
+        }
+        return;
+      case 'artist':
+        if (contextId) {
+          handleArtistClick(Number(contextId));
+        }
+        return;
+      case 'playlist':
+        if (contextId) {
+          setRestoredPlaylistId(Number(contextId));
+          restoreView('playlist');
+        }
+        return;
+      case 'library-album':
+        if (contextId) {
+          setRestoredLocalAlbumId(contextId);
+          restoreView('library-album');
+        }
+        return;
+      default:
+        // Simple views (search, library, settings, favorites-*, etc.)
+        restoreView(view);
+        return;
+    }
+  }
+
   // Save session state before window closes
   async function saveSessionBeforeClose() {
-    if (!isLoggedIn || !currentTrack) return;
+    if (!isLoggedIn) return;
 
     try {
-      // Get current queue state from backend
+      // Build view context from current navigation state
+      const currentView = activeView;
+      let viewContextId: string | null = null;
+      let viewContextType: string | null = null;
+
+      switch (currentView) {
+        case 'album':
+          if (selectedAlbum?.id) {
+            viewContextId = String(selectedAlbum.id);
+            viewContextType = 'album';
+          }
+          break;
+        case 'artist':
+          if (selectedArtist?.id) {
+            viewContextId = String(selectedArtist.id);
+            viewContextType = 'artist';
+          }
+          break;
+        case 'playlist':
+          if (selectedPlaylistId) {
+            viewContextId = String(selectedPlaylistId);
+            viewContextType = 'playlist';
+          }
+          break;
+        case 'library-album': {
+          const localAlbumId = getSelectedLocalAlbumId();
+          if (localAlbumId) {
+            viewContextId = localAlbumId;
+            viewContextType = 'library-album';
+          }
+          break;
+        }
+      }
+
+      // Get current queue state from backend (may be empty)
       const queueState = await getBackendQueueState();
-      if (!queueState) return;
 
       // Build persisted queue tracks
       const allTracks: PersistedQueueTrack[] = [];
-      if (queueState.current_track) {
+      if (queueState?.current_track) {
         allTracks.push({
           id: queueState.current_track.id,
           title: queueState.current_track.title,
@@ -2622,25 +2679,30 @@
           artwork_url: queueState.current_track.artwork_url
         });
       }
-      for (const track of queueState.upcoming) {
-        allTracks.push({
-          id: track.id,
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          duration_secs: track.duration_secs,
-          artwork_url: track.artwork_url
-        });
+      if (queueState?.upcoming) {
+        for (const track of queueState.upcoming) {
+          allTracks.push({
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            duration_secs: track.duration_secs,
+            artwork_url: track.artwork_url
+          });
+        }
       }
 
       await saveSessionState(
         allTracks,
-        queueState.current_index,
-        Math.floor(currentTime),
+        queueState?.current_index ?? null,
+        currentTrack ? Math.floor(currentTime) : 0,
         volume / 100,
         isShuffle,
         repeatMode,
-        isPlaying
+        isPlaying,
+        currentView,
+        viewContextId,
+        viewContextType
       );
       console.log('[Session] Session saved on close');
     } catch (err) {

@@ -677,6 +677,12 @@
         "split-suggestions": "Divisé : Suggestions",
         "split-queue": "Divisé : File d'attente"
       },
+      "startupPage": "Page de démarrage",
+      "startupPageDesc": "Choisissez quelle page afficher au lancement de l'application",
+      "startupPages": {
+        "home": "Accueil",
+        "last-view": "Où vous en étiez"
+      },
       "hardwareAcceleration": "Accélération matérielle (GPU)",
       "hardwareAccelerationDesc": "Activer le rendu accéléré par GPU. Désactivé par défaut pour une compatibilité maximale. Si QBZ plante au démarrage après activation : QBZ_HARDWARE_ACCEL=0 qbz",
       "forceX11": "Forcer le backend X11 (Wayland)",

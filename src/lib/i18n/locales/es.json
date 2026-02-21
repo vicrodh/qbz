@@ -694,6 +694,12 @@
         "split-suggestions": "Dividido: Sugerencias",
         "split-queue": "Dividido: Cola"
       },
+      "startupPage": "Página de inicio",
+      "startupPageDesc": "Elige qué página mostrar al iniciar la app",
+      "startupPages": {
+        "home": "Inicio",
+        "last-view": "Donde te quedaste"
+      },
       "hardwareAcceleration": "Aceleración por hardware (GPU)",
       "hardwareAccelerationDesc": "Habilitar renderizado acelerado por GPU. Desactivado por defecto para máxima compatibilidad. Si QBZ se cierra al iniciar después de activar esto, ejecuta: QBZ_HARDWARE_ACCEL=0 qbz",
       "forceX11": "Forzar backend X11 (Wayland)",

@@ -694,6 +694,12 @@
         "split-suggestions": "Split: Suggestions",
         "split-queue": "Split: Queue"
       },
+      "startupPage": "Startup page",
+      "startupPageDesc": "Choose which page to show when the app starts",
+      "startupPages": {
+        "home": "Home",
+        "last-view": "Where you left off"
+      },
       "hardwareAcceleration": "Hardware acceleration (GPU)",
       "hardwareAccelerationDesc": "Enable GPU-accelerated rendering. Disabled by default for maximum compatibility. If QBZ crashes on startup after enabling, run: QBZ_HARDWARE_ACCEL=0 qbz",
       "forceX11": "Force X11 backend (Wayland)",
