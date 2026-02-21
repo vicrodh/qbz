@@ -127,6 +127,12 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         queue.get_state()
     }
 
+    /// Get all queue tracks and current index (for session persistence)
+    pub async fn get_all_queue_tracks(&self) -> (Vec<QueueTrack>, Option<usize>) {
+        let queue = self.queue.read().await;
+        queue.get_all_tracks()
+    }
+
     /// Set repeat mode
     pub async fn set_repeat_mode(&self, mode: RepeatMode) {
         let queue = self.queue.write().await;

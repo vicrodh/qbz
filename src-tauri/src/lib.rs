@@ -932,6 +932,7 @@ pub fn run() {
             commands_v2::v2_set_force_x11,
             commands_v2::v2_restart_app,
             commands_v2::v2_get_queue_state,
+            commands_v2::v2_get_all_queue_tracks,
             commands_v2::v2_get_current_queue_track,
             commands_v2::v2_set_repeat_mode,
             commands_v2::v2_toggle_shuffle,

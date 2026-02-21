@@ -2664,37 +2664,27 @@
         }
       }
 
-      // Get current queue state from backend (may be empty)
-      const queueState = await getBackendQueueState();
+      // Get ALL queue tracks from backend (uncapped, for full persistence)
+      const [tracks, currentIndex] = await invoke<[BackendQueueTrack[], number | null]>('v2_get_all_queue_tracks');
 
-      // Build persisted queue tracks
-      const allTracks: PersistedQueueTrack[] = [];
-      if (queueState?.current_track) {
-        allTracks.push({
-          id: queueState.current_track.id,
-          title: queueState.current_track.title,
-          artist: queueState.current_track.artist,
-          album: queueState.current_track.album,
-          duration_secs: queueState.current_track.duration_secs,
-          artwork_url: queueState.current_track.artwork_url
-        });
-      }
-      if (queueState?.upcoming) {
-        for (const track of queueState.upcoming) {
-          allTracks.push({
-            id: track.id,
-            title: track.title,
-            artist: track.artist,
-            album: track.album,
-            duration_secs: track.duration_secs,
-            artwork_url: track.artwork_url
-          });
-        }
-      }
+      const allTracks: PersistedQueueTrack[] = tracks.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        duration_secs: track.duration_secs,
+        artwork_url: track.artwork_url,
+        hires: track.hires,
+        bit_depth: track.bit_depth ?? null,
+        sample_rate: track.sample_rate ?? null,
+        is_local: track.is_local ?? false,
+        album_id: track.album_id ?? null,
+        artist_id: track.artist_id ?? null,
+      }));
 
       await saveSessionState(
         allTracks,
-        queueState?.current_index ?? null,
+        currentIndex,
         currentTrack ? Math.floor(currentTime) : 0,
         volume / 100,
         isShuffle,

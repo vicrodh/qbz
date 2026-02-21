@@ -4360,6 +4360,15 @@ pub async fn v2_get_queue_state(
     Ok(bridge.get_queue_state().await)
 }
 
+/// Get all queue tracks and current index (for session persistence, no caps)
+#[tauri::command]
+pub async fn v2_get_all_queue_tracks(
+    bridge: State<'_, CoreBridgeState>,
+) -> Result<(Vec<CoreQueueTrack>, Option<usize>), RuntimeError> {
+    let bridge = bridge.get().await;
+    Ok(bridge.get_all_queue_tracks().await)
+}
+
 /// Get currently selected queue track (V2)
 #[tauri::command]
 pub async fn v2_get_current_queue_track(

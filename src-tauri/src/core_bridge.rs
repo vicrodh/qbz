@@ -106,6 +106,11 @@ impl CoreBridge {
         self.core.get_queue_state().await
     }
 
+    /// Get all queue tracks and current index (for session persistence)
+    pub async fn get_all_queue_tracks(&self) -> (Vec<qbz_models::playback::QueueTrack>, Option<usize>) {
+        self.core.get_all_queue_tracks().await
+    }
+
     /// Set repeat mode
     pub async fn set_repeat_mode(&self, mode: RepeatMode) {
         self.core.set_repeat_mode(mode).await

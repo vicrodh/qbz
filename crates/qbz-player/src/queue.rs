@@ -653,6 +653,13 @@ impl QueueManager {
         }
     }
 
+    /// Get all tracks in the queue plus the current index (for session persistence).
+    /// Unlike get_state() which caps upcoming/history, this returns the full track list.
+    pub fn get_all_tracks(&self) -> (Vec<QueueTrack>, Option<usize>) {
+        let state = self.state.lock().unwrap();
+        (state.tracks.clone(), state.current_index)
+    }
+
     /// Regenerate shuffle order (internal, must be called with lock held)
     fn regenerate_shuffle_order_internal(state: &mut InternalState) {
         let mut order: Vec<usize> = (0..state.tracks.len()).collect();
