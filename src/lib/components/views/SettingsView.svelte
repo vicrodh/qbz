@@ -548,6 +548,38 @@
   // Available languages (only those with translations)
   const availableLanguages = ['Auto', 'English', 'Español', 'Français', 'Deutsch'];
 
+  // Font family selection
+  const fontFamilies: Record<string, string> = {
+    'LINE Seed JP': '',                // default (no data-font attribute)
+    'Montserrat': 'montserrat',
+    'Noto Sans': 'noto-sans',
+    'Source Sans 3': 'source-sans-3',
+    'System': 'system',
+  };
+
+  const fontReverseMap: Record<string, string> = Object.fromEntries(
+    Object.entries(fontFamilies).map(([name, val]) => [val, name])
+  );
+
+  const fontOptions = Object.keys(fontFamilies);
+
+  let selectedFont = $state('LINE Seed JP');
+
+  function applyFont(fontValue: string) {
+    if (fontValue) {
+      document.documentElement.setAttribute('data-font', fontValue);
+    } else {
+      document.documentElement.removeAttribute('data-font');
+    }
+  }
+
+  function handleFontChange(newFont: string) {
+    selectedFont = newFont;
+    const fontValue = fontFamilies[newFont] || '';
+    applyFont(fontValue);
+    localStorage.setItem('qbz-font-family', fontValue);
+  }
+
   // Audio settings
   let streamingQuality = $state('Hi-Res+');
   let outputDevice = $state('System Default');
@@ -886,6 +918,11 @@
     const savedTheme = localStorage.getItem('qbz-theme') || '';
     theme = themeReverseMap[savedTheme] || 'Dark';
     applyTheme(savedTheme);
+
+    // Load font
+    const savedFont = localStorage.getItem('qbz-font-family') || '';
+    selectedFont = fontReverseMap[savedFont] || 'LINE Seed JP';
+    applyFont(savedFont);
 
     // Load streaming quality preference
     const savedQuality = getUserItem('qbz-streaming-quality');
@@ -3559,6 +3596,14 @@
         value={language}
         options={availableLanguages}
         onchange={handleLanguageChange}
+      />
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">{$t('settings.appearance.fontFamily')}</span>
+      <Dropdown
+        value={selectedFont}
+        options={fontOptions}
+        onchange={handleFontChange}
       />
     </div>
     <div class="setting-row">

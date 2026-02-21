@@ -670,6 +670,7 @@
       },
       "accentColor": "Accent Color",
       "language": "Language",
+      "fontFamily": "Font",
       "uiScale": "UI Scale",
       "inAppToasts": "In-app toasts notifications",
       "systemNotifications": "System Notifications",

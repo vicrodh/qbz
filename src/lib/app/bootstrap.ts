@@ -28,6 +28,16 @@ export function loadSavedTheme(): void {
 }
 
 /**
+ * Load and apply saved font family from localStorage
+ */
+export function loadSavedFont(): void {
+  const savedFont = localStorage.getItem('qbz-font-family');
+  if (savedFont) {
+    document.documentElement.setAttribute('data-font', savedFont);
+  }
+}
+
+/**
  * Apply saved UI zoom level (Tauri webview zoom)
  */
 export async function applySavedZoom(): Promise<void> {
@@ -124,8 +134,9 @@ export interface BootstrapResult {
  * @returns Object with cleanup function for onDestroy
  */
 export function bootstrapApp(): BootstrapResult {
-  // Load theme
+  // Load theme and font
   loadSavedTheme();
+  loadSavedFont();
   void applySavedZoom();
 
   // Load notification preferences

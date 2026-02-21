@@ -653,6 +653,7 @@
       },
       "accentColor": "Couleur d'accent",
       "language": "Langue",
+      "fontFamily": "Police",
       "uiScale": "Échelle de l'interface",
       "inAppToasts": "Notifications toast intégrées",
       "systemNotifications": "Notifications système",
