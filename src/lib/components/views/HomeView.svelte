@@ -131,6 +131,8 @@
     onNavigateQobuzPlaylists?: () => void;
     onNavigateDailyQ?: () => void;
     onNavigateWeeklyQ?: () => void;
+    onNavigateFavQ?: () => void;
+    onNavigateTopQ?: () => void;
   }
 
   let {
@@ -179,6 +181,8 @@
     onNavigateQobuzPlaylists,
     onNavigateDailyQ,
     onNavigateWeeklyQ,
+    onNavigateFavQ,
+    onNavigateTopQ,
   }: Props = $props();
 
   // Home settings state
@@ -1470,6 +1474,20 @@
             </div>
             <p class="mix-card-desc">{@html $t('weeklyMixes.cardDesc')}</p>
           </button>
+          <button class="mix-card" onclick={() => onNavigateFavQ?.()}>
+            <div class="mix-card-artwork mix-gradient-favq">
+              <span class="mix-card-badge">qbz</span>
+              <span class="mix-card-name">FavQ</span>
+            </div>
+            <p class="mix-card-desc">{$t('favMixes.cardDesc')}</p>
+          </button>
+          <button class="mix-card" onclick={() => onNavigateTopQ?.()}>
+            <div class="mix-card-artwork mix-gradient-topq">
+              <span class="mix-card-badge">qbz</span>
+              <span class="mix-card-name">TopQ</span>
+            </div>
+            <p class="mix-card-desc">{@html $t('topMixes.cardDesc')}</p>
+          </button>
         </div>
       </div>
     {/if}
@@ -1878,7 +1896,9 @@
   }
 
   .mix-gradient-daily::before,
-  .mix-gradient-weekly::before {
+  .mix-gradient-weekly::before,
+  .mix-gradient-favq::before,
+  .mix-gradient-topq::before {
     content: '';
     position: absolute;
     inset: -40%;
@@ -1916,6 +1936,44 @@
   }
 
   @keyframes silk-weekly {
+    0%   { transform: translate(-3%, 6%) rotate(2deg) scale(1.01); }
+    20%  { transform: translate(7%, -4%) rotate(-5deg) scale(0.98); }
+    45%  { transform: translate(-6%, -2%) rotate(7deg) scale(1.03); }
+    70%  { transform: translate(4%, 7%) rotate(-3deg) scale(1); }
+    100% { transform: translate(-5%, 3%) rotate(4deg) scale(0.99); }
+  }
+
+  .mix-gradient-favq::before {
+    background:
+      linear-gradient(125deg, transparent 20%, rgba(255, 200, 200, 0.45) 23%, transparent 26%),
+      linear-gradient(125deg, transparent 55%, rgba(80, 0, 0, 0.35) 58%, transparent 61%),
+      radial-gradient(ellipse at 30% 20%, rgba(255, 180, 180, 0.25) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 60%, rgba(255, 50, 50, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 80%, rgba(200, 0, 0, 0.5) 0%, transparent 60%),
+      linear-gradient(135deg, #e82020 0%, #c41818 30%, #a01010 60%, #800808 100%);
+    animation: silk-favq 28s ease-in-out infinite alternate;
+  }
+
+  .mix-gradient-topq::before {
+    background:
+      linear-gradient(125deg, transparent 20%, rgba(200, 220, 255, 0.45) 23%, transparent 26%),
+      linear-gradient(125deg, transparent 55%, rgba(0, 0, 80, 0.35) 58%, transparent 61%),
+      radial-gradient(ellipse at 30% 20%, rgba(180, 200, 255, 0.25) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 60%, rgba(50, 100, 255, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 80%, rgba(0, 50, 200, 0.5) 0%, transparent 60%),
+      linear-gradient(135deg, #2060e8 0%, #1848c4 30%, #1030a0 60%, #081880 100%);
+    animation: silk-topq 32s ease-in-out infinite alternate;
+  }
+
+  @keyframes silk-favq {
+    0%   { transform: translate(5%, 3%) rotate(0deg) scale(1); }
+    25%  { transform: translate(-8%, 6%) rotate(6deg) scale(1.03); }
+    50%  { transform: translate(3%, -5%) rotate(-4deg) scale(0.98); }
+    75%  { transform: translate(-4%, 8%) rotate(8deg) scale(1.02); }
+    100% { transform: translate(6%, -3%) rotate(-2deg) scale(1); }
+  }
+
+  @keyframes silk-topq {
     0%   { transform: translate(-3%, 6%) rotate(2deg) scale(1.01); }
     20%  { transform: translate(7%, -4%) rotate(-5deg) scale(0.98); }
     45%  { transform: translate(-6%, -2%) rotate(7deg) scale(1.03); }

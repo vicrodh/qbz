@@ -1749,6 +1749,20 @@
     "subtitle": "Based on your weekly listening.",
     "cardDesc": "Take a weekly journey with a fresh mix <strong>every Friday</strong>."
   },
+  "favMixes": {
+    "title": "FavQ",
+    "subtitle": "Your favorites, remixed",
+    "cardDesc": "A fresh shuffle from your personal favorites.",
+    "algorithmInfo": "Randomly selects up to 50 tracks from your Qobuz favorites collection.",
+    "emptyFavorites": "No favorite tracks yet. Start adding favorites to build your mix!"
+  },
+  "topMixes": {
+    "title": "TopQ",
+    "subtitle": "From your top playlists",
+    "cardDesc": "Discover new music from your <strong>most-played</strong> playlists.",
+    "algorithmInfo": "Powered by the Qobuz suggestion algorithm, seeded from your most-played playlists.",
+    "emptyPlaylists": "No played playlists yet. Play some playlists to build your mix!"
+  },
   "playlistManager": {
     "switchToFlat": "Flat view",
     "switchToFolders": "Folder view",

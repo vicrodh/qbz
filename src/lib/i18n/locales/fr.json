@@ -1585,6 +1585,20 @@
     "subtitle": "Base sur vos ecoutes hebdomadaires.",
     "cardDesc": "Un voyage hebdomadaire avec un mix frais <strong>chaque vendredi</strong>."
   },
+  "favMixes": {
+    "title": "FavQ",
+    "subtitle": "Vos favoris, remixes",
+    "cardDesc": "Un melange frais de vos morceaux favoris.",
+    "algorithmInfo": "Selectionne aleatoirement jusqu'a 50 pistes de votre collection de favoris Qobuz.",
+    "emptyFavorites": "Pas encore de pistes favorites. Ajoutez des favoris pour creer votre mix !"
+  },
+  "topMixes": {
+    "title": "TopQ",
+    "subtitle": "Depuis vos playlists les plus ecoutees",
+    "cardDesc": "Decouvrez de la musique a partir de vos playlists <strong>les plus ecoutees</strong>.",
+    "algorithmInfo": "Propulse par l'algorithme de suggestion Qobuz, alimente par vos playlists les plus ecoutees.",
+    "emptyPlaylists": "Pas encore de playlists ecoutees. Ecoutez des playlists pour creer votre mix !"
+  },
   "radio": {
     "albumRadio": "Radio de l'album",
     "creatingAlbumRadio": "Création de la radio de l'album...",

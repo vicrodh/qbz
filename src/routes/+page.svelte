@@ -332,6 +332,8 @@
   import PurchaseAlbumDetailView from '$lib/components/views/PurchaseAlbumDetailView.svelte';
   import DynamicSuggestView from '$lib/components/views/DynamicSuggestView.svelte';
   import WeeklySuggestView from '$lib/components/views/WeeklySuggestView.svelte';
+  import FavQView from '$lib/components/views/FavQView.svelte';
+  import TopQView from '$lib/components/views/TopQView.svelte';
 
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
@@ -947,6 +949,14 @@
 
         case 'weekly_q':
           navigateTo('weeklyq');
+          break;
+
+        case 'fav_q':
+          navigateTo('favq');
+          break;
+
+        case 'top_q':
+          navigateTo('topq');
           break;
 
         case 'radio':
@@ -3511,6 +3521,8 @@
             onNavigateQobuzPlaylists={() => navigateTo('discover-playlists')}
             onNavigateDailyQ={() => navigateTo('dailyq')}
             onNavigateWeeklyQ={() => navigateTo('weeklyq')}
+            onNavigateFavQ={() => navigateTo('favq')}
+            onNavigateTopQ={() => navigateTo('topq')}
           />
         {/if}
       {:else if activeView === 'search'}
@@ -3975,6 +3987,44 @@
         />
       {:else if activeView === 'weeklyq'}
         <WeeklySuggestView
+          onBack={navGoBack}
+          onTrackPlay={handleDisplayTrackPlay}
+          onTrackPlayNext={queueDisplayTrackNext}
+          onTrackPlayLater={queueDisplayTrackLater}
+          onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackShareQobuz={shareQobuzTrackLink}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackGoToAlbum={handleAlbumClick}
+          onTrackGoToArtist={handleArtistClick}
+          onTrackShowInfo={showTrackInfo}
+          onTrackDownload={handleDisplayTrackDownload}
+          onTrackRemoveDownload={handleTrackRemoveDownload}
+          onTrackReDownload={handleDisplayTrackDownload}
+          getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'favq'}
+        <FavQView
+          onBack={navGoBack}
+          onTrackPlay={handleDisplayTrackPlay}
+          onTrackPlayNext={queueDisplayTrackNext}
+          onTrackPlayLater={queueDisplayTrackLater}
+          onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackShareQobuz={shareQobuzTrackLink}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackGoToAlbum={handleAlbumClick}
+          onTrackGoToArtist={handleArtistClick}
+          onTrackShowInfo={showTrackInfo}
+          onTrackDownload={handleDisplayTrackDownload}
+          onTrackRemoveDownload={handleTrackRemoveDownload}
+          onTrackReDownload={handleDisplayTrackDownload}
+          getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'topq'}
+        <TopQView
           onBack={navGoBack}
           onTrackPlay={handleDisplayTrackPlay}
           onTrackPlayNext={queueDisplayTrackNext}

@@ -34,7 +34,9 @@ export type ViewType =
   | 'purchases'
   | 'purchase-album'
   | 'dailyq'
-  | 'weeklyq';
+  | 'weeklyq'
+  | 'favq'
+  | 'topq';
 export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'playlists';
 
 // Navigation state
