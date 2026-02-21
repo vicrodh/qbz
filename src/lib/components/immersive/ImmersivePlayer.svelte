@@ -379,6 +379,7 @@
 </script>
 
 {#if isOpen}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="immersive-player"
     onmousemove={handleMouseMove}
@@ -387,6 +388,13 @@
     aria-label="Now Playing"
     tabindex="-1"
   >
+    <!-- Persistent drag region for window movement (always active, unaffected by UI auto-hide) -->
+    <div
+      class="immersive-drag-region"
+      data-tauri-drag-region
+      ondblclick={toggleMaximize}
+    ></div>
+
     <!-- Background (skip for canvas-based visualizers that render their own black background) -->
     {#if activeFocusTab !== 'visualizer' && activeFocusTab !== 'oscilloscope' && activeFocusTab !== 'spectral-ribbon' && activeFocusTab !== 'energy-bands' && activeFocusTab !== 'lissajous' && activeFocusTab !== 'transient-pulse'}
       <ImmersiveBackground {artwork} />
@@ -672,6 +680,17 @@
     background-color: var(--bg-primary, #0a0a0b);
     animation: fadeIn 200ms ease-out;
     overflow: hidden;
+  }
+
+  .immersive-drag-region {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    z-index: 15; /* Above content (1-5), below header controls (20) */
+    -webkit-app-region: drag;
+    app-region: drag;
   }
 
   @keyframes fadeIn {

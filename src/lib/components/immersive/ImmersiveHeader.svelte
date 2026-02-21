@@ -330,6 +330,8 @@
     min-width: 100px;
     height: 100%;
     cursor: grab;
+    -webkit-app-region: drag;
+    app-region: drag;
   }
 
   .mode-toggle {
@@ -376,6 +378,8 @@
     background: rgba(0, 0, 0, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.15);
     border-radius: 12px;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
   }
 
   .tab {
@@ -474,6 +478,8 @@
     display: flex;
     justify-content: flex-end;
     gap: 8px;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
   }
 
   /* Expandable Window Controls */
