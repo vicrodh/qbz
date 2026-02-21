@@ -237,6 +237,36 @@ export function navigateToFavorites(tab?: FavoritesTab): void {
   navigateTo(favoritesViewForTab(targetTab));
 }
 
+// ============ Session Restore ============
+
+/**
+ * Restore a view as initial state (Home always in history root).
+ * Used during session restore to set the view without triggering data fetches.
+ */
+export function restoreView(view: ViewType): void {
+  activeView = view;
+  viewHistory = ['home'];
+  if (view !== 'home') {
+    viewHistory.push(view);
+  }
+  forwardHistory = [];
+  notifyListeners();
+}
+
+/**
+ * Set playlist ID without triggering navigation (for session restore).
+ */
+export function setRestoredPlaylistId(playlistId: number): void {
+  selectedPlaylistId = playlistId;
+}
+
+/**
+ * Set local album ID without triggering navigation (for session restore).
+ */
+export function setRestoredLocalAlbumId(albumId: string): void {
+  selectedLocalAlbumId = albumId;
+}
+
 // ============ Scroll Position ============
 
 /**

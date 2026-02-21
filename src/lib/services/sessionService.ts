@@ -31,6 +31,9 @@ export interface PersistedSession {
   repeat_mode: string; // "off" | "all" | "one"
   was_playing: boolean;
   saved_at: number;
+  last_view: string;
+  view_context_id: string | null;
+  view_context_type: string | null;
 }
 
 /**
@@ -43,7 +46,10 @@ export async function saveSessionState(
   volume: number,
   shuffleEnabled: boolean,
   repeatMode: string,
-  wasPlaying: boolean
+  wasPlaying: boolean,
+  lastView?: string,
+  viewContextId?: string | null,
+  viewContextType?: string | null
 ): Promise<void> {
   try {
     await invoke('v2_save_session_state', {
@@ -54,6 +60,9 @@ export async function saveSessionState(
       shuffleEnabled,
       repeatMode,
       wasPlaying,
+      lastView: lastView ?? 'home',
+      viewContextId: viewContextId ?? null,
+      viewContextType: viewContextType ?? null,
     });
     console.log('[Session] State saved successfully');
   } catch (err) {
