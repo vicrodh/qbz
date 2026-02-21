@@ -110,6 +110,7 @@
               <h3 class="category-title">{getCategoryLabel(category.id)}</h3>
 
               {#each actions as action}
+                {@const _v = bindingsVersion}
                 {@const bindings = getActiveBindings()}
                 <ShortcutInput
                   {action}

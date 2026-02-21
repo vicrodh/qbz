@@ -1254,6 +1254,57 @@
     "expand": "Développer",
     "clearFilter": "Effacer le filtre"
   },
+  "keybindings": {
+    "title": "Raccourcis clavier",
+    "customize": "Personnaliser les raccourcis",
+    "pressKeys": "Appuyez sur les touches...",
+    "modified": "modifiés",
+    "resetToDefault": "Réinitialiser par défaut",
+    "resetAll": "Tout réinitialiser",
+    "resetAllConfirmTitle": "Réinitialiser tous les raccourcis ?",
+    "resetAllConfirmText": "Cela réinitialisera les {count} raccourcis modifiés à leurs valeurs par défaut.",
+    "conflict": "\"{shortcut}\" est déjà utilisé par \"{action}\"",
+    "categories": {
+      "playback": "Lecture",
+      "navigation": "Navigation",
+      "ui": "Interface",
+      "focus": "Mode focus"
+    },
+    "actions": {
+      "playbackToggle": "Lecture / Pause",
+      "playbackNext": "Piste suivante",
+      "playbackPrev": "Piste précédente",
+      "navBack": "Retour",
+      "navForward": "Avancer",
+      "navSearch": "Rechercher",
+      "uiFocusMode": "Mode focus",
+      "uiQueue": "File d'attente",
+      "uiEscape": "Fermer / Annuler",
+      "uiShowShortcuts": "Afficher les raccourcis",
+      "uiOpenLink": "Ouvrir un lien musical",
+      "focusSeekForward": "Avancer (5s)",
+      "focusSeekBack": "Reculer (5s)",
+      "focusSeekForwardLong": "Avancer (10s)",
+      "focusSeekBackLong": "Reculer (10s)"
+    },
+    "descriptions": {
+      "playbackToggle": "Basculer la lecture",
+      "playbackNext": "Passer à la piste suivante",
+      "playbackPrev": "Revenir à la piste précédente",
+      "navBack": "Naviguer vers la page précédente",
+      "navForward": "Naviguer vers la page suivante",
+      "navSearch": "Mettre le focus sur la recherche",
+      "uiFocusMode": "Basculer le mode focus",
+      "uiQueue": "Basculer le panneau de file d'attente",
+      "uiEscape": "Fermer le panneau actif ou la modale",
+      "uiShowShortcuts": "Afficher la modale des raccourcis clavier",
+      "uiOpenLink": "Ouvrir un lien Qobuz dans l'application",
+      "focusSeekForward": "Avancer de 5 secondes",
+      "focusSeekBack": "Reculer de 5 secondes",
+      "focusSeekForwardLong": "Avancer de 10 secondes",
+      "focusSeekBackLong": "Reculer de 10 secondes"
+    }
+  },
   "dacWizard": {
     "title": "Assistant Configuration DAC",
     "triggerTooltip": "Guide de configuration DAC",

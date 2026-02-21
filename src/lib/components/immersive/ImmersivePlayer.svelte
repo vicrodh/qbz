@@ -258,10 +258,6 @@
         e.preventDefault();
         toggleFullscreen();
         break;
-      case ' ':
-        e.preventDefault();
-        onTogglePlay();
-        break;
       case 'ArrowLeft':
         if (e.shiftKey && onSkipBack) {
           onSkipBack();

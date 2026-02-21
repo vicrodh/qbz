@@ -1254,6 +1254,57 @@
     "expand": "Ausklappen",
     "clearFilter": "Filter löschen"
   },
+  "keybindings": {
+    "title": "Tastenkürzel",
+    "customize": "Tastenkürzel anpassen",
+    "pressKeys": "Tasten drücken...",
+    "modified": "geändert",
+    "resetToDefault": "Auf Standard zurücksetzen",
+    "resetAll": "Alle zurücksetzen",
+    "resetAllConfirmTitle": "Alle Tastenkürzel zurücksetzen?",
+    "resetAllConfirmText": "Dies setzt alle {count} geänderten Tastenkürzel auf ihre Standardwerte zurück.",
+    "conflict": "\"{shortcut}\" wird bereits von \"{action}\" verwendet",
+    "categories": {
+      "playback": "Wiedergabe",
+      "navigation": "Navigation",
+      "ui": "Oberfläche",
+      "focus": "Fokusmodus"
+    },
+    "actions": {
+      "playbackToggle": "Wiedergabe / Pause",
+      "playbackNext": "Nächster Titel",
+      "playbackPrev": "Vorheriger Titel",
+      "navBack": "Zurück",
+      "navForward": "Vorwärts",
+      "navSearch": "Suchen",
+      "uiFocusMode": "Fokusmodus",
+      "uiQueue": "Warteschlange",
+      "uiEscape": "Schließen / Verwerfen",
+      "uiShowShortcuts": "Tastenkürzel anzeigen",
+      "uiOpenLink": "Musik-Link öffnen",
+      "focusSeekForward": "Vorspulen (5s)",
+      "focusSeekBack": "Zurückspulen (5s)",
+      "focusSeekForwardLong": "Vorspulen (10s)",
+      "focusSeekBackLong": "Zurückspulen (10s)"
+    },
+    "descriptions": {
+      "playbackToggle": "Wiedergabe umschalten",
+      "playbackNext": "Zum nächsten Titel springen",
+      "playbackPrev": "Zum vorherigen Titel gehen",
+      "navBack": "Zur vorherigen Seite navigieren",
+      "navForward": "Zur nächsten Seite navigieren",
+      "navSearch": "Suchfeld fokussieren",
+      "uiFocusMode": "Fokusmodus umschalten",
+      "uiQueue": "Warteschlangen-Panel umschalten",
+      "uiEscape": "Aktives Panel oder Modal schließen",
+      "uiShowShortcuts": "Tastenkürzel-Modal anzeigen",
+      "uiOpenLink": "Einen Qobuz-Link in der App öffnen",
+      "focusSeekForward": "5 Sekunden vorspulen",
+      "focusSeekBack": "5 Sekunden zurückspulen",
+      "focusSeekForwardLong": "10 Sekunden vorspulen",
+      "focusSeekBackLong": "10 Sekunden zurückspulen"
+    }
+  },
   "dacWizard": {
     "title": "DAC-Einrichtungsassistent",
     "triggerTooltip": "DAC-Einrichtungshilfe",

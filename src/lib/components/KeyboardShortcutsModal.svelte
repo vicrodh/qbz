@@ -116,7 +116,7 @@
                 {#each actions as action}
                   <div class="shortcut-row">
                     <span class="action-label">
-                      {$t(`keybindings.actions.${actionIdToKey(action.id)}`) || action.label}
+                      {getActionLabel(action.id)}
                     </span>
                     <kbd class="shortcut-key">
                       {formatShortcutDisplay(getActiveBindings()[action.id])}
