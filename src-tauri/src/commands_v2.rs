@@ -503,7 +503,24 @@ pub async fn runtime_bootstrap(
                     },
                 );
 
-                // Step 4: Authenticate CoreBridge/V2 - REQUIRED per ADR
+                // Step 4: Wait for CoreBridge init, then authenticate V2 - REQUIRED per ADR
+                let cb_start = std::time::Instant::now();
+                let cb_timeout = std::time::Duration::from_secs(10);
+                let cb_poll = std::time::Duration::from_millis(50);
+
+                loop {
+                    if core_bridge.try_get().await.is_some() {
+                        break;
+                    }
+                    if cb_start.elapsed() > cb_timeout {
+                        log::error!("[Runtime] CoreBridge not available after 10s");
+                        manager.set_bootstrap_in_progress(false).await;
+                        return Err(RuntimeError::V2NotInitialized);
+                    }
+                    tokio::time::sleep(cb_poll).await;
+                }
+                log::info!("[Runtime] CoreBridge ready after {:?}", cb_start.elapsed());
+
                 if let Some(bridge) = core_bridge.try_get().await {
                     match bridge.login(&creds.email, &creds.password).await {
                         Ok(_) => {
@@ -523,7 +540,7 @@ pub async fn runtime_bootstrap(
                         }
                     }
                 } else {
-                    log::error!("[Runtime] CoreBridge not initialized - cannot complete bootstrap");
+                    log::error!("[Runtime] CoreBridge disappeared after ready check");
                     manager.set_bootstrap_in_progress(false).await;
                     return Err(RuntimeError::V2NotInitialized);
                 }
