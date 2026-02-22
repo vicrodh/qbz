@@ -897,7 +897,18 @@ async fn apply_renderer_command_to_corebridge(
             }
 
             if let Some(position_ms) = renderer_state.current_position_ms.or(*current_position_ms) {
-                bridge.seek(position_ms / 1000)?;
+                let current_pos_secs = bridge.get_playback_state().position;
+                let target_secs = position_ms / 1000;
+                // Only seek if the position differs by more than 2 seconds to
+                // avoid audio hiccups from redundant seeks (e.g. when the server
+                // echoes back our own position in a SET_STATE after queue_load).
+                if current_pos_secs.abs_diff(target_secs) > 2 {
+                    log::info!(
+                        "[QConnect] SetState seek: current={}s target={}s",
+                        current_pos_secs, target_secs
+                    );
+                    bridge.seek(target_secs)?;
+                }
             }
         }
         RendererCommand::SetVolume { volume, .. } => {
