@@ -22,6 +22,7 @@
   import { isTrackUnavailable, clearTrackUnavailable, subscribe as subscribeUnavailable } from '$lib/stores/unavailableTracksStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { showToast } from '$lib/stores/toastStore';
+  import { sanitizeHtml } from '$lib/utils/sanitize';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
   import { onMount, tick } from 'svelte';
@@ -2020,7 +2021,7 @@
         <span class="playlist-label">Playlist</span>
         <h1 class="playlist-title">{playlist.name}</h1>
         {#if playlist.description}
-          <p class="playlist-description">{playlist.description}</p>
+          <p class="playlist-description">{@html sanitizeHtml(playlist.description)}</p>
         {/if}
         <div class="playlist-info">
           <span class="owner">{playlist.owner.name}</span>
@@ -2601,6 +2602,15 @@
     color: var(--text-secondary);
     margin: 0 0 12px 0;
     line-height: 1.4;
+  }
+
+  .playlist-description :global(a) {
+    color: var(--accent-primary);
+    text-decoration: none;
+  }
+
+  .playlist-description :global(a:hover) {
+    text-decoration: underline;
   }
 
   .playlist-info {
