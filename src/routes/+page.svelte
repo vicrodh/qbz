@@ -2898,6 +2898,11 @@
     // Keyboard navigation
     document.addEventListener('keydown', handleKeydown);
 
+    // Suppress WebKit default context menu globally
+    // Custom menus (TrackRow, sidebar, etc.) call e.stopPropagation() so they are unaffected
+    const handleGlobalContextMenu = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener('contextmenu', handleGlobalContextMenu);
+
     // Register keybinding actions
     registerAction('playback.toggle', togglePlay);
     registerAction('playback.next', handleSkipForward);
@@ -3392,6 +3397,7 @@
       saveSessionBeforeClose();
       cleanupBootstrap();
       document.removeEventListener('keydown', handleKeydown);
+      document.removeEventListener('contextmenu', handleGlobalContextMenu);
       unregisterAll(); // Cleanup keybinding actions
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
