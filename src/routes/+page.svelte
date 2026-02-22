@@ -152,6 +152,7 @@
     setVolume as playerSetVolume,
     stop as stopPlayback,
     setPendingSessionRestore,
+    setRemoteControlMode,
     startPolling,
     stopPolling,
     reset as resetPlayer,
@@ -770,7 +771,11 @@
     try {
       const status = await invoke<QconnectConnectionStatus>('v2_qconnect_status');
       qobuzConnectStatus = status;
+      const wasConnected = isQobuzConnectConnected;
       isQobuzConnectConnected = Boolean(status.transport_connected);
+      if (isQobuzConnectConnected !== wasConnected) {
+        setRemoteControlMode(isQobuzConnectConnected);
+      }
     } catch {
       qobuzConnectStatus = {
         running: false,
@@ -778,7 +783,10 @@
         endpoint_url: null,
         last_error: null
       };
-      isQobuzConnectConnected = false;
+      if (isQobuzConnectConnected) {
+        isQobuzConnectConnected = false;
+        setRemoteControlMode(false);
+      }
     }
   }
 

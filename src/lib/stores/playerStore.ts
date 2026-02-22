@@ -154,6 +154,10 @@ const SEEK_SETTLE_TOLERANCE_SECS = 1;
 let onTrackEnded: (() => Promise<void>) | null = null;
 let onResumeFromStop: (() => Promise<void>) | null = null;
 
+// Remote control mode: when active, external service (QConnect) controls playback.
+// Disables gapless interception, auto-advance, and resume-from-stop in the event handler.
+let remoteControlMode = false;
+
 // Gapless: callback to get the next track ID for pre-queuing
 let gaplessGetNextTrackId: (() => number | null) | null = null;
 // Gapless: callback when backend transitions to next track (update frontend metadata/queue)
@@ -579,6 +583,15 @@ export function setOnGaplessTransition(callback: (trackId: number) => Promise<vo
 }
 
 /**
+ * Enable/disable remote control mode (e.g. QConnect renderer).
+ * When active, gapless interception and auto-advance are disabled
+ * so the external service controls track transitions.
+ */
+export function setRemoteControlMode(active: boolean): void {
+  remoteControlMode = active;
+}
+
+/**
  * Handle playback event from backend
  */
 async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
@@ -592,7 +605,9 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
 
   // Gapless transition: backend changed track_id because gapless playback advanced
   // Handle this BEFORE the external track change handler to prevent stale queue lookups
-  const isGaplessTransition = event.track_id !== 0
+  // Skip when remote control mode is active — external service controls transitions.
+  const isGaplessTransition = !remoteControlMode
+    && event.track_id !== 0
     && currentTrack
     && event.track_id !== currentTrack.id
     && event.is_playing
@@ -666,6 +681,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
   // a final same-track frame at duration. Treat as natural end only when
   // previous progress was already at the tail and playback was active.
   if (
+    !remoteControlMode &&
     event.track_id === 0 &&
     prevTrackId !== 0 &&
     prevDuration > 0 &&
@@ -770,6 +786,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
 
     // Check if track ended - auto-advance to next
     if (
+      !remoteControlMode &&
       event.duration > 0 &&
       event.position >= event.duration - 1 &&
       !event.is_playing &&
