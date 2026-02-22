@@ -2467,19 +2467,23 @@
     display: flex;
     gap: 12px;
     align-items: flex-start;
+    flex: 1;
+    min-height: 0;
   }
 
   .artist-sections {
     display: flex;
     gap: 12px;
     align-items: flex-start;
+    flex: 1;
+    min-height: 0;
   }
 
   .virtualized-artist-grid-container,
   .virtualized-album-grid-container {
     flex: 1;
-    height: calc(100vh - 380px);
-    min-height: 400px;
+    height: 100%;
+    min-height: 300px;
     min-width: 0;
     overflow: hidden;
   }
