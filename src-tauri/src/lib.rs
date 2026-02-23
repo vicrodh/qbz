@@ -274,6 +274,7 @@ fn setup_kwin_window_rule() -> Result<(), String> {
 }
 
 /// Remove the KWin window rule for QBZ when system title bar is disabled.
+#[allow(dead_code)]
 fn remove_kwin_window_rule() {
     // Find and remove QBZ rule from kwinrulesrc
     let config_path = match dirs::config_dir() {
