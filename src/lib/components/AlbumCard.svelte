@@ -198,6 +198,7 @@
   style="width: {cardSize}px"
   data-search-id={searchId}
   onclick={handleCardClick}
+  oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); menuOpen = true; }}
   onmouseenter={measureOverflowOnce}
   onfocus={measureOverflowOnce}
   role="button"

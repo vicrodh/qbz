@@ -126,6 +126,7 @@
   class="playlist-card"
   class:menu-open={menuOpen}
   onclick={handleCardClick}
+  oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); menuOpen = true; positionMenu(); }}
   onmouseenter={measureOverflowOnce}
   onfocus={measureOverflowOnce}
   role="button"
