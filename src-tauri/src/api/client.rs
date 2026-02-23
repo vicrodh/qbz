@@ -280,6 +280,63 @@ impl QobuzClient {
         }
     }
 
+    /// Re-authenticate using a previously obtained `user_auth_token`.
+    ///
+    /// Used at bootstrap when OAuth credentials are stored but email/password are not.
+    /// Calls `POST /user/login` with `X-User-Auth-Token` header — the same as step 2
+    /// of the OAuth code exchange flow.  Returns an error if the token has expired.
+    pub async fn login_with_token(&self, token: &str) -> Result<UserSession> {
+        use reqwest::header::{HeaderMap, HeaderValue};
+
+        let tokens = self.tokens.read().await;
+        let app_id = tokens
+            .as_ref()
+            .ok_or_else(|| ApiError::BundleExtractionError("Client not initialized".to_string()))?
+            .app_id
+            .clone();
+        drop(tokens);
+
+        let user_login_url = endpoints::build_url(paths::USER_LOGIN);
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "X-App-Id",
+            HeaderValue::from_str(&app_id).map_err(|_| ApiError::InvalidAppId)?,
+        );
+        headers.insert(
+            "X-User-Auth-Token",
+            HeaderValue::from_str(token).map_err(|_| {
+                ApiError::AuthenticationError("Invalid token format".into())
+            })?,
+        );
+
+        log::info!("[OAuth] Restoring session from saved token");
+        let resp = self
+            .http
+            .post(&user_login_url)
+            .headers(headers)
+            .header("Content-Type", "text/plain;charset=UTF-8")
+            .body("extra=partner")
+            .send()
+            .await?;
+
+        match resp.status() {
+            StatusCode::OK => {
+                let json: Value = resp.json().await?;
+                let session = parse_login_response(&json)?;
+                *self.session.write().await = Some(session.clone());
+                log::info!("[OAuth] Session restored for user {}", session.user_id);
+                Ok(session)
+            }
+            StatusCode::UNAUTHORIZED => Err(ApiError::AuthenticationError(
+                "OAuth token expired or invalid".to_string(),
+            )),
+            status => Err(ApiError::ApiResponse(format!(
+                "Token re-auth failed: {}",
+                status
+            ))),
+        }
+    }
+
     /// Get current user info (display name, subscription, and expiry if available)
     pub async fn get_user_info(&self) -> Option<(String, String, Option<String>)> {
         self.session.read().await.as_ref().map(|s| {

@@ -598,6 +598,90 @@ pub async fn runtime_bootstrap(
                 // Not a fatal error - user can login manually
             }
         }
+    } else if let Ok(Some(oauth_token)) = crate::credentials::load_oauth_token() {
+        // No email/password credentials but there IS a saved OAuth token.
+        // Try to restore the session by calling /user/login with the stored token.
+        log::info!("[Runtime] No email/password credentials, trying saved OAuth token...");
+
+        let client = app_state.client.read().await;
+        match client.login_with_token(&oauth_token).await {
+            Ok(session) => {
+                log::info!(
+                    "[Runtime] OAuth token re-auth successful for user {}",
+                    session.user_id
+                );
+                manager.set_legacy_auth(true, Some(session.user_id)).await;
+                let _ = app.emit(
+                    "runtime:event",
+                    RuntimeEvent::AuthChanged {
+                        logged_in: true,
+                        user_id: Some(session.user_id),
+                    },
+                );
+
+                // Wait for CoreBridge, then inject session
+                let cb_start = std::time::Instant::now();
+                let cb_timeout = std::time::Duration::from_secs(10);
+                loop {
+                    if core_bridge.try_get().await.is_some() {
+                        break;
+                    }
+                    if cb_start.elapsed() > cb_timeout {
+                        log::error!("[Runtime] CoreBridge not available after 10s (OAuth restore)");
+                        manager.set_bootstrap_in_progress(false).await;
+                        return Err(RuntimeError::V2NotInitialized);
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+
+                if let Some(bridge) = core_bridge.try_get().await {
+                    let core_session: qbz_models::UserSession = match serde_json::to_value(&session)
+                        .and_then(serde_json::from_value)
+                    {
+                        Ok(s) => s,
+                        Err(e) => {
+                            log::error!("[Runtime] OAuth session conversion failed: {}", e);
+                            manager.set_bootstrap_in_progress(false).await;
+                            return Err(RuntimeError::Internal(e.to_string()));
+                        }
+                    };
+                    match bridge.login_with_session(core_session).await {
+                        Ok(_) => {
+                            log::info!("[Runtime] CoreBridge session restored via OAuth token");
+                            manager.set_corebridge_auth(true).await;
+                        }
+                        Err(e) => {
+                            log::error!("[Runtime] CoreBridge OAuth restore failed: {}", e);
+                            manager.set_bootstrap_in_progress(false).await;
+                            return Err(RuntimeError::V2AuthFailed(e));
+                        }
+                    }
+                }
+
+                if let Err(e) =
+                    crate::session_lifecycle::activate_session(&app, session.user_id).await
+                {
+                    log::error!("[Runtime] Session activation failed (OAuth restore): {}", e);
+                    manager.set_legacy_auth(false, None).await;
+                    manager.set_corebridge_auth(false).await;
+                    let reason = DegradedReason::SessionActivationFailed(e.clone());
+                    manager.set_degraded(reason.clone()).await;
+                    manager.set_bootstrap_in_progress(false).await;
+                    let _ = app.emit(
+                        "runtime:event",
+                        RuntimeEvent::RuntimeDegraded {
+                            reason: reason.clone(),
+                        },
+                    );
+                    return Err(RuntimeError::RuntimeDegraded(reason));
+                }
+            }
+            Err(e) => {
+                // Token expired — clear it and let user re-login via OAuth
+                log::warn!("[Runtime] OAuth token expired, clearing: {}", e);
+                let _ = crate::credentials::clear_oauth_token();
+            }
+        }
     } else {
         log::info!("[Runtime] No saved credentials, staying in InitializedNoAuth");
     }
@@ -1252,6 +1336,12 @@ pub async fn v2_start_oauth_login(
             error: Some(format!("Session activation failed: {}", e)),
             error_code: Some("session_activation_failed".to_string()),
         });
+    }
+
+    // Persist the OAuth token so bootstrap can restore the session on next launch.
+    // Non-fatal: if saving fails, the user just has to re-login via OAuth.
+    if let Err(e) = crate::credentials::save_oauth_token(&session.user_auth_token) {
+        log::warn!("[V2] Failed to persist OAuth token: {}", e);
     }
 
     let _ = app.emit(
@@ -2663,7 +2753,8 @@ pub fn v2_save_credentials(email: String, password: String) -> Result<(), String
 
 #[tauri::command]
 pub fn v2_clear_saved_credentials() -> Result<(), String> {
-    crate::credentials::clear_qobuz_credentials()
+    crate::credentials::clear_qobuz_credentials()?;
+    crate::credentials::clear_oauth_token()
 }
 
 #[tauri::command]

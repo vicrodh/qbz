@@ -21,6 +21,7 @@ const SERVICE_NAME: &str = "qbz";
 const QOBUZ_CREDENTIALS_KEY: &str = "qobuz-credentials";
 const FALLBACK_FILE_NAME: &str = ".qbz-auth";
 const LEGACY_FALLBACK_FILE_NAME: &str = ".qbz-auth.legacy";
+const OAUTH_TOKEN_FILE_NAME: &str = ".qbz-oauth-token";
 
 // Salt for key derivation (app-specific, not secret but adds uniqueness)
 const KEY_DERIVATION_SALT: &[u8] = b"QbzNixCredentialEncryption2024";
@@ -414,6 +415,80 @@ pub fn clear_qobuz_credentials() -> Result<(), String> {
     // Also clear fallback
     clear_fallback()?;
 
+    Ok(())
+}
+
+// ─── OAuth token persistence ──────────────────────────────────────────────────
+//
+// OAuth login produces a `user_auth_token` instead of email+password.
+// We persist it encrypted the same way as regular credentials so the user
+// doesn't have to re-authenticate via browser on every app start.
+// The token is re-used at bootstrap via `POST /user/login` with the
+// `X-User-Auth-Token` header. If it has expired Qobuz returns a 4xx and
+// we clear the stored token so the user sees the login screen normally.
+
+fn get_oauth_token_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|p| p.join("qbz").join(OAUTH_TOKEN_FILE_NAME))
+}
+
+/// Persist the OAuth `user_auth_token` to an AES-256-GCM encrypted file.
+pub fn save_oauth_token(token: &str) -> Result<(), String> {
+    let path = get_oauth_token_path().ok_or("Could not determine config directory")?;
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+
+    // Re-use the same encryption machinery: wrap the token as the "email" field
+    // of a throwaway QobuzCredentials so we don't duplicate the crypto code.
+    let placeholder = QobuzCredentials {
+        email: token.to_string(),
+        password: String::new(),
+    };
+    let encrypted = encrypt_credentials(&placeholder)?;
+    fs::write(&path, encrypted)
+        .map_err(|e| format!("Failed to write OAuth token file: {}", e))?;
+
+    log::info!("[Credentials] OAuth token saved");
+    Ok(())
+}
+
+/// Load a previously saved OAuth `user_auth_token`, or `None` if absent.
+pub fn load_oauth_token() -> Result<Option<String>, String> {
+    let path = match get_oauth_token_path() {
+        Some(p) => p,
+        None => return Ok(None),
+    };
+
+    if !path.exists() {
+        return Ok(None);
+    }
+
+    let content = fs::read_to_string(&path)
+        .map_err(|e| format!("Failed to read OAuth token file: {}", e))?;
+
+    match decrypt_credentials(&content) {
+        Ok(placeholder) => {
+            log::info!("[Credentials] OAuth token loaded");
+            Ok(Some(placeholder.email))
+        }
+        Err(e) => {
+            log::warn!("[Credentials] Failed to decrypt OAuth token: {}", e);
+            Ok(None)
+        }
+    }
+}
+
+/// Delete the stored OAuth token (called on logout or token expiry).
+pub fn clear_oauth_token() -> Result<(), String> {
+    if let Some(path) = get_oauth_token_path() {
+        if path.exists() {
+            fs::remove_file(&path)
+                .map_err(|e| format!("Failed to remove OAuth token file: {}", e))?;
+            log::info!("[Credentials] OAuth token cleared");
+        }
+    }
     Ok(())
 }
 
