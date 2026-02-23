@@ -1233,11 +1233,9 @@
             class="search-input-inline"
             autofocus
           />
-          {#if getCurrentSearchValue()}
-            <button class="search-clear-btn" onclick={clearCurrentSearch} title={$t('actions.clear')}>
-              <X size={14} />
-            </button>
-          {/if}
+          <button class="search-clear-btn" onclick={() => { clearCurrentSearch(); searchExpanded = false; }} title={$t('actions.close')}>
+            <X size={14} />
+          </button>
         </div>
       {/if}
     </div>
