@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
+  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { open } from '@tauri-apps/plugin-dialog';
+  import { t } from 'svelte-i18n';
   import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Settings } from 'lucide-svelte';
   import {
     isBlacklisted,
@@ -137,6 +139,11 @@
   let bioExpanded = $state(false);
   let imageError = $state(false);
   let lightboxOpen = $state(false);
+  let showImageMenu = $state(false);
+  let imageMenuPos = $state({ x: 0, y: 0 });
+  let hasCustomImage = $state(false);
+  let imageOverride = $state<string | null>(null);
+  let customFullImage = $state<string | null>(null);
   let topTracks = $state<Track[]>([]);
   let tracksLoading = $state(false);
   let isFavorite = $state(false);
@@ -185,6 +192,9 @@
     unsubscribeTrackFavorites = subscribeFavorites(() => {
       trackFavoritesVersion++;
     });
+
+    // Load custom image status
+    loadCustomImageStatus();
 
     // Restore scroll position
     requestAnimationFrame(() => {
@@ -1006,6 +1016,56 @@
     imageError = true;
   }
 
+  // Check if artist has a custom image on mount
+  async function loadCustomImageStatus() {
+    try {
+      const info = await invoke<{ custom_image_path?: string | null } | null>('v2_library_get_artist_image', { artistName: artist.name });
+      if (info?.custom_image_path) {
+        hasCustomImage = true;
+        customFullImage = convertFileSrc(info.custom_image_path);
+        imageOverride = customFullImage;
+      }
+    } catch {
+      // No custom image, use default
+    }
+  }
+
+  async function handleAddCustomImage() {
+    showImageMenu = false;
+    const selected = await open({
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+      multiple: false
+    });
+    if (!selected) return;
+
+    try {
+      const result = await invoke<{ image_path: string; thumbnail_path: string }>('v2_library_set_custom_artist_image', {
+        artistName: artist.name,
+        customImagePath: selected
+      });
+      imageOverride = convertFileSrc(result.thumbnail_path);
+      customFullImage = convertFileSrc(result.image_path);
+      hasCustomImage = true;
+      imageError = false;
+      showToast($t('artist.customImageSet'), 'success');
+    } catch (err) {
+      showToast(`${$t('artist.customImageError')}: ${err}`, 'error');
+    }
+  }
+
+  async function handleRemoveCustomImage() {
+    showImageMenu = false;
+    try {
+      await invoke('v2_library_remove_custom_artist_image', { artistName: artist.name });
+      imageOverride = null;
+      customFullImage = null;
+      hasCustomImage = false;
+      showToast($t('artist.customImageRemoved'), 'success');
+    } catch (err) {
+      showToast(`${$t('artist.customImageError')}: ${err}`, 'error');
+    }
+  }
+
   // Get biography text (prefer content for full text, fall back to summary)
   let bioText = $derived(
     artist.biography?.content || artist.biography?.summary || null
@@ -1302,18 +1362,19 @@
     <div class="artist-image-column">
       <div
         class="artist-image-container"
-        onclick={() => { if (!imageError && artist.image) lightboxOpen = true; }}
-        onkeydown={(e) => { if (e.key === 'Enter' && !imageError && artist.image) lightboxOpen = true; }}
+        onclick={() => { if (!imageError && (imageOverride || artist.image)) lightboxOpen = true; }}
+        onkeydown={(e) => { if (e.key === 'Enter' && !imageError && (imageOverride || artist.image)) lightboxOpen = true; }}
+        oncontextmenu={(e) => { e.preventDefault(); imageMenuPos = { x: e.clientX, y: e.clientY }; showImageMenu = true; }}
         role="button"
         tabindex="0"
       >
-        {#if imageError || !artist.image}
+        {#if imageError || (!imageOverride && !artist.image)}
           <div class="artist-image-placeholder">
             <User size={60} />
           </div>
         {:else}
           <img
-            src={artist.image}
+            src={imageOverride ?? artist.image}
             alt={artist.name}
             class="artist-image"
             loading="lazy"
@@ -2448,9 +2509,36 @@
 <ImageLightbox
   isOpen={lightboxOpen}
   onClose={() => lightboxOpen = false}
-  src={artist.image ?? ''}
+  src={customFullImage ?? imageOverride ?? artist.image ?? ''}
   alt={artist.name}
 />
+
+{#if showImageMenu}
+  <div
+    class="image-context-backdrop"
+    onclick={() => showImageMenu = false}
+    onkeydown={(e) => { if (e.key === 'Escape') showImageMenu = false; }}
+    role="button"
+    tabindex="-1"
+  ></div>
+  <div
+    class="image-context-menu"
+    style="left: {imageMenuPos.x}px; top: {imageMenuPos.y}px;"
+  >
+    {#if hasCustomImage}
+      <button class="image-context-item" onclick={handleAddCustomImage}>
+        {$t('artist.changeImage')}
+      </button>
+      <button class="image-context-item danger" onclick={handleRemoveCustomImage}>
+        {$t('artist.removeImage')}
+      </button>
+    {:else}
+      <button class="image-context-item" onclick={handleAddCustomImage}>
+        {$t('artist.addImage')}
+      </button>
+    {/if}
+  </div>
+{/if}
 
 <style>
   .artist-detail {
@@ -3967,5 +4055,54 @@
     .biography {
       max-width: 100%;
     }
+  }
+
+  .image-context-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2999;
+  }
+
+  .image-context-menu {
+    position: fixed;
+    z-index: 3000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 4px;
+    min-width: 180px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    animation: lightbox-fade-in 100ms ease;
+  }
+
+  @keyframes lightbox-fade-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .image-context-item {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 100ms ease;
+  }
+
+  .image-context-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .image-context-item.danger {
+    color: var(--color-error, #ef4444);
+  }
+
+  .image-context-item.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
   }
 </style>
