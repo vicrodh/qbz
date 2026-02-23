@@ -45,7 +45,9 @@ let viewHistory: ViewType[] = ['home'];
 let forwardHistory: ViewType[] = [];
 
 // Scroll position memory — keyed by "viewType" or "viewType:itemId"
-const scrollPositions = new Map<string, number>();
+const SCROLL_TTL_MS = 60 * 60 * 1000; // 1 hour
+interface ScrollEntry { scrollTop: number; savedAt: number; }
+const scrollPositions = new Map<string, ScrollEntry>();
 
 function scrollKey(view: ViewType, itemId?: string | number): string {
   return itemId != null ? `${view}:${itemId}` : view;
@@ -281,15 +283,17 @@ export function setRestoredLocalAlbumId(albumId: string): void {
  * different items don't share the same saved position.
  */
 export function saveScrollPosition(view: ViewType, scrollTop: number, itemId?: string | number): void {
-  scrollPositions.set(scrollKey(view, itemId), scrollTop);
+  scrollPositions.set(scrollKey(view, itemId), { scrollTop, savedAt: Date.now() });
 }
 
 /**
- * Get saved scroll position for a view (0 if none saved).
+ * Get saved scroll position for a view (0 if none saved or expired).
  * Pass the same itemId used in saveScrollPosition.
  */
 export function getSavedScrollPosition(view: ViewType, itemId?: string | number): number {
-  return scrollPositions.get(scrollKey(view, itemId)) ?? 0;
+  const entry = scrollPositions.get(scrollKey(view, itemId));
+  if (!entry || Date.now() - entry.savedAt > SCROLL_TTL_MS) return 0;
+  return entry.scrollTop;
 }
 
 // ============ Getters ============
