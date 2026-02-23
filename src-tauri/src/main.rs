@@ -332,7 +332,27 @@ fn main() {
             }
         } else if is_wayland && std::env::var_os("GDK_BACKEND").is_none() {
             std::env::set_var("GDK_BACKEND", "wayland");
-            std::env::set_var("GTK_CSD", "1");
+
+            // GTK_CSD controls who draws the title bar:
+            //   1 = GTK draws CSD (client-side) — looks like Breeze-GTK on KDE
+            //   0 = WM draws SSD (server-side) — looks native (Breeze-KDE on KDE, Adwaita on GNOME)
+            //
+            // When user wants system title bar (decorations=true), let the WM draw it
+            // so it matches the rest of the desktop (KWin Breeze, Mutter Adwaita, etc.)
+            // When using QBZ's custom title bar (decorations=false), CSD/SSD doesn't matter.
+            let wants_system_titlebar = qbz_nix_lib::config::window_settings::WindowSettingsStore::new()
+                .and_then(|store| store.get_settings())
+                .map(|s| s.use_system_titlebar)
+                .unwrap_or(false);
+
+            if wants_system_titlebar {
+                std::env::set_var("GTK_CSD", "0");
+                qbz_nix_lib::logging::log_startup(
+                    "[QBZ] System title bar: GTK_CSD=0 (window manager draws decorations)",
+                );
+            } else {
+                std::env::set_var("GTK_CSD", "1");
+            }
         }
 
         // Log effective display server AFTER GDK backend selection
