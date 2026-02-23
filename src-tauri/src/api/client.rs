@@ -174,6 +174,105 @@ impl QobuzClient {
         *self.session.write().await = None;
     }
 
+    /// Inject an already-authenticated session (e.g. obtained via OAuth flow).
+    pub async fn set_session(&self, session: UserSession) {
+        *self.session.write().await = Some(session);
+    }
+
+    /// Exchange an OAuth code for a full user session.
+    ///
+    /// Step 1: GET /oauth/callback?code=CODE&private_key=KEY → { token }
+    /// Step 2: POST /user/login with X-User-Auth-Token: token, body=extra=partner
+    pub async fn login_with_oauth_code(&self, code: &str) -> Result<UserSession> {
+        use reqwest::header::{HeaderMap, HeaderValue};
+
+        let tokens = self.tokens.read().await;
+        let tokens = tokens.as_ref().ok_or_else(|| {
+            ApiError::BundleExtractionError("Client not initialized".to_string())
+        })?;
+        let app_id = tokens.app_id.clone();
+        let private_key = tokens.private_key.clone().ok_or_else(|| {
+            ApiError::BundleExtractionError(
+                "OAuth private key not available — bundle may be outdated".to_string(),
+            )
+        })?;
+        drop(tokens);
+
+        // Step 1: Exchange code for token via /oauth/callback
+        let callback_url = endpoints::build_url(paths::OAUTH_CALLBACK);
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "X-App-Id",
+            HeaderValue::from_str(&app_id).map_err(|_| ApiError::InvalidAppId)?,
+        );
+
+        log::info!("[OAuth] Exchanging code at /oauth/callback");
+        let resp = self
+            .http
+            .get(&callback_url)
+            .headers(headers)
+            .query(&[("code", code), ("private_key", &private_key)])
+            .send()
+            .await?;
+
+        if !resp.status().is_success() {
+            return Err(ApiError::ApiResponse(format!(
+                "OAuth callback failed: {}",
+                resp.status()
+            )));
+        }
+
+        let json: Value = resp.json().await?;
+        let token = json["token"]
+            .as_str()
+            .ok_or_else(|| {
+                ApiError::ApiResponse("No token in OAuth callback response".to_string())
+            })?
+            .to_string();
+
+        log::info!("[OAuth] Token received, fetching session via /user/login");
+
+        // Step 2: GET /user/login with X-User-Auth-Token to fetch full profile
+        let user_login_url = endpoints::build_url(paths::USER_LOGIN);
+        let mut auth_headers = HeaderMap::new();
+        auth_headers.insert(
+            "X-App-Id",
+            HeaderValue::from_str(&app_id).map_err(|_| ApiError::InvalidAppId)?,
+        );
+        auth_headers.insert(
+            "X-User-Auth-Token",
+            HeaderValue::from_str(&token).map_err(|_| {
+                ApiError::AuthenticationError("Invalid OAuth token format".into())
+            })?,
+        );
+
+        let login_resp = self
+            .http
+            .post(&user_login_url)
+            .headers(auth_headers)
+            .header("Content-Type", "text/plain;charset=UTF-8")
+            .body("extra=partner")
+            .send()
+            .await?;
+
+        match login_resp.status() {
+            StatusCode::OK => {
+                let login_json: Value = login_resp.json().await?;
+                let session = parse_login_response(&login_json)?;
+                *self.session.write().await = Some(session.clone());
+                log::info!("[OAuth] Session established for user {}", session.user_id);
+                Ok(session)
+            }
+            StatusCode::UNAUTHORIZED => Err(ApiError::AuthenticationError(
+                "OAuth token rejected".to_string(),
+            )),
+            status => Err(ApiError::ApiResponse(format!(
+                "user/login OAuth step failed: {}",
+                status
+            ))),
+        }
+    }
+
     /// Get current user info (display name, subscription, and expiry if available)
     pub async fn get_user_info(&self) -> Option<(String, String, Option<String>)> {
         self.session.read().await.as_ref().map(|s| {
