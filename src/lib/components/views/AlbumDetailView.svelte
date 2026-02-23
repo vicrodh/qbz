@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { t } from 'svelte-i18n';
-  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, Loader2 } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
@@ -101,6 +101,7 @@
     checkRelatedAlbumDownloaded?: (albumId: string) => Promise<boolean>;
     onShowAlbumCredits?: () => void;
     onCreateAlbumRadio?: () => void;
+    radioLoading?: boolean;
   }
 
   let {
@@ -146,7 +147,8 @@
     onViewArtistDiscography,
     checkRelatedAlbumDownloaded,
     onShowAlbumCredits,
-    onCreateAlbumRadio
+    onCreateAlbumRadio,
+    radioLoading = false
   }: Props = $props();
 
   let isFavorite = $state(false);
@@ -387,8 +389,13 @@
             class="action-btn-circle"
             onclick={onCreateAlbumRadio}
             title={$t('radio.albumRadio')}
+            disabled={radioLoading}
           >
-            <Radio size={18} />
+            {#if radioLoading}
+              <Loader2 size={18} class="spin" />
+            {:else}
+              <Radio size={18} />
+            {/if}
           </button>
         {/if}
         {#if onShowAlbumCredits}
@@ -927,5 +934,13 @@
 
   .retry-btn:hover {
     background: var(--bg-hover);
+  }
+
+  :global(.spin) {
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>

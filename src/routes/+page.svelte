@@ -621,6 +621,7 @@
   let historyTracks = $state<QueueTrack[]>([]);
   let infinitePlayEnabled = $state(false);
   let sessionPersistEnabled = $state(false);
+  let radioLoading = $state(false);
 
   // Toast State (from store subscription)
   let toast = $state<ToastData | null>(null);
@@ -1881,6 +1882,8 @@
   // Create album radio via Qobuz /radio/album API
   async function handleCreateAlbumRadio() {
     if (!selectedAlbum) return;
+    radioLoading = true;
+    showToast($t('radio.creating'), 'info');
     try {
       const contextId = await invoke<string>('v2_create_album_radio', {
         albumId: String(selectedAlbum.id),
@@ -1910,11 +1913,15 @@
       }
     } catch (err) {
       console.error('Failed to create album radio:', err);
+    } finally {
+      radioLoading = false;
     }
   }
 
   // Create QBZ track radio (used by PlaylistDetailView, FavoritesView, etc.)
   async function handleCreateQbzTrackRadio(trackId: number, trackTitle: string, artistId?: number) {
+    radioLoading = true;
+    showToast($t('radio.creating'), 'info');
     try {
       await invoke<string>('v2_create_track_radio', {
         trackId,
@@ -1942,11 +1949,15 @@
       }
     } catch (err) {
       console.error('Failed to create QBZ track radio:', err);
+    } finally {
+      radioLoading = false;
     }
   }
 
   // Create Qobuz track radio (used by PlaylistDetailView, FavoritesView, etc.)
   async function handleCreateQobuzTrackRadio(trackId: number, trackTitle: string) {
+    radioLoading = true;
+    showToast($t('radio.creating'), 'info');
     try {
       await invoke<string>('v2_create_qobuz_track_radio', {
         trackId,
@@ -1973,6 +1984,8 @@
       }
     } catch (err) {
       console.error('Failed to create Qobuz track radio:', err);
+    } finally {
+      radioLoading = false;
     }
   }
 
@@ -3712,6 +3725,7 @@
           checkRelatedAlbumDownloaded={checkAlbumFullyDownloaded}
           onShowAlbumCredits={() => selectedAlbum && showAlbumCredits(selectedAlbum.id)}
           onCreateAlbumRadio={handleCreateAlbumRadio}
+          {radioLoading}
         />
       {:else if activeView === 'artist' && selectedArtist}
         <ArtistDetailView
