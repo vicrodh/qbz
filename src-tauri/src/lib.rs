@@ -160,6 +160,176 @@ pub fn update_media_controls_metadata(
     media_controls.set_metadata(&track_info);
 }
 
+/// Add a KWin window rule that forces server-side decorations (SSD) for QBZ.
+///
+/// GTK3 on Wayland hardcodes CLIENT_SIDE in the xdg-decoration protocol,
+/// so KWin scripting alone can't override it. Window rules operate at a
+/// deeper level (applied during window setup, before protocol negotiation)
+/// and can force KWin to draw native SSD.
+///
+/// The rule is written to ~/.config/kwinrulesrc and persists across sessions.
+/// It's removed when the user disables system title bar.
+fn setup_kwin_window_rule() -> Result<(), String> {
+    let config_path = dirs::config_dir()
+        .ok_or_else(|| "Could not determine config directory".to_string())?
+        .join("kwinrulesrc");
+
+    // Read existing rules to find next available slot and check for existing QBZ rule
+    let existing = std::fs::read_to_string(&config_path).unwrap_or_default();
+    let mut existing_count: u32 = 0;
+    let mut qbz_rule_group: Option<u32> = None;
+
+    for line in existing.lines() {
+        // Parse [General] count=N
+        if line.starts_with("count=") {
+            if let Ok(n) = line.trim_start_matches("count=").parse::<u32>() {
+                existing_count = n;
+            }
+        }
+        // Check if we already have a QBZ rule
+        if line.contains("Description=QBZ Native Title Bar") {
+            // Find the group number from context — we'll just scan backwards
+            // Simpler: track current group
+        }
+    }
+
+    // Parse INI to find existing QBZ rule group
+    let mut current_group: Option<u32> = None;
+    for line in existing.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            current_group = inner.parse::<u32>().ok();
+        }
+        if trimmed == "Description=QBZ Native Title Bar" {
+            qbz_rule_group = current_group;
+        }
+    }
+
+    let rule_num = if let Some(num) = qbz_rule_group {
+        log::info!("KWin window rule for QBZ already exists (group {}), updating", num);
+        num
+    } else {
+        existing_count + 1
+    };
+
+    // Write the rule using kwriteconfig6
+    let group = rule_num.to_string();
+    let rules: &[(&str, &str)] = &[
+        ("Description", "QBZ Native Title Bar"),
+        ("noborder", "false"),
+        ("noborderrule", "2"),       // 2 = Force
+        ("wmclass", "qbz"),
+        ("wmclasscomplete", "false"),
+        ("wmclassmatch", "1"),       // 1 = Exact match
+        ("types", "1"),              // 1 = Normal windows
+    ];
+
+    for (key, value) in rules {
+        let output = std::process::Command::new("kwriteconfig6")
+            .args(["--file", "kwinrulesrc", "--group", &group, "--key", key, value])
+            .output()
+            .map_err(|e| format!("kwriteconfig6 failed: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "kwriteconfig6 --key {} failed: {}",
+                key,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    }
+
+    // Update the count in [General] if we added a new rule
+    if qbz_rule_group.is_none() {
+        let new_count = (existing_count + 1).to_string();
+        let output = std::process::Command::new("kwriteconfig6")
+            .args(["--file", "kwinrulesrc", "--group", "General", "--key", "count", &new_count])
+            .output()
+            .map_err(|e| format!("kwriteconfig6 count update failed: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "kwriteconfig6 count failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    }
+
+    // Tell KWin to reload rules
+    let output = std::process::Command::new("qdbus6")
+        .args(["org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"])
+        .output()
+        .map_err(|e| format!("qdbus6 reconfigure failed: {}", e))?;
+
+    if !output.status.success() {
+        log::warn!(
+            "KWin reconfigure failed (non-fatal): {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    log::info!("KWin window rule set for native title bar (group {})", rule_num);
+    Ok(())
+}
+
+/// Remove the KWin window rule for QBZ when system title bar is disabled.
+#[allow(dead_code)]
+fn remove_kwin_window_rule() {
+    // Find and remove QBZ rule from kwinrulesrc
+    let config_path = match dirs::config_dir() {
+        Some(p) => p.join("kwinrulesrc"),
+        None => return,
+    };
+
+    let existing = match std::fs::read_to_string(&config_path) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+
+    // Find the QBZ rule group number
+    let mut current_group: Option<String> = None;
+    let mut qbz_group: Option<String> = None;
+
+    for line in existing.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            current_group = Some(trimmed[1..trimmed.len() - 1].to_string());
+        }
+        if trimmed == "Description=QBZ Native Title Bar" {
+            qbz_group = current_group.clone();
+        }
+    }
+
+    if let Some(group) = qbz_group {
+        // Delete the group using kwriteconfig6
+        let _ = std::process::Command::new("kwriteconfig6")
+            .args(["--file", "kwinrulesrc", "--group", &group, "--delete-group"])
+            .output();
+
+        // Decrement count
+        let mut count: u32 = 0;
+        for line in existing.lines() {
+            if line.starts_with("count=") {
+                count = line.trim_start_matches("count=").parse().unwrap_or(0);
+            }
+        }
+        if count > 0 {
+            let new_count = (count - 1).to_string();
+            let _ = std::process::Command::new("kwriteconfig6")
+                .args(["--file", "kwinrulesrc", "--group", "General", "--key", "count", &new_count])
+                .output();
+        }
+
+        // Reconfigure KWin
+        let _ = std::process::Command::new("qdbus6")
+            .args(["org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"])
+            .output();
+
+        log::info!("KWin window rule for QBZ removed");
+    }
+}
+
 pub fn run() {
     // Load .env file if present (for development)
     // Silently ignore if not found (production builds use compile-time env vars)
@@ -402,13 +572,37 @@ pub fn run() {
         .manage(runtime::RuntimeManagerState::new())
         .manage(user_data_paths)
         .setup(move |app| {
-            // Create main window programmatically so we can set the correct
-            // decoration state at creation time. On Linux/Wayland, windows
-            // created with decorations:false cannot reliably switch to
-            // decorations:true at runtime (WM buttons don't work). By
-            // creating the window with the right value from the start, the
-            // WM sees the correct state when the window is first mapped.
-            log::info!("Creating main window (decorations={})", use_system_titlebar);
+            // On KDE Plasma + Wayland, GTK3 always uses client-side decorations
+            // (CSD) regardless of GTK_CSD env var, because it hardcodes
+            // CLIENT_SIDE in the xdg-decoration protocol. This means
+            // decorations(true) shows a GTK/Breeze-GTK title bar, not the
+            // native KDE Breeze one.
+            //
+            // Workaround: create the window with decorations=false (no GTK CSD),
+            // then load a KWin script via D-Bus that forces KWin to draw its own
+            // server-side decorations (SSD) for QBZ. This gives a single, native
+            // KDE title bar identical to Dolphin/Konsole.
+            let is_kde_wayland = std::env::var("GDK_BACKEND")
+                .map(|v| v == "wayland")
+                .unwrap_or(false)
+                && auto_theme::system::detect_desktop_environment()
+                    == auto_theme::system::DesktopEnvironment::KdePlasma;
+
+            let use_kwin_ssd = use_system_titlebar && is_kde_wayland;
+
+            // On KDE Wayland: always decorations=false, KWin script adds SSD
+            // On other DEs: use decorations directly (GTK CSD is acceptable)
+            let gtk_decorations = if use_kwin_ssd {
+                false
+            } else {
+                use_system_titlebar
+            };
+
+            log::info!(
+                "Creating main window (decorations={}, kwin_ssd={})",
+                gtk_decorations,
+                use_kwin_ssd
+            );
             tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
@@ -417,7 +611,7 @@ pub fn run() {
             .title("QBZ")
             .inner_size(1280.0, 800.0)
             .min_inner_size(800.0, 600.0)
-            .decorations(use_system_titlebar)
+            .decorations(gtk_decorations)
             .transparent(true)
             .resizable(true)
             .zoom_hotkeys_enabled(true)
@@ -426,6 +620,15 @@ pub fn run() {
                 log::error!("Failed to create main window: {}", e);
                 e
             })?;
+
+            // Add KWin window rule to force server-side decorations for QBZ
+            if use_kwin_ssd {
+                std::thread::spawn(|| {
+                    if let Err(e) = setup_kwin_window_rule() {
+                        log::warn!("Failed to set KWin window rule: {}", e);
+                    }
+                });
+            }
 
             // Initialize system tray icon (only if enabled)
             if enable_tray {
