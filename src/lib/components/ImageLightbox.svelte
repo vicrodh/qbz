@@ -6,15 +6,13 @@
     onClose: () => void;
     src: string;
     alt?: string;
-    round?: boolean;
   }
 
   let {
     isOpen,
     onClose,
     src,
-    alt = '',
-    round = false
+    alt = ''
   }: Props = $props();
 
   function handleBackdropClick(e: MouseEvent) {
@@ -48,7 +46,6 @@
         {src}
         {alt}
         class="lightbox-image"
-        class:round
       />
       <button class="lightbox-close" onclick={onClose}>
         <X size={18} />
@@ -89,10 +86,6 @@
     object-fit: contain;
     border-radius: 8px;
     box-shadow: 0 16px 64px rgba(0, 0, 0, 0.6);
-  }
-
-  .lightbox-image.round {
-    border-radius: 50%;
   }
 
   .lightbox-close {

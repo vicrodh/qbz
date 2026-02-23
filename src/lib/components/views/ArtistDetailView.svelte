@@ -2450,7 +2450,6 @@
   onClose={() => lightboxOpen = false}
   src={artist.image ?? ''}
   alt={artist.name}
-  round={true}
 />
 
 <style>
