@@ -166,6 +166,45 @@ pub struct GeneratedTheme {
     pub source: String,
 }
 
+/// Full color scheme read from the desktop environment.
+///
+/// Maps directly to the semantic color roles in KDE kdeglobals, GNOME dconf, etc.
+/// Each field is optional because not all DEs expose all colors.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemColorScheme {
+    // Backgrounds
+    pub window_bg: Option<PaletteColor>,
+    pub window_bg_alt: Option<PaletteColor>,
+    pub view_bg: Option<PaletteColor>,
+    pub button_bg: Option<PaletteColor>,
+    pub header_bg: Option<PaletteColor>,
+    pub header_bg_inactive: Option<PaletteColor>,
+    pub tooltip_bg: Option<PaletteColor>,
+
+    // Foregrounds (text)
+    pub window_fg: Option<PaletteColor>,
+    pub window_fg_inactive: Option<PaletteColor>,
+    pub view_fg: Option<PaletteColor>,
+    pub button_fg: Option<PaletteColor>,
+
+    // Selection / accent
+    pub selection_bg: Option<PaletteColor>,
+    pub selection_fg: Option<PaletteColor>,
+    pub selection_hover: Option<PaletteColor>,
+    pub accent: Option<PaletteColor>,
+
+    // Semantic
+    pub fg_link: Option<PaletteColor>,
+    pub fg_negative: Option<PaletteColor>,
+    pub fg_neutral: Option<PaletteColor>,
+    pub fg_positive: Option<PaletteColor>,
+
+    // Window manager
+    pub wm_active_bg: Option<PaletteColor>,
+    pub wm_active_fg: Option<PaletteColor>,
+    pub wm_inactive_bg: Option<PaletteColor>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

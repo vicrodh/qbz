@@ -1110,6 +1110,8 @@ pub fn run() {
             commands_v2::v2_get_system_accent_color,
             commands_v2::v2_generate_theme_from_image,
             commands_v2::v2_generate_theme_from_wallpaper,
+            commands_v2::v2_generate_theme_from_system_colors,
+            commands_v2::v2_get_system_color_scheme,
             commands_v2::v2_extract_palette,
         ])
         .run(tauri::generate_context!())

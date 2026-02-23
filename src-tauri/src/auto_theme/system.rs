@@ -6,7 +6,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
 
-use super::PaletteColor;
+use super::{PaletteColor, SystemColorScheme};
 
 /// Supported desktop environments.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -509,6 +509,141 @@ fn parse_cosmic_color(content: &str) -> Option<PaletteColor> {
     } else {
         None
     }
+}
+
+// ── Full color scheme ────────────────────────────────────────────────────
+
+/// Read the full system color scheme from the current DE.
+pub fn get_system_color_scheme() -> Result<SystemColorScheme, String> {
+    let de = detect_desktop_environment();
+    match de {
+        DesktopEnvironment::KdePlasma => get_kde_color_scheme(),
+        DesktopEnvironment::Gnome => get_gnome_color_scheme(),
+        _ => Err(format!(
+            "Full color scheme not supported for {}",
+            de.display_name()
+        )),
+    }
+}
+
+fn get_kde_color_scheme() -> Result<SystemColorScheme, String> {
+    let home = env::var("HOME").map_err(|_| "HOME not set".to_string())?;
+    let config_path = format!("{}/.config/kdeglobals", home);
+    let content =
+        fs::read_to_string(&config_path).map_err(|e| format!("Cannot read kdeglobals: {}", e))?;
+
+    // Also check [General] AccentColor
+    let accent_explicit = read_kde_color_key(&content, "[General]", "AccentColor");
+
+    let scheme = SystemColorScheme {
+        // Window
+        window_bg: read_kde_color_key(&content, "[Colors:Window]", "BackgroundNormal"),
+        window_bg_alt: read_kde_color_key(&content, "[Colors:Window]", "BackgroundAlternate"),
+        view_bg: read_kde_color_key(&content, "[Colors:View]", "BackgroundNormal"),
+        button_bg: read_kde_color_key(&content, "[Colors:Button]", "BackgroundNormal"),
+        header_bg: read_kde_color_key(&content, "[Colors:Header]", "BackgroundNormal"),
+        header_bg_inactive: read_kde_color_key(&content, "[Colors:Header][Inactive]", "BackgroundNormal"),
+        tooltip_bg: read_kde_color_key(&content, "[Colors:Tooltip]", "BackgroundNormal"),
+
+        // Foregrounds
+        window_fg: read_kde_color_key(&content, "[Colors:Window]", "ForegroundNormal"),
+        window_fg_inactive: read_kde_color_key(&content, "[Colors:Window]", "ForegroundInactive"),
+        view_fg: read_kde_color_key(&content, "[Colors:View]", "ForegroundNormal"),
+        button_fg: read_kde_color_key(&content, "[Colors:Button]", "ForegroundNormal"),
+
+        // Selection / accent
+        selection_bg: read_kde_color_key(&content, "[Colors:Selection]", "BackgroundNormal"),
+        selection_fg: read_kde_color_key(&content, "[Colors:Selection]", "ForegroundNormal"),
+        selection_hover: read_kde_color_key(&content, "[Colors:Selection]", "DecorationHover"),
+        accent: accent_explicit.or_else(|| {
+            read_kde_color_key(&content, "[Colors:Selection]", "DecorationFocus")
+        }),
+
+        // Semantic
+        fg_link: read_kde_color_key(&content, "[Colors:Window]", "ForegroundLink"),
+        fg_negative: read_kde_color_key(&content, "[Colors:Window]", "ForegroundNegative"),
+        fg_neutral: read_kde_color_key(&content, "[Colors:Window]", "ForegroundNeutral"),
+        fg_positive: read_kde_color_key(&content, "[Colors:Window]", "ForegroundPositive"),
+
+        // Window manager
+        wm_active_bg: read_kde_color_key(&content, "[WM]", "activeBackground"),
+        wm_active_fg: read_kde_color_key(&content, "[WM]", "activeForeground"),
+        wm_inactive_bg: read_kde_color_key(&content, "[WM]", "inactiveBackground"),
+    };
+
+    // Validate: at minimum we need window_bg and some accent
+    if scheme.window_bg.is_none() {
+        return Err("KDE color scheme missing Colors:Window BackgroundNormal".into());
+    }
+
+    Ok(scheme)
+}
+
+fn get_gnome_color_scheme() -> Result<SystemColorScheme, String> {
+    // GNOME exposes much less via dconf. We can detect dark vs light and accent.
+    // Full background/text colors are determined by GTK theme, not easily readable.
+    let accent = get_gnome_accent().ok();
+
+    // Detect dark/light preference
+    let is_dark = Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
+        .output()
+        .ok()
+        .and_then(|o| {
+            if o.status.success() {
+                let val = String::from_utf8_lossy(&o.stdout).trim().to_lowercase();
+                Some(val.contains("dark"))
+            } else {
+                None
+            }
+        })
+        .unwrap_or(true);
+
+    // Build a minimal scheme with GNOME defaults
+    let (bg, bg_alt, view_bg, btn_bg, fg, fg_inactive) = if is_dark {
+        (
+            PaletteColor::new(36, 36, 36),   // Adwaita Dark
+            PaletteColor::new(48, 48, 48),
+            PaletteColor::new(30, 30, 30),
+            PaletteColor::new(60, 60, 60),
+            PaletteColor::new(255, 255, 255),
+            PaletteColor::new(140, 140, 140),
+        )
+    } else {
+        (
+            PaletteColor::new(246, 245, 244), // Adwaita Light
+            PaletteColor::new(235, 235, 235),
+            PaletteColor::new(255, 255, 255),
+            PaletteColor::new(225, 225, 225),
+            PaletteColor::new(36, 36, 36),
+            PaletteColor::new(120, 120, 120),
+        )
+    };
+
+    Ok(SystemColorScheme {
+        window_bg: Some(bg),
+        window_bg_alt: Some(bg_alt),
+        view_bg: Some(view_bg),
+        button_bg: Some(btn_bg),
+        header_bg: None,
+        header_bg_inactive: None,
+        tooltip_bg: None,
+        window_fg: Some(fg),
+        window_fg_inactive: Some(fg_inactive),
+        view_fg: Some(fg),
+        button_fg: Some(PaletteColor::new(255, 255, 255)),
+        selection_bg: accent.clone(),
+        selection_fg: Some(PaletteColor::new(255, 255, 255)),
+        selection_hover: None,
+        accent,
+        fg_link: None,
+        fg_negative: Some(PaletteColor::new(224, 27, 36)),
+        fg_neutral: Some(PaletteColor::new(205, 147, 9)),
+        fg_positive: Some(PaletteColor::new(38, 162, 105)),
+        wm_active_bg: None,
+        wm_active_fg: None,
+        wm_inactive_bg: None,
+    })
 }
 
 fn is_image_path(path: &str) -> bool {

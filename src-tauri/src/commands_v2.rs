@@ -10176,6 +10176,17 @@ pub async fn v2_generate_theme_from_wallpaper() -> Result<crate::auto_theme::Gen
 }
 
 #[tauri::command]
+pub fn v2_generate_theme_from_system_colors() -> Result<crate::auto_theme::GeneratedTheme, String> {
+    let scheme = crate::auto_theme::system::get_system_color_scheme()?;
+    Ok(crate::auto_theme::generator::generate_theme_from_scheme(&scheme))
+}
+
+#[tauri::command]
+pub fn v2_get_system_color_scheme() -> Result<crate::auto_theme::SystemColorScheme, String> {
+    crate::auto_theme::system::get_system_color_scheme()
+}
+
+#[tauri::command]
 #[allow(non_snake_case)]
 pub async fn v2_extract_palette(
     imagePath: String,

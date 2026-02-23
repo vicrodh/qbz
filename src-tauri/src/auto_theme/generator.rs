@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use super::{GeneratedTheme, PaletteColor, ThemePalette};
+use super::{GeneratedTheme, PaletteColor, SystemColorScheme, ThemePalette};
 
 /// Generate a full CSS theme from an extracted palette.
 pub fn generate_theme(palette: &ThemePalette, source: &str) -> GeneratedTheme {
@@ -139,6 +139,193 @@ pub fn generate_theme(palette: &ThemePalette, source: &str) -> GeneratedTheme {
         variables: vars,
         is_dark: palette.is_dark,
         source: source.to_string(),
+    }
+}
+
+/// Generate a full CSS theme directly from a DE color scheme.
+///
+/// Instead of k-means extraction, this maps the DE's semantic colors (window bg,
+/// view bg, button bg, selection, etc.) directly to CSS variables — producing a
+/// theme that matches the system look exactly.
+pub fn generate_theme_from_scheme(scheme: &SystemColorScheme) -> GeneratedTheme {
+    let mut vars = HashMap::new();
+
+    // Determine dark/light from the window background
+    let window_bg = scheme
+        .window_bg
+        .unwrap_or(PaletteColor::new(40, 40, 40));
+    let is_dark = window_bg.luminance() < 0.5;
+
+    // ── Backgrounds ──────────────────────────────────────────────────────
+    vars.insert("--bg-primary".into(), window_bg.to_hex());
+
+    let bg_secondary = scheme.view_bg.unwrap_or_else(|| {
+        if is_dark {
+            window_bg.shift_lightness(0.03)
+        } else {
+            window_bg.shift_lightness(-0.03)
+        }
+    });
+    vars.insert("--bg-secondary".into(), bg_secondary.to_hex());
+
+    let bg_tertiary = scheme.button_bg.unwrap_or_else(|| {
+        if is_dark {
+            window_bg.shift_lightness(0.10)
+        } else {
+            window_bg.shift_lightness(-0.10)
+        }
+    });
+    vars.insert("--bg-tertiary".into(), bg_tertiary.to_hex());
+
+    // Hover: midpoint between primary and secondary
+    let bg_hover = scheme.window_bg_alt.unwrap_or_else(|| {
+        PaletteColor::new(
+            ((window_bg.r as u16 + bg_secondary.r as u16) / 2) as u8,
+            ((window_bg.g as u16 + bg_secondary.g as u16) / 2) as u8,
+            ((window_bg.b as u16 + bg_secondary.b as u16) / 2) as u8,
+        )
+    });
+    vars.insert("--bg-hover".into(), bg_hover.to_hex());
+
+    // ── Text ─────────────────────────────────────────────────────────────
+    let text_primary = scheme
+        .window_fg
+        .unwrap_or(if is_dark {
+            PaletteColor::new(223, 223, 223)
+        } else {
+            PaletteColor::new(36, 36, 36)
+        });
+    let text_primary = ensure_text_contrast(text_primary, &window_bg, is_dark);
+    vars.insert("--text-primary".into(), text_primary.to_hex());
+
+    // Secondary: slightly dimmed from primary
+    let text_secondary = scheme.view_fg.unwrap_or_else(|| {
+        text_primary.shift_lightness(if is_dark { -0.10 } else { 0.10 })
+    });
+    vars.insert("--text-secondary".into(), text_secondary.to_hex());
+
+    let text_muted = scheme.window_fg_inactive.unwrap_or_else(|| {
+        text_primary.shift_lightness(if is_dark { -0.25 } else { 0.25 })
+    });
+    vars.insert("--text-muted".into(), text_muted.to_hex());
+
+    let text_disabled = text_muted.shift_lightness(if is_dark { -0.10 } else { 0.10 });
+    vars.insert("--text-disabled".into(), text_disabled.to_hex());
+
+    // ── Accent (selection) ───────────────────────────────────────────────
+    let accent = scheme
+        .accent
+        .or(scheme.selection_bg)
+        .unwrap_or(PaletteColor::new(0, 120, 215));
+    vars.insert("--accent-primary".into(), accent.to_hex());
+
+    let accent_hover = scheme
+        .selection_hover
+        .unwrap_or_else(|| accent.shift_lightness(0.10));
+    vars.insert("--accent-hover".into(), accent_hover.to_hex());
+    vars.insert(
+        "--accent-active".into(),
+        accent.shift_lightness(-0.10).to_hex(),
+    );
+
+    // Button text on accent
+    let btn_text = scheme.selection_fg.unwrap_or(
+        if accent.luminance() < 0.5 {
+            PaletteColor::new(255, 255, 255)
+        } else {
+            PaletteColor::new(0, 0, 0)
+        },
+    );
+    vars.insert("--btn-primary-text".into(), btn_text.to_hex());
+
+    // ── Status colors ────────────────────────────────────────────────────
+    // Use system negative/neutral if available, else fallback to safe defaults
+    let danger = scheme
+        .fg_negative
+        .unwrap_or(if is_dark {
+            PaletteColor::new(239, 68, 68)
+        } else {
+            PaletteColor::new(220, 38, 38)
+        });
+    vars.insert("--danger".into(), danger.to_hex());
+    vars.insert("--danger-bg".into(), danger.to_rgba(0.1));
+    vars.insert("--danger-border".into(), danger.to_rgba(0.3));
+    vars.insert(
+        "--danger-hover".into(),
+        danger.to_rgba(if is_dark { 0.2 } else { 0.15 }),
+    );
+
+    let warning = scheme
+        .fg_neutral
+        .unwrap_or(if is_dark {
+            PaletteColor::new(251, 191, 36)
+        } else {
+            PaletteColor::new(217, 119, 6)
+        });
+    vars.insert("--warning".into(), warning.to_hex());
+    vars.insert("--warning-bg".into(), warning.to_rgba(0.1));
+    vars.insert("--warning-border".into(), warning.to_rgba(0.3));
+    vars.insert(
+        "--warning-hover".into(),
+        warning.to_rgba(if is_dark { 0.2 } else { 0.15 }),
+    );
+
+    // ── Borders ──────────────────────────────────────────────────────────
+    let border_subtle = if is_dark {
+        window_bg.shift_lightness(0.06)
+    } else {
+        window_bg.shift_lightness(-0.06)
+    };
+    let border_strong = if is_dark {
+        window_bg.shift_lightness(0.12)
+    } else {
+        window_bg.shift_lightness(-0.12)
+    };
+    vars.insert("--border-subtle".into(), border_subtle.to_hex());
+    vars.insert("--border-strong".into(), border_strong.to_hex());
+
+    // ── Alpha tokens ─────────────────────────────────────────────────────
+    let alpha_base = if is_dark {
+        (255, 255, 255)
+    } else {
+        (0, 0, 0)
+    };
+    let alpha_levels: &[(f64, &str)] = &[
+        (0.04, "--alpha-4"),
+        (0.05, "--alpha-5"),
+        (0.06, "--alpha-6"),
+        (0.08, "--alpha-8"),
+        (0.10, "--alpha-10"),
+        (0.15, "--alpha-15"),
+        (0.18, "--alpha-18"),
+        (0.20, "--alpha-20"),
+        (0.25, "--alpha-25"),
+        (0.30, "--alpha-30"),
+        (0.35, "--alpha-35"),
+        (0.40, "--alpha-40"),
+        (0.45, "--alpha-45"),
+        (0.50, "--alpha-50"),
+        (0.60, "--alpha-60"),
+        (0.70, "--alpha-70"),
+        (0.80, "--alpha-80"),
+        (0.85, "--alpha-85"),
+        (0.90, "--alpha-90"),
+        (0.95, "--alpha-95"),
+    ];
+    for (alpha, name) in alpha_levels {
+        vars.insert(
+            name.to_string(),
+            format!(
+                "rgba({}, {}, {}, {})",
+                alpha_base.0, alpha_base.1, alpha_base.2, alpha
+            ),
+        );
+    }
+
+    GeneratedTheme {
+        variables: vars,
+        is_dark,
+        source: "system-colors".to_string(),
     }
 }
 
