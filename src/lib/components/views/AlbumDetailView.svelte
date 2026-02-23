@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { t } from 'svelte-i18n';
-  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, Loader2 } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, Loader2, CheckSquare } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
+  import BulkActionBar from '../BulkActionBar.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { getOfflineCacheState, type OfflineCacheStatus, isAlbumFullyCached } from '$lib/stores/offlineCacheState';
   import { consumeContextTrackFocus } from '$lib/stores/playbackContextStore';
@@ -156,6 +158,60 @@
   let isFavoriteLoading = $state(false);
   let lightboxOpen = $state(false);
   let scrollContainer: HTMLDivElement | null = $state(null);
+
+  // Multi-select
+  let multiSelectMode = $state(false);
+  let multiSelectedIds = $state(new Set<number>());
+
+  function toggleMultiSelectMode() {
+    multiSelectMode = !multiSelectMode;
+    if (!multiSelectMode) multiSelectedIds = new Set();
+  }
+
+  function toggleMultiSelect(id: number) {
+    const next = new Set(multiSelectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    multiSelectedIds = next;
+  }
+
+  function buildAlbumQueueTracks(tracks: Track[]) {
+    return tracks.map(trk => ({
+      id: trk.id,
+      title: trk.title,
+      artist: trk.artist || album.artist,
+      album: album.title,
+      duration_secs: trk.durationSeconds,
+      artwork_url: album.artwork || null,
+      hires: trk.hires ?? false,
+      bit_depth: trk.bitDepth ?? null,
+      sample_rate: trk.samplingRate ?? null,
+      is_local: false,
+      album_id: album.id || null,
+      artist_id: album.artistId ?? null,
+    }));
+  }
+
+  async function handleBulkPlayNext() {
+    const selected = album.tracks.filter(t => multiSelectedIds.has(t.id));
+    await invoke('v2_add_tracks_to_queue_next', { tracks: buildAlbumQueueTracks(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkPlayLater() {
+    const selected = album.tracks.filter(t => multiSelectedIds.has(t.id));
+    await invoke('v2_add_tracks_to_queue', { tracks: buildAlbumQueueTracks(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddToPlaylist() {
+    for (const id of multiSelectedIds) { onAddTrackToPlaylist?.(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddFavorites() {
+    for (const id of multiSelectedIds) { onTrackAddFavorite?.(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
 
   // Carousel state for "By the same artist" section
   let carouselContainer: HTMLDivElement | null = $state(null);
@@ -429,6 +485,14 @@
           onOpenContainingFolder={onOpenAlbumFolder}
           onReDownloadAlbum={onReDownloadAlbum}
         />
+        <button
+          class="action-btn-circle"
+          class:is-active={multiSelectMode}
+          onclick={toggleMultiSelectMode}
+          title={multiSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+        >
+          <CheckSquare size={18} />
+        </button>
       </div>
     </div>
   </div>
@@ -471,6 +535,9 @@
           quality={track.quality}
           isPlaying={activeTrackId === track.id}
           isBlacklisted={trackBlacklisted}
+          selectable={multiSelectMode}
+          selected={multiSelectedIds.has(track.id)}
+          onToggleSelect={() => toggleMultiSelect(track.id)}
           downloadStatus={downloadInfo.status}
           downloadProgress={downloadInfo.progress}
           hideFavorite={trackBlacklisted}
@@ -505,6 +572,15 @@
       {/if}
     </div>
   </div>
+
+  <BulkActionBar
+    count={multiSelectedIds.size}
+    onPlayNext={handleBulkPlayNext}
+    onPlayLater={handleBulkPlayLater}
+    onAddToPlaylist={handleBulkAddToPlaylist}
+    onAddFavorites={onTrackAddFavorite ? handleBulkAddFavorites : undefined}
+    onClearSelection={() => { multiSelectedIds = new Set(); }}
+  />
 
   <!-- By the same artist Section -->
   {#if filteredArtistAlbums.length > 0 && !isVariousArtists}

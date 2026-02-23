@@ -1,9 +1,10 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
   import { onMount, onDestroy } from 'svelte';
-  import { ArrowLeft, Info, ListPlus, Play, Search, Shuffle, X } from 'lucide-svelte';
+  import { ArrowLeft, Info, ListPlus, Play, Search, Shuffle, X, CheckSquare } from 'lucide-svelte';
   import PlaylistModal from '$lib/components/PlaylistModal.svelte';
   import TrackRow from '$lib/components/TrackRow.svelte';
+  import BulkActionBar from '$lib/components/BulkActionBar.svelte';
   import { t } from '$lib/i18n';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import { getDynamicSuggest } from '$lib/services/dynamicSuggest';
@@ -86,6 +87,38 @@
 
   let loading = $state(false);
   let showPlaylistModal = $state(false);
+
+  // Multi-select
+  let multiSelectMode = $state(false);
+  let multiSelectedIds = $state(new Set<number>());
+
+  function toggleMultiSelectMode() {
+    multiSelectMode = !multiSelectMode;
+    if (!multiSelectMode) multiSelectedIds = new Set();
+  }
+
+  function toggleMultiSelect(id: number) {
+    const next = new Set(multiSelectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    multiSelectedIds = next;
+  }
+
+  async function handleBulkPlayNext() {
+    const selected = filteredTracks.filter(t => multiSelectedIds.has(t.id));
+    await invoke('v2_add_tracks_to_queue_next', { tracks: buildQueueTracks(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkPlayLater() {
+    const selected = filteredTracks.filter(t => multiSelectedIds.has(t.id));
+    await invoke('v2_add_tracks_to_queue', { tracks: buildQueueTracks(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddToPlaylist() {
+    for (const id of multiSelectedIds) { onTrackAddToPlaylist?.(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
   let userPlaylists = $state<Playlist[]>([]);
   let playlistModalTrackIds = $state<number[]>([]);
   let error = $state<string | null>(null);
@@ -463,6 +496,14 @@
         </button>
       {/if}
     </div>
+    <button
+      class="select-btn"
+      class:active={multiSelectMode}
+      onclick={toggleMultiSelectMode}
+      title={multiSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+    >
+      <CheckSquare size={16} />
+    </button>
   </div>
 
   {#if !result && loading}
@@ -498,6 +539,9 @@
           artworkUrl={getQobuzImage(track.album?.image)}
           isPlaying={isPlaybackActive && activeTrackId === track.id}
           isBlacklisted={trackBlacklisted}
+          selectable={multiSelectMode}
+          selected={multiSelectedIds.has(track.id)}
+          onToggleSelect={() => toggleMultiSelect(track.id)}
           hideDownload={trackBlacklisted}
           hideFavorite={trackBlacklisted}
           downloadStatus={cacheStatus.status}
@@ -528,6 +572,14 @@
       {/each}
     </div>
   {/if}
+
+  <BulkActionBar
+    count={multiSelectedIds.size}
+    onPlayNext={handleBulkPlayNext}
+    onPlayLater={handleBulkPlayLater}
+    onAddToPlaylist={handleBulkAddToPlaylist}
+    onClearSelection={() => { multiSelectedIds = new Set(); }}
+  />
 </div>
 
 <PlaylistModal
@@ -736,6 +788,26 @@
     gap: 16px;
     margin-top: 24px;
     margin-bottom: 16px;
+  }
+
+  .select-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: color 150ms ease, background 150ms ease;
+  }
+
+  .select-btn:hover { color: var(--text-primary); }
+
+  .select-btn.active {
+    color: var(--accent-primary);
+    background: color-mix(in srgb, var(--accent-primary) 12%, transparent);
   }
 
   .search-container {

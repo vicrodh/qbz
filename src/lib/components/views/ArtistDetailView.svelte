@@ -3,7 +3,7 @@
   import { open } from '@tauri-apps/plugin-dialog';
   import { setCustomImage, removeCustomImage as removeCustomImageFromStore } from '$lib/stores/customArtistImageStore';
   import { t } from 'svelte-i18n';
-  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Settings } from 'lucide-svelte';
+  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Settings, CheckSquare } from 'lucide-svelte';
   import {
     isBlacklisted,
     isEnabled as isFilteringEnabled,
@@ -15,6 +15,7 @@
   import type { ArtistDetail, QobuzArtist, PageArtistTrack, PageArtistSimilarItem } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
+  import BulkActionBar from '../BulkActionBar.svelte';
   import QualityBadge from '../QualityBadge.svelte';
   import { consumeContextTrackFocus, setPlaybackContext, getPlaybackContext } from '$lib/stores/playbackContextStore';
   import { saveScrollPosition, getSavedScrollPosition } from '$lib/stores/navigationStore';
@@ -305,6 +306,62 @@
   // Computed visible tracks
   let visibleTracks = $derived(topTracks.slice(0, visibleTracksCount));
   let canLoadMoreTracks = $derived(visibleTracksCount < 50 && topTracks.length > visibleTracksCount);
+
+  // Multi-select (popular tracks)
+  let multiSelectMode = $state(false);
+  let multiSelectedIds = $state(new Set<number>());
+
+  function toggleMultiSelectMode() {
+    multiSelectMode = !multiSelectMode;
+    if (!multiSelectMode) multiSelectedIds = new Set();
+  }
+
+  function toggleMultiSelect(id: number) {
+    const next = new Set(multiSelectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    multiSelectedIds = next;
+  }
+
+  function buildArtistQueueTracks(tracks: typeof topTracks) {
+    return tracks
+      .filter(trk => !trk.performer?.id || !isBlacklisted(trk.performer.id))
+      .map(trk => ({
+        id: trk.id,
+        title: trk.title,
+        artist: trk.performer?.name || artist?.name || 'Unknown',
+        album: trk.album?.title || '',
+        duration_secs: trk.duration,
+        artwork_url: trk.album?.image?.large || trk.album?.image?.thumbnail || null,
+        hires: trk.hires_streamable ?? false,
+        bit_depth: trk.maximum_bit_depth ?? null,
+        sample_rate: trk.maximum_sampling_rate ?? null,
+        is_local: false,
+        album_id: trk.album?.id || null,
+        artist_id: trk.performer?.id ?? null,
+      }));
+  }
+
+  async function handleBulkPlayNext() {
+    const selected = visibleTracks.filter(trk => multiSelectedIds.has(trk.id));
+    await invoke('v2_add_tracks_to_queue_next', { tracks: buildArtistQueueTracks(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkPlayLater() {
+    const selected = visibleTracks.filter(trk => multiSelectedIds.has(trk.id));
+    await invoke('v2_add_tracks_to_queue', { tracks: buildArtistQueueTracks(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddToPlaylist() {
+    for (const id of multiSelectedIds) { onTrackAddToPlaylist?.(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddFavorites() {
+    for (const id of multiSelectedIds) { await toggleTrackFavorite(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
 
   function loadMoreTracks() {
     if (visibleTracksCount === 5) {
@@ -1707,6 +1764,14 @@
             <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
               <Play size={20} fill="currentColor" color="currentColor" />
             </button>
+            <button
+              class="action-btn-circle"
+              class:is-active={multiSelectMode}
+              onclick={toggleMultiSelectMode}
+              title={multiSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+            >
+              <CheckSquare size={18} />
+            </button>
             <div class="context-menu-wrapper">
               <button
                 class="action-btn-circle"
@@ -1746,16 +1811,28 @@
             <div
               class="track-row"
               class:playing={isActiveTrack}
+              class:multi-selected={multiSelectMode && multiSelectedIds.has(track.id)}
               role="button"
               tabindex="0"
               data-track-id={track.id}
-              onclick={() => handleTrackPlay(track, index)}
-              onkeydown={(e) => e.key === 'Enter' && handleTrackPlay(track, index)}
+              onclick={() => multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index)}
+              onkeydown={(e) => e.key === 'Enter' && (multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index))}
               oncontextmenu={(e) => {
+                if (multiSelectMode) return;
                 e.preventDefault();
                 trackContextMenu = { trackId: track.id, x: e.clientX, y: e.clientY };
               }}
             >
+              {#if multiSelectMode}
+                <label class="track-checkbox-wrap" onclick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={multiSelectedIds.has(track.id)}
+                    onchange={() => toggleMultiSelect(track.id)}
+                    style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent-primary);"
+                  />
+                </label>
+              {/if}
               <div class="track-number">{index + 1}</div>
               <div class="track-artwork">
                 <!-- Placeholder always visible as background -->
@@ -1866,6 +1943,15 @@
         {/if}
       {/if}
     </div>
+
+    <BulkActionBar
+      count={multiSelectedIds.size}
+      onPlayNext={handleBulkPlayNext}
+      onPlayLater={handleBulkPlayLater}
+      onAddToPlaylist={handleBulkAddToPlaylist}
+      onAddFavorites={handleBulkAddFavorites}
+      onClearSelection={() => { multiSelectedIds = new Set(); }}
+    />
   {/if}
 
   <!-- Discography Section -->
@@ -3829,6 +3915,19 @@
 
   .track-row:hover {
     background-color: var(--bg-tertiary);
+  }
+
+  .track-row.multi-selected {
+    background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  }
+
+  .track-checkbox-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    flex-shrink: 0;
+    cursor: pointer;
   }
 
   .track-number {
