@@ -1,8 +1,8 @@
 //! QBZ Cache - Audio caching system
 //!
 //! Provides two-level caching for audio data:
-//! - **L1 (Memory)**: In-memory LRU cache (~300MB, fast access)
-//! - **L2 (Disk)**: Disk-based playback cache (~500MB, persistent)
+//! - **L1 (Memory)**: In-memory LRU cache (~400MB, fast access)
+//! - **L2 (Disk)**: Disk-based playback cache (~800MB, persistent)
 //!
 //! ## Architecture
 //!
@@ -15,7 +15,7 @@
 //! ┌─────────────────────────────────────────────────────────┐
 //! │              L1 Memory Cache (AudioCache)                │
 //! │  - Fast HashMap + LRU tracking                           │
-//! │  - ~300MB limit (3-4 Hi-Res tracks)                      │
+//! │  - ~400MB limit (3-4 Hi-Res tracks)                      │
 //! │  - Evicted tracks spill to L2                            │
 //! └─────────────────────────────────────────────────────────┘
 //!                           │ miss/evict
@@ -23,7 +23,7 @@
 //! ┌─────────────────────────────────────────────────────────┐
 //! │              L2 Disk Cache (PlaybackCache)               │
 //! │  - File-based storage                                    │
-//! │  - ~500MB limit                                          │
+//! │  - ~800MB limit                                          │
 //! │  - LRU eviction by access time                           │
 //! └─────────────────────────────────────────────────────────┘
 //!                           │ miss
@@ -38,11 +38,11 @@
 //! use std::sync::Arc;
 //!
 //! // Create L2 disk cache
-//! let playback_cache = Arc::new(PlaybackCache::new(500 * 1024 * 1024).unwrap());
+//! let playback_cache = Arc::new(PlaybackCache::new(800 * 1024 * 1024).unwrap());
 //!
 //! // Create L1 memory cache with L2 spillover
 //! let audio_cache = AudioCache::with_playback_cache(
-//!     300 * 1024 * 1024,
+//!     400 * 1024 * 1024,
 //!     playback_cache.clone()
 //! );
 //!

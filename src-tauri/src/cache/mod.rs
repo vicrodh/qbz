@@ -3,8 +3,8 @@
 //! Re-exports from qbz-cache crate for backwards compatibility.
 //!
 //! Provides two-level caching for audio data:
-//! - L1: In-memory LRU cache (fast, limited to ~300MB)
-//! - L2: Disk-based playback cache (slower, larger ~500MB)
+//! - L1: In-memory LRU cache (fast, limited to ~400MB)
+//! - L2: Disk-based playback cache (slower, larger ~800MB)
 //!
 //! Flow:
 //! 1. When a track is evicted from memory, it's saved to disk cache
