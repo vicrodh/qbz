@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { invoke } from '@tauri-apps/api/core';
   import { onMount, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
-  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library, CloudDownload, Shuffle, MoreHorizontal, PanelLeftClose, Loader2, ArrowLeft } from 'lucide-svelte';
+  import { Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, CloudDownload, Shuffle, MoreHorizontal, PanelLeftClose, Loader2, ArrowLeft } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import QualityBadge from '../QualityBadge.svelte';
@@ -373,18 +373,6 @@
   }
 
   let showTracksContextMenu = $state(false);
-  function resolveCustomIconSrc(path: string | null): string | null {
-    if (!path) return null;
-    if (path.startsWith('asset://') || path.startsWith('http://asset.localhost') || path.startsWith('https://asset.localhost')) {
-      return path;
-    }
-    if (path.startsWith('file://')) {
-      return path;
-    }
-    return convertFileSrc(path);
-  }
-
-  let customIconSrc = $derived.by(() => resolveCustomIconSrc(favoritesPreferences.custom_icon_path));
 
   async function scrollToTrack(trackId: number) {
     await tick();
@@ -1184,34 +1172,6 @@
   </div>
   <!-- Header -->
   <div class="header">
-    <div
-      class="header-icon"
-      style={favoritesPreferences.icon_background ? `background: ${favoritesPreferences.icon_background};` : ''}
-    >
-      {#if customIconSrc}
-        <img
-          src={customIconSrc}
-          alt="Custom Icon"
-          class="custom-icon-img"
-        />
-      {:else if favoritesPreferences.custom_icon_preset}
-        {#if favoritesPreferences.custom_icon_preset === 'heart'}
-          <Heart size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
-        {:else if favoritesPreferences.custom_icon_preset === 'star'}
-          <svelte:component this={Star} size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
-        {:else if favoritesPreferences.custom_icon_preset === 'music'}
-          <Music size={32} color="var(--accent-primary)" />
-        {:else if favoritesPreferences.custom_icon_preset === 'folder'}
-          <svelte:component this={Folder} size={32} color="var(--accent-primary)" />
-        {:else if favoritesPreferences.custom_icon_preset === 'disc'}
-          <Disc3 size={32} color="var(--accent-primary)" />
-        {:else if favoritesPreferences.custom_icon_preset === 'library'}
-          <svelte:component this={Library} size={32} color="var(--accent-primary)" />
-        {/if}
-      {:else}
-        <Heart size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
-      {/if}
-    </div>
     <div class="header-content">
       <h1>{$t('favorites.title')}</h1>
       {#if activeTab === 'tracks' && !loading && filteredTracks.length > 0}
@@ -2074,22 +2034,7 @@
     margin-bottom: 16px;
   }
 
-  .header-icon {
-    width: 94px;
-    height: 94px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, var(--accent-primary) 0%, #ff6b9d 100%);
-    border-radius: 16px;
-    overflow: hidden;
-  }
 
-  .custom-icon-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
 
   .header-content {
     flex: 1;

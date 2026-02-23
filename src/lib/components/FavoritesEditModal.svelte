@@ -1,8 +1,8 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
-  import { open } from '@tauri-apps/plugin-dialog';
   import Modal from './Modal.svelte';
-  import { Heart, Star, Music, Folder, Disc, Library, Headphones, Upload, GripVertical } from 'lucide-svelte';
+  import { GripVertical } from 'lucide-svelte';
+  import { t } from '$lib/i18n';
   import type { FavoritesPreferences } from '../types';
 
   interface Props {
@@ -14,113 +14,19 @@
 
   let { isOpen, onClose, onSave, initialPreferences }: Props = $props();
 
-  let customIconPath = $state<string | null>(initialPreferences.custom_icon_path || null);
-  let customIconPreset = $state<string | null>(initialPreferences.custom_icon_preset || 'heart');
-  let iconBackground = $state<string | null>(initialPreferences.icon_background || null);
   let tabOrder = $state<string[]>([...initialPreferences.tab_order]);
-  let useCustomImage = $state(!!initialPreferences.custom_icon_path);
   let saving = $state(false);
 
-  const presetIcons = [
-    { id: 'heart', label: 'Heart', icon: Heart },
-    { id: 'star', label: 'Star', icon: Star },
-    { id: 'music', label: 'Music', icon: Music },
-    { id: 'folder', label: 'Folder', icon: Folder },
-    { id: 'disc', label: 'Disc', icon: Disc },
-    { id: 'library', label: 'Library', icon: Library },
-    { id: 'headphones', label: 'Headphones', icon: Headphones },
-  ];
-
-  const solidColors = [
-    { id: 'accent', label: 'Accent', value: 'var(--accent-primary)' },
-    { id: 'red', label: 'Red', value: '#ef4444' },
-    { id: 'orange', label: 'Orange', value: '#f97316' },
-    { id: 'amber', label: 'Amber', value: '#f59e0b' },
-    { id: 'green', label: 'Green', value: '#10b981' },
-    { id: 'cyan', label: 'Cyan', value: '#06b6d4' },
-    { id: 'blue', label: 'Blue', value: '#3b82f6' },
-    { id: 'purple', label: 'Purple', value: '#a855f7' },
-    { id: 'pink', label: 'Pink', value: '#ec4899' },
-    { id: 'rose', label: 'Rose', value: '#f43f5e' },
-    { id: 'slate', label: 'Slate', value: '#64748b' },
-  ];
-
-  const gradients = [
-    { id: 'sunset', label: 'Sunset', value: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' },
-    { id: 'ocean', label: 'Ocean', value: 'linear-gradient(135deg, #2e3192 0%, #1bffff 100%)' },
-    { id: 'fire', label: 'Fire', value: 'linear-gradient(135deg, #ff0844 0%, #ffb199 100%)' },
-    { id: 'mint', label: 'Mint', value: 'linear-gradient(135deg, #00b09b 0%, #96c93d 100%)' },
-    { id: 'candy', label: 'Candy', value: 'linear-gradient(135deg, #fc6767 0%, #ec008c 100%)' },
-    { id: 'forest', label: 'Forest', value: 'linear-gradient(135deg, #134e5e 0%, #71b280 100%)' },
-  ];
-
-  let customGradientColors = $state<string[]>(['#667eea', '#764ba2']);
-  let showCustomGradientPicker = $state(false);
-
-  function addGradientColor() {
-    if (customGradientColors.length < 3) {
-      customGradientColors = [...customGradientColors, '#888888'];
-    }
-  }
-
-  function removeGradientColor(index: number) {
-    if (customGradientColors.length > 2) {
-      customGradientColors = customGradientColors.filter((_, i) => i !== index);
-    }
-  }
-
-  function updateGradientColor(index: number, value: string) {
-    customGradientColors[index] = value;
-  }
-
-  function applyCustomGradient() {
-    const stops = customGradientColors.map((c, i) => {
-      const percent = (i / (customGradientColors.length - 1)) * 100;
-      return `${c} ${percent}%`;
-    }).join(', ');
-    iconBackground = `linear-gradient(135deg, ${stops})`;
-    showCustomGradientPicker = false;
-  }
-
-  const tabLabels: Record<string, string> = {
-    tracks: 'Tracks',
-    albums: 'Albums',
-    artists: 'Artists',
-    playlists: 'Playlists',
-  };
-
-  function selectPreset(presetId: string) {
-    customIconPreset = presetId;
-    useCustomImage = false;
-    customIconPath = null;
+  function getTabLabel(tab: string): string {
+    const key = `favorites.tabLabels.${tab}`;
+    const translated = $t(key);
+    if (translated && !translated.startsWith('favorites.tabLabels.')) return translated;
+    const fallback: Record<string, string> = { tracks: 'Tracks', albums: 'Albums', artists: 'Artists', playlists: 'Playlists' };
+    return fallback[tab] || tab;
   }
 
   function syncFromPreferences() {
-    customIconPath = initialPreferences.custom_icon_path || null;
-    customIconPreset = initialPreferences.custom_icon_preset || 'heart';
-    iconBackground = initialPreferences.icon_background || null;
     tabOrder = [...initialPreferences.tab_order];
-    useCustomImage = !!initialPreferences.custom_icon_path;
-  }
-
-  async function handleUploadClick() {
-    try {
-      const selected = await open({
-        multiple: false,
-        filters: [{
-          name: 'Images',
-          extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif']
-        }]
-      });
-
-      if (selected && typeof selected === 'string') {
-        customIconPath = selected;
-        useCustomImage = true;
-        customIconPreset = null;
-      }
-    } catch (err) {
-      console.error('Failed to open file picker:', err);
-    }
   }
 
   function moveUp(index: number) {
@@ -141,9 +47,9 @@
     saving = true;
     try {
       const prefs: FavoritesPreferences = {
-        custom_icon_path: useCustomImage ? customIconPath : null,
-        custom_icon_preset: useCustomImage ? null : customIconPreset,
-        icon_background: iconBackground,
+        custom_icon_path: null,
+        custom_icon_preset: null,
+        icon_background: null,
         tab_order: tabOrder,
       };
 
@@ -169,147 +75,39 @@
   });
 </script>
 
-<Modal {isOpen} onClose={handleCancel} title="Favorites Settings" maxWidth="736px">
+<Modal {isOpen} onClose={handleCancel} title={$t('favorites.settingsModalTitle')} maxWidth="400px">
   {#snippet children()}
-  <div class="modal-columns">
-    <!-- Left Column: Icon Customization -->
-    <div class="modal-column">
-      <div class="modal-section">
-        <h3>Icon</h3>
+  <div class="modal-body">
+    <div class="modal-section">
+      <h3>{$t('favorites.tabOrderSectionTitle')}</h3>
 
-        <div class="icon-grid">
-          {#each presetIcons as preset}
-            <button
-              class="icon-preset-btn"
-              class:active={!useCustomImage && customIconPreset === preset.id}
-              onclick={() => selectPreset(preset.id)}
-              title={preset.label}
-            >
-              <svelte:component this={preset.icon} size={17} />
-            </button>
-          {/each}
-        </div>
-
-        <div class="custom-upload">
-          <button class="upload-btn" onclick={handleUploadClick}>
-            <Upload size={16} />
-            <span>Upload Custom Image</span>
-          </button>
-          {#if useCustomImage && customIconPath}
-            <span class="upload-filename">{customIconPath.split('/').pop()}</span>
-          {/if}
-        </div>
-      </div>
-
-      <div class="modal-section">
-        <h3>Background</h3>
-
-        <div class="color-section">
-          <div class="color-grid">
-            <button
-              class="color-btn"
-              class:active={iconBackground === null}
-              onclick={() => iconBackground = null}
-              title="None"
-            >
-              <div class="color-swatch no-color"></div>
-            </button>
-            {#each solidColors as color}
-              <button
-                class="color-btn"
-                class:active={iconBackground === color.value}
-                onclick={() => iconBackground = color.value}
-                title={color.label}
-              >
-                <div class="color-swatch" style="background: {color.value};"></div>
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <div class="color-section">
-          <div class="color-grid">
-            {#each gradients as gradient}
-              <button
-                class="color-btn"
-                class:active={iconBackground === gradient.value}
-                onclick={() => iconBackground = gradient.value}
-                title={gradient.label}
-              >
-                <div class="color-swatch" style="background: {gradient.value};"></div>
-              </button>
-            {/each}
-          </div>
-        </div>
-
-        <div class="color-section">
-          {#if !showCustomGradientPicker}
-            <button class="btn-custom-gradient" onclick={() => showCustomGradientPicker = true}>
-              Create Custom Gradient
-            </button>
-          {:else}
-            <div class="custom-gradient-editor">
-              {#each customGradientColors as color, i}
-                <div class="gradient-color-row">
-                  <input
-                    type="color"
-                    value={color}
-                    oninput={(e) => updateGradientColor(i, e.currentTarget.value)}
-                    class="color-input"
-                  />
-                  {#if customGradientColors.length > 2}
-                    <button class="btn-remove-color" onclick={() => removeGradientColor(i)} title="Remove">
-                      ✕
-                    </button>
-                  {/if}
-                </div>
-              {/each}
-              <div class="gradient-actions">
-                {#if customGradientColors.length < 3}
-                  <button class="btn-add-color" onclick={addGradientColor}>+ Add Color</button>
-                {/if}
-                <button class="btn-apply-gradient" onclick={applyCustomGradient}>Apply</button>
-                <button class="btn-cancel-gradient" onclick={() => showCustomGradientPicker = false}>Cancel</button>
-              </div>
+      <div class="tab-order-list">
+        {#each tabOrder as tab, index}
+          <div class="tab-order-item">
+            <div class="tab-grip">
+              <GripVertical size={16} />
             </div>
-          {/if}
-        </div>
-      </div>
-    </div>
-
-    <!-- Right Column: Tab Order -->
-    <div class="modal-column">
-      <div class="modal-section">
-        <h3>Tab Order</h3>
-
-        <div class="tab-order-list">
-          {#each tabOrder as tab, index}
-            <div class="tab-order-item">
-              <div class="tab-grip">
-                <GripVertical size={16} />
-              </div>
-              <div class="tab-label">{tabLabels[tab] || tab}</div>
-              <div class="tab-controls">
-                <button
-                  class="tab-move-btn"
-                  onclick={() => moveUp(index)}
-                  disabled={index === 0}
-                  title="Move up"
-                >
-                  ↑
-                </button>
-                <button
-                  class="tab-move-btn"
-                  onclick={() => moveDown(index)}
-                  disabled={index === tabOrder.length - 1}
-                  title="Move down"
-                >
-                  ↓
-                </button>
-              </div>
+            <div class="tab-label">{getTabLabel(tab)}</div>
+            <div class="tab-controls">
+              <button
+                class="tab-move-btn"
+                onclick={() => moveUp(index)}
+                disabled={index === 0}
+                title={$t('actions.moveUp')}
+              >
+                ↑
+              </button>
+              <button
+                class="tab-move-btn"
+                onclick={() => moveDown(index)}
+                disabled={index === tabOrder.length - 1}
+                title={$t('actions.moveDown')}
+              >
+                ↓
+              </button>
             </div>
-          {/each}
-        </div>
+          </div>
+        {/each}
       </div>
     </div>
   </div>
@@ -318,172 +116,25 @@
   {#snippet footer()}
   <div class="modal-actions">
     <button class="btn btn-secondary" onclick={handleCancel} disabled={saving}>
-      Cancel
+      {$t('actions.cancel')}
     </button>
     <button class="btn btn-primary" onclick={handleSave} disabled={saving}>
-      {saving ? 'Saving...' : 'Save'}
+      {saving ? $t('actions.saving') : $t('actions.save')}
     </button>
   </div>
   {/snippet}
 </Modal>
 
 <style>
-  .modal-columns {
-    display: grid;
-    grid-template-columns: 65fr 35fr;
-    gap: 32px;
-  }
-
-  .modal-column {
+  .modal-body {
     min-width: 0;
-  }
-
-  .modal-section {
-    margin-bottom: 32px;
-  }
-
-  .modal-section:last-of-type {
-    margin-bottom: 0;
   }
 
   .modal-section h3 {
     font-size: 15px;
     font-weight: 600;
-    margin: 0 0 4px 0;
+    margin: 0 0 12px 0;
     color: var(--text-primary);
-  }
-
-  .color-section {
-    margin-bottom: 20px;
-  }
-
-  .color-section:last-of-type {
-    margin-bottom: 0;
-  }
-
-  .icon-grid {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-
-  .icon-preset-btn {
-    width: 42px;
-    height: 42px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-secondary);
-    border: 2px solid transparent;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 150ms ease;
-    color: var(--text-secondary);
-  }
-
-  .icon-preset-btn:hover {
-    background: var(--bg-tertiary);
-    border-color: var(--accent-primary);
-    color: var(--text-primary);
-  }
-
-  .icon-preset-btn.active {
-    background: var(--accent-primary);
-    border-color: var(--accent-primary);
-    color: var(--bg-primary);
-  }
-
-  .color-grid {
-    display: grid;
-    grid-template-columns: repeat(12, 1fr);
-    gap: 2px;
-  }
-
-  .color-btn {
-    aspect-ratio: 1;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: transparent;
-    font-size: 0;
-    border: 2px solid transparent;
-    border-radius: 6px;
-    cursor: pointer;
-    transition: all 150ms ease;
-    padding: 3px;
-  }
-
-  .color-btn:hover {
-    border-color: var(--accent-primary);
-  }
-
-  .color-btn.active {
-    border-color: var(--accent-primary);
-    box-shadow: 0 0 0 1px var(--accent-primary);
-  }
-
-  .color-swatch {
-    width: 100%;
-    height: 100%;
-    border-radius: 4px;
-    border: 1px solid var(--bg-tertiary);
-  }
-
-  .color-swatch.no-color {
-    background: linear-gradient(
-      45deg,
-      var(--bg-tertiary) 25%,
-      transparent 25%,
-      transparent 75%,
-      var(--bg-tertiary) 75%,
-      var(--bg-tertiary)
-    ),
-    linear-gradient(
-      45deg,
-      var(--bg-tertiary) 25%,
-      transparent 25%,
-      transparent 75%,
-      var(--bg-tertiary) 75%,
-      var(--bg-tertiary)
-    );
-    background-size: 10px 10px;
-    background-position: 0 0, 5px 5px;
-  }
-
-  .custom-upload {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-
-  .upload-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 6px;
-    color: var(--text-secondary);
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .upload-btn:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-
-  .upload-filename {
-    font-size: 13px;
-    color: var(--text-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .tab-order-list {
@@ -548,104 +199,5 @@
     justify-content: flex-end;
     gap: 12px;
     padding-top: 24px;
-  }
-
-  .btn-custom-gradient {
-    width: 100%;
-    padding: 8px 16px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 6px;
-    color: var(--text-secondary);
-    font-size: 13px;
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .btn-custom-gradient:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-
-  .custom-gradient-editor {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    padding: 12px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 6px;
-  }
-
-  .gradient-color-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .color-input {
-    flex: 1;
-    height: 32px;
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 4px;
-    cursor: pointer;
-    background: var(--bg-primary);
-  }
-
-  .btn-remove-color {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--bg-primary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    font-size: 16px;
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .btn-remove-color:hover {
-    background: var(--bg-danger);
-    border-color: var(--bg-danger);
-    color: white;
-  }
-
-  .gradient-actions {
-    display: flex;
-    gap: 6px;
-    margin-top: 4px;
-  }
-
-  .btn-add-color,
-  .btn-apply-gradient,
-  .btn-cancel-gradient {
-    flex: 1;
-    padding: 6px 12px;
-    background: var(--bg-primary);
-    border: 1px solid var(--bg-tertiary);
-    border-radius: 4px;
-    color: var(--text-secondary);
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 150ms ease;
-  }
-
-  .btn-add-color:hover,
-  .btn-cancel-gradient:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
-  }
-
-  .btn-apply-gradient {
-    background: var(--accent-primary);
-    border-color: var(--accent-primary);
-    color: var(--bg-primary);
-  }
-
-  .btn-apply-gradient:hover {
-    opacity: 0.9;
   }
 </style>
