@@ -210,6 +210,7 @@ fn get_kde_accent() -> Result<PaletteColor, String> {
     let content =
         fs::read_to_string(&config_path).map_err(|e| format!("Cannot read kdeglobals: {}", e))?;
 
+    // 1. Try explicit AccentColor in [General] (Plasma 6 custom accent)
     let mut in_general = false;
     for line in content.lines() {
         let trimmed = line.trim();
@@ -229,7 +230,47 @@ fn get_kde_accent() -> Result<PaletteColor, String> {
         }
     }
 
-    Err("AccentColor not found in kdeglobals".into())
+    // 2. Fallback: read from color scheme sections (DecorationFocus or Selection background)
+    // Priority: Colors:Selection DecorationFocus → BackgroundNormal → Colors:View DecorationFocus
+    let fallback_sections = [
+        ("[Colors:Selection]", "DecorationFocus"),
+        ("[Colors:Selection]", "BackgroundNormal"),
+        ("[Colors:View]", "DecorationFocus"),
+    ];
+
+    for (section, key) in &fallback_sections {
+        if let Some(color) = read_kde_color_key(&content, section, key) {
+            return Ok(color);
+        }
+    }
+
+    Err("AccentColor not found in kdeglobals (no explicit accent or color scheme)".into())
+}
+
+/// Read a specific key from a KDE config section, parsing "r,g,b" format.
+fn read_kde_color_key(content: &str, section: &str, key: &str) -> Option<PaletteColor> {
+    let mut in_section = false;
+    let prefix = format!("{}=", key);
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed == section {
+            in_section = true;
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            in_section = false;
+            continue;
+        }
+
+        if in_section && trimmed.starts_with(&prefix) {
+            let value = trimmed[prefix.len()..].trim();
+            return parse_rgb_csv(value).ok();
+        }
+    }
+
+    None
 }
 
 // --- COSMIC ---

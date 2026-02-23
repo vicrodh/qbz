@@ -10127,6 +10127,8 @@ pub async fn v2_dynamic_suggest_raw(
 }
 
 // ── Auto-Theme commands ─────────────────────────────────────────────────────
+// Image processing (decode + k-means) is CPU-bound, so heavy commands use
+// spawn_blocking to avoid freezing the main thread / UI spinner.
 
 #[tauri::command]
 pub fn v2_detect_desktop_environment() -> crate::auto_theme::system::DesktopEnvironment {
@@ -10145,30 +10147,42 @@ pub fn v2_get_system_accent_color() -> Result<crate::auto_theme::PaletteColor, S
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn v2_generate_theme_from_image(
+pub async fn v2_generate_theme_from_image(
     imagePath: String,
 ) -> Result<crate::auto_theme::GeneratedTheme, String> {
-    let palette = crate::auto_theme::palette::extract_palette(&imagePath)?;
-    Ok(crate::auto_theme::generator::generate_theme(
-        &palette,
-        &imagePath,
-    ))
+    tokio::task::spawn_blocking(move || {
+        let palette = crate::auto_theme::palette::extract_palette(&imagePath)?;
+        Ok(crate::auto_theme::generator::generate_theme(
+            &palette,
+            &imagePath,
+        ))
+    })
+    .await
+    .map_err(|e| format!("Theme generation task failed: {}", e))?
 }
 
 #[tauri::command]
-pub fn v2_generate_theme_from_wallpaper() -> Result<crate::auto_theme::GeneratedTheme, String> {
-    let wallpaper = crate::auto_theme::system::get_system_wallpaper()?;
-    let palette = crate::auto_theme::palette::extract_palette(&wallpaper)?;
-    Ok(crate::auto_theme::generator::generate_theme(
-        &palette,
-        &wallpaper,
-    ))
+pub async fn v2_generate_theme_from_wallpaper() -> Result<crate::auto_theme::GeneratedTheme, String> {
+    tokio::task::spawn_blocking(|| {
+        let wallpaper = crate::auto_theme::system::get_system_wallpaper()?;
+        let palette = crate::auto_theme::palette::extract_palette(&wallpaper)?;
+        Ok(crate::auto_theme::generator::generate_theme(
+            &palette,
+            &wallpaper,
+        ))
+    })
+    .await
+    .map_err(|e| format!("Theme generation task failed: {}", e))?
 }
 
 #[tauri::command]
 #[allow(non_snake_case)]
-pub fn v2_extract_palette(
+pub async fn v2_extract_palette(
     imagePath: String,
 ) -> Result<crate::auto_theme::ThemePalette, String> {
-    crate::auto_theme::palette::extract_palette(&imagePath)
+    tokio::task::spawn_blocking(move || {
+        crate::auto_theme::palette::extract_palette(&imagePath)
+    })
+    .await
+    .map_err(|e| format!("Palette extraction task failed: {}", e))?
 }
