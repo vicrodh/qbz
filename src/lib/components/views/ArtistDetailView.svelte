@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
   import { open } from '@tauri-apps/plugin-dialog';
+  import { setCustomImage, removeCustomImage as removeCustomImageFromStore } from '$lib/stores/customArtistImageStore';
   import { t } from 'svelte-i18n';
   import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Settings } from 'lucide-svelte';
   import {
@@ -1047,6 +1048,7 @@
       customFullImage = convertFileSrc(result.image_path);
       hasCustomImage = true;
       imageError = false;
+      setCustomImage(artist.name, convertFileSrc(result.image_path));
       showToast($t('artist.customImageSet'), 'success');
     } catch (err) {
       showToast(`${$t('artist.customImageError')}: ${err}`, 'error');
@@ -1060,6 +1062,7 @@
       imageOverride = null;
       customFullImage = null;
       hasCustomImage = false;
+      removeCustomImageFromStore(artist.name);
       showToast($t('artist.customImageRemoved'), 'success');
     } catch (err) {
       showToast(`${$t('artist.customImageError')}: ${err}`, 'error');
