@@ -686,6 +686,7 @@
       "autoThemeGenerating": "Generando tema...",
       "autoThemeError": "Error al generar el tema",
       "autoThemeDetectedDE": "Detectado: {de}",
+      "autoThemeExperimental": "Experimental: el tema puede no coincidir exactamente con tu sistema.",
       "autoThemeNoWallpaper": "No se pudo detectar el wallpaper del sistema",
       "autoThemeApplied": "Tema automatico aplicado",
       "autoThemeRegenerate": "Regenerar",

@@ -669,6 +669,7 @@
       "autoThemeGenerating": "Generation du theme...",
       "autoThemeError": "Erreur lors de la generation du theme",
       "autoThemeDetectedDE": "Detecte : {de}",
+      "autoThemeExperimental": "Experimental : le theme peut ne pas correspondre exactement a votre systeme.",
       "autoThemeNoWallpaper": "Impossible de detecter le fond d'ecran systeme",
       "autoThemeApplied": "Theme automatique applique",
       "autoThemeRegenerate": "Regenerer",

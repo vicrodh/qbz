@@ -669,6 +669,7 @@
       "autoThemeGenerating": "Theme wird generiert...",
       "autoThemeError": "Theme konnte nicht generiert werden",
       "autoThemeDetectedDE": "Erkannt: {de}",
+      "autoThemeExperimental": "Experimentell: Das Theme stimmt moglicherweise nicht exakt mit Ihrem System uberein.",
       "autoThemeNoWallpaper": "System-Hintergrundbild konnte nicht erkannt werden",
       "autoThemeApplied": "Auto-Theme angewendet",
       "autoThemeRegenerate": "Neu generieren",

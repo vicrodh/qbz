@@ -3862,6 +3862,7 @@
         {#if autoThemeDE}
           <div class="auto-theme-status">
             <span>{$t('settings.appearance.autoThemeDetectedDE', { values: { de: autoThemeDE } })}</span>
+            <span class="auto-theme-experimental">{$t('settings.appearance.autoThemeExperimental')}</span>
           </div>
         {/if}
 
@@ -6344,11 +6345,17 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
 
   .auto-theme-status {
     display: flex;
-    align-items: center;
-    gap: 8px;
+    flex-direction: column;
+    gap: 4px;
     font-size: 0.8rem;
     color: var(--text-muted);
     padding: 4px 0;
+  }
+
+  .auto-theme-experimental {
+    font-size: 0.75rem;
+    color: var(--warning);
+    opacity: 0.85;
   }
 
   .auto-theme-palette {
