@@ -198,6 +198,16 @@ workspace.windowAdded.connect(forceDecorations);
     file.write_all(script_content.as_bytes())
         .map_err(|e| format!("Failed to write KWin script: {}", e))?;
 
+    // Unload previous script instance if it exists
+    let _ = std::process::Command::new("qdbus6")
+        .args([
+            "org.kde.KWin",
+            "/Scripting",
+            "org.kde.kwin.Scripting.unloadScript",
+            "qbz-ssd",
+        ])
+        .output();
+
     // Load script via qdbus6 (KDE Plasma 6)
     let output = std::process::Command::new("qdbus6")
         .args([
@@ -217,19 +227,25 @@ workspace.windowAdded.connect(forceDecorations);
         ));
     }
 
-    // Start the script
+    // Parse script ID from loadScript output (returns an integer)
+    let script_id = String::from_utf8_lossy(&output.stdout)
+        .trim()
+        .to_string();
+
+    // Run the specific script using its D-Bus object path
+    let script_path_dbus = format!("/Scripting/Script{}", script_id);
     let output = std::process::Command::new("qdbus6")
         .args([
             "org.kde.KWin",
-            "/Scripting",
-            "org.kde.kwin.Scripting.start",
+            &script_path_dbus,
+            "org.kde.kwin.Script.run",
         ])
         .output()
-        .map_err(|e| format!("Failed to start KWin script: {}", e))?;
+        .map_err(|e| format!("Failed to run KWin script: {}", e))?;
 
     if !output.status.success() {
         return Err(format!(
-            "qdbus6 start failed: {}",
+            "qdbus6 Script.run failed: {}",
             String::from_utf8_lossy(&output.stderr)
         ));
     }
@@ -487,8 +503,10 @@ pub fn run() {
             })?;
 
             // Load KWin script to force server-side decorations for QBZ
+            // Small delay ensures the window is mapped in KWin before script runs
             if use_kwin_ssd {
                 std::thread::spawn(|| {
+                    std::thread::sleep(std::time::Duration::from_millis(500));
                     if let Err(e) = load_kwin_ssd_script() {
                         log::warn!("Failed to load KWin SSD script: {}", e);
                     }
