@@ -16,9 +16,12 @@ const BUNDLE_BASE_URL: &str = "https://play.qobuz.com";
 pub struct BundleTokens {
     pub app_id: String,
     pub secrets: Vec<String>,
+    /// OAuth private key used for the /oauth/callback exchange.
+    /// Present in recent bundle versions; None on older bundles.
+    pub private_key: Option<String>,
 }
 
-/// Extract app_id and secrets from Qobuz bundle
+/// Extract app_id, secrets, and OAuth private_key from Qobuz bundle
 pub async fn extract_bundle_tokens(client: &Client) -> Result<BundleTokens> {
     // Step 1: Get login page to find bundle URL
     let login_page = client
@@ -51,7 +54,15 @@ pub async fn extract_bundle_tokens(client: &Client) -> Result<BundleTokens> {
         ));
     }
 
-    Ok(BundleTokens { app_id, secrets })
+    // Step 5: Extract OAuth private_key (optional - present in newer bundles)
+    let private_key = extract_private_key(&bundle_content);
+    if private_key.is_some() {
+        log::info!("OAuth private_key extracted from bundle");
+    } else {
+        log::debug!("OAuth private_key not found in bundle (older bundle version)");
+    }
+
+    Ok(BundleTokens { app_id, secrets, private_key })
 }
 
 fn extract_bundle_url(html: &str) -> Result<String> {
@@ -175,6 +186,16 @@ fn extract_secrets(bundle: &str) -> Result<Vec<String>> {
 
     log::info!("Extracted {} secrets", secrets.len());
     Ok(secrets)
+}
+
+fn extract_private_key(bundle: &str) -> Option<String> {
+    // Pattern: privateKey:"VALUE" (the static OAuth key used in /oauth/callback)
+    let re = Regex::new(r#"privateKey:\s*"(?P<key>[A-Za-z0-9]{6,30})""#)
+        .expect("Invalid regex");
+
+    re.captures(bundle)
+        .and_then(|caps| caps.name("key"))
+        .map(|m| m.as_str().to_string())
 }
 
 #[cfg(test)]

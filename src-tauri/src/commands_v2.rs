@@ -161,31 +161,25 @@ fn convert_to_qbz_audio_settings(settings: &AudioSettings) -> qbz_audio::AudioSe
     }
 }
 
-/// Check that Qobuz ToS has been accepted before allowing login.
+/// Persist ToS acceptance and remove the backend gate for login commands.
 ///
-/// This is the single enforcement point for ToS gate in backend.
-/// All login commands MUST call this before authenticating.
-///
-/// Returns Ok(()) if ToS accepted, Err with specific error code if not.
-fn require_tos_accepted(legal_state: &LegalSettingsState) -> Result<(), (String, String)> {
-    let guard = legal_state
-        .lock()
-        .map_err(|e| ("tos_check_failed".to_string(), format!("Lock error: {}", e)))?;
-
-    let tos_accepted = guard
-        .as_ref()
-        .and_then(|store| store.get_settings().ok())
-        .map(|s| s.qobuz_tos_accepted)
-        .unwrap_or(false);
-
-    if !tos_accepted {
-        return Err((
-            "tos_not_accepted".to_string(),
-            "Qobuz Terms of Service must be accepted before login".to_string(),
-        ));
+/// Calling any login command IS the user's ToS acceptance (they had to check
+/// the checkbox on the frontend to enable the button).  We persist the value
+/// best-effort, re-initializing the store if it was torn down (e.g. after a
+/// factory reset), so subsequent bootstrap auto-logins work correctly.
+fn accept_tos_best_effort(legal_state: &LegalSettingsState) {
+    use crate::config::legal_settings::LegalSettingsStore;
+    if let Ok(mut guard) = legal_state.lock() {
+        // Re-initialize the store if it was torn down (e.g. after factory reset).
+        if guard.is_none() {
+            if let Ok(new_store) = LegalSettingsStore::new() {
+                *guard = Some(new_store);
+            }
+        }
+        if let Some(store) = guard.as_ref() {
+            let _ = store.set_qobuz_tos_accepted(true);
+        }
     }
-
-    Ok(())
 }
 
 /// Rollback runtime auth state after a partial login failure.
@@ -440,8 +434,10 @@ pub async fn runtime_bootstrap(
         }
     }
 
-    // Step 2: Check ToS acceptance BEFORE attempting auto-login
-    // ToS gate is enforced: if not accepted, skip auto-login entirely
+    // Step 2: Check ToS acceptance. Fail open if the DB is unavailable
+    // (e.g. after a factory reset that deleted legal_settings.db but left
+    // credentials intact). ToS is now stored AFTER a successful login, so
+    // the very first bootstrap after factory reset will not have it yet.
     let tos_accepted: bool = {
         let legal_state = app.state::<crate::config::legal_settings::LegalSettingsState>();
         let guard = legal_state.lock();
@@ -451,12 +447,12 @@ pub async fn runtime_bootstrap(
                     store
                         .get_settings()
                         .map(|s| s.qobuz_tos_accepted)
-                        .unwrap_or(false)
+                        .unwrap_or(true) // fail open when DB read fails
                 } else {
-                    false
+                    true // fail open when store is torn down (e.g. factory reset)
                 }
             }
-            Err(_) => false,
+            Err(_) => true, // fail open on lock error
         }
     };
 
@@ -598,6 +594,90 @@ pub async fn runtime_bootstrap(
                 // Not a fatal error - user can login manually
             }
         }
+    } else if let Ok(Some(oauth_token)) = crate::credentials::load_oauth_token() {
+        // No email/password credentials but there IS a saved OAuth token.
+        // Try to restore the session by calling /user/login with the stored token.
+        log::info!("[Runtime] No email/password credentials, trying saved OAuth token...");
+
+        let client = app_state.client.read().await;
+        match client.login_with_token(&oauth_token).await {
+            Ok(session) => {
+                log::info!(
+                    "[Runtime] OAuth token re-auth successful for user {}",
+                    session.user_id
+                );
+                manager.set_legacy_auth(true, Some(session.user_id)).await;
+                let _ = app.emit(
+                    "runtime:event",
+                    RuntimeEvent::AuthChanged {
+                        logged_in: true,
+                        user_id: Some(session.user_id),
+                    },
+                );
+
+                // Wait for CoreBridge, then inject session
+                let cb_start = std::time::Instant::now();
+                let cb_timeout = std::time::Duration::from_secs(10);
+                loop {
+                    if core_bridge.try_get().await.is_some() {
+                        break;
+                    }
+                    if cb_start.elapsed() > cb_timeout {
+                        log::error!("[Runtime] CoreBridge not available after 10s (OAuth restore)");
+                        manager.set_bootstrap_in_progress(false).await;
+                        return Err(RuntimeError::V2NotInitialized);
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+
+                if let Some(bridge) = core_bridge.try_get().await {
+                    let core_session: qbz_models::UserSession = match serde_json::to_value(&session)
+                        .and_then(serde_json::from_value)
+                    {
+                        Ok(s) => s,
+                        Err(e) => {
+                            log::error!("[Runtime] OAuth session conversion failed: {}", e);
+                            manager.set_bootstrap_in_progress(false).await;
+                            return Err(RuntimeError::Internal(e.to_string()));
+                        }
+                    };
+                    match bridge.login_with_session(core_session).await {
+                        Ok(_) => {
+                            log::info!("[Runtime] CoreBridge session restored via OAuth token");
+                            manager.set_corebridge_auth(true).await;
+                        }
+                        Err(e) => {
+                            log::error!("[Runtime] CoreBridge OAuth restore failed: {}", e);
+                            manager.set_bootstrap_in_progress(false).await;
+                            return Err(RuntimeError::V2AuthFailed(e));
+                        }
+                    }
+                }
+
+                if let Err(e) =
+                    crate::session_lifecycle::activate_session(&app, session.user_id).await
+                {
+                    log::error!("[Runtime] Session activation failed (OAuth restore): {}", e);
+                    manager.set_legacy_auth(false, None).await;
+                    manager.set_corebridge_auth(false).await;
+                    let reason = DegradedReason::SessionActivationFailed(e.clone());
+                    manager.set_degraded(reason.clone()).await;
+                    manager.set_bootstrap_in_progress(false).await;
+                    let _ = app.emit(
+                        "runtime:event",
+                        RuntimeEvent::RuntimeDegraded {
+                            reason: reason.clone(),
+                        },
+                    );
+                    return Err(RuntimeError::RuntimeDegraded(reason));
+                }
+            }
+            Err(e) => {
+                // Token expired — clear it and let user re-login via OAuth
+                log::warn!("[Runtime] OAuth token expired, clearing: {}", e);
+                let _ = crate::credentials::clear_oauth_token();
+            }
+        }
     } else {
         log::info!("[Runtime] No saved credentials, staying in InitializedNoAuth");
     }
@@ -709,19 +789,6 @@ pub async fn v2_auto_login(
     let manager = runtime.manager();
 
     log::info!("[V2] v2_auto_login starting...");
-
-    // ToS gate - must be accepted before any login attempt
-    if let Err((error_code, error)) = require_tos_accepted(&legal_state) {
-        return Ok(V2LoginResponse {
-            success: false,
-            user_name: None,
-            user_id: None,
-            subscription: None,
-            subscription_valid_until: None,
-            error: Some(error),
-            error_code: Some(error_code),
-        });
-    }
 
     // Load saved credentials
     let creds = match crate::credentials::load_qobuz_credentials() {
@@ -841,6 +908,12 @@ pub async fn v2_auto_login(
         });
     }
 
+    // Persist ToS acceptance now that login succeeded.
+    // The frontend checkbox already gated the UI; we store the value so
+    // subsequent bootstrap auto-logins pass without requiring the user to
+    // re-accept (e.g. after a factory reset that wiped the DB).
+    accept_tos_best_effort(&legal_state);
+
     // Emit ready event
     let _ = app.emit(
         "runtime:event",
@@ -882,19 +955,6 @@ pub async fn v2_manual_login(
     let manager = runtime.manager();
 
     log::info!("[V2] v2_manual_login starting...");
-
-    // ToS gate - must be accepted before any login attempt
-    if let Err((error_code, error)) = require_tos_accepted(&legal_state) {
-        return Ok(V2LoginResponse {
-            success: false,
-            user_name: None,
-            user_id: None,
-            subscription: None,
-            subscription_valid_until: None,
-            error: Some(error),
-            error_code: Some(error_code),
-        });
-    }
 
     // Legacy auth
     let client = app_state.client.read().await;
@@ -987,7 +1047,335 @@ pub async fn v2_manual_login(
         });
     }
 
+    // Persist ToS acceptance now that login succeeded.
+    accept_tos_best_effort(&legal_state);
+
     // Emit ready event
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::RuntimeReady {
+            user_id: session.user_id,
+        },
+    );
+
+    Ok(V2LoginResponse {
+        success: true,
+        user_name: Some(session.display_name),
+        user_id: Some(session.user_id),
+        subscription: Some(session.subscription_label),
+        subscription_valid_until: session.subscription_valid_until,
+        error: None,
+        error_code: None,
+    })
+}
+
+/// OAuth login via embedded browser window.
+///
+/// Opens a Qobuz sign-in page in a new WebView window.  When Qobuz redirects
+/// to play.qobuz.com/discover?code=..., the code is intercepted and exchanged
+/// for a full user session without loading that page.
+///
+/// Both the legacy client and CoreBridge are authenticated so all subsystems
+/// work identically to a normal email/password login.
+///
+/// Returns the same V2LoginResponse as v2_manual_login.
+#[tauri::command]
+pub async fn v2_start_oauth_login(
+    app: tauri::AppHandle,
+    runtime: State<'_, RuntimeManagerState>,
+    app_state: State<'_, AppState>,
+    core_bridge: State<'_, CoreBridgeState>,
+    legal_state: State<'_, LegalSettingsState>,
+) -> Result<V2LoginResponse, String> {
+    let manager = runtime.manager();
+    log::info!("[V2] v2_start_oauth_login starting...");
+
+    // Get app_id from initialized client
+    let app_id = {
+        let client = app_state.client.read().await;
+        client.app_id().await.map_err(|e| e.to_string())?
+    };
+
+    // Redirect URL that Qobuz will send the code to (play.qobuz.com/discover)
+    let redirect_url = "https://play.qobuz.com/discover";
+    let oauth_url = format!(
+        "https://www.qobuz.com/signin/oauth?ext_app_id={}&redirect_url={}",
+        app_id,
+        urlencoding::encode(redirect_url),
+    );
+
+    // Shared state: code captured by the navigation callback
+    let code_holder: Arc<std::sync::Mutex<Option<String>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let notify = Arc::new(tokio::sync::Notify::new());
+
+    let code_holder_nav = Arc::clone(&code_holder);
+    let notify_nav = Arc::clone(&notify);
+    let app_for_nav = app.clone();
+
+    // Clones for the on_new_window handler (Google/Apple/Facebook OAuth popups)
+    let code_holder_popup = Arc::clone(&code_holder);
+    let notify_popup = Arc::clone(&notify);
+    let app_for_popup = app.clone();
+    let popup_counter = Arc::new(std::sync::atomic::AtomicU32::new(0));
+
+    // Build and open the OAuth WebView window
+    let parsed_url: tauri::Url = oauth_url
+        .parse()
+        .map_err(|e| format!("Invalid OAuth URL: {}", e))?;
+
+    let _oauth_window = tauri::WebviewWindowBuilder::new(
+        &app,
+        "qobuz-oauth",
+        tauri::WebviewUrl::External(parsed_url),
+    )
+    .title("Qobuz Login")
+    .inner_size(520.0, 720.0)
+    .resizable(true)
+    .on_navigation(move |url| {
+        log::info!("[OAuth] on_navigation: {}", url);
+        // Intercept redirect to play.qobuz.com/discover?code_autorisation=...
+        if url.host_str() == Some("play.qobuz.com") {
+            for (key, value) in url.query_pairs() {
+                if key == "code_autorisation" || key == "code" {
+                    let mut holder = code_holder_nav.lock().unwrap();
+                    // Only act on the first code (idempotent)
+                    if holder.is_none() {
+                        log::info!("[OAuth] Intercepted OAuth code from navigation");
+                        *holder = Some(value.to_string());
+                        drop(holder);
+                        notify_nav.notify_one();
+                        // Close from within the navigation callback — more reliable on WebKitGTK
+                        if let Some(win) = app_for_nav.get_webview_window("qobuz-oauth") {
+                            let _ = win.close();
+                            log::info!("[OAuth] OAuth window closed from navigation callback");
+                        }
+                    }
+                    break;
+                }
+            }
+        }
+        true // Always allow navigation — never block (blocking is unreliable on WebKitGTK)
+    })
+    .on_new_window(move |url, features| {
+        // Handle window.open() calls from Google/Apple/Facebook OAuth flows.
+        // On Linux, .window_features(features) sets the required related_view automatically.
+        let popup_id = popup_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let label = format!("qobuz-oauth-popup-{}", popup_id);
+        log::info!("[OAuth] New popup window requested: {} (label={})", url, label);
+
+        let code_holder_p = Arc::clone(&code_holder_popup);
+        let notify_p = Arc::clone(&notify_popup);
+        let app_p = app_for_popup.clone();
+        let label_p = label.clone();
+
+        let builder = tauri::WebviewWindowBuilder::new(
+            &app_for_popup,
+            &label,
+            tauri::WebviewUrl::External(url),
+        )
+        .window_features(features) // sets related_view on Linux, webview config on macOS
+        .title("Qobuz Login")
+        .inner_size(520.0, 720.0)
+        .resizable(true)
+        .on_navigation(move |popup_url| {
+            log::info!("[OAuth] popup({}) on_navigation: {}", label_p, popup_url);
+            if popup_url.host_str() == Some("play.qobuz.com") {
+                for (key, value) in popup_url.query_pairs() {
+                    if key == "code_autorisation" || key == "code" {
+                        let mut holder = code_holder_p.lock().unwrap();
+                        if holder.is_none() {
+                            log::info!("[OAuth] Code captured from popup navigation");
+                            *holder = Some(value.to_string());
+                            drop(holder);
+                            notify_p.notify_one();
+                            // Close main OAuth window and this popup
+                            for win_label in ["qobuz-oauth", label_p.as_str()] {
+                                if let Some(win) = app_p.get_webview_window(win_label) {
+                                    let _ = win.close();
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            true
+        });
+
+        match builder.build() {
+            Ok(window) => tauri::webview::NewWindowResponse::Create { window },
+            Err(e) => {
+                log::error!("[OAuth] Failed to create popup window: {}", e);
+                tauri::webview::NewWindowResponse::Deny
+            }
+        }
+    })
+    .build()
+    .map_err(|e| format!("Failed to open OAuth window: {}", e))?;
+
+    // Wait up to 5 minutes for the user to complete login
+    let timed_out = tokio::time::timeout(
+        std::time::Duration::from_secs(300),
+        notify.notified(),
+    )
+    .await
+    .is_err();
+
+    // Best-effort close of main window and any open popups
+    for win in app.webview_windows().values() {
+        let label = win.label().to_string();
+        if label == "qobuz-oauth" || label.starts_with("qobuz-oauth-popup-") {
+            let _ = win.close();
+        }
+    }
+
+    if timed_out {
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: None,
+            user_id: None,
+            subscription: None,
+            subscription_valid_until: None,
+            error: Some("OAuth login timed out after 5 minutes".to_string()),
+            error_code: Some("oauth_timeout".to_string()),
+        });
+    }
+
+    // Extract code from shared state
+    let code = code_holder.lock().unwrap().clone();
+    let code = match code {
+        Some(c) => c,
+        None => {
+            return Ok(V2LoginResponse {
+                success: false,
+                user_name: None,
+                user_id: None,
+                subscription: None,
+                subscription_valid_until: None,
+                error: Some("OAuth login cancelled".to_string()),
+                error_code: Some("oauth_cancelled".to_string()),
+            });
+        }
+    };
+
+    log::info!("[V2] OAuth code received, exchanging for session...");
+
+    // Exchange code for UserSession via legacy client
+    let session = {
+        let client = app_state.client.read().await;
+        match client.login_with_oauth_code(&code).await {
+            Ok(s) => s,
+            Err(e) => {
+                return Ok(V2LoginResponse {
+                    success: false,
+                    user_name: None,
+                    user_id: None,
+                    subscription: None,
+                    subscription_valid_until: None,
+                    error: Some(e.to_string()),
+                    error_code: Some("oauth_exchange_failed".to_string()),
+                });
+            }
+        }
+    };
+
+    log::info!("[V2] OAuth session established for user {}", session.user_id);
+    manager.set_legacy_auth(true, Some(session.user_id)).await;
+    let _ = app.emit(
+        "runtime:event",
+        RuntimeEvent::AuthChanged {
+            logged_in: true,
+            user_id: Some(session.user_id),
+        },
+    );
+
+    // Convert api::models::UserSession → qbz_models::UserSession for CoreBridge
+    // Both types are structurally identical; serde round-trip is safe.
+    let core_session: UserSession = match serde_json::to_value(&session)
+        .and_then(serde_json::from_value)
+    {
+        Ok(s) => s,
+        Err(e) => {
+            log::error!("[V2] Failed to convert session for CoreBridge: {}", e);
+            rollback_auth_state(&manager, &app).await;
+            return Ok(V2LoginResponse {
+                success: false,
+                user_name: None,
+                user_id: None,
+                subscription: None,
+                subscription_valid_until: None,
+                error: Some(format!("Session conversion error: {}", e)),
+                error_code: Some("internal_error".to_string()),
+            });
+        }
+    };
+
+    // CoreBridge auth — inject session directly (OAuth has no email/password)
+    if let Some(bridge) = core_bridge.try_get().await {
+        match bridge.login_with_session(core_session).await {
+            Ok(_) => {
+                log::info!("[V2] CoreBridge session injected for OAuth user");
+                manager.set_corebridge_auth(true).await;
+            }
+            Err(e) => {
+                log::error!("[V2] CoreBridge session injection failed: {}", e);
+                rollback_auth_state(&manager, &app).await;
+                let _ = app.emit(
+                    "runtime:event",
+                    RuntimeEvent::CoreBridgeAuthFailed {
+                        error: e.to_string(),
+                    },
+                );
+                return Ok(V2LoginResponse {
+                    success: false,
+                    user_name: Some(session.display_name),
+                    user_id: Some(session.user_id),
+                    subscription: Some(session.subscription_label),
+                    subscription_valid_until: session.subscription_valid_until,
+                    error: Some(format!("V2 authentication failed: {}", e)),
+                    error_code: Some("v2_auth_failed".to_string()),
+                });
+            }
+        }
+    } else {
+        log::error!("[V2] CoreBridge not initialized for OAuth login");
+        rollback_auth_state(&manager, &app).await;
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: Some(session.display_name),
+            user_id: Some(session.user_id),
+            subscription: Some(session.subscription_label),
+            subscription_valid_until: session.subscription_valid_until,
+            error: Some("V2 CoreBridge not initialized".to_string()),
+            error_code: Some("v2_not_initialized".to_string()),
+        });
+    }
+
+    // Activate per-user session (same as manual login)
+    if let Err(e) = crate::session_lifecycle::activate_session(&app, session.user_id).await {
+        log::error!("[V2] Session activation failed after OAuth: {}", e);
+        rollback_auth_state(&manager, &app).await;
+        return Ok(V2LoginResponse {
+            success: false,
+            user_name: Some(session.display_name.clone()),
+            user_id: Some(session.user_id),
+            subscription: Some(session.subscription_label.clone()),
+            subscription_valid_until: session.subscription_valid_until.clone(),
+            error: Some(format!("Session activation failed: {}", e)),
+            error_code: Some("session_activation_failed".to_string()),
+        });
+    }
+
+    // Persist the OAuth token so bootstrap can restore the session on next launch.
+    // Non-fatal: if saving fails, the user just has to re-login via OAuth.
+    if let Err(e) = crate::credentials::save_oauth_token(&session.user_auth_token) {
+        log::warn!("[V2] Failed to persist OAuth token: {}", e);
+    }
+
+    // Persist ToS acceptance now that login succeeded.
+    accept_tos_best_effort(&legal_state);
+
     let _ = app.emit(
         "runtime:event",
         RuntimeEvent::RuntimeReady {
@@ -1165,11 +1553,6 @@ pub async fn v2_login(
 ) -> Result<UserSession, RuntimeError> {
     let manager = runtime.manager();
 
-    // Step 0: ToS gate - must be accepted before any login attempt
-    if let Err((_, error)) = require_tos_accepted(&legal_state) {
-        return Err(RuntimeError::Internal(error));
-    }
-
     // Step 1: Legacy auth
     let session = {
         let client = app_state.client.read().await;
@@ -1201,6 +1584,9 @@ pub async fn v2_login(
         return Err(RuntimeError::Internal(e));
     }
     log::info!("[v2_login] Session activated for user {}", session.user_id);
+
+    // Persist ToS acceptance now that login succeeded.
+    accept_tos_best_effort(&legal_state);
 
     // Convert api::models::UserSession to qbz_models::UserSession
     Ok(UserSession {
@@ -2397,7 +2783,8 @@ pub fn v2_save_credentials(email: String, password: String) -> Result<(), String
 
 #[tauri::command]
 pub fn v2_clear_saved_credentials() -> Result<(), String> {
-    crate::credentials::clear_qobuz_credentials()
+    crate::credentials::clear_qobuz_credentials()?;
+    crate::credentials::clear_oauth_token()
 }
 
 #[tauri::command]

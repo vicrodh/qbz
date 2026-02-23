@@ -21,7 +21,7 @@
   import QualityBadge from './QualityBadge.svelte';
   import AudioOutputBadges from './AudioOutputBadges.svelte';
   import StackIcon from './StackIcon.svelte';
-  import { t } from '$lib/i18n';
+  import { t as translateStore } from '$lib/i18n';
   import {
     subscribe as subscribeOffline,
     isOffline as checkIsOffline,
@@ -145,13 +145,13 @@
   function getOfflineReasonText(reason: OfflineReason | null): string {
     switch (reason) {
       case 'no_network':
-        return $t('offline.noNetwork');
+        return $translateStore('offline.noNetwork');
       case 'not_logged_in':
-        return $t('offline.notLoggedIn');
+        return $translateStore('offline.notLoggedIn');
       case 'manual_override':
-        return $t('offline.manualMode');
+        return $translateStore('offline.manualMode');
       default:
-        return $t('offline.indicator');
+        return $translateStore('offline.indicator');
     }
   }
 
@@ -251,7 +251,7 @@
         class:disabled={controlsDisabled}
         disabled={controlsDisabled}
         onclick={controlsDisabled ? undefined : onToggleShuffle}
-        title={$t('player.shuffle')}
+        title={$translateStore('player.shuffle')}
       >
         <Shuffle size={16} />
       </button>
@@ -261,7 +261,7 @@
         class:disabled={controlsDisabled}
         disabled={controlsDisabled}
         onclick={controlsDisabled ? undefined : onSkipBack}
-        title={$t('player.previous')}
+        title={$translateStore('player.previous')}
       >
         <SkipBack size={18} />
       </button>
@@ -271,7 +271,7 @@
         class:disabled={controlsDisabled}
         disabled={controlsDisabled}
         onclick={controlsDisabled ? undefined : onTogglePlay}
-        title={isPlaying ? $t('player.pause') : $t('player.play')}
+        title={isPlaying ? $translateStore('player.pause') : $translateStore('player.play')}
       >
         {#if isPlaying}
           <Pause size={20} />
@@ -285,7 +285,7 @@
         class:disabled={controlsDisabled}
         disabled={controlsDisabled}
         onclick={controlsDisabled ? undefined : onSkipForward}
-        title={$t('player.next')}
+        title={$translateStore('player.next')}
       >
         <SkipForward size={18} />
       </button>
@@ -296,7 +296,7 @@
         class:disabled={controlsDisabled}
         disabled={controlsDisabled}
         onclick={controlsDisabled ? undefined : onToggleRepeat}
-        title={repeatMode === 'off' ? $t('player.repeat') : repeatMode === 'all' ? $t('player.repeatAll') : $t('player.repeatOne')}
+        title={repeatMode === 'off' ? $translateStore('player.repeat') : repeatMode === 'all' ? $translateStore('player.repeatAll') : $translateStore('player.repeatOne')}
       >
         {#if repeatMode === 'one'}
           <Repeat1 size={16} />
@@ -310,7 +310,7 @@
         class:disabled={controlsDisabled}
         disabled={controlsDisabled}
         onclick={controlsDisabled ? undefined : onAddToPlaylist}
-        title={$t('actions.addToPlaylist')}
+        title={$translateStore('actions.addToPlaylist')}
       >
         <Plus size={16} />
       </button>
@@ -321,7 +321,7 @@
         class:disabled={controlsDisabled}
         disabled={controlsDisabled}
         onclick={controlsDisabled ? undefined : onToggleFavorite}
-        title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
+        title={isFavorite ? $translateStore('actions.removeFromFavorites') : $translateStore('actions.addToFavorites')}
       >
         <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
       </button>
@@ -352,11 +352,11 @@
           </button>
 
           <div class="song-info">
-            <button class="song-title" title={$t('actions.trackInfo')} onclick={onTrackClick}>{trackTitle}</button>
+            <button class="song-title" title={$translateStore('actions.trackInfo')} onclick={onTrackClick}>{trackTitle}</button>
             <div class="song-meta">
               <StackIcon size={12} class="stack-icon" onClick={onContextClick} />
               {#if artist}
-                <button class="meta-link" onclick={onArtistClick} title={$t('actions.goToArtist')}>
+                <button class="meta-link" onclick={onArtistClick} title={$translateStore('actions.goToArtist')}>
                   {artist}
                 </button>
               {/if}
@@ -364,7 +364,7 @@
                 <span class="meta-separator">·</span>
               {/if}
               {#if album}
-                <button class="meta-link" onclick={onAlbumClick} title={$t('actions.goToAlbum')}>
+                <button class="meta-link" onclick={onAlbumClick} title={$translateStore('actions.goToAlbum')}>
                   {album}
                 </button>
               {/if}
@@ -380,7 +380,7 @@
         </div>
       {:else}
         <div class="empty-state">
-          <span>{$t('player.noTrackPlaying')}</span>
+          <span>{$translateStore('player.noTrackPlaying')}</span>
         </div>
       {/if}
     </div>
@@ -402,7 +402,7 @@
         class="control-btn"
         class:cast-active={isCastConnected}
         onclick={onCast}
-        title={isCastConnected ? $t('player.castingManage') : $t('player.castToDevice')}
+        title={isCastConnected ? $translateStore('player.castingManage') : $translateStore('player.castToDevice')}
       >
         <Cast size={16} />
       </button>
@@ -413,19 +413,19 @@
         class:disabled={isOffline}
         onclick={isOffline ? undefined : onToggleLyrics}
         disabled={isOffline}
-        title={isOffline ? $t('offline.featureDisabled') : $t('player.lyrics')}
-        aria-label={isOffline ? $t('offline.featureDisabled') : $t('player.lyrics')}
+        title={isOffline ? $translateStore('offline.featureDisabled') : $translateStore('player.lyrics')}
+        aria-label={isOffline ? $translateStore('offline.featureDisabled') : $translateStore('player.lyrics')}
       >
         <Mic2 size={16} aria-hidden="true" />
       </button>
 
       {#if onOpenMiniPlayer}
-        <button class="control-btn" onclick={onOpenMiniPlayer} title={$t('player.miniPlayer')}>
+        <button class="control-btn" onclick={onOpenMiniPlayer} title={$translateStore('player.miniPlayer')}>
           <PictureInPicture2 size={16} />
         </button>
       {/if}
 
-      <button class="control-btn" onclick={onOpenFullScreen} title={$t('player.fullScreen')}>
+      <button class="control-btn" onclick={onOpenFullScreen} title={$translateStore('player.fullScreen')}>
         <Maximize2 size={16} />
       </button>
 
@@ -435,10 +435,10 @@
         class:norm-enabled={normalizationEnabled && (normalizationGain === null || normalizationGain === 1.0)}
         onclick={onToggleNormalization}
         title={!normalizationEnabled
-          ? $t('player.normalizationOff')
+          ? $translateStore('player.normalizationOff')
           : normalizationGain !== null && normalizationGain !== 1.0
-            ? $t('player.normalizationApplied')
-            : $t('player.normalizationOn')}
+            ? $translateStore('player.normalizationApplied')
+            : $translateStore('player.normalizationOn')}
       >
         <span
           class="norm-icon"
@@ -453,7 +453,7 @@
         <button
           class="control-btn volume-btn"
           onclick={() => toggleMute()}
-          title={volume === 0 ? $t('player.unmute') : $t('player.mute')}
+          title={volume === 0 ? $translateStore('player.unmute') : $translateStore('player.mute')}
         >
           {#if volume === 0}
             <VolumeX size={16} />
@@ -483,7 +483,7 @@
         <button
           class="control-btn volume-step-btn"
           onclick={() => onVolumeChange?.(Math.max(0, volume - 5))}
-          title={$t('player.volumeDown')}
+          title={$translateStore('player.volumeDown')}
         >
           <Minus size={14} />
         </button>
@@ -491,7 +491,7 @@
         <button
           class="control-btn volume-step-btn"
           onclick={() => onVolumeChange?.(Math.min(100, volume + 5))}
-          title={$t('player.volumeUp')}
+          title={$translateStore('player.volumeUp')}
         >
           <Plus size={14} />
         </button>
@@ -502,7 +502,7 @@
         class="control-btn queue-btn"
         class:active={queueOpen}
         onclick={onOpenQueue}
-        title={$t('player.queue')}
+        title={$translateStore('player.queue')}
       >
         <svg width="18" height="18" viewBox="0 0 256 256" class="queue-icon" class:open={queueOpen}>
           <path class="queue-play" d="M240,160l-64,40V120Z"/>

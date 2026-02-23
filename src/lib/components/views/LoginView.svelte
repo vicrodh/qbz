@@ -24,6 +24,7 @@
   let password = $state('');
   let rememberMe = $state(true);
   let isLoading = $state(false);
+  let isOAuthLoading = $state(false);
   let isInitializing = $state(true);
   let initStatus = $state('Connecting to Qobuz™...');
   let error = $state<string | null>(null);
@@ -196,6 +197,15 @@
     error = null;
 
     try {
+      // Persist ToS acceptance synchronously before backend login so the
+      // backend gate (require_tos_accepted) always sees the correct value.
+      // The subscribe-handler write is fire-and-forget and can lose the race.
+      await setTosAcceptance(true);
+    } catch {
+      // If persistence fails the backend will reject the login below
+    }
+
+    try {
       // V2 manual login with blocking CoreBridge auth
       const response = await invoke<{
         success: boolean;
@@ -268,6 +278,65 @@
     } catch (err) {
       console.error('Failed to enable offline mode:', err);
       error = formatErrorMessage(err);
+    }
+  }
+
+  async function handleOAuthLogin() {
+    if (!get(qobuzTosAccepted)) {
+      error = $t('legal.tosRequiredToLogin');
+      return;
+    }
+
+    isOAuthLoading = true;
+    error = null;
+
+    try {
+      await setTosAcceptance(true);
+    } catch {
+      // Continue even if persistence fails
+    }
+
+    try {
+      const response = await invoke<{
+        success: boolean;
+        user_name?: string;
+        user_id?: number;
+        subscription?: string;
+        subscription_valid_until?: string | null;
+        error?: string;
+        error_code?: string;
+      }>('v2_start_oauth_login');
+
+      console.log('[LoginView] v2_start_oauth_login response:', response);
+
+      if (response.success) {
+        if (!response.user_id || response.user_id === 0) {
+          console.error('[LoginView] OAuth login returned success but invalid user_id');
+          error = $t('auth.v2AuthFailed');
+          return;
+        }
+        onLoginSuccess({
+          userName: response.user_name || 'User',
+          userId: response.user_id,
+          subscription: response.subscription || 'Active',
+          subscriptionValidUntil: response.subscription_valid_until ?? null,
+        });
+      } else {
+        if (response.error_code === 'v2_auth_failed') {
+          error = $t('auth.v2AuthFailed');
+        } else if (response.error_code === 'v2_not_initialized') {
+          error = $t('auth.v2NotInitialized');
+        } else if (response.error_code === 'oauth_cancelled') {
+          error = null; // User closed the window, no error to show
+        } else {
+          error = response.error || 'Browser login failed';
+        }
+      }
+    } catch (err) {
+      console.error('OAuth login error:', err);
+      error = formatErrorMessage(err);
+    } finally {
+      isOAuthLoading = false;
     }
   }
 </script>
@@ -353,12 +422,28 @@
             <div class="error-message">{error}</div>
           {/if}
 
-          <button type="submit" class="login-btn" disabled={isLoading || !$qobuzTosAccepted}>
+          <button type="submit" class="login-btn" disabled={isLoading || isOAuthLoading || !$qobuzTosAccepted}>
             {#if isLoading}
               <div class="spinner small"></div>
-              <span>Signing in...</span>
+              <span>{$t('auth.loggingIn')}</span>
             {:else}
-              <span>Sign in with Qobuz™</span>
+              <span>{$t('auth.loginButton')}</span>
+            {/if}
+          </button>
+
+          <div class="divider"><span>or</span></div>
+
+          <button
+            type="button"
+            class="oauth-btn"
+            disabled={isLoading || isOAuthLoading || !$qobuzTosAccepted}
+            onclick={handleOAuthLogin}
+          >
+            {#if isOAuthLoading}
+              <div class="spinner small"></div>
+              <span>{$t('auth.oauthLoading')}</span>
+            {:else}
+              <span>{$t('auth.oauthButton')}</span>
             {/if}
           </button>
 
@@ -641,6 +726,49 @@
   }
 
   .login-btn:disabled {
+    opacity: 0.7;
+    cursor: not-allowed;
+  }
+
+  .divider {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+    margin: -4px 0;
+  }
+
+  .divider::before,
+  .divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background-color: var(--border-color, var(--bg-tertiary));
+  }
+
+  .oauth-btn {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background-color: transparent;
+    color: var(--text-primary);
+    border: 1px solid var(--accent-primary);
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .oauth-btn:hover:not(:disabled) {
+    background-color: var(--accent-primary);
+    color: white;
+  }
+
+  .oauth-btn:disabled {
     opacity: 0.7;
     cursor: not-allowed;
   }

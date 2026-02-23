@@ -321,18 +321,22 @@ fn main() {
             qbz_nix_lib::logging::log_startup("[QBZ] Forcing X11 backend on Wayland session");
             std::env::set_var("GDK_BACKEND", "x11");
 
-            // Apply XWayland display scaling overrides if configured
+            // GDK_SCALE is integer-only and only meaningful on X11/XWayland
             if let Some(ref gdk_scale) = graphics_db.as_ref().and_then(|s| s.gdk_scale.clone()) {
                 std::env::set_var("GDK_SCALE", gdk_scale);
                 qbz_nix_lib::logging::log_startup(&format!("[QBZ] GDK_SCALE={}", gdk_scale));
             }
-            if let Some(ref gdk_dpi) = graphics_db.as_ref().and_then(|s| s.gdk_dpi_scale.clone()) {
-                std::env::set_var("GDK_DPI_SCALE", gdk_dpi);
-                qbz_nix_lib::logging::log_startup(&format!("[QBZ] GDK_DPI_SCALE={}", gdk_dpi));
-            }
         } else if is_wayland && std::env::var_os("GDK_BACKEND").is_none() {
             std::env::set_var("GDK_BACKEND", "wayland");
             std::env::set_var("GTK_CSD", "1");
+        }
+
+        // GDK_DPI_SCALE is a float multiplier that works on ALL backends
+        // (X11, XWayland, and native Wayland). Apply it unconditionally so
+        // users can compensate for their DE scale without switching backends.
+        if let Some(ref gdk_dpi) = graphics_db.as_ref().and_then(|s| s.gdk_dpi_scale.clone()) {
+            std::env::set_var("GDK_DPI_SCALE", gdk_dpi);
+            qbz_nix_lib::logging::log_startup(&format!("[QBZ] GDK_DPI_SCALE={}", gdk_dpi));
         }
 
         // Log effective display server AFTER GDK backend selection

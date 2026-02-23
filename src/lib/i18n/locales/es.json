@@ -1094,7 +1094,10 @@
     "rememberMe": "Recordarme",
     "ineligibleSubscription": "No hay una suscripción activa. QBZ solo funcionará en modo offline.",
     "v2AuthFailed": "La autenticación con Qobuz falló. Por favor, inténtalo de nuevo.",
-    "v2NotInitialized": "No se pudo conectar con Qobuz. Por favor, reinicia la aplicación."
+    "v2NotInitialized": "No se pudo conectar con Qobuz. Por favor, reinicia la aplicación.",
+    "connectionFailed": "No se pudo conectar a Qobuz™. Verifica tu red e intenta de nuevo.",
+    "oauthButton": "Iniciar sesión en el navegador",
+    "oauthLoading": "Abriendo navegador..."
   },
   "legal": {
     "brandingLineSuffix": "Esta aplicación usa la API de Qobuz™ pero no está certificada por Qobuz™.",
@@ -1769,7 +1772,7 @@
       "probeRaw": "Probar respuesta raw",
       "rawResponse": "Respuesta raw"
     },
-    "algorithmInfo": "Impulsado por el algoritmo de sugerencias de Qobuz\u2122, curado a partir de tu historial de reproducciones local.",
+    "algorithmInfo": "Impulsado por el algoritmo de sugerencias de Qobuz™, curado a partir de tu historial de reproducciones local.",
     "result": {
       "algorithm": "Algoritmo",
       "count": "{count} pistas",
