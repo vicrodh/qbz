@@ -3,7 +3,7 @@
   import TitleBar from '../TitleBar.svelte';
   import { t } from '$lib/i18n';
   import { setManualOffline } from '$lib/stores/offlineStore';
-  import { qobuzTosAccepted, loadTosAcceptance } from '$lib/stores/qobuzLegalStore';
+  import { qobuzTosAccepted, loadTosAcceptance, setTosAcceptance } from '$lib/stores/qobuzLegalStore';
   import { get } from 'svelte/store';
 
   interface UserInfo {
@@ -175,6 +175,16 @@
     if (!get(qobuzTosAccepted)) {
       error = $t('legal.tosRequiredToLogin');
       return;
+    }
+
+    // Persist ToS acceptance synchronously before login so the backend
+    // gate in require_tos_accepted() always sees the correct value.
+    // The subscribe-handler write is fire-and-forget and can lose the
+    // race if the user clicks Login immediately after checking the box.
+    try {
+      await setTosAcceptance(true);
+    } catch {
+      // If persistence fails the backend will reject login — error shown below
     }
 
     if (!email || !password) {
