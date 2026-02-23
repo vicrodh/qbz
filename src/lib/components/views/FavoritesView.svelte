@@ -1255,12 +1255,8 @@
         </button>
       {/each}
     </div>
-  </div>
-
-  <!-- Toolbar with actions -->
-  <div class="toolbar">
-    {#if activeTab === 'albums'}
-      <div class="toolbar-controls">
+    <div class="nav-right">
+      {#if activeTab === 'albums'}
         <GenreFilterButton context={GENRE_CONTEXT} variant="control" align="right" onFilterChange={handleGenreFilterChange} />
         <div class="dropdown-container">
           <button class="control-btn" onclick={() => (showAlbumGroupMenu = !showAlbumGroupMenu)}>
@@ -1332,9 +1328,7 @@
             <LayoutGrid size={16} />
           {/if}
         </button>
-      </div>
-    {:else if activeTab === 'tracks'}
-      <div class="toolbar-controls">
+      {:else if activeTab === 'tracks'}
         <div class="dropdown-container">
           <button class="control-btn" onclick={() => (showTrackGroupMenu = !showTrackGroupMenu)}>
             <span>
@@ -1381,10 +1375,7 @@
             </div>
           {/if}
         </div>
-      </div>
-    {:else if activeTab === 'artists'}
-      <div class="toolbar-controls">
-        <!-- Single toggle button: Grid <-> Browse (sidepanel) -->
+      {:else if activeTab === 'artists'}
         <button
           class="control-btn icon-only"
           onclick={() => {
@@ -1429,70 +1420,68 @@
             {/if}
           </div>
         {/if}
-      </div>
-    {/if}
-
-    <!-- Alpha Index inline for artists in Browse (sidepanel) view -->
-    {#if activeTab === 'artists' && artistViewMode === 'sidepanel' && filteredArtists.length > 0}
-      {@const groupedArtistsForIndex = groupArtists(filteredArtists)}
-      {@const artistAlphaGroupsForIndex = new Set(groupedArtistsForIndex.map(group => group.key))}
-      <div class="alpha-index-inline">
-        {#each alphaIndexLetters as letter}
-          <button
-            class="alpha-letter"
-            class:disabled={!artistAlphaGroupsForIndex.has(letter)}
-            onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroupsForIndex)}
-          >
-            {letter}
-          </button>
-        {/each}
-      </div>
-    {/if}
-
-    <!-- Alpha Index (inline in toolbar for tracks when grouping by name or artist) -->
-    {#if activeTab === 'tracks' && !loading && trackGroupingEnabled && (trackGroupMode === 'name' || trackGroupMode === 'artist')}
-      {@const groupedTracks = groupTracks(filteredTracks, trackGroupMode)}
-      {@const trackIndexTargets = trackGroupMode === 'artist'
-        ? (() => {
-            const map = new Map<string, string>();
-            for (const group of groupedTracks) {
-              const letter = alphaGroupKey(group.title);
-              if (!map.has(letter)) {
-                map.set(letter, group.id);
-              }
-            }
-            return map;
-          })()
-        : new Map<string, string>()}
-      {@const trackAlphaGroups = trackGroupMode === 'name'
-        ? new Set(groupedTracks.map(group => group.key))
-        : new Set(trackIndexTargets.keys())}
-      <div class="alpha-index-inline">
-        {#each alphaIndexLetters as letter}
-          <button
-            class="alpha-letter"
-            class:disabled={!trackAlphaGroups.has(letter)}
-            onclick={() => scrollToTrackGroup(letter, trackAlphaGroups, trackIndexTargets)}
-          >
-            {letter}
-          </button>
-        {/each}
-      </div>
-    {/if}
-
-    <!-- Results count -->
-    <span class="results-count">
-      {#if activeTab === 'tracks'}
-        {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} tracks
-      {:else if activeTab === 'albums'}
-        {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} albums
-      {:else if activeTab === 'artists'}
-        {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} artists
-      {:else}
-        {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} playlists
       {/if}
-    </span>
+      <span class="results-count">
+        {#if activeTab === 'tracks'}
+          {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} tracks
+        {:else if activeTab === 'albums'}
+          {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} albums
+        {:else if activeTab === 'artists'}
+          {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} artists
+        {:else}
+          {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} playlists
+        {/if}
+      </span>
+    </div>
   </div>
+
+  <!-- Alpha Index inline for artists in Browse (sidepanel) view -->
+  {#if activeTab === 'artists' && artistViewMode === 'sidepanel' && filteredArtists.length > 0}
+    {@const groupedArtistsForIndex = groupArtists(filteredArtists)}
+    {@const artistAlphaGroupsForIndex = new Set(groupedArtistsForIndex.map(group => group.key))}
+    <div class="alpha-index-inline">
+      {#each alphaIndexLetters as letter}
+        <button
+          class="alpha-letter"
+          class:disabled={!artistAlphaGroupsForIndex.has(letter)}
+          onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroupsForIndex)}
+        >
+          {letter}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  <!-- Alpha Index (inline for tracks when grouping by name or artist) -->
+  {#if activeTab === 'tracks' && !loading && trackGroupingEnabled && (trackGroupMode === 'name' || trackGroupMode === 'artist')}
+    {@const groupedTracks = groupTracks(filteredTracks, trackGroupMode)}
+    {@const trackIndexTargets = trackGroupMode === 'artist'
+      ? (() => {
+          const map = new Map<string, string>();
+          for (const group of groupedTracks) {
+            const letter = alphaGroupKey(group.title);
+            if (!map.has(letter)) {
+              map.set(letter, group.id);
+            }
+          }
+          return map;
+        })()
+      : new Map<string, string>()}
+    {@const trackAlphaGroups = trackGroupMode === 'name'
+      ? new Set(groupedTracks.map(group => group.key))
+      : new Set(trackIndexTargets.keys())}
+    <div class="alpha-index-inline">
+      {#each alphaIndexLetters as letter}
+        <button
+          class="alpha-letter"
+          class:disabled={!trackAlphaGroups.has(letter)}
+          onclick={() => scrollToTrackGroup(letter, trackAlphaGroups, trackIndexTargets)}
+        >
+          {letter}
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   <!-- Content -->
   <div class="content">
@@ -2071,6 +2060,7 @@
     position: sticky;
     top: -24px;
     display: flex;
+    justify-content: space-between;
     align-items: center;
     gap: 10px;
     padding: 10px 24px;
@@ -2086,6 +2076,12 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 20px;
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .nav-link {
@@ -2177,19 +2173,6 @@
   .search-clear-btn:hover {
     color: var(--text-primary);
     background: var(--bg-tertiary);
-  }
-
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-
-  .toolbar-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
   }
 
   .dropdown-container {
