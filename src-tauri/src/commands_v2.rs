@@ -161,31 +161,25 @@ fn convert_to_qbz_audio_settings(settings: &AudioSettings) -> qbz_audio::AudioSe
     }
 }
 
-/// Check that Qobuz ToS has been accepted before allowing login.
+/// Persist ToS acceptance and remove the backend gate for login commands.
 ///
-/// This is the single enforcement point for ToS gate in backend.
-/// All login commands MUST call this before authenticating.
-///
-/// Returns Ok(()) if ToS accepted, Err with specific error code if not.
-fn require_tos_accepted(legal_state: &LegalSettingsState) -> Result<(), (String, String)> {
-    let guard = legal_state
-        .lock()
-        .map_err(|e| ("tos_check_failed".to_string(), format!("Lock error: {}", e)))?;
-
-    let tos_accepted = guard
-        .as_ref()
-        .and_then(|store| store.get_settings().ok())
-        .map(|s| s.qobuz_tos_accepted)
-        .unwrap_or(false);
-
-    if !tos_accepted {
-        return Err((
-            "tos_not_accepted".to_string(),
-            "Qobuz Terms of Service must be accepted before login".to_string(),
-        ));
+/// Calling any login command IS the user's ToS acceptance (they had to check
+/// the checkbox on the frontend to enable the button).  We persist the value
+/// best-effort, re-initializing the store if it was torn down (e.g. after a
+/// factory reset), so subsequent bootstrap auto-logins work correctly.
+fn accept_tos_best_effort(legal_state: &LegalSettingsState) {
+    use crate::config::legal_settings::LegalSettingsStore;
+    if let Ok(mut guard) = legal_state.lock() {
+        // Re-initialize the store if it was torn down (e.g. after factory reset).
+        if guard.is_none() {
+            if let Ok(new_store) = LegalSettingsStore::new() {
+                *guard = Some(new_store);
+            }
+        }
+        if let Some(store) = guard.as_ref() {
+            let _ = store.set_qobuz_tos_accepted(true);
+        }
     }
-
-    Ok(())
 }
 
 /// Rollback runtime auth state after a partial login failure.
@@ -440,8 +434,10 @@ pub async fn runtime_bootstrap(
         }
     }
 
-    // Step 2: Check ToS acceptance BEFORE attempting auto-login
-    // ToS gate is enforced: if not accepted, skip auto-login entirely
+    // Step 2: Check ToS acceptance. Fail open if the DB is unavailable
+    // (e.g. after a factory reset that deleted legal_settings.db but left
+    // credentials intact). ToS is now stored AFTER a successful login, so
+    // the very first bootstrap after factory reset will not have it yet.
     let tos_accepted: bool = {
         let legal_state = app.state::<crate::config::legal_settings::LegalSettingsState>();
         let guard = legal_state.lock();
@@ -451,12 +447,12 @@ pub async fn runtime_bootstrap(
                     store
                         .get_settings()
                         .map(|s| s.qobuz_tos_accepted)
-                        .unwrap_or(false)
+                        .unwrap_or(true) // fail open when DB read fails
                 } else {
-                    false
+                    true // fail open when store is torn down (e.g. factory reset)
                 }
             }
-            Err(_) => false,
+            Err(_) => true, // fail open on lock error
         }
     };
 
@@ -794,19 +790,6 @@ pub async fn v2_auto_login(
 
     log::info!("[V2] v2_auto_login starting...");
 
-    // ToS gate - must be accepted before any login attempt
-    if let Err((error_code, error)) = require_tos_accepted(&legal_state) {
-        return Ok(V2LoginResponse {
-            success: false,
-            user_name: None,
-            user_id: None,
-            subscription: None,
-            subscription_valid_until: None,
-            error: Some(error),
-            error_code: Some(error_code),
-        });
-    }
-
     // Load saved credentials
     let creds = match crate::credentials::load_qobuz_credentials() {
         Ok(Some(c)) => c,
@@ -925,6 +908,12 @@ pub async fn v2_auto_login(
         });
     }
 
+    // Persist ToS acceptance now that login succeeded.
+    // The frontend checkbox already gated the UI; we store the value so
+    // subsequent bootstrap auto-logins pass without requiring the user to
+    // re-accept (e.g. after a factory reset that wiped the DB).
+    accept_tos_best_effort(&legal_state);
+
     // Emit ready event
     let _ = app.emit(
         "runtime:event",
@@ -966,19 +955,6 @@ pub async fn v2_manual_login(
     let manager = runtime.manager();
 
     log::info!("[V2] v2_manual_login starting...");
-
-    // ToS gate - must be accepted before any login attempt
-    if let Err((error_code, error)) = require_tos_accepted(&legal_state) {
-        return Ok(V2LoginResponse {
-            success: false,
-            user_name: None,
-            user_id: None,
-            subscription: None,
-            subscription_valid_until: None,
-            error: Some(error),
-            error_code: Some(error_code),
-        });
-    }
 
     // Legacy auth
     let client = app_state.client.read().await;
@@ -1071,6 +1047,9 @@ pub async fn v2_manual_login(
         });
     }
 
+    // Persist ToS acceptance now that login succeeded.
+    accept_tos_best_effort(&legal_state);
+
     // Emit ready event
     let _ = app.emit(
         "runtime:event",
@@ -1110,19 +1089,6 @@ pub async fn v2_start_oauth_login(
 ) -> Result<V2LoginResponse, String> {
     let manager = runtime.manager();
     log::info!("[V2] v2_start_oauth_login starting...");
-
-    // ToS gate — same as v2_manual_login
-    if let Err((error_code, error)) = require_tos_accepted(&legal_state) {
-        return Ok(V2LoginResponse {
-            success: false,
-            user_name: None,
-            user_id: None,
-            subscription: None,
-            subscription_valid_until: None,
-            error: Some(error),
-            error_code: Some(error_code),
-        });
-    }
 
     // Get app_id from initialized client
     let app_id = {
@@ -1407,6 +1373,9 @@ pub async fn v2_start_oauth_login(
         log::warn!("[V2] Failed to persist OAuth token: {}", e);
     }
 
+    // Persist ToS acceptance now that login succeeded.
+    accept_tos_best_effort(&legal_state);
+
     let _ = app.emit(
         "runtime:event",
         RuntimeEvent::RuntimeReady {
@@ -1584,11 +1553,6 @@ pub async fn v2_login(
 ) -> Result<UserSession, RuntimeError> {
     let manager = runtime.manager();
 
-    // Step 0: ToS gate - must be accepted before any login attempt
-    if let Err((_, error)) = require_tos_accepted(&legal_state) {
-        return Err(RuntimeError::Internal(error));
-    }
-
     // Step 1: Legacy auth
     let session = {
         let client = app_state.client.read().await;
@@ -1620,6 +1584,9 @@ pub async fn v2_login(
         return Err(RuntimeError::Internal(e));
     }
     log::info!("[v2_login] Session activated for user {}", session.user_id);
+
+    // Persist ToS acceptance now that login succeeded.
+    accept_tos_best_effort(&legal_state);
 
     // Convert api::models::UserSession to qbz_models::UserSession
     Ok(UserSession {
