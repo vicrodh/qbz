@@ -33,7 +33,7 @@ export interface HomeSeeds {
 
 export async function logRecoEvent(event: RecoEventInput): Promise<void> {
   try {
-    await invoke('reco_log_event', { event });
+    await invoke('v2_reco_log_event', { event });
   } catch (err) {
     console.debug('Reco event log failed:', err);
   }
@@ -58,7 +58,7 @@ export async function getHomeSeeds(limits?: {
   topArtists?: number;
   favorites?: number;
 }): Promise<HomeSeeds> {
-  return invoke<HomeSeeds>('reco_get_home', {
+  return invoke<HomeSeeds>('v2_reco_get_home', {
     limitRecentAlbums: limits?.recentAlbums,
     limitContinueTracks: limits?.continueTracks,
     limitTopArtists: limits?.topArtists,
@@ -72,7 +72,7 @@ export async function trainScores(options?: {
   maxEvents?: number;
   maxPerType?: number;
 }): Promise<void> {
-  await invoke('reco_train_scores', {
+  await invoke('v2_reco_train_scores', {
     lookbackDays: options?.lookbackDays,
     halfLifeDays: options?.halfLifeDays,
     maxEvents: options?.maxEvents,
@@ -86,7 +86,7 @@ export async function getHomeSeedsML(limits?: {
   topArtists?: number;
   favorites?: number;
 }): Promise<HomeSeeds> {
-  return invoke<HomeSeeds>('reco_get_home_ml', {
+  return invoke<HomeSeeds>('v2_reco_get_home_ml', {
     limitRecentAlbums: limits?.recentAlbums,
     limitContinueTracks: limits?.continueTracks,
     limitTopArtists: limits?.topArtists,

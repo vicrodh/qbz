@@ -1,0 +1,36 @@
+[package]
+name = "qbz-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Core orchestrator for QBZ music player"
+
+[dependencies]
+qbz-models = { path = "../qbz-models" }
+qbz-audio = { path = "../qbz-audio" }
+qbz-player = { path = "../qbz-player" }
+qbz-qobuz = { path = "../qbz-qobuz" }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Serialization
+serde_json = { workspace = true }
+
+[features]
+default = []
+# Tier 2 features (to be added later)
+# offline = ["qbz-offlineplayback"]
+# local-library = ["qbz-locallibrary"]
+# cast = ["qbz-cast"]
+# scrobbling = ["qbz-scrobbling"]
+# plex = ["qbz-plex"]
+# full = ["offline", "local-library", "cast", "scrobbling", "plex"]

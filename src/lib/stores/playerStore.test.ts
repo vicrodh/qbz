@@ -201,7 +201,7 @@ describe('playerStore', () => {
       await togglePlay();
 
       expect(getIsPlaying()).toBe(true);
-      expect(mockedInvoke).toHaveBeenCalledWith('resume_playback');
+      expect(mockedInvoke).toHaveBeenCalledWith('v2_resume_playback');
     });
 
     it('should pause playback when playing', async () => {
@@ -212,7 +212,7 @@ describe('playerStore', () => {
       await togglePlay();
 
       expect(getIsPlaying()).toBe(false);
-      expect(mockedInvoke).toHaveBeenCalledWith('pause_playback');
+      expect(mockedInvoke).toHaveBeenCalledWith('v2_pause_playback');
     });
 
     it('should revert on error', async () => {
@@ -226,7 +226,7 @@ describe('playerStore', () => {
     });
   });
 
-  describe('seek', () => {
+  describe('v2_seek', () => {
     it('should clamp position to valid range', async () => {
       setCurrentTrack(mockTrack); // duration = 180
       mockedInvoke.mockResolvedValue(undefined);
@@ -250,7 +250,7 @@ describe('playerStore', () => {
 
       await seek(45.7);
 
-      expect(mockedInvoke).toHaveBeenCalledWith('seek', { position: 45 });
+      expect(mockedInvoke).toHaveBeenCalledWith('v2_seek', { position: 45 });
     });
   });
 
@@ -273,7 +273,7 @@ describe('playerStore', () => {
 
       await setVolume(80);
 
-      expect(mockedInvoke).toHaveBeenCalledWith('set_volume', { volume: 0.8 });
+      expect(mockedInvoke).toHaveBeenCalledWith('v2_set_volume', { volume: 0.8 });
     });
   });
 

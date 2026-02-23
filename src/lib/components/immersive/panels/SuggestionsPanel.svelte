@@ -162,7 +162,7 @@
   async function fetchPlaylistCovers(playlists: Playlist[]) {
     for (const playlist of playlists) {
       try {
-        const fullPlaylist = await invoke<Playlist>('get_playlist', { playlistId: playlist.id });
+        const fullPlaylist = await invoke<Playlist>('v2_get_playlist', { playlistId: playlist.id });
 
         // Extract unique album artworks from tracks
         const artworks: string[] = [];
@@ -209,7 +209,7 @@
 
     loadingRadio = true;
     try {
-      await invoke('create_track_radio', {
+      await invoke('v2_create_track_radio', {
         trackId,
         trackName: trackName || 'Unknown Track',
         artistId

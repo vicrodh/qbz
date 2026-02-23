@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Play, Pause, Heart, HardDrive, AlertCircle, Ban } from 'lucide-svelte';
+  import { Play, Pause, Heart, HardDrive, AlertCircle, Ban, Music } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import TrackMenu from './TrackMenu.svelte';
   import DownloadButton from './DownloadButton.svelte';
@@ -35,6 +35,11 @@
     hideDownload?: boolean;
     hideFavorite?: boolean;
     compact?: boolean; // Compact mode: smaller height, artist as column
+    showArtwork?: boolean; // Optional artwork column (e.g., playlist detail)
+    artworkUrl?: string;
+    selectable?: boolean; // Multi-select mode: show checkbox
+    selected?: boolean;
+    onToggleSelect?: (e: MouseEvent) => void;
     onPlay?: () => void;
     onArtistClick?: () => void;
     onAlbumClick?: () => void;
@@ -49,6 +54,8 @@
     onPlayFromHere?: () => void;
     onPlayNext?: () => void;
     onPlayLater?: () => void;
+    onCreateQbzRadio?: () => void;
+    onCreateQobuzRadio?: () => void;
     onAddToPlaylist?: () => void;
     onRemoveFromPlaylist?: () => void;
     onFindReplacement?: () => void;
@@ -83,6 +90,11 @@
     hideDownload = false,
     hideFavorite = false,
     compact = false,
+    showArtwork = false,
+    artworkUrl,
+    selectable = false,
+    selected = false,
+    onToggleSelect,
     onPlay,
     onArtistClick,
     onAlbumClick,
@@ -92,6 +104,7 @@
   }: Props = $props();
 
   let isHovered = $state(false);
+  let contextMenuPos = $state<{ x: number; y: number } | null>(null);
   let favoriteFromStore = $state(false);
   let isToggling = $state(false);
 
@@ -144,14 +157,32 @@
   class:hovered={isHovered && !isPlaying && !isBlacklisted}
   class:compact
   class:blacklisted={isBlacklisted}
+  class:selected
   data-track-id={trackId ?? undefined}
   onmouseenter={() => (isHovered = true)}
   onmouseleave={() => (isHovered = false)}
-  onclick={isBlacklisted ? undefined : onPlay}
+  onclick={selectable ? onToggleSelect : (isBlacklisted ? undefined : onPlay)}
+  oncontextmenu={(e) => {
+    if (isBlacklisted || selectable) return;
+    e.preventDefault();
+    contextMenuPos = { x: e.clientX, y: e.clientY };
+  }}
   role="button"
   tabindex={isBlacklisted ? -1 : 0}
-  onkeydown={(e) => e.key === 'Enter' && !isBlacklisted && onPlay?.()}
+  onkeydown={(e) => e.key === 'Enter' && !isBlacklisted && (selectable ? onToggleSelect?.(e as unknown as MouseEvent) : onPlay?.())}
 >
+  <!-- Checkbox (select mode) -->
+  {#if selectable}
+    <div class="track-checkbox" onclick={(e) => e.stopPropagation()}>
+      <input
+        type="checkbox"
+        checked={selected}
+        onchange={onToggleSelect as unknown as (e: Event) => void}
+        aria-label="Select track"
+      />
+    </div>
+  {/if}
+
   <!-- Track Number / Play Button / Unavailable Indicator -->
   <div class="track-number" class:unavailable={isUnavailable} class:blacklisted={isBlacklisted}>
     {#if isBlacklisted}
@@ -180,6 +211,18 @@
       <span>{number}</span>
     {/if}
   </div>
+
+  <!-- Track Info -->
+  {#if showArtwork}
+    <div class="track-artwork">
+      <div class="track-artwork-placeholder">
+        <Music size={14} />
+      </div>
+      {#if artworkUrl}
+        <img src={artworkUrl} alt={title} loading="lazy" decoding="async" />
+      {/if}
+    </div>
+  {/if}
 
   <!-- Track Info -->
   <div class="track-info">
@@ -278,6 +321,8 @@
       onPlayFromHere={menuActions?.onPlayFromHere}
       onPlayNext={menuActions?.onPlayNext}
       onPlayLater={menuActions?.onPlayLater}
+      onCreateQbzRadio={menuActions?.onCreateQbzRadio}
+      onCreateQobuzRadio={menuActions?.onCreateQobuzRadio}
       onAddFavorite={trackId !== undefined ? () => toggleTrackFavorite(trackId) : undefined}
       onAddToPlaylist={menuActions?.onAddToPlaylist}
       onRemoveFromPlaylist={menuActions?.onRemoveFromPlaylist}
@@ -291,6 +336,8 @@
       isTrackDownloaded={menuActions?.isTrackDownloaded}
       onReDownload={menuActions?.onReDownload}
       onRemoveDownload={menuActions?.onRemoveDownload ?? onRemoveDownload}
+      contextMenuPosition={contextMenuPos}
+      onContextMenuClosed={() => { contextMenuPos = null; }}
     />
   </div>
 </div>
@@ -326,6 +373,29 @@
 
   .track-row.compact .track-number {
     width: 32px;
+  }
+
+  .track-row.selected {
+    background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  }
+
+  .track-row.selected.hovered {
+    background-color: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  }
+
+  .track-checkbox {
+    width: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .track-checkbox input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
   }
 
   .track-number {
@@ -443,6 +513,35 @@
   .track-info {
     flex: 1;
     min-width: 0;
+  }
+
+  .track-artwork {
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
+    overflow: hidden;
+    flex-shrink: 0;
+    position: relative;
+    background-color: var(--bg-tertiary);
+  }
+
+  .track-artwork img {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    z-index: 1;
+  }
+
+  .track-artwork-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.7;
   }
 
   .track-title {

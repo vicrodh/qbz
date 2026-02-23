@@ -58,9 +58,18 @@
     onGoToArtist?: (artistId: number) => void;
     onShowInfo?: (trackId: number) => void;
     onReDownload?: (track: Track) => void;
+    onCreateQbzRadio?: (trackId: number, trackTitle: string, artistId?: number) => void;
+    onCreateQobuzRadio?: (trackId: number, trackTitle: string) => void;
     // For getting artist/album IDs from non-local tracks
     getArtistId?: (track: Track) => number | undefined;
     getAlbumId?: (track: Track) => string | undefined;
+    // Album artwork column (same as Playlist view)
+    showArtwork?: boolean;
+    getArtworkUrl?: (track: Track) => string | undefined;
+    // Multi-select support
+    selectable?: boolean;
+    selectedIds?: Set<number>;
+    onToggleSelect?: (trackId: number) => void;
   }
 
   let {
@@ -79,13 +88,13 @@
     onTrackPlayLater,
     onTrackAddToPlaylist,
     // Optional accessors with defaults for LocalTrack structure
-    getTrackId = (t: Track) => t.id,
-    getTrackNumber = (t: Track, idx: number) => t.track_number ?? idx + 1,
-    getTrackTitle = (t: Track) => t.title,
-    getTrackArtist = (t: Track) => t.artist,
-    getTrackDuration = (t: Track) => t.duration_secs,
-    getTrackAlbumKey = (t: Track) => t.album_group_key,
-    getTrackAlbum = (t: Track) => t.album,
+    getTrackId = (track: Track) => track.id,
+    getTrackNumber = (track: Track, idx: number) => track.track_number ?? idx + 1,
+    getTrackTitle = (track: Track) => track.title,
+    getTrackArtist = (track: Track) => track.artist,
+    getTrackDuration = (track: Track) => track.duration_secs,
+    getTrackAlbumKey = (track: Track) => track.album_group_key,
+    getTrackAlbum = (track: Track) => track.album,
     showAlbum = false,
     // Non-local defaults
     isLocal = true,
@@ -101,8 +110,15 @@
     onGoToArtist,
     onShowInfo,
     onReDownload,
+    onCreateQbzRadio,
+    onCreateQobuzRadio,
     getArtistId,
     getAlbumId,
+    showArtwork = false,
+    getArtworkUrl,
+    selectable = false,
+    selectedIds,
+    onToggleSelect,
   }: Props = $props();
 
   // Constants
@@ -323,10 +339,15 @@
             title={getTrackTitle(item.track)}
             artist={trackArtist}
             album={albumName}
+            showArtwork={showArtwork}
+            artworkUrl={getArtworkUrl?.(item.track)}
             duration={formatDuration(getTrackDuration(item.track))}
             quality={getQualityBadge(item.track)}
             isPlaying={isPlaybackActive && activeTrackId === trackId}
             isBlacklisted={trackBlacklisted}
+            selectable={selectable}
+            selected={selectedIds?.has(trackId) ?? false}
+            onToggleSelect={onToggleSelect ? () => onToggleSelect(trackId) : undefined}
             {isLocal}
             hideDownload={hideDownload || trackBlacklisted}
             hideFavorite={hideFavorite || trackBlacklisted}
@@ -347,6 +368,8 @@
               onPlayNow: () => onTrackPlay(item.track),
               onPlayNext: onTrackPlayNext ? () => onTrackPlayNext(item.track) : undefined,
               onPlayLater: onTrackPlayLater ? () => onTrackPlayLater(item.track) : undefined,
+              onCreateQbzRadio: !isLocal && onCreateQbzRadio ? () => onCreateQbzRadio(trackId, getTrackTitle(item.track), artistId) : undefined,
+              onCreateQobuzRadio: !isLocal && onCreateQobuzRadio ? () => onCreateQobuzRadio(trackId, getTrackTitle(item.track)) : undefined,
               onAddToPlaylist: onTrackAddToPlaylist ? () => onTrackAddToPlaylist(trackId) : undefined,
               onShareQobuz: onShareQobuz ? () => onShareQobuz(trackId) : undefined,
               onShareSonglink: onShareSonglink ? () => onShareSonglink(item.track) : undefined,

@@ -135,11 +135,11 @@ export async function connectToDevice(device: CastDevice, protocol: CastProtocol
   if (wasPlaying || currentTrack) {
     console.log('[CastStore] Stopping local playback before cast connection...');
     try {
-      await invoke('stop_playback');
+      await invoke('v2_stop_playback');
       setIsPlaying(false);
     } catch (err) {
       // Ignore errors - player might not be playing
-      console.log('[CastStore] stop_playback returned:', err);
+      console.log('[CastStore] v2_stop_playback returned:', err);
     }
   }
 
@@ -147,13 +147,13 @@ export async function connectToDevice(device: CastDevice, protocol: CastProtocol
     // Now establish the cast connection
     switch (protocol) {
       case 'chromecast':
-        await invoke('cast_connect', { deviceId: device.id });
+        await invoke('v2_cast_connect', { deviceId: device.id });
         break;
       case 'dlna':
-        await invoke('dlna_connect', { deviceId: device.id });
+        await invoke('v2_dlna_connect', { deviceId: device.id });
         break;
       case 'airplay':
-        await invoke('airplay_connect', { deviceId: device.id });
+        await invoke('v2_airplay_connect', { deviceId: device.id });
         break;
     }
 
@@ -232,13 +232,13 @@ export async function disconnect(): Promise<void> {
     await castStop();
     switch (savedProtocol) {
       case 'chromecast':
-        await invoke('cast_disconnect');
+        await invoke('v2_cast_disconnect');
         break;
       case 'dlna':
-        await invoke('dlna_disconnect');
+        await invoke('v2_dlna_disconnect');
         break;
       case 'airplay':
-        await invoke('airplay_disconnect');
+        await invoke('v2_airplay_disconnect');
         break;
     }
   } catch (err) {
@@ -321,7 +321,7 @@ export async function castTrack(
   try {
     switch (state.protocol) {
       case 'chromecast':
-        await invoke('cast_play_track', {
+        await invoke('v2_cast_play_track', {
           trackId,
           metadata: {
             title: metadata.title,
@@ -333,7 +333,7 @@ export async function castTrack(
         });
         break;
       case 'dlna':
-        await invoke('dlna_play_track', {
+        await invoke('v2_dlna_play_track', {
           trackId: trackId,
           metadata: {
             title: metadata.title,
@@ -345,7 +345,7 @@ export async function castTrack(
         });
         break;
       case 'airplay':
-        await invoke('airplay_load_media', {
+        await invoke('v2_airplay_load_media', {
           metadata: {
             title: metadata.title,
             artist: metadata.artist,
@@ -354,7 +354,7 @@ export async function castTrack(
             duration_secs: metadata.durationSecs
           }
         });
-        await invoke('airplay_play');
+        await invoke('v2_airplay_play');
         break;
     }
 
@@ -386,13 +386,13 @@ export async function castPlay(): Promise<void> {
   try {
     switch (state.protocol) {
       case 'chromecast':
-        await invoke('cast_play');
+        await invoke('v2_cast_play');
         break;
       case 'dlna':
-        await invoke('dlna_play');
+        await invoke('v2_dlna_play');
         break;
       case 'airplay':
-        await invoke('airplay_play');
+        await invoke('v2_airplay_play');
         break;
     }
     state = { ...state, isPlaying: true };
@@ -411,13 +411,13 @@ export async function castPause(): Promise<void> {
   try {
     switch (state.protocol) {
       case 'chromecast':
-        await invoke('cast_pause');
+        await invoke('v2_cast_pause');
         break;
       case 'dlna':
-        await invoke('dlna_pause');
+        await invoke('v2_dlna_pause');
         break;
       case 'airplay':
-        await invoke('airplay_pause');
+        await invoke('v2_airplay_pause');
         break;
     }
     state = { ...state, isPlaying: false };
@@ -436,13 +436,13 @@ export async function castStop(): Promise<void> {
   try {
     switch (state.protocol) {
       case 'chromecast':
-        await invoke('cast_stop');
+        await invoke('v2_cast_stop');
         break;
       case 'dlna':
-        await invoke('dlna_stop');
+        await invoke('v2_dlna_stop');
         break;
       case 'airplay':
-        await invoke('airplay_stop');
+        await invoke('v2_airplay_stop');
         break;
     }
     state = { ...state, isPlaying: false, currentTrackId: null };
@@ -461,10 +461,10 @@ export async function castSeek(positionSecs: number): Promise<void> {
   try {
     switch (state.protocol) {
       case 'chromecast':
-        await invoke('cast_seek', { positionSecs });
+        await invoke('v2_cast_seek', { positionSecs });
         break;
       case 'dlna':
-        await invoke('dlna_seek', { positionSecs });
+        await invoke('v2_dlna_seek', { positionSecs });
         break;
       case 'airplay':
         // AirPlay seek - not implemented
@@ -486,13 +486,13 @@ export async function castSetVolume(volume: number): Promise<void> {
   try {
     switch (state.protocol) {
       case 'chromecast':
-        await invoke('cast_set_volume', { volume: normalizedVolume });
+        await invoke('v2_cast_set_volume', { volume: normalizedVolume });
         break;
       case 'dlna':
-        await invoke('dlna_set_volume', { volume: normalizedVolume });
+        await invoke('v2_dlna_set_volume', { volume: normalizedVolume });
         break;
       case 'airplay':
-        await invoke('airplay_set_volume', { volume: normalizedVolume });
+        await invoke('v2_airplay_set_volume', { volume: normalizedVolume });
         break;
     }
   } catch (err) {
@@ -545,7 +545,7 @@ export function startPositionPolling(): void {
           position_secs: number;
           duration_secs: number;
           transport_state: string;
-        }>('dlna_get_position');
+        }>('v2_dlna_get_position');
         
         positionSecs = positionInfo.position_secs;
         durationSecs = positionInfo.duration_secs;
@@ -556,7 +556,7 @@ export function startPositionPolling(): void {
           duration_secs: number;
           player_state: string;
           idle_reason: string | null;
-        }>('cast_get_position');
+        }>('v2_cast_get_position');
         
         positionSecs = positionInfo.position_secs;
         durationSecs = positionInfo.duration_secs;

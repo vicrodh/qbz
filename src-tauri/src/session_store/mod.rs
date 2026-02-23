@@ -42,6 +42,16 @@ pub struct PersistedSession {
     pub repeat_mode: String, // "off", "all", "one"
     pub was_playing: bool,
     pub saved_at: i64,
+    #[serde(default = "default_last_view")]
+    pub last_view: String,
+    #[serde(default)]
+    pub view_context_id: Option<String>,
+    #[serde(default)]
+    pub view_context_type: Option<String>,
+}
+
+fn default_last_view() -> String {
+    "home".to_string()
 }
 
 impl Default for PersistedSession {
@@ -55,6 +65,9 @@ impl Default for PersistedSession {
             repeat_mode: "off".to_string(),
             was_playing: false,
             saved_at: 0,
+            last_view: "home".to_string(),
+            view_context_id: None,
+            view_context_type: None,
         }
     }
 }
@@ -180,6 +193,26 @@ impl SessionStore {
             );
         }
 
+        // Add last_view, view_context_id, view_context_type columns to player_state
+        let has_last_view: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('player_state') WHERE name = 'last_view'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(0)
+            > 0;
+
+        if !has_last_view {
+            let _ = conn.execute_batch(
+                "
+                ALTER TABLE player_state ADD COLUMN last_view TEXT NOT NULL DEFAULT 'home';
+                ALTER TABLE player_state ADD COLUMN view_context_id TEXT;
+                ALTER TABLE player_state ADD COLUMN view_context_type TEXT;
+                ",
+            );
+        }
+
         Ok(Self { conn })
     }
 
@@ -237,7 +270,10 @@ impl SessionStore {
                 shuffle_enabled = ?4,
                 repeat_mode = ?5,
                 was_playing = ?6,
-                saved_at = ?7
+                saved_at = ?7,
+                last_view = ?8,
+                view_context_id = ?9,
+                view_context_type = ?10
              WHERE id = 1",
             params![
                 session.current_index.map(|i| i as i64),
@@ -247,6 +283,9 @@ impl SessionStore {
                 session.repeat_mode,
                 session.was_playing as i64,
                 now,
+                session.last_view,
+                session.view_context_id,
+                session.view_context_type,
             ],
         ) {
             let _ = self.conn.execute("ROLLBACK", []);
@@ -263,10 +302,10 @@ impl SessionStore {
     /// Load the persisted session state
     pub fn load_session(&self) -> Result<PersistedSession, String> {
         // Load player state
-        let (current_index, current_position_secs, volume, shuffle_enabled, repeat_mode, was_playing, saved_at):
-            (Option<i64>, i64, f64, i64, String, i64, i64) = self.conn
+        let (current_index, current_position_secs, volume, shuffle_enabled, repeat_mode, was_playing, saved_at, last_view, view_context_id, view_context_type):
+            (Option<i64>, i64, f64, i64, String, i64, i64, String, Option<String>, Option<String>) = self.conn
             .query_row(
-                "SELECT current_index, current_position_secs, volume, shuffle_enabled, repeat_mode, was_playing, saved_at
+                "SELECT current_index, current_position_secs, volume, shuffle_enabled, repeat_mode, was_playing, saved_at, last_view, view_context_id, view_context_type
                  FROM player_state WHERE id = 1",
                 [],
                 |row| Ok((
@@ -277,6 +316,9 @@ impl SessionStore {
                     row.get(4)?,
                     row.get(5)?,
                     row.get(6)?,
+                    row.get::<_, String>(7).unwrap_or_else(|_| "home".to_string()),
+                    row.get(8)?,
+                    row.get(9)?,
                 )),
             )
             .map_err(|e| format!("Failed to load player state: {}", e))?;
@@ -318,6 +360,9 @@ impl SessionStore {
             repeat_mode,
             was_playing: was_playing != 0,
             saved_at,
+            last_view,
+            view_context_id,
+            view_context_type,
         })
     }
 
@@ -369,7 +414,7 @@ impl SessionStore {
             .map_err(|e| format!("Failed to clear queue: {}", e))?;
 
         self.conn.execute(
-            "UPDATE player_state SET current_index = NULL, current_position_secs = 0, was_playing = 0 WHERE id = 1",
+            "UPDATE player_state SET current_index = NULL, current_position_secs = 0, was_playing = 0, last_view = 'home', view_context_id = NULL, view_context_type = NULL WHERE id = 1",
             [],
         ).map_err(|e| format!("Failed to reset player state: {}", e))?;
 
@@ -435,6 +480,9 @@ pub fn save_session_state(
         repeat_mode,
         was_playing,
         saved_at: 0, // Will be set in save_session
+        last_view: "home".to_string(),
+        view_context_id: None,
+        view_context_type: None,
     };
 
     let guard = state

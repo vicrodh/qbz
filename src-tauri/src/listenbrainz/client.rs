@@ -103,7 +103,9 @@ impl ListenBrainzClient {
             return Err(validation.message);
         }
 
-        let user_name = validation.user_name.ok_or("Token valid but no username returned")?;
+        let user_name = validation
+            .user_name
+            .ok_or("Token valid but no username returned")?;
 
         // Store validated token and username
         {
@@ -252,7 +254,11 @@ impl ListenBrainzClient {
     }
 
     /// Internal: Submit listens to API
-    async fn submit_listens(&self, token: &str, payload: &SubmitListensPayload) -> Result<(), String> {
+    async fn submit_listens(
+        &self,
+        token: &str,
+        payload: &SubmitListensPayload,
+    ) -> Result<(), String> {
         let url = format!("{}/submit-listens", LISTENBRAINZ_API_URL);
 
         let response = self
@@ -282,7 +288,10 @@ impl ListenBrainzClient {
         } else {
             let status = response.status();
             let text = response.text().await.unwrap_or_default();
-            Err(format!("ListenBrainz submission failed: {} - {}", status, text))
+            Err(format!(
+                "ListenBrainz submission failed: {} - {}",
+                status, text
+            ))
         }
     }
 }

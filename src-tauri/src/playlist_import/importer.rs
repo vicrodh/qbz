@@ -11,9 +11,7 @@ use crate::playlist_import::providers::{detect_provider, fetch_playlist};
 const ADD_CHUNK_SIZE: usize = 50;
 const QOBUZ_PLAYLIST_TRACK_LIMIT: usize = 2000;
 
-pub async fn preview_public_playlist(
-    url: &str,
-) -> Result<ImportPlaylist, PlaylistImportError> {
+pub async fn preview_public_playlist(url: &str) -> Result<ImportPlaylist, PlaylistImportError> {
     let provider = detect_provider(url)?;
     fetch_playlist(provider).await
 }

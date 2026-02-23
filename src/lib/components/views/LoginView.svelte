@@ -33,6 +33,27 @@
 
   const LOGIN_TIMEOUT_MS = 60000; // 60 seconds
 
+  function formatErrorMessage(err: unknown): string {
+    if (typeof err === 'string') return err;
+    if (err instanceof Error) return err.message;
+    if (err && typeof err === 'object') {
+      const obj = err as Record<string, unknown>;
+      const candidates = ['message', 'error', 'details', 'reason'];
+      for (const key of candidates) {
+        const value = obj[key];
+        if (typeof value === 'string' && value.trim().length > 0) {
+          return value;
+        }
+      }
+      try {
+        return JSON.stringify(obj);
+      } catch {
+        return 'Unknown error';
+      }
+    }
+    return 'Unknown error';
+  }
+
   // Initialize the Qobuz™ client on mount
   $effect(() => {
     initializeClient();
@@ -44,6 +65,17 @@
       }
     };
   });
+
+  // RuntimeStatus type from backend
+  interface RuntimeStatus {
+    state: string;
+    user_id: number | null;
+    client_initialized: boolean;
+    legacy_auth: boolean;
+    corebridge_auth: boolean;
+    session_activated: boolean;
+    degraded_reason: { code: string; message: string } | null;
+  }
 
   async function initializeClient() {
     try {
@@ -64,77 +96,52 @@
         }
       }, LOGIN_TIMEOUT_MS);
 
-      const result = await invoke<boolean>('init_client');
-      console.log('Client initialized:', result);
-
-      // Check if already logged in (in-memory session)
-      const loggedIn = await invoke<boolean>('is_logged_in');
-      if (loggedIn) {
-        clearTimeoutTimer();
-        const userInfo = await invoke<{ user_name: string; subscription: string; subscription_valid_until?: string | null } | null>('get_user_info');
-        const userId = await invoke<number | null>('get_current_user_id');
-        if (userInfo && userId) {
-          onLoginSuccess({
-            userName: userInfo.user_name,
-            userId,
-            subscription: userInfo.subscription,
-            subscriptionValidUntil: userInfo.subscription_valid_until ?? null,
-          });
-        } else {
-          onLoginSuccess({ userName: 'User', userId: userId || 0, subscription: 'Active' });
-        }
-        return;
-      }
-
-      // Check for saved credentials and last user session
-      initStatus = 'Checking saved credentials...';
-      const hasSavedCreds = await invoke<boolean>('has_saved_credentials');
-      const lastUserId = await invoke<number | null>('get_last_user_id');
-
-      // Restore per-user session before reading ToS or auto-login
-      if (hasSavedCreds && lastUserId) {
-        initStatus = 'Restoring session...';
-        try {
-          await invoke('activate_user_session', { userId: lastUserId });
-          console.log('Restored user session for', lastUserId);
-        } catch (e) {
-          console.warn('Failed to restore user session:', e);
-        }
-      }
-
-      // Load ToS acceptance from Rust (now available after session restore)
+      // Load ToS acceptance first (uses localStorage fallback before session)
       initStatus = 'Loading preferences...';
       await loadTosAcceptance();
 
-      if (hasSavedCreds && get(qobuzTosAccepted)) {
-        initStatus = 'Logging in...';
-        const response = await invoke<{
-          success: boolean;
-          user_name?: string;
-          user_id?: number;
-          subscription?: string;
-          subscription_valid_until?: string | null;
-          error?: string;
-          error_code?: string;
-        }>('auto_login');
+      // Use runtime_bootstrap as the SINGLE SOURCE OF TRUTH for initialization.
+      // It does everything: init client, auto-login if saved creds, activate session.
+      // NO legacy is_logged_in/get_user_info checks - that causes state divergence.
+      initStatus = 'Initializing...';
+      const status = await invoke<RuntimeStatus>('runtime_bootstrap');
+      console.log('[LoginView] runtime_bootstrap result:', status);
 
-        if (response.success) {
-          clearTimeoutTimer();
-          console.log('Auto-login successful');
-          onLoginSuccess({
-            userName: response.user_name || 'User',
-            userId: response.user_id || 0,
-            subscription: response.subscription || 'Active',
-            subscriptionValidUntil: response.subscription_valid_until ?? null,
-          });
-          return;
-        } else {
-          console.log('Auto-login failed:', response.error);
-          if (response.error_code === 'ineligible_user') {
-            error = $t('auth.ineligibleSubscription');
+      // Check if session is fully active (authenticated + session activated)
+      if (status.session_activated && status.user_id && status.user_id > 0) {
+        // Session is valid - need to get user display info
+        // Use v2 command since session is active
+        clearTimeoutTimer();
+        try {
+          const userInfo = await invoke<{ user_name: string; subscription: string; subscription_valid_until?: string | null } | null>('v2_get_user_info');
+          if (userInfo) {
+            console.log('[LoginView] Session restored for user_id:', status.user_id);
+            onLoginSuccess({
+              userName: userInfo.user_name,
+              userId: status.user_id,
+              subscription: userInfo.subscription,
+              subscriptionValidUntil: userInfo.subscription_valid_until ?? null,
+            });
+            return;
           }
-          // Don't show error, just fall through to manual login
+        } catch (err) {
+          console.warn('[LoginView] Could not get user info, will show login form:', err);
         }
+      }
+
+      // Check for degraded state
+      if (status.degraded_reason) {
+        console.warn('[LoginView] Runtime degraded:', status.degraded_reason);
+        if (status.degraded_reason.code === 'BundleExtractionFailed') {
+          initError = $t('auth.connectionFailed');
+          clearTimeoutTimer();
+          return;
+        }
+      }
+
+      // If client is initialized but no session, show login form
+      if (status.client_initialized && !status.session_activated) {
+        console.log('[LoginView] Client ready, no session - showing login form');
       }
 
       // If we reach here, no auto-login - clear timeout and show login form
@@ -142,7 +149,7 @@
     } catch (err) {
       console.error('Failed to initialize client:', err);
       clearTimeoutTimer();
-      initError = String(err);
+      initError = formatErrorMessage(err);
     } finally {
       if (!isTimedOut) {
         isInitializing = false;
@@ -179,6 +186,7 @@
     error = null;
 
     try {
+      // V2 manual login with blocking CoreBridge auth
       const response = await invoke<{
         success: boolean;
         user_name?: string;
@@ -187,38 +195,57 @@
         subscription_valid_until?: string | null;
         error?: string;
         error_code?: string;
-      }>('login', { email, password });
+      }>('v2_manual_login', { email, password });
 
-      console.log('Login response:', response);
+      console.log('[LoginView] v2_manual_login response:', response);
 
       if (response.success) {
-        // Save credentials if "Remember me" is checked
+        // Validate that we have a valid user_id - NEVER allow 0
+        if (!response.user_id || response.user_id === 0) {
+          console.error('[LoginView] v2_manual_login returned success but invalid user_id');
+          error = $t('auth.v2AuthFailed');
+          isLoading = false;
+          return;
+        }
+
+        // Persist credential preference explicitly on each successful login
         if (rememberMe) {
           try {
-            await invoke('save_credentials', { email, password });
+            await invoke('v2_save_credentials', { email, password });
             console.log('Credentials saved to keyring');
           } catch (saveErr) {
             console.error('Failed to save credentials:', saveErr);
             // Don't block login if saving fails
           }
+        } else {
+          try {
+            await invoke('v2_clear_saved_credentials');
+            console.log('Saved credentials cleared (remember me disabled)');
+          } catch (clearErr) {
+            console.error('Failed to clear saved credentials:', clearErr);
+          }
         }
 
         onLoginSuccess({
             userName: response.user_name || 'User',
-            userId: response.user_id || 0,
+            userId: response.user_id,
             subscription: response.subscription || 'Active',
             subscriptionValidUntil: response.subscription_valid_until ?? null,
           });
       } else {
         if (response.error_code === 'ineligible_user') {
           error = $t('auth.ineligibleSubscription');
+        } else if (response.error_code === 'v2_auth_failed') {
+          error = $t('auth.v2AuthFailed');
+        } else if (response.error_code === 'v2_not_initialized') {
+          error = $t('auth.v2NotInitialized');
         } else {
           error = response.error || 'Login failed';
         }
       }
     } catch (err) {
       console.error('Login error:', err);
-      error = String(err);
+      error = formatErrorMessage(err);
     } finally {
       isLoading = false;
     }
@@ -230,7 +257,7 @@
       onStartOffline?.();
     } catch (err) {
       console.error('Failed to enable offline mode:', err);
-      error = String(err);
+      error = formatErrorMessage(err);
     }
   }
 </script>

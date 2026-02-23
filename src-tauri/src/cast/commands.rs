@@ -5,12 +5,13 @@ use tauri::State;
 use tokio::sync::Mutex;
 
 use crate::api::models::Quality;
-use crate::AppState;
-use crate::cast::{
-    CastError, CastStatus, CastPositionInfo, DeviceDiscovery, DiscoveredDevice, MediaMetadata, MediaServer,
-};
 use crate::cast::chromecast_thread::ChromecastHandle;
+use crate::cast::{
+    CastError, CastPositionInfo, CastStatus, DeviceDiscovery, DiscoveredDevice, MediaMetadata,
+    MediaServer,
+};
 use crate::library::{AudioFormat, LibraryState};
+use crate::AppState;
 
 /// Cast state shared across commands
 /// Uses a dedicated thread for Chromecast operations since rust_cast is not thread-safe
@@ -49,9 +50,7 @@ impl CastState {
 #[tauri::command]
 pub async fn cast_start_discovery(state: State<'_, CastState>) -> Result<(), String> {
     let mut discovery = state.discovery.lock().await;
-    discovery
-        .start_discovery()
-        .map_err(|e| e.to_string())
+    discovery.start_discovery().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -112,7 +111,10 @@ pub async fn cast_get_status(state: State<'_, CastState>) -> Result<CastStatus, 
 
 #[tauri::command]
 pub async fn cast_get_position(state: State<'_, CastState>) -> Result<CastPositionInfo, String> {
-    state.chromecast.get_media_position().map_err(|e| e.to_string())
+    state
+        .chromecast
+        .get_media_position()
+        .map_err(|e| e.to_string())
 }
 
 // === Playback ===
@@ -149,11 +151,16 @@ pub async fn cast_play_track(
     };
 
     // Ensure media server is started (lazy init)
-    state.get_or_create_media_server().await.map_err(|e| e.to_string())?;
+    state
+        .get_or_create_media_server()
+        .await
+        .map_err(|e| e.to_string())?;
 
     let url = {
         let mut server_guard = state.media_server.lock().await;
-        let server = server_guard.as_mut().ok_or("Media server not initialized")?;
+        let server = server_guard
+            .as_mut()
+            .ok_or("Media server not initialized")?;
         server.register_audio(track_id, audio_data, &content_type);
         let url = match target_ip.as_deref() {
             Some(ip) => server.get_audio_url_for_target(track_id, ip),
@@ -176,7 +183,9 @@ pub async fn cast_play_local_track(
 ) -> Result<(), String> {
     let track = {
         let db_opt__ = library_state.db.lock().await;
-        let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
+        let db = db_opt__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         db.get_track(track_id)
             .map_err(|e| e.to_string())?
             .ok_or_else(|| "Track not found".to_string())?
@@ -188,11 +197,16 @@ pub async fn cast_play_local_track(
     };
 
     // Ensure media server is started (lazy init)
-    state.get_or_create_media_server().await.map_err(|e| e.to_string())?;
+    state
+        .get_or_create_media_server()
+        .await
+        .map_err(|e| e.to_string())?;
 
     let url = {
         let mut server_guard = state.media_server.lock().await;
-        let server = server_guard.as_mut().ok_or("Media server not initialized")?;
+        let server = server_guard
+            .as_mut()
+            .ok_or("Media server not initialized")?;
         server
             .register_file(track_id as u64, &track.file_path)
             .map_err(|e| e.to_string())?;
@@ -236,12 +250,18 @@ pub async fn cast_stop(state: State<'_, CastState>) -> Result<(), String> {
 
 #[tauri::command]
 pub async fn cast_seek(position_secs: f64, state: State<'_, CastState>) -> Result<(), String> {
-    state.chromecast.seek(position_secs).map_err(|e| e.to_string())
+    state
+        .chromecast
+        .seek(position_secs)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub async fn cast_set_volume(volume: f32, state: State<'_, CastState>) -> Result<(), String> {
-    state.chromecast.set_volume(volume).map_err(|e| e.to_string())
+    state
+        .chromecast
+        .set_volume(volume)
+        .map_err(|e| e.to_string())
 }
 
 async fn download_audio(url: &str) -> Result<Vec<u8>, String> {

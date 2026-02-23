@@ -228,14 +228,23 @@ impl DiscogsClient {
 
         log::debug!("Fetching Discogs release details for ID: {}", release_id);
 
-        let response = self.client.get(&url).send().await
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .map_err(|e| format!("Failed to fetch release details: {}", e))?;
 
         if !response.status().is_success() {
-            return Err(format!("Failed to fetch release details: {}", response.status()));
+            return Err(format!(
+                "Failed to fetch release details: {}",
+                response.status()
+            ));
         }
 
-        let details: ReleaseDetails = response.json().await
+        let details: ReleaseDetails = response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse release details: {}", e))?;
 
         Ok(details)
@@ -269,14 +278,23 @@ impl DiscogsClient {
             catalog_number
         );
 
-        let response = self.client.get(&url).send().await
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .map_err(|e| format!("Failed to search Discogs: {}", e))?;
 
         if !response.status().is_success() {
-            return Err(format!("Discogs search failed with status: {}", response.status()));
+            return Err(format!(
+                "Discogs search failed with status: {}",
+                response.status()
+            ));
         }
 
-        let search: SearchResponse = response.json().await
+        let search: SearchResponse = response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse Discogs response: {}", e))?;
 
         // Get IDs of top 2 relevant releases
@@ -323,7 +341,12 @@ impl DiscogsClient {
                                 count += 1;
                             }
                         }
-                        log::debug!("Added {} images from release #{} ({})", count, idx + 1, details.title);
+                        log::debug!(
+                            "Added {} images from release #{} ({})",
+                            count,
+                            idx + 1,
+                            details.title
+                        );
                     }
                 }
                 Err(e) => {
@@ -379,7 +402,10 @@ impl DiscogsClient {
 
         // Return up to 10 unique images
         all_images.truncate(10);
-        log::info!("Returning {} artwork options from Discogs", all_images.len());
+        log::info!(
+            "Returning {} artwork options from Discogs",
+            all_images.len()
+        );
         Ok(all_images)
     }
 
@@ -399,7 +425,8 @@ impl DiscogsClient {
         let cache_path = cache_dir.join(&filename);
 
         // Download the image
-        self.download_image(image_url, &cache_path).await
+        self.download_image(image_url, &cache_path)
+            .await
             .ok_or_else(|| "Failed to download image".to_string())?;
 
         Ok(cache_path.to_string_lossy().to_string())
@@ -415,14 +442,23 @@ impl DiscogsClient {
 
         log::debug!("Searching Discogs for artist: {}", query);
 
-        let response = self.client.get(&url).send().await
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .map_err(|e| format!("Failed to search Discogs: {}", e))?;
 
         if !response.status().is_success() {
-            return Err(format!("Discogs search failed with status: {}", response.status()));
+            return Err(format!(
+                "Discogs search failed with status: {}",
+                response.status()
+            ));
         }
 
-        let search: SearchResponse = response.json().await
+        let search: SearchResponse = response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse Discogs response: {}", e))?;
 
         Ok(search)
@@ -458,11 +494,18 @@ impl DiscogsClient {
             catalog_number
         );
 
-        let response = self.client.get(&url).send().await
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .map_err(|e| format!("Failed to search Discogs: {}", e))?;
 
         if !response.status().is_success() {
-            return Err(format!("Discogs search failed with status: {}", response.status()));
+            return Err(format!(
+                "Discogs search failed with status: {}",
+                response.status()
+            ));
         }
 
         // Parse response with extended fields
@@ -471,11 +514,14 @@ impl DiscogsClient {
             results: Vec<DiscogsSearchResultExtended>,
         }
 
-        let search: ExtendedSearchResponse = response.json().await
+        let search: ExtendedSearchResponse = response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse Discogs response: {}", e))?;
 
         // Filter to releases only
-        let results: Vec<_> = search.results
+        let results: Vec<_> = search
+            .results
             .into_iter()
             .filter(|r| r.result_type == "release" || r.result_type == "master")
             .collect();
@@ -485,22 +531,35 @@ impl DiscogsClient {
     }
 
     /// Get full release metadata including tracklist
-    pub async fn get_release_metadata(&self, release_id: u64) -> Result<DiscogsReleaseMetadata, String> {
+    pub async fn get_release_metadata(
+        &self,
+        release_id: u64,
+    ) -> Result<DiscogsReleaseMetadata, String> {
         let url = format!("{}/release/{}", DISCOGS_PROXY_URL, release_id);
 
         log::debug!("Fetching Discogs release metadata for ID: {}", release_id);
 
-        let response = self.client.get(&url).send().await
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
             .map_err(|e| format!("Failed to fetch release: {}", e))?;
 
         if !response.status().is_success() {
             return Err(format!("Failed to fetch release: {}", response.status()));
         }
 
-        let metadata: DiscogsReleaseMetadata = response.json().await
+        let metadata: DiscogsReleaseMetadata = response
+            .json()
+            .await
             .map_err(|e| format!("Failed to parse release metadata: {}", e))?;
 
-        log::info!("Fetched Discogs release: {} ({:?})", metadata.title, metadata.year);
+        log::info!(
+            "Fetched Discogs release: {} ({:?})",
+            metadata.title,
+            metadata.year
+        );
         Ok(metadata)
     }
 
@@ -515,12 +574,7 @@ impl DiscogsClient {
             urlencoding::encode(image_url)
         );
 
-        let response = self
-            .client
-            .get(&proxy_url)
-            .send()
-            .await
-            .ok()?;
+        let response = self.client.get(&proxy_url).send().await.ok()?;
 
         if !response.status().is_success() {
             log::warn!("Failed to download Discogs image: {}", response.status());

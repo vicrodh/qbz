@@ -4,16 +4,11 @@
 //! Uses a lockless ring buffer to capture samples from the audio thread and processes them
 //! on a dedicated thread.
 
-mod ring_buffer;
 mod fft_processor;
-mod tapped_source;
+pub use fft_processor::{start_visualizer_thread, VisualizerState};
+pub use qbz_audio::{RingBuffer, TappedSource, VisualizerTap};
 
-pub use ring_buffer::RingBuffer;
-pub use fft_processor::{VisualizerState, start_visualizer_thread};
-pub use tapped_source::TappedSource;
-
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri::AppHandle;
 
 /// Number of frequency bins to send to frontend
@@ -21,53 +16,10 @@ use tauri::AppHandle;
 pub const NUM_BARS: usize = 16;
 
 /// FFT size (must be power of 2)
-/// 1024 is faster than 2048 and still gives ~43Hz resolution at 44.1kHz
-pub const FFT_SIZE: usize = 1024;
+pub const FFT_SIZE: usize = qbz_audio::visualizer::FFT_SIZE;
 
 /// Target frames per second for visualization updates
 pub const TARGET_FPS: u64 = 30;
-
-/// Shared state for visualization that can be passed to the audio thread
-#[derive(Clone)]
-pub struct VisualizerTap {
-    /// Ring buffer for sample capture
-    pub ring_buffer: Arc<RingBuffer>,
-    /// Whether visualization is enabled
-    pub enabled: Arc<AtomicBool>,
-    /// Current sample rate
-    pub sample_rate: Arc<AtomicU32>,
-}
-
-impl VisualizerTap {
-    /// Create a new tap
-    pub fn new() -> Self {
-        Self {
-            ring_buffer: Arc::new(RingBuffer::new(FFT_SIZE * 2)),
-            enabled: Arc::new(AtomicBool::new(false)),
-            sample_rate: Arc::new(AtomicU32::new(44100)),
-        }
-    }
-
-    /// Check if visualization is enabled (fast atomic check)
-    #[inline]
-    pub fn is_enabled(&self) -> bool {
-        self.enabled.load(Ordering::Relaxed)
-    }
-
-    /// Push a sample (only if enabled)
-    #[inline]
-    pub fn push(&self, sample: f32) {
-        if self.is_enabled() {
-            self.ring_buffer.push(sample);
-        }
-    }
-}
-
-impl Default for VisualizerTap {
-    fn default() -> Self {
-        Self::new()
-    }
-}
 
 /// Manages the audio visualizer lifecycle
 pub struct Visualizer {
@@ -107,8 +59,11 @@ impl Visualizer {
 
     /// Enable or disable visualization
     pub fn set_enabled(&self, enabled: bool) {
-        self.tap.enabled.store(enabled, Ordering::Relaxed);
-        log::info!("Visualizer {}", if enabled { "enabled" } else { "disabled" });
+        self.tap.set_enabled(enabled);
+        log::info!(
+            "Visualizer {}",
+            if enabled { "enabled" } else { "disabled" }
+        );
     }
 
     /// Check if visualization is enabled
@@ -118,7 +73,7 @@ impl Visualizer {
 
     /// Update the sample rate (call when audio format changes)
     pub fn set_sample_rate(&self, rate: u32) {
-        self.tap.sample_rate.store(rate, Ordering::Relaxed);
+        self.tap.set_sample_rate(rate);
     }
 }
 

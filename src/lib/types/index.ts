@@ -17,6 +17,7 @@ export interface QobuzTrack {
   id: number;
   title: string;
   duration: number;
+  track_number?: number;
   album?: {
     id?: string;
     title: string;
@@ -89,6 +90,7 @@ export interface TrackCredits {
 export interface QobuzAlbum {
   id: string;
   title: string;
+  description?: string;
   artist: { id?: number; name: string };
   image: QobuzImage;
   release_date_original?: string;
@@ -272,6 +274,35 @@ export interface LabelDetail {
   albums: QobuzAlbum[];
   totalAlbums: number;
   albumsFetched: number;
+}
+
+/** Response from /label/page */
+export interface LabelPageData {
+  id: number;
+  name: string;
+  description?: string;
+  image?: string | Record<string, string>;
+  releases?: LabelReleaseContainer[];
+  playlists?: { has_more?: boolean; items?: Record<string, unknown>[] };
+  top_tracks?: Record<string, unknown>[];
+  top_artists?: { has_more?: boolean; items?: Record<string, unknown>[] };
+}
+
+export interface LabelReleaseContainer {
+  id?: string;
+  data?: { has_more?: boolean; items?: QobuzAlbum[] };
+}
+
+/** Response from /label/explore */
+export interface LabelExploreResponse {
+  has_more?: boolean;
+  items?: LabelExploreItem[];
+}
+
+export interface LabelExploreItem {
+  id: number;
+  name: string;
+  image?: string | Record<string, string>;
 }
 
 export interface PlaylistTrack {

@@ -56,7 +56,7 @@ export async function loadArtistFavorites(): Promise<void> {
   try {
     // Step 1: Load from local cache for instant UI
     try {
-      const cachedIds = await invoke<number[]>('get_cached_favorite_artists');
+      const cachedIds = await invoke<number[]>('v2_get_cached_favorite_artists');
       if (cachedIds.length > 0) {
         favoriteArtistIds = new Set(cachedIds);
         isLoaded = true;
@@ -92,7 +92,7 @@ export async function syncFromApi(): Promise<void> {
     const limit = 500;
 
     while (true) {
-      const result = await invoke<{ artists?: { items: Array<{ id: number }>; total?: number } }>('get_favorites', {
+      const result = await invoke<{ artists?: { items: Array<{ id: number }>; total?: number } }>('v2_get_favorites', {
         favType: 'artists',
         limit,
         offset
@@ -109,7 +109,7 @@ export async function syncFromApi(): Promise<void> {
     }
 
     // Sync to local cache
-    await invoke('sync_cached_favorite_artists', { artistIds: allArtistIds });
+    await invoke('v2_sync_cached_favorite_artists', { artistIds: allArtistIds });
 
     // Update in-memory store
     favoriteArtistIds = new Set(allArtistIds);
@@ -141,8 +141,8 @@ export async function toggleArtistFavorite(artistId: number): Promise<boolean> {
 
   try {
     if (newState) {
-      await invoke('add_favorite', { favType: 'artist', itemId: String(artistId) });
-      await invoke('cache_favorite_artist', { artistId });
+      await invoke('v2_add_favorite', { favType: 'artist', itemId: String(artistId) });
+      await invoke('v2_cache_favorite_artist', { artistId });
       favoriteArtistIds.add(artistId);
       void logRecoEvent({
         eventType: 'favorite',
@@ -150,8 +150,8 @@ export async function toggleArtistFavorite(artistId: number): Promise<boolean> {
         artistId
       });
     } else {
-      await invoke('remove_favorite', { favType: 'artist', itemId: String(artistId) });
-      await invoke('uncache_favorite_artist', { artistId });
+      await invoke('v2_remove_favorite', { favType: 'artist', itemId: String(artistId) });
+      await invoke('v2_uncache_favorite_artist', { artistId });
       favoriteArtistIds.delete(artistId);
     }
     return newState;
@@ -170,7 +170,7 @@ export async function toggleArtistFavorite(artistId: number): Promise<boolean> {
  */
 export async function syncCache(artistIds: number[]): Promise<void> {
   try {
-    await invoke('sync_cached_favorite_artists', { artistIds });
+    await invoke('v2_sync_cached_favorite_artists', { artistIds });
     favoriteArtistIds = new Set(artistIds);
     notifyListeners();
   } catch (err) {
@@ -181,7 +181,7 @@ export async function syncCache(artistIds: number[]): Promise<void> {
 export function markAsFavorite(artistId: number): void {
   if (!favoriteArtistIds.has(artistId)) {
     favoriteArtistIds.add(artistId);
-    invoke('cache_favorite_artist', { artistId }).catch(() => {});
+    invoke('v2_cache_favorite_artist', { artistId }).catch(() => {});
     notifyListeners();
   }
 }
@@ -189,7 +189,7 @@ export function markAsFavorite(artistId: number): void {
 export function unmarkAsFavorite(artistId: number): void {
   if (favoriteArtistIds.has(artistId)) {
     favoriteArtistIds.delete(artistId);
-    invoke('uncache_favorite_artist', { artistId }).catch(() => {});
+    invoke('v2_uncache_favorite_artist', { artistId }).catch(() => {});
     notifyListeners();
   }
 }

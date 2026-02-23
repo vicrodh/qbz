@@ -44,7 +44,7 @@ export function initTitleBarStore(): void {
     // startup (before window creation). Handles migration from the
     // localStorage-only era and keeps both stores in sync.
     // Always sync, not just when true - otherwise false values never propagate.
-    invoke('set_use_system_titlebar', { value: useSystemTitleBar }).catch((e) => {
+    invoke('v2_set_use_system_titlebar', { value: useSystemTitleBar }).catch((e) => {
       console.error('[TitleBarStore] Failed to sync system titlebar to backend:', e);
     });
   } catch (e) {
@@ -118,8 +118,8 @@ export async function setUseSystemTitleBar(value: boolean): Promise<void> {
     console.error('[TitleBarStore] Failed to save system titlebar setting:', e);
   }
   try {
-    await invoke('set_use_system_titlebar', { value });
-    await invoke('restart_app');
+    await invoke('v2_set_use_system_titlebar', { value });
+    await invoke('v2_restart_app');
   } catch (e) {
     console.error('[TitleBarStore] Failed to apply system titlebar change:', e);
   }

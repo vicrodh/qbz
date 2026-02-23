@@ -85,7 +85,7 @@
   // Load local track counts
   async function loadLocalTrackCounts() {
     try {
-      const counts = await invoke<Record<string, number>>('playlist_get_all_local_track_counts');
+      const counts = await invoke<Record<string, number>>('v2_playlist_get_all_local_track_counts');
       const map = new Map<number, number>();
       for (const [id, count] of Object.entries(counts)) {
         map.set(Number(id), count);
@@ -259,7 +259,7 @@
         onClose();
       } else {
         // Create playlist normally via API
-        const newPlaylist = await invoke<Playlist>('create_playlist', {
+        const newPlaylist = await invoke<Playlist>('v2_create_playlist', {
           name: name.trim(),
           description: description.trim() || null,
           isPublic
@@ -293,7 +293,7 @@
 
     try {
       // Update playlist on Qobuz
-      const updatedPlaylist = await invoke<Playlist>('update_playlist', {
+      const updatedPlaylist = await invoke<Playlist>('v2_update_playlist', {
         playlistId: playlist.id,
         name: name.trim(),
         description: description.trim() || null,
@@ -301,7 +301,7 @@
       });
 
       // Update hidden status locally
-      await invoke('playlist_set_hidden', {
+      await invoke('v2_playlist_set_hidden', {
         playlistId: playlist.id,
         hidden
       });
@@ -328,7 +328,7 @@
     error = null;
 
     try {
-      await invoke('delete_playlist', { playlistId: playlist.id });
+      await invoke('v2_delete_playlist', { playlistId: playlist.id });
       onDelete?.(playlist.id);
       onClose();
     } catch (err) {
@@ -357,7 +357,7 @@
 
     try {
       // Check for duplicates in regular playlists with Qobuz tracks
-      const result = await invoke<PlaylistDuplicateResult>('check_playlist_duplicates', {
+      const result = await invoke<PlaylistDuplicateResult>('v2_check_playlist_duplicates', {
         playlistId: selectedPlaylistId,
         trackIds
       });
@@ -401,13 +401,13 @@
         let localTrackPaths: string[] = [];
         if (isLocalTracks && trackIds.length > 0) {
           // Fetch tracks to get their file paths
-          const tracks = await invoke<Array<{ id: number; file_path: string }>>('library_get_tracks_by_ids', {
+          const tracks = await invoke<Array<{ id: number; file_path: string }>>('v2_library_get_tracks_by_ids', {
             trackIds
           });
           localTrackPaths = tracks.map(track => track.file_path);
         }
 
-        await invoke('add_tracks_to_pending_playlist', {
+        await invoke('v2_add_tracks_to_pending_playlist', {
           pendingId,
           qobuzTrackIds,
           localTrackPaths
@@ -422,7 +422,7 @@
 
         // Add local tracks at the end
         for (let i = 0; i < trackIds.length; i++) {
-          await invoke('playlist_add_local_track', {
+          await invoke('v2_playlist_add_local_track', {
             playlistId: selectedPlaylistId,
             localTrackId: trackIds[i],
             position: startPosition + i
@@ -457,7 +457,7 @@
         return;
       }
 
-      await invoke('add_tracks_to_playlist', {
+      await invoke('v2_add_tracks_to_playlist', {
         playlistId: selectedPlaylistId!,
         trackIds: tracksToAdd
       });
@@ -502,7 +502,7 @@
         let localTrackPaths: string[] = [];
         if (isLocalTracks && trackIds.length > 0) {
           // Fetch tracks to get their file paths
-          const tracks = await invoke<Array<{ id: number; file_path: string }>>('library_get_tracks_by_ids', {
+          const tracks = await invoke<Array<{ id: number; file_path: string }>>('v2_library_get_tracks_by_ids', {
             trackIds
           });
           localTrackPaths = tracks.map(track => track.file_path);
@@ -530,7 +530,7 @@
       }
 
       // Online mode - create the playlist first
-      const newPlaylist = await invoke<Playlist>('create_playlist', {
+      const newPlaylist = await invoke<Playlist>('v2_create_playlist', {
         name: name.trim(),
         description: description.trim() || null,
         isPublic: false
@@ -541,14 +541,14 @@
         if (isLocalTracks) {
           // Add local tracks one by one
           for (let i = 0; i < trackIds.length; i++) {
-            await invoke('playlist_add_local_track', {
+            await invoke('v2_playlist_add_local_track', {
               playlistId: newPlaylist.id,
               localTrackId: trackIds[i],
               position: i
             });
           }
         } else {
-          await invoke('add_tracks_to_playlist', {
+          await invoke('v2_add_tracks_to_playlist', {
             playlistId: newPlaylist.id,
             trackIds
           });

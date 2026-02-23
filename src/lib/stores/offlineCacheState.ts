@@ -53,6 +53,8 @@ export function getOfflineCacheState(trackId: number): OfflineCacheInfo {
 }
 
 export function setOfflineCacheState(trackId: number, info: OfflineCacheInfo): void {
+  const current = offlineCacheStates.get(trackId);
+  if (current && current.status === info.status && current.progress === info.progress) return;
   offlineCacheStates.set(trackId, info);
   notifyListeners();
 }
@@ -72,16 +74,23 @@ export function subscribe(listener: () => void): () => void {
   return () => listeners.delete(listener);
 }
 
+let rafScheduled = false;
+
 function notifyListeners(): void {
-  for (const listener of listeners) {
-    listener();
-  }
+  if (rafScheduled) return;
+  rafScheduled = true;
+  requestAnimationFrame(() => {
+    rafScheduled = false;
+    for (const listener of listeners) {
+      listener();
+    }
+  });
 }
 
 // Initialize offline cache states from backend
 export async function initOfflineCacheStates(): Promise<void> {
   try {
-    const tracks = await invoke<CachedTrackInfo[]>('get_cached_tracks');
+    const tracks = await invoke<CachedTrackInfo[]>('v2_get_cached_tracks');
     for (const track of tracks) {
       offlineCacheStates.set(track.trackId, {
         status: track.status,
@@ -171,7 +180,7 @@ export async function cacheTrackForOffline(track: {
 }): Promise<void> {
   try {
     setOfflineCacheState(track.id, { status: 'queued', progress: 0 });
-    await invoke('cache_track_for_offline', {
+    await invoke('v2_cache_track_for_offline', {
       trackId: track.id,
       title: track.title,
       artist: track.artist,
@@ -189,10 +198,52 @@ export async function cacheTrackForOffline(track: {
   }
 }
 
+// Cache multiple tracks for offline in a single batch IPC call
+export async function cacheTracksForOfflineBatch(tracks: Array<{
+  id: number;
+  title: string;
+  artist: string;
+  album?: string;
+  albumId?: string;
+  durationSecs: number;
+  quality: string;
+  bitDepth?: number;
+  sampleRate?: number;
+}>): Promise<void> {
+  if (tracks.length === 0) return;
+
+  // Mark all as queued immediately
+  for (const track of tracks) {
+    setOfflineCacheState(track.id, { status: 'queued', progress: 0 });
+  }
+
+  try {
+    await invoke('v2_cache_tracks_batch_for_offline', {
+      tracks: tracks.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        albumId: track.albumId,
+        durationSecs: track.durationSecs,
+        quality: track.quality,
+        bitDepth: track.bitDepth,
+        sampleRate: track.sampleRate,
+      })),
+    });
+  } catch (err) {
+    console.error('Failed to batch cache tracks for offline:', err);
+    for (const track of tracks) {
+      setOfflineCacheState(track.id, { status: 'failed', progress: 0, error: String(err) });
+    }
+    throw err;
+  }
+}
+
 // Remove a track from offline cache
 export async function removeCachedTrack(trackId: number): Promise<void> {
   try {
-    await invoke('remove_cached_track', { trackId });
+    await invoke('v2_remove_cached_track', { trackId });
     offlineCacheStates.delete(trackId);
     notifyListeners();
   } catch (err) {
@@ -203,34 +254,34 @@ export async function removeCachedTrack(trackId: number): Promise<void> {
 
 // Get offline cache stats
 export async function getOfflineCacheStats(): Promise<OfflineCacheStats> {
-  return invoke<OfflineCacheStats>('get_offline_cache_stats');
+  return invoke<OfflineCacheStats>('v2_get_offline_cache_stats');
 }
 
 // Clear all offline cache
 export async function clearOfflineCache(): Promise<void> {
-  await invoke('clear_offline_cache');
+  await invoke('v2_clear_offline_cache');
   offlineCacheStates.clear();
   notifyListeners();
 }
 
 // Open offline cache folder
 export async function openOfflineCacheFolder(): Promise<void> {
-  await invoke('open_offline_cache_folder');
+  await invoke('v2_open_offline_cache_folder');
 }
 
 // Set offline cache limit
 export async function setOfflineCacheLimit(limitMb: number | null): Promise<void> {
-  await invoke('set_offline_cache_limit', { limitMb });
+  await invoke('v2_set_offline_cache_limit', { limitMb });
 }
 
 // Open containing folder for a specific album
 export async function openAlbumFolder(albumId: string): Promise<void> {
-  await invoke('open_album_folder', { albumId });
+  await invoke('v2_open_album_folder', { albumId });
 }
 
 // Open containing folder for a specific track
 export async function openTrackFolder(trackId: number): Promise<void> {
-  await invoke('open_track_folder', { trackId });
+  await invoke('v2_open_track_folder', { trackId });
 }
 
 // Refresh a cached track (re-cache, overwriting if exists)

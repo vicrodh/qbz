@@ -1,54 +1,102 @@
 //! Local music library module
 //!
-//! Provides functionality for scanning, indexing, and playing local audio files.
-//! This module is completely independent of the Qobuz streaming functionality.
+//! Re-exports core functionality from qbz-library crate.
+//! Commands and remote metadata remain Tauri-specific.
 
+// Tauri-specific modules (stay here)
 pub mod commands;
-pub mod cue_parser;
-pub mod database;
-pub mod errors;
-pub mod metadata;
-pub mod models;
 pub mod remote_metadata;
-pub mod scanner;
-pub mod tag_sidecar;
-pub mod thumbnails;
 
-pub use commands::LibraryState;
-pub use cue_parser::{cue_to_tracks, CueParser, CueSheet, CueTrack};
-pub use database::{
-    AlbumTrackUpdate, LibraryDatabase, LibraryFolder, LibraryStats, PlaylistFolder, PlaylistSettings,
-    PlaylistStats, TrackMetadataUpdateFull,
+// Re-export everything from qbz-library
+pub use qbz_library::{
+    apply_sidecar_to_track,
+    clear_thumbnails,
+    cue_to_tracks,
+    delete_album_sidecar,
+    // Thumbnails
+    generate_thumbnail,
+    generate_thumbnail_from_bytes,
+    get_artwork_cache_dir,
+    get_cache_size,
+    // Utility functions
+    get_db_path,
+    get_or_generate_thumbnail,
+    get_thumbnail_path,
+    get_thumbnails_dir,
+    read_album_sidecar,
+    sidecar_path,
+    thumbnail_exists,
+    write_album_sidecar,
+    // Tag sidecar
+    AlbumMetadataOverride,
+    AlbumSettings,
+    AlbumTagSidecar,
+    AlbumTrackUpdate,
+    ArtistImageInfo,
+    // Models
+    AudioFormat,
+    AudioProperties,
+    // CUE Parser
+    CueParser,
+    CueSheet,
+    CueTime,
+    CueTrack,
+    // Database
+    LibraryDatabase,
+    // Errors
+    LibraryError,
+    LibraryFolder,
+    // Scanner
+    LibraryScanner,
+    LibraryStats,
+    LocalAlbum,
+    LocalArtist,
+    LocalContentStatus,
+    LocalTrack,
+    // Metadata
+    MetadataExtractor,
+    PlaylistFolder,
+    PlaylistLocalTrack,
+    PlaylistSettings,
+    PlaylistStats,
+    ScanError,
+    ScanProgress,
+    ScanResult,
+    ScanStatus,
+    TrackMetadataOverride,
+    TrackMetadataUpdateFull,
 };
-pub use errors::LibraryError;
-pub use metadata::MetadataExtractor;
-pub use models::*;
-pub use tag_sidecar::*;
-pub use scanner::{LibraryScanner, ScanResult};
 
-use std::path::{Path, PathBuf};
+// Backwards compatibility: re-export as modules
+pub mod database {
+    pub use qbz_library::database_exports::*;
+}
+
+pub mod thumbnails {
+    pub use qbz_library::{
+        clear_thumbnails, generate_thumbnail, generate_thumbnail_from_bytes, get_cache_size,
+        get_or_generate_thumbnail, get_thumbnail_path, get_thumbnails_dir, thumbnail_exists,
+    };
+}
+
+// Re-export commands::LibraryState for compatibility
+pub use commands::LibraryState;
+pub use commands::{
+    library_add_folder, library_cleanup_missing_files, library_clear_impl,
+    library_fetch_missing_artwork, library_get_album_tracks, library_get_artists,
+    library_get_folders, library_get_folders_with_metadata, library_get_scan_progress,
+    library_get_stats, library_get_thumbnail, library_get_thumbnails_cache_size,
+    library_get_tracks_by_ids, library_refresh_album_metadata_from_files_impl,
+    library_scan_folder_impl, library_scan_impl, library_search, library_stop_scan_impl,
+    library_update_album_metadata_impl, library_write_album_metadata_to_files_impl,
+    playlist_get_custom_order, playlist_get_tracks_with_local_copies, playlist_has_custom_order,
+    update_playlist_folder, CleanupResult, LibraryAlbumMetadataUpdateRequest,
+};
+
+use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
-/// Get library database path in app data directory
-pub fn get_db_path() -> PathBuf {
-    let data_dir = dirs::data_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("qbz");
-    std::fs::create_dir_all(&data_dir).ok();
-    data_dir.join("library.db")
-}
-
-/// Get artwork cache directory
-pub fn get_artwork_cache_dir() -> PathBuf {
-    let cache_dir = dirs::cache_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("qbz")
-        .join("artwork");
-    std::fs::create_dir_all(&cache_dir).ok();
-    cache_dir
-}
 
 /// Initialize library state
 pub fn init_library_state() -> Result<LibraryState, LibraryError> {

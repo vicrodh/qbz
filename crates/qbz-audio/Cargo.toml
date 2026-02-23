@@ -1,0 +1,43 @@
+[package]
+name = "qbz-audio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Audio backend system for QBZ - bit-perfect playback"
+
+[dependencies]
+qbz-models = { path = "../qbz-models" }
+
+# Async
+tokio = { workspace = true }
+async-trait = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Audio - Vendored rodio for bit-perfect playback
+# This is the same vendored version used by qbz-nix
+# CRITICAL: Must use symphonia-all feature for f32 pipeline
+rodio = { path = "../../src-tauri/vendor/rodio", features = ["symphonia-all"] }
+
+# Audio analysis
+symphonia = { workspace = true }
+ebur128 = "0.1"
+rustfft = "6.4"
+
+# Database for loudness cache
+rusqlite = { version = "0.31", features = ["bundled"] }
+
+# System directories
+dirs = "5"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# ALSA for direct hardware access (bit-perfect)
+alsa = "0.9"

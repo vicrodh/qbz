@@ -15,6 +15,45 @@ const RATE_LIMIT_DELAY_MS: u64 = 200; // Delay between API calls to avoid 429
 const TIDAL_PROXY_URL: &str = "https://qbz-api-proxy.blitzkriegfc.workers.dev/tidal";
 const TIDAL_API_BASE: &str = "https://openapi.tidal.com/v2";
 
+/// Detect if a URL is a Tidal track, album, or playlist.
+///
+/// Tidal URLs:
+/// - Track: `tidal.com/browse/track/{id}` or `tidal.com/track/{id}`
+/// - Album: `tidal.com/browse/album/{id}` or `tidal.com/album/{id}`
+/// - Playlist: `tidal.com/browse/playlist/{id}` or `tidal.com/playlist/{id}`
+pub fn detect_resource(url: &str) -> Option<super::MusicResource> {
+    if !url.contains("tidal.com") {
+        return None;
+    }
+
+    // Playlist
+    if parse_playlist_id(url).is_some() {
+        return Some(super::MusicResource::Playlist {
+            provider: super::MusicProvider::Tidal,
+        });
+    }
+
+    let lower = url.to_ascii_lowercase();
+
+    // Track
+    if lower.contains("/track/") || lower.contains("/browse/track/") {
+        return Some(super::MusicResource::Track {
+            provider: super::MusicProvider::Tidal,
+            url: url.to_string(),
+        });
+    }
+
+    // Album
+    if lower.contains("/album/") || lower.contains("/browse/album/") {
+        return Some(super::MusicResource::Album {
+            provider: super::MusicProvider::Tidal,
+            url: url.to_string(),
+        });
+    }
+
+    None
+}
+
 pub fn parse_playlist_id(url: &str) -> Option<String> {
     if !url.contains("tidal.com") {
         return None;
@@ -36,9 +75,7 @@ pub fn parse_playlist_id(url: &str) -> Option<String> {
     None
 }
 
-pub async fn fetch_playlist(
-    playlist_id: &str,
-) -> Result<ImportPlaylist, PlaylistImportError> {
+pub async fn fetch_playlist(playlist_id: &str) -> Result<ImportPlaylist, PlaylistImportError> {
     let token = get_app_token().await?;
     let country_code = env::var("TIDAL_COUNTRY_CODE").unwrap_or_else(|_| "US".to_string());
 
@@ -53,10 +90,16 @@ pub async fn fetch_playlist(
         .map_err(|e| PlaylistImportError::Http(e.to_string()))?;
 
     let status = resp.status();
-    let body = resp.text().await.map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
+    let body = resp
+        .text()
+        .await
+        .map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
 
     if !status.is_success() {
-        return Err(PlaylistImportError::Http(format!("Tidal playlist fetch failed: {} - {}", status, body)));
+        return Err(PlaylistImportError::Http(format!(
+            "Tidal playlist fetch failed: {} - {}",
+            status, body
+        )));
     }
 
     let meta: Value = serde_json::from_str(&body)
@@ -115,10 +158,16 @@ async fn fetch_track_ids(
             .map_err(|e| PlaylistImportError::Http(e.to_string()))?;
 
         let status = resp.status();
-        let body = resp.text().await.map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
 
         if !status.is_success() {
-            return Err(PlaylistImportError::Http(format!("Tidal track IDs fetch failed: {} - {}", status, body)));
+            return Err(PlaylistImportError::Http(format!(
+                "Tidal track IDs fetch failed: {} - {}",
+                status, body
+            )));
         }
 
         let response: Value = serde_json::from_str(&body)
@@ -179,10 +228,16 @@ async fn fetch_tracks_by_ids(
             .map_err(|e| PlaylistImportError::Http(e.to_string()))?;
 
         let status = resp.status();
-        let body = resp.text().await.map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
+        let body = resp
+            .text()
+            .await
+            .map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
 
         if !status.is_success() {
-            return Err(PlaylistImportError::Http(format!("Tidal tracks fetch failed: {} - {}", status, body)));
+            return Err(PlaylistImportError::Http(format!(
+                "Tidal tracks fetch failed: {} - {}",
+                status, body
+            )));
         }
 
         let response: Value = serde_json::from_str(&body)

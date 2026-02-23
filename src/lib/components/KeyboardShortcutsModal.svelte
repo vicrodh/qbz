@@ -116,7 +116,7 @@
                 {#each actions as action}
                   <div class="shortcut-row">
                     <span class="action-label">
-                      {$t(`keybindings.actions.${actionIdToKey(action.id)}`) || action.label}
+                      {getActionLabel(action.id)}
                     </span>
                     <kbd class="shortcut-key">
                       {formatShortcutDisplay(getActiveBindings()[action.id])}
@@ -148,7 +148,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 3000;
     backdrop-filter: blur(4px);
     animation: fadeIn 150ms ease-out;
   }
@@ -162,7 +162,7 @@
     background: var(--bg-secondary);
     border-radius: 12px;
     width: 90%;
-    max-width: 500px;
+    max-width: 660px;
     max-height: 80vh;
     display: flex;
     flex-direction: column;
@@ -225,10 +225,14 @@
     flex: 1;
     overflow-y: auto;
     padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 24px;
   }
 
   .category-section {
     margin-bottom: 24px;
+    break-inside: avoid;
   }
 
   .category-section:last-child {
@@ -315,6 +319,7 @@
 
     .modal-content {
       padding: 16px;
+      grid-template-columns: 1fr;
     }
 
     .shortcut-row {

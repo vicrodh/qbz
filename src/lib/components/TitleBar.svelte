@@ -25,7 +25,7 @@
 
       // Load tray settings
       try {
-        const settings = await invoke<TraySettings>('get_tray_settings');
+        const settings = await invoke<TraySettings>('v2_get_tray_settings');
         minimizeToTray = settings.minimize_to_tray;
       } catch (e) {
         console.debug('Failed to load tray settings:', e);
@@ -45,7 +45,7 @@
   async function handleMinimize() {
     // Re-read setting to pick up per-user value after login
     try {
-      const settings = await invoke<TraySettings>('get_tray_settings');
+      const settings = await invoke<TraySettings>('v2_get_tray_settings');
       minimizeToTray = settings.minimize_to_tray;
     } catch {}
 

@@ -13,6 +13,7 @@
   let { isOpen, onClose }: Props = $props();
 
   const BUILD_DATE = import.meta.env.VITE_BUILD_DATE || new Date().toISOString().split('T')[0];
+  const BUILD_COMMIT = import.meta.env.VITE_BUILD_COMMIT || '';
 
   let appName = $state('QBZ');
   let appVersion = $state('0.0.0');
@@ -95,12 +96,14 @@
           <div class="info-grid">
             <span class="label">Version</span>
             <span class="value">{appVersion}</span>
+            <span class="label">Codename</span>
+            <span class="value codename">La marrano de engorda</span>
             <span class="label">License</span>
             <span class="value">MIT</span>
             <span class="label">Platform</span>
             <span class="value">{platformLabel}</span>
             <span class="label">Build</span>
-            <span class="value">{BUILD_DATE}</span>
+            <span class="value">{BUILD_DATE}{#if BUILD_COMMIT} <span class="commit">({BUILD_COMMIT})</span>{/if}</span>
           </div>
         </div>
 
@@ -141,10 +144,28 @@
         <!-- Author -->
         <div class="info-section author-section">
           <h3>Author</h3>
-          <button class="author-link" onclick={() => handleOpenUrl('https://github.com/vicrodh')}>
-            Victor RH
-            <ExternalLink size={12} />
+          <button class="author-pill" onclick={() => handleOpenUrl('https://github.com/vicrodh')}>
+            <img src="https://github.com/vicrodh.png?size=32" alt="vicrodh" class="author-avatar" />
+            vicrodh
+            <ExternalLink size={11} />
           </button>
+        </div>
+
+        <!-- Contributors -->
+        <div class="info-section">
+          <h3>Contributors</h3>
+          <div class="contributors">
+            <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/vorce')}>
+              <img src="https://github.com/vorce.png?size=28" alt="vorce" class="contributor-avatar" />
+              vorce
+              <ExternalLink size={10} />
+            </button>
+            <button class="contributor-link" onclick={() => handleOpenUrl('https://github.com/boxdot')}>
+              <img src="https://github.com/boxdot.png?size=28" alt="boxdot" class="contributor-avatar" />
+              boxdot
+              <ExternalLink size={10} />
+            </button>
+          </div>
         </div>
 
         <!-- Signature -->
@@ -186,7 +207,7 @@
     background: var(--bg-secondary);
     border-radius: 16px;
     width: 90%;
-    max-width: 672px;
+    max-width: 782px;
     max-height: 85vh;
     overflow-y: auto;
     box-shadow: 0 24px 48px rgba(0, 0, 0, 0.4);
@@ -312,7 +333,7 @@
 
   .info-grid {
     display: grid;
-    grid-template-columns: auto 1fr;
+    grid-template-columns: auto 1fr auto 1fr;
     gap: 6px 16px;
     font-size: 13px;
   }
@@ -326,10 +347,21 @@
     font-family: var(--font-mono);
   }
 
+  .commit {
+    color: var(--text-muted);
+    font-size: 11px;
+  }
+
+  .codename {
+    font-family: var(--font-sans);
+    font-style: italic;
+    color: var(--text-secondary);
+  }
+
   .attributions {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 24px;
   }
 
   .attribution {
@@ -342,25 +374,69 @@
     font-weight: 500;
   }
 
-  .author-link {
+  .author-pill {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    font-size: 14px;
-    color: var(--text-primary);
-    background: none;
+    gap: 8px;
+    padding: 6px 12px 6px 6px;
+    background: var(--bg-tertiary);
     border: none;
-    padding: 0;
+    border-radius: 24px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
     cursor: pointer;
-    transition: color 150ms ease;
+    transition: all 150ms ease;
   }
 
-  .author-link:hover {
+  .author-pill:hover {
+    background: var(--bg-hover);
     color: var(--accent-primary);
   }
 
-  .author-link :global(svg) {
-    opacity: 0.5;
+  .author-pill :global(svg) {
+    opacity: 0.4;
+  }
+
+  .author-avatar {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+  }
+
+  .contributors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .contributor-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px 5px 5px;
+    background: var(--bg-tertiary);
+    border: none;
+    border-radius: 20px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: all 150ms ease;
+  }
+
+  .contributor-link:hover {
+    background: var(--bg-hover);
+    color: var(--accent-primary);
+  }
+
+  .contributor-link :global(svg) {
+    opacity: 0.4;
+  }
+
+  .contributor-avatar {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
   }
 
   .signature {

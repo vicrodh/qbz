@@ -140,7 +140,7 @@ export interface LaunchUpdateDecision {
  */
 async function shouldShowFlatpakWelcome(): Promise<boolean> {
   try {
-    const isFlatpak = await invoke<boolean>('is_running_in_flatpak');
+    const isFlatpak = await invoke<boolean>('v2_is_running_in_flatpak');
     if (!isFlatpak) return false;
     const alreadyShown = await invoke<boolean>('has_flatpak_welcome_been_shown');
     return !alreadyShown;
@@ -154,7 +154,7 @@ async function shouldShowFlatpakWelcome(): Promise<boolean> {
  */
 export async function markFlatpakWelcomeShown(): Promise<void> {
   try {
-    await invoke('mark_flatpak_welcome_shown');
+    await invoke('v2_mark_flatpak_welcome_shown');
   } catch (error) {
     console.debug('[Updates] Failed to mark flatpak welcome shown:', error);
   }

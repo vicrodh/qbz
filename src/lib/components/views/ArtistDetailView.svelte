@@ -1,6 +1,9 @@
 <script lang="ts">
-  import { invoke } from '@tauri-apps/api/core';
-  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Settings } from 'lucide-svelte';
+  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { open } from '@tauri-apps/plugin-dialog';
+  import { setCustomImage, removeCustomImage as removeCustomImageFromStore } from '$lib/stores/customArtistImageStore';
+  import { t } from 'svelte-i18n';
+  import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Settings, CheckSquare } from 'lucide-svelte';
   import {
     isBlacklisted,
     isEnabled as isFilteringEnabled,
@@ -12,6 +15,7 @@
   import type { ArtistDetail, QobuzArtist, PageArtistTrack, PageArtistSimilarItem } from '$lib/types';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackMenu from '../TrackMenu.svelte';
+  import BulkActionBar from '../BulkActionBar.svelte';
   import QualityBadge from '../QualityBadge.svelte';
   import { consumeContextTrackFocus, setPlaybackContext, getPlaybackContext } from '$lib/stores/playbackContextStore';
   import { saveScrollPosition, getSavedScrollPosition } from '$lib/stores/navigationStore';
@@ -25,6 +29,7 @@
     toggleTrackFavorite
   } from '$lib/stores/favoritesStore';
   import { tick, onMount, onDestroy } from 'svelte';
+  import ImageLightbox from '../ImageLightbox.svelte';
 
   interface Track {
     id: number;
@@ -135,6 +140,12 @@
 
   let bioExpanded = $state(false);
   let imageError = $state(false);
+  let lightboxOpen = $state(false);
+  let showImageMenu = $state(false);
+  let imageMenuPos = $state({ x: 0, y: 0 });
+  let hasCustomImage = $state(false);
+  let imageOverride = $state<string | null>(null);
+  let customFullImage = $state<string | null>(null);
   let topTracks = $state<Track[]>([]);
   let tracksLoading = $state(false);
   let isFavorite = $state(false);
@@ -150,6 +161,8 @@
   }
 
   let isRadioLoading = $state(false);
+  let radioDropdownOpen = $state(false);
+  let trackContextMenu = $state<{ trackId: number; x: number; y: number } | null>(null);
   let artistIsBlacklisted = $state(false);
   let isBlacklistLoading = $state(false);
   let showHideDropdown = $state(false);
@@ -182,9 +195,12 @@
       trackFavoritesVersion++;
     });
 
+    // Load custom image status
+    loadCustomImageStatus();
+
     // Restore scroll position
     requestAnimationFrame(() => {
-      const saved = getSavedScrollPosition('artist');
+      const saved = getSavedScrollPosition('artist', artist.id);
       if (artistDetailEl && saved > 0) {
         artistDetailEl.scrollTop = saved;
       }
@@ -290,6 +306,62 @@
   // Computed visible tracks
   let visibleTracks = $derived(topTracks.slice(0, visibleTracksCount));
   let canLoadMoreTracks = $derived(visibleTracksCount < 50 && topTracks.length > visibleTracksCount);
+
+  // Multi-select (popular tracks)
+  let multiSelectMode = $state(false);
+  let multiSelectedIds = $state(new Set<number>());
+
+  function toggleMultiSelectMode() {
+    multiSelectMode = !multiSelectMode;
+    if (!multiSelectMode) multiSelectedIds = new Set();
+  }
+
+  function toggleMultiSelect(id: number) {
+    const next = new Set(multiSelectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    multiSelectedIds = next;
+  }
+
+  function buildArtistQueueTracks(tracks: typeof topTracks) {
+    return tracks
+      .filter(trk => !trk.performer?.id || !isBlacklisted(trk.performer.id))
+      .map(trk => ({
+        id: trk.id,
+        title: trk.title,
+        artist: trk.performer?.name || artist?.name || 'Unknown',
+        album: trk.album?.title || '',
+        duration_secs: trk.duration,
+        artwork_url: trk.album?.image?.large || trk.album?.image?.thumbnail || null,
+        hires: trk.hires_streamable ?? false,
+        bit_depth: trk.maximum_bit_depth ?? null,
+        sample_rate: trk.maximum_sampling_rate ?? null,
+        is_local: false,
+        album_id: trk.album?.id || null,
+        artist_id: trk.performer?.id ?? null,
+      }));
+  }
+
+  async function handleBulkPlayNext() {
+    const selected = visibleTracks.filter(trk => multiSelectedIds.has(trk.id));
+    await invoke('v2_add_tracks_to_queue_next', { tracks: buildArtistQueueTracks(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkPlayLater() {
+    const selected = visibleTracks.filter(trk => multiSelectedIds.has(trk.id));
+    await invoke('v2_add_tracks_to_queue', { tracks: buildArtistQueueTracks(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddToPlaylist() {
+    for (const id of multiSelectedIds) { onTrackAddToPlaylist?.(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddFavorites() {
+    for (const id of multiSelectedIds) { await toggleTrackFavorite(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
 
   function loadMoreTracks() {
     if (visibleTracksCount === 5) {
@@ -465,7 +537,7 @@
 
   async function checkFavoriteStatus() {
     try {
-      const response = await invoke<{ artists?: { items: Array<{ id: number }> } }>('get_favorites', {
+      const response = await invoke<{ artists?: { items: Array<{ id: number }> } }>('v2_get_favorites', {
         favType: 'artists',
         limit: 500,
         offset: 0
@@ -486,10 +558,10 @@
 
     try {
       if (wasFavorite) {
-        await invoke('remove_favorite', { favType: 'artist', itemId: String(artist.id) });
+        await invoke('v2_remove_favorite', { favType: 'artist', itemId: String(artist.id) });
         isFavorite = false;
       } else {
-        await invoke('add_favorite', { favType: 'artist', itemId: String(artist.id) });
+        await invoke('v2_add_favorite', { favType: 'artist', itemId: String(artist.id) });
         isFavorite = true;
       }
     } catch (err) {
@@ -537,7 +609,7 @@
       await new Promise(resolve => setTimeout(resolve, 800));
 
       radioLoadingMessage = 'Fetching similar artists';
-      const sessionId = await invoke<string>('create_artist_radio', {
+      const sessionId = await invoke<string>('v2_create_artist_radio', {
         artistId: artist.id,
         artistName: artist.name
       });
@@ -591,7 +663,7 @@
       const trackName = track.title;
       const trackArtistId = track.performer?.id || artist.id;
 
-      const sessionId = await invoke<string>('create_track_radio', {
+      const sessionId = await invoke<string>('v2_create_track_radio', {
         trackId: track.id,
         trackName,
         artistId: trackArtistId
@@ -629,11 +701,87 @@
     }
   }
 
+  async function createQobuzArtistRadio() {
+    if (isRadioLoading) return;
+
+    isRadioLoading = true;
+    radioJustCreated = false;
+
+    try {
+      radioLoadingMessage = 'Creating Qobuz artist radio...';
+      const sessionId = await invoke<string>('v2_create_qobuz_artist_radio', {
+        artistId: artist.id,
+        artistName: artist.name
+      });
+      console.log(`[Radio] Qobuz artist radio created: ${sessionId}`);
+
+      await getPlaybackContext();
+      const firstTrack = await playQueueIndex(0);
+
+      if (firstTrack && onTrackPlay) {
+        onTrackPlay({
+          id: firstTrack.id,
+          title: firstTrack.title,
+          artist: firstTrack.artist,
+          album: firstTrack.album,
+          albumArt: firstTrack.artwork_url || '',
+          duration: formatDuration(firstTrack.duration_secs),
+          durationSeconds: firstTrack.duration_secs,
+          hires: firstTrack.hires,
+          bitDepth: firstTrack.bit_depth ?? undefined,
+          samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
+        });
+
+        radioJustCreated = true;
+        setTimeout(() => { radioJustCreated = false; }, 3000);
+      }
+    } catch (err) {
+      console.error('Failed to create Qobuz artist radio:', err);
+    } finally {
+      isRadioLoading = false;
+      radioLoadingMessage = '';
+    }
+  }
+
+  async function createQobuzTrackRadio(track: Track) {
+    try {
+      const sessionId = await invoke<string>('v2_create_qobuz_track_radio', {
+        trackId: track.id,
+        trackName: track.title
+      });
+      console.log(`[Radio] Qobuz track radio created: ${sessionId}`);
+
+      await getPlaybackContext();
+      const firstTrack = await playQueueIndex(0);
+
+      if (firstTrack && onTrackPlay) {
+        onTrackPlay({
+          id: firstTrack.id,
+          title: firstTrack.title,
+          artist: firstTrack.artist,
+          album: firstTrack.album,
+          albumArt: firstTrack.artwork_url || '',
+          duration: formatDuration(firstTrack.duration_secs),
+          durationSeconds: firstTrack.duration_secs,
+          hires: firstTrack.hires,
+          bitDepth: firstTrack.bit_depth ?? undefined,
+          samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to create Qobuz track radio:', err);
+    }
+  }
+
   async function loadTopTracks() {
     tracksLoading = true;
     try {
       // Search for tracks by artist name
-      const results = await invoke<SearchResults>('search_tracks', {
+      const results = await invoke<SearchResults>('v2_search_tracks', {
         query: artist.name,
         limit: 30,
         offset: 0
@@ -652,7 +800,7 @@
   async function loadSimilarArtists() {
     similarArtistsLoading = true;
     try {
-      const results = await invoke<SimilarArtistsPage>('get_similar_artists', {
+      const results = await invoke<SimilarArtistsPage>('v2_get_similar_artists', {
         artistId: artist.id,
         limit: 5,
         offset: 0
@@ -678,7 +826,7 @@
 
     try {
       // Check if MusicBrainz is enabled
-      const enabled = await invoke<boolean>('musicbrainz_is_enabled');
+      const enabled = await invoke<boolean>('v2_musicbrainz_is_enabled');
       if (!enabled) {
         mbAvailable = false;
         mbRelationshipsLoading = false;
@@ -690,7 +838,7 @@
         mbid?: string;
         name?: string;
         confidence: string;
-      }>('musicbrainz_resolve_artist', { name: artist.name });
+      }>('v2_musicbrainz_resolve_artist', { name: artist.name });
 
       if (!resolved?.mbid || resolved.confidence === 'none') {
         mbRelationshipsLoading = false;
@@ -705,7 +853,7 @@
         past_members: RelatedArtist[];
         groups: RelatedArtist[];
         collaborators: RelatedArtist[];
-      }>('musicbrainz_get_artist_relationships', { mbid: resolved.mbid });
+      }>('v2_musicbrainz_get_artist_relationships', { mbid: resolved.mbid });
 
       mbRelationships = {
         members: relationships.members || [],
@@ -726,7 +874,7 @@
   async function navigateToRelatedArtist(name: string) {
     try {
       // Search for the artist on Qobuz
-      const results = await invoke<{ artists?: { items: QobuzArtist[] } }>('search_artists', {
+      const results = await invoke<{ artists?: { items: QobuzArtist[] } }>('v2_search_artists', {
         query: name,
         limit: 5
       });
@@ -851,7 +999,7 @@
         console.log(`[Artist] Context created: "${artist.name}" top tracks, ${trackIds.length} tracks, starting at ${index}`);
         try {
           const queueTracks = buildTopTracksQueue(topTracks);
-          await invoke('set_queue', { tracks: queueTracks, startIndex: index });
+          await invoke('v2_set_queue', { tracks: queueTracks, startIndex: index });
         } catch (err) {
           console.error('Failed to set queue:', err);
         }
@@ -924,6 +1072,58 @@
 
   function handleImageError() {
     imageError = true;
+  }
+
+  // Check if artist has a custom image on mount
+  async function loadCustomImageStatus() {
+    try {
+      const info = await invoke<{ custom_image_path?: string | null } | null>('v2_library_get_artist_image', { artistName: artist.name });
+      if (info?.custom_image_path) {
+        hasCustomImage = true;
+        customFullImage = convertFileSrc(info.custom_image_path);
+        imageOverride = customFullImage;
+      }
+    } catch {
+      // No custom image, use default
+    }
+  }
+
+  async function handleAddCustomImage() {
+    showImageMenu = false;
+    const selected = await open({
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+      multiple: false
+    });
+    if (!selected) return;
+
+    try {
+      const result = await invoke<{ image_path: string; thumbnail_path: string }>('v2_library_set_custom_artist_image', {
+        artistName: artist.name,
+        customImagePath: selected
+      });
+      imageOverride = convertFileSrc(result.thumbnail_path);
+      customFullImage = convertFileSrc(result.image_path);
+      hasCustomImage = true;
+      imageError = false;
+      setCustomImage(artist.name, convertFileSrc(result.image_path));
+      showToast($t('artist.customImageSet'), 'success');
+    } catch (err) {
+      showToast(`${$t('artist.customImageError')}: ${err}`, 'error');
+    }
+  }
+
+  async function handleRemoveCustomImage() {
+    showImageMenu = false;
+    try {
+      await invoke('v2_library_remove_custom_artist_image', { artistName: artist.name });
+      imageOverride = null;
+      customFullImage = null;
+      hasCustomImage = false;
+      removeCustomImageFromStore(artist.name);
+      showToast($t('artist.customImageRemoved'), 'success');
+    } catch (err) {
+      showToast(`${$t('artist.customImageError')}: ${err}`, 'error');
+    }
   }
 
   // Get biography text (prefer content for full text, fall back to summary)
@@ -1209,7 +1409,7 @@
   });
 </script>
 
-<div class="artist-detail" bind:this={artistDetailEl} onscroll={(e) => saveScrollPosition('artist', (e.target as HTMLElement).scrollTop)}>
+<div class="artist-detail" bind:this={artistDetailEl} onscroll={(e) => saveScrollPosition('artist', (e.target as HTMLElement).scrollTop, artist.id)}>
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
@@ -1220,14 +1420,21 @@
   <div class="artist-header section-anchor" bind:this={aboutSection}>
     <!-- Artist Image -->
     <div class="artist-image-column">
-      <div class="artist-image-container">
-        {#if imageError || !artist.image}
+      <div
+        class="artist-image-container"
+        onclick={() => { if (!imageError && (imageOverride || artist.image)) lightboxOpen = true; }}
+        onkeydown={(e) => { if (e.key === 'Enter' && !imageError && (imageOverride || artist.image)) lightboxOpen = true; }}
+        oncontextmenu={(e) => { e.preventDefault(); imageMenuPos = { x: e.clientX, y: e.clientY }; showImageMenu = true; }}
+        role="button"
+        tabindex="0"
+      >
+        {#if imageError || (!imageOverride && !artist.image)}
           <div class="artist-image-placeholder">
             <User size={60} />
           </div>
         {:else}
           <img
-            src={artist.image}
+            src={imageOverride ?? artist.image}
             alt={artist.name}
             class="artist-image"
             loading="lazy"
@@ -1376,12 +1583,24 @@
             class="radio-btn"
             class:loading={isRadioLoading}
             class:glow={radioJustCreated}
-            onclick={createArtistRadio}
+            onclick={() => { radioDropdownOpen = !radioDropdownOpen; }}
             disabled={isRadioLoading}
             title="Start Artist Radio"
           >
             <Radio size={24} />
           </button>
+          {#if radioDropdownOpen && !isRadioLoading}
+            <div class="radio-dropdown" role="menu">
+              <button class="radio-dropdown-item" onclick={() => { radioDropdownOpen = false; createArtistRadio(); }}>
+                QBZ Radio
+              </button>
+              <button class="radio-dropdown-item" onclick={() => { radioDropdownOpen = false; createQobuzArtistRadio(); }}>
+                Qobuz Radio
+              </button>
+            </div>
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div class="radio-dropdown-backdrop" onclick={() => radioDropdownOpen = false}></div>
+          {/if}
           {#if isRadioLoading && radioLoadingMessage}
             {#key radioLoadingMessage}
               <span class="floating-message">{radioLoadingMessage}</span>
@@ -1545,6 +1764,14 @@
             <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
               <Play size={20} fill="currentColor" color="currentColor" />
             </button>
+            <button
+              class="action-btn-circle"
+              class:is-active={multiSelectMode}
+              onclick={toggleMultiSelectMode}
+              title={multiSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+            >
+              <CheckSquare size={18} />
+            </button>
             <div class="context-menu-wrapper">
               <button
                 class="action-btn-circle"
@@ -1584,12 +1811,28 @@
             <div
               class="track-row"
               class:playing={isActiveTrack}
+              class:multi-selected={multiSelectMode && multiSelectedIds.has(track.id)}
               role="button"
               tabindex="0"
               data-track-id={track.id}
-              onclick={() => handleTrackPlay(track, index)}
-              onkeydown={(e) => e.key === 'Enter' && handleTrackPlay(track, index)}
+              onclick={() => multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index)}
+              onkeydown={(e) => e.key === 'Enter' && (multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index))}
+              oncontextmenu={(e) => {
+                if (multiSelectMode) return;
+                e.preventDefault();
+                trackContextMenu = { trackId: track.id, x: e.clientX, y: e.clientY };
+              }}
             >
+              {#if multiSelectMode}
+                <label class="track-checkbox-wrap" onclick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={multiSelectedIds.has(track.id)}
+                    onchange={() => toggleMultiSelect(track.id)}
+                    style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent-primary);"
+                  />
+                </label>
+              {/if}
               <div class="track-number">{index + 1}</div>
               <div class="track-artwork">
                 <!-- Placeholder always visible as background -->
@@ -1679,12 +1922,15 @@
                   onPlayNow={() => handleTrackPlay(track, index)}
                   onPlayNext={onTrackPlayNext ? () => onTrackPlayNext(track) : undefined}
                   onPlayLater={onTrackPlayLater ? () => onTrackPlayLater(track) : undefined}
-                  onCreateRadio={() => createTrackRadio(track)}
+                  onCreateQbzRadio={() => createTrackRadio(track)}
+                  onCreateQobuzRadio={() => createQobuzTrackRadio(track)}
                   onAddFavorite={onTrackAddFavorite ? () => onTrackAddFavorite(track.id) : undefined}
                   onAddToPlaylist={onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined}
                   onShareQobuz={onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined}
                   onShareSonglink={onTrackShareSonglink ? () => onTrackShareSonglink(track) : undefined}
                   onGoToAlbum={track.album?.id && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.album!.id) : undefined}
+                  contextMenuPosition={trackContextMenu?.trackId === track.id ? { x: trackContextMenu.x, y: trackContextMenu.y } : null}
+                  onContextMenuClosed={() => { trackContextMenu = null; }}
                 />
               </div>
             </div>
@@ -1695,6 +1941,14 @@
             Load More
           </button>
         {/if}
+        <BulkActionBar
+          count={multiSelectedIds.size}
+          onPlayNext={handleBulkPlayNext}
+          onPlayLater={handleBulkPlayLater}
+          onAddToPlaylist={handleBulkAddToPlaylist}
+          onAddFavorites={handleBulkAddFavorites}
+          onClearSelection={() => { multiSelectedIds = new Set(); }}
+        />
       {/if}
     </div>
   {/if}
@@ -2340,6 +2594,40 @@
   {/if}
 </div>
 
+<ImageLightbox
+  isOpen={lightboxOpen}
+  onClose={() => lightboxOpen = false}
+  src={customFullImage ?? imageOverride ?? artist.image ?? ''}
+  alt={artist.name}
+/>
+
+{#if showImageMenu}
+  <div
+    class="image-context-backdrop"
+    onclick={() => showImageMenu = false}
+    onkeydown={(e) => { if (e.key === 'Escape') showImageMenu = false; }}
+    role="button"
+    tabindex="-1"
+  ></div>
+  <div
+    class="image-context-menu"
+    style="left: {imageMenuPos.x}px; top: {imageMenuPos.y}px;"
+  >
+    {#if hasCustomImage}
+      <button class="image-context-item" onclick={handleAddCustomImage}>
+        {$t('artist.changeImage')}
+      </button>
+      <button class="image-context-item danger" onclick={handleRemoveCustomImage}>
+        {$t('artist.removeImage')}
+      </button>
+    {:else}
+      <button class="image-context-item" onclick={handleAddCustomImage}>
+        {$t('artist.addImage')}
+      </button>
+    {/if}
+  </div>
+{/if}
+
 <style>
   .artist-detail {
     width: 100%;
@@ -2578,6 +2866,7 @@
 
   .artist-image-container {
     flex-shrink: 0;
+    cursor: pointer;
   }
 
   .artist-image {
@@ -2725,6 +3014,43 @@
 
   .radio-btn-wrapper {
     position: relative;
+  }
+
+  .radio-dropdown {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 4px 0;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    z-index: 100;
+    min-width: 140px;
+  }
+
+  .radio-dropdown-item {
+    width: 100%;
+    padding: 8px 14px;
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    text-align: left;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .radio-dropdown-item:hover {
+    background-color: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .radio-dropdown-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 99;
   }
 
   .network-btn {
@@ -3023,6 +3349,7 @@
   .jump-nav {
     position: sticky;
     top: 0;
+    z-index: 50;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -3589,6 +3916,19 @@
     background-color: var(--bg-tertiary);
   }
 
+  .track-row.multi-selected {
+    background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  }
+
+  .track-checkbox-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+
   .track-number {
     width: 24px;
     font-size: 14px;
@@ -3816,5 +4156,54 @@
     .biography {
       max-width: 100%;
     }
+  }
+
+  .image-context-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2999;
+  }
+
+  .image-context-menu {
+    position: fixed;
+    z-index: 3000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 4px;
+    min-width: 180px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    animation: lightbox-fade-in 100ms ease;
+  }
+
+  @keyframes lightbox-fade-in {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .image-context-item {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 100ms ease;
+  }
+
+  .image-context-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .image-context-item.danger {
+    color: var(--color-error, #ef4444);
+  }
+
+  .image-context-item.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
   }
 </style>

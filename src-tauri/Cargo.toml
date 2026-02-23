@@ -1,6 +1,6 @@
 [package]
 name = "qbz-nix"
-version = "1.1.14"
+version = "1.1.15"
 description = "Native high-fidelity client for Qobuz™ subscribers on Linux with Hi-Fi audio support (uses the Qobuz API; not certified by Qobuz)"
 authors = ["blitzkriegfc"]
 edition = "2021"
@@ -9,10 +9,25 @@ edition = "2021"
 name = "qbz_nix_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[bin]]
+name = "qbz"
+path = "src/main.rs"
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+# QBZ Crates (extracted core functionality)
+qbz-models = { path = "../crates/qbz-models" }
+qbz-audio = { path = "../crates/qbz-audio" }
+qbz-player = { path = "../crates/qbz-player" }
+qbz-qobuz = { path = "../crates/qbz-qobuz" }
+qbz-core = { path = "../crates/qbz-core" }
+qbz-integrations = { path = "../crates/qbz-integrations" }
+qbz-cache = { path = "../crates/qbz-cache" }
+qbz-library = { path = "../crates/qbz-library" }
+qbz-cast = { path = "../crates/qbz-cast" }
+
 # Tauri
 tauri = { version = "2", features = ["protocol-asset", "tray-icon"] }
 tauri-plugin-opener = "2"
@@ -27,6 +42,7 @@ reqwest = { version = "0.12", features = ["json", "cookies", "rustls-tls", "stre
 
 # Async Runtime
 tokio = { version = "1", features = ["full"] }
+async-trait = "0.1"
 tokio-stream = { version = "0.1", features = ["sync"] }
 
 # Local API server
@@ -106,11 +122,10 @@ keyring = "3"
 # Clipboard
 tauri-plugin-clipboard-manager = "2"
 
-# Casting (Chromecast, AirPlay, DLNA)
-rust_cast = "0.18.1"
-mdns-sd = "0.11"
-tiny_http = "0.12"
-rupnp = { version = "3", features = ["full_device_spec"] }
+# Casting: qbz-cast crate provides all casting functionality
+# (Chromecast via rust_cast, AirPlay discovery, DLNA via rupnp)
+
+# Async utilities (used across codebase)
 futures-util = "0.3"
 
 # Platform-specific dependencies

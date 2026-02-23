@@ -11,9 +11,8 @@ use std::sync::{LazyLock, Mutex};
 const MAX_LOG_LINES: usize = 5000;
 
 /// Global ring buffer for captured log lines
-static LOG_BUFFER: LazyLock<Mutex<VecDeque<String>>> = LazyLock::new(|| {
-    Mutex::new(VecDeque::with_capacity(MAX_LOG_LINES))
-});
+static LOG_BUFFER: LazyLock<Mutex<VecDeque<String>>> =
+    LazyLock::new(|| Mutex::new(VecDeque::with_capacity(MAX_LOG_LINES)));
 
 /// Push a log line to the ring buffer (used by startup messages before env_logger is initialized)
 pub fn push_log(line: String) {
@@ -27,7 +26,8 @@ pub fn push_log(line: String) {
 
 /// Get all captured log lines
 pub fn get_logs() -> Vec<String> {
-    LOG_BUFFER.lock()
+    LOG_BUFFER
+        .lock()
         .map(|buf| buf.iter().cloned().collect())
         .unwrap_or_default()
 }
@@ -73,12 +73,13 @@ pub fn get_backend_logs() -> Vec<String> {
 
 #[tauri::command]
 pub async fn upload_logs_to_paste(content: String) -> Result<String, String> {
-    let form = reqwest::multipart::Form::new()
-        .part("file", reqwest::multipart::Part::text(content)
+    let form = reqwest::multipart::Form::new().part(
+        "file",
+        reqwest::multipart::Part::text(content)
             .file_name("qbz-logs.txt")
             .mime_str("text/plain")
-            .map_err(|e| format!("Failed to create multipart part: {}", e))?
-        );
+            .map_err(|e| format!("Failed to create multipart part: {}", e))?,
+    );
 
     let client = reqwest::Client::builder()
         .user_agent("QBZ/1.0")
@@ -95,7 +96,9 @@ pub async fn upload_logs_to_paste(content: String) -> Result<String, String> {
         return Err(format!("Upload failed with status: {}", response.status()));
     }
 
-    let url = response.text().await
+    let url = response
+        .text()
+        .await
         .map_err(|e| format!("Failed to read response: {}", e))?;
 
     Ok(url.trim().to_string())

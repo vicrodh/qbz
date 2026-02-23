@@ -143,6 +143,12 @@ let isAdvancingTrack = false;
 let isSkipping = false;
 let queueEnded = false;
 let normalizationGain: number | null = null;  // Current normalization gain (null = not active)
+let pendingSeekPosition: number | null = null;
+let seekRequestInFlight = false;
+let seekTargetPosition: number | null = null;
+let seekGuardUntilMs = 0;
+const SEEK_GUARD_WINDOW_MS = 1500;
+const SEEK_SETTLE_TOLERANCE_SECS = 1;
 
 // Callbacks for track advancement (set by consumer)
 let onTrackEnded: (() => Promise<void>) | null = null;
@@ -154,6 +160,8 @@ let gaplessGetNextTrackId: (() => number | null) | null = null;
 let onGaplessTransition: ((trackId: number) => Promise<void>) | null = null;
 // Track whether gapless pre-queue request is in flight
 let gaplessRequestInFlight = false;
+// One-shot guard: attempt gapless pre-queue only once per current track.
+let gaplessAttemptTrackId: number | null = null;
 
 // Session restore state - when set, next play will load the track first
 let pendingSessionRestore: { trackId: number; position: number } | null = null;
@@ -208,6 +216,28 @@ export function getIsSkipping(): boolean {
 
 export function getNormalizationGain(): number | null {
   return normalizationGain;
+}
+
+async function flushPendingSeek(): Promise<void> {
+  if (seekRequestInFlight) return;
+  if (pendingSeekPosition === null) return;
+
+  const targetPosition = pendingSeekPosition;
+  pendingSeekPosition = null;
+  seekTargetPosition = targetPosition;
+  seekGuardUntilMs = Date.now() + SEEK_GUARD_WINDOW_MS;
+
+  seekRequestInFlight = true;
+  try {
+    await invoke('v2_seek', { position: Math.floor(targetPosition) });
+  } catch (err) {
+    console.error('Failed to seek:', err);
+  } finally {
+    seekRequestInFlight = false;
+    if (pendingSeekPosition !== null) {
+      void flushPendingSeek();
+    }
+  }
 }
 
 // ============ State Setter ============
@@ -348,7 +378,7 @@ export async function togglePlay(): Promise<void> {
           if (!plexBaseUrl || !plexToken) {
             throw new Error('Missing Plex configuration for session restore');
           }
-          const result = await invoke<PlexPlayTrackResult>('plex_play_track', {
+          const result = await invoke<PlexPlayTrackResult>('v2_plex_play_track', {
             baseUrl: plexBaseUrl,
             token: plexToken,
             ratingKey: String(currentTrack.id)
@@ -362,12 +392,11 @@ export async function togglePlay(): Promise<void> {
         } else if (currentTrack.isLocal || currentTrack.id < 0) {
           // Local filesystem track
           const localTrackId = Math.abs(currentTrack.id);
-          await invoke('library_play_track', { trackId: localTrackId });
+          await invoke('v2_library_play_track', { trackId: localTrackId });
         } else {
-          // Qobuz track - use play_track with duration for seekbar
-          await invoke('play_track', {
+          // Qobuz track - use v2_play_track
+          await invoke('v2_play_track', {
             trackId: currentTrack.id,
-            durationSecs: currentTrack.duration,
             quality: getStreamingQuality()
           });
         }
@@ -376,7 +405,7 @@ export async function togglePlay(): Promise<void> {
         if (savedPosition > 0) {
           setTimeout(async () => {
             try {
-              await invoke('seek', { position: savedPosition });
+              await invoke('v2_seek', { position: savedPosition });
               console.log('[Player] Seeked to restored position:', savedPosition);
             } catch (seekErr) {
               console.error('[Player] Failed to seek to restored position:', seekErr);
@@ -385,10 +414,10 @@ export async function togglePlay(): Promise<void> {
         }
 
       } else {
-        await invoke('resume_playback');
+        await invoke('v2_resume_playback');
       }
     } else {
-      await invoke('pause_playback');
+      await invoke('v2_pause_playback');
     }
   } catch (err) {
     console.error('Failed to toggle playback:', err);
@@ -419,8 +448,8 @@ export async function seek(position: number): Promise<void> {
       await castSeek(Math.floor(clampedPosition));
       return;
     }
-
-    await invoke('seek', { position: Math.floor(clampedPosition) });
+    pendingSeekPosition = clampedPosition;
+    void flushPendingSeek();
   } catch (err) {
     console.error('Failed to seek:', err);
   }
@@ -435,7 +464,7 @@ export async function resyncPersistedVolume(): Promise<void> {
   volume = persistedVolume;
   notifyListeners();
   try {
-    await invoke('set_volume', { volume: persistedVolume / 100 });
+    await invoke('v2_set_volume', { volume: persistedVolume / 100 });
     console.log('[Player] Resynced volume after login:', persistedVolume);
   } catch {
     console.debug('[Player] Could not resync volume to backend');
@@ -461,7 +490,7 @@ export async function setVolume(newVolume: number): Promise<void> {
     }
 
     // Try to set volume on backend - will fail silently if no track is loaded
-    await invoke('set_volume', { volume: clampedVolume / 100 });
+    await invoke('v2_set_volume', { volume: clampedVolume / 100 });
   } catch (err) {
     // Ignore errors when nothing is playing - volume is saved and will apply on next play
     console.debug('Volume set locally (no active playback):', clampedVolume);
@@ -503,12 +532,14 @@ export async function stop(): Promise<void> {
     if (isCasting()) {
       await castStop();
     } else {
-      await invoke('stop_playback');
+      await invoke('v2_stop_playback');
     }
     isPlaying = false;
     currentTrack = null;
     currentTime = 0;
     duration = 0;
+    gaplessAttemptTrackId = null;
+    gaplessRequestInFlight = false;
     notifyListeners();
   } catch (err) {
     console.error('Failed to stop playback:', err);
@@ -551,6 +582,14 @@ export function setOnGaplessTransition(callback: (trackId: number) => Promise<vo
  * Handle playback event from backend
  */
 async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
+  const prevTrackId = currentTrack?.id ?? 0;
+  const prevDuration = duration;
+  const prevPosition = currentTime;
+  const prevWasPlaying = isPlaying;
+  if (event.track_id !== 0 && gaplessAttemptTrackId !== null && gaplessAttemptTrackId !== event.track_id) {
+    gaplessAttemptTrackId = null;
+  }
+
   // Gapless transition: backend changed track_id because gapless playback advanced
   // Handle this BEFORE the external track change handler to prevent stale queue lookups
   const isGaplessTransition = event.track_id !== 0
@@ -564,6 +603,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     console.log('[Gapless] Transition detected, updating to track', event.track_id);
     try {
       await onGaplessTransition!(event.track_id);
+      gaplessAttemptTrackId = null;
     } catch (err) {
       console.error('[Gapless] Failed to handle transition:', err);
     }
@@ -576,7 +616,7 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     // Sync queue state when track changes externally (e.g., from remote control)
     syncQueueState().catch(err => console.error('[Player] Failed to sync queue:', err));
     try {
-      const queueTrack = await invoke<QueueTrack | null>('get_current_queue_track');
+      const queueTrack = await invoke<QueueTrack | null>('v2_get_current_queue_track');
       if (queueTrack && queueTrack.id === event.track_id) {
         const rawRate = queueTrack.sample_rate ?? undefined;
         const normalizedRate = rawRate == null
@@ -621,9 +661,60 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     return;
   }
 
+  // Fallback end-of-track detection:
+  // some backend paths can emit a terminal stop with track_id=0 instead of
+  // a final same-track frame at duration. Treat as natural end only when
+  // previous progress was already at the tail and playback was active.
+  if (
+    event.track_id === 0 &&
+    prevTrackId !== 0 &&
+    prevDuration > 0 &&
+    prevPosition >= prevDuration - 2 &&
+    !event.is_playing &&
+    prevWasPlaying &&
+    !isAdvancingTrack &&
+    !queueEnded &&
+    onTrackEnded
+  ) {
+    console.log('[Player] Track ended (fallback), advancing to next...');
+    isAdvancingTrack = true;
+
+    try {
+      await onTrackEnded();
+    } catch (err) {
+      console.error('[Player] Failed fallback auto-advance:', err);
+    } finally {
+      isAdvancingTrack = false;
+    }
+    return;
+  }
+
   // Update playback state if track matches
   if (event.track_id === currentTrack.id) {
-    currentTime = event.position;
+    const now = Date.now();
+    const seekGuardActive = seekTargetPosition !== null && now < seekGuardUntilMs;
+    if (seekGuardActive) {
+      const target = seekTargetPosition;
+      if (target === null) {
+        currentTime = event.position;
+        isPlaying = event.is_playing;
+        return;
+      }
+      const delta = Math.abs(event.position - target);
+      if (delta <= SEEK_SETTLE_TOLERANCE_SECS) {
+        seekTargetPosition = null;
+        seekGuardUntilMs = 0;
+        currentTime = event.position;
+      } else {
+        // Ignore stale position updates briefly after seek to avoid UI snap-back.
+      }
+    } else {
+      if (seekTargetPosition !== null && now >= seekGuardUntilMs) {
+        seekTargetPosition = null;
+        seekGuardUntilMs = 0;
+      }
+      currentTime = event.position;
+    }
     isPlaying = event.is_playing;
 
     // Update volume from backend (e.g., changed via remote control or system)
@@ -649,12 +740,18 @@ async function handlePlaybackEvent(event: PlaybackEvent): Promise<void> {
     notifyListeners();
 
     // Gapless: when backend signals it's approaching end and wants next track queued
-    if (event.gapless_ready && !gaplessRequestInFlight && gaplessGetNextTrackId) {
+    if (
+      event.gapless_ready &&
+      !gaplessRequestInFlight &&
+      gaplessGetNextTrackId &&
+      gaplessAttemptTrackId !== currentTrack.id
+    ) {
       const nextId = gaplessGetNextTrackId();
       if (nextId && nextId > 0) {
         gaplessRequestInFlight = true;
+        gaplessAttemptTrackId = currentTrack.id;
         console.log('[Gapless] Backend ready, queueing track', nextId);
-        invoke<boolean>('play_next_gapless', { trackId: nextId })
+        invoke<boolean>('v2_play_next_gapless', { trackId: nextId })
           .then((queued) => {
             if (queued) {
               console.log('[Gapless] Track', nextId, 'queued successfully');
@@ -712,7 +809,7 @@ export async function startPolling(): Promise<void> {
     // the unscoped key. resyncPersistedVolume() is called after login to fix this.
     const persistedVolume = loadPersistedVolume();
     try {
-      await invoke('set_volume', { volume: persistedVolume / 100 });
+      await invoke('v2_set_volume', { volume: persistedVolume / 100 });
       console.log('[Player] Synced persisted volume to backend:', persistedVolume);
     } catch {
       // Backend might not be ready yet, volume will be applied on first interaction
@@ -770,6 +867,10 @@ export function isPollingActive(): boolean {
  * Reset all state (for logout)
  */
 export function reset(): void {
+  pendingSeekPosition = null;
+  seekRequestInFlight = false;
+  seekTargetPosition = null;
+  seekGuardUntilMs = 0;
   stopPolling();
   currentTrack = null;
   isPlaying = false;
@@ -779,5 +880,7 @@ export function reset(): void {
   isAdvancingTrack = false;
   isSkipping = false;
   queueEnded = false;
+  gaplessAttemptTrackId = null;
+  gaplessRequestInFlight = false;
   notifyListeners();
 }

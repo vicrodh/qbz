@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { Search, Disc3, Music, Mic2, User, X, ChevronLeft, ChevronRight, Crown, Heart, Play, MoreHorizontal, ListPlus } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import SearchPlaylistCard from '../SearchPlaylistCard.svelte';
@@ -22,29 +23,34 @@
   let currentArtistPage = $state(0);
   let albumsPerPage = $state(5);
   let artistsPerPage = $state(5);
-  let totalAlbumPages = $derived(allResults ? Math.ceil(allResults.albums.items.length / albumsPerPage) : 0);
-  let totalArtistPages = $derived(allResults ? Math.ceil(allResults.artists.items.length / artistsPerPage) : 0);
+  // NOTE: totalAlbumPages/totalArtistPages are defined after allResults declaration
 
-  onMount(async () => {
+  onMount(() => {
     console.log('SearchView mounted!');
-    await tick();
-    searchInput?.focus();
-    calculateAlbumsPerPage();
-    calculateArtistsPerPage();
 
-    // Restore scroll position
-    requestAnimationFrame(() => {
-      const saved = getSavedScrollPosition('search');
-      if (scrollContainer && saved > 0) {
-        scrollContainer.scrollTop = saved;
+    // Async initialization in IIFE (doesn't block cleanup return)
+    (async () => {
+      await tick();
+      searchInput?.focus();
+      calculateAlbumsPerPage();
+      calculateArtistsPerPage();
+
+      // Restore scroll position
+      requestAnimationFrame(() => {
+        const saved = getSavedScrollPosition('search');
+        if (scrollContainer && saved > 0) {
+          scrollContainer.scrollTop = saved;
+        }
+      });
+
+      // Auto-search if query is pre-filled (e.g., from performer link)
+      if (query.trim().length >= 2 && !allResults && !albumResults && !trackResults && !artistResults) {
+        performSearch();
       }
-    });
-    window.addEventListener('resize', handleResize);
+    })();
 
-    // Auto-search if query is pre-filled (e.g., from performer link)
-    if (query.trim().length >= 2 && !allResults && !albumResults && !trackResults && !artistResults) {
-      performSearch();
-    }
+    // Synchronous subscriptions
+    window.addEventListener('resize', handleResize);
 
     // Subscribe to focus trigger (when user re-clicks Search in sidebar)
     const unsubscribeFocus = subscribeSearchFocus(() => {
@@ -306,13 +312,14 @@
   interface Album {
     id: string;
     title: string;
-    artist: { name: string };
+    artist: { id?: number; name: string };
     genre?: { name: string; };
     image: { small?: string; thumbnail?: string; large?: string };
     release_date_original?: string;
     hires_streamable?: boolean;
     maximum_bit_depth?: number;
     maximum_sampling_rate?: number;
+    isViewMore?: boolean; // For "view more" placeholder
   }
 
   interface Track {
@@ -336,6 +343,7 @@
     name: string;
     image?: { small?: string; thumbnail?: string; large?: string };
     albums_count?: number;
+    isViewMore?: boolean; // For "view more" placeholder
   }
 
   const cachedState = getSearchState<Album, Track, Artist>();
@@ -351,6 +359,8 @@
   let artistResults = $state<SearchResults<Artist> | null>(cachedState.artistResults ?? null);
   let playlistResults = $state<SearchResults<Playlist> | null>(cachedState.playlistResults ?? null);
   let allResults = $state<SearchAllResults<Album, Track, Artist> | null>(cachedState.allResults ?? null);
+  let totalAlbumPages = $derived(allResults ? Math.ceil(allResults.albums.items.length / albumsPerPage) : 0);
+  let totalArtistPages = $derived(allResults ? Math.ceil(allResults.artists.items.length / artistsPerPage) : 0);
 
   let searchTimeout: ReturnType<typeof setTimeout> | null = null;
   let isLoadingMore = $state(false);
@@ -483,7 +493,7 @@
       // Search based on active tab - reset to first page
       if (activeTab === 'all') {
         // Use title case for better most_popular results from Qobuz API
-        const results = await invoke<SearchAllResults<Album, Track, Artist>>('search_all', {
+        const results = await invoke<SearchAllResults<Album, Track, Artist>>('v2_search_all', {
           query: toTitleCase(searchQuery)
         });
         // Only apply if query hasn't changed while we were fetching
@@ -503,7 +513,7 @@
           loadAllAlbumDownloadStatuses(allResults.albums.items); // fire-and-forget
         }
       } else if (activeTab === 'albums') {
-        const results = await invoke<SearchResults<Album>>('search_albums', {
+        const results = await invoke<SearchResults<Album>>('v2_search_albums', {
           query: searchQuery,
           limit: PAGE_SIZE,
           offset: 0,
@@ -517,7 +527,7 @@
           loadAllAlbumDownloadStatuses(albumResults.items); // fire-and-forget
         }
       } else if (activeTab === 'tracks') {
-        const results = await invoke<SearchResults<Track>>('search_tracks', {
+        const results = await invoke<SearchResults<Track>>('v2_search_tracks', {
           query: searchQuery,
           limit: PAGE_SIZE,
           offset: 0,
@@ -527,7 +537,7 @@
         trackResults = results;
         console.log('Track results:', trackResults);
       } else if (activeTab === 'artists') {
-        const results = await invoke<SearchResults<Artist>>('search_artists', {
+        const results = await invoke<SearchResults<Artist>>('v2_search_artists', {
           query: searchQuery,
           limit: PAGE_SIZE,
           offset: 0,
@@ -569,7 +579,7 @@
     try {
       if (activeTab === 'albums' && albumResults && hasMoreAlbums) {
         const newOffset = albumResults.offset + albumResults.items.length;
-        const moreResults = await invoke<SearchResults<Album>>('search_albums', {
+        const moreResults = await invoke<SearchResults<Album>>('v2_search_albums', {
           query: query.trim(),
           limit: PAGE_SIZE,
           offset: newOffset,
@@ -583,7 +593,7 @@
         loadAllAlbumDownloadStatuses(moreResults.items); // fire-and-forget
       } else if (activeTab === 'tracks' && trackResults && hasMoreTracks) {
         const newOffset = trackResults.offset + trackResults.items.length;
-        const moreResults = await invoke<SearchResults<Track>>('search_tracks', {
+        const moreResults = await invoke<SearchResults<Track>>('v2_search_tracks', {
           query: query.trim(),
           limit: PAGE_SIZE,
           offset: newOffset,
@@ -596,7 +606,7 @@
         };
       } else if (activeTab === 'artists' && artistResults && hasMoreArtists) {
         const newOffset = artistResults.offset + artistResults.items.length;
-        const moreResults = await invoke<SearchResults<Artist>>('search_artists', {
+        const moreResults = await invoke<SearchResults<Artist>>('v2_search_artists', {
           query: query.trim(),
           limit: PAGE_SIZE,
           offset: newOffset,
@@ -715,7 +725,7 @@
     if (trackResults && trackResults.items.length > 0) {
       try {
         const queueTracks = buildSearchQueueTracks(trackResults.items);
-        await invoke('set_queue', { tracks: queueTracks, startIndex: trackIndex });
+        await invoke('v2_set_queue', { tracks: queueTracks, startIndex: trackIndex });
       } catch (err) {
         console.error('Failed to set queue:', err);
       }
@@ -733,7 +743,8 @@
   }
 
   function getArtistImage(artist: Artist): string {
-    return artist.image?.large || artist.image?.thumbnail || artist.image?.small || '';
+    const defaultUrl = artist.image?.large || artist.image?.thumbnail || artist.image?.small || '';
+    return resolveArtistImage(artist.name, defaultUrl);
   }
 
   // Title case query for better API results (Qobuz returns most_popular more consistently with proper capitalization)
@@ -757,14 +768,9 @@
     }
   }
 
-  let canScrollAlbumsLeft = $derived(currentAlbumPage > 0);
-  let canScrollAlbumsRight = $derived(currentAlbumPage < totalAlbumPagesWithViewMore - 1);
-  let canScrollArtistsLeft = $derived(currentArtistPage > 0);
-  let canScrollArtistsRight = $derived(currentArtistPage < totalArtistPagesWithViewMore - 1);
-
   let showAlbumsViewMore = $derived(allResults ? allResults.albums.total > 30 : false);
   let showArtistsViewMore = $derived(allResults ? allResults.artists.total > 12 : false);
-  
+
   let albumsWithViewMore = $derived(() => {
     if (!allResults) return [];
     const albums = [...allResults.albums.items];
@@ -785,6 +791,11 @@
 
   let totalAlbumPagesWithViewMore = $derived(albumsWithViewMore().length > 0 ? Math.ceil(albumsWithViewMore().length / albumsPerPage) : 0);
   let totalArtistPagesWithViewMore = $derived(artistsWithViewMore().length > 0 ? Math.ceil(artistsWithViewMore().length / artistsPerPage) : 0);
+
+  let canScrollAlbumsLeft = $derived(currentAlbumPage > 0);
+  let canScrollAlbumsRight = $derived(currentAlbumPage < totalAlbumPagesWithViewMore - 1);
+  let canScrollArtistsLeft = $derived(currentArtistPage > 0);
+  let canScrollArtistsRight = $derived(currentArtistPage < totalArtistPagesWithViewMore - 1);
   
   let visibleAlbums = $derived(
     albumsWithViewMore().slice(currentAlbumPage * albumsPerPage, (currentAlbumPage + 1) * albumsPerPage)
@@ -1333,7 +1344,7 @@
                             </button>
                             {#if album.artist?.id}
                               <div class="separator"></div>
-                              <button class="menu-item" onclick={() => { onArtistClick?.(album.artist.id); mostPopularMenuOpen = false; }}>
+                              <button class="menu-item" onclick={() => { onArtistClick?.(album.artist.id!); mostPopularMenuOpen = false; }}>
                                 <User size={14} /> <span>{$t('actions.goToArtist')}</span>
                               </button>
                             {/if}

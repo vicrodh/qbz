@@ -6,6 +6,9 @@ pub const BASE_URL: &str = "https://www.qobuz.com/api.json/0.2";
 pub mod paths {
     // User
     pub const USER_LOGIN: &str = "/user/login";
+    pub const PURCHASE_GET_USER_PURCHASES: &str = "/purchase/getUserPurchases";
+    pub const PURCHASE_GET_USER_PURCHASES_IDS: &str = "/purchase/getUserPurchasesIds";
+    pub const DYNAMIC_SUGGEST: &str = "/dynamic/suggest";
 
     // Track
     pub const TRACK_GET: &str = "/track/get";
@@ -44,12 +47,19 @@ pub mod paths {
 
     // Label
     pub const LABEL_GET: &str = "/label/get";
+    pub const LABEL_PAGE: &str = "/label/page";
+    pub const LABEL_EXPLORE: &str = "/label/explore";
 
     // Genre
     pub const GENRE_LIST: &str = "/genre/list";
 
     // Catalog (combined search)
     pub const CATALOG_SEARCH: &str = "/catalog/search";
+
+    // Radio
+    pub const RADIO_ALBUM: &str = "/radio/album";
+    pub const RADIO_ARTIST: &str = "/radio/artist";
+    pub const RADIO_TRACK: &str = "/radio/track";
 
     // Discover (home page content)
     pub const DISCOVER_INDEX: &str = "/discover/index";

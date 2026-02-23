@@ -19,7 +19,8 @@
     "recentlyAdded": "Recently Added",
     "backTo": "Back to",
     "updates": "Updates",
-    "flatpak": "Flatpak"
+    "flatpak": "Flatpak",
+    "purchases": "Purchases"
   },
   "home": {
     "title": "Home",
@@ -46,7 +47,8 @@
     "artistPlays": "{count} plays",
     "moreFromFavorites": "More From Favorites",
     "startListening": "Start Listening",
-    "startListeningDescription": "Play music or add favorites to activate recommendations."
+    "startListeningDescription": "Play music or add favorites to activate recommendations.",
+    "yourMixes": "Your mixes"
   },
   "discover": {
     "newReleases": "New Releases",
@@ -82,6 +84,22 @@
     "noPlaylistsFor": "No playlists found for \"{query}\"",
     "viewMore": "View more"
   },
+  "label": {
+    "title": "Label",
+    "about": "About",
+    "otherLabels": "Other labels",
+    "popularTracks": "Popular Tracks",
+    "releases": "Releases",
+    "criticsPicks": "Critics' Picks",
+    "playlists": "Playlists",
+    "artists": "Artists",
+    "moreLabels": "More labels",
+    "readMore": "READ MORE",
+    "readLess": "READ LESS",
+    "seeAll": "See all",
+    "showMore": "Show more",
+    "showLess": "Show less"
+  },
   "library": {
     "title": "Local Library",
     "browse": "Browse Library",
@@ -109,6 +127,7 @@
     "searchAlbums": "Search albums...",
     "searchArtists": "Search artists...",
     "searchTracks": "Search tracks, albums, artists...",
+    "searchAlbumTracks": "Search tracks...",
     "trackCount": "{count} tracks",
     "albumCount": "{count} albums",
     "artistCount": "{count} artists",
@@ -172,7 +191,14 @@
     "noAlbumsInLibrary": "No albums in library",
     "addFoldersHint": "Add folders and scan to build your library",
     "clearAllFilters": "Clear all",
+    "source": "Source",
+    "localFiles": "Local files",
     "offlineCache": "Offline cache",
+    "plexLibrary": "Plex library",
+    "syncPlexLibrary": "Sync Plex library",
+    "syncingPlexLibrary": "Syncing Plex...",
+    "plexSyncDone": "Plex library synchronized",
+    "plexSyncFailed": "Failed to synchronize Plex library",
     "noAlbumsMatch": "No albums match your search",
     "tryDifferentSearch": "Try a different artist or album name",
     "noArtistsInLibrary": "No artists in library",
@@ -227,7 +253,13 @@
     "noBiography": "No biography available",
     "tributes": "Tributes & Covers",
     "others": "Others",
-    "playlists": "Playlists"
+    "playlists": "Playlists",
+    "addImage": "Add custom artist image",
+    "changeImage": "Change custom artist image",
+    "removeImage": "Remove custom artist image",
+    "customImageSet": "Artist image updated",
+    "customImageRemoved": "Custom artist image removed",
+    "customImageError": "Failed to update artist image"
   },
   "sort": {
     "nameAZ": "Name (A-Z)",
@@ -330,6 +362,8 @@
     "likeAlbumsHint": "Like albums to see them here",
     "likeArtistsHint": "Like artists to see them here",
     "likePlaylistsHint": "Click the heart icon on playlists to add them here",
+    "randomAlbum": "Play random album",
+    "randomArtist": "Go to random artist",
     "selectArtistHint": "Select an artist to see their albums",
     "loadingAlbums": "Loading albums...",
     "failedLoadAlbums": "Failed to load albums",
@@ -385,6 +419,7 @@
     "history": "History",
     "recentlyPlayed": "Recently Played",
     "noHistoryYet": "No tracks played yet",
+    "historyEmpty": "No tracks played yet",
     "infinitePlay": "Infinite Play",
     "infinitePlayEnabled": "Infinite play enabled",
     "infinitePlayDisabled": "Infinite play disabled",
@@ -430,12 +465,13 @@
     "castToDevice": "Cast to device",
     "castingManage": "Casting - Click to manage",
     "miniPlayer": "Mini Player",
-    "fullScreen": "Full Screen",
-    "exitFullScreen": "Exit Full Screen",
+    "fullScreen": "Immersive Mode",
+    "exitFullScreen": "Exit Immersive Mode",
     "maximize": "Maximize",
     "restore": "Restore",
     "minimize": "Minimize",
     "exitImmersive": "Exit Immersive",
+    "dragWindow": "Move Window",
     "normalizationOff": "Volume Normalization: Off",
     "normalizationOn": "Volume Normalization: On",
     "normalizationApplied": "Volume Normalization: Active"
@@ -485,6 +521,10 @@
     "addToPlaylist": "Add to Playlist",
     "addToFavorites": "Add to Favorites",
     "removeFromFavorites": "Remove from Favorites",
+    "removeFromPlaylist": "Remove from Playlist",
+    "selectedTracks": "{count, plural, one {# track selected} other {# tracks selected}}",
+    "select": "Select",
+    "cancelSelection": "Cancel Selection",
     "makeAvailableOffline": "Make available offline",
     "share": "Share",
     "viewAlbum": "View Album",
@@ -540,6 +580,7 @@
       "qualityChangedCacheCleared": "Quality changed. Playback cache cleared.",
       "outputDevice": "Output Device",
       "outputDeviceDesc": "Select your preferred audio output device. Devices shown are from the selected backend.",
+      "systemDefaultIs": "System Default is: {device}",
       "audioDevice": "Audio Device",
       "audioDeviceDesc": "Select your preferred audio output device. Devices shown are from the selected backend.",
       "exclusiveMode": "Exclusive Mode",
@@ -550,6 +591,11 @@
       "dacPassthroughNote": "Refers to decoded audio content. DAC displays may show transport format, not content resolution.",
       "dacPassthroughDisabledDesc": "DAC Passthrough uses pw-metadata to force PipeWire sample rates. It is only compatible with the PipeWire backend.",
       "dacPassthroughExtendedDesc": "When enabled, overrides the quality setting above if your audio device doesn't support the selected sample rate. Prevents resampling to guarantee bit-perfect playback.",
+      "pwForceBitperfect": "Force Bit-Perfect (Experimental)",
+      "pwForceBitperfectDesc": "Forces PipeWire quantum and sample rate to match the track, resetting on stop. Requires DAC Passthrough.",
+      "pwForceBitperfectNote": "Experimental. May cause audio glitches on some systems. Only affects PipeWire backend.",
+      "syncAudioOnStartup": "Sync audio settings on startup",
+      "syncAudioOnStartupDesc": "Reload audio configuration from database when the app starts. Enable if your audio device or settings appear incorrect after launching.",
       "audioBackend": "Audio Backend",
       "audioBackendDesc": "Choose audio system: Auto (recommended), PipeWire (modern), ALSA Direct (bit-perfect, exclusive), or PulseAudio (legacy).",
       "currentSampleRate": "Current Sample Rate",
@@ -558,7 +604,10 @@
       "loadingAudioDevices": "Loading audio devices...",
       "parsingHardware": "Parsing hardware information",
       "limitQualityToDevice": "Limit Quality to Device",
-      "limitQualityToDeviceDesc": "When enabled, overrides the quality setting above if your audio device doesn't support the selected sample rate. Prevents resampling to guarantee bit-perfect playback.",
+      "limitQualityToDeviceDesc": "When enabled, limits streaming quality to your DAC's maximum sample rate. Prevents requesting formats your device can't play natively.",
+      "maxSampleRate": "Maximum Sample Rate",
+      "maxSampleRateDesc": "Select your DAC's maximum supported sample rate. Tracks above this rate will be requested at a lower quality from Qobuz.",
+      "refreshDevices": "Refresh device list",
       "alsaPlugin": "ALSA Plugin",
       "alsaPluginDesc": "hw: Bit-perfect, exclusive. plughw: Auto-convert. pcm: Most compatible.",
       "hardwareVolume": "Enable Hardware Volume Control",
@@ -601,6 +650,8 @@
       "playOnlySelectedTrack": "Play only selected track",
       "showContextIcon": "Show track playing context in player",
       "showContextIconTooltip": "Shows the context from which the current track is being played (album, artist, playlist, etc.)",
+      "persistSession": "Restore session on startup",
+      "persistSessionDesc": "Remember your queue, playback position, and current view when restarting",
       "streamUncached": "Stream Uncached Tracks",
       "streamUncachedDesc": "Start playback faster when track is not in cache. Seeking may be limited during initial buffering.",
       "initialBuffer": "Initial Buffer Size",
@@ -632,10 +683,35 @@
         "ikari": "Ikari",
         "langley": "Langley",
         "ayanami": "Ayanami",
-        "iscariot": "Iscariot"
+        "iscariot": "Iscariot",
+        "system": "System"
       },
+      "autoTheme": "Auto-Theme",
+      "autoThemeDesc": "Generate a color theme from your system wallpaper or a custom image",
+      "autoThemeSource": "Source",
+      "autoThemeSourceSystem": "System Colors",
+      "autoThemeSourceWallpaper": "Wallpaper Sync",
+      "autoThemeSourceImage": "Custom Image",
+      "autoThemeSelectImage": "Select Image...",
+      "autoThemeGenerating": "Generating theme...",
+      "autoThemeError": "Failed to generate theme",
+      "autoThemeDetectedDE": "Detected: {de}",
+      "autoThemeExperimental": "Experimental: theme may not match your system exactly.",
+      "autoThemeNoWallpaper": "Could not detect system wallpaper",
+      "autoThemeApplied": "Auto-theme applied",
+      "autoThemeRegenerate": "Regenerate",
+      "autoThemeFailedHint": "We recommend choosing a different theme or generating one from a custom image.",
+      "colorBg": "Base",
+      "colorSurface": "Surface",
+      "colorElevated": "Elevated",
+      "colorAccent": "Accent",
+      "colorText": "Text",
+      "colorMuted": "Muted",
+      "colorBorder": "Border",
+      "colorDanger": "Danger",
       "accentColor": "Accent Color",
       "language": "Language",
+      "fontFamily": "Font",
       "uiScale": "UI Scale",
       "inAppToasts": "In-app toasts notifications",
       "systemNotifications": "System Notifications",
@@ -643,6 +719,8 @@
       "useSystemTitleBarDesc": "Replace QBZ custom title bar with your system's native window decorations. Changing this will restart the app.",
       "hideTitleBar": "Hide title bar",
       "hideTitleBarDesc": "Hide the title bar completely (for tiling window manager users)",
+      "showPurchases": "Show Purchases",
+      "showPurchasesDesc": "Show the Purchases section in the sidebar for browsing and downloading your purchased music",
       "immersiveDefaultView": "Immersive default view",
       "immersiveViews": {
         "remember": "Remember last used",
@@ -656,6 +734,12 @@
         "split-trackInfo": "Split: Track Info",
         "split-suggestions": "Split: Suggestions",
         "split-queue": "Split: Queue"
+      },
+      "startupPage": "Startup page",
+      "startupPageDesc": "Choose which page to show when the app starts",
+      "startupPages": {
+        "home": "Home",
+        "last-view": "Where you left off"
       },
       "hardwareAcceleration": "Hardware acceleration (GPU)",
       "hardwareAccelerationDesc": "Enable GPU-accelerated rendering. Disabled by default for maximum compatibility. If QBZ crashes on startup after enabling, run: QBZ_HARDWARE_ACCEL=0 qbz",
@@ -695,7 +779,18 @@
         "envVarForceX11": "Force XWayland backend",
         "envVarSoftwareRender": "Force software rendering (Mesa llvmpipe)",
         "envVarForceDmabuf": "Force DMA-BUF renderer on (may crash)",
-        "envVarDisableDmabuf": "Force DMA-BUF renderer off"
+        "envVarDisableDmabuf": "Force DMA-BUF renderer off",
+        "profiles": {
+          "title": "Rendering profiles",
+          "helpText": "Quick presets for mixed-DPI and multi-monitor setups. Apply one and restart QBZ.",
+          "nativeWaylandLabel": "Native Wayland (Sharpest)",
+          "nativeWaylandDesc": "Use native Wayland rendering. Best text sharpness, may be heavier on some GPU/compositor combos.",
+          "x11BalancedLabel": "Xwayland Balanced",
+          "x11BalancedDesc": "Force Xwayland with GDK_SCALE=1 and GDK_DPI_SCALE=1.1 for a balanced size/sharpness tradeoff.",
+          "x11PerformanceLabel": "Xwayland Performance",
+          "x11PerformanceDesc": "Force Xwayland with neutral scaling (1.0/1.0). Best performance and least blur on external monitors.",
+          "applied": "Applied profile: {profile}. Restart QBZ to take effect."
+        }
       }
     },
     "library": {
@@ -840,7 +935,10 @@
       "plexClearCacheConfirmDesc": "This removes locally cached Plex sections/tracks in QBZ. Your Plex token remains connected.",
       "plexClearCacheConfirmOk": "Clear cache",
       "plexNoTracksLoaded": "No tracks loaded yet.",
-      "plexTrackMeta": "{artist} - {album} - {rate} Hz / {bits}-bit"
+      "plexTrackMeta": "{artist} - {album} - {rate} Hz / {bits}-bit",
+      "qobuzLinkHandler": "Qobuz Link Handler",
+      "qobuzLinkHandlerDesc": "Register QBZ as the default app for qobuzapp:// links from your browser.",
+      "qobuzLinkHandlerError": "Failed to update link handler registration."
     },
     "storage": {
       "title": "Storage",
@@ -994,7 +1092,9 @@
     "loginError": "Login failed. Please check your credentials.",
     "welcomeBack": "Welcome back",
     "rememberMe": "Remember me",
-    "ineligibleSubscription": "No active subscription. QBZ will run in offline mode only."
+    "ineligibleSubscription": "No active subscription. QBZ will run in offline mode only.",
+    "v2AuthFailed": "Authentication with Qobuz failed. Please try again.",
+    "v2NotInitialized": "Could not connect to Qobuz. Please restart the app."
   },
   "legal": {
     "brandingLineSuffix": "",
@@ -1270,6 +1370,7 @@
       "uiQueue": "Queue",
       "uiEscape": "Close / Dismiss",
       "uiShowShortcuts": "Show Shortcuts",
+      "uiOpenLink": "Open Music Link",
       "focusSeekForward": "Seek Forward (5s)",
       "focusSeekBack": "Seek Back (5s)",
       "focusSeekForwardLong": "Seek Forward (10s)",
@@ -1286,6 +1387,7 @@
       "uiQueue": "Toggle queue panel",
       "uiEscape": "Close active panel or modal",
       "uiShowShortcuts": "Show keyboard shortcuts modal",
+      "uiOpenLink": "Open a Qobuz link in the app",
       "focusSeekForward": "Seek forward 5 seconds",
       "focusSeekBack": "Seek back 5 seconds",
       "focusSeekForwardLong": "Seek forward 10 seconds",
@@ -1372,7 +1474,7 @@
     },
     "pulseConfig": {
       "title": "Choose Apps for Bit-Perfect",
-      "subtitle": "Add QBZ and any players you want without resampling.",
+      "subtitle": "Add QBZ and any players you want without resampling. Uses PipeWire stream rules (applies to all audio APIs).",
       "apps": {
         "qbz": "QBZ",
         "qobuzPlayer": "qobuz-player (TUI)",
@@ -1436,7 +1538,7 @@
       "detectDac": "Detect DAC",
       "backup": "Backup",
       "pipewireConfig": "PipeWire",
-      "pulseConfig": "Pulse",
+      "pulseConfig": "Apps",
       "wireplumberConfig": "WirePlumber",
       "restart": "Restart",
       "verify": "Verify",
@@ -1576,5 +1678,153 @@
     "addingPhase": "Adding tracks to playlist...",
     "addingProgress": "Adding tracks: {current} / {total}",
     "partsCreated": "Split into {count} playlists (Qobuz 2000-track limit)"
+  },
+  "purchases": {
+    "title": "Purchases",
+    "tabs": {
+      "albums": "Albums",
+      "tracks": "Tracks"
+    },
+    "search": "Search purchases...",
+    "empty": "No purchases yet. Visit Qobuz to buy music.",
+    "emptyTracks": "No individually purchased tracks.",
+    "unavailable": "This album is no longer available for download.",
+    "downloadAll": "Download All",
+    "downloadTrack": "Download track",
+    "chooseFolder": "Choose download folder",
+    "format": "Format",
+    "purchasedOn": "Purchased:",
+    "addToLibrary": "Add to Local Library",
+    "addToLibraryDesc": "Add the downloaded folder to your local music library.",
+    "addToLibrarySuccess": "Folder added to local library.",
+    "addToLibraryError": "Failed to add folder to library.",
+    "downloading": "Downloading...",
+    "downloadProgress": "Downloading {current}/{total}...",
+    "complete": "Download complete",
+    "failed": "Download failed",
+    "filter": {
+      "all": "All",
+      "downloaded": "Downloaded",
+      "notDownloaded": "Not Downloaded",
+      "hires": "Hi-Res",
+      "availability": "Availability",
+      "hideUnavailable": "Hide unavailable",
+      "downloads": "Downloads",
+      "hideDownloaded": "Hide downloaded on this computer"
+    },
+    "sort": {
+      "date": "Purchase Date",
+      "artist": "Artist",
+      "album": "Album",
+      "quality": "Quality"
+    },
+    "formats": {
+      "flac_hires_192": "FLAC 24-bit / 192 kHz",
+      "flac_hires_96": "FLAC 24-bit / 96 kHz",
+      "flac_cd": "FLAC 16-bit / 44.1 kHz",
+      "mp3_320": "MP3 320 kbps"
+    },
+    "tracksCount": "{count} tracks",
+    "sortLabel": "Sort",
+    "table": {
+      "title": "Title"
+    },
+    "group": {
+      "off": "Group: Off",
+      "alpha": "Group: A-Z",
+      "artist": "Group: Artist",
+      "album": "Group: Album",
+      "name": "Group: Name",
+      "optionOff": "Off",
+      "optionAlpha": "Alphabetical (A-Z)",
+      "optionArtist": "Artist",
+      "optionAlbum": "Album",
+      "optionName": "Name (A-Z)"
+    },
+    "view": {
+      "list": "List view",
+      "grid": "Grid view"
+    },
+    "regionNotice": "Purchases availability depends on your Qobuz account and region. If unavailable, this may be expected.",
+    "errors": {
+      "noAlbum": "Cannot download: track has no associated album.",
+      "noFormats": "No download formats available for this track."
+    }
+  },
+  "yourMixes": {
+    "title": "DailyQ",
+    "subtitle": "Based on your recent listening.",
+    "cardDesc": "Elevate your day with a customized selection of music.",
+    "actions": {
+      "saveAsPlaylist": "Save as playlist"
+    },
+    "form": {
+      "limit": "Limit",
+      "listenedTrackIds": "Listened track IDs (comma-separated)",
+      "listenedTrackIdsPlaceholder": "123,456,789",
+      "tracksToAnalyse": "Tracks to analyse (one row: trackId,artistId,genreId,labelId)",
+      "tracksToAnalysePlaceholder": "123,45,78,90",
+      "prefillFromRecents": "Use QBZ recent log",
+      "run": "Fetch Suggestions",
+      "probeRaw": "Probe Raw Response",
+      "rawResponse": "Raw response"
+    },
+    "algorithmInfo": "Powered by the Qobuz\u2122 suggestion algorithm, curated from your local listening history.",
+    "result": {
+      "algorithm": "Algorithm",
+      "count": "{count} tracks",
+      "empty": "No suggested tracks returned.",
+      "emptyHint": "Tried fallback payload strategies. This account/seed set may currently return no mix candidates.",
+      "unknownArtist": "Unknown artist"
+    },
+    "errors": {
+      "fetchFailed": "Failed to fetch dynamic suggestions.",
+      "prefillFailed": "Failed to load recent data from QBZ logs.",
+      "rawProbeFailed": "Failed to fetch raw endpoint response.",
+      "playlistsLoadFailed": "Failed to load your playlists.",
+      "emptyPlaylist": "No tracks available to save as playlist."
+    }
+  },
+  "weeklyMixes": {
+    "title": "WeeklyQ",
+    "subtitle": "Based on your weekly listening.",
+    "cardDesc": "Take a weekly journey with a fresh mix <strong>every Friday</strong>."
+  },
+  "favMixes": {
+    "title": "FavQ",
+    "subtitle": "Your favorites, remixed",
+    "cardDesc": "A fresh shuffle from your personal favorites.",
+    "algorithmInfo": "Randomly selects up to 50 tracks from your Qobuz favorites collection.",
+    "emptyFavorites": "No favorite tracks yet. Start adding favorites to build your mix!"
+  },
+  "topMixes": {
+    "title": "TopQ",
+    "subtitle": "From your top playlists",
+    "cardDesc": "Discover new music from your <strong>most-played</strong> playlists.",
+    "algorithmInfo": "Powered by the Qobuz suggestion algorithm, seeded from your most-played playlists.",
+    "emptyPlaylists": "No played playlists yet. Play some playlists to build your mix!"
+  },
+  "playlistManager": {
+    "switchToFlat": "Flat view",
+    "switchToFolders": "Folder view",
+    "emptyFolder": "Empty folder"
+  },
+  "linkResolver": {
+    "title": "Open Music Link",
+    "placeholder": "Paste a link from Qobuz, Spotify, Apple Music, Tidal, Deezer, or song.link...",
+    "go": "Go",
+    "resolving": "Resolving...",
+    "invalidLink": "Invalid or unsupported music link.",
+    "notOnQobuz": "This content is not available on Qobuz.",
+    "playlistDetected": "This is a playlist. Use the Playlist Importer for playlists.",
+    "openPlaylistImporter": "Open Playlist Importer"
+  },
+  "radio": {
+    "albumRadio": "Album Radio",
+    "creatingAlbumRadio": "Creating album radio...",
+    "createRadio": "Create radio",
+    "qbzRadio": "QBZ Radio",
+    "qobuzRadio": "Qobuz Radio",
+    "creating": "Creating radio..."
   }
 }

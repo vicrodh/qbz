@@ -9,7 +9,7 @@ import { invoke } from '@tauri-apps/api/core';
 
 // ============ Types ============
 
-export type ContextType = 'album' | 'playlist' | 'artist_top' | 'home_list' | 'favorites' | 'local_library' | 'radio';
+export type ContextType = 'album' | 'playlist' | 'artist_top' | 'label_top' | 'home_list' | 'daily_q' | 'weekly_q' | 'fav_q' | 'top_q' | 'favorites' | 'local_library' | 'radio' | 'search';
 export type ContentSource = 'qobuz' | 'local' | 'plex';
 
 export interface PlaybackContext {
@@ -48,7 +48,7 @@ export async function setPlaybackContext(
 ): Promise<void> {
   console.log('[PlaybackContext] Setting context:', { contextType, id, label, trackIds: trackIds.length, startPosition });
   
-  await invoke('set_playback_context', {
+  await invoke('v2_set_playback_context', {
     contextType,
     id,
     label,
@@ -76,7 +76,7 @@ export async function setPlaybackContext(
  */
 export async function clearPlaybackContext(): Promise<void> {
   console.log('[PlaybackContext] Clearing context');
-  await invoke('clear_playback_context');
+  await invoke('v2_clear_playback_context');
   currentContext = null;
   console.log('[PlaybackContext] Context cleared, notifying listeners');
   notifyListeners();
@@ -86,7 +86,7 @@ export async function clearPlaybackContext(): Promise<void> {
  * Get the current playback context
  */
 export async function getPlaybackContext(): Promise<PlaybackContext | null> {
-  const context = await invoke<PlaybackContext | null>('get_playback_context');
+  const context = await invoke<PlaybackContext | null>('v2_get_playback_context');
   currentContext = context;
   notifyListeners();
   return context;
@@ -96,7 +96,7 @@ export async function getPlaybackContext(): Promise<PlaybackContext | null> {
  * Check if a context is active
  */
 export async function hasPlaybackContext(): Promise<boolean> {
-  return await invoke<boolean>('has_playback_context');
+  return await invoke<boolean>('v2_has_playback_context');
 }
 
 /**
@@ -133,17 +133,25 @@ export function consumeContextTrackFocus(
 export function getContextDisplayInfo(): string | null {
   if (!currentContext) return null;
 
-  const typeStr = {
+  const typeStr: Record<ContextType, string> = {
     album: 'Album',
     playlist: 'Playlist',
     artist_top: 'Artist Top Songs',
+    label_top: 'Label Top Songs',
     home_list: 'Home List',
+    daily_q: 'DailyQ',
+    weekly_q: 'WeeklyQ',
+    fav_q: 'FavQ',
+    top_q: 'TopQ',
     favorites: 'Favorites',
     local_library: 'Local Library',
-    radio: 'Radio'
-  }[currentContext.type];
+    radio: 'Radio',
+    search: 'Search Results'
+  };
 
-  return `${typeStr} · ${currentContext.label}`;
+  const displayType = typeStr[currentContext.type];
+
+  return `${displayType} · ${currentContext.label}`;
 }
 
 /**

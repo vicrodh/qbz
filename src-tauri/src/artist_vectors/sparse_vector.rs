@@ -104,7 +104,10 @@ impl SparseVector {
 
     /// Iterate over (index, value) pairs
     pub fn iter(&self) -> impl Iterator<Item = (u32, f32)> + '_ {
-        self.indices.iter().copied().zip(self.values.iter().copied())
+        self.indices
+            .iter()
+            .copied()
+            .zip(self.values.iter().copied())
     }
 
     /// Add two sparse vectors element-wise

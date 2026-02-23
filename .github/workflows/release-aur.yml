@@ -20,8 +20,8 @@ on:
 jobs:
   update-aur:
     runs-on: ubuntu-latest
-    # Only run if the triggering workflow succeeded (or manual dispatch)
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # Only run on manual dispatch, or successful stable tag releases (no -rc)
+    if: ${{ github.event_name == 'workflow_dispatch' || (github.event.workflow_run.conclusion == 'success' && startsWith(github.event.workflow_run.head_branch, 'v') && !contains(github.event.workflow_run.head_branch, '-rc')) }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4

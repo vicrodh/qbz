@@ -5,14 +5,16 @@
 //! - Media key support
 //! - Now playing notifications
 
-use souvlaki::{MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, PlatformConfig, SeekDirection};
+use serde::Serialize;
+use souvlaki::{
+    MediaControlEvent, MediaControls, MediaMetadata, MediaPlayback, PlatformConfig, SeekDirection,
+};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc, Mutex,
 };
 use std::thread;
 use tauri::{AppHandle, Emitter};
-use serde::Serialize;
 
 /// Track metadata for media controls
 #[derive(Debug, Clone, Default)]
@@ -76,7 +78,10 @@ impl MediaControlsManager {
                     }
                 }
                 Err(e) => {
-                    log::warn!("Failed to initialize media controls: {}. Media keys won't work.", e);
+                    log::warn!(
+                        "Failed to initialize media controls: {}. Media keys won't work.",
+                        e
+                    );
                 }
             }
         });
@@ -90,7 +95,9 @@ impl MediaControlsManager {
                     title: Some(track.title.as_str()),
                     artist: Some(track.artist.as_str()),
                     album: Some(track.album.as_str()),
-                    duration: track.duration_secs.map(|d| std::time::Duration::from_secs(d)),
+                    duration: track
+                        .duration_secs
+                        .map(|d| std::time::Duration::from_secs(d)),
                     cover_url: track.cover_url.as_deref(),
                 };
 
@@ -122,7 +129,9 @@ impl MediaControlsManager {
     pub fn set_playback_with_progress(&self, playing: bool, position_secs: u64) {
         if let Ok(mut guard) = self.controls.lock() {
             if let Some(controls) = guard.as_mut() {
-                let progress = Some(souvlaki::MediaPosition(std::time::Duration::from_secs(position_secs)));
+                let progress = Some(souvlaki::MediaPosition(std::time::Duration::from_secs(
+                    position_secs,
+                )));
                 let playback = if playing {
                     MediaPlayback::Playing { progress }
                 } else {

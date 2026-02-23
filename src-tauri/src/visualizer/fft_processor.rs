@@ -3,17 +3,17 @@
 //! Runs on a dedicated thread, completely separate from audio playback.
 //! Uses spectrum-analyzer crate for efficient FFT computation.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
+use qbz_audio::SpectralAnalyzer;
 use spectrum_analyzer::scaling::divide_by_N_sqrt;
 use spectrum_analyzer::windows::hann_window;
+use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
 use tauri::{AppHandle, Emitter};
 
-use super::ring_buffer::RingBuffer;
-use super::{NUM_BARS, FFT_SIZE, TARGET_FPS};
+use super::{RingBuffer, FFT_SIZE, NUM_BARS, TARGET_FPS};
 
 /// Shared state for the visualizer thread
 pub struct VisualizerState {
@@ -34,6 +34,22 @@ pub fn start_visualizer_thread(state: VisualizerState, app_handle: AppHandle) {
     log::info!("Visualizer FFT thread started");
 }
 
+/// Number of energy bands for the Energy Bands visualizer
+const NUM_ENERGY_BANDS: usize = 5;
+const NUM_SPECTRAL_BANDS: usize = 190;
+const SPECTRAL_UPDATE_RATE_HZ: u32 = 58;
+const SPECTRAL_SMOOTHING: f32 = 0.80;
+
+/// Energy band frequency ranges (Hz):
+/// Sub-bass (20-60), Bass (60-250), Mids (250-2k), Presence (2k-6k), Air (6k-20k)
+const ENERGY_BAND_RANGES: [(f32, f32); NUM_ENERGY_BANDS] = [
+    (20.0, 60.0),
+    (60.0, 250.0),
+    (250.0, 2000.0),
+    (2000.0, 6000.0),
+    (6000.0, 20000.0),
+];
+
 /// Main FFT processing loop
 fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
     // Pre-allocate all buffers to avoid allocations in the hot path
@@ -41,6 +57,28 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
     let mut windowed = vec![0.0f32; FFT_SIZE];
     let mut output = vec![0.0f32; NUM_BARS];
     let mut smoothed = vec![0.0f32; NUM_BARS];
+
+    // Waveform buffer: 256 L + 256 R = 512 floats
+    const WAVEFORM_POINTS: usize = 256;
+    let mut waveform_buf = vec![0.0f32; WAVEFORM_POINTS * 2];
+
+    // Energy bands state
+    let mut energy_bands = [0.0f32; NUM_ENERGY_BANDS];
+    let mut smoothed_energy = [0.0f32; NUM_ENERGY_BANDS];
+    let mut spectral_analyzer = SpectralAnalyzer::new(
+        state.sample_rate.load(Ordering::Relaxed),
+        FFT_SIZE,
+        NUM_SPECTRAL_BANDS,
+        SPECTRAL_UPDATE_RATE_HZ,
+        SPECTRAL_SMOOTHING,
+    );
+    let mut spectral_bytes = vec![0u8; NUM_SPECTRAL_BANDS * std::mem::size_of::<f32>()];
+
+    // Transient detection state
+    let mut prev_rms = 0.0f32;
+    let mut transient_cooldown = 0u32; // frames remaining in cooldown
+    const TRANSIENT_THRESHOLD: f32 = 0.04; // RMS jump threshold (sensitive)
+    const TRANSIENT_COOLDOWN_FRAMES: u32 = 3; // ~100ms at 30fps
 
     // Smoothing factor: 0 = no smoothing, higher = more smoothing
     const SMOOTHING: f32 = 0.65;
@@ -55,6 +93,16 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
 
             // Get samples from ring buffer
             state.ring_buffer.snapshot(&mut samples);
+
+            // Emit compact, progressive spectrogram bands for Spectral Ribbon.
+            if spectral_analyzer.process_audio_frame(&samples, sample_rate) {
+                let spectral = spectral_analyzer.get_latest_bands();
+                for (idx, value) in spectral.iter().enumerate() {
+                    let offset = idx * 4;
+                    spectral_bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+                }
+                let _ = app_handle.emit("viz:spectral", spectral_bytes.clone());
+            }
 
             // Apply Hann window to reduce spectral leakage
             let window = hann_window(&samples);
@@ -80,23 +128,113 @@ fn run_fft_loop(state: VisualizerState, app_handle: AppHandle) {
                         if new > smoothed[i] {
                             smoothed[i] = smoothed[i] * 0.3 + new * 0.7; // Fast attack
                         } else {
-                            smoothed[i] = smoothed[i] * SMOOTHING + new * (1.0 - SMOOTHING); // Slow decay
+                            smoothed[i] = smoothed[i] * SMOOTHING + new * (1.0 - SMOOTHING);
+                            // Slow decay
                         }
                         output[i] = smoothed[i];
                     }
 
                     // Send to frontend as binary data
-                    let bytes: Vec<u8> = output
-                        .iter()
-                        .flat_map(|f| f.to_le_bytes())
-                        .collect();
+                    let bytes: Vec<u8> = output.iter().flat_map(|f| f.to_le_bytes()).collect();
 
                     let _ = app_handle.emit("viz:data", bytes);
+
+                    // --- Energy Bands: compute RMS per frequency band from spectrum ---
+                    let data = spectrum.data();
+                    for (band_idx, &(lo, hi)) in ENERGY_BAND_RANGES.iter().enumerate() {
+                        let mut sum_sq = 0.0f32;
+                        let mut count = 0u32;
+                        for (freq, magnitude) in data.iter() {
+                            let f = freq.val();
+                            if f >= lo && f < hi {
+                                let mag = magnitude.val();
+                                sum_sq += mag * mag;
+                                count += 1;
+                            }
+                        }
+                        let rms = if count > 0 {
+                            (sum_sq / count as f32).sqrt()
+                        } else {
+                            0.0
+                        };
+                        // Compress and normalize
+                        let compressed = (rms * 6.0).powf(0.5).clamp(0.0, 1.0);
+                        // Smooth: fast attack, slow decay
+                        if compressed > smoothed_energy[band_idx] {
+                            smoothed_energy[band_idx] =
+                                smoothed_energy[band_idx] * 0.2 + compressed * 0.8;
+                        } else {
+                            smoothed_energy[band_idx] =
+                                smoothed_energy[band_idx] * 0.85 + compressed * 0.15;
+                        }
+                        energy_bands[band_idx] = smoothed_energy[band_idx];
+                    }
+
+                    let energy_bytes: Vec<u8> =
+                        energy_bands.iter().flat_map(|f| f.to_le_bytes()).collect();
+                    let _ = app_handle.emit("viz:energy", energy_bytes);
+
+                    // --- Transient Detection: detect sharp RMS jumps ---
+                    // Use raw (pre-smoothed) RMS for transient sensitivity
+                    // Weight bass/sub-bass more heavily for beat detection
+                    let raw_rms = {
+                        let mut raw_sum = 0.0f32;
+                        for (band_idx, &(lo, hi)) in ENERGY_BAND_RANGES.iter().enumerate() {
+                            let mut sum_sq = 0.0f32;
+                            let mut cnt = 0u32;
+                            for (freq, magnitude) in data.iter() {
+                                let f = freq.val();
+                                if f >= lo && f < hi {
+                                    let mag = magnitude.val();
+                                    sum_sq += mag * mag;
+                                    cnt += 1;
+                                }
+                            }
+                            let band_rms = if cnt > 0 {
+                                (sum_sq / cnt as f32).sqrt()
+                            } else {
+                                0.0
+                            };
+                            // Bass/sub-bass weighted 2x for beat detection
+                            let weight = if band_idx < 2 { 2.0 } else { 1.0 };
+                            raw_sum += (band_rms * 6.0).powf(0.5).clamp(0.0, 1.0) * weight;
+                        }
+                        raw_sum / (NUM_ENERGY_BANDS as f32 + 2.0) // account for extra bass weight
+                    };
+                    let rms_delta = raw_rms - prev_rms;
+
+                    if transient_cooldown > 0 {
+                        transient_cooldown -= 1;
+                    }
+
+                    if rms_delta > TRANSIENT_THRESHOLD && transient_cooldown == 0 {
+                        // Transient detected! Emit intensity (0.0 - 1.0)
+                        let intensity = (rms_delta * 5.0).clamp(0.0, 1.0);
+                        let transient_bytes: Vec<u8> = intensity.to_le_bytes().to_vec();
+                        let _ = app_handle.emit("viz:transient", transient_bytes);
+                        transient_cooldown = TRANSIENT_COOLDOWN_FRAMES;
+                    }
+
+                    prev_rms = raw_rms;
                 }
                 Err(e) => {
                     log::debug!("FFT error: {:?}", e);
                 }
             }
+
+            // Emit raw waveform data for oscilloscope (stereo L/R)
+            // samples[] is interleaved: L0, R0, L1, R1, ...
+            // 1024 samples = 512 stereo pairs → downsample to 256 per channel
+            let stereo_pairs = FFT_SIZE / 2; // 512
+            let step = stereo_pairs / WAVEFORM_POINTS; // 512/256 = 2
+            for i in 0..WAVEFORM_POINTS {
+                let base = i * step * 2; // index into interleaved buffer
+                waveform_buf[i] = samples[base]; // L
+                waveform_buf[WAVEFORM_POINTS + i] = samples[base + 1]; // R
+            }
+            let waveform_bytes: Vec<u8> =
+                waveform_buf.iter().flat_map(|f| f.to_le_bytes()).collect();
+            let _ = app_handle.emit("viz:waveform", waveform_bytes);
         }
 
         // Maintain target FPS
@@ -155,11 +293,7 @@ fn map_to_log_bars(spectrum: &spectrum_analyzer::FrequencySpectrum, output: &mut
         }
 
         // Average magnitude for this bar
-        let avg = if count > 0 {
-            sum / count as f32
-        } else {
-            0.0
-        };
+        let avg = if count > 0 { sum / count as f32 } else { 0.0 };
 
         // Apply dynamic range compression and normalize
         // This makes quiet passages more visible while preventing clipping

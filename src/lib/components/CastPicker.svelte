@@ -74,9 +74,9 @@
       // Start discovery protocols in parallel
       // Note: AirPlay discovery disabled until RAOP streaming is implemented
       await Promise.allSettled([
-        invoke('cast_start_discovery'),
-        invoke('dlna_start_discovery')
-        // invoke('airplay_start_discovery')  // Disabled - see docs/AIRPLAY_IMPLEMENTATION_STATUS.md
+        invoke('v2_cast_start_discovery'),
+        invoke('v2_dlna_start_discovery')
+        // invoke('v2_airplay_start_discovery')  // Disabled - see docs/AIRPLAY_IMPLEMENTATION_STATUS.md
       ]);
       // Poll for devices
       pollDevices();
@@ -90,9 +90,9 @@
     discoveryStarted = false;
     try {
       await Promise.allSettled([
-        invoke('cast_stop_discovery'),
-        invoke('dlna_stop_discovery')
-        // invoke('airplay_stop_discovery')  // Disabled
+        invoke('v2_cast_stop_discovery'),
+        invoke('v2_dlna_stop_discovery')
+        // invoke('v2_airplay_stop_discovery')  // Disabled
       ]);
     } catch (err) {
       console.error('Failed to stop discovery:', err);
@@ -106,9 +106,9 @@
       // Poll active protocols in parallel
       // Note: AirPlay polling disabled until RAOP streaming is implemented
       const [chromecast, dlna] = await Promise.allSettled([
-        invoke<CastDevice[]>('cast_get_devices'),
-        invoke<CastDevice[]>('dlna_get_devices')
-        // invoke<CastDevice[]>('airplay_get_devices')  // Disabled
+        invoke<CastDevice[]>('v2_cast_get_devices'),
+        invoke<CastDevice[]>('v2_dlna_get_devices')
+        // invoke<CastDevice[]>('v2_airplay_get_devices')  // Disabled
       ]);
 
       if (chromecast.status === 'fulfilled') {

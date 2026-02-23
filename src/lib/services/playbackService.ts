@@ -132,21 +132,19 @@ export async function playTrack(
       console.log('[Gapless] Transition mode — skipping stop/play, updating metadata only');
       setIsPlaying(true);
     } else {
-      // For Qobuz tracks: stop current playback immediately and show buffering
-      // This prevents the previous track from continuing while we download
-      // Local tracks load instantly so they don't need this
-      if (!isLocal && !isCasting()) {
+      // Always stop local playback engine before starting a new local track.
+      // This prevents overlap when switching source types (qobuz/local/plex).
+      if (!isCasting()) {
         // Stop current playback immediately
         try {
-          await invoke('stop_playback');
+          await invoke('v2_stop_playback');
         } catch {
           // Ignore errors - player might not be playing
         }
-        // Show buffering indicator
-        if (showLoadingToast) {
-          showToast(track.title, 'buffering');
-        }
-      } else if (showLoadingToast && !isLocal) {
+      }
+
+      // Show buffering indicator for network-backed playback.
+      if (showLoadingToast && !isLocal) {
         showToast(track.title, 'buffering');
       }
 
@@ -168,7 +166,7 @@ export async function playTrack(
           if (!plexBaseUrl || !plexToken) {
             throw new Error('Missing Plex base URL or token');
           }
-          const result = await invoke<PlexPlayTrackResult>('plex_play_track', {
+          const result = await invoke<PlexPlayTrackResult>('v2_plex_play_track', {
             baseUrl: plexBaseUrl,
             token: plexToken,
             ratingKey: String(track.id)
@@ -183,11 +181,10 @@ export async function playTrack(
           }
           setCurrentTrack(track);
         } else if (isLocal) {
-          await invoke('library_play_track', { trackId: track.id });
+          await invoke('v2_library_play_track', { trackId: track.id });
         } else {
-          const result = await invoke<PlayTrackResult>('play_track', {
+          const result = await invoke<PlayTrackResult>('v2_play_track', {
             trackId: track.id,
-            durationSecs: track.duration,
             quality: getStreamingQuality()
           });
 
@@ -324,12 +321,12 @@ export async function playTrack(
 // ============ MPRIS Metadata ============
 
 /**
- * Update system media controls metadata
+ * Update system media controls metadata (V2)
  */
 export async function updateMediaMetadata(metadata: MediaMetadata): Promise<void> {
   try {
     const coverUrl = normalizeCoverUrlForMetadata(metadata.coverUrl);
-    await invoke('set_media_metadata', {
+    await invoke('v2_set_media_metadata', {
       title: metadata.title,
       artist: metadata.artist,
       album: metadata.album,
@@ -414,7 +411,7 @@ export async function showTrackNotification(
   }
 
   try {
-    await invoke('show_track_notification', {
+    await invoke('v2_show_track_notification', {
       title,
       artist,
       album,
@@ -458,7 +455,7 @@ interface MusicBrainzTrackData {
  */
 async function getListenBrainzStatus(): Promise<ListenBrainzStatus | null> {
   try {
-    return await invoke<ListenBrainzStatus>('listenbrainz_get_status');
+    return await invoke<ListenBrainzStatus>('v2_listenbrainz_get_status');
   } catch {
     return null;
   }
@@ -473,7 +470,7 @@ async function resolveMusicBrainzTrack(
   isrc?: string
 ): Promise<MusicBrainzTrackData | null> {
   try {
-    const result = await invoke<MusicBrainzTrackData>('musicbrainz_resolve_track', {
+    const result = await invoke<MusicBrainzTrackData>('v2_musicbrainz_resolve_track', {
       isrc: isrc || null,
       title,
       artist
@@ -514,7 +511,7 @@ export async function updateListenBrainzNowPlaying(
   // Skip "now playing" update when offline (requires network)
   if (!isOffline) {
     try {
-      await invoke('listenbrainz_now_playing', {
+      await invoke('v2_listenbrainz_now_playing', {
         artist,
         track: title,
         album: album || null,
@@ -544,7 +541,7 @@ export async function updateListenBrainzNowPlaying(
       // If offline, queue the scrobble for later
       if (checkIsOffline()) {
         try {
-          await invoke('listenbrainz_queue_listen', {
+          await invoke('v2_listenbrainz_queue_listen', {
             artist,
             track: title,
             album: album || null,
@@ -563,7 +560,7 @@ export async function updateListenBrainzNowPlaying(
       } else {
         // Online - scrobble immediately
         try {
-          await invoke('listenbrainz_scrobble', {
+          await invoke('v2_listenbrainz_scrobble', {
             artist,
             track: title,
             album: album || null,
@@ -600,7 +597,7 @@ export async function flushListenBrainzQueue(): Promise<number> {
   }
 
   try {
-    const sent = await invoke<number>('listenbrainz_flush_queue');
+    const sent = await invoke<number>('v2_listenbrainz_flush_queue');
     if (sent > 0) {
       console.log(`ListenBrainz: Flushed ${sent} queued listens`);
     }
@@ -632,7 +629,7 @@ export async function updateLastfmNowPlaying(
   // Skip "now playing" update when offline (requires network)
   if (!isOffline) {
     try {
-      await invoke('lastfm_now_playing', {
+      await invoke('v2_lastfm_now_playing', {
         artist,
         track: title,
         album: album || null
@@ -666,7 +663,7 @@ export async function updateLastfmNowPlaying(
       } else {
         // Online - scrobble immediately
         try {
-          await invoke('lastfm_scrobble', {
+          await invoke('v2_lastfm_scrobble', {
             artist,
             track: title,
             album: album || null,
@@ -727,7 +724,7 @@ export async function flushScrobbleQueue(): Promise<{ sent: number; failed: numb
       }
 
       try {
-        await invoke('lastfm_scrobble', {
+        await invoke('v2_lastfm_scrobble', {
           artist: scrobble.artist,
           track: scrobble.track,
           album: scrobble.album,
@@ -765,9 +762,10 @@ export async function flushScrobbleQueue(): Promise<{ sent: number; failed: numb
  */
 export async function checkTrackFavorite(trackId: number): Promise<boolean> {
   try {
-    const response = await invoke<{ tracks?: { items: Array<{ id: number }> } }>('get_favorites', {
+    const response = await invoke<{ tracks?: { items: Array<{ id: number }> } }>('v2_get_favorites', {
       favType: 'tracks',
-      limit: 500
+      limit: 500,
+      offset: 0
     });
     if (response.tracks?.items) {
       return response.tracks.items.some(item => item.id === trackId);

@@ -46,8 +46,8 @@ function updateIdSet(): void {
  */
 export async function loadBlacklist(): Promise<BlacklistedArtist[]> {
   const [list, settings] = await Promise.all([
-    invoke<BlacklistedArtist[]>('get_artist_blacklist'),
-    invoke<BlacklistSettings>('get_blacklist_settings')
+    invoke<BlacklistedArtist[]>('v2_get_artist_blacklist'),
+    invoke<BlacklistSettings>('v2_get_blacklist_settings')
   ]);
   blacklist = list;
   enabled = settings.enabled;
@@ -64,7 +64,7 @@ export async function addToBlacklist(
   artistName: string,
   notes?: string
 ): Promise<void> {
-  await invoke('add_to_artist_blacklist', {
+  await invoke('v2_add_to_artist_blacklist', {
     artistId,
     artistName,
     notes: notes ?? null
@@ -77,7 +77,7 @@ export async function addToBlacklist(
  * Remove an artist from the blacklist
  */
 export async function removeFromBlacklist(artistId: number): Promise<void> {
-  await invoke('remove_from_artist_blacklist', { artistId });
+  await invoke('v2_remove_from_artist_blacklist', { artistId });
   // Update local state
   blacklist = blacklist.filter(a => a.artist_id !== artistId);
   updateIdSet();
@@ -96,7 +96,7 @@ export function isBlacklisted(artistId: number): boolean {
  * Set the enabled state
  */
 export async function setEnabled(value: boolean): Promise<void> {
-  await invoke('set_blacklist_enabled', { enabled: value });
+  await invoke('v2_set_blacklist_enabled', { enabled: value });
   enabled = value;
   notifyListeners();
 }
@@ -126,7 +126,7 @@ export function getCount(): number {
  * Clear all blacklisted artists
  */
 export async function clearBlacklist(): Promise<void> {
-  await invoke('clear_artist_blacklist');
+  await invoke('v2_clear_artist_blacklist');
   blacklist = [];
   updateIdSet();
   notifyListeners();

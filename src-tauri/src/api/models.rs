@@ -1,6 +1,122 @@
 //! API response models
 
-use serde::{Deserialize, Serialize};
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Deserializer, Serialize};
+
+/// Lenient deserializer: if the field is present but has a wrong type, return None
+/// instead of failing the entire response. Use for non-vital optional fields.
+fn lenient_option<'de, D, T>(deserializer: D) -> Result<Option<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    if value.is_null() {
+        return Ok(None);
+    }
+    Ok(serde_json::from_value(value).ok())
+}
+
+fn lenient_page<'de, D, T>(deserializer: D) -> Result<SearchResultsPage<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    if value.is_null() {
+        return Ok(SearchResultsPage {
+            items: Vec::new(),
+            total: 0,
+            offset: 0,
+            limit: 0,
+        });
+    }
+    Ok(serde_json::from_value(value).unwrap_or(SearchResultsPage {
+        items: Vec::new(),
+        total: 0,
+        offset: 0,
+        limit: 0,
+    }))
+}
+
+fn lenient_page_flexible<'de, D, T>(deserializer: D) -> Result<SearchResultsPage<T>, D::Error>
+where
+    D: Deserializer<'de>,
+    T: DeserializeOwned,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    if value.is_null() {
+        return Ok(SearchResultsPage {
+            items: Vec::new(),
+            total: 0,
+            offset: 0,
+            limit: 0,
+        });
+    }
+
+    let items: Vec<T> = value
+        .get("items")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|item| serde_json::from_value::<T>(item.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let limit = value
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .unwrap_or(items.len() as u32);
+
+    let offset = value
+        .get("offset")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .unwrap_or(0);
+
+    let total = value
+        .get("total")
+        .and_then(|v| v.as_u64())
+        .map(|v| v as u32)
+        .unwrap_or(items.len() as u32);
+
+    Ok(SearchResultsPage {
+        items,
+        total,
+        offset,
+        limit,
+    })
+}
+
+fn deserialize_string_id<'de, D>(deserializer: D) -> Result<String, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::String(v) => v,
+        serde_json::Value::Number(v) => v.to_string(),
+        _ => String::new(),
+    })
+}
+
+fn deserialize_u64_id<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    Ok(match value {
+        serde_json::Value::Number(v) => v.as_u64().unwrap_or(0),
+        serde_json::Value::String(v) => v.parse::<u64>().unwrap_or(0),
+        _ => 0,
+    })
+}
+
+fn serde_true() -> bool {
+    true
+}
 
 /// Audio quality format IDs
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -329,6 +445,47 @@ pub struct LabelDetail {
     pub albums_count: Option<u32>,
 }
 
+// ============ Label Page Types (/label/page) ============
+
+/// Top-level response from /label/page
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelPageData {
+    pub id: u64,
+    pub name: String,
+    pub description: Option<String>,
+    #[serde(default)]
+    pub image: Option<serde_json::Value>,
+    #[serde(default)]
+    pub releases: Option<Vec<LabelPageContainer>>,
+    #[serde(default)]
+    pub playlists: Option<LabelPageGenericList>,
+    #[serde(default)]
+    pub top_tracks: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub top_artists: Option<LabelPageGenericList>,
+}
+
+/// A container within label page (e.g. releases category)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelPageContainer {
+    pub id: Option<String>,
+    pub data: Option<LabelPageGenericList>,
+}
+
+/// Generic list with has_more and items
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelPageGenericList {
+    pub has_more: Option<bool>,
+    pub items: Option<Vec<serde_json::Value>>,
+}
+
+/// Response from /label/explore
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LabelExploreResponse {
+    pub has_more: Option<bool>,
+    pub items: Option<Vec<serde_json::Value>>,
+}
+
 /// Genre model (basic, used in album responses)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Genre {
@@ -375,6 +532,163 @@ pub struct SearchResultsPage<T> {
     pub total: u32,
     pub offset: u32,
     pub limit: u32,
+}
+
+impl<T> Default for SearchResultsPage<T> {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            total: 0,
+            offset: 0,
+            limit: 0,
+        }
+    }
+}
+
+// ============ Purchases API Models ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchaseResponse {
+    #[serde(default, deserialize_with = "lenient_page")]
+    pub albums: SearchResultsPage<PurchaseAlbum>,
+    #[serde(default, deserialize_with = "lenient_page")]
+    pub tracks: SearchResultsPage<PurchaseTrack>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchaseIdsResponse {
+    #[serde(default, deserialize_with = "lenient_page")]
+    pub albums: SearchResultsPage<serde_json::Value>,
+    #[serde(default, deserialize_with = "lenient_page")]
+    pub tracks: SearchResultsPage<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchaseAlbum {
+    #[serde(default, deserialize_with = "deserialize_string_id")]
+    pub id: String,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub artist: Artist,
+    #[serde(default)]
+    pub image: ImageSet,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub release_date_original: Option<String>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub label: Option<Label>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub genre: Option<Genre>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub tracks_count: Option<u32>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub duration: Option<u32>,
+    #[serde(default)]
+    pub hires: bool,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub maximum_sampling_rate: Option<f64>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub maximum_bit_depth: Option<u32>,
+    #[serde(default = "serde_true")]
+    pub downloadable: bool,
+    #[serde(default)]
+    pub downloaded: bool,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub purchased_at: Option<i64>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub tracks: Option<SearchResultsPage<PurchaseTrack>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PurchaseTrack {
+    #[serde(default, deserialize_with = "deserialize_u64_id")]
+    pub id: u64,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default)]
+    pub track_number: u32,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub media_number: Option<u32>,
+    #[serde(default)]
+    pub duration: u32,
+    #[serde(default)]
+    pub performer: Artist,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub album: Option<AlbumSummary>,
+    #[serde(default)]
+    pub hires: bool,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub maximum_sampling_rate: Option<f64>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub maximum_bit_depth: Option<u32>,
+    #[serde(default = "serde_true")]
+    pub streamable: bool,
+    #[serde(default)]
+    pub downloaded: bool,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub purchased_at: Option<i64>,
+}
+
+// ============ Dynamic Suggest API Models ============
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicSuggestRequest {
+    pub limit: u32,
+    #[serde(default)]
+    pub listened_tracks_ids: Vec<u64>,
+    #[serde(default)]
+    pub track_to_analysed: Vec<DynamicTrackToAnalyse>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicTrackToAnalyse {
+    pub track_id: u64,
+    pub artist_id: u64,
+    pub genre_id: u64,
+    pub label_id: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicSuggestResponse {
+    #[serde(default)]
+    pub algorithm: String,
+    #[serde(default, deserialize_with = "lenient_page_flexible")]
+    pub tracks: SearchResultsPage<DynamicSuggestTrack>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DynamicSuggestTrack {
+    #[serde(default, deserialize_with = "deserialize_u64_id")]
+    pub id: u64,
+    #[serde(default)]
+    pub title: String,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub duration: Option<u32>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub performer: Option<Artist>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub album: Option<AlbumSummary>,
+    #[serde(default)]
+    pub hires: bool,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub maximum_sampling_rate: Option<f64>,
+    #[serde(default, deserialize_with = "lenient_option")]
+    pub maximum_bit_depth: Option<u32>,
+    #[serde(default = "serde_true")]
+    pub streamable: bool,
+}
+
+/// Response from `/radio/album` endpoint
+#[derive(Debug, Clone, Deserialize)]
+pub struct RadioResponse {
+    #[serde(rename = "type")]
+    pub radio_type: Option<String>,
+    pub algorithm: Option<String>,
+    pub title: Option<String>,
+    pub duration: Option<u64>,
+    pub track_count: Option<u32>,
+    #[serde(default, deserialize_with = "lenient_page_flexible")]
+    pub tracks: SearchResultsPage<Track>,
 }
 
 /// Favorites container

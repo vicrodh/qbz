@@ -34,8 +34,8 @@ pub mod models;
 pub use cache::{ListenBrainzCache, ListenBrainzCacheState, QueueStats};
 pub use client::{ListenBrainzClient, ListenBrainzConfig};
 pub use models::{
-    AdditionalInfo, Listen, ListenBrainzStatus, ListenType, QueuedListen,
-    SubmitListensPayload, TrackMetadata, UserInfo,
+    AdditionalInfo, Listen, ListenBrainzStatus, ListenType, QueuedListen, SubmitListensPayload,
+    TrackMetadata, UserInfo,
 };
 
 use std::path::Path;
@@ -124,6 +124,9 @@ impl ListenBrainzSharedState {
     }
 
     pub async fn teardown(&self) {
+        // Clear in-memory token to prevent cross-user token leaks
+        self.client.lock().await.disconnect().await;
+        // Close cache DB connection
         let mut guard = self.cache.lock().await;
         *guard = None;
     }

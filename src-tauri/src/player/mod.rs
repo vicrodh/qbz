@@ -1,5 +1,24 @@
 //! Audio player module
 //!
+//! # DEPRECATED - LEGACY CODE
+//!
+//! **This module is deprecated and will be removed.**
+//!
+//! Use `qbz-player` crate instead. The V2 architecture routes playback through:
+//! - `CoreBridge` -> `QbzCore` -> `qbz_player::Player`
+//!
+//! This legacy module remains only as emergency fallback during migration.
+//! Do NOT add new functionality here. All new playback code goes to `qbz-player`.
+//!
+//! ## Migration Status
+//! - [x] Player struct exists in qbz-player
+//! - [x] CoreBridge creates Player from qbz-player
+//! - [x] V2 playback commands use CoreBridge
+//! - [ ] play_track V2 command (in progress)
+//! - [ ] Full frontend migration to V2 commands
+//!
+//! ---
+//!
 //! Handles audio playback with support for:
 //! - HTTP streaming from Qobuz
 //! - FLAC, MP3 decoding via symphonia
@@ -13,20 +32,24 @@
 mod playback_engine;
 mod streaming_source;
 
-pub use streaming_source::{BufferedMediaSource, BufferWriter, StreamingConfig, IncrementalStreamingSource};
+pub use streaming_source::{
+    BufferWriter, BufferedMediaSource, IncrementalStreamingSource, StreamingConfig,
+};
 
+use rodio::buffer::SamplesBuffer;
+use rodio::cpal::traits::{DeviceTrait, HostTrait};
+use rodio::cpal::{
+    BufferSize, SampleFormat, SampleRate, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
+};
+use rodio::decoder::Mp4Type;
+use rodio::{Decoder, OutputStream, Source};
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};
 use std::panic::{self, AssertUnwindSafe};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::mpsc::{self, Sender, SyncSender, RecvTimeoutError};
+use std::sync::mpsc::{self, RecvTimeoutError, Sender, SyncSender};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
-use rodio::{Decoder, OutputStream, Source};
-use rodio::buffer::SamplesBuffer;
-use rodio::decoder::Mp4Type;
-use rodio::cpal::traits::{DeviceTrait, HostTrait};
-use rodio::cpal::{StreamConfig, SampleRate, BufferSize, SupportedStreamConfig, SupportedBufferSize, SampleFormat};
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::errors::Error as SymphoniaError;
@@ -38,12 +61,12 @@ use symphonia::default::{get_codecs, get_probe};
 
 use crate::api::{client::QobuzClient, models::Quality};
 use crate::audio::{
+    calculate_gain_factor, db_to_linear, extract_replaygain, AnalyzerMessage, AnalyzerTap,
     AudioBackendType, AudioDiagnostic, BackendConfig, BackendManager, DiagnosticSource,
-    extract_replaygain, calculate_gain_factor, db_to_linear,
-    DynamicAmplify, AnalyzerTap, AnalyzerMessage, LoudnessCache, LoudnessAnalyzer,
+    DynamicAmplify, LoudnessAnalyzer, LoudnessCache,
 };
 use crate::config::audio_settings::AudioSettings;
-use crate::visualizer::{VisualizerTap, TappedSource};
+use crate::visualizer::{TappedSource, VisualizerTap};
 use playback_engine::PlaybackEngine;
 
 /// Commands sent to the audio thread
@@ -102,7 +125,10 @@ struct CursorMediaSource {
 impl CursorMediaSource {
     fn new(data: Vec<u8>) -> Self {
         let len = data.len() as u64;
-        Self { inner: Cursor::new(data), len }
+        Self {
+            inner: Cursor::new(data),
+            len,
+        }
     }
 }
 
@@ -261,12 +287,16 @@ fn extract_audio_metadata_full(data: &[u8]) -> Result<AudioMetadata, String> {
         .default_track()
         .ok_or_else(|| "Symphonia: no supported audio tracks".to_string())?;
 
-    let sample_rate = track.codec_params.sample_rate
+    let sample_rate = track
+        .codec_params
+        .sample_rate
         .ok_or_else(|| "No sample rate in codec params".to_string())?;
 
     // ALAC and some other formats don't include channel info in initial codec params
     // Default to stereo (2 channels) which is the most common case
-    let channels = track.codec_params.channels
+    let channels = track
+        .codec_params
+        .channels
         .map(|c| c.count() as u16)
         .unwrap_or(2);
 
@@ -280,15 +310,12 @@ fn extract_audio_metadata_full(data: &[u8]) -> Result<AudioMetadata, String> {
     })
 }
 
-fn decode_with_fallback(
-    data: &[u8],
-) -> Result<Box<dyn Source<Item = f32> + Send>, String> {
+fn decode_with_fallback(data: &[u8]) -> Result<Box<dyn Source<Item = f32> + Send>, String> {
     if is_isomp4(data) {
-        return decode_with_symphonia(data)
-            .map(|specs| {
-                log::info!("Decoded audio using symphonia fallback (isomp4)");
-                Box::new(specs.samples) as Box<dyn Source<Item = f32> + Send>
-            });
+        return decode_with_symphonia(data).map(|specs| {
+            log::info!("Decoded audio using symphonia fallback (isomp4)");
+            Box::new(specs.samples) as Box<dyn Source<Item = f32> + Send>
+        });
     }
 
     let primary = panic::catch_unwind(AssertUnwindSafe(|| {
@@ -354,7 +381,7 @@ fn create_output_stream_with_config(
         channels,
         sample_rate: SampleRate(sample_rate),
         buffer_size: if exclusive_mode {
-            BufferSize::Fixed(512)  // Lower latency for exclusive mode
+            BufferSize::Fixed(512) // Lower latency for exclusive mode
         } else {
             BufferSize::Default
         },
@@ -404,7 +431,11 @@ fn create_output_stream_with_config(
             Ok((stream, handle))
         }
         Err(e) => {
-            log::error!("❌ Failed to create OutputStream at {}Hz: {}", sample_rate, e);
+            log::error!(
+                "❌ Failed to create OutputStream at {}Hz: {}",
+                sample_rate,
+                e
+            );
             Err(format!("Failed to create output stream: {}", e))
         }
     }
@@ -460,6 +491,7 @@ fn try_init_stream_with_backend(
         channels,
         exclusive_mode: audio_settings.exclusive_mode,
         alsa_plugin: audio_settings.alsa_plugin,
+        pw_force_bitperfect: audio_settings.pw_force_bitperfect,
     };
 
     // For ALSA backend with hw: devices, try direct ALSA first (Linux only)
@@ -471,7 +503,10 @@ fn try_init_stream_with_backend(
                 log::info!("Detected hw: device, using ALSA Direct for bit-perfect playback");
 
                 // Downcast backend to AlsaBackend to access try_create_direct_stream
-                if let Some(alsa_backend) = backend.as_any().downcast_ref::<crate::audio::alsa_backend::AlsaBackend>() {
+                if let Some(alsa_backend) = backend
+                    .as_any()
+                    .downcast_ref::<crate::audio::alsa_backend::AlsaBackend>()
+                {
                     if let Some(result) = alsa_backend.try_create_direct_stream(&config) {
                         return Some(result.map(|(stream, mode)| {
                             log::info!("ALSA Direct stream created with mode: {:?}", mode);
@@ -486,7 +521,11 @@ fn try_init_stream_with_backend(
     // Fallback to regular rodio stream (PipeWire, Pulse, ALSA via CPAL)
     match backend.create_output_stream(&config) {
         Ok(stream) => {
-            log::info!("Stream created via {:?} backend at {}Hz", backend_type, sample_rate);
+            log::info!(
+                "Stream created via {:?} backend at {}Hz",
+                backend_type,
+                sample_rate
+            );
             Some(Ok(StreamType::Rodio(stream.0, stream.1)))
         }
         Err(e) => {
@@ -614,7 +653,11 @@ impl SharedState {
     pub fn get_normalization_gain(&self) -> Option<f32> {
         let bits = self.normalization_gain.load(Ordering::SeqCst);
         let gain = f32::from_bits(bits);
-        if gain == 0.0 { None } else { Some(gain) }
+        if gain == 0.0 {
+            None
+        } else {
+            Some(gain)
+        }
     }
 
     pub fn set_current_device(&self, device: Option<String>) {
@@ -674,7 +717,8 @@ impl SharedState {
             .unwrap_or_default()
             .as_millis() as u64;
 
-        self.playback_start_millis.store(now_millis, Ordering::SeqCst);
+        self.playback_start_millis
+            .store(now_millis, Ordering::SeqCst);
         self.position_at_start.store(position, Ordering::SeqCst);
     }
 
@@ -732,7 +776,12 @@ impl Player {
     /// Create a new player with an optional specific output device and audio settings
     /// If device_name is None, uses the system default device
     /// visualizer_tap is optional - if provided, audio samples are captured for visualization
-    pub fn new(device_name: Option<String>, audio_settings: AudioSettings, visualizer_tap: Option<VisualizerTap>, diagnostic: AudioDiagnostic) -> Self {
+    pub fn new(
+        device_name: Option<String>,
+        audio_settings: AudioSettings,
+        visualizer_tap: Option<VisualizerTap>,
+        diagnostic: AudioDiagnostic,
+    ) -> Self {
         let (tx, rx) = mpsc::channel::<AudioCommand>();
         let state = SharedState::new();
         let thread_state = state.clone();
@@ -772,28 +821,42 @@ impl Player {
                                normalization_gain: Option<f32>,
                                gain_atomic: Option<Arc<AtomicU32>>,
                                analyzer_tx: &SyncSender<AnalyzerMessage>,
-                               analyzer_enabled: &Arc<AtomicBool>| -> Box<dyn Source<Item = f32> + Send> {
+                               analyzer_enabled: &Arc<AtomicBool>|
+             -> Box<dyn Source<Item = f32> + Send> {
                 // Diagnostic tap (innermost — captures raw decoded samples)
                 let source: Box<dyn Source<Item = f32> + Send> =
                     Box::new(DiagnosticSource::new(source, thread_diagnostic.clone()));
 
                 // Normalization: dynamic (Phase 2) > static (Phase 1 fallback) > none (bit-perfect)
-                let source: Box<dyn Source<Item = f32> + Send> = if let Some(gain_atomic) = gain_atomic {
-                    let initial_gain = normalization_gain.unwrap_or(1.0);
-                    log::info!("Audio thread: dynamic normalization enabled (initial gain {:.4})", initial_gain);
-                    analyzer_enabled.store(true, Ordering::SeqCst);
-                    let source: Box<dyn Source<Item = f32> + Send> = Box::new(AnalyzerTap::new(source, analyzer_tx.clone(), analyzer_enabled.clone()));
-                    Box::new(DynamicAmplify::new(source, gain_atomic, initial_gain))
-                } else if let Some(gain) = normalization_gain {
-                    log::info!("Audio thread: applying static normalization gain factor {:.4}", gain);
-                    Box::new(source.amplify(gain))
-                } else {
-                    source
-                };
+                let source: Box<dyn Source<Item = f32> + Send> =
+                    if let Some(gain_atomic) = gain_atomic {
+                        let initial_gain = normalization_gain.unwrap_or(1.0);
+                        log::info!(
+                            "Audio thread: dynamic normalization enabled (initial gain {:.4})",
+                            initial_gain
+                        );
+                        analyzer_enabled.store(true, Ordering::SeqCst);
+                        let source: Box<dyn Source<Item = f32> + Send> = Box::new(
+                            AnalyzerTap::new(source, analyzer_tx.clone(), analyzer_enabled.clone()),
+                        );
+                        Box::new(DynamicAmplify::new(source, gain_atomic, initial_gain))
+                    } else if let Some(gain) = normalization_gain {
+                        log::info!(
+                            "Audio thread: applying static normalization gain factor {:.4}",
+                            gain
+                        );
+                        Box::new(source.amplify(gain))
+                    } else {
+                        source
+                    };
 
                 // Visualizer tap (outermost)
                 if let Some(ref tap) = thread_viz_tap {
-                    Box::new(TappedSource::new(source, tap.ring_buffer.clone(), tap.enabled.clone()))
+                    Box::new(TappedSource::new(
+                        source,
+                        tap.ring_buffer.clone(),
+                        tap.enabled.clone(),
+                    ))
                 } else {
                     source
                 }
@@ -812,23 +875,36 @@ impl Player {
             // Helper to find and initialize audio device
             // Try backend system first, fall back to legacy CPAL
             // Takes desired sample_rate and channels to maintain DAC passthrough
-            let init_device = |name: &Option<String>, state: &SharedState, sample_rate: u32, channels: u16| -> Option<StreamType> {
+            let init_device = |name: &Option<String>,
+                               state: &SharedState,
+                               sample_rate: u32,
+                               channels: u16|
+             -> Option<StreamType> {
                 // Try backend system if configured
                 if let Ok(settings) = thread_settings.lock() {
                     if settings.backend_type.is_some() {
                         // Use provided sample rate/channels to maintain DAC passthrough
-                        log::info!("Initializing backend system with {}Hz/{}ch", sample_rate, channels);
+                        log::info!(
+                            "Initializing backend system with {}Hz/{}ch",
+                            sample_rate,
+                            channels
+                        );
                         match try_init_stream_with_backend(&settings, sample_rate, channels) {
                             Some(Ok(stream_type)) => {
                                 // Set device name from settings for backend system
-                                let device_name = settings.output_device.clone()
+                                let device_name = settings
+                                    .output_device
+                                    .clone()
                                     .unwrap_or_else(|| "Default".to_string());
                                 log::info!("Audio output initialized via backend system at {}Hz (device: {})", sample_rate, device_name);
                                 state.set_current_device(Some(device_name));
                                 return Some(stream_type);
                             }
                             Some(Err(e)) => {
-                                log::warn!("Backend system init failed: {}, falling back to legacy", e);
+                                log::warn!(
+                                    "Backend system init failed: {}, falling back to legacy",
+                                    e
+                                );
                             }
                             None => {
                                 // Backend not configured, continue to legacy path
@@ -840,11 +916,9 @@ impl Player {
                 // Legacy CPAL path
                 let device = if let Some(ref name) = name {
                     log::info!("Looking for audio device: {}", name);
-                    let found = host.output_devices()
-                        .ok()
-                        .and_then(|mut devices| {
-                            devices.find(|d| d.name().ok().as_ref() == Some(name))
-                        });
+                    let found = host.output_devices().ok().and_then(|mut devices| {
+                        devices.find(|d| d.name().ok().as_ref() == Some(name))
+                    });
 
                     match found {
                         Some(d) if is_device_valid(&d) => {
@@ -852,7 +926,10 @@ impl Player {
                             Some(d)
                         }
                         Some(_) => {
-                            log::warn!("Device '{}' found but has no valid output configs, using default", name);
+                            log::warn!(
+                                "Device '{}' found but has no valid output configs, using default",
+                                name
+                            );
                             host.default_output_device()
                         }
                         None => {
@@ -886,7 +963,10 @@ impl Player {
                         Some(StreamType::Rodio(stream, handle))
                     }
                     Err(e) => {
-                        log::error!("Failed to create audio output on device: {}. Trying default...", e);
+                        log::error!(
+                            "Failed to create audio output on device: {}. Trying default...",
+                            e
+                        );
                         match OutputStream::try_default() {
                             Ok((stream, handle)) => {
                                 log::info!("Fallback to default audio output succeeded");
@@ -934,62 +1014,73 @@ impl Player {
 
             log::info!("Audio thread ready and waiting for commands");
 
-            let handle_command = |command: AudioCommand,
-                                      current_engine: &mut Option<PlaybackEngine>,
-                                      current_audio_data: &mut Option<Vec<u8>>,
-                                      current_streaming_source: &mut Option<Arc<BufferedMediaSource>>,
-                                      stream_opt: &mut Option<StreamType>,
-                                      current_device_name: &mut Option<String>,
-                                      consecutive_sink_failures: &mut u32,
-                                      pause_suspend_deadline: &mut Option<Instant>,
-                                      current_sample_rate: &mut Option<u32>,
-                                      current_channels: &mut Option<u16>,
-                                      current_normalization_gain: &mut Option<f32>,
-                                      current_gain_atomic: &mut Option<Arc<AtomicU32>>,
-                                      gapless_pending: &mut Option<GaplessPending>| {
-                match command {
-                    AudioCommand::Play { data, track_id, duration_secs, sample_rate, channels } => {
-                        log::info!(
-                            "Audio thread: playing track {} ({}Hz, {} channels)",
+            let handle_command =
+                |command: AudioCommand,
+                 current_engine: &mut Option<PlaybackEngine>,
+                 current_audio_data: &mut Option<Vec<u8>>,
+                 current_streaming_source: &mut Option<Arc<BufferedMediaSource>>,
+                 stream_opt: &mut Option<StreamType>,
+                 current_device_name: &mut Option<String>,
+                 consecutive_sink_failures: &mut u32,
+                 pause_suspend_deadline: &mut Option<Instant>,
+                 current_sample_rate: &mut Option<u32>,
+                 current_channels: &mut Option<u16>,
+                 current_normalization_gain: &mut Option<f32>,
+                 current_gain_atomic: &mut Option<Arc<AtomicU32>>,
+                 gapless_pending: &mut Option<GaplessPending>| {
+                    match command {
+                        AudioCommand::Play {
+                            data,
                             track_id,
+                            duration_secs,
                             sample_rate,
-                            channels
-                        );
-                        *pause_suspend_deadline = None;
-                        // Clear any pending gapless state (new Play supersedes queued gapless)
-                        *gapless_pending = None;
-                        thread_state.set_gapless_ready(false);
-                        thread_state.set_gapless_next_track_id(0);
+                            channels,
+                        } => {
+                            log::info!(
+                                "Audio thread: playing track {} ({}Hz, {} channels)",
+                                track_id,
+                                sample_rate,
+                                channels
+                            );
+                            *pause_suspend_deadline = None;
+                            // Clear any pending gapless state (new Play supersedes queued gapless)
+                            *gapless_pending = None;
+                            thread_state.set_gapless_ready(false);
+                            thread_state.set_gapless_next_track_id(0);
 
-                        // Get DAC passthrough setting
-                        let dac_passthrough = thread_settings
-                            .lock()
-                            .ok()
-                            .map(|s| s.dac_passthrough)
-                            .unwrap_or(false);
+                            // Get DAC passthrough setting
+                            let dac_passthrough = thread_settings
+                                .lock()
+                                .ok()
+                                .map(|s| s.dac_passthrough)
+                                .unwrap_or(false);
 
-                        // Check if we need to recreate the stream
-                        // Recreate on format change if DAC passthrough OR ALSA Direct is enabled (both require bit-perfect)
-                        let format_changed = *current_sample_rate != Some(sample_rate)
-                            || *current_channels != Some(channels);
+                            // Check if we need to recreate the stream
+                            // Recreate on format change if DAC passthrough OR ALSA Direct is enabled (both require bit-perfect)
+                            let format_changed = *current_sample_rate != Some(sample_rate)
+                                || *current_channels != Some(channels);
 
-                        // Check if using ALSA Direct backend
-                        let using_alsa_direct = thread_settings
-                            .lock()
-                            .ok()
-                            .and_then(|s| s.backend_type)
-                            .map(|b| b == AudioBackendType::Alsa)
-                            .unwrap_or(false);
+                            // Check if using ALSA Direct backend
+                            let using_alsa_direct = thread_settings
+                                .lock()
+                                .ok()
+                                .and_then(|s| s.backend_type)
+                                .map(|b| b == AudioBackendType::Alsa)
+                                .unwrap_or(false);
 
-                        let needs_new_stream = stream_opt.is_none()
-                            || (dac_passthrough && format_changed)
-                            || (using_alsa_direct && format_changed);
+                            let needs_new_stream = stream_opt.is_none()
+                                || (dac_passthrough && format_changed)
+                                || (using_alsa_direct && format_changed);
 
-                        if needs_new_stream {
-                            if stream_opt.is_some() {
-                                if (dac_passthrough || using_alsa_direct) && format_changed {
-                                    let mode = if using_alsa_direct { "ALSA Direct" } else { "DAC passthrough" };
-                                    log::info!(
+                            if needs_new_stream {
+                                if stream_opt.is_some() {
+                                    if (dac_passthrough || using_alsa_direct) && format_changed {
+                                        let mode = if using_alsa_direct {
+                                            "ALSA Direct"
+                                        } else {
+                                            "DAC passthrough"
+                                        };
+                                        log::info!(
                                         "Sample rate/channels changed from {:?}Hz/{:?}ch to {}Hz/{}ch - recreating OutputStream ({})",
                                         *current_sample_rate,
                                         *current_channels,
@@ -997,647 +1088,582 @@ impl Player {
                                         channels,
                                         mode
                                     );
-                                } else {
-                                    log::info!("Creating initial OutputStream");
-                                }
-                                // Drop old stream
-                                drop(stream_opt.take());
-                            }
-
-                            log::info!("DAC passthrough: {}, ALSA Direct: {}", dac_passthrough, using_alsa_direct);
-
-                            // Try backend system first (if configured), then fall back to legacy CPAL
-                            // This avoids unnecessary CPAL device enumeration for PipeWire DAC and ALSA Direct
-                            let stream_result = if let Some(settings) = thread_settings.lock().ok() {
-                                match try_init_stream_with_backend(&settings, sample_rate, channels) {
-                                    Some(result) => {
-                                        // Backend system handled it - set device name from settings
-                                        if result.is_ok() {
-                                            let device_name = settings.output_device.clone()
-                                                .unwrap_or_else(|| "Default".to_string());
-                                            log::info!("Backend system using device: {}", device_name);
-                                            thread_state.set_current_device(Some(device_name));
-                                        }
-                                        result
+                                    } else {
+                                        log::info!("Creating initial OutputStream");
                                     }
-                                    None => {
-                                        // Backend system not configured, use legacy CPAL path
-                                        log::info!("Backend system not configured, using legacy CPAL path");
+                                    // Drop old stream
+                                    drop(stream_opt.take());
+                                }
 
-                                        // Get the audio device via CPAL
-                                        let device = if let Some(ref name) = *current_device_name {
-                                            log::info!("Looking for audio device: {}", name);
-                                            let found = host.output_devices()
-                                                .ok()
-                                                .and_then(|mut devices| {
-                                                    devices.find(|d| d.name().ok().as_ref() == Some(name))
-                                                });
+                                log::info!(
+                                    "DAC passthrough: {}, ALSA Direct: {}",
+                                    dac_passthrough,
+                                    using_alsa_direct
+                                );
 
-                                            match found {
-                                                Some(d) if is_device_valid(&d) => {
-                                                    log::info!("Found and validated device: {}", name);
-                                                    Some(d)
+                                // Try backend system first (if configured), then fall back to legacy CPAL
+                                // This avoids unnecessary CPAL device enumeration for PipeWire DAC and ALSA Direct
+                                let stream_result = if let Some(settings) =
+                                    thread_settings.lock().ok()
+                                {
+                                    match try_init_stream_with_backend(
+                                        &settings,
+                                        sample_rate,
+                                        channels,
+                                    ) {
+                                        Some(result) => {
+                                            // Backend system handled it - set device name from settings
+                                            if result.is_ok() {
+                                                let device_name = settings
+                                                    .output_device
+                                                    .clone()
+                                                    .unwrap_or_else(|| "Default".to_string());
+                                                log::info!(
+                                                    "Backend system using device: {}",
+                                                    device_name
+                                                );
+                                                thread_state.set_current_device(Some(device_name));
+                                            }
+                                            result
+                                        }
+                                        None => {
+                                            // Backend system not configured, use legacy CPAL path
+                                            log::info!("Backend system not configured, using legacy CPAL path");
+
+                                            // Get the audio device via CPAL
+                                            let device = if let Some(ref name) =
+                                                *current_device_name
+                                            {
+                                                log::info!("Looking for audio device: {}", name);
+                                                let found = host.output_devices().ok().and_then(
+                                                    |mut devices| {
+                                                        devices.find(|d| {
+                                                            d.name().ok().as_ref() == Some(name)
+                                                        })
+                                                    },
+                                                );
+
+                                                match found {
+                                                    Some(d) if is_device_valid(&d) => {
+                                                        log::info!(
+                                                            "Found and validated device: {}",
+                                                            name
+                                                        );
+                                                        Some(d)
+                                                    }
+                                                    Some(_) => {
+                                                        log::warn!("Device '{}' found but has no valid output configs, using default", name);
+                                                        host.default_output_device()
+                                                    }
+                                                    None => {
+                                                        log::warn!(
+                                                            "Device '{}' not found, using default",
+                                                            name
+                                                        );
+                                                        host.default_output_device()
+                                                    }
                                                 }
-                                                Some(_) => {
-                                                    log::warn!("Device '{}' found but has no valid output configs, using default", name);
-                                                    host.default_output_device()
-                                                }
-                                                None => {
-                                                    log::warn!("Device '{}' not found, using default", name);
-                                                    host.default_output_device()
-                                                }
+                                            } else {
+                                                log::info!("Using default audio device");
+                                                host.default_output_device()
+                                            };
+
+                                            let Some(device) = device else {
+                                                log::error!("No audio output device available");
+                                                thread_state.set_current_device(None);
+                                                thread_state.set_stream_error(true);
+                                                return;
+                                            };
+
+                                            // Set current device name
+                                            if let Ok(name) = device.name() {
+                                                log::info!("Using audio device: {}", name);
+                                                thread_state.set_current_device(Some(name));
+                                            }
+
+                                            create_output_stream_with_config(
+                                                &device,
+                                                sample_rate,
+                                                channels,
+                                                dac_passthrough,
+                                            )
+                                            .map(
+                                                |(stream, handle)| {
+                                                    StreamType::Rodio(stream, handle)
+                                                },
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    // Failed to lock settings, use legacy path with CPAL device search
+                                    let device = if let Some(ref name) = *current_device_name {
+                                        log::info!("Looking for audio device: {}", name);
+                                        host.output_devices()
+                                            .ok()
+                                            .and_then(|mut devices| {
+                                                devices
+                                                    .find(|d| d.name().ok().as_ref() == Some(name))
+                                            })
+                                            .or_else(|| {
+                                                log::warn!(
+                                                    "Device '{}' not found, using default",
+                                                    name
+                                                );
+                                                host.default_output_device()
+                                            })
+                                    } else {
+                                        host.default_output_device()
+                                    };
+
+                                    let Some(device) = device else {
+                                        log::error!("No audio output device available");
+                                        thread_state.set_current_device(None);
+                                        thread_state.set_stream_error(true);
+                                        return;
+                                    };
+
+                                    if let Ok(name) = device.name() {
+                                        thread_state.set_current_device(Some(name));
+                                    }
+
+                                    create_output_stream_with_config(
+                                        &device,
+                                        sample_rate,
+                                        channels,
+                                        dac_passthrough,
+                                    )
+                                    .map(|(stream, handle)| StreamType::Rodio(stream, handle))
+                                };
+
+                                // Handle stream creation result
+                                match stream_result {
+                                    Ok(stream) => {
+                                        *stream_opt = Some(stream);
+                                        *current_sample_rate = Some(sample_rate);
+                                        *current_channels = Some(channels);
+                                        thread_state.set_stream_error(false);
+
+                                        // Set current device name from settings (for backend system)
+                                        if let Some(settings) = thread_settings.lock().ok() {
+                                            if let Some(ref device_name) = settings.output_device {
+                                                thread_state
+                                                    .set_current_device(Some(device_name.clone()));
+                                                log::info!(
+                                                    "Audio stream ready at {}Hz on device: {}",
+                                                    sample_rate,
+                                                    device_name
+                                                );
+                                            } else {
+                                                thread_state.set_current_device(Some(
+                                                    "Default".to_string(),
+                                                ));
+                                                log::info!(
+                                                    "Audio stream ready at {}Hz on default device",
+                                                    sample_rate
+                                                );
                                             }
                                         } else {
-                                            log::info!("Using default audio device");
-                                            host.default_output_device()
-                                        };
-
-                                        let Some(device) = device else {
-                                            log::error!("No audio output device available");
-                                            thread_state.set_current_device(None);
-                                            thread_state.set_stream_error(true);
-                                            return;
-                                        };
-
-                                        // Set current device name
-                                        if let Ok(name) = device.name() {
-                                            log::info!("Using audio device: {}", name);
-                                            thread_state.set_current_device(Some(name));
+                                            log::info!("Audio stream ready at {}Hz", sample_rate);
                                         }
 
-                                        create_output_stream_with_config(
-                                            &device,
+                                        // Delay to ensure stream is fully initialized before decoder starts
+                                        // This prevents sync gaps and allows hardware to stabilize after sample rate changes
+                                        // Extra time needed for large sample rate changes (e.g., 88.2kHz → 44.1kHz)
+                                        std::thread::sleep(Duration::from_millis(150));
+                                    }
+                                    Err(e) => {
+                                        log::error!(
+                                            "❌ Failed to create stream at {}Hz: {}",
                                             sample_rate,
-                                            channels,
-                                            dac_passthrough,
-                                        ).map(|(stream, handle)| StreamType::Rodio(stream, handle))
+                                            e
+                                        );
+                                        thread_state.set_stream_error(true);
+                                        thread_state.set_current_device(None);
+                                        return;
                                     }
                                 }
-                            } else {
-                                // Failed to lock settings, use legacy path with CPAL device search
-                                let device = if let Some(ref name) = *current_device_name {
-                                    log::info!("Looking for audio device: {}", name);
-                                    host.output_devices()
-                                        .ok()
-                                        .and_then(|mut devices| {
-                                            devices.find(|d| d.name().ok().as_ref() == Some(name))
-                                        })
-                                        .or_else(|| {
-                                            log::warn!("Device '{}' not found, using default", name);
-                                            host.default_output_device()
-                                        })
-                                } else {
-                                    host.default_output_device()
-                                };
-
-                                let Some(device) = device else {
-                                    log::error!("No audio output device available");
-                                    thread_state.set_current_device(None);
-                                    thread_state.set_stream_error(true);
-                                    return;
-                                };
-
-                                if let Ok(name) = device.name() {
-                                    thread_state.set_current_device(Some(name));
-                                }
-
-                                create_output_stream_with_config(
-                                    &device,
-                                    sample_rate,
-                                    channels,
-                                    dac_passthrough,
-                                ).map(|(stream, handle)| StreamType::Rodio(stream, handle))
-                            };
-
-                            // Handle stream creation result
-                            match stream_result {
-                                Ok(stream) => {
-                                    *stream_opt = Some(stream);
-                                    *current_sample_rate = Some(sample_rate);
-                                    *current_channels = Some(channels);
-                                    thread_state.set_stream_error(false);
-
-                                    // Set current device name from settings (for backend system)
-                                    if let Some(settings) = thread_settings.lock().ok() {
-                                        if let Some(ref device_name) = settings.output_device {
-                                            thread_state.set_current_device(Some(device_name.clone()));
-                                            log::info!("Audio stream ready at {}Hz on device: {}", sample_rate, device_name);
-                                        } else {
-                                            thread_state.set_current_device(Some("Default".to_string()));
-                                            log::info!("Audio stream ready at {}Hz on default device", sample_rate);
-                                        }
-                                    } else {
-                                        log::info!("Audio stream ready at {}Hz", sample_rate);
-                                    }
-
-                                    // Delay to ensure stream is fully initialized before decoder starts
-                                    // This prevents sync gaps and allows hardware to stabilize after sample rate changes
-                                    // Extra time needed for large sample rate changes (e.g., 88.2kHz → 44.1kHz)
-                                    std::thread::sleep(Duration::from_millis(150));
-                                }
-                                Err(e) => {
-                                    log::error!("❌ Failed to create stream at {}Hz: {}", sample_rate, e);
-                                    thread_state.set_stream_error(true);
-                                    thread_state.set_current_device(None);
-                                    return;
-                                }
-                            }
-                        } else if format_changed {
-                            // Format changed but DAC passthrough is disabled - reuse existing stream
-                            log::info!(
+                            } else if format_changed {
+                                // Format changed but DAC passthrough is disabled - reuse existing stream
+                                log::info!(
                                 "Audio format changed from {:?}Hz/{:?}ch to {}Hz/{}ch - reusing OutputStream (DAC passthrough disabled, gapless enabled)",
                                 *current_sample_rate,
                                 *current_channels,
                                 sample_rate,
                                 channels
                             );
-                        }
+                            }
 
-                        let Some(ref stream) = *stream_opt else {
-                            log::error!("Audio thread: no audio device available");
-                            return;
-                        };
+                            let Some(ref stream) = *stream_opt else {
+                                log::error!("Audio thread: no audio device available");
+                                return;
+                            };
 
-                        // Stop previous engine and wait for sink to release resources
-                        if let Some(engine) = current_engine.take() {
-                            engine.stop();
-                            // Small delay to allow the audio sink to fully release its
-                            // reference to the OutputStreamHandle before creating a new sink.
-                            // This prevents "resource busy" errors on rapid track switches.
-                            std::thread::sleep(Duration::from_millis(50));
-                        }
+                            // Stop previous engine and wait for sink to release resources
+                            if let Some(engine) = current_engine.take() {
+                                engine.stop();
+                                // Small delay to allow the audio sink to fully release its
+                                // reference to the OutputStreamHandle before creating a new sink.
+                                // This prevents "resource busy" errors on rapid track switches.
+                                std::thread::sleep(Duration::from_millis(50));
+                            }
 
-                        *current_audio_data = Some(data.clone());
-                        *current_streaming_source = None; // Clear streaming source for non-streaming playback
+                            *current_audio_data = Some(data.clone());
+                            *current_streaming_source = None; // Clear streaming source for non-streaming playback
 
-                        // Create PlaybackEngine from StreamType
-                        let mut engine = match stream {
-                            StreamType::Rodio(_stream, handle) => {
-                                match PlaybackEngine::new_rodio(handle) {
-                                    Ok(e) => {
-                                        *consecutive_sink_failures = 0;
-                                        thread_state.set_stream_error(false);
-                                        e
-                                    }
-                                    Err(e) => {
-                                        *consecutive_sink_failures += 1;
-                                        log::error!(
-                                            "Failed to create engine (attempt {}): {}",
-                                            *consecutive_sink_failures,
+                            // Create PlaybackEngine from StreamType
+                            let mut engine = match stream {
+                                StreamType::Rodio(_stream, handle) => {
+                                    match PlaybackEngine::new_rodio(handle) {
+                                        Ok(e) => {
+                                            *consecutive_sink_failures = 0;
+                                            thread_state.set_stream_error(false);
                                             e
-                                        );
+                                        }
+                                        Err(e) => {
+                                            *consecutive_sink_failures += 1;
+                                            log::error!(
+                                                "Failed to create engine (attempt {}): {}",
+                                                *consecutive_sink_failures,
+                                                e
+                                            );
 
-                                        if *consecutive_sink_failures >= MAX_SINK_FAILURES {
-                                            log::warn!(
+                                            if *consecutive_sink_failures >= MAX_SINK_FAILURES {
+                                                log::warn!(
                                                 "Audio stream appears broken after {} failures. Auto-reinitializing...",
                                                 *consecutive_sink_failures
                                             );
-                                            thread_state.set_stream_error(true);
+                                                thread_state.set_stream_error(true);
 
-                                            drop(stream_opt.take());
-                                            std::thread::sleep(Duration::from_millis(200));
+                                                drop(stream_opt.take());
+                                                std::thread::sleep(Duration::from_millis(200));
 
-                                            // Use last known sample rate/channels to maintain DAC passthrough
-                                            let sr = current_sample_rate.unwrap_or(48000);
-                                            let ch = current_channels.unwrap_or(2);
-                                            *stream_opt = init_device(current_device_name, &thread_state, sr, ch);
-                                            if stream_opt.is_some() {
-                                                log::info!("Audio stream auto-reinitialized successfully at {}Hz", sr);
-                                                *consecutive_sink_failures = 0;
-                                                thread_state.set_stream_error(false);
-                                            } else {
-                                                log::error!("Auto-reinit failed. Audio device unavailable.");
-                                                thread_state.is_playing.store(false, Ordering::SeqCst);
-                                                thread_state.set_current_device(None);
+                                                // Use last known sample rate/channels to maintain DAC passthrough
+                                                let sr = current_sample_rate.unwrap_or(48000);
+                                                let ch = current_channels.unwrap_or(2);
+                                                *stream_opt = init_device(
+                                                    current_device_name,
+                                                    &thread_state,
+                                                    sr,
+                                                    ch,
+                                                );
+                                                if stream_opt.is_some() {
+                                                    log::info!("Audio stream auto-reinitialized successfully at {}Hz", sr);
+                                                    *consecutive_sink_failures = 0;
+                                                    thread_state.set_stream_error(false);
+                                                } else {
+                                                    log::error!("Auto-reinit failed. Audio device unavailable.");
+                                                    thread_state
+                                                        .is_playing
+                                                        .store(false, Ordering::SeqCst);
+                                                    thread_state.set_current_device(None);
+                                                }
                                             }
+                                            return;
                                         }
-                                        return;
                                     }
                                 }
-                            }
-                            #[cfg(target_os = "linux")]
-                            StreamType::AlsaDirect(alsa_stream) => {
-                                *consecutive_sink_failures = 0;
-                                thread_state.set_stream_error(false);
-                                let hardware_volume = thread_settings
-                                    .lock()
-                                    .ok()
-                                    .map(|s| s.alsa_hardware_volume)
-                                    .unwrap_or(false);
-                                PlaybackEngine::new_alsa_direct(alsa_stream.clone(), hardware_volume)
-                            }
-                        };
+                                #[cfg(target_os = "linux")]
+                                StreamType::AlsaDirect(alsa_stream) => {
+                                    *consecutive_sink_failures = 0;
+                                    thread_state.set_stream_error(false);
+                                    let hardware_volume = thread_settings
+                                        .lock()
+                                        .ok()
+                                        .map(|s| s.alsa_hardware_volume)
+                                        .unwrap_or(false);
+                                    PlaybackEngine::new_alsa_direct(
+                                        alsa_stream.clone(),
+                                        hardware_volume,
+                                    )
+                                }
+                            };
 
-                        let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
-                        engine.set_volume(volume);
+                            let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
+                            engine.set_volume(volume);
 
-                        let source = match decode_with_fallback(&data) {
-                            Ok(s) => s,
-                            Err(e) => {
-                                log::error!("Failed to decode audio: {}", e);
+                            let source = match decode_with_fallback(&data) {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    log::error!("Failed to decode audio: {}", e);
+                                    return;
+                                }
+                            };
+
+                            let actual_duration = source
+                                .total_duration()
+                                .map(|d| d.as_secs())
+                                .unwrap_or(duration_secs);
+                            thread_state
+                                .duration
+                                .store(actual_duration, Ordering::SeqCst);
+
+                            // Calculate normalization gain if enabled
+                            let norm_settings = thread_settings
+                                .lock()
+                                .ok()
+                                .filter(|s| s.normalization_enabled)
+                                .map(|s| s.normalization_target_lufs);
+
+                            let (normalization, gain_atomic) =
+                                if let Some(target_lufs) = norm_settings {
+                                    // Check for ReplayGain metadata first (initial gain hint)
+                                    let rg_gain = extract_replaygain(&data)
+                                        .map(|rg| calculate_gain_factor(&rg, target_lufs));
+
+                                    // Create shared atomic for dynamic normalization
+                                    let atomic =
+                                        Arc::new(AtomicU32::new(rg_gain.unwrap_or(1.0).to_bits()));
+
+                                    // Check loudness cache for pre-computed EBU R128 gain
+                                    if let Some(cached) = loudness_cache.get(track_id) {
+                                        let cached_gain = db_to_linear(cached.gain_db.min(6.0));
+                                        atomic.store(cached_gain.to_bits(), Ordering::Relaxed);
+                                        log::info!(
+                                            "Normalization: cache hit for track {}, gain {:.4}",
+                                            track_id,
+                                            cached_gain
+                                        );
+                                    }
+
+                                    // Notify analyzer of new track
+                                    let _ = analyzer_tx.try_send(AnalyzerMessage::NewTrack {
+                                        track_id,
+                                        sample_rate,
+                                        channels,
+                                        target_lufs,
+                                        gain_atomic: atomic.clone(),
+                                    });
+
+                                    (rg_gain, Some(atomic))
+                                } else {
+                                    (None, None)
+                                };
+
+                            *current_normalization_gain = normalization;
+                            *current_gain_atomic = gain_atomic.clone();
+                            thread_state.set_normalization_gain(normalization);
+
+                            // Wrap source with diagnostic, normalization, and visualizer
+                            let source = wrap_source(
+                                source,
+                                normalization,
+                                gain_atomic,
+                                &analyzer_tx,
+                                &analyzer_enabled,
+                            );
+                            if let Err(e) = engine.append(source) {
+                                log::error!("Failed to append source to engine: {}", e);
                                 return;
                             }
-                        };
 
-                        let actual_duration = source
-                            .total_duration()
-                            .map(|d| d.as_secs())
-                            .unwrap_or(duration_secs);
-                        thread_state.duration.store(actual_duration, Ordering::SeqCst);
+                            thread_state.is_playing.store(true, Ordering::SeqCst);
+                            thread_state.position.store(0, Ordering::SeqCst);
+                            thread_state
+                                .current_track_id
+                                .store(track_id, Ordering::SeqCst);
+                            thread_state.start_playback_timer(0);
 
-                        // Calculate normalization gain if enabled
-                        let norm_settings = thread_settings
-                            .lock()
-                            .ok()
-                            .filter(|s| s.normalization_enabled)
-                            .map(|s| s.normalization_target_lufs);
-
-                        let (normalization, gain_atomic) = if let Some(target_lufs) = norm_settings {
-                            // Check for ReplayGain metadata first (initial gain hint)
-                            let rg_gain = extract_replaygain(&data).map(|rg| calculate_gain_factor(&rg, target_lufs));
-
-                            // Create shared atomic for dynamic normalization
-                            let atomic = Arc::new(AtomicU32::new(
-                                rg_gain.unwrap_or(1.0).to_bits()
-                            ));
-
-                            // Check loudness cache for pre-computed EBU R128 gain
-                            if let Some(cached) = loudness_cache.get(track_id) {
-                                let cached_gain = db_to_linear(cached.gain_db.min(6.0));
-                                atomic.store(cached_gain.to_bits(), Ordering::Relaxed);
-                                log::info!("Normalization: cache hit for track {}, gain {:.4}", track_id, cached_gain);
-                            }
-
-                            // Notify analyzer of new track
-                            let _ = analyzer_tx.try_send(AnalyzerMessage::NewTrack {
-                                track_id,
-                                sample_rate,
-                                channels,
-                                target_lufs,
-                                gain_atomic: atomic.clone(),
-                            });
-
-                            (rg_gain, Some(atomic))
-                        } else {
-                            (None, None)
-                        };
-
-                        *current_normalization_gain = normalization;
-                        *current_gain_atomic = gain_atomic.clone();
-                        thread_state.set_normalization_gain(normalization);
-
-                        // Wrap source with diagnostic, normalization, and visualizer
-                        let source = wrap_source(source, normalization, gain_atomic, &analyzer_tx, &analyzer_enabled);
-                        if let Err(e) = engine.append(source) {
-                            log::error!("Failed to append source to engine: {}", e);
-                            return;
+                            *current_engine = Some(engine);
+                            log::info!(
+                                "Audio thread: playback started, duration: {}s, normalization: {}",
+                                actual_duration,
+                                normalization
+                                    .map(|g| format!("{:.4}x", g))
+                                    .unwrap_or_else(|| "off".to_string())
+                            );
                         }
-
-                        thread_state.is_playing.store(true, Ordering::SeqCst);
-                        thread_state.position.store(0, Ordering::SeqCst);
-                        thread_state.current_track_id.store(track_id, Ordering::SeqCst);
-                        thread_state.start_playback_timer(0);
-
-                        *current_engine = Some(engine);
-                        log::info!(
-                            "Audio thread: playback started, duration: {}s, normalization: {}",
-                            actual_duration,
-                            normalization.map(|g| format!("{:.4}x", g)).unwrap_or_else(|| "off".to_string())
-                        );
-                    }
-                    AudioCommand::PlayStreaming { source, track_id, sample_rate, channels, duration_secs } => {
-                        log::info!(
+                        AudioCommand::PlayStreaming {
+                            source,
+                            track_id,
+                            sample_rate,
+                            channels,
+                            duration_secs,
+                        } => {
+                            log::info!(
                             "Audio thread: starting streaming playback for track {} ({}Hz, {} channels, {}s)",
                             track_id,
                             sample_rate,
                             channels,
                             duration_secs
                         );
-                        *pause_suspend_deadline = None;
+                            *pause_suspend_deadline = None;
 
-                        // Store streaming source for resume capability
-                        // When download completes, we can extract the data for resume
-                        *current_streaming_source = Some(source.clone());
-                        *current_audio_data = None; // Clear regular audio data
+                            // Store streaming source for resume capability
+                            // When download completes, we can extract the data for resume
+                            *current_streaming_source = Some(source.clone());
+                            *current_audio_data = None; // Clear regular audio data
 
-                        // Get DAC passthrough setting
-                        let dac_passthrough = thread_settings
-                            .lock()
-                            .ok()
-                            .map(|s| s.dac_passthrough)
-                            .unwrap_or(false);
+                            // Get DAC passthrough setting
+                            let dac_passthrough = thread_settings
+                                .lock()
+                                .ok()
+                                .map(|s| s.dac_passthrough)
+                                .unwrap_or(false);
 
-                        // Check if we need to recreate the stream
-                        let format_changed = *current_sample_rate != Some(sample_rate)
-                            || *current_channels != Some(channels);
+                            // Check if we need to recreate the stream
+                            let format_changed = *current_sample_rate != Some(sample_rate)
+                                || *current_channels != Some(channels);
 
-                        let using_alsa_direct = thread_settings
-                            .lock()
-                            .ok()
-                            .and_then(|s| s.backend_type)
-                            .map(|b| b == AudioBackendType::Alsa)
-                            .unwrap_or(false);
+                            let using_alsa_direct = thread_settings
+                                .lock()
+                                .ok()
+                                .and_then(|s| s.backend_type)
+                                .map(|b| b == AudioBackendType::Alsa)
+                                .unwrap_or(false);
 
-                        let needs_new_stream = stream_opt.is_none()
-                            || (dac_passthrough && format_changed)
-                            || (using_alsa_direct && format_changed);
+                            let needs_new_stream = stream_opt.is_none()
+                                || (dac_passthrough && format_changed)
+                                || (using_alsa_direct && format_changed);
 
-                        if needs_new_stream {
-                            if stream_opt.is_some() {
-                                if (dac_passthrough || using_alsa_direct) && format_changed {
-                                    let mode = if using_alsa_direct { "ALSA Direct" } else { "DAC passthrough" };
-                                    log::info!(
+                            if needs_new_stream {
+                                if stream_opt.is_some() {
+                                    if (dac_passthrough || using_alsa_direct) && format_changed {
+                                        let mode = if using_alsa_direct {
+                                            "ALSA Direct"
+                                        } else {
+                                            "DAC passthrough"
+                                        };
+                                        log::info!(
                                         "Streaming: Sample rate/channels changed to {}Hz/{}ch - recreating OutputStream ({})",
                                         sample_rate,
                                         channels,
                                         mode
                                     );
-                                }
-                                drop(stream_opt.take());
-                            }
-
-                            let stream_result = if let Some(settings) = thread_settings.lock().ok() {
-                                match try_init_stream_with_backend(&settings, sample_rate, channels) {
-                                    Some(result) => {
-                                        // Set device name from settings for backend system
-                                        if result.is_ok() {
-                                            let device_name = settings.output_device.clone()
-                                                .unwrap_or_else(|| "Default".to_string());
-                                            log::info!("Streaming backend using device: {}", device_name);
-                                            thread_state.set_current_device(Some(device_name));
-                                        }
-                                        result
                                     }
-                                    None => {
-                                        log::info!("Backend system not configured, using legacy CPAL path");
-                                        let device = if let Some(ref name) = *current_device_name {
-                                            host.output_devices()
-                                                .ok()
-                                                .and_then(|mut devices| {
-                                                    devices.find(|d| d.name().ok().as_ref() == Some(name))
-                                                })
-                                                .or_else(|| host.default_output_device())
-                                        } else {
-                                            host.default_output_device()
-                                        };
-
-                                        let Some(device) = device else {
-                                            log::error!("No audio output device available for streaming");
-                                            thread_state.set_stream_error(true);
-                                            return;
-                                        };
-
-                                        if let Ok(name) = device.name() {
-                                            thread_state.set_current_device(Some(name));
-                                        }
-
-                                        create_output_stream_with_config(
-                                            &device,
-                                            sample_rate,
-                                            channels,
-                                            dac_passthrough,
-                                        ).map(|(stream, handle)| StreamType::Rodio(stream, handle))
-                                    }
+                                    drop(stream_opt.take());
                                 }
-                            } else {
-                                let device = host.default_output_device();
-                                let Some(device) = device else {
-                                    log::error!("No audio output device available for streaming");
-                                    thread_state.set_stream_error(true);
-                                    return;
-                                };
-                                create_output_stream_with_config(&device, sample_rate, channels, dac_passthrough)
+
+                                let stream_result = if let Some(settings) =
+                                    thread_settings.lock().ok()
+                                {
+                                    match try_init_stream_with_backend(
+                                        &settings,
+                                        sample_rate,
+                                        channels,
+                                    ) {
+                                        Some(result) => {
+                                            // Set device name from settings for backend system
+                                            if result.is_ok() {
+                                                let device_name = settings
+                                                    .output_device
+                                                    .clone()
+                                                    .unwrap_or_else(|| "Default".to_string());
+                                                log::info!(
+                                                    "Streaming backend using device: {}",
+                                                    device_name
+                                                );
+                                                thread_state.set_current_device(Some(device_name));
+                                            }
+                                            result
+                                        }
+                                        None => {
+                                            log::info!("Backend system not configured, using legacy CPAL path");
+                                            let device =
+                                                if let Some(ref name) = *current_device_name {
+                                                    host.output_devices()
+                                                        .ok()
+                                                        .and_then(|mut devices| {
+                                                            devices.find(|d| {
+                                                                d.name().ok().as_ref() == Some(name)
+                                                            })
+                                                        })
+                                                        .or_else(|| host.default_output_device())
+                                                } else {
+                                                    host.default_output_device()
+                                                };
+
+                                            let Some(device) = device else {
+                                                log::error!("No audio output device available for streaming");
+                                                thread_state.set_stream_error(true);
+                                                return;
+                                            };
+
+                                            if let Ok(name) = device.name() {
+                                                thread_state.set_current_device(Some(name));
+                                            }
+
+                                            create_output_stream_with_config(
+                                                &device,
+                                                sample_rate,
+                                                channels,
+                                                dac_passthrough,
+                                            )
+                                            .map(
+                                                |(stream, handle)| {
+                                                    StreamType::Rodio(stream, handle)
+                                                },
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    let device = host.default_output_device();
+                                    let Some(device) = device else {
+                                        log::error!(
+                                            "No audio output device available for streaming"
+                                        );
+                                        thread_state.set_stream_error(true);
+                                        return;
+                                    };
+                                    create_output_stream_with_config(
+                                        &device,
+                                        sample_rate,
+                                        channels,
+                                        dac_passthrough,
+                                    )
                                     .map(|(stream, handle)| StreamType::Rodio(stream, handle))
-                            };
+                                };
 
-                            match stream_result {
-                                Ok(stream) => {
-                                    *stream_opt = Some(stream);
-                                    *current_sample_rate = Some(sample_rate);
-                                    *current_channels = Some(channels);
-                                    thread_state.set_stream_error(false);
-                                    log::info!("Streaming audio stream ready at {}Hz", sample_rate);
-                                    std::thread::sleep(Duration::from_millis(150));
-                                }
-                                Err(e) => {
-                                    log::error!("❌ Failed to create stream for streaming at {}Hz: {}", sample_rate, e);
-                                    thread_state.set_stream_error(true);
-                                    return;
-                                }
-                            }
-                        }
-
-                        let Some(ref stream) = *stream_opt else {
-                            log::error!("Audio thread: no audio device available for streaming");
-                            return;
-                        };
-
-                        // Stop previous engine
-                        if let Some(engine) = current_engine.take() {
-                            engine.stop();
-                            std::thread::sleep(Duration::from_millis(50));
-                        }
-
-                        // Create PlaybackEngine
-                        let mut engine = match stream {
-                            StreamType::Rodio(_stream, handle) => {
-                                match PlaybackEngine::new_rodio(handle) {
-                                    Ok(e) => {
-                                        *consecutive_sink_failures = 0;
+                                match stream_result {
+                                    Ok(stream) => {
+                                        *stream_opt = Some(stream);
+                                        *current_sample_rate = Some(sample_rate);
+                                        *current_channels = Some(channels);
                                         thread_state.set_stream_error(false);
-                                        e
+                                        log::info!(
+                                            "Streaming audio stream ready at {}Hz",
+                                            sample_rate
+                                        );
+                                        std::thread::sleep(Duration::from_millis(150));
                                     }
                                     Err(e) => {
-                                        log::error!("Failed to create engine for streaming: {}", e);
+                                        log::error!(
+                                            "❌ Failed to create stream for streaming at {}Hz: {}",
+                                            sample_rate,
+                                            e
+                                        );
+                                        thread_state.set_stream_error(true);
                                         return;
                                     }
                                 }
                             }
-                            #[cfg(target_os = "linux")]
-                            StreamType::AlsaDirect(alsa_stream) => {
-                                let hardware_volume = thread_settings
-                                    .lock()
-                                    .ok()
-                                    .map(|s| s.alsa_hardware_volume)
-                                    .unwrap_or(false);
-                                PlaybackEngine::new_alsa_direct(alsa_stream.clone(), hardware_volume)
-                            }
-                        };
-
-                        let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
-                        engine.set_volume(volume);
-
-                        // Wait for minimum buffer before starting playback
-                        log::info!("Streaming: waiting for initial buffer...");
-                        let start_wait = Instant::now();
-                        let max_wait = Duration::from_secs(30);
-
-                        while !source.has_min_buffer() && start_wait.elapsed() < max_wait {
-                            std::thread::sleep(Duration::from_millis(50));
-                        }
-
-                        if !source.has_min_buffer() {
-                            log::error!("Streaming: timeout waiting for initial buffer");
-                            return;
-                        }
-
-                        let buffer_wait_ms = start_wait.elapsed().as_millis();
-                        log::info!(
-                            "Streaming: initial buffer ready in {}ms, creating incremental decoder...",
-                            buffer_wait_ms
-                        );
-
-                        // Create incremental streaming source - this starts playback IMMEDIATELY
-                        // while continuing to decode/download in background
-                        let incremental_source = match IncrementalStreamingSource::new(source.clone()) {
-                            Ok(s) => s,
-                            Err(e) => {
-                                log::error!("Failed to create incremental streaming source: {}", e);
-                                return;
-                            }
-                        };
-
-                        // Verify sample rate/channels match what we expected
-                        let actual_sr = incremental_source.get_sample_rate();
-                        let actual_ch = incremental_source.get_channels();
-                        if actual_sr != sample_rate || actual_ch != channels {
-                            log::warn!(
-                                "Streaming: detected format {}Hz/{}ch differs from expected {}Hz/{}ch",
-                                actual_sr, actual_ch, sample_rate, channels
-                            );
-                        }
-
-                        // Set duration from track metadata (passed from frontend)
-                        // This allows the seekbar to show progress even during streaming
-                        thread_state.duration.store(duration_secs, Ordering::SeqCst);
-
-                        // Normalization for streaming: try ReplayGain from buffered data,
-                        // then fall back to real-time EBU R128 analysis
-                        let norm_settings = thread_settings
-                            .lock()
-                            .ok()
-                            .filter(|s| s.normalization_enabled)
-                            .map(|s| s.normalization_target_lufs);
-
-                        let (normalization, gain_atomic) = if let Some(target_lufs) = norm_settings {
-                            // Try ReplayGain metadata from buffered data
-                            let rg_gain = source.get_buffered_data().and_then(|data| {
-                                extract_replaygain(&data).map(|rg| calculate_gain_factor(&rg, target_lufs))
-                            });
-
-                            // Create shared atomic for dynamic normalization
-                            let atomic = Arc::new(AtomicU32::new(
-                                rg_gain.unwrap_or(1.0).to_bits()
-                            ));
-
-                            // Check loudness cache
-                            if let Some(cached) = loudness_cache.get(track_id) {
-                                let cached_gain = db_to_linear(cached.gain_db.min(6.0));
-                                atomic.store(cached_gain.to_bits(), Ordering::Relaxed);
-                                log::info!("Streaming normalization: cache hit for track {}, gain {:.4}", track_id, cached_gain);
-                            }
-
-                            // Notify analyzer of new track
-                            let _ = analyzer_tx.try_send(AnalyzerMessage::NewTrack {
-                                track_id,
-                                sample_rate,
-                                channels,
-                                target_lufs,
-                                gain_atomic: atomic.clone(),
-                            });
-
-                            (rg_gain, Some(atomic))
-                        } else {
-                            (None, None)
-                        };
-
-                        *current_normalization_gain = normalization;
-                        *current_gain_atomic = gain_atomic.clone();
-                        thread_state.set_normalization_gain(normalization);
-
-                        // Box the incremental source to match the expected type
-                        let source_to_play: Box<dyn Source<Item = f32> + Send> = Box::new(incremental_source);
-                        // Wrap source with diagnostic, normalization, and visualizer
-                        let source_to_play = wrap_source(source_to_play, normalization, gain_atomic, &analyzer_tx, &analyzer_enabled);
-                        if let Err(e) = engine.append(source_to_play) {
-                            log::error!("Failed to append streaming source to engine: {}", e);
-                            return;
-                        }
-
-                        thread_state.is_playing.store(true, Ordering::SeqCst);
-                        thread_state.position.store(0, Ordering::SeqCst);
-                        thread_state.current_track_id.store(track_id, Ordering::SeqCst);
-                        thread_state.start_playback_timer(0);
-
-                        *current_engine = Some(engine);
-                        log::info!(
-                            "Audio thread: streaming playback STARTED in {}ms (incremental decode active)",
-                            start_wait.elapsed().as_millis()
-                        );
-                    }
-                    AudioCommand::Pause => {
-                        if let Some(ref engine) = *current_engine {
-                            engine.pause();
-                            thread_state.pause_playback_timer();
-                            thread_state.is_playing.store(false, Ordering::SeqCst);
-                            *pause_suspend_deadline =
-                                Some(Instant::now() + Duration::from_millis(PAUSE_SUSPEND_DELAY_MS));
-                            log::info!(
-                                "Audio thread: paused at {}s",
-                                thread_state.position.load(Ordering::SeqCst)
-                            );
-                        }
-                    }
-                    AudioCommand::Resume => {
-                        *pause_suspend_deadline = None;
-                        if current_engine.is_none() {
-                            // Try to get audio data from regular storage or streaming source
-                            let audio_data: Vec<u8> = if let Some(ref data) = *current_audio_data {
-                                data.clone()
-                            } else if let Some(ref streaming_src) = *current_streaming_source {
-                                // Try to get complete data from streaming source
-                                if streaming_src.is_complete() {
-                                    match streaming_src.take_complete_data() {
-                                        Some(data) => {
-                                            log::info!("Resume: using complete streaming data ({} bytes)", data.len());
-                                            // Store it in current_audio_data for future use
-                                            *current_audio_data = Some(data.clone());
-                                            data
-                                        }
-                                        None => {
-                                            log::warn!("Audio thread: cannot resume - streaming source complete but data unavailable");
-                                            return;
-                                        }
-                                    }
-                                } else {
-                                    log::warn!("Audio thread: cannot resume - streaming not complete yet ({} bytes buffered)",
-                                        streaming_src.buffer_size());
-                                    return;
-                                }
-                            } else {
-                                log::warn!("Audio thread: cannot resume - no audio data available");
-                                return;
-                            };
-
-                            if stream_opt.is_none() {
-                                // Use last known sample rate/channels to maintain DAC passthrough
-                                let sr = current_sample_rate.unwrap_or(48000);
-                                let ch = current_channels.unwrap_or(2);
-                                log::info!("Resume: reinitializing stream at {}Hz/{}ch", sr, ch);
-                                *stream_opt = init_device(current_device_name, &thread_state, sr, ch);
-                            }
 
                             let Some(ref stream) = *stream_opt else {
-                                log::error!("Audio thread: cannot resume - no audio device available");
+                                log::error!(
+                                    "Audio thread: no audio device available for streaming"
+                                );
                                 return;
                             };
 
+                            // Stop previous engine
+                            if let Some(engine) = current_engine.take() {
+                                engine.stop();
+                                std::thread::sleep(Duration::from_millis(50));
+                            }
+
+                            // Create PlaybackEngine
                             let mut engine = match stream {
                                 StreamType::Rodio(_stream, handle) => {
                                     match PlaybackEngine::new_rodio(handle) {
-                                        Ok(e) => e,
+                                        Ok(e) => {
+                                            *consecutive_sink_failures = 0;
+                                            thread_state.set_stream_error(false);
+                                            e
+                                        }
                                         Err(e) => {
-                                            log::error!("Failed to create engine for resume: {}", e);
+                                            log::error!(
+                                                "Failed to create engine for streaming: {}",
+                                                e
+                                            );
                                             return;
                                         }
                                     }
@@ -1649,306 +1675,584 @@ impl Player {
                                         .ok()
                                         .map(|s| s.alsa_hardware_volume)
                                         .unwrap_or(false);
-                                    PlaybackEngine::new_alsa_direct(alsa_stream.clone(), hardware_volume)
+                                    PlaybackEngine::new_alsa_direct(
+                                        alsa_stream.clone(),
+                                        hardware_volume,
+                                    )
                                 }
                             };
 
                             let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
                             engine.set_volume(volume);
 
-                            let source = match decode_with_fallback(&audio_data) {
+                            // Wait for minimum buffer before starting playback
+                            log::info!("Streaming: waiting for initial buffer...");
+                            let start_wait = Instant::now();
+                            let max_wait = Duration::from_secs(30);
+
+                            while !source.has_min_buffer() && start_wait.elapsed() < max_wait {
+                                std::thread::sleep(Duration::from_millis(50));
+                            }
+
+                            if !source.has_min_buffer() {
+                                log::error!("Streaming: timeout waiting for initial buffer");
+                                return;
+                            }
+
+                            let buffer_wait_ms = start_wait.elapsed().as_millis();
+                            log::info!(
+                            "Streaming: initial buffer ready in {}ms, creating incremental decoder...",
+                            buffer_wait_ms
+                        );
+
+                            // Create incremental streaming source - this starts playback IMMEDIATELY
+                            // while continuing to decode/download in background
+                            let incremental_source =
+                                match IncrementalStreamingSource::new(source.clone()) {
+                                    Ok(s) => s,
+                                    Err(e) => {
+                                        log::error!(
+                                            "Failed to create incremental streaming source: {}",
+                                            e
+                                        );
+                                        return;
+                                    }
+                                };
+
+                            // Verify sample rate/channels match what we expected
+                            let actual_sr = incremental_source.get_sample_rate();
+                            let actual_ch = incremental_source.get_channels();
+                            if actual_sr != sample_rate || actual_ch != channels {
+                                log::warn!(
+                                "Streaming: detected format {}Hz/{}ch differs from expected {}Hz/{}ch",
+                                actual_sr, actual_ch, sample_rate, channels
+                            );
+                            }
+
+                            // Set duration from track metadata (passed from frontend)
+                            // This allows the seekbar to show progress even during streaming
+                            thread_state.duration.store(duration_secs, Ordering::SeqCst);
+
+                            // Normalization for streaming: try ReplayGain from buffered data,
+                            // then fall back to real-time EBU R128 analysis
+                            let norm_settings = thread_settings
+                                .lock()
+                                .ok()
+                                .filter(|s| s.normalization_enabled)
+                                .map(|s| s.normalization_target_lufs);
+
+                            let (normalization, gain_atomic) = if let Some(target_lufs) =
+                                norm_settings
+                            {
+                                // Try ReplayGain metadata from buffered data
+                                let rg_gain = source.get_buffered_data().and_then(|data| {
+                                    extract_replaygain(&data)
+                                        .map(|rg| calculate_gain_factor(&rg, target_lufs))
+                                });
+
+                                // Create shared atomic for dynamic normalization
+                                let atomic =
+                                    Arc::new(AtomicU32::new(rg_gain.unwrap_or(1.0).to_bits()));
+
+                                // Check loudness cache
+                                if let Some(cached) = loudness_cache.get(track_id) {
+                                    let cached_gain = db_to_linear(cached.gain_db.min(6.0));
+                                    atomic.store(cached_gain.to_bits(), Ordering::Relaxed);
+                                    log::info!("Streaming normalization: cache hit for track {}, gain {:.4}", track_id, cached_gain);
+                                }
+
+                                // Notify analyzer of new track
+                                let _ = analyzer_tx.try_send(AnalyzerMessage::NewTrack {
+                                    track_id,
+                                    sample_rate,
+                                    channels,
+                                    target_lufs,
+                                    gain_atomic: atomic.clone(),
+                                });
+
+                                (rg_gain, Some(atomic))
+                            } else {
+                                (None, None)
+                            };
+
+                            *current_normalization_gain = normalization;
+                            *current_gain_atomic = gain_atomic.clone();
+                            thread_state.set_normalization_gain(normalization);
+
+                            // Box the incremental source to match the expected type
+                            let source_to_play: Box<dyn Source<Item = f32> + Send> =
+                                Box::new(incremental_source);
+                            // Wrap source with diagnostic, normalization, and visualizer
+                            let source_to_play = wrap_source(
+                                source_to_play,
+                                normalization,
+                                gain_atomic,
+                                &analyzer_tx,
+                                &analyzer_enabled,
+                            );
+                            if let Err(e) = engine.append(source_to_play) {
+                                log::error!("Failed to append streaming source to engine: {}", e);
+                                return;
+                            }
+
+                            thread_state.is_playing.store(true, Ordering::SeqCst);
+                            thread_state.position.store(0, Ordering::SeqCst);
+                            thread_state
+                                .current_track_id
+                                .store(track_id, Ordering::SeqCst);
+                            thread_state.start_playback_timer(0);
+
+                            *current_engine = Some(engine);
+                            log::info!(
+                            "Audio thread: streaming playback STARTED in {}ms (incremental decode active)",
+                            start_wait.elapsed().as_millis()
+                        );
+                        }
+                        AudioCommand::Pause => {
+                            if let Some(ref engine) = *current_engine {
+                                engine.pause();
+                                thread_state.pause_playback_timer();
+                                thread_state.is_playing.store(false, Ordering::SeqCst);
+                                *pause_suspend_deadline = Some(
+                                    Instant::now() + Duration::from_millis(PAUSE_SUSPEND_DELAY_MS),
+                                );
+                                log::info!(
+                                    "Audio thread: paused at {}s",
+                                    thread_state.position.load(Ordering::SeqCst)
+                                );
+                            }
+                        }
+                        AudioCommand::Resume => {
+                            *pause_suspend_deadline = None;
+                            if current_engine.is_none() {
+                                // Try to get audio data from regular storage or streaming source
+                                let audio_data: Vec<u8> = if let Some(ref data) =
+                                    *current_audio_data
+                                {
+                                    data.clone()
+                                } else if let Some(ref streaming_src) = *current_streaming_source {
+                                    // Try to get complete data from streaming source
+                                    if streaming_src.is_complete() {
+                                        match streaming_src.take_complete_data() {
+                                            Some(data) => {
+                                                log::info!("Resume: using complete streaming data ({} bytes)", data.len());
+                                                // Store it in current_audio_data for future use
+                                                *current_audio_data = Some(data.clone());
+                                                data
+                                            }
+                                            None => {
+                                                log::warn!("Audio thread: cannot resume - streaming source complete but data unavailable");
+                                                return;
+                                            }
+                                        }
+                                    } else {
+                                        log::warn!("Audio thread: cannot resume - streaming not complete yet ({} bytes buffered)",
+                                        streaming_src.buffer_size());
+                                        return;
+                                    }
+                                } else {
+                                    log::warn!(
+                                        "Audio thread: cannot resume - no audio data available"
+                                    );
+                                    return;
+                                };
+
+                                if stream_opt.is_none() {
+                                    // Use last known sample rate/channels to maintain DAC passthrough
+                                    let sr = current_sample_rate.unwrap_or(48000);
+                                    let ch = current_channels.unwrap_or(2);
+                                    log::info!(
+                                        "Resume: reinitializing stream at {}Hz/{}ch",
+                                        sr,
+                                        ch
+                                    );
+                                    *stream_opt =
+                                        init_device(current_device_name, &thread_state, sr, ch);
+                                }
+
+                                let Some(ref stream) = *stream_opt else {
+                                    log::error!(
+                                        "Audio thread: cannot resume - no audio device available"
+                                    );
+                                    return;
+                                };
+
+                                let mut engine = match stream {
+                                    StreamType::Rodio(_stream, handle) => {
+                                        match PlaybackEngine::new_rodio(handle) {
+                                            Ok(e) => e,
+                                            Err(e) => {
+                                                log::error!(
+                                                    "Failed to create engine for resume: {}",
+                                                    e
+                                                );
+                                                return;
+                                            }
+                                        }
+                                    }
+                                    #[cfg(target_os = "linux")]
+                                    StreamType::AlsaDirect(alsa_stream) => {
+                                        let hardware_volume = thread_settings
+                                            .lock()
+                                            .ok()
+                                            .map(|s| s.alsa_hardware_volume)
+                                            .unwrap_or(false);
+                                        PlaybackEngine::new_alsa_direct(
+                                            alsa_stream.clone(),
+                                            hardware_volume,
+                                        )
+                                    }
+                                };
+
+                                let volume =
+                                    thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
+                                engine.set_volume(volume);
+
+                                let source = match decode_with_fallback(&audio_data) {
+                                    Ok(s) => s,
+                                    Err(e) => {
+                                        log::error!("Failed to decode audio for resume: {}", e);
+                                        return;
+                                    }
+                                };
+
+                                let resume_pos = thread_state.position.load(Ordering::SeqCst);
+                                let skipped_source: Box<dyn Source<Item = f32> + Send> =
+                                    if resume_pos > 0 {
+                                        Box::new(
+                                            source.skip_duration(Duration::from_secs(resume_pos)),
+                                        )
+                                    } else {
+                                        source
+                                    };
+
+                                // Wrap source with diagnostic, normalization, and visualizer
+                                // Reuse the gain + atomic from the original Play
+                                let skipped_source = wrap_source(
+                                    skipped_source,
+                                    *current_normalization_gain,
+                                    current_gain_atomic.clone(),
+                                    &analyzer_tx,
+                                    &analyzer_enabled,
+                                );
+                                if let Err(e) = engine.append(skipped_source) {
+                                    log::error!("Failed to append source for resume: {}", e);
+                                    return;
+                                }
+                                thread_state.start_playback_timer(resume_pos);
+                                thread_state.is_playing.store(true, Ordering::SeqCst);
+                                *current_engine = Some(engine);
+
+                                log::info!("Audio thread: resumed from {}s", resume_pos);
+                                return;
+                            }
+
+                            if let Some(ref engine) = *current_engine {
+                                engine.play();
+                                let current_pos = thread_state.position.load(Ordering::SeqCst);
+                                thread_state.start_playback_timer(current_pos);
+                                thread_state.is_playing.store(true, Ordering::SeqCst);
+                                log::info!("Audio thread: resumed");
+                            }
+                        }
+                        AudioCommand::Stop => {
+                            if let Some(engine) = current_engine.take() {
+                                engine.stop();
+                            }
+                            *current_audio_data = None;
+                            *current_streaming_source = None;
+                            *current_normalization_gain = None;
+                            *current_gain_atomic = None;
+                            *gapless_pending = None;
+                            thread_state.set_gapless_ready(false);
+                            thread_state.set_gapless_next_track_id(0);
+                            analyzer_enabled.store(false, Ordering::SeqCst);
+                            thread_state.set_normalization_gain(None);
+                            thread_state.is_playing.store(false, Ordering::SeqCst);
+                            thread_state.position.store(0, Ordering::SeqCst);
+                            thread_state
+                                .playback_start_millis
+                                .store(0, Ordering::SeqCst);
+                            thread_state.position_at_start.store(0, Ordering::SeqCst);
+                            // Drop the stream to release the device and stop background CPU use.
+                            drop(stream_opt.take());
+                            *pause_suspend_deadline = None;
+                            log::info!("Audio thread: stopped");
+                        }
+                        AudioCommand::SetVolume(volume) => {
+                            thread_state
+                                .volume
+                                .store((volume * 100.0) as u64, Ordering::SeqCst);
+                            if let Some(ref engine) = *current_engine {
+                                engine.set_volume(volume);
+                            }
+                            log::info!("Audio thread: volume set to {}", volume);
+                        }
+                        AudioCommand::Seek(position_secs) => {
+                            *pause_suspend_deadline = None;
+                            // Cancel any pending gapless — seek creates a new engine
+                            *gapless_pending = None;
+                            thread_state.set_gapless_ready(false);
+                            thread_state.set_gapless_next_track_id(0);
+                            let Some(ref audio_data) = *current_audio_data else {
+                                log::warn!("Audio thread: cannot seek - no audio data available");
+                                return;
+                            };
+
+                            let Some(ref stream) = *stream_opt else {
+                                log::error!(
+                                    "Audio thread: cannot seek - no audio device available"
+                                );
+                                return;
+                            };
+
+                            log::info!("Audio thread: seeking to {}s", position_secs);
+
+                            if let Some(engine) = current_engine.take() {
+                                engine.stop();
+                            }
+
+                            let mut engine = match stream {
+                                StreamType::Rodio(_stream, handle) => {
+                                    match PlaybackEngine::new_rodio(handle) {
+                                        Ok(e) => e,
+                                        Err(e) => {
+                                            log::error!(
+                                                "Failed to create rodio engine for seek: {}",
+                                                e
+                                            );
+                                            return;
+                                        }
+                                    }
+                                }
+                                #[cfg(target_os = "linux")]
+                                StreamType::AlsaDirect(alsa_stream) => {
+                                    let hardware_volume = thread_settings
+                                        .lock()
+                                        .ok()
+                                        .map(|s| s.alsa_hardware_volume)
+                                        .unwrap_or(false);
+                                    PlaybackEngine::new_alsa_direct(
+                                        alsa_stream.clone(),
+                                        hardware_volume,
+                                    )
+                                }
+                            };
+
+                            let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
+                            engine.set_volume(volume);
+
+                            let source = match decode_with_fallback(audio_data) {
                                 Ok(s) => s,
                                 Err(e) => {
-                                    log::error!("Failed to decode audio for resume: {}", e);
+                                    log::error!("Failed to decode audio for seek: {}", e);
                                     return;
                                 }
                             };
 
-                            let resume_pos = thread_state.position.load(Ordering::SeqCst);
-                            let skipped_source: Box<dyn Source<Item = f32> + Send> = if resume_pos > 0 {
-                                Box::new(source.skip_duration(Duration::from_secs(resume_pos)))
-                            } else {
-                                source
-                            };
+                            let skip_duration = Duration::from_secs(position_secs);
+                            let skipped_source: Box<dyn Source<Item = f32> + Send> =
+                                Box::new(source.skip_duration(skip_duration));
+
+                            // Send Reset to analyzer (seek invalidates accumulated samples)
+                            let _ = analyzer_tx.try_send(AnalyzerMessage::Reset);
 
                             // Wrap source with diagnostic, normalization, and visualizer
-                            // Reuse the gain + atomic from the original Play
-                            let skipped_source = wrap_source(skipped_source, *current_normalization_gain, current_gain_atomic.clone(), &analyzer_tx, &analyzer_enabled);
+                            // Reuse the gain + atomic from the current track
+                            let skipped_source = wrap_source(
+                                skipped_source,
+                                *current_normalization_gain,
+                                current_gain_atomic.clone(),
+                                &analyzer_tx,
+                                &analyzer_enabled,
+                            );
                             if let Err(e) = engine.append(skipped_source) {
-                                log::error!("Failed to append source for resume: {}", e);
+                                log::error!("Failed to append source for seek: {}", e);
                                 return;
                             }
-                            thread_state.start_playback_timer(resume_pos);
-                            thread_state.is_playing.store(true, Ordering::SeqCst);
+
+                            let was_playing = thread_state.is_playing.load(Ordering::SeqCst);
+                            if !was_playing {
+                                engine.pause();
+                            }
+
+                            thread_state.position.store(position_secs, Ordering::SeqCst);
+                            if was_playing {
+                                thread_state.start_playback_timer(position_secs);
+                            }
+
                             *current_engine = Some(engine);
-
-                            log::info!("Audio thread: resumed from {}s", resume_pos);
-                            return;
+                            log::info!(
+                                "Audio thread: seeked to {}s (was_playing: {})",
+                                position_secs,
+                                was_playing
+                            );
                         }
+                        AudioCommand::ReinitDevice {
+                            device_name: new_device,
+                        } => {
+                            log::info!(
+                                "Audio thread: reinitializing device (new: {:?})",
+                                new_device
+                            );
+                            *pause_suspend_deadline = None;
 
-                        if let Some(ref engine) = *current_engine {
-                            engine.play();
-                            let current_pos = thread_state.position.load(Ordering::SeqCst);
-                            thread_state.start_playback_timer(current_pos);
-                            thread_state.is_playing.store(true, Ordering::SeqCst);
-                            log::info!("Audio thread: resumed");
+                            if let Some(engine) = current_engine.take() {
+                                engine.stop();
+                            }
+
+                            drop(stream_opt.take());
+                            log::info!("Audio thread: previous stream dropped, device released");
+
+                            std::thread::sleep(Duration::from_millis(100));
+
+                            *current_device_name = new_device;
+                            // Use last known sample rate/channels to maintain DAC passthrough
+                            let sr = current_sample_rate.unwrap_or(48000);
+                            let ch = current_channels.unwrap_or(2);
+                            log::info!("ReinitDevice: reinitializing at {}Hz/{}ch", sr, ch);
+                            *stream_opt = init_device(current_device_name, &thread_state, sr, ch);
+
+                            if stream_opt.is_some() {
+                                log::info!("Audio thread: device reinitialized successfully");
+                                *consecutive_sink_failures = 0;
+                            } else {
+                                log::error!("Audio thread: failed to reinitialize device");
+                            }
+
+                            // Preserve position so Resume can seek back to it.
+                            // pause_playback_timer() captures the real-time position
+                            // into thread_state.position before clearing the timer.
+                            thread_state.pause_playback_timer();
+                            thread_state.is_playing.store(false, Ordering::SeqCst);
+                            // Keep current_audio_data and current_streaming_source
+                            // intact so Resume can recreate the engine and seek.
                         }
-                    }
-                    AudioCommand::Stop => {
-                        if let Some(engine) = current_engine.take() {
-                            engine.stop();
-                        }
-                        *current_audio_data = None;
-                        *current_streaming_source = None;
-                        *current_normalization_gain = None;
-                        *current_gain_atomic = None;
-                        *gapless_pending = None;
-                        thread_state.set_gapless_ready(false);
-                        thread_state.set_gapless_next_track_id(0);
-                        analyzer_enabled.store(false, Ordering::SeqCst);
-                        thread_state.set_normalization_gain(None);
-                        thread_state.is_playing.store(false, Ordering::SeqCst);
-                        thread_state.position.store(0, Ordering::SeqCst);
-                        thread_state.playback_start_millis.store(0, Ordering::SeqCst);
-                        thread_state.position_at_start.store(0, Ordering::SeqCst);
-                        // Drop the stream to release the device and stop background CPU use.
-                        drop(stream_opt.take());
-                        *pause_suspend_deadline = None;
-                        log::info!("Audio thread: stopped");
-                    }
-                    AudioCommand::SetVolume(volume) => {
-                        thread_state
-                            .volume
-                            .store((volume * 100.0) as u64, Ordering::SeqCst);
-                        if let Some(ref engine) = *current_engine {
-                            engine.set_volume(volume);
-                        }
-                        log::info!("Audio thread: volume set to {}", volume);
-                    }
-                    AudioCommand::Seek(position_secs) => {
-                        *pause_suspend_deadline = None;
-                        // Cancel any pending gapless — seek creates a new engine
-                        *gapless_pending = None;
-                        thread_state.set_gapless_ready(false);
-                        thread_state.set_gapless_next_track_id(0);
-                        let Some(ref audio_data) = *current_audio_data else {
-                            log::warn!("Audio thread: cannot seek - no audio data available");
-                            return;
-                        };
-
-                        let Some(ref stream) = *stream_opt else {
-                            log::error!("Audio thread: cannot seek - no audio device available");
-                            return;
-                        };
-
-                        log::info!("Audio thread: seeking to {}s", position_secs);
-
-                        if let Some(engine) = current_engine.take() {
-                            engine.stop();
-                        }
-
-                        let mut engine = match stream {
-                            StreamType::Rodio(_stream, handle) => {
-                                match PlaybackEngine::new_rodio(handle) {
-                                    Ok(e) => e,
-                                    Err(e) => {
-                                        log::error!("Failed to create rodio engine for seek: {}", e);
-                                        return;
-                                    }
+                        AudioCommand::PlayNext {
+                            data,
+                            track_id,
+                            sample_rate,
+                            channels,
+                        } => {
+                            // Gapless: append next track to existing Rodio Sink
+                            let engine = match current_engine.as_mut() {
+                                Some(e) => e,
+                                None => {
+                                    log::warn!(
+                                        "Gapless: no engine, ignoring PlayNext for track {}",
+                                        track_id
+                                    );
+                                    return;
                                 }
-                            }
-                            #[cfg(target_os = "linux")]
-                            StreamType::AlsaDirect(alsa_stream) => {
-                                let hardware_volume = thread_settings
-                                    .lock()
-                                    .ok()
-                                    .map(|s| s.alsa_hardware_volume)
-                                    .unwrap_or(false);
-                                PlaybackEngine::new_alsa_direct(alsa_stream.clone(), hardware_volume)
-                            }
-                        };
+                            };
 
-                        let volume = thread_state.volume.load(Ordering::SeqCst) as f32 / 100.0;
-                        engine.set_volume(volume);
-
-                        let source = match decode_with_fallback(audio_data) {
-                            Ok(s) => s,
-                            Err(e) => {
-                                log::error!("Failed to decode audio for seek: {}", e);
+                            // Only Rodio supports sink queueing
+                            if engine.is_alsa_direct() {
+                                log::info!("Gapless: ALSA Direct backend, cannot queue — ignoring PlayNext for track {}", track_id);
                                 return;
                             }
-                        };
 
-                        let skip_duration = Duration::from_secs(position_secs);
-                        let skipped_source: Box<dyn Source<Item = f32> + Send> = Box::new(source.skip_duration(skip_duration));
-
-                        // Send Reset to analyzer (seek invalidates accumulated samples)
-                        let _ = analyzer_tx.try_send(AnalyzerMessage::Reset);
-
-                        // Wrap source with diagnostic, normalization, and visualizer
-                        // Reuse the gain + atomic from the current track
-                        let skipped_source = wrap_source(skipped_source, *current_normalization_gain, current_gain_atomic.clone(), &analyzer_tx, &analyzer_enabled);
-                        if let Err(e) = engine.append(skipped_source) {
-                            log::error!("Failed to append source for seek: {}", e);
-                            return;
-                        }
-
-                        let was_playing = thread_state.is_playing.load(Ordering::SeqCst);
-                        if !was_playing {
-                            engine.pause();
-                        }
-
-                        thread_state.position.store(position_secs, Ordering::SeqCst);
-                        if was_playing {
-                            thread_state.start_playback_timer(position_secs);
-                        }
-
-                        *current_engine = Some(engine);
-                        log::info!(
-                            "Audio thread: seeked to {}s (was_playing: {})",
-                            position_secs,
-                            was_playing
-                        );
-                    }
-                    AudioCommand::ReinitDevice { device_name: new_device } => {
-                        log::info!(
-                            "Audio thread: reinitializing device (new: {:?})",
-                            new_device
-                        );
-                        *pause_suspend_deadline = None;
-
-                        if let Some(engine) = current_engine.take() {
-                            engine.stop();
-                        }
-
-                        drop(stream_opt.take());
-                        log::info!("Audio thread: previous stream dropped, device released");
-
-                        std::thread::sleep(Duration::from_millis(100));
-
-                        *current_device_name = new_device;
-                        // Use last known sample rate/channels to maintain DAC passthrough
-                        let sr = current_sample_rate.unwrap_or(48000);
-                        let ch = current_channels.unwrap_or(2);
-                        log::info!("ReinitDevice: reinitializing at {}Hz/{}ch", sr, ch);
-                        *stream_opt = init_device(current_device_name, &thread_state, sr, ch);
-
-                        if stream_opt.is_some() {
-                            log::info!("Audio thread: device reinitialized successfully");
-                            *consecutive_sink_failures = 0;
-                        } else {
-                            log::error!("Audio thread: failed to reinitialize device");
-                        }
-
-                        // Preserve position so Resume can seek back to it.
-                        // pause_playback_timer() captures the real-time position
-                        // into thread_state.position before clearing the timer.
-                        thread_state.pause_playback_timer();
-                        thread_state.is_playing.store(false, Ordering::SeqCst);
-                        // Keep current_audio_data and current_streaming_source
-                        // intact so Resume can recreate the engine and seek.
-                    }
-                    AudioCommand::PlayNext { data, track_id, sample_rate, channels } => {
-                        // Gapless: append next track to existing Rodio Sink
-                        let engine = match current_engine.as_mut() {
-                            Some(e) => e,
-                            None => {
-                                log::warn!("Gapless: no engine, ignoring PlayNext for track {}", track_id);
-                                return;
-                            }
-                        };
-
-                        // Only Rodio supports sink queueing
-                        if engine.is_alsa_direct() {
-                            log::info!("Gapless: ALSA Direct backend, cannot queue — ignoring PlayNext for track {}", track_id);
-                            return;
-                        }
-
-                        // Verify format compatibility (same sample rate and channels)
-                        if let (Some(cur_sr), Some(cur_ch)) = (*current_sample_rate, *current_channels) {
-                            if sample_rate != cur_sr || channels != cur_ch {
-                                log::info!(
+                            // Verify format compatibility (same sample rate and channels)
+                            if let (Some(cur_sr), Some(cur_ch)) =
+                                (*current_sample_rate, *current_channels)
+                            {
+                                if sample_rate != cur_sr || channels != cur_ch {
+                                    log::info!(
                                     "Gapless: format mismatch (current {}Hz/{}ch vs next {}Hz/{}ch), ignoring PlayNext for track {}",
                                     cur_sr, cur_ch, sample_rate, channels, track_id
                                 );
+                                    return;
+                                }
+                            }
+
+                            // Don't queue if already streaming
+                            if current_streaming_source.is_some() {
+                                log::info!("Gapless: streaming source active, ignoring PlayNext for track {}", track_id);
                                 return;
                             }
-                        }
 
-                        // Don't queue if already streaming
-                        if current_streaming_source.is_some() {
-                            log::info!("Gapless: streaming source active, ignoring PlayNext for track {}", track_id);
-                            return;
-                        }
+                            // Decode the next track's audio
+                            let source = match decode_with_fallback(&data) {
+                                Ok(s) => s,
+                                Err(e) => {
+                                    log::error!(
+                                        "Gapless: failed to decode track {}: {}",
+                                        track_id,
+                                        e
+                                    );
+                                    return;
+                                }
+                            };
 
-                        // Decode the next track's audio
-                        let source = match decode_with_fallback(&data) {
-                            Ok(s) => s,
-                            Err(e) => {
-                                log::error!("Gapless: failed to decode track {}: {}", track_id, e);
+                            let actual_duration =
+                                source.total_duration().map(|d| d.as_secs()).unwrap_or(0);
+
+                            // Calculate normalization for the next track
+                            let norm_settings = thread_settings
+                                .lock()
+                                .ok()
+                                .filter(|s| s.normalization_enabled)
+                                .map(|s| s.normalization_target_lufs);
+
+                            let (normalization, gain_atomic) =
+                                if let Some(target_lufs) = norm_settings {
+                                    let rg_gain = extract_replaygain(&data)
+                                        .map(|rg| calculate_gain_factor(&rg, target_lufs));
+                                    let atomic =
+                                        Arc::new(AtomicU32::new(rg_gain.unwrap_or(1.0).to_bits()));
+                                    if let Some(cached) = loudness_cache.get(track_id) {
+                                        let cached_gain = db_to_linear(cached.gain_db.min(6.0));
+                                        atomic.store(cached_gain.to_bits(), Ordering::Relaxed);
+                                    }
+                                    let _ = analyzer_tx.try_send(AnalyzerMessage::NewTrack {
+                                        track_id,
+                                        sample_rate,
+                                        channels,
+                                        target_lufs,
+                                        gain_atomic: atomic.clone(),
+                                    });
+                                    (rg_gain, Some(atomic))
+                                } else {
+                                    (None, None)
+                                };
+
+                            // Wrap source with normalization/visualizer pipeline
+                            let source = wrap_source(
+                                source,
+                                normalization,
+                                gain_atomic,
+                                &analyzer_tx,
+                                &analyzer_enabled,
+                            );
+
+                            // Append to existing Sink (gapless queue)
+                            if let Err(e) = engine.append(source) {
+                                log::error!(
+                                    "Gapless: failed to append track {} to engine: {}",
+                                    track_id,
+                                    e
+                                );
                                 return;
                             }
-                        };
 
-                        let actual_duration = source
-                            .total_duration()
-                            .map(|d| d.as_secs())
-                            .unwrap_or(0);
-
-                        // Calculate normalization for the next track
-                        let norm_settings = thread_settings
-                            .lock()
-                            .ok()
-                            .filter(|s| s.normalization_enabled)
-                            .map(|s| s.normalization_target_lufs);
-
-                        let (normalization, gain_atomic) = if let Some(target_lufs) = norm_settings {
-                            let rg_gain = extract_replaygain(&data).map(|rg| calculate_gain_factor(&rg, target_lufs));
-                            let atomic = Arc::new(AtomicU32::new(
-                                rg_gain.unwrap_or(1.0).to_bits()
-                            ));
-                            if let Some(cached) = loudness_cache.get(track_id) {
-                                let cached_gain = db_to_linear(cached.gain_db.min(6.0));
-                                atomic.store(cached_gain.to_bits(), Ordering::Relaxed);
-                            }
-                            let _ = analyzer_tx.try_send(AnalyzerMessage::NewTrack {
+                            // Store pending gapless data for transition detection
+                            *gapless_pending = Some(GaplessPending {
                                 track_id,
-                                sample_rate,
-                                channels,
-                                target_lufs,
-                                gain_atomic: atomic.clone(),
+                                duration_secs: actual_duration,
+                                data,
+                                normalization_gain: normalization,
                             });
-                            (rg_gain, Some(atomic))
-                        } else {
-                            (None, None)
-                        };
+                            thread_state.set_gapless_next_track_id(track_id);
+                            thread_state.set_gapless_ready(false); // Request fulfilled
 
-                        // Wrap source with normalization/visualizer pipeline
-                        let source = wrap_source(source, normalization, gain_atomic, &analyzer_tx, &analyzer_enabled);
-
-                        // Append to existing Sink (gapless queue)
-                        if let Err(e) = engine.append(source) {
-                            log::error!("Gapless: failed to append track {} to engine: {}", track_id, e);
-                            return;
+                            log::info!(
+                                "Gapless: queued track {} (duration: {}s) for seamless transition",
+                                track_id,
+                                actual_duration
+                            );
                         }
-
-                        // Store pending gapless data for transition detection
-                        *gapless_pending = Some(GaplessPending {
-                            track_id,
-                            duration_secs: actual_duration,
-                            data,
-                            normalization_gain: normalization,
-                        });
-                        thread_state.set_gapless_next_track_id(track_id);
-                        thread_state.set_gapless_ready(false); // Request fulfilled
-
-                        log::info!(
-                            "Gapless: queued track {} (duration: {}s) for seamless transition",
-                            track_id, actual_duration
-                        );
                     }
-                }
-            };
+                };
 
             loop {
                 if thread_state.is_playing.load(Ordering::SeqCst) {
@@ -1985,12 +2289,17 @@ impl Player {
                                             thread_state.current_track_id.load(Ordering::SeqCst),
                                             pending.track_id, pos, dur
                                         );
-                                        thread_state.current_track_id.store(pending.track_id, Ordering::SeqCst);
-                                        thread_state.duration.store(pending.duration_secs, Ordering::SeqCst);
+                                        thread_state
+                                            .current_track_id
+                                            .store(pending.track_id, Ordering::SeqCst);
+                                        thread_state
+                                            .duration
+                                            .store(pending.duration_secs, Ordering::SeqCst);
                                         thread_state.start_playback_timer(0);
                                         current_audio_data = Some(pending.data.clone());
                                         current_normalization_gain = pending.normalization_gain;
-                                        thread_state.set_normalization_gain(pending.normalization_gain);
+                                        thread_state
+                                            .set_normalization_gain(pending.normalization_gain);
                                         thread_state.set_gapless_next_track_id(0);
                                         gapless_pending = None;
                                     }
@@ -2024,7 +2333,9 @@ impl Player {
                                         thread_state.is_playing.store(false, Ordering::SeqCst);
                                         let duration = thread_state.duration.load(Ordering::SeqCst);
                                         thread_state.position.store(duration, Ordering::SeqCst);
-                                        thread_state.playback_start_millis.store(0, Ordering::SeqCst);
+                                        thread_state
+                                            .playback_start_millis
+                                            .store(0, Ordering::SeqCst);
                                         // Clear gapless state on track end
                                         thread_state.set_gapless_ready(false);
                                         thread_state.set_gapless_next_track_id(0);
@@ -2106,7 +2417,13 @@ impl Player {
             }
         });
 
-        Self { tx, state, audio_settings: settings, visualizer_tap, diagnostic }
+        Self {
+            tx,
+            state,
+            audio_settings: settings,
+            visualizer_tap,
+            diagnostic,
+        }
     }
 
     /// Play a track by ID (downloads audio)
@@ -2116,7 +2433,11 @@ impl Player {
         track_id: u64,
         quality: Quality,
     ) -> Result<(), String> {
-        log::info!("Player: Starting playback for track {} with quality {:?}", track_id, quality);
+        log::info!(
+            "Player: Starting playback for track {} with quality {:?}",
+            track_id,
+            quality
+        );
 
         // Get the stream URL
         log::info!("Player: Getting stream URL...");
@@ -2128,7 +2449,11 @@ impl Player {
                 format!("Failed to get stream URL: {}", e)
             })?;
 
-        log::info!("Player: Got stream URL: {} (format: {})", stream_url.url, stream_url.mime_type);
+        log::info!(
+            "Player: Got stream URL: {} (format: {})",
+            stream_url.url,
+            stream_url.mime_type
+        );
 
         // Download the audio data
         log::info!("Player: Starting audio caching...");
@@ -2144,7 +2469,11 @@ impl Player {
 
     /// Play from raw audio data (for cached tracks)
     pub fn play_data(&self, data: Vec<u8>, track_id: u64) -> Result<(), String> {
-        log::info!("Player: Playing {} bytes of audio data for track {}", data.len(), track_id);
+        log::info!(
+            "Player: Playing {} bytes of audio data for track {}",
+            data.len(),
+            track_id
+        );
 
         // Extract audio metadata (sample rate, channels, bit depth) - fast header-only read
         let meta = extract_audio_metadata_full(&data)
@@ -2174,7 +2503,10 @@ impl Player {
             })
             .map_err(|e| {
                 log::error!("Player: Failed to send to audio thread: {}", e);
-                format!("Failed to send play command (audio thread may have crashed): {}", e)
+                format!(
+                    "Failed to send play command (audio thread may have crashed): {}",
+                    e
+                )
             })?;
 
         log::info!("Player: Playback initiated successfully");
@@ -2188,7 +2520,10 @@ impl Player {
 
         log::info!(
             "Player: Queueing gapless track {} ({}Hz, {}ch, {} bytes)",
-            track_id, meta.sample_rate, meta.channels, data.len()
+            track_id,
+            meta.sample_rate,
+            meta.channels,
+            data.len()
         );
 
         self.tx
@@ -2421,10 +2756,14 @@ impl Player {
             duration: self.state.duration(),
             track_id: self.state.current_track_id(),
             volume: self.state.volume(),
-            sample_rate: if sample_rate > 0 { Some(sample_rate) } else { None },
+            sample_rate: if sample_rate > 0 {
+                Some(sample_rate)
+            } else {
+                None
+            },
             bit_depth: if bit_depth > 0 { Some(bit_depth) } else { None },
-            shuffle: None,  // Set by caller with access to queue state
-            repeat: None,   // Set by caller with access to queue state
+            shuffle: None, // Set by caller with access to queue state
+            repeat: None,  // Set by caller with access to queue state
             normalization_gain: self.state.get_normalization_gain(),
             gapless_ready: self.state.is_gapless_ready(),
             gapless_next_track_id: self.state.get_gapless_next_track_id(),

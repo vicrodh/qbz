@@ -1,10 +1,10 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { CheckCircle, AlertCircle, Info, Loader2, X } from 'lucide-svelte';
+  import { CheckCircle, AlertCircle, AlertTriangle, Info, Loader2, X } from 'lucide-svelte';
 
   interface Props {
     message: string;
-    type?: 'success' | 'error' | 'info' | 'buffering';
+    type?: 'success' | 'error' | 'info' | 'warning' | 'buffering';
     persistent?: boolean;
     onClose: () => void;
   }
@@ -20,12 +20,14 @@
   });
 </script>
 
-<div class="toast" class:success={type === 'success'} class:error={type === 'error'} class:info={type === 'info'} class:buffering={type === 'buffering'}>
+<div class="toast" class:success={type === 'success'} class:error={type === 'error'} class:info={type === 'info'} class:warning={type === 'warning'} class:buffering={type === 'buffering'}>
   <div class="icon">
     {#if type === 'success'}
       <CheckCircle size={20} />
     {:else if type === 'error'}
       <AlertCircle size={20} />
+    {:else if type === 'warning'}
+      <AlertTriangle size={20} />
     {:else if type === 'buffering'}
       <Loader2 size={20} class="spinning" />
     {:else}
@@ -90,6 +92,10 @@
 
   .toast.info .icon {
     color: var(--accent-primary);
+  }
+
+  .toast.warning .icon {
+    color: #FFA726;
   }
 
   .toast.buffering .icon {

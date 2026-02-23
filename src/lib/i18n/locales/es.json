@@ -19,7 +19,8 @@
     "recentlyAdded": "Agregado Recientemente",
     "backTo": "Volver a",
     "updates": "Actualizaciones",
-    "flatpak": "Flatpak"
+    "flatpak": "Flatpak",
+    "purchases": "Compras"
   },
   "home": {
     "title": "Inicio",
@@ -46,7 +47,8 @@
     "artistPlays": "{count} reproducciones",
     "moreFromFavorites": "Más de Favoritos",
     "startListening": "Empieza a Escuchar",
-    "startListeningDescription": "Reproduce música o agrega favoritos para activar recomendaciones."
+    "startListeningDescription": "Reproduce música o agrega favoritos para activar recomendaciones.",
+    "yourMixes": "Tus mixes"
   },
   "discover": {
     "newReleases": "Novedades",
@@ -82,6 +84,22 @@
     "noPlaylistsFor": "No se encontraron listas para \"{query}\"",
     "viewMore": "Ver más"
   },
+  "label": {
+    "title": "Sello",
+    "about": "Acerca de",
+    "otherLabels": "Otros sellos",
+    "popularTracks": "Canciones populares",
+    "releases": "Lanzamientos",
+    "criticsPicks": "Selección de la crítica",
+    "playlists": "Playlists",
+    "artists": "Artistas",
+    "moreLabels": "Más sellos",
+    "readMore": "LEER MÁS",
+    "readLess": "LEER MENOS",
+    "seeAll": "Ver todo",
+    "showMore": "Ver más",
+    "showLess": "Ver menos"
+  },
   "library": {
     "title": "Biblioteca Local",
     "browse": "Explorar Biblioteca",
@@ -109,6 +127,7 @@
     "searchAlbums": "Buscar álbumes...",
     "searchArtists": "Buscar artistas...",
     "searchTracks": "Buscar pistas, álbumes, artistas...",
+    "searchAlbumTracks": "Buscar pistas...",
     "trackCount": "{count} pistas",
     "albumCount": "{count} álbumes",
     "artistCount": "{count} artistas",
@@ -172,7 +191,14 @@
     "noAlbumsInLibrary": "No hay álbumes en la biblioteca",
     "addFoldersHint": "Agrega carpetas y escanea para construir tu biblioteca",
     "clearAllFilters": "Limpiar todo",
+    "source": "Origen",
+    "localFiles": "Archivos locales",
     "offlineCache": "Caché offline",
+    "plexLibrary": "Biblioteca Plex",
+    "syncPlexLibrary": "Sincronizar biblioteca Plex",
+    "syncingPlexLibrary": "Sincronizando Plex...",
+    "plexSyncDone": "Biblioteca Plex sincronizada",
+    "plexSyncFailed": "No se pudo sincronizar la biblioteca Plex",
     "noAlbumsMatch": "Ningún álbum coincide con tu búsqueda",
     "tryDifferentSearch": "Prueba con un artista o álbum diferente",
     "noArtistsInLibrary": "No hay artistas en la biblioteca",
@@ -227,7 +253,13 @@
     "noBiography": "No hay biografía disponible",
     "tributes": "Tributos y Covers",
     "others": "Otros",
-    "playlists": "Playlists"
+    "playlists": "Playlists",
+    "addImage": "Agregar imagen personalizada",
+    "changeImage": "Cambiar imagen personalizada",
+    "removeImage": "Eliminar imagen personalizada",
+    "customImageSet": "Imagen del artista actualizada",
+    "customImageRemoved": "Imagen personalizada eliminada",
+    "customImageError": "Error al actualizar imagen del artista"
   },
   "sort": {
     "nameAZ": "Nombre (A-Z)",
@@ -330,6 +362,8 @@
     "likeAlbumsHint": "Da me gusta a álbumes para verlos aquí",
     "likeArtistsHint": "Da me gusta a artistas para verlos aquí",
     "likePlaylistsHint": "Haz clic en el corazón de las listas para agregarlas aquí",
+    "randomAlbum": "Reproducir álbum aleatorio",
+    "randomArtist": "Ir a artista aleatorio",
     "selectArtistHint": "Selecciona un artista para ver sus álbumes",
     "loadingAlbums": "Cargando álbumes...",
     "failedLoadAlbums": "Error al cargar álbumes",
@@ -385,6 +419,7 @@
     "history": "Historial",
     "recentlyPlayed": "Reproducido Recientemente",
     "noHistoryYet": "Sin pistas reproducidas aún",
+    "historyEmpty": "Sin pistas reproducidas aún",
     "infinitePlay": "Reproducción Infinita",
     "infinitePlayEnabled": "Reproducción infinita activada",
     "infinitePlayDisabled": "Reproducción infinita desactivada",
@@ -430,12 +465,13 @@
     "castToDevice": "Transmitir a dispositivo",
     "castingManage": "Transmitiendo - Clic para administrar",
     "miniPlayer": "Mini Reproductor",
-    "fullScreen": "Pantalla Completa",
-    "exitFullScreen": "Salir de Pantalla Completa",
+    "fullScreen": "Modo Inmersivo",
+    "exitFullScreen": "Salir del Modo Inmersivo",
     "maximize": "Maximizar",
     "restore": "Restaurar",
     "minimize": "Minimizar",
     "exitImmersive": "Salir del modo inmersivo",
+    "dragWindow": "Mover ventana",
     "normalizationOff": "Normalización de volumen: Desactivada",
     "normalizationOn": "Normalización de volumen: Activada",
     "normalizationApplied": "Normalización de volumen: Activa"
@@ -485,6 +521,10 @@
     "addToPlaylist": "Agregar a Lista",
     "addToFavorites": "Agregar a Favoritos",
     "removeFromFavorites": "Quitar de Favoritos",
+    "removeFromPlaylist": "Quitar del Playlist",
+    "selectedTracks": "{count, plural, one {# canción seleccionada} other {# canciones seleccionadas}}",
+    "select": "Seleccionar",
+    "cancelSelection": "Cancelar selección",
     "makeAvailableOffline": "Disponible offline",
     "share": "Compartir",
     "viewAlbum": "Ver Álbum",
@@ -540,6 +580,7 @@
       "qualityChangedCacheCleared": "Calidad cambiada. Caché de reproducción limpiado.",
       "outputDevice": "Dispositivo de Salida",
       "outputDeviceDesc": "Selecciona tu dispositivo de audio preferido. Se muestran los dispositivos del backend seleccionado.",
+      "systemDefaultIs": "Sistema Default es: {device}",
       "audioDevice": "Dispositivo de Audio",
       "audioDeviceDesc": "Selecciona tu dispositivo de salida de audio preferido. Los dispositivos mostrados son del backend seleccionado.",
       "exclusiveMode": "Modo Exclusivo",
@@ -550,6 +591,11 @@
       "dacPassthroughNote": "Se refiere al contenido de audio decodificado. Las pantallas del DAC pueden mostrar el formato de transporte, no la resolución del contenido.",
       "dacPassthroughDisabledDesc": "DAC Passthrough usa pw-metadata para forzar las tasas de muestreo de PipeWire. Solo es compatible con el backend PipeWire.",
       "dacPassthroughExtendedDesc": "Cuando está habilitado, anula la configuración de calidad anterior si tu dispositivo de audio no soporta la tasa de muestreo seleccionada. Previene el remuestreo para garantizar reproducción bit-perfect.",
+      "pwForceBitperfect": "Forzar Bit-Perfect (Experimental)",
+      "pwForceBitperfectDesc": "Fuerza el quantum y la tasa de muestreo de PipeWire para coincidir con la pista, restableciendo al detener. Requiere Passthrough DAC.",
+      "pwForceBitperfectNote": "Experimental. Puede causar artefactos de audio en algunos sistemas. Solo afecta al backend PipeWire.",
+      "syncAudioOnStartup": "Sincronizar configuración de audio al iniciar",
+      "syncAudioOnStartupDesc": "Recarga la configuración de audio desde la base de datos al iniciar la app. Actívalo si tu dispositivo o configuración de audio aparecen incorrectos al abrir.",
       "audioBackend": "Backend de Audio",
       "audioBackendDesc": "Elige el sistema de audio: Auto (recomendado), PipeWire (moderno), ALSA Direct (bit-perfect, exclusivo), o PulseAudio (legacy).",
       "currentSampleRate": "Tasa de Muestreo Actual",
@@ -558,7 +604,10 @@
       "loadingAudioDevices": "Cargando dispositivos de audio...",
       "parsingHardware": "Analizando información de hardware",
       "limitQualityToDevice": "Limitar Calidad al Dispositivo",
-      "limitQualityToDeviceDesc": "Cuando está activado, anula la configuración de calidad si tu dispositivo de audio no soporta la tasa de muestreo seleccionada. Previene el remuestreo para garantizar reproducción bit-perfect.",
+      "limitQualityToDeviceDesc": "Cuando está activado, limita la calidad de streaming a la tasa de muestreo máxima de tu DAC. Evita solicitar formatos que tu dispositivo no puede reproducir nativamente.",
+      "maxSampleRate": "Tasa de Muestreo Máxima",
+      "maxSampleRateDesc": "Selecciona la tasa de muestreo máxima de tu DAC. Los tracks por encima de esta tasa se solicitarán a Qobuz en una calidad inferior.",
+      "refreshDevices": "Actualizar lista de dispositivos",
       "alsaPlugin": "Plugin ALSA",
       "alsaPluginDesc": "hw: Bit-perfect, exclusivo. plughw: Auto-conversión. pcm: Más compatible.",
       "hardwareVolume": "Habilitar Control de Volumen por Hardware",
@@ -601,6 +650,8 @@
       "playOnlySelectedTrack": "Reproducir solo la pista seleccionada",
       "showContextIcon": "Mostrar contexto de reproducción en el reproductor",
       "showContextIconTooltip": "Muestra el contexto desde donde se reproduce la pista actual (álbum, artista, playlist, etc.)",
+      "persistSession": "Restaurar sesión al iniciar",
+      "persistSessionDesc": "Recuerda tu cola, posición de reproducción y vista actual al reiniciar",
       "streamUncached": "Transmitir Pistas Sin Caché",
       "streamUncachedDesc": "Inicia la reproducción más rápido cuando la pista no está en caché. La búsqueda puede estar limitada durante el buffering inicial.",
       "initialBuffer": "Tamaño del Buffer Inicial",
@@ -632,10 +683,35 @@
         "ikari": "Ikari",
         "langley": "Langley",
         "ayanami": "Ayanami",
-        "iscariot": "Iscariot"
+        "iscariot": "Iscariot",
+        "system": "Sistema"
       },
+      "autoTheme": "Tema Automatico",
+      "autoThemeDesc": "Genera un tema de colores desde tu wallpaper del sistema o una imagen personalizada",
+      "autoThemeSource": "Fuente",
+      "autoThemeSourceSystem": "Colores del Sistema",
+      "autoThemeSourceWallpaper": "Wallpaper Sync",
+      "autoThemeSourceImage": "Imagen Personalizada",
+      "autoThemeSelectImage": "Seleccionar Imagen...",
+      "autoThemeGenerating": "Generando tema...",
+      "autoThemeError": "Error al generar el tema",
+      "autoThemeDetectedDE": "Detectado: {de}",
+      "autoThemeExperimental": "Experimental: el tema puede no coincidir exactamente con tu sistema.",
+      "autoThemeNoWallpaper": "No se pudo detectar el wallpaper del sistema",
+      "autoThemeApplied": "Tema automatico aplicado",
+      "autoThemeRegenerate": "Regenerar",
+      "autoThemeFailedHint": "Te recomendamos elegir otro tema o generar uno a partir de una imagen personalizada.",
+      "colorBg": "Base",
+      "colorSurface": "Superficie",
+      "colorElevated": "Elevado",
+      "colorAccent": "Acento",
+      "colorText": "Texto",
+      "colorMuted": "Tenue",
+      "colorBorder": "Borde",
+      "colorDanger": "Peligro",
       "accentColor": "Color de Acento",
       "language": "Idioma",
+      "fontFamily": "Fuente",
       "uiScale": "Escala de UI",
       "inAppToasts": "Notificaciones en App",
       "systemNotifications": "Notificaciones del Sistema",
@@ -643,6 +719,8 @@
       "useSystemTitleBarDesc": "Reemplazar la barra de título personalizada de QBZ con las decoraciones nativas de tu sistema. Cambiar esto reiniciará la app.",
       "hideTitleBar": "Ocultar barra de título",
       "hideTitleBarDesc": "Ocultar completamente la barra de título (para usuarios de gestores de ventanas en mosaico)",
+      "showPurchases": "Mostrar Compras",
+      "showPurchasesDesc": "Mostrar la sección de Compras en la barra lateral para explorar y descargar tu música comprada",
       "immersiveDefaultView": "Vista predeterminada del modo inmersivo",
       "immersiveViews": {
         "remember": "Recordar la última usada",
@@ -656,6 +734,12 @@
         "split-trackInfo": "Dividido: Info de pista",
         "split-suggestions": "Dividido: Sugerencias",
         "split-queue": "Dividido: Cola"
+      },
+      "startupPage": "Página de inicio",
+      "startupPageDesc": "Elige qué página mostrar al iniciar la app",
+      "startupPages": {
+        "home": "Inicio",
+        "last-view": "Donde te quedaste"
       },
       "hardwareAcceleration": "Aceleración por hardware (GPU)",
       "hardwareAccelerationDesc": "Habilitar renderizado acelerado por GPU. Desactivado por defecto para máxima compatibilidad. Si QBZ se cierra al iniciar después de activar esto, ejecuta: QBZ_HARDWARE_ACCEL=0 qbz",
@@ -695,7 +779,18 @@
         "envVarForceX11": "Forzar backend XWayland",
         "envVarSoftwareRender": "Forzar renderizado por software (Mesa llvmpipe)",
         "envVarForceDmabuf": "Forzar DMA-BUF activo (puede crashear)",
-        "envVarDisableDmabuf": "Forzar DMA-BUF desactivado"
+        "envVarDisableDmabuf": "Forzar DMA-BUF desactivado",
+        "profiles": {
+          "title": "Perfiles de renderizado",
+          "helpText": "Presets rápidos para configuraciones multi-monitor y DPI mixto. Aplica uno y reinicia QBZ.",
+          "nativeWaylandLabel": "Wayland nativo (más nítido)",
+          "nativeWaylandDesc": "Usa renderizado Wayland nativo. Mejor nitidez de texto, puede ser más pesado en algunas combinaciones GPU/compositor.",
+          "x11BalancedLabel": "Xwayland balanceado",
+          "x11BalancedDesc": "Fuerza Xwayland con GDK_SCALE=1 y GDK_DPI_SCALE=1.1 para balancear tamaño y nitidez.",
+          "x11PerformanceLabel": "Xwayland rendimiento",
+          "x11PerformanceDesc": "Fuerza Xwayland con escala neutra (1.0/1.0). Mejor rendimiento y menos blur en monitores externos.",
+          "applied": "Perfil aplicado: {profile}. Reinicia QBZ para que surta efecto."
+        }
       }
     },
     "library": {
@@ -840,7 +935,10 @@
       "plexClearCacheConfirmDesc": "Esto elimina las secciones/pistas de Plex almacenadas localmente en QBZ. Tu token de Plex seguirá conectado.",
       "plexClearCacheConfirmOk": "Limpiar caché",
       "plexNoTracksLoaded": "Aún no se cargaron pistas.",
-      "plexTrackMeta": "{artist} - {album} - {rate} Hz / {bits}-bit"
+      "plexTrackMeta": "{artist} - {album} - {rate} Hz / {bits}-bit",
+      "qobuzLinkHandler": "Manejador de enlaces Qobuz",
+      "qobuzLinkHandlerDesc": "Registrar QBZ como la app predeterminada para enlaces qobuzapp:// desde el navegador.",
+      "qobuzLinkHandlerError": "Error al actualizar el registro del manejador de enlaces."
     },
     "storage": {
       "title": "Almacenamiento",
@@ -994,7 +1092,9 @@
     "loginError": "Error al iniciar sesión. Verifica tus credenciales.",
     "welcomeBack": "Bienvenido de nuevo",
     "rememberMe": "Recordarme",
-    "ineligibleSubscription": "No hay una suscripción activa. QBZ solo funcionará en modo offline."
+    "ineligibleSubscription": "No hay una suscripción activa. QBZ solo funcionará en modo offline.",
+    "v2AuthFailed": "La autenticación con Qobuz falló. Por favor, inténtalo de nuevo.",
+    "v2NotInitialized": "No se pudo conectar con Qobuz. Por favor, reinicia la aplicación."
   },
   "legal": {
     "brandingLineSuffix": "Esta aplicación usa la API de Qobuz™ pero no está certificada por Qobuz™.",
@@ -1270,6 +1370,7 @@
       "uiQueue": "Cola",
       "uiEscape": "Cerrar / Descartar",
       "uiShowShortcuts": "Mostrar Atajos",
+      "uiOpenLink": "Abrir Enlace Musical",
       "focusSeekForward": "Avanzar (5s)",
       "focusSeekBack": "Retroceder (5s)",
       "focusSeekForwardLong": "Avanzar (10s)",
@@ -1286,6 +1387,7 @@
       "uiQueue": "Alternar panel de cola",
       "uiEscape": "Cerrar panel activo o modal",
       "uiShowShortcuts": "Mostrar modal de atajos de teclado",
+      "uiOpenLink": "Abrir un enlace de Qobuz en la app",
       "focusSeekForward": "Avanzar 5 segundos",
       "focusSeekBack": "Retroceder 5 segundos",
       "focusSeekForwardLong": "Avanzar 10 segundos",
@@ -1372,7 +1474,7 @@
     },
     "pulseConfig": {
       "title": "Elegir Apps para Bit-Perfect",
-      "subtitle": "Agrega QBZ y players que quieras sin resampling.",
+      "subtitle": "Agrega QBZ y players que quieras sin resampling. Usa reglas de stream de PipeWire (aplica a todas las APIs de audio).",
       "apps": {
         "qbz": "QBZ",
         "qobuzPlayer": "qobuz-player (TUI)",
@@ -1436,7 +1538,7 @@
       "detectDac": "Detectar DAC",
       "backup": "Backup",
       "pipewireConfig": "PipeWire",
-      "pulseConfig": "Pulse",
+      "pulseConfig": "Apps",
       "wireplumberConfig": "WirePlumber",
       "restart": "Reiniciar",
       "verify": "Verificar",
@@ -1576,5 +1678,153 @@
     "addingPhase": "Agregando tracks a la playlist...",
     "addingProgress": "Agregando tracks: {current} / {total}",
     "partsCreated": "Dividida en {count} playlists (limite de 2000 tracks en Qobuz)"
+  },
+  "purchases": {
+    "title": "Compras",
+    "tabs": {
+      "albums": "Albumes",
+      "tracks": "Pistas"
+    },
+    "search": "Buscar compras...",
+    "empty": "No hay compras aun. Visita Qobuz para comprar musica.",
+    "emptyTracks": "No hay pistas compradas individualmente.",
+    "unavailable": "Este album ya no esta disponible para descarga.",
+    "downloadAll": "Descargar Todo",
+    "downloadTrack": "Descargar pista",
+    "chooseFolder": "Elegir carpeta de descarga",
+    "format": "Formato",
+    "purchasedOn": "Comprado:",
+    "addToLibrary": "Agregar a Biblioteca Local",
+    "addToLibraryDesc": "Agregar la carpeta descargada a tu biblioteca de musica local.",
+    "addToLibrarySuccess": "Carpeta agregada a la biblioteca local.",
+    "addToLibraryError": "Error al agregar la carpeta a la biblioteca.",
+    "downloading": "Descargando...",
+    "downloadProgress": "Descargando {current}/{total}...",
+    "complete": "Descarga completa",
+    "failed": "Descarga fallida",
+    "filter": {
+      "all": "Todos",
+      "downloaded": "Descargados",
+      "notDownloaded": "No Descargados",
+      "hires": "Hi-Res",
+      "availability": "Disponibilidad",
+      "hideUnavailable": "Ocultar no disponibles",
+      "downloads": "Descargas",
+      "hideDownloaded": "Ocultar descargados en este equipo"
+    },
+    "sort": {
+      "date": "Fecha de Compra",
+      "artist": "Artista",
+      "album": "Album",
+      "quality": "Calidad"
+    },
+    "formats": {
+      "flac_hires_192": "FLAC 24-bit / 192 kHz",
+      "flac_hires_96": "FLAC 24-bit / 96 kHz",
+      "flac_cd": "FLAC 16-bit / 44.1 kHz",
+      "mp3_320": "MP3 320 kbps"
+    },
+    "tracksCount": "{count} pistas",
+    "sortLabel": "Ordenar",
+    "table": {
+      "title": "Titulo"
+    },
+    "group": {
+      "off": "Grupo: Desactivado",
+      "alpha": "Grupo: A-Z",
+      "artist": "Grupo: Artista",
+      "album": "Grupo: Album",
+      "name": "Grupo: Nombre",
+      "optionOff": "Desactivado",
+      "optionAlpha": "Alfabetico (A-Z)",
+      "optionArtist": "Artista",
+      "optionAlbum": "Album",
+      "optionName": "Nombre (A-Z)"
+    },
+    "view": {
+      "list": "Vista de lista",
+      "grid": "Vista de cuadricula"
+    },
+    "regionNotice": "La disponibilidad de Compras depende de tu cuenta y region de Qobuz. Si no aparece disponible, puede ser esperado.",
+    "errors": {
+      "noAlbum": "No se puede descargar: la pista no tiene album asociado.",
+      "noFormats": "No hay formatos de descarga disponibles para esta pista."
+    }
+  },
+  "yourMixes": {
+    "title": "DailyQ",
+    "subtitle": "Basado en tus escuchas recientes.",
+    "cardDesc": "Eleva tu dia con una seleccion personalizada de musica.",
+    "actions": {
+      "saveAsPlaylist": "Guardar como playlist"
+    },
+    "form": {
+      "limit": "Limite",
+      "listenedTrackIds": "IDs de pistas escuchadas (separadas por coma)",
+      "listenedTrackIdsPlaceholder": "123,456,789",
+      "tracksToAnalyse": "Pistas a analizar (una linea: trackId,artistId,genreId,labelId)",
+      "tracksToAnalysePlaceholder": "123,45,78,90",
+      "prefillFromRecents": "Usar log reciente de QBZ",
+      "run": "Obtener sugerencias",
+      "probeRaw": "Probar respuesta raw",
+      "rawResponse": "Respuesta raw"
+    },
+    "algorithmInfo": "Impulsado por el algoritmo de sugerencias de Qobuz\u2122, curado a partir de tu historial de reproducciones local.",
+    "result": {
+      "algorithm": "Algoritmo",
+      "count": "{count} pistas",
+      "empty": "No se devolvieron pistas sugeridas.",
+      "emptyHint": "Se probaron estrategias de fallback del payload. Esta cuenta/semillas puede no estar devolviendo candidatos ahora.",
+      "unknownArtist": "Artista desconocido"
+    },
+    "errors": {
+      "fetchFailed": "No se pudieron obtener sugerencias dinamicas.",
+      "prefillFailed": "No se pudieron cargar datos recientes del log de QBZ.",
+      "rawProbeFailed": "No se pudo obtener la respuesta raw del endpoint.",
+      "playlistsLoadFailed": "No se pudieron cargar tus playlists.",
+      "emptyPlaylist": "No hay pistas para guardar como playlist."
+    }
+  },
+  "weeklyMixes": {
+    "title": "WeeklyQ",
+    "subtitle": "Basado en tus escuchas semanales.",
+    "cardDesc": "Un viaje semanal con un mix fresco <strong>cada viernes</strong>."
+  },
+  "favMixes": {
+    "title": "FavQ",
+    "subtitle": "Tus favoritos, remezclados",
+    "cardDesc": "Una mezcla fresca de tus canciones favoritas.",
+    "algorithmInfo": "Selecciona aleatoriamente hasta 50 pistas de tu colección de favoritos de Qobuz.",
+    "emptyFavorites": "Aún no tienes pistas favoritas. ¡Agrega favoritos para crear tu mix!"
+  },
+  "topMixes": {
+    "title": "TopQ",
+    "subtitle": "Desde tus playlists más escuchadas",
+    "cardDesc": "Descubre música nueva desde tus playlists <strong>más escuchadas</strong>.",
+    "algorithmInfo": "Impulsado por el algoritmo de sugerencias de Qobuz, basado en tus playlists más reproducidas.",
+    "emptyPlaylists": "Aún no tienes playlists reproducidas. ¡Reproduce algunas playlists para crear tu mix!"
+  },
+  "playlistManager": {
+    "switchToFlat": "Vista plana",
+    "switchToFolders": "Vista de carpetas",
+    "emptyFolder": "Carpeta vacía"
+  },
+  "linkResolver": {
+    "title": "Abrir enlace de música",
+    "placeholder": "Pega un enlace de Qobuz, Spotify, Apple Music, Tidal, Deezer o song.link...",
+    "go": "Ir",
+    "resolving": "Resolviendo...",
+    "invalidLink": "Enlace inválido o no soportado.",
+    "notOnQobuz": "Este contenido no está disponible en Qobuz.",
+    "playlistDetected": "Esto es una playlist. Usa el Importador de Playlists.",
+    "openPlaylistImporter": "Abrir Importador de Playlists"
+  },
+  "radio": {
+    "albumRadio": "Radio del Album",
+    "creatingAlbumRadio": "Creando radio del album...",
+    "createRadio": "Crear radio",
+    "qbzRadio": "Radio QBZ",
+    "qobuzRadio": "Radio Qobuz",
+    "creating": "Creando radio..."
   }
 }

@@ -1,17 +1,21 @@
 use axum::{
     body::Body,
-    extract::{ws::{Message, WebSocket, WebSocketUpgrade}, ConnectInfo, Path, Query, State},
+    extract::{
+        ws::{Message, WebSocket, WebSocketUpgrade},
+        ConnectInfo, Path, Query, State,
+    },
     http::{header, Method, StatusCode},
     middleware,
-    response::{sse::{Event, Sse}, IntoResponse},
+    response::{
+        sse::{Event, Sse},
+        IntoResponse,
+    },
     routing::{get, post},
     Json, Router,
 };
-use futures_util::stream::Stream;
-use tokio_stream::wrappers::BroadcastStream;
-use tokio_stream::StreamExt;
 use axum_server::{tls_rustls::RustlsConfig, Handle as AxumHandle};
 use base64::Engine;
+use futures_util::stream::Stream;
 use rcgen::{CertificateParams, DistinguishedName, DnType, SanType};
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
@@ -20,6 +24,8 @@ use std::sync::Once;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::sync::{broadcast, Mutex};
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::StreamExt;
 use tower_http::cors::{AllowOrigin, CorsLayer};
 
 use crate::{
@@ -28,7 +34,7 @@ use crate::{
     commands::{self, search::SearchAllResults},
     config::{
         audio_settings::AudioSettingsState,
-        playback_preferences::{AutoplayMode, PlaybackPreferencesState, PlaybackPreferences},
+        playback_preferences::{AutoplayMode, PlaybackPreferences, PlaybackPreferencesState},
         remote_control_settings::{RemoteControlSettings, RemoteControlSettingsState},
     },
     offline_cache::OfflineCacheState,
@@ -175,7 +181,9 @@ impl ApiServerState {
         }
 
         if let Some(handle) = inner.server.take() {
-            handle.handle.graceful_shutdown(Some(Duration::from_secs(2)));
+            handle
+                .handle
+                .graceful_shutdown(Some(Duration::from_secs(2)));
         }
 
         inner.current = Some(settings.clone());
@@ -195,7 +203,8 @@ impl ApiServerState {
         let allowed_origins = app_handle
             .try_state::<crate::config::AllowedOriginsState>()
             .map(|state| {
-                state.get_origins()
+                state
+                    .get_origins()
                     .unwrap_or_default()
                     .into_iter()
                     .map(|o| o.origin)
@@ -315,10 +324,13 @@ fn emit_queue_state_update(app_handle: &AppHandle) {
         crate::queue::RepeatMode::All => "all",
         crate::queue::RepeatMode::One => "one",
     };
-    let _ = app_handle.emit("queue:state", serde_json::json!({
-        "shuffle": shuffle,
-        "repeat": repeat
-    }));
+    let _ = app_handle.emit(
+        "queue:state",
+        serde_json::json!({
+            "shuffle": shuffle,
+            "repeat": repeat
+        }),
+    );
 }
 
 #[tauri::command]
@@ -367,9 +379,7 @@ pub async fn remote_control_set_secure(
 }
 
 #[tauri::command]
-pub async fn remote_control_regenerate_token(
-    app: AppHandle,
-) -> Result<RemoteControlQr, String> {
+pub async fn remote_control_regenerate_token(app: AppHandle) -> Result<RemoteControlQr, String> {
     let settings_state = app.state::<RemoteControlSettingsState>();
     let _ = settings_state.regenerate_token()?;
     sync_server(&app).await?;
@@ -377,9 +387,7 @@ pub async fn remote_control_regenerate_token(
 }
 
 #[tauri::command]
-pub async fn remote_control_get_pairing_qr(
-    app: AppHandle,
-) -> Result<RemoteControlQr, String> {
+pub async fn remote_control_get_pairing_qr(app: AppHandle) -> Result<RemoteControlQr, String> {
     let settings_state = app.state::<RemoteControlSettingsState>();
     let settings = settings_state.get_settings()?;
     let url = get_local_url(settings.port, settings.secure);
@@ -395,7 +403,8 @@ pub async fn remote_control_get_pairing_qr(
         qrcode_generator::QrCodeEcc::Low,
         512,
         None::<&str>,
-    ).map_err(|e| format!("QR generation failed: {}", e))?;
+    )
+    .map_err(|e| format!("QR generation failed: {}", e))?;
 
     let svg_base64 = base64::engine::general_purpose::STANDARD.encode(svg.as_bytes());
     let data_url = format!("data:image/svg+xml;base64,{}", svg_base64);
@@ -438,10 +447,7 @@ pub async fn remote_control_add_allowed_origin(
 }
 
 #[tauri::command]
-pub async fn remote_control_remove_allowed_origin(
-    id: i64,
-    app: AppHandle,
-) -> Result<(), String> {
+pub async fn remote_control_remove_allowed_origin(id: i64, app: AppHandle) -> Result<(), String> {
     let state = app.state::<crate::config::AllowedOriginsState>();
     state.remove_origin(id)?;
     // Restart server to apply new CORS settings
@@ -547,7 +553,9 @@ async fn get_openapi_spec() -> impl IntoResponse {
     (headers, spec)
 }
 
-async fn now_playing(State(ctx): State<ApiContext>) -> Result<Json<NowPlayingResponse>, StatusCode> {
+async fn now_playing(
+    State(ctx): State<ApiContext>,
+) -> Result<Json<NowPlayingResponse>, StatusCode> {
     let app_state = ctx.app_handle.state::<AppState>();
     let playback = app_state
         .player
@@ -579,9 +587,7 @@ async fn pause(State(ctx): State<ApiContext>) -> Result<StatusCode, StatusCode> 
     Ok(StatusCode::NO_CONTENT)
 }
 
-async fn next_track(
-    State(ctx): State<ApiContext>,
-) -> Result<Json<Option<QueueTrack>>, StatusCode> {
+async fn next_track(State(ctx): State<ApiContext>) -> Result<Json<Option<QueueTrack>>, StatusCode> {
     let app_state = ctx.app_handle.state::<AppState>();
     let next = app_state.queue.next();
     if let Some(track) = next {
@@ -603,10 +609,7 @@ async fn previous_track(
     Ok(Json(None))
 }
 
-async fn play_queue_track(
-    ctx: &ApiContext,
-    track: QueueTrack,
-) -> Result<QueueTrack, StatusCode> {
+async fn play_queue_track(ctx: &ApiContext, track: QueueTrack) -> Result<QueueTrack, StatusCode> {
     if track.is_local {
         return Err(StatusCode::NOT_IMPLEMENTED);
     }
@@ -622,7 +625,9 @@ async fn play_queue_track(
         app_state,
         offline_cache,
         audio_settings,
-    ).await {
+    )
+    .await
+    {
         log::error!("Remote control play_track failed: {}", err);
         return Err(StatusCode::BAD_GATEWAY);
     }
@@ -692,7 +697,8 @@ async fn get_playback_preferences(
     State(ctx): State<ApiContext>,
 ) -> Result<Json<PlaybackPreferences>, StatusCode> {
     let prefs_state = ctx.app_handle.state::<PlaybackPreferencesState>();
-    prefs_state.get_preferences()
+    prefs_state
+        .get_preferences()
         .map(Json)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
 }
@@ -708,7 +714,8 @@ async fn set_autoplay(
         "infinite" => AutoplayMode::InfiniteRadio,
         _ => return Err(StatusCode::BAD_REQUEST),
     };
-    prefs_state.set_autoplay_mode(mode)
+    prefs_state
+        .set_autoplay_mode(mode)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -743,9 +750,24 @@ async fn search_all(
 
     // Parallel search for each type
     let (albums_result, tracks_result, artists_result) = tokio::join!(
-        client.search_albums(&query.q, query.limit.unwrap_or(10), query.offset.unwrap_or(0), None),
-        client.search_tracks(&query.q, query.limit.unwrap_or(10), query.offset.unwrap_or(0), None),
-        client.search_artists(&query.q, query.limit.unwrap_or(10), query.offset.unwrap_or(0), None),
+        client.search_albums(
+            &query.q,
+            query.limit.unwrap_or(10),
+            query.offset.unwrap_or(0),
+            None
+        ),
+        client.search_tracks(
+            &query.q,
+            query.limit.unwrap_or(10),
+            query.offset.unwrap_or(0),
+            None
+        ),
+        client.search_artists(
+            &query.q,
+            query.limit.unwrap_or(10),
+            query.offset.unwrap_or(0),
+            None
+        ),
     );
 
     let mut albums = albums_result.map_err(|_| StatusCode::BAD_GATEWAY)?;
@@ -753,7 +775,9 @@ async fn search_all(
     let mut artists = artists_result.map_err(|_| StatusCode::BAD_GATEWAY)?;
 
     // Filter blacklisted artists
-    albums.items.retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
+    albums
+        .items
+        .retain(|album| !blacklist_state.is_blacklisted(album.artist.id));
     tracks.items.retain(|track| {
         if let Some(ref performer) = track.performer {
             !blacklist_state.is_blacklisted(performer.id)
@@ -761,13 +785,20 @@ async fn search_all(
             true
         }
     });
-    artists.items.retain(|artist| !blacklist_state.is_blacklisted(artist.id));
+    artists
+        .items
+        .retain(|artist| !blacklist_state.is_blacklisted(artist.id));
 
     Ok(Json(SearchAllResults {
         albums,
         tracks,
         artists,
-        playlists: SearchResultsPage { items: vec![], total: 0, offset: 0, limit: 10 },
+        playlists: SearchResultsPage {
+            items: vec![],
+            total: 0,
+            offset: 0,
+            limit: 10,
+        },
         most_popular: None,
     }))
 }
@@ -812,7 +843,9 @@ async fn play_queue_index(
                 app_state,
                 offline_cache,
                 audio_settings,
-            ).await {
+            )
+            .await
+            {
                 log::error!("Remote control play_queue_index failed: {}", err);
                 return Err(StatusCode::BAD_GATEWAY);
             }
@@ -867,7 +900,11 @@ async fn get_favorites(
     let app_state = ctx.app_handle.state::<AppState>();
     let client = app_state.client.read().await;
     let result = client
-        .get_favorites(&query.fav_type, query.limit.unwrap_or(50), query.offset.unwrap_or(0))
+        .get_favorites(
+            &query.fav_type,
+            query.limit.unwrap_or(50),
+            query.offset.unwrap_or(0),
+        )
         .await
         .map_err(|_| StatusCode::BAD_GATEWAY)?;
     Ok(Json(result))
@@ -916,29 +953,35 @@ async fn play_album(
 
     // Extract tracks and convert to QueueTrack
     let tracks: Vec<QueueTrack> = if let Some(tracks) = album.tracks {
-        tracks.items.into_iter().map(|t| {
-            let artist_name = t.performer.as_ref()
-                .map(|p| p.name.clone())
-                .unwrap_or_else(|| album.artist.name.clone());
-            let artwork = album.image.large.clone().or(album.image.small.clone());
+        tracks
+            .items
+            .into_iter()
+            .map(|t| {
+                let artist_name = t
+                    .performer
+                    .as_ref()
+                    .map(|p| p.name.clone())
+                    .unwrap_or_else(|| album.artist.name.clone());
+                let artwork = album.image.large.clone().or(album.image.small.clone());
 
-            QueueTrack {
-                id: t.id,
-                title: t.title,
-                artist: artist_name,
-                album: album.title.clone(),
-                duration_secs: t.duration as u64,
-                artwork_url: artwork,
-                hires: t.hires,
-                bit_depth: t.maximum_bit_depth,
-                sample_rate: t.maximum_sampling_rate,
-                is_local: false,
-                album_id: Some(album.id.clone()),
-                artist_id: t.performer.as_ref().map(|p| p.id),
-                streamable: t.streamable,
-                source: Some("qobuz".to_string()),
-            }
-        }).collect()
+                QueueTrack {
+                    id: t.id,
+                    title: t.title,
+                    artist: artist_name,
+                    album: album.title.clone(),
+                    duration_secs: t.duration as u64,
+                    artwork_url: artwork,
+                    hires: t.hires,
+                    bit_depth: t.maximum_bit_depth,
+                    sample_rate: t.maximum_sampling_rate,
+                    is_local: false,
+                    album_id: Some(album.id.clone()),
+                    artist_id: t.performer.as_ref().map(|p| p.id),
+                    streamable: t.streamable,
+                    source: Some("qobuz".to_string()),
+                }
+            })
+            .collect()
     } else {
         return Err(StatusCode::NOT_FOUND);
     };
@@ -965,7 +1008,9 @@ async fn play_album(
                 app_state,
                 offline_cache,
                 audio_settings,
-            ).await {
+            )
+            .await
+            {
                 log::error!("Remote control play_album failed: {}", err);
                 return Err(StatusCode::BAD_GATEWAY);
             }
@@ -997,16 +1042,13 @@ async fn get_artist(
     let client = app_state.client.read().await;
     let id: u64 = artist_id.parse().map_err(|_| StatusCode::BAD_REQUEST)?;
     let artist = client
-        .get_artist(id, true)  // Include albums
+        .get_artist(id, true) // Include albums
         .await
         .map_err(|_| StatusCode::BAD_GATEWAY)?;
     Ok(Json(artist))
 }
 
-async fn ws_handler(
-    State(ctx): State<ApiContext>,
-    ws: WebSocketUpgrade,
-) -> impl IntoResponse {
+async fn ws_handler(State(ctx): State<ApiContext>, ws: WebSocketUpgrade) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handle_ws(socket, ctx.playback_tx.subscribe()))
 }
 
@@ -1032,21 +1074,20 @@ async fn sse_handler(
     State(ctx): State<ApiContext>,
 ) -> Sse<impl Stream<Item = Result<Event, std::convert::Infallible>>> {
     let rx = ctx.playback_tx.subscribe();
-    let stream = BroadcastStream::new(rx)
-        .filter_map(|result| {
-            match result {
-                Ok(event) => {
-                    let json = serde_json::to_string(&event).ok()?;
-                    Some(Ok(Event::default().data(json)))
-                }
-                Err(_) => None, // Skip lagged messages
+    let stream = BroadcastStream::new(rx).filter_map(|result| {
+        match result {
+            Ok(event) => {
+                let json = serde_json::to_string(&event).ok()?;
+                Some(Ok(Event::default().data(json)))
             }
-        });
+            Err(_) => None, // Skip lagged messages
+        }
+    });
 
     Sse::new(stream).keep_alive(
         axum::response::sse::KeepAlive::new()
             .interval(Duration::from_secs(15))
-            .text("ping")
+            .text("ping"),
     )
 }
 
@@ -1099,10 +1140,7 @@ async fn require_token(
     StatusCode::UNAUTHORIZED.into_response()
 }
 
-async fn lan_only(
-    req: axum::http::Request<Body>,
-    next: middleware::Next,
-) -> impl IntoResponse {
+async fn lan_only(req: axum::http::Request<Body>, next: middleware::Next) -> impl IntoResponse {
     let addr = req
         .extensions()
         .get::<ConnectInfo<SocketAddr>>()
@@ -1120,7 +1158,9 @@ async fn lan_only(
 fn is_local_addr(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(addr) => addr.is_private() || addr.is_loopback(),
-        IpAddr::V6(addr) => addr.is_loopback() || addr.is_unique_local() || is_ipv6_link_local(addr),
+        IpAddr::V6(addr) => {
+            addr.is_loopback() || addr.is_unique_local() || is_ipv6_link_local(addr)
+        }
     }
 }
 
@@ -1224,7 +1264,8 @@ fn ensure_certificate() -> Result<(PathBuf, PathBuf), String> {
 
     let cert = rcgen::Certificate::from_params(params)
         .map_err(|e| format!("Failed to generate certificate: {}", e))?;
-    let cert_pem = cert.serialize_pem()
+    let cert_pem = cert
+        .serialize_pem()
         .map_err(|e| format!("Failed to serialize certificate: {}", e))?;
     let key_pem = cert.serialize_private_key_pem();
 

@@ -4,12 +4,11 @@
   import ViewTransition from '../ViewTransition.svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
-  import { ask } from '@tauri-apps/plugin-dialog';
-  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, HelpCircle, Ban, AlertTriangle } from 'lucide-svelte';
+  import { ask, open as openFileDialog } from '@tauri-apps/plugin-dialog';
+  import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, Ban, AlertTriangle, RefreshCw } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
   import DeviceDropdown from '../DeviceDropdown.svelte';
-  import AlsaUtilsHelpModal from '../AlsaUtilsHelpModal.svelte';
   import DACSetupWizard from '../DACSetupWizard.svelte';
   import RemoteControlSetupGuide from '../RemoteControlSetupGuide.svelte';
   import LogsModal from '../LogsModal.svelte';
@@ -42,6 +41,16 @@
   import { ZOOM_OPTIONS, findZoomOption, getZoomLevelFromOption } from '$lib/utils/zoom';
   import { getZoom, setZoom, subscribeZoom } from '$lib/stores/zoomStore';
   import {
+    enableAutoTheme,
+    disableAutoTheme,
+    isAutoThemeActive,
+    getAutoThemePrefs,
+    updateThemeVariable,
+    EDITABLE_THEME_VARS,
+    autoThemeStore,
+    type AutoThemeSource,
+  } from '$lib/stores/autoThemeStore';
+  import {
     subscribe as subscribeOffline,
     getStatus as getOfflineStatus,
     getSettings as getOfflineSettings,
@@ -72,6 +81,7 @@
     getPlaybackPreferences,
     setAutoplayMode,
     setShowContextIcon,
+    setPersistSession,
     type AutoplayMode
   } from '$lib/stores/playbackPreferencesStore';
   import {
@@ -93,11 +103,16 @@
     isEnabled as isBlacklistEnabled,
     subscribe as subscribeBlacklist
   } from '$lib/stores/artistBlacklistStore';
+  import {
+    getShowPurchases,
+    setShowPurchases as setShowPurchasesStore
+  } from '$lib/stores/purchasesStore';
 
   interface Props {
     onBack?: () => void;
     onLogout?: () => void;
     onBlacklistManagerClick?: () => void;
+    onPurchasesToggle?: (enabled: boolean) => void;
     userName?: string;
     userEmail?: string;
     subscription?: string;
@@ -181,12 +196,22 @@
     onBack,
     onLogout,
     onBlacklistManagerClick,
+    onPurchasesToggle,
     userName = 'User',
     userEmail = '',
     subscription = 'Qobuz™',
     subscriptionValidUntil = null,
     showTitleBar = true
   }: Props = $props();
+
+  // Purchases toggle
+  let purchasesEnabled = $state(getShowPurchases());
+
+  function handlePurchasesToggle(v: boolean) {
+    purchasesEnabled = v;
+    setShowPurchasesStore(v);
+    onPurchasesToggle?.(v);
+  }
 
   // Cache state (memory cache)
   let cacheStats = $state<CacheStats | null>(null);
@@ -220,7 +245,6 @@
   let legacyTracksCount = $state(0);
 
   // ALSA Utils help modal
-  let showAlsaUtilsHelpModal = $state(false);
 
   // DAC Setup Wizard modal
   let showDACWizardModal = $state(false);
@@ -282,6 +306,44 @@
   let graphicsHwAccelEnabled = $state(true);
   let showLogsModal = $state(false);
 
+  type CompositionProfileId = 'nativeWayland' | 'x11Balanced' | 'x11Performance';
+
+  type CompositionProfile = {
+    id: CompositionProfileId;
+    forceX11: boolean;
+    gdkScale: string;
+    gdkDpiScale: string;
+    labelKey: string;
+    descKey: string;
+  };
+
+  const compositionProfiles: CompositionProfile[] = [
+    {
+      id: 'nativeWayland',
+      forceX11: false,
+      gdkScale: '',
+      gdkDpiScale: '',
+      labelKey: 'settings.appearance.composition.profiles.nativeWaylandLabel',
+      descKey: 'settings.appearance.composition.profiles.nativeWaylandDesc',
+    },
+    {
+      id: 'x11Balanced',
+      forceX11: true,
+      gdkScale: '1',
+      gdkDpiScale: '1.1',
+      labelKey: 'settings.appearance.composition.profiles.x11BalancedLabel',
+      descKey: 'settings.appearance.composition.profiles.x11BalancedDesc',
+    },
+    {
+      id: 'x11Performance',
+      forceX11: true,
+      gdkScale: '1',
+      gdkDpiScale: '1',
+      labelKey: 'settings.appearance.composition.profiles.x11PerformanceLabel',
+      descKey: 'settings.appearance.composition.profiles.x11PerformanceDesc',
+    },
+  ];
+
   // Navigation section IDs with translation keys
   const navSectionIds = [
     { id: 'audio', labelKey: 'settings.audio.title' },
@@ -305,7 +367,7 @@
   );
 
   // Get section element by id (resolved at call time, not definition time)
-  function getSectionEl(id: string): HTMLElement | undefined {
+  function getSectionEl(id: string): HTMLElement | null {
     switch (id) {
       case 'audio': return audioSection;
       case 'playback': return playbackSection;
@@ -318,7 +380,7 @@
       case 'updates': return updatesSection;
       case 'storage': return storageSection;
       case 'flatpak': return flatpakSection;
-      default: return undefined;
+      default: return null;
     }
   }
 
@@ -420,9 +482,12 @@
   }
 
   const themes: Record<string, ThemeInfo> = {
-    // Dark themes
+    // Core themes
     'Dark':              { value: '',                 type: 'dark' },
     'OLED Black':        { value: 'oled',             type: 'dark' },
+    'Light':             { value: 'light',            type: 'light' },
+    'System':            { value: 'auto',             type: 'dark' },
+    // Dark themes
     'Warm':              { value: 'warm',             type: 'dark' },
     'Nord':              { value: 'nord',             type: 'dark' },
     'Dracula':           { value: 'dracula',          type: 'dark' },
@@ -439,7 +504,6 @@
     'Zoey':              { value: 'zoey',             type: 'dark' },
     'Mira':              { value: 'mira',             type: 'dark' },
     // Light themes
-    'Light':             { value: 'light',            type: 'light' },
     'Rose Pine Dawn':    { value: 'rose-pine-dawn',   type: 'light' },
     'Breeze Light':      { value: 'breeze-light',     type: 'light' },
     'Adwaita Light':     { value: 'adwaita-light',    type: 'light' },
@@ -478,6 +542,110 @@
     else themeFilter = 'all';
   }
 
+  // Auto-theme state
+  // Sources: 'system' = accent first + wallpaper fallback, 'wallpaper' = explicit wallpaper, 'image' = custom image
+  let autoThemeSource = $state<AutoThemeSource>('system');
+  let autoThemeGenerating = $state(false);
+  let autoThemeError = $state<string | null>(null);
+  let autoThemeDE = $state<string | null>(null);
+  let autoThemeSwatches = $state<Record<string, string>>({});
+  let autoThemeCustomPath = $state<string | null>(null);
+  let autoThemeFailedModal = $state(false);
+  let autoThemeFailedMessage = $state('');
+
+  // Source options (use labelKey pattern to avoid $t() in $derived per ADR-001)
+  const autoThemeSourceOptions = [
+    { value: 'system' as AutoThemeSource, labelKey: 'settings.appearance.autoThemeSourceSystem' },
+    { value: 'wallpaper' as AutoThemeSource, labelKey: 'settings.appearance.autoThemeSourceWallpaper' },
+    { value: 'image' as AutoThemeSource, labelKey: 'settings.appearance.autoThemeSourceImage' },
+  ];
+
+  async function handleAutoThemeGenerate() {
+    autoThemeGenerating = true;
+    autoThemeError = null;
+    autoThemeFailedModal = false;
+    try {
+      if (autoThemeSource === 'image' && autoThemeCustomPath) {
+        await enableAutoTheme('image', autoThemeCustomPath);
+      } else if (autoThemeSource === 'wallpaper') {
+        await enableAutoTheme('wallpaper');
+      } else {
+        // 'system': accent first, wallpaper fallback (handled in store)
+        await enableAutoTheme('system');
+      }
+      // Update editable swatches from generated theme variables
+      const storeState = $autoThemeStore;
+      if (storeState.theme) {
+        const vars = storeState.theme.variables;
+        const swatches: Record<string, string> = {};
+        for (const entry of EDITABLE_THEME_VARS) {
+          if (vars[entry.varName]) swatches[entry.varName] = vars[entry.varName];
+        }
+        autoThemeSwatches = swatches;
+      }
+      autoThemeDE = storeState.detectedDE;
+      showToast($t('settings.appearance.autoThemeApplied'), 'success');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      autoThemeError = message;
+      // Show failure modal and fallback to dark theme
+      autoThemeFailedMessage = message;
+      autoThemeFailedModal = true;
+      fallbackToStaticTheme();
+    } finally {
+      autoThemeGenerating = false;
+    }
+  }
+
+  /** Fallback to Dark theme when auto-theme fails */
+  function fallbackToStaticTheme() {
+    disableAutoTheme();
+    theme = 'Dark';
+    applyTheme('');
+    localStorage.setItem('qbz-theme', '');
+    autoThemeSwatches = {};
+    autoThemeDE = null;
+  }
+
+  function dismissAutoThemeFailedModal() {
+    autoThemeFailedModal = false;
+    autoThemeFailedMessage = '';
+  }
+
+  function handleAutoThemeFailedSelectImage() {
+    autoThemeFailedModal = false;
+    autoThemeFailedMessage = '';
+    theme = 'System';
+    autoThemeSource = 'image';
+    void handleAutoThemeSelectImage();
+  }
+
+  async function handleAutoThemeSelectImage() {
+    try {
+      const selected = await openFileDialog({
+        multiple: false,
+        filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }],
+      });
+      if (selected && typeof selected === 'string') {
+        autoThemeCustomPath = selected;
+        autoThemeSource = 'image';
+        await handleAutoThemeGenerate();
+      }
+    } catch (err) {
+      console.error('Failed to open file picker:', err);
+    }
+  }
+
+  function handleAutoThemeSourceChange(newSource: string) {
+    const match = autoThemeSourceOptions.find(opt => $t(opt.labelKey) === newSource);
+    if (match) {
+      autoThemeSource = match.value;
+      if (match.value !== 'image') {
+        void handleAutoThemeGenerate();
+      }
+    }
+  }
+
   // Language mapping: display name -> locale code
   const languageToLocale: Record<string, string | null> = {
     'Auto': null,
@@ -497,24 +665,69 @@
   // Available languages (only those with translations)
   const availableLanguages = ['Auto', 'English', 'Español', 'Français', 'Deutsch'];
 
+  // Font family selection
+  const fontFamilies: Record<string, string> = {
+    'LINE Seed JP': '',                // default (no data-font attribute)
+    'Montserrat': 'montserrat',
+    'Noto Sans': 'noto-sans',
+    'Source Sans 3': 'source-sans-3',
+    'System': 'system',
+  };
+
+  const fontReverseMap: Record<string, string> = Object.fromEntries(
+    Object.entries(fontFamilies).map(([name, val]) => [val, name])
+  );
+
+  const fontOptions = Object.keys(fontFamilies);
+
+  let selectedFont = $state('LINE Seed JP');
+
+  function applyFont(fontValue: string) {
+    if (fontValue) {
+      document.documentElement.setAttribute('data-font', fontValue);
+    } else {
+      document.documentElement.removeAttribute('data-font');
+    }
+  }
+
+  function handleFontChange(newFont: string) {
+    selectedFont = newFont;
+    const fontValue = fontFamilies[newFont] || '';
+    applyFont(fontValue);
+    localStorage.setItem('qbz-font-family', fontValue);
+  }
+
   // Audio settings
   let streamingQuality = $state('Hi-Res+');
   let outputDevice = $state('System Default');
   let exclusiveMode = $state(false);
   let dacPassthrough = $state(false);
+  let pwForceBitperfect = $state(false);
+  let syncAudioOnStartup = $state(false);
   let selectedBackend = $state<string>('Auto');
   let selectedAlsaPlugin = $state<string>('hw (Direct Hardware)');
   let alsaHardwareVolume = $state(false);
   let streamFirstTrack = $state(false);
   let streamBufferSeconds = $state(3);
   let streamingOnly = $state(false);
-  let limitQualityToDevice = $state(false);  // Disabled in 1.1.9 — detection unreliable (#45)
+  let limitQualityToDevice = $state(false);  // Re-enabled in 1.2.x with manual per-device config
+  let deviceMaxSampleRate = $state<number | null>(null);  // Per-device max sample rate
+
+  // Sample rate options for the dropdown
+  const sampleRateOptions = [
+    { value: 44100, label: '44.1 kHz (CD)' },
+    { value: 48000, label: '48 kHz (DVD)' },
+    { value: 96000, label: '96 kHz (Hi-Res)' },
+    { value: 192000, label: '192 kHz (Hi-Res+)' },
+    { value: 384000, label: '384 kHz (DSD)' },
+  ];
 
   // Backend system state
   let availableBackends = $state<BackendInfo[]>([]);
   let backendDevices = $state<AudioDevice[]>([]);
   let alsaPlugins = $state<AlsaPluginInfo[]>([]);
   let isLoadingDevices = $state(false);
+  let defaultDeviceName = $state<string | null>(null);
 
   // Backend selector options (derived)
   // TEST: Re-enable ALSA Direct to verify if CPAL can actually open hw: devices
@@ -532,7 +745,7 @@
   }
 
   // Device options based on selected backend (derived)
-  // For ALSA: use description from aplay -L if available, otherwise translate
+  // For ALSA: use backend-provided description if available, otherwise translate
   // For PipeWire/PulseAudio: names are already friendly
   let deviceOptions = $derived.by(() => {
     // First pass: generate display names
@@ -609,6 +822,11 @@
     });
 
     backendDevices.forEach((device, idx) => {
+      // Skip 'default' device - we already added explicit "System Default" above
+      if (device.id === 'default' || device.name === 'default') {
+        return;
+      }
+
       let displayName = displayNames[idx];
 
       // If duplicate, append device ID to make unique
@@ -669,6 +887,7 @@
   // Playback settings
   let autoplayMode = $state<AutoplayMode>('continue');
   let showContextIcon = $state(true);
+  let persistSession = $state(false);
   let gaplessPlayback = $state(true);
   let crossfade = $state(0);
   let normalizeVolume = $state(false);
@@ -712,6 +931,30 @@
       const key = IMMERSIVE_VIEW_KEYS[index];
       immersiveDefaultView = key;
       setUserItem('qbz-immersive-default-view', key);
+    }
+  }
+
+  // Startup page setting
+  const STARTUP_PAGE_KEYS = ['home', 'last-view'] as const;
+  let startupPage = $state(
+    getUserItem('qbz-startup-page') || 'home'
+  );
+
+  function getStartupPageOptions(): string[] {
+    return STARTUP_PAGE_KEYS.map(key => $t(`settings.appearance.startupPages.${key}`));
+  }
+
+  function getStartupPageDisplayValue(): string {
+    return $t(`settings.appearance.startupPages.${startupPage}`);
+  }
+
+  function handleStartupPageChange(displayValue: string) {
+    const options = getStartupPageOptions();
+    const index = options.indexOf(displayValue);
+    if (index >= 0) {
+      const key = STARTUP_PAGE_KEYS[index];
+      startupPage = key;
+      setUserItem('qbz-startup-page', key);
     }
   }
 
@@ -791,12 +1034,59 @@
   const PLEX_CLIENT_ID_KEY = 'qbz-plex-poc-client-id';
   const PLEX_METADATA_WRITE_KEY = 'qbz-plex-poc-metadata-write-enabled';
 
+  // Qobuz Link Handler state
+  let qobuzLinkHandlerEnabled = $state(false);
+  let qobuzLinkHandlerBusy = $state(false);
+
+  async function handleQobuzLinkHandlerToggle(enabled: boolean) {
+    qobuzLinkHandlerBusy = true;
+    try {
+      if (enabled) {
+        await invoke('v2_register_qobuzapp_handler');
+      } else {
+        await invoke('v2_deregister_qobuzapp_handler');
+      }
+      qobuzLinkHandlerEnabled = enabled;
+    } catch (err) {
+      console.error('Failed to toggle qobuzapp handler:', err);
+      showToast(get(t)('settings.integrations.qobuzLinkHandlerError'), 'error');
+    } finally {
+      qobuzLinkHandlerBusy = false;
+    }
+  }
+
   // Load saved settings on mount
   onMount(() => {
-    // Load theme
+    // Load theme (check for auto-theme first)
     const savedTheme = localStorage.getItem('qbz-theme') || '';
-    theme = themeReverseMap[savedTheme] || 'Dark';
-    applyTheme(savedTheme);
+    if (savedTheme === 'auto') {
+      theme = 'System';
+      // Restore auto-theme preferences
+      const prefs = getAutoThemePrefs();
+      if (prefs) {
+        autoThemeSource = prefs.source;
+        autoThemeCustomPath = prefs.customImagePath ?? null;
+      }
+      // Update editable swatches from store state
+      const storeState = $autoThemeStore;
+      if (storeState.theme) {
+        const vars = storeState.theme.variables;
+        const swatches: Record<string, string> = {};
+        for (const entry of EDITABLE_THEME_VARS) {
+          if (vars[entry.varName]) swatches[entry.varName] = vars[entry.varName];
+        }
+        autoThemeSwatches = swatches;
+      }
+      autoThemeDE = storeState.detectedDE;
+    } else {
+      theme = themeReverseMap[savedTheme] || 'Dark';
+      applyTheme(savedTheme);
+    }
+
+    // Load font
+    const savedFont = localStorage.getItem('qbz-font-family') || '';
+    selectedFont = fontReverseMap[savedFont] || 'LINE Seed JP';
+    applyFont(savedFont);
 
     // Load streaming quality preference
     const savedQuality = getUserItem('qbz-streaming-quality');
@@ -869,6 +1159,11 @@
     // Load remote control status
     loadRemoteControlStatus();
 
+    // Check qobuzapp:// link handler registration
+    invoke<boolean>('v2_check_qobuzapp_handler')
+      .then((registered) => { qobuzLinkHandlerEnabled = registered; })
+      .catch((err) => { console.warn('Could not check qobuzapp handler:', err); });
+
     // Warm-start Plex panel from local cache and refresh in background
     hydratePlexAddressFieldsFromBaseUrl();
     if (plexEnabled) {
@@ -902,7 +1197,7 @@
     checkLegacyCachedFiles();
 
     // Load developer settings
-    invoke('get_developer_settings').then((settings: any) => {
+    invoke('v2_get_developer_settings').then((settings: any) => {
       forceDmabuf = settings.force_dmabuf;
     }).catch(() => {});
 
@@ -910,7 +1205,7 @@
     verboseLogCapture = isVerboseCaptureEnabled();
 
     // Load graphics settings
-    invoke('get_graphics_settings').then((settings: any) => {
+    invoke('v2_get_graphics_settings').then((settings: any) => {
       forceX11 = settings.force_x11;
       gdkScale = settings.gdk_scale || '';
       gdkDpiScale = settings.gdk_dpi_scale || '';
@@ -918,7 +1213,7 @@
     }).catch(() => {});
 
     // Load graphics startup status (for fallback warning)
-    invoke('get_graphics_startup_status').then((status: any) => {
+    invoke('v2_get_graphics_startup_status').then((status: any) => {
       graphicsUsingFallback = status.using_fallback;
       graphicsIsWayland = status.is_wayland;
       graphicsHasNvidia = status.has_nvidia;
@@ -984,7 +1279,7 @@
   async function loadLastfmState() {
     try {
       // Check if embedded (build-time) credentials are available
-      hasEmbeddedCredentials = await invoke<boolean>('lastfm_has_embedded_credentials');
+      hasEmbeddedCredentials = await invoke<boolean>('v2_lastfm_has_embedded_credentials');
 
       // Load saved credentials from localStorage (for user-provided keys)
       const savedApiKey = getUserItem('qbz-lastfm-api-key');
@@ -997,7 +1292,7 @@
       if (savedApiKey && savedApiSecret) {
         lastfmApiKey = savedApiKey;
         lastfmApiSecret = savedApiSecret;
-        await invoke('lastfm_set_credentials', {
+        await invoke('v2_lastfm_set_credentials', {
           apiKey: savedApiKey,
           apiSecret: savedApiSecret
         });
@@ -1005,7 +1300,7 @@
 
       // Restore session if available
       if (savedSessionKey && savedUsername) {
-        await invoke('lastfm_set_session', { sessionKey: savedSessionKey });
+        await invoke('v2_lastfm_set_session', { sessionKey: savedSessionKey });
         lastfmConnected = true;
         lastfmUsername = savedUsername;
       }
@@ -1032,19 +1327,19 @@
       if (lastfmApiKey && lastfmApiSecret) {
         setUserItem('qbz-lastfm-api-key', lastfmApiKey);
         setUserItem('qbz-lastfm-api-secret', lastfmApiSecret);
-        await invoke('lastfm_set_credentials', {
+        await invoke('v2_lastfm_set_credentials', {
           apiKey: lastfmApiKey,
           apiSecret: lastfmApiSecret
         });
       }
 
-      // Get auth URL and token
-      const [token, url] = await invoke<[string, string]>('lastfm_get_auth_url');
-      lastfmAuthToken = token;
+      // Get auth URL (V2 stores token internally)
+      const url = await invoke<string>('v2_lastfm_get_auth_url');
+      lastfmAuthToken = 'pending'; // V2 stores token internally, just mark as pending
 
       // Open browser for authorization using Tauri's native opener
       try {
-        await invoke('lastfm_open_auth_url', { url });
+        await invoke('v2_lastfm_open_auth_url', { url });
       } catch {
         // Fallback to window.open if native opener fails
         window.open(url, '_blank');
@@ -1068,9 +1363,8 @@
 
     lastfmConnecting = true;
     try {
-      const session = await invoke<{ name: string; key: string }>('lastfm_authenticate', {
-        token: lastfmAuthToken
-      });
+      // V2 uses internally stored token
+      const session = await invoke<{ name: string; key: string }>('v2_lastfm_complete_auth');
 
       lastfmConnected = true;
       lastfmUsername = session.name;
@@ -1090,7 +1384,7 @@
 
   async function handleLastfmDisconnect() {
     try {
-      await invoke('lastfm_disconnect');
+      await invoke('v2_lastfm_disconnect');
       lastfmConnected = false;
       lastfmUsername = '';
 
@@ -1109,7 +1403,7 @@
 
   async function loadMusicBrainzState() {
     try {
-      musicbrainzEnabled = await invoke<boolean>('musicbrainz_is_enabled');
+      musicbrainzEnabled = await invoke<boolean>('v2_musicbrainz_is_enabled');
     } catch (err) {
       console.error('Failed to load MusicBrainz state:', err);
     }
@@ -1117,7 +1411,7 @@
 
   async function handleMusicBrainzChange(enabled: boolean) {
     try {
-      await invoke('musicbrainz_set_enabled', { enabled });
+      await invoke('v2_musicbrainz_set_enabled', { enabled });
       musicbrainzEnabled = enabled;
     } catch (err) {
       console.error('Failed to update MusicBrainz setting:', err);
@@ -1131,7 +1425,7 @@
         connected: boolean;
         userName: string | null;
         enabled: boolean;
-      }>('listenbrainz_get_status');
+      }>('v2_listenbrainz_get_status');
       listenbrainzConnected = status.connected;
       listenbrainzUsername = status.userName || '';
       listenbrainzEnabled = status.enabled;
@@ -1148,7 +1442,7 @@
 
     listenbrainzConnecting = true;
     try {
-      const userInfo = await invoke<{ user_name: string }>('listenbrainz_connect', {
+      const userInfo = await invoke<{ user_name: string }>('v2_listenbrainz_connect', {
         token: listenbrainzToken.trim()
       });
       listenbrainzConnected = true;
@@ -1165,7 +1459,7 @@
 
   async function handleListenBrainzDisconnect() {
     try {
-      await invoke('listenbrainz_disconnect');
+      await invoke('v2_listenbrainz_disconnect');
       listenbrainzConnected = false;
       listenbrainzUsername = '';
     } catch (err) {
@@ -1175,7 +1469,7 @@
 
   async function handleListenBrainzEnabledChange(enabled: boolean) {
     try {
-      await invoke('listenbrainz_set_enabled', { enabled });
+      await invoke('v2_listenbrainz_set_enabled', { enabled });
       listenbrainzEnabled = enabled;
     } catch (err) {
       console.error('Failed to update ListenBrainz setting:', err);
@@ -1314,7 +1608,7 @@
     persistPlexConfig();
     try {
       const clientIdentifier = ensurePlexClientId();
-      const pin = await invoke<PlexPinStartResult>('plex_auth_pin_start', { clientIdentifier });
+      const pin = await invoke<PlexPinStartResult>('v2_plex_auth_pin_start', { clientIdentifier });
       plexAuthPinId = pin.pinId;
       plexAuthCode = pin.code;
       plexAuthUrl = pin.authUrl;
@@ -1328,7 +1622,7 @@
       plexAuthPollTimer = setInterval(async () => {
         if (!plexAuthPinId) return;
         try {
-          const check = await invoke<PlexPinCheckResult>('plex_auth_pin_check', {
+          const check = await invoke<PlexPinCheckResult>('v2_plex_auth_pin_check', {
             clientIdentifier,
             pinId: plexAuthPinId,
             code: plexAuthCode || null
@@ -1370,7 +1664,7 @@
 
   function handleOpenPlexAuthUrl() {
     if (!plexAuthUrl) return;
-    invoke('plex_open_auth_url', { url: plexAuthUrl }).catch((error) => {
+    invoke('v2_plex_open_auth_url', { url: plexAuthUrl }).catch((error) => {
       console.error('Failed opening Plex auth URL:', error);
       setPlexError(error);
     });
@@ -1433,7 +1727,7 @@
     removeUserItem(PLEX_CACHE_SERVER_ID_KEY);
 
     try {
-      await invoke('plex_cache_clear');
+      await invoke('v2_plex_cache_clear');
     } catch (error) {
       console.warn('Failed clearing Plex cache:', error);
     }
@@ -1449,7 +1743,7 @@
     if (!confirmed) return;
 
     try {
-      await invoke('plex_cache_clear');
+      await invoke('v2_plex_cache_clear');
       plexTracks = [];
       plexStatusKey = 'settings.integrations.plexStatusCacheCleared';
       plexStatusValues = {};
@@ -1464,7 +1758,7 @@
   async function loadPlexCachedState() {
     if (!plexEnabled) return;
     try {
-      const cachedSections = await invoke<PlexMusicSection[]>('plex_cache_get_sections');
+      const cachedSections = await invoke<PlexMusicSection[]>('v2_plex_cache_get_sections');
       if (Array.isArray(cachedSections) && cachedSections.length > 0) {
         plexSections = cachedSections;
       }
@@ -1474,7 +1768,7 @@
         plexSelectedSectionKeys = persistedSections;
       }
 
-      const cachedTracks = await invoke<PlexTrack[]>('plex_cache_get_tracks', {
+      const cachedTracks = await invoke<PlexTrack[]>('v2_plex_cache_get_tracks', {
         sectionKey: null
       });
       if (Array.isArray(cachedTracks) && cachedTracks.length > 0) {
@@ -1498,7 +1792,7 @@
     plexLastError = '';
     persistPlexConfig();
     try {
-      const info = await invoke<PlexServerInfo>('plex_ping', {
+      const info = await invoke<PlexServerInfo>('v2_plex_ping', {
         baseUrl: plexBaseUrl.trim(),
         token: plexToken.trim()
       });
@@ -1526,10 +1820,10 @@
     plexLastError = '';
     try {
       const serverId = getUserItem(PLEX_CACHE_SERVER_ID_KEY) || null;
-      await invoke('plex_cache_clear');
+      await invoke('v2_plex_cache_clear');
 
       if (plexSections.length > 0) {
-        await invoke<number>('plex_cache_save_sections', {
+        await invoke<number>('v2_plex_cache_save_sections', {
           serverId,
           sections: plexSections
         });
@@ -1545,7 +1839,7 @@
       let totalCount = 0;
       const sectionCounts: Record<string, number> = {};
       for (const sectionKey of plexSelectedSectionKeys) {
-        const sectionTracks = await invoke<PlexTrack[]>('plex_get_section_tracks', {
+        const sectionTracks = await invoke<PlexTrack[]>('v2_plex_get_section_tracks', {
           baseUrl: plexBaseUrl.trim(),
           token: plexToken.trim(),
           sectionKey
@@ -1553,7 +1847,7 @@
         const count = sectionTracks.length;
         sectionCounts[sectionKey] = count;
         totalCount += count;
-        await invoke<number>('plex_cache_save_tracks', {
+        await invoke<number>('v2_plex_cache_save_tracks', {
           serverId,
           sectionKey,
           tracks: sectionTracks
@@ -1561,7 +1855,7 @@
       }
 
       plexSectionTrackCounts = { ...plexSectionTrackCounts, ...sectionCounts };
-      plexTracks = await invoke<PlexTrack[]>('plex_cache_get_tracks', { sectionKey: null });
+      plexTracks = await invoke<PlexTrack[]>('v2_plex_cache_get_tracks', { sectionKey: null });
       plexStatusKey = 'settings.integrations.plexStatusTracksLoaded';
       plexStatusValues = { count: totalCount };
     } catch (error) {
@@ -1578,12 +1872,12 @@
     plexLastError = '';
     persistPlexConfig();
     try {
-      const sections = await invoke<PlexMusicSection[]>('plex_get_music_sections', {
+      const sections = await invoke<PlexMusicSection[]>('v2_plex_get_music_sections', {
         baseUrl: plexBaseUrl.trim(),
         token: plexToken.trim()
       });
       plexSections = sections;
-      await invoke<number>('plex_cache_save_sections', {
+      await invoke<number>('v2_plex_cache_save_sections', {
         serverId: getUserItem(PLEX_CACHE_SERVER_ID_KEY) || null,
         sections
       });
@@ -1632,7 +1926,7 @@
 
   async function loadRemoteControlStatus() {
     try {
-      const status = await invoke<RemoteControlStatus>('remote_control_get_status');
+      const status = await invoke<RemoteControlStatus>('v2_remote_control_get_status');
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
@@ -1648,7 +1942,7 @@
   async function handleRemoteControlToggle(enabled: boolean) {
     remoteControlLoading = true;
     try {
-      const status = await invoke<RemoteControlStatus>('remote_control_set_enabled', { enabled });
+      const status = await invoke<RemoteControlStatus>('v2_remote_control_set_enabled', { enabled });
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
@@ -1670,7 +1964,7 @@
     if (!Number.isFinite(value)) return;
     remoteControlLoading = true;
     try {
-      const status = await invoke<RemoteControlStatus>('remote_control_set_port', { port: value });
+      const status = await invoke<RemoteControlStatus>('v2_remote_control_set_port', { port: value });
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
@@ -1695,7 +1989,7 @@
     }
     remoteControlLoading = true;
     try {
-      const qr = await invoke<RemoteControlQr>('remote_control_get_pairing_qr');
+      const qr = await invoke<RemoteControlQr>('v2_remote_control_get_pairing_qr');
       remoteControlQrData = qr.qrDataUrl;
       remoteControlUrl = qr.url;
       remoteControlQrOpen = true;
@@ -1721,11 +2015,11 @@
 
     remoteControlLoading = true;
     try {
-      const qr = await invoke<RemoteControlQr>('remote_control_regenerate_token');
+      const qr = await invoke<RemoteControlQr>('v2_remote_control_regenerate_token');
       remoteControlQrData = qr.qrDataUrl;
       remoteControlUrl = qr.url;
       remoteControlQrOpen = true;
-      const status = await invoke<RemoteControlStatus>('remote_control_get_status');
+      const status = await invoke<RemoteControlStatus>('v2_remote_control_get_status');
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
@@ -1762,7 +2056,7 @@
   async function handleRemoteControlSecureChange(secure: boolean) {
     remoteControlLoading = true;
     try {
-      const status = await invoke<RemoteControlStatus>('remote_control_set_secure', { secure });
+      const status = await invoke<RemoteControlStatus>('v2_remote_control_set_secure', { secure });
       remoteControlStatus = status;
       remoteControlEnabled = status.enabled;
       remoteControlPort = status.port;
@@ -1782,7 +2076,7 @@
 
   async function handleShowDownloadsChange(enabled: boolean) {
     try {
-      await invoke('set_show_downloads_in_library', { show: enabled });
+      await invoke('v2_set_show_downloads_in_library', { show: enabled });
       showQobuzDownloadsInLibrary = enabled;
       // Notify LocalLibraryView to refresh
       notifyDownloadSettingsChanged();
@@ -1801,7 +2095,7 @@
     // Important for users with hardware sample rate limitations
     if (previousQuality !== quality) {
       try {
-        await invoke('clear_cache');
+        await invoke('v2_clear_cache');
         await loadCacheStats();
         showToast($t('settings.audio.qualityChangedCacheCleared'), 'success');
       } catch (err) {
@@ -1895,7 +2189,7 @@
       await setLocale(localeCode);
       // Clear artist cache to force refetch in new language
       try {
-        await invoke('clear_artist_cache');
+        await invoke('v2_clear_artist_cache');
         console.log('Artist cache cleared after language change');
       } catch (error) {
         console.error('Failed to clear artist cache:', error);
@@ -1909,7 +2203,7 @@
       localStorage.removeItem('qbz-locale');
       // Also clear artist cache
       try {
-        await invoke('clear_artist_cache');
+        await invoke('v2_clear_artist_cache');
         console.log('Artist cache cleared after language change');
       } catch (error) {
         console.error('Failed to clear artist cache:', error);
@@ -1930,6 +2224,9 @@
     streaming_only: boolean;
     limit_quality_to_device: boolean;
     device_max_sample_rate: number | null;
+    gapless_enabled: boolean;
+    pw_force_bitperfect: boolean;
+    sync_audio_on_startup: boolean;
   }
 
   interface BackendInfo {
@@ -1971,11 +2268,12 @@
    */
   async function reinitAndResume(device: string | null): Promise<void> {
     const wasPlaying = getIsPlaying();
-    await invoke('reinit_audio_device', { device });
+    // Reinit audio device (V2 only)
+    await invoke('v2_reinit_audio_device', { device });
     if (wasPlaying) {
       // Small delay to let the new stream initialize
       await new Promise(r => setTimeout(r, 150));
-      await invoke('resume_playback');
+      await invoke('v2_resume_playback');
     }
   }
 
@@ -1986,7 +2284,7 @@
       pipewireSinks = sinks;
 
       // Load hardware audio status
-      const hwStatus = await invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null);
+      const hwStatus = await invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null);
       hardwareStatus = hwStatus;
 
       console.log('[Audio] PipeWire sinks:', sinks.map(s => ({ name: s.name, desc: s.description })));
@@ -1998,7 +2296,7 @@
 
   async function loadBackends() {
     try {
-      const backends = await invoke<BackendInfo[]>('get_available_backends');
+      const backends = await invoke<BackendInfo[]>('v2_get_available_backends');
       availableBackends = backends;
       console.log('[Audio] Available backends:', backends);
     } catch (err) {
@@ -2008,7 +2306,7 @@
 
   async function loadAlsaPlugins() {
     try {
-      const plugins = await invoke<AlsaPluginInfo[]>('get_alsa_plugins');
+      const plugins = await invoke<AlsaPluginInfo[]>('v2_get_alsa_plugins');
       alsaPlugins = plugins;
       console.log('[Audio] ALSA plugins:', plugins);
     } catch (err) {
@@ -2019,20 +2317,39 @@
   async function loadBackendDevices(backendType: 'PipeWire' | 'Alsa' | 'Pulse') {
     isLoadingDevices = true;
     try {
-      const devices = await invoke<AudioDevice[]>('get_devices_for_backend', { backendType });
+      const devices = await invoke<AudioDevice[]>('v2_get_devices_for_backend', { backendType });
       backendDevices = devices;
       console.log(`[Audio] Devices for ${backendType}:`, devices);
+
+      // Fetch the name of the current default device for this backend
+      try {
+        const name = await invoke<string | null>('v2_get_default_device_name', { backendType });
+        defaultDeviceName = name;
+      } catch {
+        defaultDeviceName = null;
+      }
     } catch (err) {
       console.error(`Failed to load devices for ${backendType}:`, err);
       backendDevices = [];
+      defaultDeviceName = null;
     } finally {
       isLoadingDevices = false;
     }
   }
 
+  async function handleRefreshDevices() {
+    if (isLoadingDevices) return;
+    const backendType = selectedBackend === 'ALSA Direct' ? 'Alsa' :
+                        selectedBackend === 'PipeWire' ? 'PipeWire' :
+                        selectedBackend === 'PulseAudio' ? 'Pulse' : null;
+    if (backendType) {
+      await loadBackendDevices(backendType);
+    }
+  }
+
   async function loadFlatpakStatus() {
     try {
-      isFlatpak = await invoke<boolean>('is_running_in_flatpak');
+      isFlatpak = await invoke<boolean>('v2_is_running_in_flatpak');
       if (isFlatpak) {
         flatpakHelpText = await invoke<string>('get_flatpak_help_text');
       }
@@ -2043,7 +2360,7 @@
 
   async function loadAudioSettings() {
     try {
-      const settings = await invoke<AudioSettings>('get_audio_settings');
+      const settings = await invoke<AudioSettings>('v2_get_audio_settings');
       // Convert stored device name to description for display
       if (settings.output_device) {
         // Look up the friendly description from the device name
@@ -2054,6 +2371,8 @@
       }
       exclusiveMode = settings.exclusive_mode;
       dacPassthrough = settings.dac_passthrough;
+      pwForceBitperfect = settings.pw_force_bitperfect;
+      syncAudioOnStartup = settings.sync_audio_on_startup;
 
       // Load backend and plugin settings
       if (settings.backend_type) {
@@ -2071,7 +2390,7 @@
         if (settings.output_device) {
           const device = backendDevices.find(d => d.id === settings.output_device);
           if (device) {
-            // Use description from aplay -L if available (ALSA), otherwise translate
+            // Use backend-provided description if available (ALSA), otherwise translate
             outputDevice = (device.description && settings.backend_type === 'Alsa')
               ? device.description
               : (needsTranslation(device.name) ? getDevicePrettyName(device.name) : device.name);
@@ -2080,7 +2399,7 @@
             console.warn(`[Audio] Saved device '${settings.output_device}' not found in current enumeration. Resetting to System Default.`);
             outputDevice = 'System Default';
             try {
-              await invoke('set_audio_output_device', { device: null });
+              await invoke('v2_set_audio_output_device', { device: null });
               console.log('[Audio] Cleared stale device from database');
             } catch (err) {
               console.error('[Audio] Failed to clear stale device:', err);
@@ -2106,8 +2425,12 @@
       streamFirstTrack = settings.stream_first_track ?? false;
       streamBufferSeconds = settings.stream_buffer_seconds ?? 3;
       streamingOnly = settings.streaming_only ?? false;
-      limitQualityToDevice = settings.limit_quality_to_device ?? true;
+      limitQualityToDevice = settings.limit_quality_to_device ?? false;
       gaplessPlayback = settings.gapless_enabled ?? true;
+
+      // Load per-device sample rate limit
+      const deviceId = settings.output_device ?? 'default';
+      await loadDeviceSampleRateLimit(deviceId);
     } catch (err) {
       console.error('Failed to load audio settings:', err);
     }
@@ -2118,7 +2441,7 @@
 
     // Convert description back to device name for storage
     const deviceName = sinkDescriptionToName.get(description);
-    const deviceToStore = description === 'System Default' ? null : deviceName;
+    const deviceToStore = description === 'System Default' ? null : (deviceName ?? null);
 
     // Try to find max sample rate from backendDevices if available
     // This enables quality limiting for PipeWire mode when possible
@@ -2129,9 +2452,9 @@
 
     try {
       // Save the preference
-      await invoke('set_audio_output_device', { device: deviceToStore });
+      await invoke('v2_set_audio_output_device', { device: deviceToStore });
       // Store device's max sample rate for quality limiting
-      await invoke('set_audio_device_max_sample_rate', { rate: maxSampleRate });
+      await invoke('v2_set_audio_device_max_sample_rate', { rate: maxSampleRate });
 
       // Reinitialize audio with the selected device
       // CRITICAL: Pass the actual CPAL device name, not null
@@ -2147,7 +2470,7 @@
   async function handleExclusiveModeChange(enabled: boolean) {
     exclusiveMode = enabled;
     try {
-      await invoke('set_audio_exclusive_mode', { enabled });
+      await invoke('v2_set_audio_exclusive_mode', { enabled });
 
       // Reinitialize audio with currently selected device
       const deviceName = getCurrentDeviceSinkName();
@@ -2164,12 +2487,19 @@
     // Gapless not compatible with DAC Passthrough
     if (enabled && gaplessPlayback) {
       gaplessPlayback = false;
-      await invoke('set_audio_gapless_enabled', { enabled: false });
+      await invoke('v2_set_audio_gapless_enabled', { enabled: false });
       console.log('[Audio] Disabled gapless playback (not compatible with DAC Passthrough)');
     }
 
+    // Disabling DAC Passthrough also disables PW force bit-perfect
+    if (!enabled && pwForceBitperfect) {
+      pwForceBitperfect = false;
+      await invoke('v2_set_audio_pw_force_bitperfect', { enabled: false });
+      console.log('[Audio] Disabled PW force bit-perfect (requires DAC Passthrough)');
+    }
+
     try {
-      await invoke('set_audio_dac_passthrough', { enabled });
+      await invoke('v2_set_audio_dac_passthrough', { enabled });
 
       // Reinitialize audio with currently selected device
       const deviceName = getCurrentDeviceSinkName();
@@ -2177,6 +2507,35 @@
       console.log('[Audio] DAC passthrough changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change DAC passthrough:', err);
+    }
+  }
+
+  async function handlePwForceBitperfectChange(enabled: boolean) {
+    pwForceBitperfect = enabled;
+
+    // Auto-enable DAC Passthrough when turning on bit-perfect
+    if (enabled && !dacPassthrough) {
+      await handleDacPassthroughChange(true);
+    }
+
+    try {
+      await invoke('v2_set_audio_pw_force_bitperfect', { enabled });
+
+      const deviceName = getCurrentDeviceSinkName();
+      await reinitAndResume(deviceName);
+      console.log('[Audio] PW force bit-perfect changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change PW force bit-perfect:', err);
+    }
+  }
+
+  async function handleSyncAudioOnStartupChange(enabled: boolean) {
+    syncAudioOnStartup = enabled;
+    try {
+      await invoke('v2_set_sync_audio_on_startup', { enabled });
+      console.log('[Audio] Sync audio on startup changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change sync audio on startup:', err);
     }
   }
 
@@ -2188,11 +2547,16 @@
     const backendType = backendName === 'Auto' ? null : backend?.backend_type ?? null;
 
     // Auto-disable incompatible features
-    // DAC Passthrough only works with PipeWire
+    // DAC Passthrough and PW force bit-perfect only work with PipeWire
     if (backendName !== 'PipeWire') {
+      if (pwForceBitperfect) {
+        pwForceBitperfect = false;
+        await invoke('v2_set_audio_pw_force_bitperfect', { enabled: false });
+        console.log('[Audio] Disabled PW force bit-perfect (only compatible with PipeWire)');
+      }
       if (dacPassthrough) {
         dacPassthrough = false;
-        await invoke('set_audio_dac_passthrough', { enabled: false });
+        await invoke('v2_set_audio_dac_passthrough', { enabled: false });
         console.log('[Audio] Disabled DAC Passthrough (only compatible with PipeWire)');
       }
     }
@@ -2201,7 +2565,7 @@
     if (backendName !== 'ALSA Direct') {
       if (exclusiveMode) {
         exclusiveMode = false;
-        await invoke('set_audio_exclusive_mode', { enabled: false });
+        await invoke('v2_set_audio_exclusive_mode', { enabled: false });
         console.log('[Audio] Disabled exclusive mode (only compatible with ALSA Direct)');
       }
     }
@@ -2210,14 +2574,14 @@
     if (backendName === 'ALSA Direct') {
       if (gaplessPlayback) {
         gaplessPlayback = false;
-        await invoke('set_audio_gapless_enabled', { enabled: false });
+        await invoke('v2_set_audio_gapless_enabled', { enabled: false });
         console.log('[Audio] Disabled gapless playback (not compatible with ALSA Direct)');
       }
     }
 
     try {
       // Save backend preference
-      await invoke('set_audio_backend_type', { backendType });
+      await invoke('v2_set_audio_backend_type', { backendType });
       console.log('[Audio] Backend changed:', backendName, '(type:', backendType ?? 'auto', ')');
 
       // Load devices for new backend
@@ -2231,7 +2595,7 @@
 
       // Reset to default device when switching backends (always)
       outputDevice = 'System Default';
-      await invoke('set_audio_output_device', { device: null });
+      await invoke('v2_set_audio_output_device', { device: null });
 
       // Reinitialize audio - recreates stream with new backend.
       // Position and audio data are preserved so the user can resume.
@@ -2249,7 +2613,7 @@
     const plugin = pluginInfo?.plugin ?? null;
 
     try {
-      await invoke('set_audio_alsa_plugin', { plugin });
+      await invoke('v2_set_audio_alsa_plugin', { plugin });
       console.log('[Audio] ALSA plugin changed:', pluginName, '(type:', plugin ?? 'none', ')');
 
       // Reinitialize audio if ALSA backend is active
@@ -2265,7 +2629,7 @@
   async function handleAlsaHardwareVolumeChange(enabled: boolean) {
     alsaHardwareVolume = enabled;
     try {
-      await invoke('set_audio_alsa_hardware_volume', { enabled });
+      await invoke('v2_set_audio_alsa_hardware_volume', { enabled });
       console.log('[Audio] ALSA hardware volume changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change ALSA hardware volume:', err);
@@ -2275,7 +2639,7 @@
   async function handleStreamFirstTrackChange(enabled: boolean) {
     streamFirstTrack = enabled;
     try {
-      await invoke('set_audio_stream_first_track', { enabled });
+      await invoke('v2_set_audio_stream_first_track', { enabled });
       console.log('[Audio] Stream first track changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change stream first track:', err);
@@ -2287,7 +2651,7 @@
     const clamped = Math.max(1, Math.min(10, Math.round(seconds)));
     streamBufferSeconds = clamped;
     try {
-      await invoke('set_audio_stream_buffer_seconds', { seconds: clamped });
+      await invoke('v2_set_audio_stream_buffer_seconds', { seconds: clamped });
       console.log('[Audio] Stream buffer seconds changed:', clamped);
     } catch (err) {
       console.error('[Audio] Failed to change stream buffer seconds:', err);
@@ -2300,12 +2664,12 @@
     // Gapless not compatible with streaming-only
     if (enabled && gaplessPlayback) {
       gaplessPlayback = false;
-      await invoke('set_audio_gapless_enabled', { enabled: false });
+      await invoke('v2_set_audio_gapless_enabled', { enabled: false });
       console.log('[Audio] Disabled gapless playback (not compatible with streaming-only)');
     }
 
     try {
-      await invoke('set_audio_streaming_only', { enabled });
+      await invoke('v2_set_audio_streaming_only', { enabled });
       console.log('[Audio] Streaming-only mode changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change streaming-only mode:', err);
@@ -2315,10 +2679,35 @@
   async function handleLimitQualityToDeviceChange(enabled: boolean) {
     limitQualityToDevice = enabled;
     try {
-      await invoke('set_audio_limit_quality_to_device', { enabled });
+      await invoke('v2_set_audio_limit_quality_to_device', { enabled });
       console.log('[Audio] Limit quality to device changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change limit quality to device:', err);
+    }
+  }
+
+  async function handleDeviceMaxSampleRateChange(rate: number | null) {
+    deviceMaxSampleRate = rate;
+    // Get current device ID
+    const device = deviceByDisplayName.get(outputDevice);
+    const deviceId = outputDevice === 'System Default' ? 'default' : device?.id ?? 'default';
+
+    try {
+      await invoke('v2_set_device_sample_rate_limit', { deviceId, rate });
+      console.log('[Audio] Device max sample rate changed:', deviceId, rate);
+    } catch (err) {
+      console.error('[Audio] Failed to change device max sample rate:', err);
+    }
+  }
+
+  async function loadDeviceSampleRateLimit(deviceId: string) {
+    try {
+      const rate = await invoke<number | null>('v2_get_device_sample_rate_limit', { deviceId });
+      deviceMaxSampleRate = rate;
+      console.log('[Audio] Loaded sample rate limit for', deviceId, ':', rate);
+    } catch (err) {
+      console.error('[Audio] Failed to load device sample rate limit:', err);
+      deviceMaxSampleRate = null;
     }
   }
 
@@ -2336,9 +2725,11 @@
     }
 
     try {
-      await invoke('set_audio_output_device', { device: deviceId });
+      await invoke('v2_set_audio_output_device', { device: deviceId });
       // Store device's max sample rate for quality limiting
-      await invoke('set_audio_device_max_sample_rate', { rate: maxSampleRate });
+      await invoke('v2_set_audio_device_max_sample_rate', { rate: maxSampleRate });
+      // Load per-device sample rate limit for the new device
+      await loadDeviceSampleRateLimit(deviceId ?? 'default');
       // Reinitialize audio - position and audio data preserved for resume.
       await reinitAndResume(deviceId);
       console.log('[Audio] Backend device changed:', deviceName, '(id:', deviceId ?? 'default', ', max_rate:', maxSampleRate ?? 'unknown', ')');
@@ -2350,7 +2741,7 @@
   async function handleGaplessPlaybackChange(enabled: boolean) {
     gaplessPlayback = enabled;
     try {
-      await invoke('set_audio_gapless_enabled', { enabled });
+      await invoke('v2_set_audio_gapless_enabled', { enabled });
       console.log('[Audio] Gapless playback changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change gapless playback:', err);
@@ -2365,7 +2756,7 @@
       dacPassthrough = false;
       console.log('[Audio] Crossfade enabled: disabled DAC passthrough');
       try {
-        await invoke('set_audio_dac_passthrough', { enabled: false });
+        await invoke('v2_set_audio_dac_passthrough', { enabled: false });
 
         // Reinitialize audio with currently selected device
         const deviceName = getCurrentDeviceSinkName();
@@ -2378,7 +2769,7 @@
 
   async function loadCacheStats() {
     try {
-      cacheStats = await invoke<CacheStats>('get_cache_stats');
+      cacheStats = await invoke<CacheStats>('v2_get_cache_stats');
     } catch (err) {
       console.error('Failed to load cache stats:', err);
     }
@@ -2386,7 +2777,7 @@
 
   async function loadLyricsCacheStats() {
     try {
-      const stats = await invoke<{ entries: number; sizeBytes: number }>('lyrics_get_cache_stats');
+      const stats = await invoke<{ entries: number; sizeBytes: number }>('v2_lyrics_get_cache_stats');
       lyricsCacheStats = stats;
     } catch (err) {
       console.error('Failed to load lyrics cache stats:', err);
@@ -2404,7 +2795,7 @@
 
   async function loadDownloadSettings() {
     try {
-      const settings = await invoke<{download_root: string, show_in_library: boolean}>('get_download_settings');
+      const settings = await invoke<{download_root: string, show_in_library: boolean}>('v2_get_download_settings');
       showQobuzDownloadsInLibrary = settings.show_in_library;
     } catch (err) {
       console.error('Failed to load download settings:', err);
@@ -2418,8 +2809,10 @@
       console.log('[Settings] Loaded preferences:', prefs);
       autoplayMode = prefs.autoplay_mode;
       showContextIcon = prefs.show_context_icon;
+      persistSession = prefs.persist_session;
       console.log('[Settings] Set autoplayMode to:', autoplayMode);
       console.log('[Settings] Set showContextIcon to:', showContextIcon);
+      console.log('[Settings] Set persistSession to:', persistSession);
     } catch (err) {
       console.error('Failed to load playback preferences:', err);
     }
@@ -2433,7 +2826,7 @@
 
   async function loadTraySettings() {
     try {
-      const settings = await invoke<TraySettings>('get_tray_settings');
+      const settings = await invoke<TraySettings>('v2_get_tray_settings');
       enableTray = settings.enable_tray;
       minimizeToTray = settings.minimize_to_tray;
       closeToTray = settings.close_to_tray;
@@ -2444,7 +2837,7 @@
 
   async function handleEnableTrayChange(value: boolean) {
     try {
-      await invoke('set_enable_tray', { value });
+      await invoke('v2_set_enable_tray', { value });
       enableTray = value;
       showToast($t('settings.appearance.tray.enableTrayDesc'), 'info');
     } catch (err) {
@@ -2455,7 +2848,7 @@
 
   async function handleMinimizeToTrayChange(value: boolean) {
     try {
-      await invoke('set_minimize_to_tray', { value });
+      await invoke('v2_set_minimize_to_tray', { value });
       minimizeToTray = value;
     } catch (err) {
       console.error('Failed to set minimize to tray:', err);
@@ -2465,7 +2858,7 @@
 
   async function handleCloseToTrayChange(value: boolean) {
     try {
-      await invoke('set_close_to_tray', { value });
+      await invoke('v2_set_close_to_tray', { value });
       closeToTray = value;
     } catch (err) {
       console.error('Failed to set close to tray:', err);
@@ -2497,9 +2890,20 @@
     }
   }
 
+  async function handlePersistSessionChange(persist: boolean) {
+    console.log('[Settings] Changing persist session to:', persist);
+    try {
+      await setPersistSession(persist);
+      persistSession = persist;
+      console.log('[Settings] Persist session saved successfully');
+    } catch (err) {
+      console.error('[Settings] Failed to set persist session:', err);
+    }
+  }
+
   async function checkLegacyCachedFiles() {
     try {
-      const result = await invoke<{has_legacy_files: boolean, total_tracks: number}>('detect_legacy_cached_files');
+      const result = await invoke<{has_legacy_files: boolean, total_tracks: number}>('v2_detect_legacy_cached_files');
       if (result.has_legacy_files && result.total_tracks > 0) {
         legacyTracksCount = result.total_tracks;
         showMigrationModal = true;
@@ -2525,7 +2929,7 @@
         repaired_tracks: number;
         skipped_tracks: number;
         failed_tracks: string[];
-      }>('library_backfill_downloads');
+      }>('v2_library_backfill_downloads');
 
       const message = `Repair complete!\n\nAdded: ${report.added_tracks}\nRepaired: ${report.repaired_tracks}\nSkipped: ${report.skipped_tracks}\nFailed: ${report.failed_tracks.length}`;
 
@@ -2556,7 +2960,7 @@
 
   async function handleOpenCacheFolder() {
     try {
-      await invoke('open_offline_cache_folder');
+      await invoke('v2_open_offline_cache_folder');
     } catch (err) {
       console.error('Failed to open cache folder:', err);
       showToast($t('toast.failedOpenCacheFolder'), 'error');
@@ -2567,7 +2971,7 @@
     if (isClearing) return;
     isClearing = true;
     try {
-      await invoke('clear_cache');
+      await invoke('v2_clear_cache');
       await loadCacheStats();
     } catch (err) {
       console.error('Failed to clear cache:', err);
@@ -2594,7 +2998,7 @@
     if (isClearingMusicBrainz) return;
     isClearingMusicBrainz = true;
     try {
-      await invoke('musicbrainz_clear_cache');
+      await invoke('v2_musicbrainz_clear_cache');
       console.log('MusicBrainz cache cleared');
       await loadMusicBrainzCacheStats();
     } catch (err) {
@@ -2606,7 +3010,7 @@
 
   async function loadMusicBrainzCacheStats() {
     try {
-      musicBrainzCacheStats = await invoke('musicbrainz_get_cache_stats');
+      musicBrainzCacheStats = await invoke('v2_musicbrainz_get_cache_stats');
     } catch (err) {
       console.error('Failed to load MusicBrainz cache stats:', err);
       musicBrainzCacheStats = null;
@@ -2615,7 +3019,7 @@
 
   async function loadVectorStoreStats() {
     try {
-      vectorStoreStats = await invoke('get_vector_store_stats');
+      vectorStoreStats = await invoke('v2_get_vector_store_stats');
     } catch (err) {
       console.error('Failed to load vector store stats:', err);
       vectorStoreStats = null;
@@ -2626,7 +3030,7 @@
     if (isClearingVectorStore) return;
     isClearingVectorStore = true;
     try {
-      await invoke('clear_vector_store');
+      await invoke('v2_clear_vector_store');
       console.log('Artist vector store cleared');
       await loadVectorStoreStats();
     } catch (err) {
@@ -2638,7 +3042,7 @@
 
   async function loadArtworkCacheStats() {
     try {
-      artworkCacheStats = await invoke('library_get_cache_stats');
+      artworkCacheStats = await invoke('v2_library_get_cache_stats');
     } catch (err) {
       console.error('Failed to load artwork cache stats:', err);
       artworkCacheStats = null;
@@ -2650,8 +3054,8 @@
     isClearingArtwork = true;
     try {
       // Clear both legacy artwork cache and new thumbnails cache
-      await invoke('library_clear_artwork_cache');
-      await invoke('library_clear_thumbnails_cache');
+      await invoke('v2_library_clear_artwork_cache');
+      await invoke('v2_library_clear_thumbnails_cache');
       console.log('Artwork caches cleared');
       await loadArtworkCacheStats();
     } catch (err) {
@@ -2667,12 +3071,12 @@
     try {
       // Clear all caches in parallel
       await Promise.all([
-        invoke('clear_cache'),
+        invoke('v2_clear_cache'),
         clearLyricsCache(),
-        invoke('musicbrainz_clear_cache'),
-        invoke('clear_vector_store'),
-        invoke('library_clear_artwork_cache'),
-        invoke('library_clear_thumbnails_cache')
+        invoke('v2_musicbrainz_clear_cache'),
+        invoke('v2_clear_vector_store'),
+        invoke('v2_library_clear_artwork_cache'),
+        invoke('v2_library_clear_thumbnails_cache')
       ]);
       console.log('All caches cleared');
       // Reload all stats
@@ -2699,13 +3103,15 @@
     if (!confirmed) return;
     isResettingAudio = true;
     try {
-      await invoke('stop_playback');
-      await invoke('reset_audio_settings');
-      await invoke('reinit_audio_device', { device: null });
+      await invoke('v2_stop_playback');
+      await invoke('v2_reset_audio_settings');
+      // Reinit audio device (V2 only)
+      await invoke('v2_reinit_audio_device', { device: null });
       // Reset all audio UI state to defaults
       outputDevice = 'System Default';
       exclusiveMode = false;
       dacPassthrough = false;
+      pwForceBitperfect = false;
       selectedBackend = 'Auto';
       selectedAlsaPlugin = 'hw (Direct Hardware)';
       alsaHardwareVolume = false;
@@ -2735,7 +3141,7 @@
     if (!confirmed) return;
     isFactoryResetting = true;
     try {
-      await invoke('factory_reset');
+      await invoke('v2_factory_reset');
       onLogout?.();
     } catch (err) {
       console.error('Factory reset failed:', err);
@@ -2746,7 +3152,7 @@
 
   async function handleForceX11Change(enabled: boolean) {
     try {
-      await invoke('set_force_x11', { enabled });
+      await invoke('v2_set_force_x11', { enabled });
       forceX11 = enabled;
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {
@@ -2758,7 +3164,7 @@
   async function handleGdkScaleChange() {
     try {
       const value = gdkScale.trim() || null;
-      await invoke('set_gdk_scale', { value });
+      await invoke('v2_set_gdk_scale', { value });
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {
       console.error('Failed to set gdk_scale:', err);
@@ -2769,7 +3175,7 @@
   async function handleGdkDpiScaleChange() {
     try {
       const value = gdkDpiScale.trim() || null;
-      await invoke('set_gdk_dpi_scale', { value });
+      await invoke('v2_set_gdk_dpi_scale', { value });
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {
       console.error('Failed to set gdk_dpi_scale:', err);
@@ -2779,7 +3185,7 @@
 
   async function handleHardwareAccelerationChange(enabled: boolean) {
     try {
-      await invoke('set_hardware_acceleration', { enabled });
+      await invoke('v2_set_hardware_acceleration', { enabled });
       hardwareAcceleration = enabled;
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {
@@ -2788,9 +3194,63 @@
     }
   }
 
+  function normalizeScaleValue(value: string): string {
+    return value.trim() || '';
+  }
+
+  function getActiveCompositionProfileId(): CompositionProfileId | null {
+    const currentScale = normalizeScaleValue(gdkScale);
+    const currentDpiScale = normalizeScaleValue(gdkDpiScale);
+    for (const profile of compositionProfiles) {
+      if (
+        profile.forceX11 === forceX11
+        && normalizeScaleValue(profile.gdkScale) === currentScale
+        && normalizeScaleValue(profile.gdkDpiScale) === currentDpiScale
+      ) {
+        return profile.id;
+      }
+    }
+    return null;
+  }
+
+  const activeCompositionProfileId = $derived(getActiveCompositionProfileId());
+
+  async function applyCompositionProfile(profileId: CompositionProfileId) {
+    const profile = compositionProfiles.find((candidate) => candidate.id === profileId);
+    if (!profile) return;
+
+    const previousForceX11 = forceX11;
+    const previousGdkScale = gdkScale;
+    const previousGdkDpiScale = gdkDpiScale;
+
+    // Optimistic UI update so toggles/inputs reflect the selected profile immediately
+    forceX11 = profile.forceX11;
+    gdkScale = profile.gdkScale;
+    gdkDpiScale = profile.gdkDpiScale;
+
+    try {
+      await invoke('v2_set_force_x11', { enabled: profile.forceX11 });
+      await invoke('v2_set_gdk_scale', { value: profile.gdkScale || null });
+      await invoke('v2_set_gdk_dpi_scale', { value: profile.gdkDpiScale || null });
+
+      showToast(
+        $t('settings.appearance.composition.profiles.applied', { values: { profile: $t(profile.labelKey) } }),
+        'info'
+      );
+      showToast($t('settings.developer.restartRequired'), 'info');
+    } catch (err) {
+      // Roll back UI state if persistence fails
+      forceX11 = previousForceX11;
+      gdkScale = previousGdkScale;
+      gdkDpiScale = previousGdkDpiScale;
+      console.error('Failed to apply composition profile:', err);
+      showToast(String(err), 'error');
+    }
+  }
+
   async function handleForceDmabufChange(enabled: boolean) {
     try {
-      await invoke('set_developer_force_dmabuf', { enabled });
+      await invoke('v2_set_developer_force_dmabuf', { enabled });
       forceDmabuf = enabled;
       showToast($t('settings.developer.restartRequired'), 'info');
     } catch (err) {
@@ -2831,10 +3291,26 @@
   }
 
   function handleThemeChange(newTheme: string) {
+    // If switching away from System, disable auto-theme
+    if (theme === 'System' && newTheme !== 'System') {
+      disableAutoTheme();
+      autoThemeSwatches = {};
+      autoThemeDE = null;
+      autoThemeError = null;
+      autoThemeFailedModal = false;
+    }
+
     theme = newTheme;
-    const themeValue = themeMap[newTheme] || '';
-    applyTheme(themeValue);
-    localStorage.setItem('qbz-theme', themeValue);
+
+    if (newTheme === 'System') {
+      // Default source is 'system' (accent first, wallpaper fallback)
+      autoThemeSource = 'system';
+      void handleAutoThemeGenerate();
+    } else {
+      const themeValue = themeMap[newTheme] || '';
+      applyTheme(themeValue);
+      localStorage.setItem('qbz-theme', themeValue);
+    }
   }
 
   async function handleZoomChange(value: string) {
@@ -2929,8 +3405,36 @@
         onchange={handleQualityChange}
       />
     </div>
-    <!-- NOTE: limitQualityToDevice hidden in 1.1.9 — was causing incorrect downgrades (#45) -->
-    <!-- The setting is preserved but hidden until the detection logic is reliable. -->
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.limitQualityToDevice')}</span>
+        <span class="setting-desc">{$t('settings.audio.limitQualityToDeviceDesc')}</span>
+      </div>
+      <Toggle enabled={limitQualityToDevice} onchange={handleLimitQualityToDeviceChange} />
+    </div>
+    {#if limitQualityToDevice}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.maxSampleRate')}</span>
+        <span class="setting-desc">{$t('settings.audio.maxSampleRateDesc')}</span>
+      </div>
+      <Dropdown
+        value={deviceMaxSampleRate ? sampleRateOptions.find(o => o.value === deviceMaxSampleRate)?.label ?? 'No limit' : 'No limit'}
+        options={['No limit', ...sampleRateOptions.map(o => o.label)]}
+        onchange={(label) => {
+          if (label === 'No limit') {
+            handleDeviceMaxSampleRateChange(null);
+          } else {
+            const option = sampleRateOptions.find(o => o.label === label);
+            if (option) handleDeviceMaxSampleRateChange(option.value);
+          }
+        }}
+        wide
+        expandLeft
+        compact
+      />
+    </div>
+    {/if}
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.audioBackend')}</span>
@@ -2968,6 +3472,11 @@
       <div class="setting-info">
         <span class="setting-label">{$t('settings.audio.outputDevice')}</span>
         <span class="setting-desc">{$t('settings.audio.outputDeviceDesc')}</span>
+        {#if defaultDeviceName}
+          <span class="setting-desc-secondary">
+            {$t('settings.audio.systemDefaultIs', { values: { device: defaultDeviceName } })}
+          </span>
+        {/if}
       </div>
       {#if isLoadingDevices}
         <span class="loading-text">{$t('settings.audio.loadingDevices')}</span>
@@ -2983,30 +3492,48 @@
           />
           <button
             class="help-icon-btn"
-            onclick={() => showAlsaUtilsHelpModal = true}
-            title={$t('settings.audio.helpBitPerfect')}
+            onclick={handleRefreshDevices}
+            title={$t('settings.audio.refreshDevices')}
           >
-            <HelpCircle size={16} />
+            <RefreshCw size={16} />
           </button>
         </div>
       {:else if selectedBackend === 'PipeWire'}
-        <DeviceDropdown
-          value={outputDevice}
-          devices={groupedDeviceOptions}
-          onchange={handleBackendDeviceChange}
-          backend="pipewire"
-          wide
-          expandLeft
-        />
+        <div class="dropdown-with-help">
+          <DeviceDropdown
+            value={outputDevice}
+            devices={groupedDeviceOptions}
+            onchange={handleBackendDeviceChange}
+            backend="pipewire"
+            wide
+            expandLeft
+          />
+          <button
+            class="help-icon-btn"
+            onclick={handleRefreshDevices}
+            title={$t('settings.audio.refreshDevices')}
+          >
+            <RefreshCw size={16} />
+          </button>
+        </div>
       {:else}
-        <Dropdown
-          value={outputDevice}
-          options={deviceOptions}
-          onchange={handleBackendDeviceChange}
-          wide
-          expandLeft
-          compact
-        />
+        <div class="dropdown-with-help">
+          <Dropdown
+            value={outputDevice}
+            options={deviceOptions}
+            onchange={handleBackendDeviceChange}
+            wide
+            expandLeft
+            compact
+          />
+          <button
+            class="help-icon-btn"
+            onclick={handleRefreshDevices}
+            title={$t('settings.audio.refreshDevices')}
+          >
+            <RefreshCw size={16} />
+          </button>
+        </div>
       {/if}
     </div>
     {#if showAlsaPluginSelector}
@@ -3061,6 +3588,25 @@
       </div>
     </div>
     {/if}
+    {#if dacPassthrough && selectedBackend === 'PipeWire'}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.pwForceBitperfect')}</span>
+        <span class="setting-desc">{$t('settings.audio.pwForceBitperfectDesc')}</span>
+      </div>
+      <Toggle enabled={pwForceBitperfect} onchange={handlePwForceBitperfectChange} />
+    </div>
+    {#if pwForceBitperfect}
+    <small class="setting-note">{$t('settings.audio.pwForceBitperfectNote')}</small>
+    {/if}
+    {/if}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.syncAudioOnStartup')}</span>
+        <span class="setting-desc">{$t('settings.audio.syncAudioOnStartupDesc')}</span>
+      </div>
+      <Toggle enabled={syncAudioOnStartup} onchange={handleSyncAudioOnStartupChange} />
+    </div>
     <div class="setting-row">
       <span class="setting-label">{$t('settings.audio.currentSampleRate')}</span>
       <span class="setting-value" class:muted={!hardwareStatus?.is_active}>
@@ -3105,6 +3651,13 @@
         <span class="setting-desc">{$t('settings.playback.showContextIconTooltip')}</span>
       </div>
       <Toggle enabled={showContextIcon} onchange={handleShowContextIconChange} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.playback.persistSession')}</span>
+        <span class="setting-desc">{$t('settings.playback.persistSessionDesc')}</span>
+      </div>
+      <Toggle enabled={persistSession} onchange={handlePersistSessionChange} />
     </div>
     <div class="setting-row">
       <div class="setting-info">
@@ -3256,12 +3809,123 @@
         />
       </div>
     </div>
+
+    <!-- Auto-Theme generating overlay -->
+    {#if autoThemeGenerating}
+      <div class="auto-theme-overlay">
+        <div class="auto-theme-overlay-content">
+          <Loader2 size={32} class="spinner" />
+          <span>{$t('settings.appearance.autoThemeGenerating')}</span>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Auto-Theme failure modal -->
+    {#if autoThemeFailedModal}
+      <div class="auto-theme-modal-backdrop" role="presentation" onclick={dismissAutoThemeFailedModal}>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="auto-theme-modal" onclick={(e) => e.stopPropagation()}>
+          <h3>{$t('settings.appearance.autoThemeError')}</h3>
+          <p class="auto-theme-modal-message">{autoThemeFailedMessage}</p>
+          <p class="auto-theme-modal-hint">{$t('settings.appearance.autoThemeFailedHint')}</p>
+          <div class="auto-theme-modal-actions">
+            <button class="btn-secondary" onclick={dismissAutoThemeFailedModal}>
+              {$t('actions.ok')}
+            </button>
+            <button class="btn-primary" onclick={handleAutoThemeFailedSelectImage}>
+              {$t('settings.appearance.autoThemeSelectImage')}
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Auto-Theme controls (visible when System theme is selected) -->
+    {#if theme === 'System'}
+      <div class="auto-theme-panel">
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">{$t('settings.appearance.autoThemeSource')}</span>
+            <span class="setting-desc">{$t('settings.appearance.autoThemeDesc')}</span>
+          </div>
+          <Dropdown
+            value={autoThemeSourceOptions.find(opt => opt.value === autoThemeSource) ? $t(autoThemeSourceOptions.find(opt => opt.value === autoThemeSource)!.labelKey) : ''}
+            options={autoThemeSourceOptions.map(opt => $t(opt.labelKey))}
+            onchange={handleAutoThemeSourceChange}
+          />
+        </div>
+
+        {#if autoThemeSource === 'image'}
+          <div class="setting-row">
+            <span class="setting-label">
+              {#if autoThemeCustomPath}
+                {autoThemeCustomPath.split('/').pop()}
+              {:else}
+                {$t('settings.appearance.autoThemeSelectImage')}
+              {/if}
+            </span>
+            <button class="btn-secondary" onclick={handleAutoThemeSelectImage}>
+              {$t('settings.appearance.autoThemeSelectImage')}
+            </button>
+          </div>
+        {/if}
+
+        {#if autoThemeDE}
+          <div class="auto-theme-status">
+            <span>{$t('settings.appearance.autoThemeDetectedDE', { values: { de: autoThemeDE } })}</span>
+            <span class="auto-theme-experimental">{$t('settings.appearance.autoThemeExperimental')}</span>
+          </div>
+        {/if}
+
+        {#if Object.keys(autoThemeSwatches).length > 0}
+          <div class="auto-theme-palette">
+            {#each EDITABLE_THEME_VARS as entry}
+              {#if autoThemeSwatches[entry.varName]}
+                <label class="palette-swatch-wrapper" title={$t(entry.labelKey)}>
+                  <div
+                    class="palette-swatch"
+                    style="background-color: {autoThemeSwatches[entry.varName]}"
+                  ></div>
+                  <span class="palette-swatch-label">{$t(entry.labelKey)}</span>
+                  <input
+                    type="color"
+                    class="palette-swatch-input"
+                    value={autoThemeSwatches[entry.varName]}
+                    oninput={(ev) => {
+                      const hex = ev.currentTarget.value;
+                      autoThemeSwatches[entry.varName] = hex;
+                      updateThemeVariable(entry.varName, hex);
+                    }}
+                  />
+                </label>
+              {/if}
+            {/each}
+          </div>
+        {/if}
+
+        <div class="setting-row">
+          <button class="btn-secondary" onclick={handleAutoThemeGenerate} disabled={autoThemeGenerating}>
+            <RefreshCw size={14} />
+            <span>{$t('settings.appearance.autoThemeRegenerate')}</span>
+          </button>
+        </div>
+      </div>
+    {/if}
+
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.language')}</span>
       <Dropdown
         value={language}
         options={availableLanguages}
         onchange={handleLanguageChange}
+      />
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">{$t('settings.appearance.fontFamily')}</span>
+      <Dropdown
+        value={selectedFont}
+        options={fontOptions}
+        onchange={handleFontChange}
       />
     </div>
     <div class="setting-row">
@@ -3302,6 +3966,25 @@
         onchange={handleImmersiveViewChange}
       />
     </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.startupPage')}</span>
+        <span class="setting-desc">{$t('settings.appearance.startupPageDesc')}</span>
+      </div>
+      <Dropdown
+        value={getStartupPageDisplayValue()}
+        options={getStartupPageOptions()}
+        onchange={handleStartupPageChange}
+      />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.showPurchases')}</span>
+        <span class="setting-desc">{$t('settings.appearance.showPurchasesDesc')}</span>
+      </div>
+      <Toggle enabled={purchasesEnabled} onchange={handlePurchasesToggle} />
+    </div>
 
     <!-- Composition subsection (collapsible) -->
     <div class="collapsible-section composition-subsection">
@@ -3333,6 +4016,24 @@
           <div>
             <span>{$t('settings.appearance.composition.recoveryNote')}</span>
             <code class="recovery-cmd">{$t('settings.appearance.composition.recoveryCmd')}</code>
+          </div>
+        </div>
+
+        <div class="composition-profile-section">
+          <span class="composition-profile-title">{$t('settings.appearance.composition.profiles.title')}</span>
+          <p class="section-note">{$t('settings.appearance.composition.profiles.helpText')}</p>
+          <div class="composition-profile-grid">
+            {#each compositionProfiles as profile (profile.id)}
+              <button
+                class="composition-profile-card"
+                class:active={activeCompositionProfileId === profile.id}
+                type="button"
+                onclick={() => applyCompositionProfile(profile.id)}
+              >
+                <span class="profile-label">{$t(profile.labelKey)}</span>
+                <span class="profile-desc">{$t(profile.descKey)}</span>
+              </button>
+            {/each}
           </div>
         </div>
 
@@ -3554,6 +4255,15 @@
   <!-- Integrations Section -->
   <section class="section" bind:this={integrationsSection}>
     <h3 class="section-title">{$t('settings.integrations.title')}</h3>
+
+    <!-- Qobuz Link Handler -->
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.qobuzLinkHandler')}</span>
+        <small class="setting-note">{$t('settings.integrations.qobuzLinkHandlerDesc')}</small>
+      </div>
+      <Toggle enabled={qobuzLinkHandlerEnabled} onchange={handleQobuzLinkHandlerToggle} disabled={qobuzLinkHandlerBusy} />
+    </div>
 
     {#if lastfmConnected}
       <div class="setting-row">
@@ -4906,6 +5616,59 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     color: var(--text-secondary);
   }
 
+  .composition-profile-section {
+    margin-bottom: 16px;
+  }
+
+  .composition-profile-title {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+
+  .composition-profile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+
+  .composition-profile-card {
+    text-align: left;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    transition: border-color 140ms ease, background 140ms ease;
+  }
+
+  .composition-profile-card:hover {
+    border-color: var(--accent-primary);
+    background: color-mix(in srgb, var(--bg-secondary) 92%, var(--accent-primary) 8%);
+  }
+
+  .composition-profile-card.active {
+    border-color: var(--accent-primary);
+    background: color-mix(in srgb, var(--bg-secondary) 88%, var(--accent-primary) 12%);
+  }
+
+  .profile-label {
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+
+  .profile-desc {
+    font-size: 11px;
+    color: var(--text-secondary);
+    line-height: 1.35;
+  }
+
   .recovery-cmd {
     display: block;
     margin-top: 4px;
@@ -5013,6 +5776,13 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .setting-desc {
     font-size: 12px;
     color: var(--text-muted);
+  }
+
+  .setting-desc-secondary {
+    font-size: 11px;
+    color: var(--text-muted);
+    opacity: 0.7;
+    font-style: italic;
   }
 
   .setting-note {
@@ -5586,6 +6356,197 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     color: var(--text-primary);
   }
 
+  /* Auto-Theme Panel */
+  .auto-theme-panel {
+    margin: 0 0 8px 0;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .auto-theme-status {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    padding: 4px 0;
+  }
+
+  .auto-theme-experimental {
+    font-size: 0.75rem;
+    color: var(--warning);
+    opacity: 0.85;
+  }
+
+  .auto-theme-palette {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 8px 0;
+  }
+
+  .palette-swatch-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .palette-swatch {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 2px solid var(--border-subtle);
+    transition: transform 150ms ease, border-color 150ms ease;
+  }
+
+  .palette-swatch-wrapper:hover .palette-swatch {
+    transform: scale(1.12);
+    border-color: var(--text-muted);
+  }
+
+  .palette-swatch-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-align: center;
+    max-width: 48px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .palette-swatch-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 36px;
+    height: 36px;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .btn-secondary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    background: var(--accent-primary);
+    border: none;
+    border-radius: 8px;
+    color: var(--btn-primary-text, #ffffff);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: background-color 150ms ease;
+  }
+
+  .btn-primary:hover {
+    background: var(--accent-hover);
+  }
+
+  /* Auto-Theme Generating Overlay */
+  .auto-theme-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .auto-theme-overlay-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    color: #ffffff;
+    font-size: 1rem;
+  }
+
+  /* Auto-Theme Failure Modal */
+  .auto-theme-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 3100;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .auto-theme-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    padding: 28px 32px;
+    max-width: 440px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .auto-theme-modal h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--danger);
+  }
+
+  .auto-theme-modal-message {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .auto-theme-modal-hint {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .auto-theme-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 8px;
+  }
+
   /* Content Filtering Section */
   .setting-with-icon {
     display: flex;
@@ -5798,11 +6759,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   isOpen={showMigrationModal}
   onClose={closeMigrationModal}
   totalTracks={legacyTracksCount}
-/>
-
-<AlsaUtilsHelpModal
-  isOpen={showAlsaUtilsHelpModal}
-  onClose={() => showAlsaUtilsHelpModal = false}
 />
 
 <DACSetupWizard

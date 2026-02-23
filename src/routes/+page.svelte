@@ -15,6 +15,7 @@
     startOfflineCacheEventListeners,
     stopOfflineCacheEventListeners,
     cacheTrackForOffline,
+    cacheTracksForOfflineBatch,
     removeCachedTrack,
     getOfflineCacheState,
     openAlbumFolder,
@@ -35,12 +36,13 @@
   import { setSearchState, triggerSearchFocus } from '$lib/stores/searchState';
 
   // Playback context and preferences
-  import { 
+  import {
     initPlaybackContextStore,
     setPlaybackContext,
     clearPlaybackContext,
     getCurrentContext,
-    requestContextTrackFocus
+    requestContextTrackFocus,
+    type ContextType
   } from '$lib/stores/playbackContextStore';
   import {
     initPlaybackPreferences,
@@ -48,6 +50,7 @@
     isAutoplayEnabled
   } from '$lib/stores/playbackPreferencesStore';
   import { initBlacklistStore, isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
+  import { initCustomArtistImageStore, clearCustomArtistImages } from '$lib/stores/customArtistImageStore';
 
   // UI state management
   import {
@@ -121,7 +124,11 @@
     selectPlaylist,
     getNavigationState,
     getFavoritesTabFromView,
+    getSelectedLocalAlbumId,
     isFavoritesView,
+    restoreView,
+    setRestoredPlaylistId,
+    setRestoredLocalAlbumId,
     type ViewType,
     type NavigationState,
     type FavoritesTab
@@ -223,6 +230,7 @@
     playTrack,
     checkTrackFavorite,
     toggleTrackFavorite,
+    loadSystemNotificationsPreference,
     showTrackNotification,
     updateLastfmNowPlaying,
     cleanup as cleanupPlayback
@@ -241,6 +249,8 @@
     queuePlaylistTrackLater,
     queueLocalTrackNext,
     queueLocalTrackLater,
+    queueDisplayTrackNext,
+    queueDisplayTrackLater,
     handleAddToFavorites,
     addToPlaylist,
     shareQobuzTrackLink,
@@ -264,7 +274,8 @@
     debouncedSavePosition,
     flushPositionSave,
     clearSession,
-    type PersistedQueueTrack
+    type PersistedQueueTrack,
+    type PersistedSession
   } from '$lib/services/sessionService';
 
   // MiniPlayer - DISABLED: incomplete feature, re-enable when ready
@@ -310,6 +321,7 @@
   import ArtistDetailView from '$lib/components/views/ArtistDetailView.svelte';
   import MusicianPageView from '$lib/components/views/MusicianPageView.svelte';
   import LabelView from '$lib/components/views/LabelView.svelte';
+  import LabelReleasesView from '$lib/components/views/LabelReleasesView.svelte';
   import PlaylistDetailView from '$lib/components/views/PlaylistDetailView.svelte';
   import FavoritesView from '$lib/components/views/FavoritesView.svelte';
   import LocalLibraryView from '$lib/components/views/LocalLibraryView.svelte';
@@ -317,6 +329,12 @@
   import BlacklistManagerView from '$lib/components/views/BlacklistManagerView.svelte';
   import DiscoverBrowseView from '$lib/components/views/DiscoverBrowseView.svelte';
   import DiscoverPlaylistsBrowseView from '$lib/components/views/DiscoverPlaylistsBrowseView.svelte';
+  import PurchasesView from '$lib/components/views/PurchasesView.svelte';
+  import PurchaseAlbumDetailView from '$lib/components/views/PurchaseAlbumDetailView.svelte';
+  import DynamicSuggestView from '$lib/components/views/DynamicSuggestView.svelte';
+  import WeeklySuggestView from '$lib/components/views/WeeklySuggestView.svelte';
+  import FavQView from '$lib/components/views/FavQView.svelte';
+  import TopQView from '$lib/components/views/TopQView.svelte';
 
   // Overlays
   import QueuePanel from '$lib/components/QueuePanel.svelte';
@@ -335,8 +353,10 @@
   import FlatpakWelcomeModal from '$lib/components/updates/FlatpakWelcomeModal.svelte';
   import KeyboardShortcutsModal from '$lib/components/KeyboardShortcutsModal.svelte';
   import KeybindingsSettings from '$lib/components/KeybindingsSettings.svelte';
+  import LinkResolverModal from '$lib/components/LinkResolverModal.svelte';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
   import { refreshUpdatePreferences, resetUpdatesStore } from '$lib/stores/updatesStore';
+  import { getShowPurchases, setShowPurchases } from '$lib/stores/purchasesStore';
   import {
     decideLaunchModals,
     disableUpdateChecks,
@@ -366,6 +386,9 @@
 
   // Sidebar State (from sidebarStore subscription)
   let sidebarExpanded = $state(getIsExpanded());
+
+  // Purchases visibility
+  let showPurchases = $state(getShowPurchases());
 
   // Title Bar State (from titleBarStore subscription)
   let showTitleBar = $state(shouldShowTitleBar());
@@ -426,6 +449,14 @@
   let selectedMusician = $state<ResolvedMusician | null>(null);
   let musicianModalData = $state<ResolvedMusician | null>(null);
   let isArtistAlbumsLoading = $state(false);
+
+  // Purchase downloads state
+  let selectedPurchaseAlbumId = $state<string | null>(null);
+
+  function handlePurchaseAlbumClick(albumId: string) {
+    selectedPurchaseAlbumId = albumId;
+    navigateTo('purchase-album');
+  }
 
   function waitForHomePaint(): Promise<void> {
     if (typeof window === 'undefined') return Promise.resolve();
@@ -552,6 +583,7 @@
   let isAboutModalOpen = $state(false);
   let isShortcutsModalOpen = $state(false);
   let isKeybindingsSettingsOpen = $state(false);
+  let isLinkResolverOpen = $state(false);
 
   // Track Info Modal State
   let isTrackInfoOpen = $state(false);
@@ -566,6 +598,9 @@
   let sidebarRef = $state<{
     getPlaylists: () => { id: number; name: string; tracks_count: number }[];
     refreshPlaylists: () => void;
+    refreshPlaylistSettings: () => void;
+    refreshLocalTrackCounts: () => void;
+    updatePlaylistCounts: (playlistId: number, qobuzCount: number, localCount: number) => void;
     focusSearch: () => void;
   } | undefined>(undefined);
 
@@ -586,6 +621,8 @@
   let queueRemainingTracks = $state(0); // Actual remaining tracks (total - current_index - 1)
   let historyTracks = $state<QueueTrack[]>([]);
   let infinitePlayEnabled = $state(false);
+  let sessionPersistEnabled = $state(false);
+  let radioLoading = $state(false);
 
   // Toast State (from store subscription)
   let toast = $state<ToastData | null>(null);
@@ -603,7 +640,7 @@
 
   async function loadFavoritesDefaultTab(): Promise<void> {
     try {
-      const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      const prefs = await invoke<FavoritesPreferences>('v2_get_favorites_preferences');
       favoritesDefaultTab = getDefaultFavoritesTab(prefs.tab_order);
     } catch (err) {
       console.error('Failed to load favorites preferences:', err);
@@ -630,7 +667,7 @@
   async function handleAlbumClick(albumId: string) {
     try {
       showToast($t('toast.loadingAlbum'), 'info');
-      const album = await invoke<QobuzAlbum>('get_album', { albumId });
+      const album = await invoke<QobuzAlbum>('v2_get_album', { albumId });
 
       const converted = convertQobuzAlbum(album);
 
@@ -662,7 +699,7 @@
    */
   async function fetchAlbumArtistAlbums(artistId: number) {
     try {
-      const response = await invoke<PageArtistResponse>('get_artist_page', { artistId });
+      const response = await invoke<PageArtistResponse>('v2_get_artist_page', { artistId });
       const artistDetail = convertPageArtist(response);
 
       // Combine studio albums and live albums, limit to 16
@@ -715,7 +752,7 @@
   async function handleArtistClick(artistId: number) {
     try {
       showToast($t('toast.loadingArtist'), 'info');
-      const response = await invoke<PageArtistResponse>('get_artist_page', { artistId });
+      const response = await invoke<PageArtistResponse>('v2_get_artist_page', { artistId });
       console.log('Artist page:', response);
 
       selectedArtist = convertPageArtist(response);
@@ -729,9 +766,49 @@
     }
   }
 
+  /**
+   * Handle a resolved Qobuz link (from modal or OS scheme handler).
+   */
+  async function handleResolvedLink(resolved: { type: string; id: string | number }) {
+    try {
+      switch (resolved.type) {
+        case 'OpenAlbum':
+          await handleAlbumClick(String(resolved.id));
+          break;
+        case 'OpenTrack': {
+          // Fetch track to get its album, then navigate there
+          const track = await invoke<unknown>('v2_get_track', { trackId: Number(resolved.id) });
+          const data = track as Record<string, unknown> | null;
+          const nestedAlbum = (data?.album as Record<string, unknown> | undefined)?.id;
+          const albumId = nestedAlbum ?? data?.album_id ?? data?.albumId;
+          if (albumId !== undefined && albumId !== null) {
+            await handleAlbumClick(String(albumId));
+          }
+          break;
+        }
+        case 'OpenArtist':
+          await handleArtistClick(Number(resolved.id));
+          break;
+        case 'OpenPlaylist':
+          selectPlaylist(Number(resolved.id));
+          break;
+        default:
+          console.warn('Unknown resolved link type:', resolved.type);
+      }
+    } catch (err) {
+      console.error('Failed to handle resolved link:', err);
+      showToast($t('linkResolver.invalidLink'), 'error');
+    }
+  }
+
   function handleLabelClick(labelId: number, labelName?: string) {
     selectedLabel = { id: labelId, name: labelName || '' };
     navigateTo('label');
+  }
+
+  function handleNavigateLabelReleases(labelId: number, labelName: string) {
+    selectedLabel = { id: labelId, name: labelName };
+    navigateTo('label-releases');
   }
 
   /**
@@ -744,7 +821,7 @@
   async function handleMusicianClick(name: string, role: string) {
     showToast($t('toast.lookingUp', { values: { name } }), 'info');
     try {
-      const musician = await invoke<ResolvedMusician>('resolve_musician', { name, role });
+      const musician = await invoke<ResolvedMusician>('v2_resolve_musician', { name, role });
       console.log('Resolved musician:', musician);
 
       switch (musician.confidence) {
@@ -801,6 +878,7 @@
       albumResults: null,
       trackResults: null,
       artistResults: null,
+      playlistResults: null,
       allResults: null
     });
     navigateTo('search');
@@ -866,6 +944,22 @@
         case 'search':
           // Navigate to search (could restore query if needed)
           navigateTo('search');
+          break;
+
+        case 'daily_q':
+          navigateTo('dailyq');
+          break;
+
+        case 'weekly_q':
+          navigateTo('weeklyq');
+          break;
+
+        case 'fav_q':
+          navigateTo('favq');
+          break;
+
+        case 'top_q':
+          navigateTo('topq');
           break;
 
         case 'radio':
@@ -934,7 +1028,7 @@
 
   async function fetchAlbumDetail(albumId: string): Promise<AlbumDetail | null> {
     try {
-      const album = await invoke<QobuzAlbum>('get_album', { albumId });
+      const album = await invoke<QobuzAlbum>('v2_get_album', { albumId });
       return convertQobuzAlbum(album);
     } catch (err) {
       console.error('Failed to load album:', err);
@@ -1053,7 +1147,7 @@
         showToast($t('toast.couldNotFetchDetails'), 'error');
         return;
       }
-      const response = await invoke<{ pageUrl: string }>('share_album_songlink', {
+      const response = await invoke<{ pageUrl: string }>('v2_share_album_songlink', {
         upc: album.upc || null,
         albumId: album.id,
         title: album.title,
@@ -1083,22 +1177,20 @@
 
     showToast($t('toast.preparingTracksOffline', { values: { count: tracksToDownload.length, album: album.title } }), 'info');
 
-    for (const track of tracksToDownload) {
-      try {
-        await cacheTrackForOffline({
-          id: track.id,
-          title: track.title,
-          artist: track.artist || album.artist || 'Unknown',
-          album: album.title,
-          albumId: album.id,
-          durationSecs: track.durationSeconds,
-          quality: track.quality || '-',
-          bitDepth: track.bitDepth,
-          sampleRate: track.samplingRate,
-        });
-      } catch (err) {
-        console.error(`Failed to queue download for "${track.title}":`, err);
-      }
+    try {
+      await cacheTracksForOfflineBatch(tracksToDownload.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist || album.artist || 'Unknown',
+        album: album.title,
+        albumId: album.id,
+        durationSecs: track.durationSeconds,
+        quality: track.quality || '-',
+        bitDepth: track.bitDepth,
+        sampleRate: track.samplingRate,
+      })));
+    } catch (err) {
+      console.error('Failed to batch queue downloads:', err);
     }
   }
 
@@ -1131,7 +1223,7 @@
 
   async function fetchPlaylistData(playlistId: number): Promise<PlaylistData | null> {
     try {
-      const playlist = await invoke<PlaylistData>('get_playlist', { playlistId });
+      const playlist = await invoke<PlaylistData>('v2_get_playlist', { playlistId });
       return playlist;
     } catch (err) {
       console.error('Failed to load playlist:', err);
@@ -1251,7 +1343,7 @@
   async function copyPlaylistToLibraryById(playlistId: number) {
     try {
       showToast($t('toast.copyingToLibrary'), 'info');
-      await invoke('subscribe_playlist', { playlistId });
+      await invoke('v2_subscribe_playlist', { playlistId });
       sidebarRef?.refreshPlaylists();
       showToast($t('toast.playlistCopied'), 'success');
     } catch (err) {
@@ -1268,7 +1360,7 @@
 
   async function removePlaylistFavoriteById(playlistId: number) {
     try {
-      await invoke('playlist_set_favorite', { playlistId, favorite: false });
+      await invoke('v2_playlist_set_favorite', { playlistId, favorite: false });
       showToast($t('toast.playlistRemovedFavorites'), 'success');
       sidebarRef?.refreshPlaylists();
       sidebarRef?.refreshPlaylistSettings();
@@ -1337,11 +1429,12 @@
 
     // Build queue from album tracks before playing (filter blacklisted artists)
     if (selectedAlbum?.tracks) {
-      console.log('[Album Queue] Building queue from', selectedAlbum.tracks.length, 'album tracks');
+      const album = selectedAlbum; // Capture for closure
+      console.log('[Album Queue] Building queue from', album.tracks.length, 'album tracks');
 
       // Filter out blacklisted tracks
-      const playableTracks = selectedAlbum.tracks.filter(trk => {
-        const artistId = trk.artistId ?? selectedAlbum.artistId;
+      const playableTracks = album.tracks.filter(trk => {
+        const artistId = trk.artistId ?? album.artistId;
         return !artistId || !isArtistBlacklisted(artistId);
       });
 
@@ -1349,16 +1442,16 @@
       const queueTracks: BackendQueueTrack[] = playableTracks.map(trk => ({
         id: trk.id,
         title: trk.title,
-        artist: trk.artist || selectedAlbum?.artist || 'Unknown Artist',
-        album: selectedAlbum?.title || '',
+        artist: trk.artist || album.artist || 'Unknown Artist',
+        album: album.title || '',
         duration_secs: trk.durationSeconds,
         artwork_url: artwork || null,
         hires: trk.hires ?? false,
         bit_depth: trk.bitDepth ?? null,
         sample_rate: trk.samplingRate ?? null,
         is_local: false,
-        album_id: selectedAlbum?.id,
-        artist_id: trk.artistId ?? selectedAlbum?.artistId
+        album_id: album.id,
+        artist_id: trk.artistId ?? album.artistId
       }));
 
       console.log('[Album Queue] Mapped to', queueTracks.length, 'queue tracks (filtered), startIndex:', trackIndex);
@@ -1433,7 +1526,7 @@
   async function toggleNormalization() {
     const newState = !normalizationEnabled;
     try {
-      await invoke('set_audio_normalization_enabled', { enabled: newState });
+      await invoke('v2_set_audio_normalization_enabled', { enabled: newState });
       normalizationEnabled = newState;
     } catch (err) {
       console.error('Failed to toggle normalization:', err);
@@ -1444,7 +1537,8 @@
   function openAddToPlaylistModal() {
     if (!currentTrack) return;
     userPlaylists = sidebarRef?.getPlaylists() ?? [];
-    openPlaylistModal('addTrack', [currentTrack.id]);
+    const isLocal = currentTrack.isLocal === true || isLocalTrack(currentTrack.id);
+    openPlaylistModal('addTrack', [currentTrack.id], isLocal);
   }
 
   // Skip track handlers - wired to backend queue via queueStore
@@ -1507,7 +1601,7 @@
 
     // Check if Qobuz track has a local copy
     try {
-      const localIds = await invoke<number[]>('playlist_get_tracks_with_local_copies', {
+      const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
         trackIds: [track.id]
       });
       return localIds.includes(track.id);
@@ -1617,6 +1711,10 @@
     const success = await clearQueue();
     if (success) {
       showToast($t('toast.queueCleared'), 'info');
+      // Immediately persist the empty state so it survives app close
+      if (sessionPersistEnabled) {
+        saveSessionBeforeClose();
+      }
     } else {
       showToast($t('toast.failedClearQueue'), 'error');
     }
@@ -1630,10 +1728,11 @@
     }
   }
 
-  // Remove a track from the queue by index
-  async function handleRemoveFromQueue(index: number) {
+  // Remove a track from the upcoming queue by its position in the upcoming list (V2)
+  async function handleRemoveFromQueue(upcomingIndex: number) {
     try {
-      await invoke('remove_from_queue', { index });
+      await invoke('v2_remove_upcoming_track', { upcomingIndex });
+      await syncQueueState(); // Refresh UI
       showToast($t('toast.removedFromQueue'), 'info');
     } catch (err) {
       console.error('Failed to remove from queue:', err);
@@ -1646,7 +1745,8 @@
     const numericId = parseInt(trackId, 10);
     if (isNaN(numericId)) return;
     userPlaylists = sidebarRef?.getPlaylists() ?? [];
-    openPlaylistModal('addTrack', [numericId]);
+    const isLocal = isLocalTrack(numericId);
+    openPlaylistModal('addTrack', [numericId], isLocal);
   }
 
   // Show track info for a queue track
@@ -1720,13 +1820,12 @@
       await handleTrackPlay({
         id: historyTrack.id,
         title: historyTrack.title,
-        artist: historyTrack.artist,
-        album: historyTrack.album,
+        performer: { name: historyTrack.artist },
+        album: { title: historyTrack.album, image: { large: historyTrack.artwork_url || '' } },
         duration: historyTrack.duration_secs,
-        artwork: historyTrack.artwork_url || '',
-        quality: historyTrack.hires ? 'Hi-Res' : 'CD',
-        bitDepth: historyTrack.bit_depth || 16,
-        samplingRate: historyTrack.sample_rate || 44100
+        hires_streamable: historyTrack.hires,
+        maximum_bit_depth: historyTrack.bit_depth ?? undefined,
+        maximum_sampling_rate: historyTrack.sample_rate ?? undefined
       });
     } catch (err) {
       console.error('Failed to play history track:', err);
@@ -1737,9 +1836,10 @@
   // Play all tracks from album (starting from first non-blacklisted track)
   async function handlePlayAllAlbum() {
     if (!selectedAlbum?.tracks?.length) return;
+    const album = selectedAlbum; // Capture for closure
     // Find first non-blacklisted track
-    const firstPlayableTrack = selectedAlbum.tracks.find(trk => {
-      const artistId = trk.artistId ?? selectedAlbum.artistId;
+    const firstPlayableTrack = album.tracks.find(trk => {
+      const artistId = trk.artistId ?? album.artistId;
       return !artistId || !isArtistBlacklisted(artistId);
     });
     if (!firstPlayableTrack) return;
@@ -1749,10 +1849,11 @@
   // Shuffle play all tracks from album
   async function handleShuffleAlbum() {
     if (!selectedAlbum?.tracks?.length) return;
+    const album = selectedAlbum; // Capture for closure
 
     // Filter out blacklisted tracks
-    const playableTracks = selectedAlbum.tracks.filter(trk => {
-      const artistId = trk.artistId ?? selectedAlbum.artistId;
+    const playableTracks = album.tracks.filter(trk => {
+      const artistId = trk.artistId ?? album.artistId;
       return !artistId || !isArtistBlacklisted(artistId);
     });
 
@@ -1762,7 +1863,7 @@
 
     // Set shuffle mode first
     try {
-      await invoke('set_shuffle', { enabled: true });
+      await invoke('v2_set_shuffle', { enabled: true });
       isShuffle = true;
     } catch (err) {
       console.error('Failed to enable shuffle:', err);
@@ -1779,35 +1880,146 @@
     showToast($t('toast.shuffleEnabled'), 'info');
   }
 
+  // Create album radio via Qobuz /radio/album API
+  async function handleCreateAlbumRadio() {
+    if (!selectedAlbum) return;
+    radioLoading = true;
+    showToast($t('radio.creating'), 'info');
+    try {
+      const contextId = await invoke<string>('v2_create_album_radio', {
+        albumId: String(selectedAlbum.id),
+        albumName: selectedAlbum.title || 'Album Radio',
+      });
+      console.log(`[Radio] Album radio created: ${contextId}`);
+
+      // Play first track from the radio queue
+      const firstTrack = await playQueueIndex(0);
+      if (firstTrack) {
+        const quality = firstTrack.bit_depth && firstTrack.sample_rate
+          ? `${firstTrack.bit_depth}bit/${firstTrack.sample_rate}kHz`
+          : firstTrack.hires ? 'Hi-Res' : '-';
+        playTrack({
+          id: firstTrack.id,
+          title: firstTrack.title,
+          artist: firstTrack.artist,
+          album: firstTrack.album,
+          artwork: firstTrack.artwork_url || '',
+          duration: firstTrack.duration_secs,
+          quality,
+          bitDepth: firstTrack.bit_depth ?? undefined,
+          samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to create album radio:', err);
+    } finally {
+      radioLoading = false;
+    }
+  }
+
+  // Create QBZ track radio (used by PlaylistDetailView, FavoritesView, etc.)
+  async function handleCreateQbzTrackRadio(trackId: number, trackTitle: string, artistId?: number) {
+    radioLoading = true;
+    showToast($t('radio.creating'), 'info');
+    try {
+      await invoke<string>('v2_create_track_radio', {
+        trackId,
+        trackName: trackTitle,
+        artistId: artistId ?? 0
+      });
+
+      const firstTrack = await playQueueIndex(0);
+      if (firstTrack) {
+        playTrack({
+          id: firstTrack.id,
+          title: firstTrack.title,
+          artist: firstTrack.artist,
+          album: firstTrack.album,
+          artwork: firstTrack.artwork_url || '',
+          duration: firstTrack.duration_secs,
+          quality: firstTrack.bit_depth && firstTrack.sample_rate
+            ? `${firstTrack.bit_depth}bit/${firstTrack.sample_rate}kHz`
+            : firstTrack.hires ? 'Hi-Res' : '-',
+          bitDepth: firstTrack.bit_depth ?? undefined,
+          samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to create QBZ track radio:', err);
+    } finally {
+      radioLoading = false;
+    }
+  }
+
+  // Create Qobuz track radio (used by PlaylistDetailView, FavoritesView, etc.)
+  async function handleCreateQobuzTrackRadio(trackId: number, trackTitle: string) {
+    radioLoading = true;
+    showToast($t('radio.creating'), 'info');
+    try {
+      await invoke<string>('v2_create_qobuz_track_radio', {
+        trackId,
+        trackName: trackTitle
+      });
+
+      const firstTrack = await playQueueIndex(0);
+      if (firstTrack) {
+        playTrack({
+          id: firstTrack.id,
+          title: firstTrack.title,
+          artist: firstTrack.artist,
+          album: firstTrack.album,
+          artwork: firstTrack.artwork_url || '',
+          duration: firstTrack.duration_secs,
+          quality: firstTrack.bit_depth && firstTrack.sample_rate
+            ? `${firstTrack.bit_depth}bit/${firstTrack.sample_rate}kHz`
+            : firstTrack.hires ? 'Hi-Res' : '-',
+          bitDepth: firstTrack.bit_depth ?? undefined,
+          samplingRate: firstTrack.sample_rate ?? undefined,
+          albumId: firstTrack.album_id ?? undefined,
+          artistId: firstTrack.artist_id ?? undefined,
+        });
+      }
+    } catch (err) {
+      console.error('Failed to create Qobuz track radio:', err);
+    } finally {
+      radioLoading = false;
+    }
+  }
+
   // Add all album tracks next in queue (after current track)
   async function handleAddAlbumToQueueNext() {
     if (!selectedAlbum?.tracks?.length) return;
+    const album = selectedAlbum; // Capture for closure
 
     // Filter out blacklisted tracks
-    const playableTracks = selectedAlbum.tracks.filter(trk => {
-      const artistId = trk.artistId ?? selectedAlbum.artistId;
+    const playableTracks = album.tracks.filter(trk => {
+      const artistId = trk.artistId ?? album.artistId;
       return !artistId || !isArtistBlacklisted(artistId);
     });
 
     if (playableTracks.length === 0) return;
 
-    const artwork = selectedAlbum.artwork || '';
+    const artwork = album.artwork || '';
     // Add in reverse order so first track ends up right after current
     for (let i = playableTracks.length - 1; i >= 0; i--) {
       const trk = playableTracks[i];
       queueTrackNext({
         id: trk.id,
         title: trk.title,
-        artist: trk.artist || selectedAlbum?.artist || 'Unknown Artist',
-        album: selectedAlbum?.title || '',
+        artist: trk.artist || album.artist || 'Unknown Artist',
+        album: album.title || '',
         duration_secs: trk.durationSeconds,
         artwork_url: artwork || null,
         hires: trk.hires ?? false,
         bit_depth: trk.bitDepth ?? null,
         sample_rate: trk.samplingRate ?? null,
         is_local: false,
-        album_id: selectedAlbum?.id,
-        artist_id: trk.artistId ?? selectedAlbum?.artistId
+        album_id: album.id,
+        artist_id: trk.artistId ?? album.artistId
       });
     }
     showToast($t('toast.playingTracksNext', { values: { count: playableTracks.length } }), 'success');
@@ -1816,29 +2028,30 @@
   // Add all album tracks to end of queue
   async function handleAddAlbumToQueueLater() {
     if (!selectedAlbum?.tracks?.length) return;
+    const album = selectedAlbum; // Capture for closure
 
     // Filter out blacklisted tracks
-    const playableTracks = selectedAlbum.tracks.filter(trk => {
-      const artistId = trk.artistId ?? selectedAlbum.artistId;
+    const playableTracks = album.tracks.filter(trk => {
+      const artistId = trk.artistId ?? album.artistId;
       return !artistId || !isArtistBlacklisted(artistId);
     });
 
     if (playableTracks.length === 0) return;
 
-    const artwork = selectedAlbum.artwork || '';
+    const artwork = album.artwork || '';
     const queueTracks: BackendQueueTrack[] = playableTracks.map(trk => ({
       id: trk.id,
       title: trk.title,
-      artist: trk.artist || selectedAlbum?.artist || 'Unknown Artist',
-      album: selectedAlbum?.title || '',
+      artist: trk.artist || album.artist || 'Unknown Artist',
+      album: album.title || '',
       duration_secs: trk.durationSeconds,
       artwork_url: artwork || null,
       hires: trk.hires ?? false,
       bit_depth: trk.bitDepth ?? null,
       sample_rate: trk.samplingRate ?? null,
       is_local: false,
-      album_id: selectedAlbum?.id,
-      artist_id: trk.artistId ?? selectedAlbum?.artistId
+      album_id: album.id,
+      artist_id: trk.artistId ?? album.artistId
     }));
 
     const success = await addTracksToQueue(queueTracks);
@@ -1873,7 +2086,7 @@
     if (!selectedAlbum?.id) return;
     try {
       showToast($t('toast.fetchingAlbumLink'), 'info');
-      const response = await invoke<{ pageUrl: string }>('share_album_songlink', {
+      const response = await invoke<{ pageUrl: string }>('v2_share_album_songlink', {
         upc: selectedAlbum.upc || null,
         albumId: selectedAlbum.id,
         title: selectedAlbum.title,
@@ -1944,7 +2157,7 @@
         artist: track.artist || selectedAlbum?.artist || 'Unknown',
         album: 'album' in track ? track.album : selectedAlbum?.title,
         albumId: 'albumId' in track ? track.albumId : selectedAlbum?.id,
-        durationSecs: 'durationSeconds' in track ? track.durationSeconds : track.duration,
+        durationSecs: track.durationSeconds,
         quality: 'quality' in track ? track.quality || '-' : '-',
         bitDepth: 'bitDepth' in track ? track.bitDepth : undefined,
         sampleRate: 'samplingRate' in track ? track.samplingRate : undefined,
@@ -1962,8 +2175,9 @@
 
   async function handleDownloadAlbum() {
     if (!selectedAlbum) return;
+    const album = selectedAlbum;
 
-    const tracksToDownload = selectedAlbum.tracks.filter(track => {
+    const tracksToDownload = album.tracks.filter(track => {
       const status = getOfflineCacheState(track.id).status;
       return status === 'none' || status === 'failed';
     });
@@ -1973,24 +2187,22 @@
       return;
     }
 
-    showToast($t('toast.preparingTracksOffline', { values: { count: tracksToDownload.length, album: selectedAlbum.title } }), 'info');
+    showToast($t('toast.preparingTracksOffline', { values: { count: tracksToDownload.length, album: album.title } }), 'info');
 
-    for (const track of tracksToDownload) {
-      try {
-        await cacheTrackForOffline({
-          id: track.id,
-          title: track.title,
-          artist: track.artist || selectedAlbum.artist || 'Unknown',
-          album: selectedAlbum.title,
-          albumId: selectedAlbum.id,
-          durationSecs: track.durationSeconds,
-          quality: track.quality || '-',
-          bitDepth: track.bitDepth,
-          sampleRate: track.samplingRate,
-        });
-      } catch (err) {
-        console.error(`Failed to queue "${track.title}" for offline:`, err);
-      }
+    try {
+      await cacheTracksForOfflineBatch(tracksToDownload.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist || album.artist || 'Unknown',
+        album: album.title,
+        albumId: album.id,
+        durationSecs: track.durationSeconds,
+        quality: track.quality || '-',
+        bitDepth: track.bitDepth,
+        sampleRate: track.samplingRate,
+      })));
+    } catch (err) {
+      console.error('Failed to batch queue for offline:', err);
     }
   }
 
@@ -2007,25 +2219,24 @@
 
   async function handleReDownloadAlbum() {
     if (!selectedAlbum) return;
+    const album = selectedAlbum;
 
-    showToast($t('toast.refreshingAlbumOffline', { values: { album: selectedAlbum.title } }), 'info');
+    showToast($t('toast.refreshingAlbumOffline', { values: { album: album.title } }), 'info');
 
-    for (const track of selectedAlbum.tracks) {
-      try {
-        await cacheTrackForOffline({
-          id: track.id,
-          title: track.title,
-          artist: track.artist || selectedAlbum.artist || 'Unknown',
-          album: selectedAlbum.title,
-          albumId: selectedAlbum.id,
-          durationSecs: track.durationSeconds,
-          quality: track.quality || '-',
-          bitDepth: track.bitDepth,
-          sampleRate: track.samplingRate,
-        });
-      } catch (err) {
-        console.error(`Failed to refresh "${track.title}" for offline:`, err);
-      }
+    try {
+      await cacheTracksForOfflineBatch(album.tracks.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist || album.artist || 'Unknown',
+        album: album.title,
+        albumId: album.id,
+        durationSecs: track.durationSeconds,
+        quality: track.quality || '-',
+        bitDepth: track.bitDepth,
+        sampleRate: track.samplingRate,
+      })));
+    } catch (err) {
+      console.error('Failed to batch refresh for offline:', err);
     }
   }
 
@@ -2040,30 +2251,28 @@
 
   async function reDownloadAlbumById(albumId: string) {
     try {
-      const album = await invoke<QobuzAlbum>('get_album', { albumId });
-      if (!album || !album.tracks || album.tracks.data.length === 0) {
+      const album = await invoke<QobuzAlbum>('v2_get_album', { albumId });
+      if (!album || !album.tracks || album.tracks.items.length === 0) {
         showToast($t('toast.failedLoadAlbumRefresh'), 'error');
         return;
       }
 
       showToast($t('toast.refreshingAlbumOffline', { values: { album: album.title } }), 'info');
 
-      for (const track of album.tracks.data) {
-        try {
-          await cacheTrackForOffline({
-            id: track.id,
-            title: track.title,
-            artist: track.performer?.name || album.artist?.name || 'Unknown',
-            album: album.title,
-            albumId: album.id,
-            durationSecs: track.duration,
-            quality: track.hires ? 'Hi-Res' : '-',
-            bitDepth: track.maximum_bit_depth,
-            sampleRate: track.maximum_sampling_rate,
-          });
-        } catch (err) {
-          console.error(`Failed to refresh "${track.title}" for offline:`, err);
-        }
+      try {
+        await cacheTracksForOfflineBatch(album.tracks.items.map(track => ({
+          id: track.id,
+          title: track.title,
+          artist: track.performer?.name || album.artist?.name || 'Unknown',
+          album: album.title,
+          albumId: album.id,
+          durationSecs: track.duration,
+          quality: track.hires_streamable ? 'Hi-Res' : '-',
+          bitDepth: track.maximum_bit_depth,
+          sampleRate: track.maximum_sampling_rate,
+        })));
+      } catch (err) {
+        console.error('Failed to batch refresh for offline:', err);
       }
     } catch (err) {
       console.error('Failed to load album:', err);
@@ -2077,7 +2286,7 @@
     return getOfflineCacheState(trackId);
   }
 
-  async function handleDisplayTrackDownload(track: PlaylistTrack) {
+  async function handleDisplayTrackDownload(track: DisplayTrack) {
     try {
       const quality = track.bitDepth && track.samplingRate
         ? `${track.bitDepth}bit/${track.samplingRate}kHz`
@@ -2094,6 +2303,41 @@
         quality,
         bitDepth: track.bitDepth,
         sampleRate: track.samplingRate,
+      });
+      showToast($t('toast.preparingTrackOffline', { values: { title: track.title } }), 'info');
+    } catch (err) {
+      console.error('Failed to prepare for offline:', err);
+      showToast($t('toast.failedPrepareOffline'), 'error');
+    }
+  }
+
+  // Handler for SearchView's Track type (different from DisplayTrack)
+  async function handleSearchTrackDownload(track: {
+    id: number;
+    title: string;
+    duration: number;
+    album?: { id?: string; title: string; image?: { small?: string; large?: string } };
+    performer?: { id?: number; name: string };
+    hires_streamable?: boolean;
+    maximum_bit_depth?: number;
+    maximum_sampling_rate?: number;
+  }) {
+    try {
+      const quality = track.maximum_bit_depth && track.maximum_sampling_rate
+        ? `${track.maximum_bit_depth}bit/${track.maximum_sampling_rate}kHz`
+        : track.hires_streamable
+          ? 'Hi-Res'
+          : '-';
+      await cacheTrackForOffline({
+        id: track.id,
+        title: track.title,
+        artist: track.performer?.name || 'Unknown',
+        album: track.album?.title,
+        albumId: track.album?.id,
+        durationSecs: track.duration,
+        quality,
+        bitDepth: track.maximum_bit_depth,
+        sampleRate: track.maximum_sampling_rate,
       });
       showToast($t('toast.preparingTrackOffline', { values: { title: track.title } }), 'info');
     } catch (err) {
@@ -2222,7 +2466,7 @@
     openPlaylistModal('addTrack', trackIds, isLocal);
   }
 
-  function handlePlaylistCreated(playlist?: import('$lib/types').Playlist) {
+  function handlePlaylistCreated(playlist?: { id: number; name: string; tracks_count: number }) {
     const trackCount = playlistModalTrackIds.length;
     const isLocal = playlistModalTracksAreLocal;
 
@@ -2251,11 +2495,19 @@
     openPlaylistImport();
   }
 
-  function handlePlaylistImported(summary: { qobuz_playlist_id?: number | null }) {
+  function handlePlaylistImported(summary: {
+    provider: 'Spotify' | 'AppleMusic' | 'Tidal' | 'Deezer';
+    playlist_name: string;
+    total_tracks: number;
+    matched_tracks: number;
+    skipped_tracks: number;
+    qobuz_playlist_ids: number[];
+    parts_created: number;
+  }) {
     sidebarRef?.refreshPlaylists();
     sidebarRef?.refreshPlaylistSettings();
-    if (summary.qobuz_playlist_id) {
-      selectPlaylist(summary.qobuz_playlist_id);
+    if (summary.qobuz_playlist_ids.length > 0) {
+      selectPlaylist(summary.qobuz_playlist_ids[0]);
     }
   }
 
@@ -2275,6 +2527,16 @@
   async function handleStartOffline() {
     // Enable manual offline mode and enter app without authentication
     await setManualOffline(true);
+
+    // Activate offline session in backend (initializes minimal stores, sets session_activated=true)
+    // This allows queue commands to work even without remote auth
+    try {
+      await invoke('v2_activate_offline_session');
+    } catch (err) {
+      console.error('[Offline] Failed to activate offline session:', err);
+      // Continue anyway - offline mode should be best-effort
+    }
+
     setLoggedIn({
       userName: 'Offline User',
       userId: 0,
@@ -2285,28 +2547,26 @@
   }
 
   async function handleLoginSuccess(info: UserInfo) {
-    // Set login state FIRST to immediately switch from LoginView to app
-    // (prevents login form flash during async session activation)
+    // V2 login commands (v2_auto_login, v2_manual_login) now handle session activation internally.
+    // They return success:false if activation fails, so if we get here, session is already active.
+    // NO legacy activate_user_session call needed - that causes duplicate activation.
+
+    // Validate userId before any session operations
+    if (!info.userId || info.userId <= 0) {
+      console.error('[Session] Invalid userId received:', info.userId, '- cannot proceed');
+      return;
+    }
+
+    // Backend session already activated by V2 login - set UI login state
     setLoggedIn(info);
 
     // Set up per-user localStorage scoping and migrate old keys
-    setStorageUserId(info.userId || null);
-    if (info.userId) {
-      migrateLocalStorage(info.userId);
-    }
+    setStorageUserId(info.userId);
+    migrateLocalStorage(info.userId);
+    loadSystemNotificationsPreference();
 
     // Re-sync volume from the now-correct user-scoped localStorage key
     await resyncPersistedVolume();
-
-    // Activate per-user backend state (LoginView already did this for auto-login,
-    // but we call again to ensure it's active for manual login too — it's idempotent)
-    if (info.userId) {
-      try {
-        await invoke('activate_user_session', { userId: info.userId });
-      } catch (err) {
-        console.error('[Session] Failed to activate user session:', err);
-      }
-    }
 
     // Signal that per-user backend stores are ready — the launch update
     // flow $effect gates on this to avoid reading default preferences
@@ -2319,9 +2579,20 @@
 
     // Initialize per-user stores now that the backend session is active
     initOfflineCacheStates(); // has internal try/catch
-    initPlaybackPreferences().catch(err => console.debug('[PlaybackPrefs] Init deferred:', err));
+    await initPlaybackPreferences().then(() => {
+      sessionPersistEnabled = getCachedPreferences().persist_session;
+      console.log('[Session] Persist session enabled:', sessionPersistEnabled);
+    }).catch(err => console.debug('[PlaybackPrefs] Init deferred:', err));
     initBlacklistStore().catch(err => console.debug('[Blacklist] Init deferred:', err));
+    initCustomArtistImageStore().catch(err => console.debug('[CustomArtistImages] Init deferred:', err));
     refreshUpdatePreferences().catch(err => console.debug('[Updates] Prefs refresh deferred:', err));
+
+    // Load audio settings (normalization state) now that session is active
+    invoke<{ normalization_enabled: boolean }>('v2_get_audio_settings').then((settings) => {
+      normalizationEnabled = settings.normalization_enabled;
+    }).catch((err) => {
+      console.error('[AudioSettings] Failed to load:', err);
+    });
 
     // Load favorites now that login is confirmed (sync with Qobuz)
     loadFavorites();        // Track favorites
@@ -2338,15 +2609,17 @@
       console.debug('[Reco] Score training failed:', err);
     });
 
-    // DISABLED: Restore previous session if available
-    // (Temporarily disabled due to ID conflicts between local and Qobuz tracks)
-    /*
-    try {
+    // Restore previous session if available (only when persist_session is enabled)
+    if (!sessionPersistEnabled) {
+      console.log('[Session] Session persistence disabled, skipping restore');
+    }
+    if (sessionPersistEnabled) try {
       const session = await loadSessionState();
+
+      // Restore queue + track (visual only — paused at 0:00)
       if (session && session.queue_tracks.length > 0) {
         console.log('[Session] Restoring previous session...');
 
-        // Restore queue
         const tracks: BackendQueueTrack[] = session.queue_tracks.map(trk => ({
           id: trk.id,
           title: trk.title,
@@ -2366,95 +2639,71 @@
 
         // Restore shuffle/repeat mode
         if (session.shuffle_enabled) {
-          await invoke('set_shuffle', { enabled: true });
+          await invoke('v2_set_shuffle', { enabled: true });
         }
         if (session.repeat_mode !== 'off') {
-          await invoke('set_repeat', { mode: session.repeat_mode });
+          const v2Mode = session.repeat_mode.charAt(0).toUpperCase() + session.repeat_mode.slice(1);
+          await invoke('v2_set_repeat_mode', { mode: v2Mode });
         }
 
         // Restore volume
         playerSetVolume(Math.round(session.volume * 100));
 
-        // If there was a track playing, restore it (paused)
+        // Visual-only track restore: show in player bar paused at 0:00
         if (session.current_index !== null && tracks[session.current_index]) {
           const track = tracks[session.current_index];
-          showToast(`Restored: ${track.title}`, 'info');
 
-          // Fetch full track info from Qobuz to get albumId, artistId, and quality
-          try {
-            const fullTrack = await invoke<QobuzTrack>('get_track', { trackId: track.id });
-            const artwork = fullTrack.album?.image?.large || fullTrack.album?.image?.thumbnail || track.artwork_url || '';
-            const quality = fullTrack.hires_streamable
-              ? `${fullTrack.maximum_bit_depth ?? 24}/${fullTrack.maximum_sampling_rate ?? 96}`
-              : 'CD';
+          // Use cached data for instant display (no network fetch needed)
+          const quality = track.hires
+            ? `${track.bit_depth ?? 24}/${track.sample_rate ? track.sample_rate / 1000 : 96}`
+            : 'CD';
+          setCurrentTrack({
+            id: track.id,
+            title: track.title,
+            artist: track.artist,
+            album: track.album,
+            artwork: track.artwork_url || '',
+            duration: track.duration_secs,
+            quality,
+            bitDepth: track.bit_depth ?? undefined,
+            samplingRate: track.sample_rate ?? undefined,
+          });
 
-            setCurrentTrack({
-              id: track.id,
-              title: fullTrack.title || track.title,
-              artist: fullTrack.performer?.name || track.artist,
-              album: fullTrack.album?.title || track.album,
-              artwork,
-              duration: track.duration_secs,
-              quality,
-              bitDepth: fullTrack.maximum_bit_depth,
-              samplingRate: fullTrack.maximum_sampling_rate,
-              albumId: fullTrack.album?.id,
-              artistId: fullTrack.performer?.id,
-            });
-          } catch (fetchErr) {
-            console.warn('[Session] Failed to fetch track details, using cached data:', fetchErr);
-            // Fallback to cached data without albumId/artistId
-            const quality = track.hires
-              ? `${track.bit_depth ?? 24}/${track.sample_rate ? track.sample_rate / 1000 : 96}`
-              : 'CD';
-            setCurrentTrack({
-              id: track.id,
-              title: track.title,
-              artist: track.artist,
-              album: track.album,
-              artwork: track.artwork_url || '',
-              duration: track.duration_secs,
-              quality,
-              bitDepth: track.bit_depth ?? undefined,
-              samplingRate: track.sample_rate ?? undefined,
-            });
-          }
-
-          // Mark that this track needs to be loaded when user presses play
-          setPendingSessionRestore(track.id, session.current_position_secs);
-          console.log(`[Session] Track ${track.id} pending load, will resume at ${session.current_position_secs}s`);
+          // First play will load a fresh stream instead of seeking
+          setPendingSessionRestore(track.id, 0);
+          console.log(`[Session] Track ${track.id} restored visually (paused at 0:00)`);
         }
 
         console.log('[Session] Session restored successfully');
       }
+
+      // Restore last page (opt-in via settings)
+      if (session) {
+        restoreLastView(session);
+      }
     } catch (err) {
       console.error('[Session] Failed to restore session:', err);
     }
-    */
   }
 
   async function handleLogout() {
     try {
-      await invoke('logout');
+      // v2_logout handles full session deactivation internally via session_lifecycle::deactivate_session()
+      // NO legacy deactivate_user_session call needed - that causes duplicate teardown
+      await invoke('v2_logout');
       // Clear saved credentials from keyring
       try {
-        await invoke('clear_saved_credentials');
+        await invoke('v2_clear_saved_credentials');
         console.log('Credentials cleared from keyring');
       } catch (clearErr) {
         console.error('Failed to clear credentials:', clearErr);
         // Don't block logout if clearing fails
       }
-      // Deactivate per-user backend state (closes DB connections)
-      try {
-        await invoke('deactivate_user_session');
-        console.log('[Session] Per-user session deactivated');
-      } catch (deactivateErr) {
-        console.error('[Session] Failed to deactivate user session:', deactivateErr);
-      }
       // Clear per-user localStorage scoping
       setStorageUserId(null);
       // Clear session state
       await clearSession();
+      clearCustomArtistImages();
       setLoggedOut();
       sessionReady = false;
       updatesLaunchTriggered = false;
@@ -2469,46 +2718,118 @@
     }
   }
 
+  // Restore last page from session (opt-in via settings)
+  function restoreLastView(session: PersistedSession) {
+    const startupPage = getUserItem('qbz-startup-page') || 'home';
+    if (startupPage !== 'last-view') return;
+
+    const view = session.last_view as ViewType;
+    if (!view || view === 'home') return;
+
+    const contextId = session.view_context_id;
+    const contextType = session.view_context_type;
+
+    // Views that require context data to be fetched
+    switch (view) {
+      case 'album':
+        if (contextId) {
+          handleAlbumClick(contextId);
+        }
+        return;
+      case 'artist':
+        if (contextId) {
+          handleArtistClick(Number(contextId));
+        }
+        return;
+      case 'playlist':
+        if (contextId) {
+          setRestoredPlaylistId(Number(contextId));
+          restoreView('playlist');
+        }
+        return;
+      case 'library-album':
+        if (contextId) {
+          setRestoredLocalAlbumId(contextId);
+          restoreView('library-album');
+        }
+        return;
+      default:
+        // Simple views (search, library, settings, favorites-*, etc.)
+        restoreView(view);
+        return;
+    }
+  }
+
   // Save session state before window closes
   async function saveSessionBeforeClose() {
-    if (!isLoggedIn || !currentTrack) return;
+    if (!isLoggedIn || !sessionPersistEnabled) return;
 
     try {
-      // Get current queue state from backend
-      const queueState = await getBackendQueueState();
-      if (!queueState) return;
+      // Build view context from current navigation state
+      const currentView = activeView;
+      let viewContextId: string | null = null;
+      let viewContextType: string | null = null;
 
-      // Build persisted queue tracks
-      const allTracks: PersistedQueueTrack[] = [];
-      if (queueState.current_track) {
-        allTracks.push({
-          id: queueState.current_track.id,
-          title: queueState.current_track.title,
-          artist: queueState.current_track.artist,
-          album: queueState.current_track.album,
-          duration_secs: queueState.current_track.duration_secs,
-          artwork_url: queueState.current_track.artwork_url
-        });
+      switch (currentView) {
+        case 'album':
+          if (selectedAlbum?.id) {
+            viewContextId = String(selectedAlbum.id);
+            viewContextType = 'album';
+          }
+          break;
+        case 'artist':
+          if (selectedArtist?.id) {
+            viewContextId = String(selectedArtist.id);
+            viewContextType = 'artist';
+          }
+          break;
+        case 'playlist':
+          if (selectedPlaylistId) {
+            viewContextId = String(selectedPlaylistId);
+            viewContextType = 'playlist';
+          }
+          break;
+        case 'library-album': {
+          const localAlbumId = getSelectedLocalAlbumId();
+          if (localAlbumId) {
+            viewContextId = localAlbumId;
+            viewContextType = 'library-album';
+          }
+          break;
+        }
       }
-      for (const track of queueState.upcoming) {
-        allTracks.push({
-          id: track.id,
-          title: track.title,
-          artist: track.artist,
-          album: track.album,
-          duration_secs: track.duration_secs,
-          artwork_url: track.artwork_url
-        });
-      }
+
+      // Get ALL queue tracks from backend (uncapped, for full persistence)
+      const snapshot = await invoke<{ tracks: BackendQueueTrack[]; current_index: number | null }>('v2_get_all_queue_tracks');
+      const tracks = snapshot.tracks;
+      const currentIndex = snapshot.current_index;
+
+      const allTracks: PersistedQueueTrack[] = tracks.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist,
+        album: track.album,
+        duration_secs: track.duration_secs,
+        artwork_url: track.artwork_url,
+        hires: track.hires,
+        bit_depth: track.bit_depth ?? null,
+        sample_rate: track.sample_rate ?? null,
+        is_local: track.is_local ?? false,
+        album_id: track.album_id ?? null,
+        artist_id: track.artist_id ?? null,
+      }));
 
       await saveSessionState(
         allTracks,
-        queueState.current_index,
-        Math.floor(currentTime),
+        currentIndex,
+        currentTrack ? Math.floor(currentTime) : 0,
         volume / 100,
         isShuffle,
         repeatMode,
-        isPlaying
+        isPlaying,
+        currentView,
+        viewContextId,
+        viewContextType
       );
       console.log('[Session] Session saved on close');
     } catch (err) {
@@ -2536,7 +2857,17 @@
     };
   });
 
-  // Periodic full session save during playback (every 30 seconds)
+  // Debounced full session save (coalesces rapid state changes into a single save)
+  let sessionSaveDebounce: ReturnType<typeof setTimeout> | null = null;
+  function debouncedFullSessionSave() {
+    if (sessionSaveDebounce) clearTimeout(sessionSaveDebounce);
+    sessionSaveDebounce = setTimeout(() => {
+      sessionSaveDebounce = null;
+      saveSessionBeforeClose();
+    }, 2000);
+  }
+
+  // Periodic full session save during playback
   let sessionSaveInterval: ReturnType<typeof setInterval> | null = null;
 
   $effect(() => {
@@ -2545,7 +2876,7 @@
       if (!sessionSaveInterval) {
         sessionSaveInterval = setInterval(() => {
           saveSessionBeforeClose();
-        }, 60000); // Save every 60 seconds (reduced from 30s to lower IPC overhead)
+        }, 15000); // Save every 15 seconds during playback
       }
     } else {
       if (sessionSaveInterval) {
@@ -2573,7 +2904,7 @@
     void downloadStateVersion;
     
     try {
-      const isDownloaded = await invoke<boolean>('check_album_fully_cached', { albumId });
+      const isDownloaded = await invoke<boolean>('v2_check_album_fully_cached', { albumId });
       albumDownloadCache.set(albumId, isDownloaded);
       return isDownloaded;
     } catch {
@@ -2594,6 +2925,11 @@
     // Keyboard navigation
     document.addEventListener('keydown', handleKeydown);
 
+    // Suppress WebKit default context menu globally
+    // Custom menus (TrackRow, sidebar, etc.) call e.stopPropagation() so they are unaffected
+    const handleGlobalContextMenu = (e: MouseEvent) => e.preventDefault();
+    document.addEventListener('contextmenu', handleGlobalContextMenu);
+
     // Register keybinding actions
     registerAction('playback.toggle', togglePlay);
     registerAction('playback.next', handleSkipForward);
@@ -2605,6 +2941,7 @@
     registerAction('ui.queue', toggleQueue);
     registerAction('ui.escape', handleUIEscape);
     registerAction('ui.showShortcuts', () => { isShortcutsModalOpen = true; });
+    registerAction('ui.openLink', () => { isLinkResolverOpen = true; });
 
     // Session save on window close/hide
     const handleBeforeUnload = () => {
@@ -2636,12 +2973,8 @@
       // Ignore storage errors
     }
 
-    // Load normalization enabled state from audio settings
-    invoke<{ normalization_enabled: boolean }>('get_audio_settings').then((settings) => {
-      normalizationEnabled = settings.normalization_enabled;
-    }).catch((err) => {
-      console.error('Failed to load audio settings:', err);
-    });
+    // NOTE: Audio settings are loaded AFTER session is ready (in handleLoginSuccess)
+    // to avoid "No active session" errors from per-user state
 
     // Set up callback for cast disconnect handoff
     setOnAskContinueLocally(async (track, position) => {
@@ -2690,9 +3023,10 @@
     // Subscribe to UI state changes
     const unsubscribeUI = subscribeUI(() => {
       const uiState = getUIState();
-      // Close network sidebar when queue opens
+      // Close network sidebar and lyrics when queue opens
       if (uiState.isQueueOpen && !isQueueOpen) {
         closeContentSidebar('network');
+        hideLyricsSidebar();
       }
       isQueueOpen = uiState.isQueueOpen;
       isFullScreenOpen = uiState.isFullScreenOpen;
@@ -2739,6 +3073,7 @@
     });
 
     // Subscribe to player state changes
+    let prevTrackId: number | null = null;
     const unsubscribePlayer = subscribePlayer(() => {
       const playerState = getPlayerState();
       const wasPlaying = isPlaying;
@@ -2758,6 +3093,16 @@
       // Flush position save immediately when pausing
       if (wasPlaying && !isPlaying && currentTrack && currentTime > 0) {
         flushPositionSave(Math.floor(currentTime));
+      }
+
+      // Full session save on track change or pause (debounced 2s)
+      const trackId = currentTrack?.id ?? null;
+      if (trackId !== prevTrackId) {
+        prevTrackId = trackId;
+        if (trackId !== null) debouncedFullSessionSave();
+      }
+      if (wasPlaying && !isPlaying && currentTrack) {
+        debouncedFullSessionSave();
       }
 
       // MiniPlayer IPC - DISABLED: incomplete feature, causes unnecessary IPC overhead
@@ -2795,11 +3140,12 @@
       lyricsIsSynced = state.isSynced;
       lyricsActiveIndex = state.activeIndex;
       lyricsActiveProgress = state.activeProgress;
-      lyricsSidebarVisible = state.sidebarVisible;
-      // Close network sidebar when lyrics opens
-      if (state.sidebarVisible) {
+      // Close network sidebar and queue when lyrics opens
+      if (state.sidebarVisible && !lyricsSidebarVisible) {
         closeContentSidebar('network');
+        closeQueue();
       }
+      lyricsSidebarVisible = state.sidebarVisible;
     });
 
     // Subscribe to content sidebar for mutual exclusion (network closes lyrics/queue)
@@ -2826,8 +3172,27 @@
         setIsPlaying(false);
         return;
       }
+      const previousTrackId = currentTrack?.id ?? null;
       const nextTrackResult = await nextTrack();
       if (nextTrackResult) {
+        // Defensive fallback for issue #80:
+        // if backend returns same track on auto-advance while repeat-one is off,
+        // force one additional advance attempt to break one-track loops.
+        if (
+          previousTrackId !== null &&
+          nextTrackResult.id === previousTrackId &&
+          repeatMode !== 'one'
+        ) {
+          console.warn(
+            '[Player] Auto-advance returned same track id, forcing one extra nextTrack()',
+            previousTrackId
+          );
+          const forcedNext = await nextTrack();
+          if (forcedNext && forcedNext.id !== previousTrackId) {
+            await playQueueTrack(forcedNext);
+            return;
+          }
+        }
         await playQueueTrack(nextTrackResult);
       } else {
         // Queue ended - stop playback and clear player
@@ -2840,9 +3205,63 @@
     // Set up resume-from-stop callback: re-play the queue's current track
     setOnResumeFromStop(async () => {
       const queueState = await getBackendQueueState();
-      if (queueState?.current_track && queueState.current_index !== null) {
+      if (!queueState) return;
+      const tryQueueIndices = async (indices: number[]): Promise<BackendQueueTrack | null> => {
+        for (const idx of indices) {
+          if (idx < 0) continue;
+          if (queueState.total_tracks > 0 && idx >= queueState.total_tracks) continue;
+          const selected = await playQueueIndex(idx);
+          if (selected) {
+            console.log('[Player] Resume from stop: selected queue index', idx);
+            return selected;
+          }
+        }
+        return null;
+      };
+
+      // Normal case: current track already selected in queue, replay it.
+      if (queueState.current_track && queueState.current_index !== null) {
         console.log('[Player] Resuming from stop, replaying queue index:', queueState.current_index);
         await playQueueTrack(queueState.current_track);
+        return;
+      }
+
+      // Hybrid backend state: queue index exists but current_track is missing.
+      // This can happen after queue mutations where selection metadata lags.
+      if (!queueState.current_track && queueState.current_index !== null) {
+        console.log('[Player] Resume from stop: hybrid queue state, trying [current,0,1]:', queueState.current_index);
+        const selected = await tryQueueIndices([queueState.current_index, 0, 1]);
+        if (selected) {
+          await playQueueTrack(selected);
+          return;
+        }
+      }
+
+      // Empty chamber case: queue exists but no current track selected yet.
+      if (queueState.current_index === null && queueState.upcoming.length > 0) {
+        const firstUpcoming = queueState.upcoming[0];
+        const firstTrack = await tryQueueIndices([0, 1]);
+
+        // Preferred path: bind queue index first, then play selected track.
+        if (firstTrack) {
+          console.log('[Player] Resuming from stop, starting queue from first valid index');
+          await playQueueTrack(firstTrack);
+          return;
+        }
+
+        // Fallback #1: ask backend to advance/select next track from empty chamber state.
+        // Some queue states can reject play_index(0) while still accepting next_track.
+        const advancedTrack = await nextTrack();
+        if (advancedTrack) {
+          console.log('[Player] playQueueIndex(0) failed, resumed via nextTrack()');
+          await playQueueTrack(advancedTrack);
+          return;
+        }
+
+        // Fallback #2: play the first upcoming track directly.
+        // Last-resort to avoid a visible no-op on Play button.
+        console.warn('[Player] Queue resume fallback: playing first upcoming track directly');
+        await playQueueTrack(firstUpcoming);
       }
     });
 
@@ -2851,7 +3270,19 @@
       try {
         const queueState = getQueueState();
         if (queueState.queue.length > 0) {
-          return Number(queueState.queue[0].id);
+          const firstId = Number(queueState.queue[0].id);
+          const currentId = currentTrack?.id ?? null;
+          if (!Number.isNaN(firstId) && firstId > 0 && firstId !== currentId) {
+            return firstId;
+          }
+
+          // Defensive fallback: skip stale first slot if it matches current track.
+          if (queueState.queue.length > 1) {
+            const secondId = Number(queueState.queue[1].id);
+            if (!Number.isNaN(secondId) && secondId > 0 && secondId !== currentId) {
+              return secondId;
+            }
+          }
         }
       } catch {
         // Ignore
@@ -2881,6 +3312,7 @@
     let unlistenTrayNext: UnlistenFn | null = null;
     let unlistenTrayPrevious: UnlistenFn | null = null;
     let unlistenMediaControls: UnlistenFn | null = null;
+    let unlistenLinkResolved: UnlistenFn | null = null;
 
     (async () => {
       const unlisten1 = await listen('tray:play_pause', () => {
@@ -2968,6 +3400,15 @@
       });
       if (disposed) { unlisten4(); return; }
       unlistenMediaControls = unlisten4;
+
+      const unlisten5 = await listen('link:resolved', (event) => {
+        const resolved = event.payload as { type: string; id: string | number };
+        if (resolved?.type) {
+          handleResolvedLink(resolved);
+        }
+      });
+      if (disposed) { unlisten5(); return; }
+      unlistenLinkResolved = unlisten5;
     })();
 
     return () => {
@@ -2978,10 +3419,12 @@
       unlistenTrayNext?.();
       unlistenTrayPrevious?.();
       unlistenMediaControls?.();
+      unlistenLinkResolved?.();
       // Save session before cleanup
       saveSessionBeforeClose();
       cleanupBootstrap();
       document.removeEventListener('keydown', handleKeydown);
+      document.removeEventListener('contextmenu', handleGlobalContextMenu);
       unregisterAll(); // Cleanup keybinding actions
       window.removeEventListener('beforeunload', handleBeforeUnload);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
@@ -3037,8 +3480,11 @@
   async function updateQueueCounts() {
     const state = await getBackendQueueState();
     if (state) {
-      // Calculate remaining tracks: total - current_index - 1 (for current track)
-      if (state.current_index !== null && state.total_tracks > 0) {
+      // In shuffle mode current_index is an absolute index in original order,
+      // not a playback-position counter, so remaining is "all except current".
+      if (state.shuffle && state.current_track && state.total_tracks > 0) {
+        queueRemainingTracks = state.total_tracks - 1;
+      } else if (state.current_index !== null && state.total_tracks > 0) {
         queueRemainingTracks = state.total_tracks - state.current_index - 1;
       } else {
         queueRemainingTracks = state.total_tracks;
@@ -3111,6 +3557,7 @@
       isExpanded={sidebarExpanded}
       onToggle={toggleSidebar}
       showTitleBar={showTitleBar}
+      {showPurchases}
     />
 
     <!-- Content Area (main + lyrics sidebar) -->
@@ -3139,8 +3586,8 @@
             {downloadStateVersion}
             onArtistClick={handleArtistClick}
             onTrackPlay={handleDisplayTrackPlay}
-            onTrackPlayNext={queueQobuzTrackNext}
-            onTrackPlayLater={queueQobuzTrackLater}
+            onTrackPlayNext={queueDisplayTrackNext}
+            onTrackPlayLater={queueDisplayTrackLater}
             onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
             onAddAlbumToPlaylist={addAlbumToPlaylistById}
             onTrackShareQobuz={shareQobuzTrackLink}
@@ -3168,6 +3615,10 @@
             onNavigateAlbumsOfTheWeek={() => navigateTo('discover-albums-of-the-week')}
             onNavigatePressAccolades={() => navigateTo('discover-press-accolades')}
             onNavigateQobuzPlaylists={() => navigateTo('discover-playlists')}
+            onNavigateDailyQ={() => navigateTo('dailyq')}
+            onNavigateWeeklyQ={() => navigateTo('weeklyq')}
+            onNavigateFavQ={() => navigateTo('favq')}
+            onNavigateTopQ={() => navigateTo('topq')}
           />
         {/if}
       {:else if activeView === 'search'}
@@ -3200,8 +3651,8 @@
             onTrackGoToAlbum={handleAlbumClick}
             onTrackGoToArtist={handleArtistClick}
             onTrackShowInfo={showTrackInfo}
-            onTrackDownload={handleDisplayTrackDownload}
-            onTrackReDownload={handleDisplayTrackDownload}
+            onTrackDownload={handleSearchTrackDownload}
+            onTrackReDownload={handleSearchTrackDownload}
             onTrackRemoveDownload={handleTrackRemoveDownload}
             checkTrackDownloaded={checkTrackDownloaded}
             onArtistClick={handleArtistClick}
@@ -3220,6 +3671,7 @@
           onBack={navGoBack}
           onLogout={handleLogout}
           onBlacklistManagerClick={() => navigateTo('blacklist-manager')}
+          onPurchasesToggle={(v) => { showPurchases = v; }}
           userName={userInfo?.userName}
           subscription={userInfo?.subscription}
           subscriptionValidUntil={userInfo?.subscriptionValidUntil}
@@ -3275,6 +3727,8 @@
           onViewArtistDiscography={handleViewArtistDiscography}
           checkRelatedAlbumDownloaded={checkAlbumFullyDownloaded}
           onShowAlbumCredits={() => selectedAlbum && showAlbumCredits(selectedAlbum.id)}
+          onCreateAlbumRadio={handleCreateAlbumRadio}
+          {radioLoading}
         />
       {:else if activeView === 'artist' && selectedArtist}
         <ArtistDetailView
@@ -3336,6 +3790,41 @@
           checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
           {downloadStateVersion}
           onArtistClick={handleArtistClick}
+          onLabelClick={handleLabelClick}
+          onNavigateReleases={handleNavigateLabelReleases}
+          onPlaylistClick={selectPlaylist}
+          onPlaylistPlay={playPlaylistById}
+          onPlaylistPlayNext={queuePlaylistNextById}
+          onPlaylistPlayLater={queuePlaylistLaterById}
+          onPlaylistCopyToLibrary={copyPlaylistToLibraryById}
+          onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
+          onTrackPlay={handleDisplayTrackPlay}
+          onTrackPlayNext={queueQobuzTrackNext}
+          onTrackPlayLater={queueQobuzTrackLater}
+          onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackAddFavorite={handleAddToFavorites}
+          onTrackGoToAlbum={handleAlbumClick}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'label-releases' && selectedLabel}
+        <LabelReleasesView
+          labelId={selectedLabel.id}
+          labelName={selectedLabel.name}
+          onBack={navGoBack}
+          onAlbumClick={handleAlbumClick}
+          onAlbumPlay={playAlbumById}
+          onAlbumPlayNext={queueAlbumNextById}
+          onAlbumPlayLater={queueAlbumLaterById}
+          onAddAlbumToPlaylist={addAlbumToPlaylistById}
+          onAlbumShareQobuz={shareAlbumQobuzLinkById}
+          onAlbumShareSonglink={shareAlbumSonglinkById}
+          onAlbumDownload={downloadAlbumById}
+          onOpenAlbumFolder={openAlbumFolderById}
+          onReDownloadAlbum={reDownloadAlbumById}
+          checkAlbumFullyDownloaded={checkAlbumFullyDownloaded}
+          {downloadStateVersion}
+          onArtistClick={handleArtistClick}
         />
       {:else if activeView === 'library' || activeView === 'library-album'}
         <LocalLibraryView
@@ -3367,6 +3856,8 @@
           onTrackDownload={handleDisplayTrackDownload}
           onTrackRemoveDownload={handleTrackRemoveDownload}
           onTrackReDownload={handleDisplayTrackDownload}
+          onTrackCreateQbzRadio={handleCreateQbzTrackRadio}
+          onTrackCreateQobuzRadio={handleCreateQobuzTrackRadio}
           getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
           {downloadStateVersion}
           onLocalTrackPlay={handleLocalTrackPlay}
@@ -3421,6 +3912,8 @@
             onTrackDownload={handleDisplayTrackDownload}
             onTrackRemoveDownload={handleTrackRemoveDownload}
             onTrackReDownload={handleDisplayTrackDownload}
+            onTrackCreateQbzRadio={handleCreateQbzTrackRadio}
+            onTrackCreateQobuzRadio={handleCreateQobuzTrackRadio}
             getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
             onPlaylistSelect={selectPlaylist}
             onPlaylistPlay={playPlaylistById}
@@ -3428,6 +3921,7 @@
             onPlaylistPlayLater={queuePlaylistLaterById}
             onPlaylistRemoveFavorite={removePlaylistFavoriteById}
             onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
+            onRandomArtist={(artistId) => handleArtistClick(artistId)}
             selectedTab={getFavoritesTabFromView(activeView) ?? favoritesDefaultTab}
             onTabNavigate={(tab) => navigateToFavorites(tab)}
             activeTrackId={currentTrack?.id ?? null}
@@ -3574,6 +4068,101 @@
           onPlaylistCopyToLibrary={copyPlaylistToLibraryById}
           onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
         />
+      {:else if activeView === 'dailyq'}
+        <DynamicSuggestView
+          onBack={navGoBack}
+          onTrackPlay={handleDisplayTrackPlay}
+          onTrackPlayNext={queueDisplayTrackNext}
+          onTrackPlayLater={queueDisplayTrackLater}
+          onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackShareQobuz={shareQobuzTrackLink}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackGoToAlbum={handleAlbumClick}
+          onTrackGoToArtist={handleArtistClick}
+          onTrackShowInfo={showTrackInfo}
+          onTrackDownload={handleDisplayTrackDownload}
+          onTrackRemoveDownload={handleTrackRemoveDownload}
+          onTrackReDownload={handleDisplayTrackDownload}
+          getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'weeklyq'}
+        <WeeklySuggestView
+          onBack={navGoBack}
+          onTrackPlay={handleDisplayTrackPlay}
+          onTrackPlayNext={queueDisplayTrackNext}
+          onTrackPlayLater={queueDisplayTrackLater}
+          onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackShareQobuz={shareQobuzTrackLink}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackGoToAlbum={handleAlbumClick}
+          onTrackGoToArtist={handleArtistClick}
+          onTrackShowInfo={showTrackInfo}
+          onTrackDownload={handleDisplayTrackDownload}
+          onTrackRemoveDownload={handleTrackRemoveDownload}
+          onTrackReDownload={handleDisplayTrackDownload}
+          getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'favq'}
+        <FavQView
+          onBack={navGoBack}
+          onTrackPlay={handleDisplayTrackPlay}
+          onTrackPlayNext={queueDisplayTrackNext}
+          onTrackPlayLater={queueDisplayTrackLater}
+          onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackShareQobuz={shareQobuzTrackLink}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackGoToAlbum={handleAlbumClick}
+          onTrackGoToArtist={handleArtistClick}
+          onTrackShowInfo={showTrackInfo}
+          onTrackDownload={handleDisplayTrackDownload}
+          onTrackRemoveDownload={handleTrackRemoveDownload}
+          onTrackReDownload={handleDisplayTrackDownload}
+          getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'topq'}
+        <TopQView
+          onBack={navGoBack}
+          onTrackPlay={handleDisplayTrackPlay}
+          onTrackPlayNext={queueDisplayTrackNext}
+          onTrackPlayLater={queueDisplayTrackLater}
+          onTrackAddToPlaylist={(trackId) => openAddToPlaylist([trackId])}
+          onTrackShareQobuz={shareQobuzTrackLink}
+          onTrackShareSonglink={(track) => shareSonglinkTrack(track.id, track.isrc)}
+          onTrackGoToAlbum={handleAlbumClick}
+          onTrackGoToArtist={handleArtistClick}
+          onTrackShowInfo={showTrackInfo}
+          onTrackDownload={handleDisplayTrackDownload}
+          onTrackRemoveDownload={handleTrackRemoveDownload}
+          onTrackReDownload={handleDisplayTrackDownload}
+          getTrackOfflineCacheStatus={getTrackOfflineCacheStatus}
+          activeTrackId={currentTrack?.id ?? null}
+          isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'purchases'}
+        <PurchasesView
+          onAlbumClick={handlePurchaseAlbumClick}
+          onArtistClick={handleArtistClick}
+          onTrackPlay={handleDisplayTrackPlay}
+          onAlbumPlay={playAlbumById}
+          activeTrackId={currentTrack?.id}
+          isPlaybackActive={isPlaying}
+        />
+      {:else if activeView === 'purchase-album' && selectedPurchaseAlbumId}
+        <PurchaseAlbumDetailView
+          albumId={selectedPurchaseAlbumId}
+          onBack={navGoBack}
+          onArtistClick={handleArtistClick}
+          onTrackPlay={handleDisplayTrackPlay}
+          onAlbumPlay={playAlbumById}
+          activeTrackId={currentTrack?.id}
+          isPlaybackActive={isPlaying}
+        />
       {/if}
     </main>
 
@@ -3584,7 +4173,7 @@
     {/if}
 
     <!-- Lyrics Sidebar -->
-    {#if lyricsSidebarVisible}
+    {#if lyricsSidebarVisible && !isQueueOpen}
       <LyricsSidebar
         title={currentTrack?.title}
         artist={currentTrack?.artist}
@@ -3594,6 +4183,29 @@
         isSynced={lyricsIsSynced}
         isLoading={lyricsStatus === 'loading'}
         error={lyricsStatus === 'error' ? lyricsError : (lyricsStatus === 'not_found' ? $t('player.noLyrics') : null)}
+      />
+    {/if}
+
+    <!-- Queue Sidebar -->
+    {#if isQueueOpen}
+      <QueuePanel
+        currentTrack={currentQueueTrack ?? undefined}
+        upcomingTracks={queue}
+        {queueTotalTracks}
+        {queueRemainingTracks}
+        {historyTracks}
+        isRadioMode={getCurrentContext()?.type === 'radio'}
+        onPlayTrack={handleQueueTrackPlay}
+        onPlayHistoryTrack={handlePlayHistoryTrack}
+        onClearQueue={handleClearQueue}
+        onSaveAsPlaylist={handleSaveQueueAsPlaylist}
+        onReorderTrack={handleQueueReorder}
+        onToggleInfinitePlay={handleToggleInfinitePlay}
+        {infinitePlayEnabled}
+        {isPlaying}
+        onRemoveFromQueue={handleRemoveFromQueue}
+        onAddToPlaylist={handleQueueTrackAddToPlaylist}
+        onShowTrackInfo={handleQueueTrackInfo}
       />
     {/if}
     </div>
@@ -3662,6 +4274,7 @@
       />
     {:else}
       <NowPlayingBar
+        onTogglePlay={togglePlay}
         onOpenQueue={toggleQueue}
         onOpenFullScreen={openFullScreen}
         onCast={openCastPicker}
@@ -3669,31 +4282,9 @@
         queueOpen={isQueueOpen}
         {volume}
         onVolumeChange={handleVolumeChange}
+        controlsDisabled={queue.length === 0}
       />
     {/if}
-
-    <!-- Queue Panel -->
-    <QueuePanel
-      isOpen={isQueueOpen}
-      onClose={closeQueue}
-      currentTrack={currentQueueTrack ?? undefined}
-      upcomingTracks={queue}
-      {queueTotalTracks}
-      {queueRemainingTracks}
-      {historyTracks}
-      isRadioMode={getCurrentContext()?.type === 'radio'}
-      onPlayTrack={handleQueueTrackPlay}
-      onPlayHistoryTrack={handlePlayHistoryTrack}
-      onClearQueue={handleClearQueue}
-      onSaveAsPlaylist={handleSaveQueueAsPlaylist}
-      onReorderTrack={handleQueueReorder}
-      onToggleInfinitePlay={handleToggleInfinitePlay}
-      {infinitePlayEnabled}
-      {isPlaying}
-      onRemoveFromQueue={handleRemoveFromQueue}
-      onAddToPlaylist={handleQueueTrackAddToPlaylist}
-      onShowTrackInfo={handleQueueTrackInfo}
-    />
 
     <!-- Immersive Player (replaces ExpandedPlayer + FocusMode) -->
     {#if currentTrack}
@@ -3812,6 +4403,14 @@
     <KeybindingsSettings
       isOpen={isKeybindingsSettingsOpen}
       onClose={() => isKeybindingsSettingsOpen = false}
+    />
+
+    <!-- Link Resolver Modal -->
+    <LinkResolverModal
+      isOpen={isLinkResolverOpen}
+      onClose={() => isLinkResolverOpen = false}
+      onResolve={handleResolvedLink}
+      onOpenImporter={() => { isLinkResolverOpen = false; openPlaylistImport(); }}
     />
 
     {#if updateRelease}

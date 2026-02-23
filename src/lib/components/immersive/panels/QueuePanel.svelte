@@ -153,7 +153,7 @@
         </div>
       {:else}
         <div class="empty-state">
-          <span>{$t('player.historyEmpty') || 'No history yet'}</span>
+          <span>{$t('player.noHistoryYet') || 'No history yet'}</span>
         </div>
       {/if}
     </div>

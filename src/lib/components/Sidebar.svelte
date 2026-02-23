@@ -1,6 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
-  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus, X, User, Disc, Music } from 'lucide-svelte';
+  import { Search, Home, HardDrive, Plus, RefreshCw, ChevronDown, ChevronUp, Heart, ListMusic, Import, Settings, MoreHorizontal, ArrowUpDown, ChevronRight, ChevronLeft, Folder, FolderPlus, X, User, Disc, Music, ShoppingBag } from 'lucide-svelte';
   import type { FavoritesPreferences } from '$lib/types';
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
@@ -83,6 +83,7 @@
     isExpanded?: boolean;
     onToggle?: () => void;
     showTitleBar?: boolean;
+    showPurchases?: boolean;
   }
 
   let {
@@ -101,7 +102,8 @@
     subscription = 'Qobuz™',
     isExpanded = true,
     onToggle,
-    showTitleBar = true
+    showTitleBar = true,
+    showPurchases = false
   }: Props = $props();
 
   let userPlaylists = $state<Playlist[]>([]);
@@ -279,7 +281,7 @@
     }
 
     try {
-      const details = await invoke<PlaylistDetails>('get_playlist', { playlistId });
+      const details = await invoke<PlaylistDetails>('v2_get_playlist', { playlistId });
       if (details.tracks?.items) {
         // Extract unique artist names
         const artistNames = new Set<string>();
@@ -906,7 +908,7 @@
 
   async function loadFavoritesPreferences() {
     try {
-      const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      const prefs = await invoke<FavoritesPreferences>('v2_get_favorites_preferences');
       // Filter out 'playlists' from tab order for sidebar display
       favoritesTabOrder = (prefs.tab_order || ['tracks', 'albums', 'artists']).filter(tab => tab !== 'playlists');
     } catch (err) {
@@ -1099,7 +1101,7 @@
       if (isOffline) {
         // In offline mode, show only pending playlists (created offline)
         console.log('[Sidebar] Loading pending playlists in offline mode');
-        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists');
+        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('v2_get_pending_playlists');
 
         // Store pending playlists metadata and populate localTrackCounts
         const newPendingMap = new Map<number, import('$lib/stores/offlineStore').PendingPlaylist>();
@@ -1135,7 +1137,7 @@
         console.log(`[Sidebar] Loaded ${userPlaylists.length} pending playlists`);
       } else {
         // Online mode - load from Qobuz
-        const playlists = await invoke<Playlist[]>('get_user_playlists');
+        const playlists = await invoke<Playlist[]>('v2_get_user_playlists');
         userPlaylists = playlists;
       }
     } catch (err) {
@@ -1147,7 +1149,7 @@
 
   async function loadPlaylistSettings() {
     try {
-      const settings = await invoke<PlaylistSettings[]>('playlist_get_all_settings');
+      const settings = await invoke<PlaylistSettings[]>('v2_playlist_get_all_settings');
       const map = new Map<number, PlaylistSettings>();
       for (const s of settings) {
         map.set(s.qobuz_playlist_id, s);
@@ -1161,7 +1163,7 @@
 
   async function loadLocalTrackCounts() {
     try {
-      const counts = await invoke<Record<string, number>>('playlist_get_all_local_track_counts');
+      const counts = await invoke<Record<string, number>>('v2_playlist_get_all_local_track_counts');
       const map = new Map<number, number>();
       for (const [id, count] of Object.entries(counts)) {
         map.set(Number(id), count);
@@ -1374,6 +1376,20 @@
         </button>
       {/if}
     </nav>
+
+    <!-- Purchases Section (conditional on settings toggle) -->
+    {#if showPurchases}
+      <nav class="nav-section">
+        <NavigationItem
+          label={$t('nav.purchases')}
+          active={activeView === 'purchases' || activeView === 'purchase-album'}
+          onclick={() => handleViewChange('purchases')}
+          showLabel={isExpanded}
+        >
+          {#snippet icon()}<ShoppingBag size={14} />{/snippet}
+        </NavigationItem>
+      </nav>
+    {/if}
 
     <!-- Playlists Section (hidden in offline mode) -->
     {#if !isOffline}
@@ -1819,7 +1835,7 @@
     flex-shrink: 0;
     background-color: var(--bg-secondary, #1a1a1a);
     position: relative;
-    z-index: 3;
+    z-index: 2000;
     display: flex;
     flex-direction: column;
     height: calc(100vh - 136px); /* 104px NowPlayingBar + 32px TitleBar */
@@ -2202,7 +2218,7 @@
     min-width: 180px;
     max-width: 260px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 10001;
+    z-index: 120001;
   }
 
   .folder-popover-header {
@@ -2281,7 +2297,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10000;
+    z-index: 120000;
   }
 
   .modal-content {
@@ -2387,7 +2403,7 @@
     border-radius: 8px;
     padding: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 10000;
+    z-index: 120000;
     max-height: 260px;
     overflow-y: auto;
     scrollbar-width: thin;
@@ -2468,7 +2484,7 @@
     border-radius: 8px;
     padding: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 10001;
+    z-index: 120001;
   }
 
   .submenu .menu-item {
@@ -2484,7 +2500,7 @@
     padding: 6px;
     min-width: 180px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-    z-index: 10002;
+    z-index: 120002;
   }
 
   .context-menu.has-search {
@@ -2684,7 +2700,7 @@
   /* Favorites Popover (collapsed sidebar) */
   .favorites-popover {
     position: fixed;
-    z-index: 9999;
+    z-index: 120000;
     background: var(--bg-secondary);
     border: 1px solid var(--border-subtle);
     border-radius: 8px;

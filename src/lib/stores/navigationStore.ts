@@ -16,6 +16,7 @@ export type ViewType =
   | 'artist'
   | 'musician'
   | 'label'
+  | 'label-releases'
   | 'playlist'
   | 'playlist-manager'
   | 'blacklist-manager'
@@ -29,7 +30,13 @@ export type ViewType =
   | 'discover-qobuzissimes'
   | 'discover-albums-of-the-week'
   | 'discover-press-accolades'
-  | 'discover-playlists';
+  | 'discover-playlists'
+  | 'purchases'
+  | 'purchase-album'
+  | 'dailyq'
+  | 'weeklyq'
+  | 'favq'
+  | 'topq';
 export type FavoritesTab = 'tracks' | 'albums' | 'artists' | 'playlists';
 
 // Navigation state
@@ -37,8 +44,14 @@ let activeView: ViewType = 'home';
 let viewHistory: ViewType[] = ['home'];
 let forwardHistory: ViewType[] = [];
 
-// Scroll position memory — keyed by ViewType
-const scrollPositions = new Map<ViewType, number>();
+// Scroll position memory — keyed by "viewType" or "viewType:itemId"
+const SCROLL_TTL_MS = 60 * 60 * 1000; // 1 hour
+interface ScrollEntry { scrollTop: number; savedAt: number; }
+const scrollPositions = new Map<string, ScrollEntry>();
+
+function scrollKey(view: ViewType, itemId?: string | number): string {
+  return itemId != null ? `${view}:${itemId}` : view;
+}
 
 // Selected playlist ID (album/artist are full data objects in +page.svelte)
 let selectedPlaylistId: number | null = null;
@@ -232,20 +245,55 @@ export function navigateToFavorites(tab?: FavoritesTab): void {
   navigateTo(favoritesViewForTab(targetTab));
 }
 
-// ============ Scroll Position ============
+// ============ Session Restore ============
 
 /**
- * Save scroll position for a view (call before navigating away)
+ * Restore a view as initial state (Home always in history root).
+ * Used during session restore to set the view without triggering data fetches.
  */
-export function saveScrollPosition(view: ViewType, scrollTop: number): void {
-  scrollPositions.set(view, scrollTop);
+export function restoreView(view: ViewType): void {
+  activeView = view;
+  viewHistory = ['home'];
+  if (view !== 'home') {
+    viewHistory.push(view);
+  }
+  forwardHistory = [];
+  notifyListeners();
 }
 
 /**
- * Get saved scroll position for a view (0 if none saved)
+ * Set playlist ID without triggering navigation (for session restore).
  */
-export function getSavedScrollPosition(view: ViewType): number {
-  return scrollPositions.get(view) ?? 0;
+export function setRestoredPlaylistId(playlistId: number): void {
+  selectedPlaylistId = playlistId;
+}
+
+/**
+ * Set local album ID without triggering navigation (for session restore).
+ */
+export function setRestoredLocalAlbumId(albumId: string): void {
+  selectedLocalAlbumId = albumId;
+}
+
+// ============ Scroll Position ============
+
+/**
+ * Save scroll position for a view (call before navigating away).
+ * Pass itemId for item-specific views (album, artist, playlist) so
+ * different items don't share the same saved position.
+ */
+export function saveScrollPosition(view: ViewType, scrollTop: number, itemId?: string | number): void {
+  scrollPositions.set(scrollKey(view, itemId), { scrollTop, savedAt: Date.now() });
+}
+
+/**
+ * Get saved scroll position for a view (0 if none saved or expired).
+ * Pass the same itemId used in saveScrollPosition.
+ */
+export function getSavedScrollPosition(view: ViewType, itemId?: string | number): number {
+  const entry = scrollPositions.get(scrollKey(view, itemId));
+  if (!entry || Date.now() - entry.savedAt > SCROLL_TTL_MS) return 0;
+  return entry.scrollTop;
 }
 
 // ============ Getters ============

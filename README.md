@@ -15,29 +15,17 @@
 
 QBZ is a free and open source (FOSS) high-fidelity streaming client for Linux with native playback. It is a real desktop application, not a web wrapper, so it can use DAC passthrough, switch sample rates per track, and deliver bit-perfect audio.
 
-## 1.1.8 Highlights
-
-- DAC Setup Wizard for guided PipeWire bit-perfect configuration
-- Immersive Player overhaul with tabbed panels and visualizer
-- Genre filtering with 3-level hierarchy
-- Playlist suggestions based on artist similarity
-- Remote control API (LAN + PWA)
-- Configurable key bindings
-- New languages: German and French, plus expanded Spanish coverage
-
-See `docs/release-1.1.8/CHANGELOG_HIGHLIGHTS.md` for details.
-
 ## Legal / Branding
 
 - This application uses the Qobuz API but is not certified by Qobuz.
-- Qobuz™ is a trademark of Qobuz. QBZ is not affiliated with, endorsed by, or certified by Qobuz.
+- Qobuz is a trademark of Qobuz. QBZ is not affiliated with, endorsed by, or certified by Qobuz.
 - The offline library is a temporary playback cache for listening without an internet connection while you have a valid subscription. You do not receive a license to keep or redistribute the content. If your subscription becomes invalid, QBZ will remove all cached content after 3 days.
 - Credentials may be stored in your system keyring if you have a keyring configured.
 - Qobuz Terms of Service: https://www.qobuz.com/us-en/legal/terms
 
 ## Why QBZ
 
-Browsers cap audio output around 48 kHz, while Qobuz™ streams up to 192 kHz. QBZ uses a native playback pipeline with direct device control, exclusive mode, and no forced resampling so your system and DAC receive the original resolution, with caching and system integrations that wrappers cannot provide.
+Browsers cap audio output around 48 kHz, while Qobuz streams up to 192 kHz. QBZ uses a native playback pipeline with direct device control, exclusive mode, and no forced resampling so your system and DAC receive the original resolution, with caching and system integrations that wrappers cannot provide.
 
 ## Installation
 
@@ -83,7 +71,7 @@ flatpak install ./QBZ.flatpak
 Due to Flatpak sandbox restrictions, **PipeWire backend cannot guarantee bit-perfect playback**. The sandbox prevents QBZ from controlling the PipeWire daemon's sample rate configuration.
 
 **For bit-perfect audio in Flatpak:**
-- Use **ALSA Direct backend** in Settings → Audio → Audio Backend
+- Use **ALSA Direct backend** in Settings > Audio > Audio Backend
 - Select your DAC from the device list
 - Enable DAC Passthrough
 
@@ -126,6 +114,8 @@ Download the `.deb` from [Releases](https://github.com/vicrodh/qbz/releases).
 sudo apt install ./qbz_*.deb
 ```
 
+> **Requires glibc 2.38+** (Ubuntu 24.04+, Debian 13+, Mint 22+). Older releases like Ubuntu 22.04 or Pop!_OS 22.04 ship glibc 2.35 and won't work -- use Flatpak, Snap, or AppImage instead.
+
 ### RPM (Fedora/openSUSE/RHEL-based)
 
 Download the `.rpm` from [Releases](https://github.com/vicrodh/qbz/releases).
@@ -134,91 +124,167 @@ Download the `.rpm` from [Releases](https://github.com/vicrodh/qbz/releases).
 sudo dnf install ./qbz-*.rpm
 ```
 
+> **Requires glibc 2.38+** (Fedora 39+, openSUSE Tumbleweed, RHEL 10+). For older releases, use Flatpak, Snap, or AppImage instead.
+
 > **Note:** Pre-built binaries include all API integrations (Last.fm, Discogs, Spotify, Apple Music, Tidal, Deezer) ready to use. If you build from source, you'll need to provide your own API keys.
-
-## Screenshots
-
-Coming soon.
 
 ## Features
 
-### Streaming and Playback
-- Qobuz™ authentication and full catalog search (albums, tracks, artists, playlists).
-- Native decoding for FLAC, MP3, AAC, and ALAC with real-time playback state updates.
-- Quality selection with automatic fallback across Qobuz™ tiers.
-- Audio device enumeration and per-device output selection.
-- Exclusive mode and DAC passthrough for bit-perfect playback.
-- Preserve original sample rates end-to-end where supported.
-- Gapless-ready playback pipeline with precise position tracking.
+### Audio and Playback
+- **Bit-perfect playback** with DAC passthrough and per-track sample rate switching (44.1 kHz to 192 kHz).
+- **Four audio backends:** PipeWire, ALSA, ALSA Direct (hw: bypass), and PulseAudio.
+- **DAC Setup Wizard** for guided bit-perfect configuration.
+- Native decoding for FLAC, MP3, AAC, ALAC, WavPack, Ogg Vorbis, and Opus via Symphonia.
+- Quality selection with automatic fallback across Qobuz tiers.
+- Per-device output selection with exclusive mode.
+- Gapless playback with precise position tracking.
+- **Loudness normalization** (EBU R128) with ReplayGain support.
+- Two-level audio cache: L1 in-memory (400 MB) with L2 disk spillover (800 MB) and next-track prefetching.
 
 ### Queue and Library
-- Queue management with shuffle, repeat, and history navigation.
-- In-memory audio cache with LRU eviction and next-track prefetching.
-- Favorites and playlists from your Qobuz™ account.
-- Local library backend: directory scanning, metadata extraction, CUE sheet parsing, and SQLite indexing.
+- Queue management with shuffle, repeat (track/queue/off), and history navigation.
+- Favorites and playlists from your Qobuz account.
+- **Local library:** directory scanning, metadata extraction with lofty, CUE sheet parsing, and SQLite indexing.
 - Grid and list views with search, A-Z index, and grouping by artist or album.
-- Multi-disc album grouping with disc headers in album views.
+- Multi-disc album grouping with disc headers.
 - Local artwork detection (folder and embedded) with Discogs fallback.
-- **Tag editor for local library:** Edit metadata (title, artist, album, genre, year) with sidecar storage that preserves original files.
+- **Tag editor:** edit metadata (title, artist, album, genre, year) with sidecar storage that preserves original files.
+- **Virtualized lists** for smooth scrolling across large libraries.
 
 ### Playlist Import
-- Import public playlists from Spotify, Apple Music, Tidal, and Deezer into your Qobuz™ library.
+- Import public playlists from Spotify, Apple Music, Tidal, and Deezer into your Qobuz library.
 - Automatic track matching with fuzzy search.
 - Batch import with progress tracking.
 
 ### Network Casting
-- Chromecast device discovery and streaming.
-- DLNA/UPnP device discovery and streaming (AVTransport SOAP).
+- **Chromecast** device discovery and streaming.
+- **DLNA/UPnP** device discovery and streaming (AVTransport SOAP).
 - Unified cast picker with protocol selection.
 - Seamless playback handoff to network devices.
 
 ### Integrations
-- MPRIS media controls and media key support on Linux.
+- **MPRIS** media controls and media key support.
+- **Last.fm** scrobbling and now-playing updates.
+- **ListenBrainz** scrobbling with offline queue and listen history sync.
+- **MusicBrainz** artist enrichment, musician credits, recording relationships, and album personnel.
+- **Discogs** artwork fetching for local library.
 - Desktop notifications for track changes.
-- Last.fm scrobbling and now-playing updates.
-- **MusicBrainz integration:** Artist enrichment, musician credits, recording relationships, and detailed album personnel.
-- **ListenBrainz integration:** Scrobbling with listen history sync.
-- Discogs artwork fetching for local library.
-- Shareable Qobuz™ URLs and universal SongLink links (Odesli).
+- Shareable Qobuz URLs and universal SongLink links (Odesli).
+
+### Immersive Player
+- Full-screen expanded player with tabbed panel system.
+- **14 visualization panels:** spectrum analyzer, oscilloscope, spectrogram, energy bands, Lissajous curves, transient pulse, vinyl animation, coverflow, and more.
+- **Synchronized lyrics** with line-by-line display and mini view.
+- Queue, track info, playback history, and suggestions panels.
 
 ### Interface
-- Now playing, queue panel, and full-screen playback views.
+- 26 built-in themes (Dark, OLED, Nord, Dracula, Tokyo Night, Catppuccin Mocha, Breeze, Adwaita, and more).
+- **Auto-theme:** generate themes dynamically from your DE color scheme, wallpaper, or a custom image (experimental).
+- **Native KDE title bar** on Plasma Wayland via KWin window rules.
 - Focus mode for distraction-free listening.
 - Mini player mode.
-- **Musician pages:** Explore performers, composers, and producers with their discography and roles.
-- **Label pages:** Browse record label catalogs.
-- **Album credits:** View detailed personnel and recording credits from MusicBrainz.
-- **Track info modal:** Detailed track metadata, recording info, and file details.
-- **Artist network sidebar:** Explore related artists and collaborators.
-- Keyboard shortcuts for common actions.
-- English and Spanish localization.
+- **Musician pages:** explore performers, composers, and producers with their discography and roles.
+- **Label pages:** browse record label catalogs.
+- **Album credits:** detailed personnel and recording credits from MusicBrainz.
+- **Image lightbox** with full-screen artwork viewing.
+- **Custom artist images:** right-click any artist to set a custom image.
+- Configurable keyboard shortcuts.
+- UI zoom from 80% to 200%.
+- 5 font choices including system font.
+- **4 languages:** English, Spanish, German, and French.
+
+### Recommendations and Discovery
+- **Home page** with personalized sections: recent albums, continue listening, top artists, favorites, and weekly suggestions.
+- Genre filtering with 3-level hierarchy.
+- **Artist similarity engine** using vector embeddings for radio and suggestions.
+- Playlist suggestions based on artist similarity.
+- Dynamic suggestions with seed-based recommendations.
+
+### Offline Support
+- Offline mode detection with automatic reconnection.
+- Offline playback cache for previously streamed content.
+- ListenBrainz and Last.fm offline queuing with automatic sync.
+
+### Remote Control
+- Built-in HTTP API for LAN remote control.
+- Self-signed TLS with auto-generated certificates.
 
 ### Settings
 - Audio device selection and quality preferences.
 - API keys configuration for self-hosted builds.
-- Theme and appearance options.
-- **Update notifications:** Check for new releases with What's New changelogs.
-
-### Performance
-- Low CPU usage in idle and playback with adaptive audio thread scheduling.
-
-## Open Source
-
-QBZ is MIT-licensed and fully open source. No telemetry, no lock-in, and no hidden services. Just a clean, transparent player built for Linux audio fans.
-
-## Inspiration
-
-QBZ draws inspiration from the broader Linux audio community that values open tools and high-fidelity playback.
+- Theme and appearance options with live preview.
+- System tray with minimize-to-tray and configurable behavior.
+- **Update notifications** with What's New changelogs.
+- Graphics composition settings for GPU/Wayland troubleshooting.
 
 ## Tech Stack
 
-- **Desktop:** Rust + Tauri 2
-- **Frontend:** SvelteKit 5 + TypeScript + Vite
-- **Audio:** rodio + symphonia
-- **Networking:** reqwest
-- **Local library:** walkdir + lofty + rusqlite
-- **Integrations:** souvlaki (MPRIS), notify-rust, SongLink (Odesli)
-- **UX:** svelte-i18n, lucide-svelte
+| Layer | Technology |
+|-------|-----------|
+| **Desktop shell** | Rust + Tauri 2.0 |
+| **Frontend** | SvelteKit + Svelte 5 (runes) + TypeScript + Vite |
+| **Audio decoding** | Symphonia (all codecs) via vendored rodio |
+| **Audio backends** | PipeWire, ALSA (via alsa-rs), ALSA Direct (hw:), PulseAudio |
+| **Networking** | reqwest (rustls-tls), axum (local API server) |
+| **Database** | rusqlite (bundled SQLite, WAL mode) |
+| **Local library** | walkdir + lofty (metadata) + image (thumbnails) |
+| **Desktop integration** | souvlaki (MPRIS), notify-rust, keyring |
+| **Casting** | rust_cast (Chromecast), rupnp (DLNA/UPnP), mdns-sd (AirPlay) |
+| **Internationalization** | svelte-i18n (4 locales) |
+| **Icons** | lucide-svelte |
+
+### Multi-Crate Architecture
+
+The Rust backend is organized into independent crates for modularity:
+
+```
+crates/
+  qbz-models/        Shared domain types (Track, Album, Artist, etc.)
+  qbz-audio/         Audio backends, loudness analysis, device management
+  qbz-player/        Playback engine, streaming, queue control
+  qbz-qobuz/         Qobuz API client and authentication
+  qbz-core/          Orchestrator coordinating player, audio, and API
+  qbz-library/       Local library scanning, metadata, thumbnails
+  qbz-integrations/  Last.fm, ListenBrainz, MusicBrainz, Discogs
+  qbz-cache/         L1 memory + L2 disk audio caching
+  qbz-cast/          Chromecast, DLNA/UPnP, AirPlay casting
+```
+
+## Project Structure
+
+```
+qbz/
+├── src/                       Frontend (SvelteKit + Svelte 5)
+│   ├── lib/
+│   │   ├── components/        120+ Svelte components
+│   │   │   ├── views/         20+ view components (Home, Search, Settings, etc.)
+│   │   │   └── immersive/     Immersive player panels and visualizers
+│   │   ├── stores/            40+ state stores (Svelte 5 runes)
+│   │   ├── services/          Backend integration services
+│   │   ├── i18n/locales/      en, es, de, fr translations
+│   │   ├── app/               Bootstrap and initialization
+│   │   └── utils/             Helpers (zoom, keyboard, sanitize, etc.)
+│   └── routes/                SvelteKit routes (main + miniplayer)
+├── src-tauri/
+│   ├── src/
+│   │   ├── auto_theme/        Dynamic theme generation from DE/wallpaper
+│   │   ├── audio/             Audio backend re-exports
+│   │   ├── config/            13 settings modules
+│   │   ├── commands_v2.rs     V2 command handlers (active API surface)
+│   │   ├── core_bridge.rs     Bridge to multi-crate architecture
+│   │   └── ...                30+ feature modules
+│   ├── vendor/
+│   │   ├── rodio/             Vendored audio playback (f32 pipeline)
+│   │   └── cpal/              Vendored audio device library
+│   └── Cargo.toml
+├── crates/                    9 independent Rust crates (see above)
+├── packaging/
+│   ├── aur/                   Arch Linux PKGBUILD
+│   └── flatpak/               Flatpak manifest and metainfo
+├── scripts/                   Build, dev, and CI helper scripts
+├── .github/workflows/         CI/CD (Linux x86_64, aarch64, Flatpak, AUR)
+└── snapcraft.yaml             Snap package definition
+```
 
 ## Building from Source
 
@@ -227,22 +293,41 @@ QBZ draws inspiration from the broader Linux audio community that values open to
 - Rust (latest stable)
 - Node.js 20+
 - Linux with audio support (PipeWire, ALSA, or PulseAudio)
-- System dependencies: `webkit2gtk-4.1`, `gtk3`, `alsa-lib`
 
-### Setup
+### System Dependencies
+
+**Debian/Ubuntu:**
+```bash
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libasound2-dev \
+  libappindicator3-dev librsvg2-dev libssl-dev pkg-config
+```
+
+**Fedora:**
+```bash
+sudo dnf install webkit2gtk4.1-devel gtk3-devel alsa-lib-devel \
+  libappindicator-gtk3-devel librsvg2-devel openssl-devel pkg-config
+```
+
+**Arch Linux:**
+```bash
+sudo pacman -S webkit2gtk-4.1 gtk3 alsa-lib libappindicator-gtk3 \
+  librsvg openssl pkg-config
+```
+
+### Build
 
 ```bash
 # Clone the repository
 git clone https://github.com/vicrodh/qbz.git
 cd qbz
 
-# Install dependencies
+# Install frontend dependencies
 npm install
 
 # Run in development mode
 npm run tauri dev
 
-# Build for production
+# Build for production (generates DEB, RPM, and AppImage)
 npm run tauri build
 ```
 
@@ -342,36 +427,6 @@ mv ~/.local/share/qbz-nix ~/.local/share/qbz
 
 If you run both development and production builds, they now share the same data directories.
 
-## Project Structure
-
-```
-qbz/
-├── src/                  # Frontend (SvelteKit)
-├── src-tauri/
-│   └── src/
-│       ├── api/          # Qobuz™ API client
-│       ├── player/       # Audio playback engine
-│       ├── queue/        # Queue management
-│       ├── cache/        # Audio cache and prefetch
-│       ├── cast/         # Chromecast & DLNA casting
-│       ├── library/      # Local library backend
-│       ├── lastfm/       # Last.fm integration
-│       ├── listenbrainz/ # ListenBrainz integration
-│       ├── musicbrainz/  # MusicBrainz integration
-│       ├── discogs/      # Discogs integration
-│       ├── playlist_import/ # Spotify/Tidal import
-│       ├── share/        # SongLink / share utilities
-│       ├── media_controls/ # MPRIS integration
-│       ├── updates/      # Release updates checker
-│       └── commands/     # Tauri IPC commands
-├── packaging/
-│   ├── aur/              # Arch Linux PKGBUILD
-│   └── flatpak/          # Flatpak manifest
-├── docs/
-│   └── release-1.1.8/    # Release notes
-└── static/               # Static assets and logo
-```
-
 ## Known Issues
 
 ### Audio Playback
@@ -383,7 +438,7 @@ qbz/
 - Future: Byte-level seeking will be implemented in a future release to fix this
 
 **First Sample Rate Change**
-- The first large sample rate change (e.g., 88.2kHz → 44.1kHz) may have a brief delay as the hardware stabilizes
+- The first large sample rate change (e.g., 88.2kHz to 44.1kHz) may have a brief delay as the hardware stabilizes
 - Subsequent changes of the same type are smooth
 - This is normal hardware behavior and not a bug
 
@@ -402,7 +457,7 @@ qbz/
 
 ### Graphics and Rendering
 
-QBZ uses WebKit for rendering. Some hardware/driver combinations may cause crashes or poor performance. Settings are available in **Settings → Appearance → Composition**.
+QBZ uses WebKit for rendering. Some hardware/driver combinations may cause crashes or poor performance. Settings are available in **Settings > Appearance > Composition**.
 
 #### Quick Recovery
 
@@ -437,7 +492,7 @@ Set these before launching QBZ to override settings:
 ```bash
 QBZ_FORCE_X11=1 qbz
 ```
-Or enable "Force X11 backend" in Settings → Appearance → Composition.
+Or enable "Force X11 backend" in Settings > Appearance > Composition.
 
 **Intel Arc GPU (EGL crashes, "Could not create default EGL display")**
 ```bash
@@ -456,7 +511,7 @@ QBZ_HARDWARE_ACCEL=0 qbz
 
 **XWayland scaling issues (blurry UI)**
 
-After enabling Force X11, configure scaling in Settings → Appearance → Composition:
+After enabling Force X11, configure scaling in Settings > Appearance > Composition:
 - **GDK_SCALE**: Integer scaling (1, 2)
 - **GDK_DPI_SCALE**: Fractional scaling (0.5, 1, 1.5, 2)
 
@@ -467,6 +522,10 @@ After enabling Force X11, configure scaling in Settings → Appearance → Compo
 - **NVIDIA on X11**: Only DMA-BUF disabled
 
 All settings require a restart to take effect.
+
+## Open Source
+
+QBZ is MIT-licensed and fully open source. No telemetry, no lock-in, and no hidden services. Just a clean, transparent player built for Linux audio fans.
 
 ## Contributing
 

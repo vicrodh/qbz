@@ -110,6 +110,7 @@
               <h3 class="category-title">{getCategoryLabel(category.id)}</h3>
 
               {#each actions as action}
+                {@const _v = bindingsVersion}
                 {@const bindings = getActiveBindings()}
                 <ShortcutInput
                   {action}
@@ -167,7 +168,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    z-index: 3000;
     backdrop-filter: blur(4px);
     animation: fadeIn 150ms ease-out;
   }
@@ -181,7 +182,7 @@
     background: var(--bg-secondary);
     border-radius: 12px;
     width: 90%;
-    max-width: 550px;
+    max-width: 660px;
     max-height: 85vh;
     display: flex;
     flex-direction: column;
@@ -253,10 +254,14 @@
     flex: 1;
     overflow-y: auto;
     padding: 20px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 24px;
   }
 
   .category-section {
     margin-bottom: 28px;
+    break-inside: avoid;
   }
 
   .category-section:last-child {
@@ -312,7 +317,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 1001;
+    z-index: 3001;
   }
 
   .confirm-dialog {
@@ -383,6 +388,7 @@
 
     .modal-content {
       padding: 16px;
+      grid-template-columns: 1fr;
     }
   }
 </style>

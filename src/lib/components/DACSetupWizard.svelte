@@ -116,7 +116,7 @@
     dacCapabilities = null;
 
     try {
-      const caps = await invoke<DacCapabilities>('query_dac_capabilities', {
+      const caps = await invoke<DacCapabilities>('v2_query_dac_capabilities', {
         nodeName: dacNodeName
       });
       dacCapabilities = caps;
@@ -243,7 +243,8 @@
     }
   }
 
-  // Generate pulse config command based on selected apps
+  // Generate stream rules config command based on selected apps
+  // Uses pipewire.conf.d/stream.rules (applies to ALL clients: ALSA, PulseAudio, JACK)
   function generatePulseConfig(): string[] {
     const fileName = dacNodeName ? `99-qbz-bitperfect-${dacShortName()}.conf` : '99-qbz-bitperfect.conf';
     const rules = selectedApps.map(app => {
@@ -256,10 +257,10 @@
     }).join('\n');
 
     return [
-      'mkdir -p ~/.config/pipewire/pipewire-pulse.conf.d',
-      `cat > ~/.config/pipewire/pipewire-pulse.conf.d/${fileName} << 'EOF'`,
+      'mkdir -p ~/.config/pipewire/pipewire.conf.d',
+      `cat > ~/.config/pipewire/pipewire.conf.d/${fileName} << 'EOF'`,
       '# QBZ DAC Setup - Per-App Bit-Perfect',
-      'pulse.rules = [',
+      'stream.rules = [',
       rules,
       ']',
       'EOF'
@@ -271,7 +272,7 @@
     const name = dacNodeName ? dacShortName() : null;
     return [
       `~/.config/pipewire/pipewire.conf.d/${name ? `99-qbz-dac-${name}.conf` : '99-qbz-dac.conf'}`,
-      `~/.config/pipewire/pipewire-pulse.conf.d/${name ? `99-qbz-bitperfect-${name}.conf` : '99-qbz-bitperfect.conf'}`,
+      `~/.config/pipewire/pipewire.conf.d/${name ? `99-qbz-bitperfect-${name}.conf` : '99-qbz-bitperfect.conf'}`,
       `~/.config/wireplumber/wireplumber.conf.d/${name ? `99-qbz-dac-${name}.conf` : '99-qbz-dac.conf'}`
     ];
   }

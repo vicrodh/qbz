@@ -14,6 +14,7 @@ import { initOfflineStore, cleanupOfflineStore, onOnlineTransition, syncPendingP
 import { loadUnavailableTracks } from '$lib/stores/unavailableTracksStore';
 import { getNextZoomLevel } from '$lib/utils/zoom';
 import { getZoom, setZoom } from '$lib/stores/zoomStore';
+import { restoreAutoThemeVars } from '$lib/stores/autoThemeStore';
 
 // ============ Theme Management ============
 
@@ -24,6 +25,16 @@ export function loadSavedTheme(): void {
   const savedTheme = localStorage.getItem('qbz-theme');
   if (savedTheme) {
     document.documentElement.setAttribute('data-theme', savedTheme);
+  }
+}
+
+/**
+ * Load and apply saved font family from localStorage
+ */
+export function loadSavedFont(): void {
+  const savedFont = localStorage.getItem('qbz-font-family');
+  if (savedFont) {
+    document.documentElement.setAttribute('data-font', savedFont);
   }
 }
 
@@ -80,7 +91,7 @@ export async function restoreLastfmSession(): Promise<void> {
 
     // Restore session if available (proxy handles credentials)
     if (savedSessionKey) {
-      await invoke('lastfm_set_session', { sessionKey: savedSessionKey });
+      await invoke('v2_lastfm_set_session', { sessionKey: savedSessionKey });
       console.log('Last.fm session restored on startup');
     }
   } catch (err) {
@@ -124,8 +135,10 @@ export interface BootstrapResult {
  * @returns Object with cleanup function for onDestroy
  */
 export function bootstrapApp(): BootstrapResult {
-  // Load theme
+  // Load theme and font (auto-theme vars first to prevent FOUC)
+  restoreAutoThemeVars();
   loadSavedTheme();
+  loadSavedFont();
   void applySavedZoom();
 
   // Load notification preferences

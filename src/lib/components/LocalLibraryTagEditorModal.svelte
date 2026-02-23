@@ -163,7 +163,7 @@
     selectedResult = null;
 
     try {
-      const results = await invoke<RemoteAlbumSearchResult[]>('remote_metadata_search', {
+      const results = await invoke<RemoteAlbumSearchResult[]>('v2_remote_metadata_search', {
         provider: remoteProvider,
         query: albumTitle.trim(),
         artist: albumArtist.trim() || null,
@@ -186,7 +186,7 @@
 
     remoteLoading = true;
     try {
-      const metadata = await invoke<RemoteAlbumMetadata>('remote_metadata_get_album', {
+      const metadata = await invoke<RemoteAlbumMetadata>('v2_remote_metadata_get_album', {
         provider: selectedResult.provider,
         providerId: selectedResult.provider_id
       });
@@ -353,13 +353,13 @@
 
     try {
       if (persistence === 'sidecar') {
-        await invoke('library_update_album_metadata', { request: payload });
+        await invoke('v2_library_update_album_metadata', { request: payload });
       } else {
         // Listen for progress events
         unlisten = await listen<{ current: number; total: number }>('library:tag_write_progress', (event) => {
           writeProgress = event.payload;
         });
-        await invoke('library_write_album_metadata_to_files', { request: payload });
+        await invoke('v2_library_write_album_metadata_to_files', { request: payload });
       }
       showToast($t('toast.albumMetadataSaved'), 'success');
       await onSaved();

@@ -20,7 +20,7 @@ export interface GenreTreeNode {
   loading?: boolean;
 }
 
-export type GenreFilterContext = 'home' | 'favorites' | 'discover-new-releases' | 'discover-ideal-discography' | 'discover-top-albums' | 'discover-qobuzissimes' | 'discover-albums-of-the-week' | 'discover-press-accolades' | 'discover-playlists';
+export type GenreFilterContext = 'home' | 'favorites' | 'favorites-tracks' | 'discover-new-releases' | 'discover-ideal-discography' | 'discover-top-albums' | 'discover-qobuzissimes' | 'discover-albums-of-the-week' | 'discover-press-accolades' | 'discover-playlists';
 
 interface ContextState {
   selectedGenreIds: Set<number>;
@@ -40,6 +40,7 @@ interface GenreFilterState {
 const STORAGE_KEYS: Record<GenreFilterContext, string> = {
   home: 'qbz_genre_filter_home',
   favorites: 'qbz_genre_filter_favorites',
+  'favorites-tracks': 'qbz_genre_filter_favorites_tracks',
   'discover-new-releases': 'qbz_genre_filter_discover_new_releases',
   'discover-ideal-discography': 'qbz_genre_filter_discover_ideal_discography',
   'discover-top-albums': 'qbz_genre_filter_discover_top_albums',
@@ -106,6 +107,11 @@ const state: GenreFilterState = {
       listeners: new Set(),
     },
     favorites: {
+      selectedGenreIds: new Set(),
+      rememberSelection: true,
+      listeners: new Set(),
+    },
+    'favorites-tracks': {
       selectedGenreIds: new Set(),
       rememberSelection: true,
       listeners: new Set(),
@@ -257,7 +263,7 @@ export async function loadGenres(): Promise<void> {
   notifyAll();
 
   try {
-    const parentGenres = await invoke<GenreInfo[]>('get_genres', {});
+    const parentGenres = await invoke<GenreInfo[]>('v2_get_genres', {});
     parentGenres.sort((a, b) => a.name.localeCompare(b.name));
 
     // Load all children and grandchildren in parallel
@@ -267,7 +273,7 @@ export async function loadGenres(): Promise<void> {
     // Fetch level 2 (children) for all parents in parallel
     const level2Results = await Promise.all(
       parentGenres.map(async (parent) => {
-        const children = await invoke<GenreInfo[]>('get_genres', { parentId: parent.id });
+        const children = await invoke<GenreInfo[]>('v2_get_genres', { parentId: parent.id });
         return { parentId: parent.id, children: children.map(c => ({ ...c, parentId: parent.id })) };
       })
     );
@@ -281,7 +287,7 @@ export async function loadGenres(): Promise<void> {
     const allChildren = level2Results.flatMap(r => r.children);
     const level3Results = await Promise.all(
       allChildren.map(async (child) => {
-        const grandchildren = await invoke<GenreInfo[]>('get_genres', { parentId: child.id });
+        const grandchildren = await invoke<GenreInfo[]>('v2_get_genres', { parentId: child.id });
         return { parentId: child.id, grandchildren: grandchildren.map(gc => ({ ...gc, parentId: child.id })) };
       })
     );
@@ -364,7 +370,7 @@ export async function loadChildren(genreId: number, silent = false): Promise<Gen
   }
 
   try {
-    const children = await invoke<GenreInfo[]>('get_genres', { parentId: genreId });
+    const children = await invoke<GenreInfo[]>('v2_get_genres', { parentId: genreId });
     const taggedChildren = children.map(c => ({ ...c, parentId: genreId, childrenLoaded: false }));
 
     state.childrenByParent.set(genreId, taggedChildren);

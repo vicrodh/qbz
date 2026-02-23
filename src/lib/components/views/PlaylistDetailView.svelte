@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ChevronUp, ImagePlus, Edit3, BarChart2, Heart, CloudDownload, ListPlus, GripVertical } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ChevronUp, ImagePlus, Edit3, BarChart2, Heart, CloudDownload, ListPlus, GripVertical, CheckSquare } from 'lucide-svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
@@ -10,8 +10,9 @@
   import { open, ask } from '@tauri-apps/plugin-dialog';
   import TrackRow from '../TrackRow.svelte';
   import PlaylistSuggestions from '../PlaylistSuggestions.svelte';
+  import BulkActionBar from '../BulkActionBar.svelte';
   import { extractAdaptiveArtists } from '$lib/services/playlistSuggestionsService';
-  import { type OfflineCacheStatus, cacheTrackForOffline, getOfflineCacheState } from '$lib/stores/offlineCacheState';
+  import { type OfflineCacheStatus, cacheTrackForOffline, cacheTracksForOfflineBatch, getOfflineCacheState } from '$lib/stores/offlineCacheState';
   import {
     subscribe as subscribeOffline,
     getStatus as getOfflineStatus,
@@ -22,6 +23,7 @@
   import { isTrackUnavailable, clearTrackUnavailable, subscribe as subscribeUnavailable } from '$lib/stores/unavailableTracksStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { showToast } from '$lib/stores/toastStore';
+  import { sanitizeHtml } from '$lib/utils/sanitize';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
   import { onMount, tick } from 'svelte';
@@ -164,6 +166,8 @@
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
+    onTrackCreateQbzRadio?: (trackId: number, trackTitle: string, artistId?: number) => void;
+    onTrackCreateQobuzRadio?: (trackId: number, trackTitle: string) => void;
     getTrackOfflineCacheStatus?: (trackId: number) => { status: OfflineCacheStatus; progress: number };
     downloadStateVersion?: number;
     onLocalTrackPlay?: (track: LocalLibraryTrack) => void;
@@ -193,6 +197,8 @@
     onTrackDownload,
     onTrackRemoveDownload,
     onTrackReDownload,
+    onTrackCreateQbzRadio,
+    onTrackCreateQobuzRadio,
     getTrackOfflineCacheStatus,
     downloadStateVersion,
     onLocalTrackPlay,
@@ -290,6 +296,10 @@
   let selectedTrackKeys = $state<Set<string>>(new Set());  // Set of "trackId:isLocal" keys
   let isSelectionMode = $derived(isCustomOrderMode && selectedTrackKeys.size > 0);
 
+  // Multi-select state (bulk actions, works in all sort modes)
+  let multiSelectMode = $state(false);
+  let multiSelectedKeys = $state(new Set<string>());
+
   // User ownership state (to show "Copy to Library" button for non-owned playlists)
   let currentUserId = $state<number | null>(null);
   let isOwnPlaylist = $derived(playlist !== null && currentUserId !== null && playlist.owner.id === currentUserId);
@@ -340,11 +350,11 @@
 
   // Subscribe to offline status changes and fetch current user ID
   onMount(() => {
-    // Fetch current user ID for ownership check
-    invoke<number | null>('get_current_user_id').then(userId => {
-      currentUserId = userId;
+    // Fetch current user ID for ownership check via runtime contract (not legacy)
+    invoke<{ user_id: number | null }>('runtime_get_status').then(status => {
+      currentUserId = status.user_id;
     }).catch(err => {
-      console.warn('Failed to get current user ID:', err);
+      console.warn('Failed to get current user ID from runtime:', err);
     });
 
     const unsubscribeOffline = subscribeOffline(() => {
@@ -364,7 +374,7 @@
     requestAnimationFrame(() => {
       if (scrollContainer) {
         trackListViewHeight = scrollContainer.clientHeight;
-        const saved = getSavedScrollPosition('playlist');
+        const saved = getSavedScrollPosition('playlist', playlistId);
         if (saved > 0) {
           scrollContainer.scrollTop = saved;
         }
@@ -439,7 +449,7 @@
         return;
       }
 
-      const localIds = await invoke<number[]>('playlist_get_tracks_with_local_copies', {
+      const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
         trackIds: qobuzTrackIds
       });
       tracksWithLocalCopies = new Set(localIds);
@@ -505,12 +515,12 @@
       if (playlistId < 0) {
         // For pending playlists, load local tracks from the pending playlist data
         const pendingId = -playlistId;
-        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists');
+        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('v2_get_pending_playlists');
         const pending = pendingPlaylists.find(p => p.id === pendingId);
 
         if (pending && pending.localTrackIds.length > 0) {
           // Load the actual local track data
-          const localTrackData = await invoke<LocalLibraryTrack[]>('library_get_tracks_by_ids', {
+          const localTrackData = await invoke<LocalLibraryTrack[]>('v2_library_get_tracks_by_ids', {
             trackIds: pending.localTrackIds
           });
 
@@ -526,7 +536,7 @@
         }
       } else {
         // Regular playlist - use existing command
-        const result = await invoke<PlaylistLocalTrack[]>('playlist_get_local_tracks_with_position', { playlistId });
+        const result = await invoke<PlaylistLocalTrack[]>('v2_playlist_get_local_tracks_with_position', { playlistId });
         localTracks = result;
         localTracksMap = new Map(result.map(trk => [trk.id, trk]));
       }
@@ -581,7 +591,7 @@
       if (playlistId < 0) {
         // === Pending (offline) playlist ===
         const pendingId = -playlistId;
-        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('get_pending_playlists');
+        const pendingPlaylists = await invoke<import('$lib/stores/offlineStore').PendingPlaylist[]>('v2_get_pending_playlists');
         const pending = pendingPlaylists.find(p => p.id === pendingId);
 
         if (!pending) {
@@ -602,7 +612,7 @@
 
         if (pending.trackIds.length > 0) {
           try {
-            const qobuzTracks = await invoke<PlaylistTrack[]>('get_tracks_by_ids', {
+            const qobuzTracks = await invoke<PlaylistTrack[]>('v2_get_tracks_batch', {
               trackIds: pending.trackIds
             });
             tracks = qobuzTracks.map((track, idx) => mapPlaylistTrack(track, idx));
@@ -619,9 +629,9 @@
         // === Regular playlist — decide strategy based on track count ===
 
         // Phase 1: lightweight metadata + track IDs (always fast)
-        console.log(`[Perf] invoke get_playlist_track_ids START (+${(performance.now() - _t0).toFixed(1)}ms)`);
-        const meta = await invoke<PlaylistWithTrackIds>('get_playlist_track_ids', { playlistId });
-        console.log(`[Perf] invoke get_playlist_track_ids DONE (+${(performance.now() - _t0).toFixed(1)}ms) — ${meta.track_ids.length} IDs`);
+        console.log(`[Perf] invoke v2_get_playlist_track_ids START (+${(performance.now() - _t0).toFixed(1)}ms)`);
+        const meta = await invoke<PlaylistWithTrackIds>('v2_get_playlist_track_ids', { playlistId });
+        console.log(`[Perf] invoke v2_get_playlist_track_ids DONE (+${(performance.now() - _t0).toFixed(1)}ms) — ${meta.track_ids.length} IDs`);
 
         // Set playlist metadata immediately
         playlist = {
@@ -640,7 +650,7 @@
         if (allTrackIds.length <= PROGRESSIVE_THRESHOLD) {
           // --- Small playlist: single get_playlist call, no placeholders ---
           console.log(`[Perf] small playlist (${allTrackIds.length} ≤ ${PROGRESSIVE_THRESHOLD}), using get_playlist`);
-          const fullPlaylist = await invoke<Playlist>('get_playlist', { playlistId });
+          const fullPlaylist = await invoke<Playlist>('v2_get_playlist', { playlistId });
           console.log(`[Perf] get_playlist DONE (+${(performance.now() - _t0).toFixed(1)}ms)`);
 
           // Use images from meta (collage thumbnails) if the full playlist doesn't have them
@@ -671,7 +681,7 @@
           const firstGroup = batches.slice(0, CONCURRENCY);
           const firstResults = await Promise.all(
             firstGroup.map(batch =>
-              invoke<PlaylistTrack[]>('get_tracks_batch', { trackIds: batch })
+              invoke<PlaylistTrack[]>('v2_get_tracks_batch', { trackIds: batch })
                 .catch(err => {
                   console.warn('[Perf] batch fetch failed:', err);
                   return [] as PlaylistTrack[];
@@ -697,36 +707,89 @@
           // plus a setTimeout(0) yield between groups so the browser can paint.
           if (batches.length > CONCURRENCY) {
             const remaining = batches.slice(CONCURRENCY);
+            const totalExpected = allTrackIds.length;
+            const currentPlaylistId = playlistId; // Capture to detect playlist change
+
             (async () => {
-              for (let g = 0; g < remaining.length; g += CONCURRENCY) {
-                const group = remaining.slice(g, g + CONCURRENCY);
+              const failedBatches: number[][] = [];
 
-                const results = await Promise.all(
-                  group.map(batch =>
-                    invoke<PlaylistTrack[]>('get_tracks_batch', { trackIds: batch })
-                      .catch(err => {
-                        console.warn('[Perf] batch fetch failed:', err);
-                        return [] as PlaylistTrack[];
-                      })
-                  )
-                );
+              try {
+                for (let g = 0; g < remaining.length; g += CONCURRENCY) {
+                  // Check if playlist changed - abort if so
+                  if (playlistId !== currentPlaylistId) {
+                    console.log('[Perf] playlist changed, aborting background load');
+                    return;
+                  }
 
-                // Build new batch of DisplayTracks
-                const currentLen = tracks.length;
-                const newTracks: DisplayTrack[] = [];
-                for (const batchTracks of results) {
-                  for (const apiTrack of batchTracks) {
-                    newTracks.push(mapPlaylistTrack(apiTrack, currentLen + newTracks.length));
+                  const group = remaining.slice(g, g + CONCURRENCY);
+
+                  const results = await Promise.all(
+                    group.map((batch, idx) =>
+                      invoke<PlaylistTrack[]>('v2_get_tracks_batch', { trackIds: batch })
+                        .catch(err => {
+                          console.warn(`[Perf] batch ${g + idx} fetch failed:`, err);
+                          failedBatches.push(batch);
+                          return [] as PlaylistTrack[];
+                        })
+                    )
+                  );
+
+                  // Build new batch of DisplayTracks
+                  const currentLen = tracks.length;
+                  const newTracks: DisplayTrack[] = [];
+                  for (const batchTracks of results) {
+                    for (const apiTrack of batchTracks) {
+                      newTracks.push(mapPlaylistTrack(apiTrack, currentLen + newTracks.length));
+                    }
+                  }
+
+                  // Single reactive assignment: append batch
+                  if (newTracks.length > 0) {
+                    tracks = [...tracks, ...newTracks];
+                    tracksLoadedCount = tracks.length;
+                  }
+                  console.log(`[Perf] loaded ${tracksLoadedCount}/${totalExpected} tracks (+${(performance.now() - _t0).toFixed(1)}ms)`);
+
+                  // Yield to browser — let it paint before next group
+                  await new Promise(r => setTimeout(r, 0));
+                }
+
+                // Retry failed batches once
+                if (failedBatches.length > 0 && playlistId === currentPlaylistId) {
+                  console.log(`[Perf] retrying ${failedBatches.length} failed batches...`);
+                  await new Promise(r => setTimeout(r, 500)); // Small delay before retry
+
+                  for (const batch of failedBatches) {
+                    if (playlistId !== currentPlaylistId) break;
+
+                    try {
+                      const retryResult = await invoke<PlaylistTrack[]>('v2_get_tracks_batch', { trackIds: batch });
+                      if (retryResult.length > 0) {
+                        const currentLen = tracks.length;
+                        const newTracks = retryResult.map((apiTrack, idx) =>
+                          mapPlaylistTrack(apiTrack, currentLen + idx)
+                        );
+                        tracks = [...tracks, ...newTracks];
+                        tracksLoadedCount = tracks.length;
+                        console.log(`[Perf] retry success: now ${tracksLoadedCount}/${totalExpected} tracks`);
+                      }
+                    } catch (retryErr) {
+                      console.error('[Perf] retry failed:', retryErr);
+                    }
                   }
                 }
 
-                // Single reactive assignment: append batch
-                tracks = [...tracks, ...newTracks];
-                tracksLoadedCount = tracks.length;
-                console.log(`[Perf] loaded ${tracksLoadedCount}/${allTrackIds.length} tracks (+${(performance.now() - _t0).toFixed(1)}ms)`);
-
-                // Yield to browser — let it paint before next group
-                await new Promise(r => setTimeout(r, 0));
+                // Final status
+                if (playlistId === currentPlaylistId) {
+                  const missing = totalExpected - tracks.length;
+                  if (missing > 0) {
+                    console.warn(`[Perf] INCOMPLETE: loaded ${tracks.length}/${totalExpected}, missing ${missing} tracks`);
+                  } else {
+                    console.log(`[Perf] COMPLETE: loaded all ${tracks.length} tracks`);
+                  }
+                }
+              } catch (loopErr) {
+                console.error('[Perf] progressive load loop failed:', loopErr);
               }
             })();
           }
@@ -774,7 +837,7 @@
     }
 
     try {
-      const settings = await invoke<PlaylistSettings | null>('playlist_get_settings', { playlistId });
+      const settings = await invoke<PlaylistSettings | null>('v2_playlist_get_settings', { playlistId });
       playlistSettings = settings;
       if (settings) {
         sortBy = (settings.sort_by as SortField) || 'default';
@@ -804,7 +867,7 @@
     }
 
     try {
-      const stats = await invoke<PlaylistStats | null>('playlist_get_stats', { playlistId });
+      const stats = await invoke<PlaylistStats | null>('v2_playlist_get_stats', { playlistId });
       playlistStats = stats;
     } catch (err) {
       console.error('Failed to load playlist stats:', err);
@@ -817,7 +880,7 @@
     const newValue = !isFavorite;
     isFavorite = newValue; // Optimistic update
     try {
-      await invoke('playlist_set_favorite', { playlistId, favorite: newValue });
+      await invoke('v2_playlist_set_favorite', { playlistId, favorite: newValue });
     } catch (err) {
       console.error('Failed to toggle favorite:', err);
       isFavorite = !newValue; // Revert on error
@@ -829,7 +892,7 @@
 
     isCopying = true;
     try {
-      const newPlaylist = await invoke<Playlist>('subscribe_playlist', { playlistId: playlist.id });
+      const newPlaylist = await invoke<Playlist>('v2_subscribe_playlist', { playlistId: playlist.id });
       // Mark as copied so button disappears
       markPlaylistAsCopied(playlist.id);
       // Notify parent to refresh sidebar
@@ -863,7 +926,7 @@
     }
 
     try {
-      await invoke('playlist_set_sort', { playlistId, sortBy, sortOrder });
+      await invoke('v2_playlist_set_sort', { playlistId, sortBy, sortOrder });
     } catch (err) {
       console.error('Failed to save sort settings:', err);
     }
@@ -876,11 +939,11 @@
     customOrderLoading = true;
     try {
       // Check if custom order exists
-      const hasOrder = await invoke<boolean>('playlist_has_custom_order', { playlistId });
+      const hasOrder = await invoke<boolean>('v2_playlist_has_custom_order', { playlistId });
 
       if (hasOrder) {
         // Load existing custom order
-        const orders = await invoke<[number, boolean, number][]>('playlist_get_custom_order', { playlistId });
+        const orders = await invoke<[number, boolean, number][]>('v2_playlist_get_custom_order', { playlistId });
         const newMap = new Map<string, number>();
         for (const [trackId, isLocal, position] of orders) {
           newMap.set(`${trackId}:${isLocal}`, position);
@@ -901,8 +964,8 @@
   async function initCustomOrderFromCurrentTracks() {
     // Get all tracks in current display order (before custom sort applied)
     const allTracks = [...tracks];
-    const localTracksInPlaylist = localTracks.map((t, idx) => ({
-      ...t,
+    const localTracksInPlaylist = localTracks.map((trackItem, idx) => ({
+      ...trackItem,
       playlist_position: idx
     }));
 
@@ -923,7 +986,7 @@
 
     // Save to backend
     try {
-      await invoke('playlist_init_custom_order', { playlistId, trackIds });
+      await invoke('v2_playlist_init_custom_order', { playlistId, trackIds });
 
       // Update local state
       const newMap = new Map<string, number>();
@@ -965,7 +1028,7 @@
 
     // Persist to backend
     try {
-      await invoke('playlist_move_track', {
+      await invoke('v2_playlist_move_track', {
         playlistId,
         trackId: Math.abs(trackId),
         isLocal,
@@ -1069,6 +1132,78 @@
     selectedTrackKeys = newSet;
   }
 
+  function toggleMultiSelectMode() {
+    multiSelectMode = !multiSelectMode;
+    if (!multiSelectMode) multiSelectedKeys = new Set();
+  }
+
+  function toggleMultiSelect(track: DisplayTrack) {
+    const key = getTrackKey(track);
+    const next = new Set(multiSelectedKeys);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    multiSelectedKeys = next;
+  }
+
+  async function handleBulkPlayNext() {
+    const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
+    const { queueTracks } = buildQueueTracks(selected);
+    await invoke('v2_add_tracks_to_queue_next', { tracks: queueTracks });
+    multiSelectedKeys = new Set();
+    multiSelectMode = false;
+  }
+
+  async function handleBulkPlayLater() {
+    const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
+    const { queueTracks } = buildQueueTracks(selected);
+    await invoke('v2_add_tracks_to_queue', { tracks: queueTracks });
+    multiSelectedKeys = new Set();
+    multiSelectMode = false;
+  }
+
+  async function handleBulkAddToPlaylist() {
+    for (const trk of displayTracks) {
+      if (multiSelectedKeys.has(getTrackKey(trk)) && !trk.isLocal) {
+        onTrackAddToPlaylist?.(trk.id);
+      }
+    }
+    multiSelectedKeys = new Set();
+    multiSelectMode = false;
+  }
+
+  async function handleBulkRemoveFromPlaylist() {
+    const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
+    const localTrackIds: number[] = [];
+    const playlistTrackIds: number[] = [];
+    const fallbackTrackIds: number[] = [];
+
+    for (const trk of selected) {
+      if (trk.isLocal && trk.localTrackId) {
+        localTrackIds.push(trk.localTrackId);
+      } else if (trk.playlistTrackId) {
+        playlistTrackIds.push(trk.playlistTrackId);
+      } else {
+        fallbackTrackIds.push(trk.id);
+      }
+    }
+
+    for (const localTrackId of localTrackIds) {
+      await invoke('v2_playlist_remove_local_track', { playlistId, localTrackId });
+    }
+    if (playlistTrackIds.length > 0) {
+      await invoke('v2_remove_tracks_from_playlist', { playlistId, playlistTrackIds });
+    }
+    if (fallbackTrackIds.length > 0) {
+      await invoke('v2_remove_tracks_from_playlist', { playlistId, trackIds: fallbackTrackIds });
+    }
+
+    multiSelectedKeys = new Set();
+    multiSelectMode = false;
+    await loadPlaylist();
+    if (localTrackIds.length > 0) await loadLocalTracks();
+    notifyParentOfCounts();
+    onPlaylistUpdated?.();
+  }
+
   // Move all selected tracks up one position (as a group)
   async function moveSelectedUp() {
     if (selectedTrackKeys.size === 0) return;
@@ -1100,7 +1235,7 @@
     // Save new order
     const orders: [number, boolean, number][] = currentOrder.map((item, pos) => [item.id, item.isLocal, pos]);
     try {
-      await invoke('playlist_set_custom_order', { playlistId, orders });
+      await invoke('v2_playlist_set_custom_order', { playlistId, orders });
       // Update local map
       const newMap = new Map<string, number>();
       orders.forEach(([id, isLocal, pos]) => {
@@ -1143,7 +1278,7 @@
     // Save new order
     const orders: [number, boolean, number][] = currentOrder.map((item, pos) => [item.id, item.isLocal, pos]);
     try {
-      await invoke('playlist_set_custom_order', { playlistId, orders });
+      await invoke('v2_playlist_set_custom_order', { playlistId, orders });
       // Update local map
       const newMap = new Map<string, number>();
       orders.forEach(([id, isLocal, pos]) => {
@@ -1163,7 +1298,7 @@
       });
       if (selected && typeof selected === 'string') {
         customArtworkPath = selected;
-        await invoke('playlist_set_artwork', { playlistId, artworkPath: selected });
+        await invoke('v2_playlist_set_artwork', { playlistId, artworkPath: selected });
       }
     } catch (err) {
       console.error('Failed to select artwork:', err);
@@ -1173,7 +1308,7 @@
   async function clearCustomArtwork() {
     customArtworkPath = null;
     try {
-      await invoke('playlist_set_artwork', { playlistId, artworkPath: null });
+      await invoke('v2_playlist_set_artwork', { playlistId, artworkPath: null });
     } catch (err) {
       console.error('Failed to clear artwork:', err);
     }
@@ -1329,7 +1464,7 @@
   function handlePlaylistScroll(e: Event) {
     const container = e.target as HTMLElement;
     // Save scroll position for navigation restoration
-    saveScrollPosition('playlist', container.scrollTop);
+    saveScrollPosition('playlist', container.scrollTop, playlistId);
     // Update virtual scroll state relative to the track list position
     if (trackListEl) {
       const trackListTop = trackListEl.offsetTop;
@@ -1420,7 +1555,7 @@
     const allTracks = displayTracks;
     if (allTracks.length === 0) return;
     const { queueTracks, localIds } = buildQueueTracks(allTracks);
-    await invoke('set_queue', { tracks: queueTracks, startIndex });
+    await invoke('v2_set_queue', { tracks: queueTracks, startIndex });
     if (localIds.length > 0) {
       onSetLocalQueue?.(localIds);
     }
@@ -1492,12 +1627,12 @@
     try {
       if (track.isLocal && track.localTrackId) {
         // Remove local track
-        await invoke('playlist_remove_local_track', { playlistId, localTrackId: track.localTrackId });
+        await invoke('v2_playlist_remove_local_track', { playlistId, localTrackId: track.localTrackId });
         await loadLocalTracks();
         notifyParentOfCounts();
       } else if (track.playlistTrackId) {
         // Remove Qobuz track using playlist_track_id (available from full playlist load)
-        await invoke('remove_tracks_from_playlist', {
+        await invoke('v2_remove_tracks_from_playlist', {
           playlistId,
           playlistTrackIds: [track.playlistTrackId]
         });
@@ -1505,7 +1640,7 @@
         notifyParentOfCounts();
       } else {
         // Progressive loading path: no playlist_track_id available, resolve by track ID
-        await invoke('remove_tracks_from_playlist', {
+        await invoke('v2_remove_tracks_from_playlist', {
           playlistId,
           trackIds: [track.id]
         });
@@ -1553,19 +1688,19 @@
 
       // Remove the old track (supports both playlist_track_id and track_id resolution)
       if (trackToReplace.playlistTrackId) {
-        await invoke('remove_tracks_from_playlist', {
+        await invoke('v2_remove_tracks_from_playlist', {
           playlistId,
           playlistTrackIds: [trackToReplace.playlistTrackId]
         });
       } else {
-        await invoke('remove_tracks_from_playlist', {
+        await invoke('v2_remove_tracks_from_playlist', {
           playlistId,
           trackIds: [trackToReplace.id]
         });
       }
 
       // Add the new track
-      await invoke('add_tracks_to_playlist', {
+      await invoke('v2_add_tracks_to_playlist', {
         playlistId,
         trackIds: [newTrack.id]
       });
@@ -1581,11 +1716,11 @@
       // Show success message
       showToast($t('playlist.trackReplaced'), 'success');
 
+      console.log(`[Playlist] Track replaced: ${trackToReplace?.title} -> ${newTrack.title} at position ${currentIndex}`);
+
       // Close modal
       replacementModalOpen = false;
       trackToReplace = null;
-
-      console.log(`[Playlist] Track replaced: ${trackToReplace?.title} -> ${newTrack.title} at position ${currentIndex}`);
     } catch (err) {
       console.error('Failed to replace track:', err);
       showToast($t('playlist.trackReplaceFailed'), 'error');
@@ -1619,7 +1754,7 @@
   async function handleAddSuggestedTrack(suggestedTrack: import('$lib/services/playlistSuggestionsService').SuggestedTrack) {
     try {
       // Add to Qobuz playlist
-      await invoke('add_tracks_to_playlist', {
+      await invoke('v2_add_tracks_to_playlist', {
         playlistId,
         trackIds: [suggestedTrack.track_id]
       });
@@ -1724,7 +1859,7 @@
       }
 
       // Increment play count
-      const stats = await invoke<PlaylistStats>('playlist_increment_play_count', { playlistId });
+      const stats = await invoke<PlaylistStats>('v2_playlist_increment_play_count', { playlistId });
       playlistStats = stats;
     } catch (err) {
       console.error('Failed to set queue:', err);
@@ -1748,7 +1883,7 @@
   async function handleShuffle() {
     if (tracks.length > 0 && onTrackPlay) {
       try {
-        await invoke('set_shuffle', { enabled: true });
+        await invoke('v2_set_shuffle', { enabled: true });
         await handlePlayAll();
       } catch (err) {
         console.error('Failed to shuffle:', err);
@@ -1774,34 +1909,31 @@
       .filter(trk => trk.isLocal)
       .map(trk => Math.abs(trk.id));
 
-    // Add in reverse order so first track ends up right after current
-    for (let i = playableTracks.length - 1; i >= 0; i--) {
-      const trk = playableTracks[i];
-      try {
-        await invoke('add_to_queue_next', {
-          track: {
-            id: trk.isLocal ? Math.abs(trk.id) : trk.id,
-            title: trk.title,
-            artist: trk.artist || 'Unknown Artist',
-            album: trk.album || playlist?.name || 'Playlist',
-            duration_secs: trk.durationSeconds,
-            artwork_url: trk.albumArt || getPlaylistImage(),
-            hires: trk.hires ?? false,
-            bit_depth: trk.bitDepth ?? null,
-            sample_rate: trk.samplingRate != null ? (trk.isLocal ? trk.samplingRate * 1000 : trk.samplingRate) : null,
-            is_local: trk.isLocal ?? false,
-            album_id: trk.isLocal ? null : (trk.albumId || null),
-            artist_id: trk.isLocal ? null : (trk.artistId ?? null),
-          }
-        });
-      } catch (err) {
-        console.error('Failed to add track next:', err);
-      }
-    }
+    // Build queue tracks for batch add (V2 handles reverse order)
+    const queueTracks = playableTracks.map(trk => ({
+      id: trk.isLocal ? Math.abs(trk.id) : trk.id,
+      title: trk.title,
+      artist: trk.artist || 'Unknown Artist',
+      album: trk.album || playlist?.name || 'Playlist',
+      duration_secs: trk.durationSeconds,
+      artwork_url: trk.albumArt || getPlaylistImage(),
+      hires: trk.hires ?? false,
+      bit_depth: trk.bitDepth ?? null,
+      sample_rate: trk.samplingRate != null ? (trk.isLocal ? trk.samplingRate * 1000 : trk.samplingRate) : null,
+      is_local: trk.isLocal ?? false,
+      album_id: trk.isLocal ? null : (trk.albumId || null),
+      artist_id: trk.isLocal ? null : (trk.artistId ?? null),
+    }));
 
-    // Tell parent about local tracks added to queue
-    if (localIds.length > 0) {
-      onSetLocalQueue?.(localIds);
+    try {
+      await invoke('v2_add_tracks_to_queue_next', { tracks: queueTracks });
+
+      // Tell parent about local tracks added to queue
+      if (localIds.length > 0) {
+        onSetLocalQueue?.(localIds);
+      }
+    } catch (err) {
+      console.error('Failed to add tracks next:', err);
     }
   }
 
@@ -1839,7 +1971,7 @@
       .map(trk => Math.abs(trk.id));
 
     try {
-      await invoke('add_tracks_to_queue', { tracks: queueTracks });
+      await invoke('v2_add_tracks_to_queue', { tracks: queueTracks });
 
       // Tell parent about local tracks added to queue
       if (localIds.length > 0) {
@@ -1887,22 +2019,20 @@
     const playlistName = playlist?.name || '';
     showToast(translate('playlist.preparingPlaylistOffline', { values: { count: tracksToCache.length, name: playlistName } }), 'info');
 
-    for (const track of tracksToCache) {
-      try {
-        await cacheTrackForOffline({
-          id: track.id,
-          title: track.title,
-          artist: track.artist || 'Unknown',
-          album: track.album,
-          albumId: track.albumId,
-          durationSecs: track.durationSeconds,
-          quality: '-',
-          bitDepth: track.bitDepth,
-          sampleRate: track.samplingRate,
-        });
-      } catch (err) {
-        console.error(`Failed to queue offline cache for "${track.title}":`, err);
-      }
+    try {
+      await cacheTracksForOfflineBatch(tracksToCache.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist || 'Unknown',
+        album: track.album,
+        albumId: track.albumId,
+        durationSecs: track.durationSeconds,
+        quality: '-',
+        bitDepth: track.bitDepth,
+        sampleRate: track.samplingRate,
+      })));
+    } catch (err) {
+      console.error('Failed to batch queue offline cache:', err);
     }
   }
 </script>
@@ -1968,7 +2098,7 @@
         <span class="playlist-label">Playlist</span>
         <h1 class="playlist-title">{playlist.name}</h1>
         {#if playlist.description}
-          <p class="playlist-description">{playlist.description}</p>
+          <p class="playlist-description">{@html sanitizeHtml(playlist.description)}</p>
         {/if}
         <div class="playlist-info">
           <span class="owner">{playlist.owner.name}</span>
@@ -2076,6 +2206,15 @@
         {/if}
       </div>
 
+      <!-- Multi-select toggle -->
+      <button
+        class="sort-btn icon-only"
+        class:active={multiSelectMode}
+        onclick={toggleMultiSelectMode}
+        title={multiSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+      >
+        <CheckSquare size={16} />
+      </button>
     </div>
 
     <!-- Track List (virtualized) -->
@@ -2103,10 +2242,11 @@
         </div>
       {/if}
       <div class="track-list-header">
-        {#if isCustomOrderMode}
+        {#if isCustomOrderMode || multiSelectMode}
           <div class="col-checkbox"></div>
         {/if}
         <div class="col-number">#</div>
+        <div class="col-artwork"></div>
         <div class="col-title">Title</div>
         <div class="col-album">Album</div>
         <div class="col-duration">Duration</div>
@@ -2117,7 +2257,7 @@
       </div>
 
       <div class="virtual-track-content" style="height: {trackListTotalHeight}px;">
-        {#each visibleDisplayTracks as track, loopIdx (`${visibleTrackRange.start + loopIdx}-${track.id}-${downloadStateVersion}`)}
+        {#each visibleDisplayTracks as track, loopIdx (`${visibleTrackRange.start + loopIdx}-${track.id}`)}
           {@const idx = visibleTrackRange.start + loopIdx}
           {@const downloadInfo = track.isLocal ? { status: 'none' as const, progress: 0 } : (getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 })}
           {@const isActiveTrack = (
@@ -2134,6 +2274,7 @@
             class:unavailable={!available}
             class:removed-from-qobuz={removedFromQobuz}
             class:custom-order-mode={isCustomOrderMode}
+            class:multi-selected={multiSelectMode && multiSelectedKeys.has(getTrackKey(track))}
             class:dragging={draggedTrackIdx === idx}
             class:drag-over={dragOverIdx === idx && draggedTrackIdx !== idx}
             style="transform: translateY({idx * TRACK_ROW_HEIGHT}px); height: {TRACK_ROW_HEIGHT}px;"
@@ -2146,6 +2287,16 @@
             ondragend={handleDragEnd}
             ondrop={(e) => handleDrop(e, idx)}
           >
+            {#if multiSelectMode && !isCustomOrderMode}
+              {@const trackKey = getTrackKey(track)}
+              <label class="track-checkbox" onclick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={multiSelectedKeys.has(trackKey)}
+                  onchange={() => toggleMultiSelect(track)}
+                />
+              </label>
+            {/if}
             {#if isCustomOrderMode}
               {@const trackKey = getTrackKey(track)}
               <label class="track-checkbox" onclick={(e) => e.stopPropagation()}>
@@ -2183,6 +2334,8 @@
               title={track.title}
               artist={track.artist}
               album={track.album}
+              showArtwork={true}
+              artworkUrl={track.albumArt}
               duration={track.duration}
               quality={track.bitDepth && track.samplingRate
                 ? `${track.bitDepth}bit/${track.samplingRate}kHz`
@@ -2212,6 +2365,8 @@
                 onPlayNow: () => handleTrackClick(track, idx),
                 onPlayNext: track.isLocal ? () => handleTrackPlayNext(track) : (onTrackPlayNext ? () => onTrackPlayNext(track) : undefined),
                 onPlayLater: track.isLocal ? () => handleTrackPlayLater(track) : (onTrackPlayLater ? () => onTrackPlayLater(track) : undefined),
+                onCreateQbzRadio: !track.isLocal && onTrackCreateQbzRadio ? () => onTrackCreateQbzRadio(track.id, track.title, track.artistId) : undefined,
+                onCreateQobuzRadio: !track.isLocal && onTrackCreateQobuzRadio ? () => onTrackCreateQobuzRadio(track.id, track.title) : undefined,
                 onAddToPlaylist: !track.isLocal && onTrackAddToPlaylist ? () => onTrackAddToPlaylist(track.id) : undefined,
                 onRemoveFromPlaylist: () => removeTrackFromPlaylist(track),
                 onShareQobuz: !track.isLocal && onTrackShareQobuz ? () => onTrackShareQobuz(track.id) : undefined,
@@ -2235,6 +2390,15 @@
         </div>
       {/if}
     </div>
+
+    <BulkActionBar
+      count={multiSelectedKeys.size}
+      onPlayNext={handleBulkPlayNext}
+      onPlayLater={handleBulkPlayLater}
+      onAddToPlaylist={handleBulkAddToPlaylist}
+      onRemoveFromPlaylist={handleBulkRemoveFromPlaylist}
+      onClearSelection={() => { multiSelectedKeys = new Set(); }}
+    />
 
     <!-- Bottom spacer when no suggestions will render (prevents back-to-top covering last track actions) -->
     {#if !isOwnPlaylist || !suggestionsEnabled || searchQuery}
@@ -2546,6 +2710,15 @@
     line-height: 1.4;
   }
 
+  .playlist-description :global(a) {
+    color: var(--accent-primary);
+    text-decoration: none;
+  }
+
+  .playlist-description :global(a:hover) {
+    text-decoration: underline;
+  }
+
   .playlist-info {
     display: flex;
     align-items: center;
@@ -2623,6 +2796,11 @@
   .col-title {
     flex: 1;
     min-width: 0;
+  }
+
+  .col-artwork {
+    width: 36px;
+    flex-shrink: 0;
   }
 
   .col-album {
@@ -2729,6 +2907,17 @@
 
   .sort-btn:hover {
     color: var(--text-primary);
+  }
+
+  .sort-btn.icon-only {
+    min-width: unset;
+    padding: 6px 8px;
+    justify-content: center;
+  }
+
+  .sort-btn.active {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
   }
 
   .sort-btn .chevron {
@@ -2849,6 +3038,10 @@
   .track-row-wrapper.removed-from-qobuz :global(.track-row .track-number),
   .track-row-wrapper.removed-from-qobuz :global(.track-row .play-button) {
     pointer-events: none;
+  }
+
+  .track-row-wrapper.multi-selected :global(.track-row) {
+    background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
   }
 
   /* Custom order mode */

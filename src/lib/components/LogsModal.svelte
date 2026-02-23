@@ -30,7 +30,7 @@
     terminalUrl = '';
     consoleUrl = '';
     try {
-      const lines: string[] = await invoke('get_backend_logs');
+      const lines: string[] = await invoke('v2_get_backend_logs');
       terminalLogs = lines.join('\n');
     } catch (e) {
       terminalLogs = `Error loading logs: ${e}`;
@@ -49,7 +49,7 @@
     else isUploadingConsole = true;
 
     try {
-      const url: string = await invoke('upload_logs_to_paste', { content });
+      const url: string = await invoke('v2_upload_logs_to_paste', { content });
       if (tab === 'terminal') terminalUrl = url;
       else consoleUrl = url;
       await copyToClipboard(url);

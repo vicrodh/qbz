@@ -16,6 +16,7 @@ export interface QueueTrack {
   artist: string;
   duration: string;
   available?: boolean; // Whether track is available (false when offline without local copy)
+  trackId?: number; // For favorite checking
 }
 
 export interface BackendQueueTrack {
@@ -157,7 +158,7 @@ export async function updateLocalCopiesSet(): Promise<void> {
       return;
     }
 
-    const localIds = await invoke<number[]>('playlist_get_tracks_with_local_copies', {
+    const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
       trackIds
     });
     tracksWithLocalCopies = new Set(localIds);
@@ -180,11 +181,11 @@ export async function updateLocalCopiesSet(): Promise<void> {
 // ============ Queue Actions ============
 
 /**
- * Sync queue state from backend
+ * Sync queue state from backend (V2)
  */
 export async function syncQueueState(): Promise<void> {
   try {
-    const queueState = await invoke<BackendQueueState>('get_queue_state');
+    const queueState = await invoke<BackendQueueState>('v2_get_queue_state');
 
     // Get track IDs for local copy check
     const trackIds = queueState.upcoming.map(t => t.id);
@@ -193,7 +194,7 @@ export async function syncQueueState(): Promise<void> {
     let localCopies = new Set<number>();
     if (isOfflineMode && trackIds.length > 0) {
       try {
-        const localIds = await invoke<number[]>('playlist_get_tracks_with_local_copies', {
+        const localIds = await invoke<number[]>('v2_playlist_get_tracks_with_local_copies', {
           trackIds
         });
         localCopies = new Set(localIds);
@@ -223,7 +224,7 @@ export async function syncQueueState(): Promise<void> {
 }
 
 /**
- * Toggle shuffle mode
+ * Toggle shuffle mode (V2)
  */
 export async function toggleShuffle(): Promise<{ success: boolean; enabled: boolean }> {
   const newState = !isShuffle;
@@ -231,7 +232,8 @@ export async function toggleShuffle(): Promise<{ success: boolean; enabled: bool
   notifyListeners();
 
   try {
-    await invoke('set_shuffle', { enabled: newState });
+    await invoke('v2_toggle_shuffle');
+    await syncQueueState();
     return { success: true, enabled: newState };
   } catch (err) {
     console.error('Failed to set shuffle:', err);
@@ -243,13 +245,15 @@ export async function toggleShuffle(): Promise<{ success: boolean; enabled: bool
 }
 
 /**
- * Toggle repeat mode (off -> all -> one -> off)
+ * Toggle repeat mode (off -> all -> one -> off) (V2)
  */
 export async function toggleRepeat(): Promise<{ success: boolean; mode: RepeatMode }> {
   const nextMode: RepeatMode = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
+  // V2 expects capitalized repeat mode: 'Off' | 'All' | 'One'
+  const v2Mode = nextMode.charAt(0).toUpperCase() + nextMode.slice(1);
 
   try {
-    await invoke('set_repeat', { mode: nextMode });
+    await invoke('v2_set_repeat_mode', { mode: v2Mode });
     repeatMode = nextMode;
     notifyListeners();
     return { success: true, mode: nextMode };
@@ -260,11 +264,11 @@ export async function toggleRepeat(): Promise<{ success: boolean; mode: RepeatMo
 }
 
 /**
- * Add track to play next in queue
+ * Add track to play next in queue (V2)
  */
 export async function addToQueueNext(track: BackendQueueTrack, isLocal = false): Promise<boolean> {
   try {
-    await invoke('add_to_queue_next', { track });
+    await invoke('v2_add_to_queue_next', { track });
     if (isLocal) {
       localTrackIds = new Set([...localTrackIds, track.id]);
     }
@@ -277,11 +281,11 @@ export async function addToQueueNext(track: BackendQueueTrack, isLocal = false):
 }
 
 /**
- * Add track to end of queue
+ * Add track to end of queue (V2)
  */
 export async function addToQueue(track: BackendQueueTrack, isLocal = false): Promise<boolean> {
   try {
-    await invoke('add_to_queue', { track });
+    await invoke('v2_add_to_queue', { track });
     if (isLocal) {
       localTrackIds = new Set([...localTrackIds, track.id]);
     }
@@ -294,11 +298,11 @@ export async function addToQueue(track: BackendQueueTrack, isLocal = false): Pro
 }
 
 /**
- * Add multiple tracks to queue
+ * Add multiple tracks to queue (V2)
  */
 export async function addTracksToQueue(tracks: BackendQueueTrack[]): Promise<boolean> {
   try {
-    await invoke('add_tracks_to_queue', { tracks });
+    await invoke('v2_add_tracks_to_queue', { tracks });
     await syncQueueState();
     return true;
   } catch (err) {
@@ -308,11 +312,11 @@ export async function addTracksToQueue(tracks: BackendQueueTrack[]): Promise<boo
 }
 
 /**
- * Set queue with new tracks
+ * Set queue with new tracks (V2)
  */
 export async function setQueue(tracks: BackendQueueTrack[], startIndex: number, clearLocal = true): Promise<boolean> {
   try {
-    await invoke('set_queue', { tracks, startIndex });
+    await invoke('v2_set_queue', { tracks, startIndex });
     if (clearLocal) {
       localTrackIds = new Set();
     }
@@ -325,11 +329,11 @@ export async function setQueue(tracks: BackendQueueTrack[], startIndex: number, 
 }
 
 /**
- * Clear the queue
+ * Clear the queue (V2)
  */
 export async function clearQueue(): Promise<boolean> {
   try {
-    await invoke('clear_queue');
+    await invoke('v2_clear_queue');
     queue = [];
     queueTotalTracks = 0;
     notifyListeners();
@@ -341,11 +345,11 @@ export async function clearQueue(): Promise<boolean> {
 }
 
 /**
- * Play track at specific index in queue
+ * Play track at specific index in queue (V2)
  */
 export async function playQueueIndex(index: number): Promise<BackendQueueTrack | null> {
   try {
-    return await invoke<BackendQueueTrack | null>('play_queue_index', { index });
+    return await invoke<BackendQueueTrack | null>('v2_play_queue_index', { index });
   } catch (err) {
     console.error('Failed to play queue index:', err);
     return null;
@@ -353,11 +357,11 @@ export async function playQueueIndex(index: number): Promise<BackendQueueTrack |
 }
 
 /**
- * Get next track from queue
+ * Get next track from queue (V2)
  */
 export async function nextTrack(): Promise<BackendQueueTrack | null> {
   try {
-    return await invoke<BackendQueueTrack | null>('next_track');
+    return await invoke<BackendQueueTrack | null>('v2_next_track');
   } catch (err) {
     console.error('Failed to get next track:', err);
     return null;
@@ -365,11 +369,11 @@ export async function nextTrack(): Promise<BackendQueueTrack | null> {
 }
 
 /**
- * Get previous track from queue
+ * Get previous track from queue (V2)
  */
 export async function previousTrack(): Promise<BackendQueueTrack | null> {
   try {
-    return await invoke<BackendQueueTrack | null>('previous_track');
+    return await invoke<BackendQueueTrack | null>('v2_previous_track');
   } catch (err) {
     console.error('Failed to get previous track:', err);
     return null;
@@ -377,11 +381,11 @@ export async function previousTrack(): Promise<BackendQueueTrack | null> {
 }
 
 /**
- * Move a track from one position to another in the queue
+ * Move a track from one position to another in the queue (V2)
  */
 export async function moveQueueTrack(fromIndex: number, toIndex: number): Promise<boolean> {
   try {
-    const success = await invoke<boolean>('move_queue_track', { fromIndex, toIndex });
+    const success = await invoke<boolean>('v2_move_queue_track', { fromIndex, toIndex });
     if (success) {
       await syncQueueState();
     }
@@ -410,11 +414,11 @@ export function clearLocalTrackIds(): void {
 }
 
 /**
- * Get the backend queue state (for advanced queue operations)
+ * Get the backend queue state (for advanced queue operations) (V2)
  */
 export async function getBackendQueueState(): Promise<BackendQueueState | null> {
   try {
-    return await invoke<BackendQueueState>('get_queue_state');
+    return await invoke<BackendQueueState>('v2_get_queue_state');
   } catch (err) {
     console.error('Failed to get backend queue state:', err);
     return null;
@@ -457,6 +461,8 @@ export async function startQueueEventListener(): Promise<void> {
       isShuffle = event.payload.shuffle;
       repeatMode = event.payload.repeat.toLowerCase() as RepeatMode;
       notifyListeners();
+      // Queue ordering may have changed (e.g. shuffle toggled remotely).
+      syncQueueState().catch(err => console.error('[Queue] Failed to sync queue after queue:state event:', err));
     });
     console.log('[Queue] Started listening for queue state events');
   } catch (err) {

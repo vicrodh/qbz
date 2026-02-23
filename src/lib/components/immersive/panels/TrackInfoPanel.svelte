@@ -82,6 +82,23 @@
     return entries.map(([role, names]) => ({ role, names }));
   }
 
+  // Parse Qobuz performers string: "Name, Role - Name, Role"
+  function parsePerformers(performersStr?: string): Performer[] {
+    if (!performersStr) return [];
+    return performersStr
+      .split(' - ')
+      .map(segment => segment.trim())
+      .filter(Boolean)
+      .map(segment => {
+        const parts = segment.split(', ').map(p => p.trim()).filter(Boolean);
+        return {
+          name: parts[0] || '',
+          roles: parts.slice(1)
+        };
+      })
+      .filter(p => p.name.length > 0);
+  }
+
   // Load track info only when trackId actually changes
   $effect(() => {
     if (trackId && trackId !== loadedTrackId) {
@@ -98,7 +115,11 @@
     loading = true;
     error = null;
     try {
-      trackInfo = await invoke<TrackInfo>('get_track_info', { trackId: id });
+      const track = await invoke<TrackInfo['track']>('v2_get_track', { trackId: id });
+      trackInfo = {
+        track,
+        performers: parsePerformers(track.performers)
+      };
       loadedTrackId = id;
     } catch (e) {
       error = e instanceof Error ? e.message : String(e);

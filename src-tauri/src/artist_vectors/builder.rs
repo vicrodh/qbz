@@ -7,9 +7,7 @@ use std::sync::Arc;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::api::QobuzClient;
-use crate::musicbrainz::models::{
-    ArtistFullResponse, ArtistRelationships, Period, RelatedArtist,
-};
+use crate::musicbrainz::models::{ArtistFullResponse, ArtistRelationships, Period, RelatedArtist};
 use crate::musicbrainz::{MusicBrainzCache, MusicBrainzClient};
 
 use super::sparse_vector::SparseVector;
@@ -89,7 +87,9 @@ impl ArtistVectorBuilder {
         log::info!("[VectorBuilder] Acquiring store lock...");
         {
             let mut guard__ = self.store.lock().await;
-            let store = guard__.as_mut().ok_or("No active session - please log in")?;
+            let store = guard__
+                .as_mut()
+                .ok_or("No active session - please log in")?;
             log::info!("[VectorBuilder] Store lock acquired, creating index");
             store.get_or_create_idx(artist_mbid, artist_name)?;
         }
@@ -107,7 +107,11 @@ impl ArtistVectorBuilder {
                 }
             }
             Err(e) => {
-                log::warn!("Failed to fetch MusicBrainz relations for {}: {}", artist_mbid, e);
+                log::warn!(
+                    "Failed to fetch MusicBrainz relations for {}: {}",
+                    artist_mbid,
+                    e
+                );
             }
         }
 
@@ -132,7 +136,9 @@ impl ArtistVectorBuilder {
         log::info!("[VectorBuilder] Persisting vectors...");
         {
             let mut guard__ = self.store.lock().await;
-            let store = guard__.as_mut().ok_or("No active session - please log in")?;
+            let store = guard__
+                .as_mut()
+                .ok_or("No active session - please log in")?;
 
             // Store MB relationships
             if let Some(mb_vec) = mb_vec_to_store {
@@ -157,27 +163,47 @@ impl ArtistVectorBuilder {
     }
 
     /// Build vector component from MusicBrainz relationships
-    async fn build_from_musicbrainz(&self, artist_mbid: &str) -> Result<(SparseVector, usize), String> {
-        log::info!("[VectorBuilder] build_from_musicbrainz: checking cache for {}", artist_mbid);
+    async fn build_from_musicbrainz(
+        &self,
+        artist_mbid: &str,
+    ) -> Result<(SparseVector, usize), String> {
+        log::info!(
+            "[VectorBuilder] build_from_musicbrainz: checking cache for {}",
+            artist_mbid
+        );
 
         // Try cache first
         log::info!("[VectorBuilder] Acquiring mb_cache lock...");
         let cached = {
             let guard__ = self.mb_cache.lock().await;
-            let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+            let cache = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
             log::info!("[VectorBuilder] mb_cache lock acquired, checking relations");
             cache.get_artist_relations(artist_mbid)?
         };
-        log::info!("[VectorBuilder] mb_cache lock released, cached={}", cached.is_some());
+        log::info!(
+            "[VectorBuilder] mb_cache lock released, cached={}",
+            cached.is_some()
+        );
 
         let relations = if let Some(rel) = cached {
             log::info!("[VectorBuilder] Cache HIT for {}", artist_mbid);
             rel
         } else {
-            log::info!("[VectorBuilder] Cache MISS - calling MusicBrainz API for {}", artist_mbid);
+            log::info!(
+                "[VectorBuilder] Cache MISS - calling MusicBrainz API for {}",
+                artist_mbid
+            );
             // Fetch from API
-            let response = self.mb_client.get_artist_with_relations(artist_mbid).await?;
-            log::info!("[VectorBuilder] MusicBrainz API response received for {}", artist_mbid);
+            let response = self
+                .mb_client
+                .get_artist_with_relations(artist_mbid)
+                .await?;
+            log::info!(
+                "[VectorBuilder] MusicBrainz API response received for {}",
+                artist_mbid
+            );
 
             // Extract relationships from raw response
             let extracted = extract_relationships(&response);
@@ -185,7 +211,9 @@ impl ArtistVectorBuilder {
             // Cache it
             {
                 let guard__ = self.mb_cache.lock().await;
-                let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+                let cache = guard__
+                    .as_ref()
+                    .ok_or("No active session - please log in")?;
                 cache.set_artist_relations(artist_mbid, &extracted)?;
             }
 
@@ -197,7 +225,9 @@ impl ArtistVectorBuilder {
 
         // Get store for index lookups
         let mut guard__ = self.store.lock().await;
-        let store = guard__.as_mut().ok_or("No active session - please log in")?;
+        let store = guard__
+            .as_mut()
+            .ok_or("No active session - please log in")?;
 
         // Process members (band → person)
         for member in &relations.members {
@@ -235,7 +265,10 @@ impl ArtistVectorBuilder {
     }
 
     /// Build vector component from Qobuz similar artists
-    async fn build_from_qobuz(&self, qobuz_artist_id: u64) -> Result<(SparseVector, usize), String> {
+    async fn build_from_qobuz(
+        &self,
+        qobuz_artist_id: u64,
+    ) -> Result<(SparseVector, usize), String> {
         let similar = {
             let client = self.qobuz_client.read().await;
             client
@@ -247,7 +280,9 @@ impl ArtistVectorBuilder {
         let mut vector = SparseVector::new();
         let mut count = 0;
         let mut guard__ = self.store.lock().await;
-        let store = guard__.as_mut().ok_or("No active session - please log in")?;
+        let store = guard__
+            .as_mut()
+            .ok_or("No active session - please log in")?;
 
         for artist in similar.items {
             // We need to resolve Qobuz artist to MBID
@@ -278,18 +313,29 @@ impl ArtistVectorBuilder {
         // Check if we have a fresh vector
         let has_fresh = {
             let guard__ = self.store.lock().await;
-            let store = guard__.as_ref().ok_or("No active session - please log in")?;
+            let store = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
             store.has_fresh_vector(artist_mbid, max_age_secs)
         };
 
         if has_fresh {
-            log::debug!("[VectorBuilder] Artist {} has fresh vector, skipping build", artist_mbid);
+            log::debug!(
+                "[VectorBuilder] Artist {} has fresh vector, skipping build",
+                artist_mbid
+            );
             return Ok(false);
         }
 
         // Build new vector
-        log::info!("[VectorBuilder] Building vector for artist: {}", artist_mbid);
-        match self.build_vector(artist_mbid, artist_name, qobuz_artist_id).await {
+        log::info!(
+            "[VectorBuilder] Building vector for artist: {}",
+            artist_mbid
+        );
+        match self
+            .build_vector(artist_mbid, artist_name, qobuz_artist_id)
+            .await
+        {
             Ok(result) => {
                 log::info!(
                     "[VectorBuilder] Vector built: {} MB relations, {} Qobuz similar",
@@ -299,7 +345,11 @@ impl ArtistVectorBuilder {
                 Ok(true)
             }
             Err(e) => {
-                log::error!("[VectorBuilder] Failed to build vector for {}: {}", artist_mbid, e);
+                log::error!(
+                    "[VectorBuilder] Failed to build vector for {}: {}",
+                    artist_mbid,
+                    e
+                );
                 Err(e)
             }
         }
@@ -356,7 +406,10 @@ fn extract_relationships(artist: &ArtistFullResponse) -> ArtistRelationships {
             let related = RelatedArtist {
                 mbid: related_artist.id.clone(),
                 name: related_artist.name.clone(),
-                role: relation.attributes.as_ref().and_then(|a| a.first().cloned()),
+                role: relation
+                    .attributes
+                    .as_ref()
+                    .and_then(|a| a.first().cloned()),
                 period: Some(Period {
                     begin: relation.begin.clone(),
                     end: relation.end.clone(),

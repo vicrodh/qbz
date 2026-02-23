@@ -1,5 +1,23 @@
 //! Queue management module
 //!
+//! # DEPRECATED - LEGACY CODE
+//!
+//! **This module is deprecated and will be removed.**
+//!
+//! Use `qbz-player::QueueManager` instead. The V2 architecture routes queue ops through:
+//! - `CoreBridge` -> `QbzCore` -> `qbz_player::QueueManager`
+//!
+//! This legacy module remains only as emergency fallback during migration.
+//! Do NOT add new functionality here. All new queue code goes to `qbz-player`.
+//!
+//! ## Migration Status
+//! - [x] QueueManager exists in qbz-player
+//! - [x] QbzCore uses qbz_player::QueueManager
+//! - [x] V2 queue commands use CoreBridge
+//! - [ ] Full frontend migration to V2 commands
+//!
+//! ---
+//!
 //! Handles playback queue with:
 //! - Queue manipulation (add, remove, reorder, clear)
 //! - Current track tracking
@@ -54,6 +72,12 @@ impl Default for RepeatMode {
     fn default() -> Self {
         Self::Off
     }
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum QueueMoveDirection {
+    Up,
+    Down,
 }
 
 /// Queue state snapshot for frontend
@@ -206,11 +230,20 @@ impl QueueManager {
     /// Clear the queue
     pub fn clear(&self) {
         let mut state = self.state.lock().unwrap();
-        state.tracks.clear();
-        state.current_index = None;
+
+        // A track is currently playing, keep it as the only item left.
+        if let Some(_curr_idx) = state.current_index {
+            state.tracks.truncate(1);
+            state.current_index = Some(0);
+        } else {
+            state.tracks.clear();
+            state.current_index = None;
+        }
+
         state.shuffle_order.clear();
         state.shuffle_position = 0;
-        state.history.clear();
+        // Keep playback history when clearing queue.
+        // UX expectation: "Clear queue" only affects current/upcoming queue items.
     }
 
     /// Remove a track by index
@@ -228,7 +261,66 @@ impl QueueManager {
                 state.current_index = Some(curr_idx - 1);
             } else if index == curr_idx {
                 if curr_idx >= state.tracks.len() {
-                    state.current_index = if state.tracks.is_empty() { None } else { Some(state.tracks.len() - 1) };
+                    state.current_index = if state.tracks.is_empty() {
+                        None
+                    } else {
+                        Some(state.tracks.len() - 1)
+                    };
+                }
+            }
+        }
+
+        Self::regenerate_shuffle_order_internal(&mut state);
+        Some(removed)
+    }
+
+    /// Remove a track by its position in the upcoming list (0 = first upcoming track)
+    /// This handles shuffle mode correctly by mapping the upcoming index to the actual track index
+    pub fn remove_upcoming_track(&self, upcoming_index: usize) -> Option<QueueTrack> {
+        let mut state = self.state.lock().unwrap();
+
+        // Calculate the actual track index based on the upcoming index
+        // Must match how get_state() builds the upcoming list
+        let actual_index = if state.shuffle {
+            // In shuffle mode, upcoming is built from shuffle_order starting at shuffle_position + 1
+            let shuffle_pos = state.shuffle_position + 1 + upcoming_index;
+            if shuffle_pos >= state.shuffle_order.len() {
+                return None;
+            }
+            state.shuffle_order[shuffle_pos]
+        } else {
+            // In normal mode:
+            // - If current_index exists: upcoming starts at current_index + 1
+            // - If current_index is None: upcoming starts at 0 (full queue)
+            match state.current_index {
+                Some(curr_idx) => curr_idx + 1 + upcoming_index,
+                None => upcoming_index,
+            }
+        };
+
+        if actual_index >= state.tracks.len() {
+            return None;
+        }
+
+        log::info!(
+            "remove_upcoming_track: upcoming_index={} -> actual_index={}",
+            upcoming_index,
+            actual_index
+        );
+
+        let removed = state.tracks.remove(actual_index);
+
+        // Adjust current index if needed
+        if let Some(curr_idx) = state.current_index {
+            if actual_index < curr_idx {
+                state.current_index = Some(curr_idx - 1);
+            } else if actual_index == curr_idx {
+                if curr_idx >= state.tracks.len() {
+                    state.current_index = if state.tracks.is_empty() {
+                        None
+                    } else {
+                        Some(state.tracks.len() - 1)
+                    };
                 }
             }
         }
@@ -240,22 +332,53 @@ impl QueueManager {
     /// Move a track from one position to another
     pub fn move_track(&self, from_index: usize, to_index: usize) -> bool {
         let mut state = self.state.lock().unwrap();
-        if from_index >= state.tracks.len() || to_index >= state.tracks.len() || from_index == to_index {
+
+        let direction: QueueMoveDirection = if from_index > to_index {
+            QueueMoveDirection::Up
+        } else {
+            QueueMoveDirection::Down
+        };
+
+        let mut from_idx = from_index;
+        let mut to_idx = to_index;
+
+        if let Some(curr_idx) = state.current_index {
+            // map to the internal state, which differs from the frontend's
+            // representation because the here we also have the current playing
+            // track part of the tracks.
+            from_idx = from_idx + curr_idx + 1;
+            to_idx = to_idx + curr_idx + 1;
+        }
+
+        if direction == QueueMoveDirection::Down {
+            // When moving tracks down this makes the new position
+            // more intuitive (since we usually drop tracks in between)
+            to_idx = to_idx - 1;
+        }
+
+        log::info!("Queue: move_track - {:?} from {} to {} (internal indices:{} -> {}). Tracks in queue: {}", direction, from_index, to_index, from_idx, to_idx, state.tracks.len());
+
+        // Moving a track to its already existing position, just ignore
+        if from_idx == to_idx {
+            return true;
+        }
+
+        if from_idx >= state.tracks.len() || to_idx >= state.tracks.len() {
             return false;
         }
 
-        let track = state.tracks.remove(from_index);
-        state.tracks.insert(to_index, track);
+        let track = state.tracks.remove(from_idx);
+        state.tracks.insert(to_idx, track);
 
         // Adjust current index if needed
         if let Some(curr_idx) = state.current_index {
-            if from_index == curr_idx {
+            if from_idx == curr_idx {
                 // The current track was moved
-                state.current_index = Some(to_index);
-            } else if from_index < curr_idx && to_index >= curr_idx {
+                state.current_index = Some(to_idx);
+            } else if from_idx < curr_idx && to_idx >= curr_idx {
                 // Track moved from before current to at/after current
                 state.current_index = Some(curr_idx - 1);
-            } else if from_index > curr_idx && to_index <= curr_idx {
+            } else if from_idx > curr_idx && to_idx <= curr_idx {
                 // Track moved from after current to at/before current
                 state.current_index = Some(curr_idx + 1);
             }
@@ -268,7 +391,9 @@ impl QueueManager {
     /// Get current track
     pub fn current_track(&self) -> Option<QueueTrack> {
         let state = self.state.lock().unwrap();
-        state.current_index.and_then(|idx| state.tracks.get(idx).cloned())
+        state
+            .current_index
+            .and_then(|idx| state.tracks.get(idx).cloned())
     }
 
     /// Get next track without advancing
@@ -279,7 +404,9 @@ impl QueueManager {
         }
 
         if state.repeat == RepeatMode::One {
-            return state.current_index.and_then(|idx| state.tracks.get(idx).cloned());
+            return state
+                .current_index
+                .and_then(|idx| state.tracks.get(idx).cloned());
         }
 
         let next_idx = if state.shuffle {
@@ -369,7 +496,9 @@ impl QueueManager {
         }
 
         if state.repeat == RepeatMode::One {
-            return state.current_index.and_then(|idx| state.tracks.get(idx).cloned());
+            return state
+                .current_index
+                .and_then(|idx| state.tracks.get(idx).cloned());
         }
 
         let next_idx = if state.shuffle {
@@ -502,18 +631,24 @@ impl QueueManager {
     pub fn get_state(&self) -> QueueState {
         let state = self.state.lock().unwrap();
 
-        let current_track = state.current_index.and_then(|idx| state.tracks.get(idx).cloned());
+        let current_track = state
+            .current_index
+            .and_then(|idx| state.tracks.get(idx).cloned());
 
         // Get upcoming tracks (after current)
         let upcoming: Vec<QueueTrack> = if let Some(curr_idx) = state.current_index {
             if state.shuffle {
-                state.shuffle_order.iter()
+                state
+                    .shuffle_order
+                    .iter()
                     .skip(state.shuffle_position + 1)
                     .take(20)
                     .filter_map(|&idx| state.tracks.get(idx).cloned())
                     .collect()
             } else {
-                state.tracks.iter()
+                state
+                    .tracks
+                    .iter()
                     .skip(curr_idx + 1)
                     .take(20)
                     .cloned()
@@ -524,7 +659,9 @@ impl QueueManager {
         };
 
         // Get history tracks (recent first)
-        let history_tracks: Vec<QueueTrack> = state.history.iter()
+        let history_tracks: Vec<QueueTrack> = state
+            .history
+            .iter()
             .rev()
             .take(10)
             .filter_map(|&idx| state.tracks.get(idx).cloned())
@@ -575,5 +712,199 @@ impl QueueManager {
         } else {
             state.shuffle_position = 0;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_test_track(id: u64) -> QueueTrack {
+        QueueTrack {
+            id,
+            title: format!("Track {}", id),
+            artist: "Artist".to_string(),
+            album: "Album".to_string(),
+            duration_secs: 180,
+            artwork_url: None,
+            hires: false,
+            bit_depth: None,
+            sample_rate: None,
+            is_local: false,
+            album_id: None,
+            artist_id: None,
+            streamable: true,
+            source: Some("test".to_string()),
+        }
+    }
+
+    #[test]
+    fn test_clear_without_current_track() {
+        let queue = QueueManager::new();
+
+        queue.add_track(create_test_track(123));
+        queue.add_track(create_test_track(124));
+        queue.add_track(create_test_track(125));
+
+        queue.clear();
+
+        let state = queue.get_state();
+        assert!(state.current_track.is_none());
+        assert!(state.upcoming.is_empty());
+        assert_eq!(state.total_tracks, 0);
+    }
+
+    #[test]
+    fn test_clear_keeps_current_track() {
+        let queue = QueueManager::new();
+
+        queue.add_track(create_test_track(123));
+        queue.add_track(create_test_track(124));
+        queue.add_track(create_test_track(125));
+        queue.play_index(0);
+
+        queue.clear();
+
+        let state = queue.get_state();
+        assert!(state.current_track.is_some());
+        assert_eq!(state.current_track.unwrap().id, 123);
+        assert!(state.upcoming.is_empty());
+        assert_eq!(state.total_tracks, 1);
+    }
+
+    #[test]
+    fn test_move_track_down_without_current_track() {
+        let queue = QueueManager::new();
+
+        for i in 1..=5 {
+            queue.add_track(create_test_track(i));
+        }
+
+        let result = queue.move_track(0, 3);
+
+        assert!(result, "move_track should succeed");
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![2, 3, 1, 4, 5]
+        );
+    }
+
+    #[test]
+    fn test_move_track_down_with_current_track() {
+        let queue = QueueManager::new();
+
+        for i in 1..=5 {
+            queue.add_track(create_test_track(i));
+        }
+        queue.play_index(0);
+
+        // Can't move the current playing track so this translates to "move from_index 1 -> 3"
+        let result = queue.move_track(0, 3);
+
+        assert!(result, "move_track should succeed");
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![3, 4, 2, 5]
+        );
+    }
+
+    #[test]
+    fn test_move_track_up_without_current_track() {
+        let queue = QueueManager::new();
+
+        for i in 1..=5 {
+            queue.add_track(create_test_track(i));
+        }
+
+        let result = queue.move_track(3, 0);
+
+        assert!(result, "move_track should succeed");
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![4, 1, 2, 3, 5]
+        );
+    }
+
+    #[test]
+    fn test_move_track_up_with_current_track() {
+        let queue = QueueManager::new();
+
+        for i in 1..=5 {
+            queue.add_track(create_test_track(i));
+        }
+        queue.play_index(0);
+
+        let result = queue.move_track(3, 0);
+
+        assert!(result, "move_track should succeed");
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![5, 2, 3, 4]
+        );
+    }
+
+    #[test]
+    fn test_move_track_to_the_same_position_without_current_track() {
+        let queue = QueueManager::new();
+
+        for i in 1..=5 {
+            queue.add_track(create_test_track(i));
+        }
+
+        let result = queue.move_track(2, 3);
+
+        assert!(result, "move_track should succeed");
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![1, 2, 3, 4, 5]
+        );
+    }
+
+    #[test]
+    fn test_move_track_to_the_same_position_with_current_track() {
+        let queue = QueueManager::new();
+
+        for i in 1..=5 {
+            queue.add_track(create_test_track(i));
+        }
+        queue.play_index(0);
+
+        let result = queue.move_track(0, 1);
+
+        assert!(result, "move_track should succeed");
+        assert_eq!(
+            queue
+                .get_state()
+                .upcoming
+                .iter()
+                .map(|track| track.id)
+                .collect::<Vec<u64>>(),
+            vec![2, 3, 4, 5]
+        );
     }
 }

@@ -127,7 +127,7 @@ export async function getPlaylistSuggestionsV2(
   }
 
   // Call backend - MBID resolution happens server-side with caching
-  const result = await invoke<SuggestionResult>('get_playlist_suggestions_v2', {
+  const result = await invoke<SuggestionResult>('v2_get_playlist_suggestions', {
     input: {
       artists: dedupedArtists.map(a => ({
         name: a.name,
@@ -146,7 +146,7 @@ export async function getPlaylistSuggestionsV2(
  * Get vector store statistics (for debugging)
  */
 export async function getVectorStoreStats(): Promise<VectorStoreStats> {
-  return invoke<VectorStoreStats>('get_vector_store_stats');
+  return invoke<VectorStoreStats>('v2_get_vector_store_stats');
 }
 
 /**
@@ -156,7 +156,7 @@ export async function getVectorStoreStats(): Promise<VectorStoreStats> {
  * @returns Number of vectors removed
  */
 export async function cleanupVectorStore(maxAgeDays?: number): Promise<number> {
-  return invoke<number>('cleanup_vector_store', { maxAgeDays: maxAgeDays ?? null });
+  return invoke<number>('v2_clear_vector_store', { maxAgeDays: maxAgeDays ?? null });
 }
 
 // ============ Helpers ============

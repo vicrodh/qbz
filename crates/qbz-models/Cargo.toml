@@ -1,0 +1,23 @@
+[package]
+name = "qbz-models"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared types, events, and traits for QBZ music player"
+
+[dependencies]
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Async
+async-trait = { workspace = true }
+
+# Logging
+log = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+
+# Time
+chrono = { workspace = true }

@@ -1,7 +1,9 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { Music, User, Loader2, ArrowRight } from 'lucide-svelte';
+  import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import {
     getHomeCache,
     setHomeCache,
@@ -112,7 +114,7 @@
     onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
     checkTrackDownloaded?: (trackId: number) => boolean;
-    getTrackOfflineCacheStatus?: (trackId: number) => { status: string; progress: number };
+    getTrackOfflineCacheStatus?: (trackId: number) => { status: OfflineCacheStatus; progress: number };
     onPlaylistClick?: (playlistId: number) => void;
     onPlaylistPlay?: (playlistId: number) => void;
     onPlaylistPlayNext?: (playlistId: number) => void;
@@ -128,6 +130,10 @@
     onNavigateAlbumsOfTheWeek?: () => void;
     onNavigatePressAccolades?: () => void;
     onNavigateQobuzPlaylists?: () => void;
+    onNavigateDailyQ?: () => void;
+    onNavigateWeeklyQ?: () => void;
+    onNavigateFavQ?: () => void;
+    onNavigateTopQ?: () => void;
   }
 
   let {
@@ -174,6 +180,10 @@
     onNavigateAlbumsOfTheWeek,
     onNavigatePressAccolades,
     onNavigateQobuzPlaylists,
+    onNavigateDailyQ,
+    onNavigateWeeklyQ,
+    onNavigateFavQ,
+    onNavigateTopQ,
   }: Props = $props();
 
   // Home settings state
@@ -439,7 +449,7 @@
     for (let i = 0; i < uncachedIds.length; i += BATCH_SIZE) {
       const batch = uncachedIds.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(albumId => invoke<QobuzAlbum>('get_album', { albumId }))
+        batch.map(albumId => invoke<QobuzAlbum>('v2_get_album', { albumId }))
       );
       
       for (const result of results) {
@@ -474,7 +484,7 @@
     for (let i = 0; i < uncachedIds.length; i += BATCH_SIZE) {
       const batch = uncachedIds.slice(i, i + BATCH_SIZE);
       const results = await Promise.allSettled(
-        batch.map(trackId => invoke<QobuzTrack>('get_track', { trackId }))
+        batch.map(trackId => invoke<QobuzTrack>('v2_get_track', { trackId }))
       );
       
       for (const result of results) {
@@ -576,7 +586,7 @@
     return {
       id: artist.id,
       name: artist.name,
-      image: getQobuzImage(artist.image),
+      image: resolveArtistImage(artist.name, getQobuzImage(artist.image)),
       playCount
     };
   }
@@ -620,7 +630,7 @@
     if (continueTracks.length > 0) {
       try {
         const queueTracks = buildContinueQueueTracks(continueTracks);
-        await invoke('set_queue', { tracks: queueTracks, startIndex: trackIndex });
+        await invoke('v2_set_queue', { tracks: queueTracks, startIndex: trackIndex });
       } catch (err) {
         console.error('Failed to set queue:', err);
       }
@@ -668,7 +678,7 @@
     loadingQobuzPlaylists = true;
     
     try {
-      const response = await invoke<DiscoverPlaylistsResponse>('get_discover_playlists', {
+      const response = await invoke<DiscoverPlaylistsResponse>('v2_get_discover_playlists', {
         tag: slug,
         limit: LIMITS.qobuzPlaylists,
         offset: 0
@@ -687,7 +697,7 @@
   async function fetchAllDiscoverData(genreIds: number[]) {
     try {
       const apiGenreIds = genreIds.length > 0 ? genreIds : null;
-      const response = await invoke<DiscoverResponse>('get_discover_index', { genreIds: apiGenreIds });
+      const response = await invoke<DiscoverResponse>('v2_get_discover_index', { genreIds: apiGenreIds });
       const c = response.containers;
 
       // Extract editorial album sections
@@ -744,7 +754,7 @@
 
       // Fetch localized playlist tags from dedicated endpoint
       if (playlistTags.length === 0) {
-        invoke<PlaylistTag[]>('get_playlist_tags')
+        invoke<PlaylistTag[]>('v2_get_playlist_tags')
           .then(tags => { playlistTags = tags; })
           .catch(err => console.error('Failed to fetch playlist tags:', err));
       }
@@ -792,7 +802,7 @@
     const discoverPromise = fetchAllDiscoverData(genreIds);
 
     // Single IPC call returns fully-resolved card data (3-tier cache in Rust)
-    const mlPromise = invoke<HomeResolved>('reco_get_home_resolved', {
+    const mlPromise = invoke<HomeResolved>('v2_reco_get_home_resolved', {
       limitRecentAlbums: homeLimits.recentAlbums,
       limitContinueTracks: homeLimits.continueTracks,
       limitTopArtists: homeLimits.topArtists,
@@ -1313,9 +1323,9 @@
             <h2>{$t('home.continueListening')}</h2>
           </div>
           <div class="track-list compact">
-            {#each continueTracks as track, index (`${track.id}-${downloadStateVersion}`)}
+            {#each continueTracks as track, index (track.id)}
               {@const isActiveTrack = isPlaybackActive && activeTrackId === track.id}
-              {@const cacheStatus = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none', progress: 0 }}
+              {@const cacheStatus = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
               {@const isTrackDownloaded = cacheStatus.status === 'ready'}
               {@const trackBlacklisted = track.artistId ? isArtistBlacklisted(track.artistId) : false}
               <TrackRow
@@ -1445,6 +1455,42 @@
           {/snippet}
         </HorizontalScrollRow>
       {/if}
+    {/if}
+
+    {#if sectionId === 'yourMixes'}
+      <div class="your-mixes-section">
+        <h2 class="section-title">{$t('home.yourMixes')}</h2>
+        <div class="mix-cards-row">
+          <button class="mix-card" onclick={() => onNavigateDailyQ?.()}>
+            <div class="mix-card-artwork mix-gradient-daily">
+              <span class="mix-card-badge">qobuz</span>
+              <span class="mix-card-name">DailyQ</span>
+            </div>
+            <p class="mix-card-desc">{$t('yourMixes.cardDesc')}</p>
+          </button>
+          <button class="mix-card" onclick={() => onNavigateWeeklyQ?.()}>
+            <div class="mix-card-artwork mix-gradient-weekly">
+              <span class="mix-card-badge">qobuz</span>
+              <span class="mix-card-name">WeeklyQ</span>
+            </div>
+            <p class="mix-card-desc">{@html $t('weeklyMixes.cardDesc')}</p>
+          </button>
+          <button class="mix-card" onclick={() => onNavigateFavQ?.()}>
+            <div class="mix-card-artwork mix-gradient-favq">
+              <span class="mix-card-badge">qbz</span>
+              <span class="mix-card-name">FavQ</span>
+            </div>
+            <p class="mix-card-desc">{$t('favMixes.cardDesc')}</p>
+          </button>
+          <button class="mix-card" onclick={() => onNavigateTopQ?.()}>
+            <div class="mix-card-artwork mix-gradient-topq">
+              <span class="mix-card-badge">qbz</span>
+              <span class="mix-card-name">TopQ</span>
+            </div>
+            <p class="mix-card-desc">{@html $t('topMixes.cardDesc')}</p>
+          </button>
+        </div>
+      </div>
     {/if}
   {/each}
 
@@ -1811,6 +1857,162 @@
   }
 
   .see-all-link:hover {
+    color: var(--text-primary);
+  }
+
+  .your-mixes-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mix-cards-row {
+    display: flex;
+    gap: 16px;
+  }
+
+  .mix-card {
+    flex-shrink: 0;
+    width: 180px;
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0;
+    text-align: left;
+    color: inherit;
+  }
+
+  .mix-card-artwork {
+    width: 180px;
+    height: 180px;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 8px;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    padding: 14px;
+    box-sizing: border-box;
+  }
+
+  .mix-gradient-daily::before,
+  .mix-gradient-weekly::before,
+  .mix-gradient-favq::before,
+  .mix-gradient-topq::before {
+    content: '';
+    position: absolute;
+    inset: -40%;
+    will-change: transform;
+  }
+
+  .mix-gradient-daily::before {
+    background:
+      linear-gradient(125deg, transparent 20%, rgba(255, 255, 230, 0.45) 23%, transparent 26%),
+      linear-gradient(125deg, transparent 55%, rgba(80, 30, 0, 0.35) 58%, transparent 61%),
+      radial-gradient(ellipse at 30% 20%, rgba(255, 255, 255, 0.25) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 60%, rgba(255, 200, 50, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 80%, rgba(255, 140, 0, 0.5) 0%, transparent 60%),
+      linear-gradient(135deg, #e8a020 0%, #d4781a 30%, #c45e18 60%, #a04010 100%);
+    animation: silk-daily 30s ease-in-out infinite alternate;
+  }
+
+  .mix-gradient-weekly::before {
+    background:
+      linear-gradient(125deg, transparent 20%, rgba(255, 220, 255, 0.5) 23%, transparent 26%),
+      linear-gradient(125deg, transparent 55%, rgba(30, 0, 50, 0.4) 58%, transparent 61%),
+      radial-gradient(ellipse at 40% 20%, rgba(255, 200, 255, 0.35) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 50%, rgba(200, 150, 255, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 70%, rgba(130, 80, 200, 0.5) 0%, transparent 60%),
+      linear-gradient(135deg, #b060d0 0%, #8040b0 30%, #6030a0 60%, #402080 100%);
+    animation: silk-weekly 34s ease-in-out infinite alternate;
+  }
+
+  @keyframes silk-daily {
+    0%   { transform: translate(5%, 3%) rotate(0deg) scale(1); }
+    25%  { transform: translate(-8%, 6%) rotate(6deg) scale(1.03); }
+    50%  { transform: translate(3%, -5%) rotate(-4deg) scale(0.98); }
+    75%  { transform: translate(-4%, 8%) rotate(8deg) scale(1.02); }
+    100% { transform: translate(6%, -3%) rotate(-2deg) scale(1); }
+  }
+
+  @keyframes silk-weekly {
+    0%   { transform: translate(-3%, 6%) rotate(2deg) scale(1.01); }
+    20%  { transform: translate(7%, -4%) rotate(-5deg) scale(0.98); }
+    45%  { transform: translate(-6%, -2%) rotate(7deg) scale(1.03); }
+    70%  { transform: translate(4%, 7%) rotate(-3deg) scale(1); }
+    100% { transform: translate(-5%, 3%) rotate(4deg) scale(0.99); }
+  }
+
+  .mix-gradient-favq::before {
+    background:
+      linear-gradient(125deg, transparent 20%, rgba(255, 200, 200, 0.45) 23%, transparent 26%),
+      linear-gradient(125deg, transparent 55%, rgba(80, 0, 0, 0.35) 58%, transparent 61%),
+      radial-gradient(ellipse at 30% 20%, rgba(255, 180, 180, 0.25) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 60%, rgba(255, 50, 50, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 80%, rgba(200, 0, 0, 0.5) 0%, transparent 60%),
+      linear-gradient(135deg, #e82020 0%, #c41818 30%, #a01010 60%, #800808 100%);
+    animation: silk-favq 28s ease-in-out infinite alternate;
+  }
+
+  .mix-gradient-topq::before {
+    background:
+      linear-gradient(125deg, transparent 20%, rgba(200, 220, 255, 0.45) 23%, transparent 26%),
+      linear-gradient(125deg, transparent 55%, rgba(0, 0, 80, 0.35) 58%, transparent 61%),
+      radial-gradient(ellipse at 30% 20%, rgba(180, 200, 255, 0.25) 0%, transparent 50%),
+      radial-gradient(ellipse at 70% 60%, rgba(50, 100, 255, 0.4) 0%, transparent 50%),
+      radial-gradient(ellipse at 20% 80%, rgba(0, 50, 200, 0.5) 0%, transparent 60%),
+      linear-gradient(135deg, #2060e8 0%, #1848c4 30%, #1030a0 60%, #081880 100%);
+    animation: silk-topq 32s ease-in-out infinite alternate;
+  }
+
+  @keyframes silk-favq {
+    0%   { transform: translate(5%, 3%) rotate(0deg) scale(1); }
+    25%  { transform: translate(-8%, 6%) rotate(6deg) scale(1.03); }
+    50%  { transform: translate(3%, -5%) rotate(-4deg) scale(0.98); }
+    75%  { transform: translate(-4%, 8%) rotate(8deg) scale(1.02); }
+    100% { transform: translate(6%, -3%) rotate(-2deg) scale(1); }
+  }
+
+  @keyframes silk-topq {
+    0%   { transform: translate(-3%, 6%) rotate(2deg) scale(1.01); }
+    20%  { transform: translate(7%, -4%) rotate(-5deg) scale(0.98); }
+    45%  { transform: translate(-6%, -2%) rotate(7deg) scale(1.03); }
+    70%  { transform: translate(4%, 7%) rotate(-3deg) scale(1); }
+    100% { transform: translate(-5%, 3%) rotate(4deg) scale(0.99); }
+  }
+
+  .mix-card-badge {
+    position: relative;
+    z-index: 1;
+    font-size: 11px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.7);
+    letter-spacing: 0.02em;
+    margin-bottom: 6px;
+  }
+
+  .mix-card-name {
+    position: relative;
+    z-index: 1;
+    font-size: 22px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.1;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  .mix-card-desc {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--text-secondary);
+    line-height: 1.4;
+    margin: 0;
+    min-height: calc(3 * 1.4 * 12px);
+  }
+
+  .mix-card-desc :global(strong) {
+    font-weight: 600;
     color: var(--text-primary);
   }
 

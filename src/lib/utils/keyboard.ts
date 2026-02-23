@@ -25,7 +25,6 @@ export function eventToShortcut(event: KeyboardEvent): string {
 
   if (event.ctrlKey || event.metaKey) parts.push('Ctrl');
   if (event.altKey) parts.push('Alt');
-  if (event.shiftKey) parts.push('Shift');
 
   // Normalize key
   let key = event.key;
@@ -37,6 +36,17 @@ export function eventToShortcut(event: KeyboardEvent): string {
 
   // Normalize space
   if (key === ' ') key = 'Space';
+
+  // Only include Shift when the key is a letter, digit, space, or named key (Arrow*, F1-F12, etc.)
+  // For symbol keys like ?, !, @, #, the Shift is already "consumed" by producing the symbol
+  if (event.shiftKey) {
+    const isLetter = key.length === 1 && /[a-zA-Z]/.test(key);
+    const isDigit = key.length === 1 && /[0-9]/.test(key);
+    const isNamedKey = key.length > 1; // ArrowLeft, Space, Tab, F1, etc.
+    if (isLetter || isDigit || isNamedKey) {
+      parts.push('Shift');
+    }
+  }
 
   parts.push(key);
   return parts.join('+');

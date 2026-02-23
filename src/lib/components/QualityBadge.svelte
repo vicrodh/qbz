@@ -38,7 +38,7 @@
 
     async function poll() {
       try {
-        const status = await invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null);
+        const status = await invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null);
         if (status?.is_active && status.hardware_sample_rate) {
           hardwareSampleRate = status.hardware_sample_rate;
         } else {

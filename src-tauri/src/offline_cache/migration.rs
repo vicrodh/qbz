@@ -2,14 +2,17 @@
 //!
 //! Handles migration of old numeric-named FLAC files to new organized structure
 
+use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use serde::Serialize;
 use tokio::sync::{Mutex, RwLock};
 
+use super::metadata::{
+    embed_artwork, fetch_complete_metadata, organize_cached_file, save_album_artwork,
+    write_flac_tags,
+};
 use crate::api::QobuzClient;
 use crate::library::database::LibraryDatabase;
-use super::metadata::{fetch_complete_metadata, write_flac_tags, embed_artwork, organize_cached_file, save_album_artwork};
 
 #[derive(Default, Serialize, Clone, Debug)]
 pub struct MigrationStatus {
@@ -31,7 +34,10 @@ pub struct MigrationError {
 
 /// Detect legacy cached files (numeric FLAC files in tracks/ folder)
 pub fn detect_legacy_cached_files(tracks_dir: &Path) -> Result<Vec<u64>, String> {
-    log::info!("Scanning for legacy cached files in: {}", tracks_dir.display());
+    log::info!(
+        "Scanning for legacy cached files in: {}",
+        tracks_dir.display()
+    );
 
     if !tracks_dir.exists() {
         return Ok(Vec::new());
@@ -94,7 +100,7 @@ async fn migrate_single_track(
 
     // 4. Organize file into artist/album structure
     let new_path = organize_cached_file(track_id, &legacy_path_str, offline_root, &metadata)?;
-    
+
     // 5. Save album artwork as cover.jpg
     let artwork_path = if let Some(artwork_url) = &metadata.artwork_url {
         if let Some(parent_dir) = std::path::Path::new(&new_path).parent() {
@@ -111,7 +117,7 @@ async fn migrate_single_track(
     } else {
         None
     };
-    
+
     // 6. Extract audio properties from FLAC file
     use lofty::AudioFile;
     let (bit_depth, sample_rate) = match lofty::read_from_path(&new_path) {
@@ -122,37 +128,44 @@ async fn migrate_single_track(
             (bit_depth, sample_rate)
         }
         Err(e) => {
-            log::warn!("Failed to read audio properties for track {}: {}", track_id, e);
+            log::warn!(
+                "Failed to read audio properties for track {}: {}",
+                track_id,
+                e
+            );
             (None, None)
         }
     };
-    
+
     // 7. Insert into local library DB
     let lib_opt__ = library_db.lock().await;
-    let lib_guard = lib_opt__.as_ref().ok_or("No active session - please log in")?;
-    
+    let lib_guard = lib_opt__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
+
     let album_artist = metadata.album_artist.as_ref().unwrap_or(&metadata.artist);
     let album_group_key = format!("{}|{}", metadata.album, album_artist);
-    
-    lib_guard.insert_qobuz_cached_track_with_grouping(
-        track_id,
-        &metadata.title,
-        &metadata.artist,
-        Some(&metadata.album),
-        metadata.album_artist.as_deref(),
-        metadata.track_number,
-        metadata.disc_number,
-        metadata.year,
-        metadata.duration_secs,
-        &new_path,
-        &album_group_key,
-        &metadata.album,
-        bit_depth,
-        sample_rate,
-        artwork_path.as_deref(),
-    )
-    .map_err(|e| format!("Failed to insert to library DB: {}", e))?;
-    
+
+    lib_guard
+        .insert_qobuz_cached_track_with_grouping(
+            track_id,
+            &metadata.title,
+            &metadata.artist,
+            Some(&metadata.album),
+            metadata.album_artist.as_deref(),
+            metadata.track_number,
+            metadata.disc_number,
+            metadata.year,
+            metadata.duration_secs,
+            &new_path,
+            &album_group_key,
+            &metadata.album,
+            bit_depth,
+            sample_rate,
+            artwork_path.as_deref(),
+        )
+        .map_err(|e| format!("Failed to insert to library DB: {}", e))?;
+
     log::info!("Track {} migrated successfully to: {}", track_id, new_path);
     Ok(new_path)
 }
@@ -191,13 +204,19 @@ pub async fn migrate_legacy_cached_files(
             &offline_root,
             &*client_guard,
             library_db.clone(),
-        ).await {
+        )
+        .await
+        {
             Ok(_) => {
                 status.successful += 1;
 
                 // Delete legacy file after successful migration
                 if let Err(e) = std::fs::remove_file(&legacy_path) {
-                    log::warn!("Failed to delete legacy file {}: {}", legacy_path.display(), e);
+                    log::warn!(
+                        "Failed to delete legacy file {}: {}",
+                        legacy_path.display(),
+                        e
+                    );
                 }
             }
             Err(e) => {
@@ -206,7 +225,11 @@ pub async fn migrate_legacy_cached_files(
                     track_id,
                     error_message: e,
                 });
-                log::error!("Failed to migrate track {}: {}", track_id, status.errors.last().unwrap().error_message);
+                log::error!(
+                    "Failed to migrate track {}: {}",
+                    track_id,
+                    status.errors.last().unwrap().error_message
+                );
             }
         }
 

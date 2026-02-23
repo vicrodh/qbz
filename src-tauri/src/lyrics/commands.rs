@@ -1,10 +1,10 @@
 //! Tauri commands for lyrics
 
-use tauri::State;
 use serde::Serialize;
+use tauri::State;
 
-use super::{build_cache_key, LyricsPayload, LyricsState};
 use super::providers::{fetch_lrclib, fetch_lyrics_ovh};
+use super::{build_cache_key, LyricsPayload, LyricsState};
 
 #[tauri::command]
 pub async fn lyrics_get(
@@ -29,7 +29,9 @@ pub async fn lyrics_get(
     // (search-first strategy is likely to find synced now).
     {
         let db_opt__ = state.db.lock().await;
-        let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
+        let db = db_opt__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
 
         let cached = if let Some(id) = track_id {
             db.get_by_track_id(id).ok().flatten()
@@ -39,7 +41,11 @@ pub async fn lyrics_get(
         .or_else(|| db.get_by_cache_key(&cache_key).ok().flatten());
 
         if let Some(payload) = cached {
-            let has_synced = payload.synced_lrc.as_ref().map(|s| !s.trim().is_empty()).unwrap_or(false);
+            let has_synced = payload
+                .synced_lrc
+                .as_ref()
+                .map(|s| !s.trim().is_empty())
+                .unwrap_or(false);
             if has_synced {
                 return Ok(Some(payload));
             }
@@ -56,7 +62,10 @@ pub async fn lyrics_get(
             match fetch_lrclib(title_trimmed, artist_trimmed, duration_secs).await {
                 Ok(data) => data,
                 Err(e2) => {
-                    eprintln!("[Lyrics] LRCLIB attempt 2 failed: {}, falling back to lyrics.ovh", e2);
+                    eprintln!(
+                        "[Lyrics] LRCLIB attempt 2 failed: {}, falling back to lyrics.ovh",
+                        e2
+                    );
                     None
                 }
             }
@@ -77,7 +86,9 @@ pub async fn lyrics_get(
         };
 
         let db_opt__ = state.db.lock().await;
-        let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
+        let db = db_opt__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         db.upsert(&cache_key, &payload)?;
         return Ok(Some(payload));
     }
@@ -96,7 +107,9 @@ pub async fn lyrics_get(
         };
 
         let db_opt__ = state.db.lock().await;
-        let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
+        let db = db_opt__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         db.upsert(&cache_key, &payload)?;
         return Ok(Some(payload));
     }
@@ -107,7 +120,9 @@ pub async fn lyrics_get(
 #[tauri::command]
 pub async fn lyrics_clear_cache(state: State<'_, LyricsState>) -> Result<(), String> {
     let db_opt__ = state.db.lock().await;
-    let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
+    let db = db_opt__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.clear()
 }
 
@@ -119,10 +134,14 @@ pub struct LyricsCacheStats {
 }
 
 #[tauri::command]
-pub async fn lyrics_get_cache_stats(state: State<'_, LyricsState>) -> Result<LyricsCacheStats, String> {
+pub async fn lyrics_get_cache_stats(
+    state: State<'_, LyricsState>,
+) -> Result<LyricsCacheStats, String> {
     let entries = {
         let db_opt__ = state.db.lock().await;
-        let db = db_opt__.as_ref().ok_or("No active session - please log in")?;
+        let db = db_opt__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         db.count_entries()?
     };
 
@@ -132,9 +151,10 @@ pub async fn lyrics_get_cache_stats(state: State<'_, LyricsState>) -> Result<Lyr
         .join("qbz")
         .join("lyrics")
         .join("lyrics.db");
-    let size_bytes = std::fs::metadata(&db_path)
-        .map(|m| m.len())
-        .unwrap_or(0);
+    let size_bytes = std::fs::metadata(&db_path).map(|m| m.len()).unwrap_or(0);
 
-    Ok(LyricsCacheStats { entries, size_bytes })
+    Ok(LyricsCacheStats {
+        entries,
+        size_bytes,
+    })
 }

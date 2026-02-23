@@ -46,6 +46,8 @@ pub struct PlexTrack {
     pub bitrate_kbps: Option<u32>,
     pub sampling_rate_hz: Option<u32>,
     pub bit_depth: Option<u32>,
+    pub track_number: Option<u32>,
+    pub disc_number: Option<u32>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -55,6 +57,19 @@ pub struct PlexPlayResult {
     pub part_key: String,
     pub part_url: String,
     pub bytes: usize,
+    pub direct_play_confirmed: bool,
+    pub content_type: Option<String>,
+    pub sampling_rate_hz: Option<u32>,
+    pub bit_depth: Option<u32>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PlexResolvedMedia {
+    pub rating_key: String,
+    pub playback_id: u64,
+    pub part_key: String,
+    pub part_url: String,
+    pub bytes: Vec<u8>,
     pub direct_play_confirmed: bool,
     pub content_type: Option<String>,
     pub sampling_rate_hz: Option<u32>,
@@ -110,6 +125,8 @@ pub struct PlexCachedTrack {
     pub artwork_path: Option<String>,
     pub source: String,
     pub album_key: String,
+    pub track_number: Option<u32>,
+    pub disc_number: Option<u32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -147,6 +164,8 @@ struct TrackBuilder {
     bitrate_kbps: Option<u32>,
     sampling_rate_hz: Option<u32>,
     bit_depth: Option<u32>,
+    track_number: Option<u32>,
+    disc_number: Option<u32>,
 }
 
 fn normalize_base_url(base_url: &str) -> String {
@@ -205,6 +224,68 @@ fn open_plex_cache_db() -> Result<Connection, String> {
         ",
     )
     .map_err(|e| format!("Failed to initialize Plex cache schema: {}", e))?;
+
+    // Migration: add track_number, disc_number, album_key columns if missing
+    for col in &[
+        "track_number INTEGER",
+        "disc_number INTEGER",
+        "album_key TEXT",
+    ] {
+        let stmt = format!("ALTER TABLE plex_cache_tracks ADD COLUMN {col}");
+        let _ = conn.execute(&stmt, []);
+    }
+
+    // Backfill album_key for existing rows that have NULL
+    {
+        let needs_backfill: bool = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM plex_cache_tracks WHERE album_key IS NULL LIMIT 1)",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(false);
+
+        if needs_backfill {
+            let mut read_stmt = conn
+                .prepare("SELECT rating_key, artist, album FROM plex_cache_tracks WHERE album_key IS NULL")
+                .map_err(|e| format!("Failed to prepare album_key backfill read: {}", e))?;
+            let rows: Vec<(String, String, String)> = read_stmt
+                .query_map([], |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?
+                            .unwrap_or_else(|| "Unknown Artist".to_string()),
+                        row.get::<_, Option<String>>(2)?
+                            .unwrap_or_else(|| "Unknown Album".to_string()),
+                    ))
+                })
+                .map_err(|e| format!("Failed to read tracks for album_key backfill: {}", e))?
+                .filter_map(|r| r.ok())
+                .collect();
+            drop(read_stmt);
+
+            for (rating_key, artist_raw, album_raw) in &rows {
+                let artist = decode_xml_entities(artist_raw.trim());
+                let artist = if artist.is_empty() {
+                    "Unknown Artist".to_string()
+                } else {
+                    artist
+                };
+                let album = decode_xml_entities(album_raw.trim());
+                let album = if album.is_empty() {
+                    "Unknown Album".to_string()
+                } else {
+                    album
+                };
+                let album = normalize_album_title(Some(&artist), &album);
+                let key = plex_album_key(&artist, &album);
+                let _ = conn.execute(
+                    "UPDATE plex_cache_tracks SET album_key = ?1 WHERE rating_key = ?2",
+                    params![key, rating_key],
+                );
+            }
+        }
+    }
 
     Ok(conn)
 }
@@ -472,6 +553,8 @@ fn parse_track_block(start_tag: &str, inner_xml: &str) -> Option<PlexTrack> {
         artwork_path: get_attr(start_tag, "thumb")
             .or_else(|| get_attr(start_tag, "parentThumb"))
             .or_else(|| get_attr(start_tag, "grandparentThumb")),
+        track_number: parse_u32(get_attr(start_tag, "index")),
+        disc_number: parse_u32(get_attr(start_tag, "parentIndex")),
         ..Default::default()
     };
 
@@ -556,6 +639,8 @@ fn parse_track_block(start_tag: &str, inner_xml: &str) -> Option<PlexTrack> {
         bitrate_kbps: t.bitrate_kbps,
         sampling_rate_hz: t.sampling_rate_hz,
         bit_depth: t.bit_depth,
+        track_number: t.track_number,
+        disc_number: t.disc_number,
     })
 }
 
@@ -826,10 +911,10 @@ pub fn plex_cache_get_tracks(
         let mut stmt = conn
             .prepare(
                 "SELECT rating_key, title, artist, album, duration_ms, artwork_path, part_key, container,
-                        codec, channels, bitrate_kbps, sampling_rate_hz, bit_depth
+                        codec, channels, bitrate_kbps, sampling_rate_hz, bit_depth, track_number, disc_number
                  FROM plex_cache_tracks
                  WHERE section_key = ?1
-                 ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, title COLLATE NOCASE
+                 ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, disc_number, track_number, title COLLATE NOCASE
                  LIMIT ?2",
             )
             .map_err(|e| format!("Failed to prepare Plex cache tracks query: {}", e))?;
@@ -853,6 +938,8 @@ pub fn plex_cache_get_tracks(
                     bitrate_kbps: row.get(10)?,
                     sampling_rate_hz: row.get(11)?,
                     bit_depth: row.get(12)?,
+                    track_number: row.get(13)?,
+                    disc_number: row.get(14)?,
                 })
             })
             .map_err(|e| format!("Failed to query Plex cache tracks: {}", e))?;
@@ -863,7 +950,7 @@ pub fn plex_cache_get_tracks(
         let mut stmt = conn
             .prepare(
                 "SELECT rating_key, title, artist, album, duration_ms, artwork_path, part_key, container,
-                        codec, channels, bitrate_kbps, sampling_rate_hz, bit_depth
+                        codec, channels, bitrate_kbps, sampling_rate_hz, bit_depth, track_number, disc_number
                  FROM plex_cache_tracks
                  ORDER BY updated_at DESC
                  LIMIT ?1",
@@ -889,6 +976,8 @@ pub fn plex_cache_get_tracks(
                     bitrate_kbps: row.get(10)?,
                     sampling_rate_hz: row.get(11)?,
                     bit_depth: row.get(12)?,
+                    track_number: row.get(13)?,
+                    disc_number: row.get(14)?,
                 })
             })
             .map_err(|e| format!("Failed to query Plex cache tracks: {}", e))?;
@@ -1018,14 +1107,16 @@ pub fn plex_cache_get_album_tracks(album_key: String) -> Result<Vec<PlexCachedTr
     let conn = open_plex_cache_db()?;
     let mut stmt = conn
         .prepare(
-            "SELECT rating_key, title, artist, album, duration_ms, container, bit_depth, sampling_rate_hz, artwork_path
+            "SELECT rating_key, title, artist, album, duration_ms, container, bit_depth,
+                    sampling_rate_hz, artwork_path, track_number, disc_number
              FROM plex_cache_tracks
-             ORDER BY title COLLATE NOCASE",
+             WHERE album_key = ?1
+             ORDER BY disc_number, track_number, title COLLATE NOCASE",
         )
         .map_err(|e| format!("Failed to prepare Plex cache album tracks query: {}", e))?;
 
     let rows = stmt
-        .query_map([], |row| {
+        .query_map(params![album_key], |row| {
             Ok((
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
@@ -1036,6 +1127,8 @@ pub fn plex_cache_get_album_tracks(album_key: String) -> Result<Vec<PlexCachedTr
                 row.get::<_, Option<i64>>(6)?,
                 row.get::<_, Option<i64>>(7)?,
                 row.get::<_, Option<String>>(8)?,
+                row.get::<_, Option<i64>>(9)?,
+                row.get::<_, Option<i64>>(10)?,
             ))
         })
         .map_err(|e| format!("Failed to query Plex cache album tracks: {}", e))?;
@@ -1052,6 +1145,8 @@ pub fn plex_cache_get_album_tracks(album_key: String) -> Result<Vec<PlexCachedTr
             bit_depth_opt,
             sampling_rate_opt,
             artwork_path,
+            track_number_opt,
+            disc_number_opt,
         ) = row.map_err(|e| format!("Failed to read Plex cache album track row: {}", e))?;
         let artist = artist_opt
             .map(|v| decode_xml_entities(v.trim()))
@@ -1062,9 +1157,6 @@ pub fn plex_cache_get_album_tracks(album_key: String) -> Result<Vec<PlexCachedTr
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| "Unknown Album".to_string());
         let album = normalize_album_title(Some(&artist), &album_raw);
-        if plex_album_key(&artist, &album) != album_key {
-            continue;
-        }
         tracks.push(PlexCachedTrack {
             id: playback_track_id(&rating_key),
             rating_key,
@@ -1078,6 +1170,8 @@ pub fn plex_cache_get_album_tracks(album_key: String) -> Result<Vec<PlexCachedTr
             artwork_path,
             source: "plex".to_string(),
             album_key: album_key.clone(),
+            track_number: track_number_opt.map(|v| v as u32),
+            disc_number: disc_number_opt.map(|v| v as u32),
         });
     }
     Ok(tracks)
@@ -1093,13 +1187,14 @@ pub fn plex_cache_search_tracks(
     let needle = format!("%{}%", query.to_lowercase());
     let mut stmt = conn
         .prepare(
-            "SELECT rating_key, title, artist, album, duration_ms, container, bit_depth, sampling_rate_hz, artwork_path
+            "SELECT rating_key, title, artist, album, duration_ms, container, bit_depth,
+                    sampling_rate_hz, artwork_path, track_number, disc_number
              FROM plex_cache_tracks
              WHERE ?1 = '' OR
                    lower(title) LIKE ?2 OR
                    lower(COALESCE(artist, '')) LIKE ?2 OR
                    lower(COALESCE(album, '')) LIKE ?2
-             ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, title COLLATE NOCASE
+             ORDER BY artist COLLATE NOCASE, album COLLATE NOCASE, disc_number, track_number, title COLLATE NOCASE
              LIMIT ?3",
         )
         .map_err(|e| format!("Failed to prepare Plex cache search query: {}", e))?;
@@ -1116,6 +1211,8 @@ pub fn plex_cache_search_tracks(
                 row.get::<_, Option<i64>>(6)?,
                 row.get::<_, Option<i64>>(7)?,
                 row.get::<_, Option<String>>(8)?,
+                row.get::<_, Option<i64>>(9)?,
+                row.get::<_, Option<i64>>(10)?,
             ))
         })
         .map_err(|e| format!("Failed to query Plex cache search tracks: {}", e))?;
@@ -1132,6 +1229,8 @@ pub fn plex_cache_search_tracks(
             bit_depth_opt,
             sampling_rate_opt,
             artwork_path,
+            track_number_opt,
+            disc_number_opt,
         ) = row.map_err(|e| format!("Failed to read Plex cache search row: {}", e))?;
         let artist = artist_opt
             .map(|v| decode_xml_entities(v.trim()))
@@ -1155,6 +1254,8 @@ pub fn plex_cache_search_tracks(
             artwork_path,
             source: "plex".to_string(),
             album_key: plex_album_key(&artist, &album),
+            track_number: track_number_opt.map(|v| v as u32),
+            disc_number: disc_number_opt.map(|v| v as u32),
         });
     }
     Ok(tracks)
@@ -1223,11 +1324,28 @@ pub fn plex_cache_save_tracks(
             .map(|v| v as i64)
             .or_else(|| saved.and_then(|s| s.2));
 
+        // Compute album_key for this track
+        let track_artist = track
+            .artist
+            .as_deref()
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
+            .unwrap_or("Unknown Artist");
+        let track_album_raw = track
+            .album
+            .as_deref()
+            .map(|v| v.trim())
+            .filter(|v| !v.is_empty())
+            .unwrap_or("Unknown Album");
+        let track_album_normalized = normalize_album_title(Some(track_artist), track_album_raw);
+        let track_album_key = plex_album_key(track_artist, &track_album_normalized);
+
         tx.execute(
             "INSERT INTO plex_cache_tracks
              (rating_key, section_key, server_id, title, artist, album, duration_ms, artwork_path,
-              part_key, container, codec, channels, bitrate_kbps, sampling_rate_hz, bit_depth, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+              part_key, container, codec, channels, bitrate_kbps, sampling_rate_hz, bit_depth,
+              track_number, disc_number, album_key, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19)",
             params![
                 track.rating_key,
                 section_key,
@@ -1244,6 +1362,9 @@ pub fn plex_cache_save_tracks(
                 track.bitrate_kbps.map(|v| v as i64),
                 sampling_rate_hz,
                 bit_depth,
+                track.track_number.map(|v| v as i64),
+                track.disc_number.map(|v| v as i64),
+                track_album_key,
                 now,
             ],
         )
@@ -1342,6 +1463,30 @@ pub async fn plex_play_track(
     rating_key: String,
     app_state: State<'_, AppState>,
 ) -> Result<PlexPlayResult, String> {
+    let resolved = plex_resolve_track_media(base_url, token, rating_key).await?;
+
+    app_state
+        .player
+        .play_data(resolved.bytes.clone(), resolved.playback_id)
+        .map_err(|e| format!("Failed to play Plex track: {}", e))?;
+
+    Ok(PlexPlayResult {
+        rating_key: resolved.rating_key,
+        part_key: resolved.part_key,
+        part_url: resolved.part_url,
+        bytes: resolved.bytes.len(),
+        direct_play_confirmed: resolved.direct_play_confirmed,
+        content_type: resolved.content_type,
+        sampling_rate_hz: resolved.sampling_rate_hz,
+        bit_depth: resolved.bit_depth,
+    })
+}
+
+pub async fn plex_resolve_track_media(
+    base_url: String,
+    token: String,
+    rating_key: String,
+) -> Result<PlexResolvedMedia, String> {
     let client = build_plex_client()?;
     let base = normalize_base_url(&base_url);
 
@@ -1388,16 +1533,12 @@ pub async fn plex_play_track(
         .map_err(|e| format!("Failed to read Plex media bytes: {}", e))?;
 
     let playback_id = playback_track_id(&rating_key);
-    app_state
-        .player
-        .play_data(bytes.to_vec(), playback_id)
-        .map_err(|e| format!("Failed to play Plex track: {}", e))?;
-
-    Ok(PlexPlayResult {
+    Ok(PlexResolvedMedia {
         rating_key,
+        playback_id,
         part_key: part_key.clone(),
         part_url,
-        bytes: bytes.len(),
+        bytes: bytes.to_vec(),
         direct_play_confirmed: is_direct_part_key(&part_key),
         content_type,
         sampling_rate_hz: track.sampling_rate_hz,

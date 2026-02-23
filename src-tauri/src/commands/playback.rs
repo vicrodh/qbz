@@ -26,7 +26,6 @@ fn parse_quality(quality_str: Option<&str>) -> Quality {
 
 /// Limit quality based on device's max sample rate
 /// This ensures bit-perfect playback by not requesting tracks that exceed device capabilities
-#[allow(dead_code)]
 fn limit_quality_for_device(quality: Quality, max_sample_rate: Option<u32>) -> Quality {
     let Some(max_rate) = max_sample_rate else {
         return quality; // No limit if device max rate unknown
@@ -44,7 +43,8 @@ fn limit_quality_for_device(quality: Quality, max_sample_rate: Option<u32>) -> Q
             Quality::UltraHiRes | Quality::HiRes => {
                 log::info!(
                     "[Quality Limit] Device max {}Hz, limiting {} to Lossless (44.1kHz)",
-                    max_rate, quality.label()
+                    max_rate,
+                    quality.label()
                 );
                 Quality::Lossless
             }
@@ -88,12 +88,38 @@ pub async fn play_track(
 ) -> Result<PlayTrackResult, String> {
     let preferred_quality = parse_quality(quality.as_deref());
 
-    // NOTE: limit_quality_to_device disabled in 1.1.9 — was causing incorrect downgrades (#45)
-    // The feature code is preserved but disconnected until the detection logic is reliable.
+    // Apply per-device sample rate limit if enabled
+    let final_quality = {
+        let guard = audio_settings
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        if let Some(store) = guard.as_ref() {
+            if let Ok(settings) = store.get_settings() {
+                if settings.limit_quality_to_device {
+                    // Get the device ID (use current output device or "default")
+                    let device_id = settings.output_device.as_deref().unwrap_or("default");
+                    // Get per-device limit, falling back to global limit
+                    let max_rate = settings
+                        .device_sample_rate_limits
+                        .get(device_id)
+                        .copied()
+                        .or(settings.device_max_sample_rate);
+                    limit_quality_for_device(preferred_quality, max_rate)
+                } else {
+                    preferred_quality
+                }
+            } else {
+                preferred_quality
+            }
+        } else {
+            preferred_quality
+        }
+    };
 
     log::info!(
-        "Command: play_track {} (duration: {:?}s, quality_str={:?}, parsed={:?}, format_id={})",
-        track_id, duration_secs, quality, preferred_quality, preferred_quality.id()
+        "Command: play_track {} (duration: {:?}s, quality_str={:?}, parsed={:?}, final={:?}, format_id={})",
+        track_id, duration_secs, quality, preferred_quality, final_quality, final_quality.id()
     );
 
     // First check offline cache (persistent disk cache)
@@ -114,7 +140,11 @@ pub async fn play_track(
         if let Some(file_path) = cached_path {
             let path = std::path::Path::new(&file_path);
             if path.exists() {
-                log::info!("[CACHE HIT] Track {} from OFFLINE cache: {:?}", track_id, path);
+                log::info!(
+                    "[CACHE HIT] Track {} from OFFLINE cache: {:?}",
+                    track_id,
+                    path
+                );
 
                 // Read file and play
                 let audio_data = std::fs::read(path)
@@ -124,8 +154,15 @@ pub async fn play_track(
 
                 // Check if prefetch should be skipped (streaming_only mode)
                 let skip_prefetch = {
-                    let guard = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-                    guard.as_ref().and_then(|s| s.get_settings().ok()).map(|s| s.streaming_only).unwrap_or(false)
+                    let guard = audio_settings
+                        .store
+                        .lock()
+                        .map_err(|e| format!("Lock error: {}", e))?;
+                    guard
+                        .as_ref()
+                        .and_then(|s| s.get_settings().ok())
+                        .map(|s| s.streaming_only)
+                        .unwrap_or(false)
                 };
 
                 // Prefetch next track in background
@@ -133,7 +170,7 @@ pub async fn play_track(
                     state.client.clone(),
                     state.audio_cache.clone(),
                     &state.queue,
-                    preferred_quality,
+                    final_quality,
                     skip_prefetch,
                 );
 
@@ -146,13 +183,24 @@ pub async fn play_track(
 
     // Check if track is in memory cache (L1)
     if let Some(cached) = cache.get(track_id) {
-        log::info!("[CACHE HIT] Track {} from MEMORY cache ({} bytes) - instant playback", track_id, cached.size_bytes);
+        log::info!(
+            "[CACHE HIT] Track {} from MEMORY cache ({} bytes) - instant playback",
+            track_id,
+            cached.size_bytes
+        );
         state.player.play_data(cached.data, track_id)?;
 
         // Check if prefetch should be skipped (streaming_only mode)
         let skip_prefetch = {
-            let guard = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-            guard.as_ref().and_then(|s| s.get_settings().ok()).map(|s| s.streaming_only).unwrap_or(false)
+            let guard = audio_settings
+                .store
+                .lock()
+                .map_err(|e| format!("Lock error: {}", e))?;
+            guard
+                .as_ref()
+                .and_then(|s| s.get_settings().ok())
+                .map(|s| s.streaming_only)
+                .unwrap_or(false)
         };
 
         // Prefetch next track in background
@@ -160,7 +208,7 @@ pub async fn play_track(
             state.client.clone(),
             state.audio_cache.clone(),
             &state.queue,
-            preferred_quality,
+            final_quality,
             skip_prefetch,
         );
 
@@ -170,7 +218,11 @@ pub async fn play_track(
     // Check if track is in playback cache (L2 - disk)
     if let Some(playback_cache) = cache.get_playback_cache() {
         if let Some(audio_data) = playback_cache.get(track_id) {
-            log::info!("[CACHE HIT] Track {} from DISK cache ({} bytes) - instant playback", track_id, audio_data.len());
+            log::info!(
+                "[CACHE HIT] Track {} from DISK cache ({} bytes) - instant playback",
+                track_id,
+                audio_data.len()
+            );
 
             // Promote back to memory cache
             cache.insert(track_id, audio_data.clone());
@@ -179,8 +231,15 @@ pub async fn play_track(
 
             // Check if prefetch should be skipped (streaming_only mode)
             let skip_prefetch = {
-                let guard = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
-                guard.as_ref().and_then(|s| s.get_settings().ok()).map(|s| s.streaming_only).unwrap_or(false)
+                let guard = audio_settings
+                    .store
+                    .lock()
+                    .map_err(|e| format!("Lock error: {}", e))?;
+                guard
+                    .as_ref()
+                    .and_then(|s| s.get_settings().ok())
+                    .map(|s| s.streaming_only)
+                    .unwrap_or(false)
             };
 
             // Prefetch next track in background
@@ -188,7 +247,7 @@ pub async fn play_track(
                 state.client.clone(),
                 state.audio_cache.clone(),
                 &state.queue,
-                preferred_quality,
+                final_quality,
                 skip_prefetch,
             );
 
@@ -197,13 +256,23 @@ pub async fn play_track(
     }
 
     // Not in any cache - check if streaming is enabled
-    log::info!("Track {} not in any cache, fetching from network...", track_id);
+    log::info!(
+        "Track {} not in any cache, fetching from network...",
+        track_id
+    );
 
     // Check streaming settings
     let (stream_first_enabled, buffer_seconds, streaming_only) = {
-        let guard = audio_settings.store.lock().map_err(|e| format!("Lock error: {}", e))?;
+        let guard = audio_settings
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
         match guard.as_ref().and_then(|s| s.get_settings().ok()) {
-            Some(settings) => (settings.stream_first_track, settings.stream_buffer_seconds, settings.streaming_only),
+            Some(settings) => (
+                settings.stream_first_track,
+                settings.stream_buffer_seconds,
+                settings.streaming_only,
+            ),
             None => {
                 log::warn!("Failed to get audio settings, using defaults");
                 (false, 3, false)
@@ -213,14 +282,16 @@ pub async fn play_track(
 
     log::info!(
         "[Playback Settings] stream_first: {}, streaming_only: {}, buffer: {}s",
-        stream_first_enabled, streaming_only, buffer_seconds
+        stream_first_enabled,
+        streaming_only,
+        buffer_seconds
     );
 
     let client = state.client.read().await;
 
-    // Get the stream URL with preferred quality
+    // Get the stream URL with final quality (after per-device limiting)
     let stream_url = client
-        .get_stream_url_with_fallback(track_id, preferred_quality)
+        .get_stream_url_with_fallback(track_id, final_quality)
         .await
         .map_err(|e| format!("Failed to get stream URL: {}", e))?;
 
@@ -228,7 +299,11 @@ pub async fn play_track(
 
     if stream_first_enabled {
         // Use streaming playback - start playing before full download
-        log::info!("[STREAMING] Track {} - streaming from network (cache_after: {})", track_id, !streaming_only);
+        log::info!(
+            "[STREAMING] Track {} - streaming from network (cache_after: {})",
+            track_id,
+            !streaming_only
+        );
 
         // Get content length, audio info, and measured speed via HEAD request
         let stream_info = get_stream_info(&stream_url.url).await?;
@@ -263,14 +338,29 @@ pub async fn play_track(
         let content_len = stream_info.content_length;
         let skip_cache = streaming_only;
         tokio::spawn(async move {
-            match download_and_stream(&url, buffer_writer, track_id, cache_clone, content_len, skip_cache).await {
+            match download_and_stream(
+                &url,
+                buffer_writer,
+                track_id,
+                cache_clone,
+                content_len,
+                skip_cache,
+            )
+            .await
+            {
                 Ok(()) => {
                     if skip_cache {
-                        log::info!("[STREAMING COMPLETE] Track {} - NOT cached (streaming_only mode)", track_id);
+                        log::info!(
+                            "[STREAMING COMPLETE] Track {} - NOT cached (streaming_only mode)",
+                            track_id
+                        );
                     } else {
-                        log::info!("[STREAMING COMPLETE] Track {} - cached for instant replay", track_id);
+                        log::info!(
+                            "[STREAMING COMPLETE] Track {} - cached for instant replay",
+                            track_id
+                        );
                     }
-                },
+                }
                 Err(e) => log::error!("[STREAMING ERROR] Track {}: {}", track_id, e),
             }
         });
@@ -283,15 +373,21 @@ pub async fn play_track(
             state.client.clone(),
             state.audio_cache.clone(),
             &state.queue,
-            preferred_quality,
+            final_quality,
             streaming_only,
         );
 
-        return Ok(PlayTrackResult { format_id: Some(actual_format_id) });
+        return Ok(PlayTrackResult {
+            format_id: Some(actual_format_id),
+        });
     }
 
     // Standard download path (streaming disabled)
-    log::info!("[DOWNLOAD] Track {} - full download before playback (cache_after: {})", track_id, !streaming_only);
+    log::info!(
+        "[DOWNLOAD] Track {} - full download before playback (cache_after: {})",
+        track_id,
+        !streaming_only
+    );
 
     // Download the audio
     let audio_data = download_audio(&stream_url.url).await?;
@@ -302,7 +398,10 @@ pub async fn play_track(
         cache.insert(track_id, audio_data.clone());
         log::info!("[CACHED] Track {} stored in memory cache", track_id);
     } else {
-        log::info!("[NOT CACHED] Track {} - streaming_only mode active", track_id);
+        log::info!(
+            "[NOT CACHED] Track {} - streaming_only mode active",
+            track_id
+        );
     }
 
     // Play it
@@ -318,11 +417,13 @@ pub async fn play_track(
         state.client.clone(),
         state.audio_cache.clone(),
         &state.queue,
-        preferred_quality,
+        final_quality,
         streaming_only,
     );
 
-    Ok(PlayTrackResult { format_id: Some(stream_url.format_id) })
+    Ok(PlayTrackResult {
+        format_id: Some(stream_url.format_id),
+    })
 }
 
 /// Prefetch a track into the in-memory cache without starting playback
@@ -332,16 +433,44 @@ pub async fn prefetch_track(
     quality: Option<String>,
     state: State<'_, AppState>,
     offline_cache: State<'_, OfflineCacheState>,
-    _audio_settings: State<'_, AudioSettingsState>,
+    audio_settings: State<'_, AudioSettingsState>,
 ) -> Result<(), String> {
     let preferred_quality = parse_quality(quality.as_deref());
 
-    // NOTE: limit_quality_to_device disabled in 1.1.9 — was causing incorrect downgrades (#45)
-    // The feature code is preserved but disconnected until the detection logic is reliable.
+    // Apply per-device sample rate limit if enabled
+    let final_quality = {
+        let guard = audio_settings
+            .store
+            .lock()
+            .map_err(|e| format!("Lock error: {}", e))?;
+        if let Some(store) = guard.as_ref() {
+            if let Ok(settings) = store.get_settings() {
+                if settings.limit_quality_to_device {
+                    let device_id = settings.output_device.as_deref().unwrap_or("default");
+                    let max_rate = settings
+                        .device_sample_rate_limits
+                        .get(device_id)
+                        .copied()
+                        .or(settings.device_max_sample_rate);
+                    limit_quality_for_device(preferred_quality, max_rate)
+                } else {
+                    preferred_quality
+                }
+            } else {
+                preferred_quality
+            }
+        } else {
+            preferred_quality
+        }
+    };
 
     log::info!(
-        "Command: prefetch_track {} (quality_str={:?}, parsed={:?}, format_id={})",
-        track_id, quality, preferred_quality, preferred_quality.id()
+        "Command: prefetch_track {} (quality_str={:?}, parsed={:?}, final={:?}, format_id={})",
+        track_id,
+        quality,
+        preferred_quality,
+        final_quality,
+        final_quality.id()
     );
 
     let cache = state.audio_cache.clone();
@@ -382,7 +511,7 @@ pub async fn prefetch_track(
 
         let client = state.client.read().await;
         let stream_url = client
-            .get_stream_url_with_fallback(track_id, preferred_quality)
+            .get_stream_url_with_fallback(track_id, final_quality)
             .await
             .map_err(|e| format!("Failed to get stream URL: {}", e))?;
         drop(client);
@@ -470,14 +599,19 @@ async fn get_stream_info(url: &str) -> Result<StreamInfo, String> {
             Err(e) => {
                 last_error = e.to_string();
                 if attempt < 2 {
-                    log::warn!("HEAD request attempt {} failed: {}, retrying...", attempt + 1, e);
+                    log::warn!(
+                        "HEAD request attempt {} failed: {}, retrying...",
+                        attempt + 1,
+                        e
+                    );
                     tokio::time::sleep(Duration::from_millis(100)).await;
                 }
             }
         }
     }
 
-    let head_response = head_response.ok_or_else(|| format!("Failed HEAD request after 3 attempts: {}", last_error))?;
+    let head_response = head_response
+        .ok_or_else(|| format!("Failed HEAD request after 3 attempts: {}", last_error))?;
 
     if !head_response.status().is_success() {
         return Err(format!("HEAD request failed: {}", head_response.status()));
@@ -493,7 +627,7 @@ async fn get_stream_info(url: &str) -> Result<StreamInfo, String> {
     // Download first ~64KB to probe audio format and measure speed
     // This is enough for FLAC/M4A headers
     let start_time = Instant::now();
-    
+
     let range_response = client
         .get(url)
         .header("User-Agent", "Mozilla/5.0")
@@ -502,7 +636,9 @@ async fn get_stream_info(url: &str) -> Result<StreamInfo, String> {
         .await
         .map_err(|e| format!("Failed range request: {}", e))?;
 
-    if !range_response.status().is_success() && range_response.status() != reqwest::StatusCode::PARTIAL_CONTENT {
+    if !range_response.status().is_success()
+        && range_response.status() != reqwest::StatusCode::PARTIAL_CONTENT
+    {
         return Err(format!("Range request failed: {}", range_response.status()));
     }
 
@@ -540,8 +676,8 @@ async fn get_stream_info(url: &str) -> Result<StreamInfo, String> {
 
 /// Extract sample rate, channels, and bit depth from audio file header
 fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16, u32), String> {
-    use std::io::{BufReader, Cursor};
     use rodio::Decoder;
+    use std::io::{BufReader, Cursor};
 
     // Check if this is FLAC
     if data.len() >= 4 && &data[0..4] == b"fLaC" {
@@ -550,7 +686,8 @@ fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16, u32), Stri
         if data.len() >= 26 {
             // STREAMINFO starts at byte 8
             // Bytes 18-20: sample rate (20 bits) + channels (3 bits) + bits per sample (5 bits)
-            let sr_high = ((data[18] as u32) << 12) | ((data[19] as u32) << 4) | ((data[20] as u32) >> 4);
+            let sr_high =
+                ((data[18] as u32) << 12) | ((data[19] as u32) << 4) | ((data[20] as u32) >> 4);
             let sample_rate = sr_high;
             let channels = ((data[20] >> 1) & 0x07) + 1;
             // Bits per sample: 5 bits starting at bit 4 of byte 20
@@ -587,12 +724,19 @@ fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16, u32), Stri
             }
         }
         impl symphonia::core::io::MediaSource for ProbeSource {
-            fn is_seekable(&self) -> bool { true }
-            fn byte_len(&self) -> Option<u64> { Some(self.len) }
+            fn is_seekable(&self) -> bool {
+                true
+            }
+            fn byte_len(&self) -> Option<u64> {
+                Some(self.len)
+            }
         }
 
         let len = data.len() as u64;
-        let source = Box::new(ProbeSource { inner: Cursor::new(data.to_vec()), len });
+        let source = Box::new(ProbeSource {
+            inner: Cursor::new(data.to_vec()),
+            len,
+        });
         let mss = MediaSourceStream::new(source, Default::default());
 
         let mut hint = Hint::new();
@@ -603,10 +747,16 @@ fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16, u32), Stri
             ..Default::default()
         };
 
-        if let Ok(probed) = get_probe().format(&hint, mss, &format_opts, &MetadataOptions::default()) {
+        if let Ok(probed) =
+            get_probe().format(&hint, mss, &format_opts, &MetadataOptions::default())
+        {
             if let Some(track) = probed.format.default_track() {
                 let sample_rate = track.codec_params.sample_rate.unwrap_or(44100);
-                let channels = track.codec_params.channels.map(|c| c.count() as u16).unwrap_or(2);
+                let channels = track
+                    .codec_params
+                    .channels
+                    .map(|c| c.count() as u16)
+                    .unwrap_or(2);
                 let bit_depth = track.codec_params.bits_per_sample.unwrap_or(16);
                 return Ok((sample_rate, channels, bit_depth));
             }
@@ -625,7 +775,9 @@ fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16, u32), Stri
         }
         Err(_) => {
             // Default fallback
-            log::warn!("Could not determine audio format, using defaults (44100Hz, stereo, 16-bit)");
+            log::warn!(
+                "Could not determine audio format, using defaults (44100Hz, stereo, 16-bit)"
+            );
             Ok((44100, 2, 16))
         }
     }
@@ -641,8 +793,8 @@ async fn download_and_stream(
     content_length: u64,
     skip_cache: bool,
 ) -> Result<(), String> {
-    use std::time::{Duration, Instant};
     use futures_util::StreamExt;
+    use std::time::{Duration, Instant};
 
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(300)) // Longer timeout for streaming
@@ -650,8 +802,9 @@ async fn download_and_stream(
         .build()
         .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
 
-    log::info!("Starting streaming cache for track {} ({:.2} MB total)", 
-        track_id, 
+    log::info!(
+        "Starting streaming cache for track {} ({:.2} MB total)",
+        track_id,
         content_length as f64 / (1024.0 * 1024.0)
     );
 
@@ -691,7 +844,7 @@ async fn download_and_stream(
             let elapsed_total = start_time.elapsed().as_secs_f64();
             let elapsed_interval = now.duration_since(last_log_time).as_secs_f64();
             let bytes_this_interval = bytes_received - last_log_bytes;
-            
+
             // Current speed (MB/s)
             let current_speed = (bytes_this_interval as f64 / elapsed_interval) / (1024.0 * 1024.0);
             // Average speed
@@ -728,7 +881,7 @@ async fn download_and_stream(
 
     let total_time = start_time.elapsed();
     let avg_speed = (bytes_received as f64 / total_time.as_secs_f64()) / (1024.0 * 1024.0);
-    
+
     log::info!(
         "Streaming cache complete: {:.2} MB in {:.1}s ({:.2} MB/s avg)",
         bytes_received as f64 / (1024.0 * 1024.0),
@@ -801,7 +954,11 @@ fn spawn_prefetch(
 
         // Skip local tracks - they don't need prefetching from Qobuz
         if track.is_local {
-            log::debug!("Skipping prefetch for local track: {} - {}", track_id, track_title);
+            log::debug!(
+                "Skipping prefetch for local track: {} - {}",
+                track_id,
+                track_title
+            );
             continue;
         }
 
@@ -934,7 +1091,11 @@ pub async fn play_next_gapless(
     // Check memory cache (L1)
     let cache = state.audio_cache.clone();
     if let Some(cached) = cache.get(track_id) {
-        log::info!("[GAPLESS] Track {} from MEMORY cache ({} bytes)", track_id, cached.size_bytes);
+        log::info!(
+            "[GAPLESS] Track {} from MEMORY cache ({} bytes)",
+            track_id,
+            cached.size_bytes
+        );
         state.player.play_next(cached.data, track_id)?;
         return Ok(true);
     }
@@ -942,13 +1103,20 @@ pub async fn play_next_gapless(
     // Check playback cache (L2 - disk)
     if let Some(playback_cache) = cache.get_playback_cache() {
         if let Some(audio_data) = playback_cache.get(track_id) {
-            log::info!("[GAPLESS] Track {} from DISK cache ({} bytes)", track_id, audio_data.len());
+            log::info!(
+                "[GAPLESS] Track {} from DISK cache ({} bytes)",
+                track_id,
+                audio_data.len()
+            );
             state.player.play_next(audio_data, track_id)?;
             return Ok(true);
         }
     }
 
-    log::info!("[GAPLESS] Track {} not in any cache, gapless not possible", track_id);
+    log::info!(
+        "[GAPLESS] Track {} not in any cache, gapless not possible",
+        track_id
+    );
     Ok(false)
 }
 
@@ -994,10 +1162,9 @@ pub fn seek(position: u64, state: State<'_, AppState>) -> Result<(), String> {
 
     // Update MPRIS with new position
     let playback_state = state.player.get_state().unwrap_or_default();
-    state.media_controls.set_playback_with_progress(
-        playback_state.is_playing,
-        position,
-    );
+    state
+        .media_controls
+        .set_playback_with_progress(playback_state.is_playing, position);
 
     result
 }
@@ -1008,10 +1175,9 @@ pub fn get_playback_state(state: State<'_, AppState>) -> Result<PlaybackState, S
     let playback_state = state.player.get_state()?;
 
     // Update MPRIS with current progress (called every ~500ms from frontend)
-    state.media_controls.set_playback_with_progress(
-        playback_state.is_playing,
-        playback_state.position,
-    );
+    state
+        .media_controls
+        .set_playback_with_progress(playback_state.is_playing, playback_state.position);
 
     Ok(playback_state)
 }
@@ -1019,10 +1185,10 @@ pub fn get_playback_state(state: State<'_, AppState>) -> Result<PlaybackState, S
 /// Audio device information
 #[derive(serde::Serialize)]
 pub struct AudioDevice {
-    pub name: String,           // Technical name (internal use)
-    pub display_name: String,   // Friendly name for UI
+    pub name: String,         // Technical name (internal use)
+    pub display_name: String, // Friendly name for UI
     pub is_default: bool,
-    pub device_type: Option<String>,  // "USB", "PCI", "HDMI", etc.
+    pub device_type: Option<String>, // "USB", "PCI", "HDMI", etc.
 }
 
 /// Get friendly device names from PipeWire/PulseAudio
@@ -1056,7 +1222,10 @@ fn get_pipewire_device_descriptions() -> std::collections::HashMap<String, Strin
         }
     }
 
-    log::info!("Found {} device descriptions from PipeWire/PulseAudio", map.len());
+    log::info!(
+        "Found {} device descriptions from PipeWire/PulseAudio",
+        map.len()
+    );
     map
 }
 
@@ -1074,9 +1243,7 @@ pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
 
     let host = rodio::cpal::default_host();
 
-    let default_device_name = host
-        .default_output_device()
-        .and_then(|d| d.name().ok());
+    let default_device_name = host.default_output_device().and_then(|d| d.name().ok());
 
     // Get friendly names from PipeWire/PulseAudio
     let friendly_names = get_pipewire_device_descriptions();
@@ -1086,20 +1253,20 @@ pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
         .map_err(|e| format!("Failed to enumerate devices: {}", e))?
         .filter_map(|device| {
             device.name().ok().map(|name| {
-                let is_default = default_device_name.as_ref().map(|d| d == &name).unwrap_or(false);
+                let is_default = default_device_name
+                    .as_ref()
+                    .map(|d| d == &name)
+                    .unwrap_or(false);
 
                 // Try to get friendly name from PipeWire/PulseAudio
-                let display_name = friendly_names
-                    .get(&name)
-                    .cloned()
-                    .unwrap_or_else(|| {
-                        // Fallback: clean up technical name slightly
-                        name.replace("alsa_output.", "")
-                            .replace("_", " ")
-                            .replace("pro-output", "")
-                            .trim()
-                            .to_string()
-                    });
+                let display_name = friendly_names.get(&name).cloned().unwrap_or_else(|| {
+                    // Fallback: clean up technical name slightly
+                    name.replace("alsa_output.", "")
+                        .replace("_", " ")
+                        .replace("pro-output", "")
+                        .trim()
+                        .to_string()
+                });
 
                 // Detect device type from technical name
                 let device_type = if name.contains("usb") || name.contains("USB") {
@@ -1159,6 +1326,7 @@ pub fn get_audio_output_status(
 
 /// Reinitialize audio device (releases and re-acquires)
 /// Call this when changing audio settings like exclusive mode or output device
+#[deprecated(since = "1.2.0", note = "Use v2_reinit_audio_device instead")]
 #[tauri::command]
 pub fn reinit_audio_device(
     device: Option<String>,
@@ -1171,7 +1339,10 @@ pub fn reinit_audio_device(
     if let Ok(guard) = audio_settings_state.store.lock() {
         if let Some(store) = guard.as_ref() {
             if let Ok(fresh_settings) = store.get_settings() {
-                log::info!("Reloading audio settings before reinit (backend_type: {:?})", fresh_settings.backend_type);
+                log::info!(
+                    "Reloading audio settings before reinit (backend_type: {:?})",
+                    fresh_settings.backend_type
+                );
                 let _ = state.player.reload_settings(fresh_settings);
             }
         }
@@ -1205,9 +1376,7 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
     let host = rodio::cpal::default_host();
 
     // Get default device name from CPAL
-    let default_device_name = host
-        .default_output_device()
-        .and_then(|d| d.name().ok());
+    let default_device_name = host.default_output_device().and_then(|d| d.name().ok());
 
     log::info!("CPAL default device: {:?}", default_device_name);
 
@@ -1219,10 +1388,14 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
         .filter_map(|(idx, device)| {
             match device.name() {
                 Ok(name) => {
-                    let is_default = default_device_name.as_ref().map(|d| d == &name).unwrap_or(false);
+                    let is_default = default_device_name
+                        .as_ref()
+                        .map(|d| d == &name)
+                        .unwrap_or(false);
 
                     // Get detailed device info for logging
-                    let configs_info = device.supported_output_configs()
+                    let configs_info = device
+                        .supported_output_configs()
                         .ok()
                         .map(|configs| {
                             let config_strs: Vec<String> = configs
@@ -1233,8 +1406,13 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
                         })
                         .unwrap_or_else(|| "no configs".to_string());
 
-                    log::info!("  [{}] Device: '{}' (default: {}) - Configs: {}",
-                        idx, name, is_default, configs_info);
+                    log::info!(
+                        "  [{}] Device: '{}' (default: {}) - Configs: {}",
+                        idx,
+                        name,
+                        is_default,
+                        configs_info
+                    );
 
                     // CRITICAL: Use CPAL device name as both name and description
                     // This ensures the name we save is the exact name CPAL can find later
@@ -1269,16 +1447,17 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
 
     let host = rodio::cpal::default_host();
 
-    let default_device_name = host
-        .default_output_device()
-        .and_then(|d| d.name().ok());
+    let default_device_name = host.default_output_device().and_then(|d| d.name().ok());
 
     let sinks: Vec<PipewireSink> = host
         .output_devices()
         .map_err(|e| format!("Failed to enumerate devices: {}", e))?
         .filter_map(|device| {
             device.name().ok().map(|name| {
-                let is_default = default_device_name.as_ref().map(|d| d == &name).unwrap_or(false);
+                let is_default = default_device_name
+                    .as_ref()
+                    .map(|d| d == &name)
+                    .unwrap_or(false);
                 PipewireSink {
                     name: name.clone(),
                     description: name, // On Mac/Windows, name is usually descriptive enough
@@ -1328,17 +1507,17 @@ pub fn set_pipewire_default_sink(_sink_name: String) -> Result<(), String> {
 #[tauri::command]
 pub fn debug_get_cpal_devices() -> Result<Vec<String>, String> {
     use rodio::cpal::traits::{DeviceTrait, HostTrait};
-    
+
     log::info!("Command: debug_get_cpal_devices");
-    
+
     let host = rodio::cpal::default_host();
-    
+
     let devices: Vec<String> = host
         .output_devices()
         .map_err(|e| format!("Failed to enumerate devices: {}", e))?
         .filter_map(|device| device.name().ok())
         .collect();
-    
+
     log::info!("CPAL devices: {:?}", devices);
     Ok(devices)
 }

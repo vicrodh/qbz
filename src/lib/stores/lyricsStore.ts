@@ -309,7 +309,7 @@ export async function fetchLyrics(): Promise<void> {
 
   try {
     console.log(`[Lyrics] Fetching for: "${track.title}" by "${track.artist}"`);
-    const result = await invoke<LyricsPayload | null>('lyrics_get', {
+    const result = await invoke<LyricsPayload | null>('v2_lyrics_get', {
       trackId: track.id,
       title: track.title,
       artist: track.artist,
@@ -384,7 +384,7 @@ export function hideSidebar(): void {
  */
 export async function clearCache(): Promise<void> {
   try {
-    await invoke('lyrics_clear_cache');
+    await invoke('v2_lyrics_clear_cache');
     console.log('Lyrics cache cleared');
   } catch (err) {
     console.error('Failed to clear lyrics cache:', err);

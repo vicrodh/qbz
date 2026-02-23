@@ -1,11 +1,14 @@
-//! DLNA/UPnP casting module (discovery + scaffolding)
+//! DLNA/UPnP casting module
+//!
+//! Core functionality is in qbz-cast crate, this module provides Tauri commands.
 
 pub mod commands;
-pub mod device;
-pub mod discovery;
-pub mod errors;
 
+// Re-export from qbz-cast
+pub use qbz_cast::{
+    DiscoveredDlnaDevice, DlnaConnection, DlnaDiscovery, DlnaError, DlnaMetadata, DlnaPositionInfo,
+    DlnaStatus,
+};
+
+// Re-export Tauri command state
 pub use commands::DlnaState;
-pub use device::{DlnaConnection, DlnaMetadata, DlnaPositionInfo, DlnaStatus};
-pub use discovery::{DiscoveredDlnaDevice, DlnaDiscovery};
-pub use errors::DlnaError;

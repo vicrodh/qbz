@@ -37,18 +37,10 @@ const DATA_DIR_SUBDIR_FILES: &[(&str, &str)] = &[
 ];
 
 /// Cache directories to move (relative to ~/.cache/qbz/)
-const CACHE_DIRS: &[&str] = &[
-    "audio",
-    "lyrics",
-    "playback",
-    "artwork",
-    "tmp",
-];
+const CACHE_DIRS: &[&str] = &["audio", "lyrics", "playback", "artwork", "tmp"];
 
 /// Data directories to move (relative to ~/.local/share/qbz/)
-const DATA_DIRS: &[&str] = &[
-    "thumbnails",
-];
+const DATA_DIRS: &[&str] = &["thumbnails"];
 
 /// Check if migration has already been performed
 pub fn is_migrated(global_data_dir: &Path) -> bool {
@@ -98,12 +90,18 @@ pub fn migrate_flat_to_user(user_id: u64) -> Result<(), String> {
 
     // 3. Move data directories (thumbnails)
     for dir_name in DATA_DIRS {
-        move_directory(&global_data_dir.join(dir_name), &user_data_dir.join(dir_name));
+        move_directory(
+            &global_data_dir.join(dir_name),
+            &user_data_dir.join(dir_name),
+        );
     }
 
     // 4. Move cache directories
     for dir_name in CACHE_DIRS {
-        move_directory(&global_cache_dir.join(dir_name), &user_cache_dir.join(dir_name));
+        move_directory(
+            &global_cache_dir.join(dir_name),
+            &user_cache_dir.join(dir_name),
+        );
     }
 
     // 5. Write marker file
@@ -153,7 +151,11 @@ fn move_directory(src: &Path, dst: &Path) {
     match std::fs::rename(src, dst) {
         Ok(()) => log::debug!("Moved dir {} -> {}", src.display(), dst.display()),
         Err(e) => {
-            log::warn!("Rename dir failed for {}, trying recursive copy: {}", src.display(), e);
+            log::warn!(
+                "Rename dir failed for {}, trying recursive copy: {}",
+                src.display(),
+                e
+            );
             if let Err(copy_err) = copy_dir_recursive(src, dst) {
                 log::error!("Failed to migrate dir {}: {}", src.display(), copy_err);
             } else {
@@ -178,8 +180,8 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> Result<(), String> {
     std::fs::create_dir_all(dst)
         .map_err(|e| format!("Create dir {} failed: {}", dst.display(), e))?;
 
-    let entries = std::fs::read_dir(src)
-        .map_err(|e| format!("Read dir {} failed: {}", src.display(), e))?;
+    let entries =
+        std::fs::read_dir(src).map_err(|e| format!("Read dir {} failed: {}", src.display(), e))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| format!("Read entry in {} failed: {}", src.display(), e))?;

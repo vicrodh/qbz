@@ -2,6 +2,16 @@
 //!
 //! This application uses the Qobuz API but is not certified by Qobuz.
 
+// New multi-crate architecture
+pub mod commands_v2;
+pub mod core_bridge;
+pub mod integrations_v2;
+pub mod runtime;
+pub mod session_lifecycle;
+pub mod tauri_adapter;
+
+pub mod auto_theme;
+
 pub mod api;
 pub mod api_cache;
 pub mod api_server;
@@ -14,7 +24,6 @@ pub mod commands;
 pub mod config;
 pub mod credentials;
 pub mod discogs;
-pub mod offline_cache;
 pub mod flatpak;
 pub mod lastfm;
 pub mod library;
@@ -26,13 +35,14 @@ pub mod migration;
 pub mod musicbrainz;
 pub mod network;
 pub mod offline;
+pub mod offline_cache;
 pub mod playback_context;
-pub mod plex;
 pub mod player;
 pub mod playlist_import;
+pub mod plex;
 pub mod queue;
-pub mod reco_store;
 pub mod radio_engine;
+pub mod reco_store;
 pub mod session_store;
 pub mod share;
 pub mod tray;
@@ -73,25 +83,31 @@ impl AppState {
     }
 
     pub fn with_device(device_name: Option<String>) -> Self {
-        Self::with_device_and_settings(device_name, config::audio_settings::AudioSettings::default())
+        Self::with_device_and_settings(
+            device_name,
+            config::audio_settings::AudioSettings::default(),
+        )
     }
 
     pub fn with_device_and_settings(
         device_name: Option<String>,
         audio_settings: config::audio_settings::AudioSettings,
     ) -> Self {
-        // Create playback cache (L2 - disk, 500MB)
-        let playback_cache = match PlaybackCache::new(500 * 1024 * 1024) {
+        // Create playback cache (L2 - disk, 800MB)
+        let playback_cache = match PlaybackCache::new(800 * 1024 * 1024) {
             Ok(cache) => Some(Arc::new(cache)),
             Err(e) => {
-                log::warn!("Failed to create playback cache: {}. Disk spillover disabled.", e);
+                log::warn!(
+                    "Failed to create playback cache: {}. Disk spillover disabled.",
+                    e
+                );
                 None
             }
         };
 
-        // Create audio cache (L1 - memory, 300MB) with optional disk spillover
+        // Create audio cache (L1 - memory, 400MB) with optional disk spillover
         let audio_cache = if let Some(pc) = playback_cache {
-            Arc::new(AudioCache::with_playback_cache(300 * 1024 * 1024, pc))
+            Arc::new(AudioCache::with_playback_cache(400 * 1024 * 1024, pc))
         } else {
             Arc::new(AudioCache::default())
         };
@@ -102,7 +118,12 @@ impl AppState {
 
         Self {
             client: Arc::new(RwLock::new(QobuzClient::default())),
-            player: Player::new(device_name, audio_settings, Some(viz_tap), audio::AudioDiagnostic::new()),
+            player: Player::new(
+                device_name,
+                audio_settings,
+                Some(viz_tap),
+                audio::AudioDiagnostic::new(),
+            ),
             queue: QueueManager::new(),
             context: ContextManager::new(),
             media_controls: MediaControlsManager::new(),
@@ -139,11 +160,174 @@ pub fn update_media_controls_metadata(
     media_controls.set_metadata(&track_info);
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
-#[tauri::command]
-fn restart_app(app: tauri::AppHandle) {
-    log::info!("App restart requested by user");
-    app.restart();
+/// Add a KWin window rule that forces server-side decorations (SSD) for QBZ.
+///
+/// GTK3 on Wayland hardcodes CLIENT_SIDE in the xdg-decoration protocol,
+/// so KWin scripting alone can't override it. Window rules operate at a
+/// deeper level (applied during window setup, before protocol negotiation)
+/// and can force KWin to draw native SSD.
+///
+/// The rule is written to ~/.config/kwinrulesrc and persists across sessions.
+/// It's removed when the user disables system title bar.
+fn setup_kwin_window_rule() -> Result<(), String> {
+    let config_path = dirs::config_dir()
+        .ok_or_else(|| "Could not determine config directory".to_string())?
+        .join("kwinrulesrc");
+
+    // Read existing rules to find next available slot and check for existing QBZ rule
+    let existing = std::fs::read_to_string(&config_path).unwrap_or_default();
+    let mut existing_count: u32 = 0;
+    let mut qbz_rule_group: Option<u32> = None;
+
+    for line in existing.lines() {
+        // Parse [General] count=N
+        if line.starts_with("count=") {
+            if let Ok(n) = line.trim_start_matches("count=").parse::<u32>() {
+                existing_count = n;
+            }
+        }
+        // Check if we already have a QBZ rule
+        if line.contains("Description=QBZ Native Title Bar") {
+            // Find the group number from context — we'll just scan backwards
+            // Simpler: track current group
+        }
+    }
+
+    // Parse INI to find existing QBZ rule group
+    let mut current_group: Option<u32> = None;
+    for line in existing.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            current_group = inner.parse::<u32>().ok();
+        }
+        if trimmed == "Description=QBZ Native Title Bar" {
+            qbz_rule_group = current_group;
+        }
+    }
+
+    let rule_num = if let Some(num) = qbz_rule_group {
+        log::info!("KWin window rule for QBZ already exists (group {}), updating", num);
+        num
+    } else {
+        existing_count + 1
+    };
+
+    // Write the rule using kwriteconfig6
+    let group = rule_num.to_string();
+    let rules: &[(&str, &str)] = &[
+        ("Description", "QBZ Native Title Bar"),
+        ("noborder", "false"),
+        ("noborderrule", "2"),       // 2 = Force
+        ("wmclass", "qbz"),
+        ("wmclasscomplete", "false"),
+        ("wmclassmatch", "1"),       // 1 = Exact match
+        ("types", "1"),              // 1 = Normal windows
+    ];
+
+    for (key, value) in rules {
+        let output = std::process::Command::new("kwriteconfig6")
+            .args(["--file", "kwinrulesrc", "--group", &group, "--key", key, value])
+            .output()
+            .map_err(|e| format!("kwriteconfig6 failed: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "kwriteconfig6 --key {} failed: {}",
+                key,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    }
+
+    // Update the count in [General] if we added a new rule
+    if qbz_rule_group.is_none() {
+        let new_count = (existing_count + 1).to_string();
+        let output = std::process::Command::new("kwriteconfig6")
+            .args(["--file", "kwinrulesrc", "--group", "General", "--key", "count", &new_count])
+            .output()
+            .map_err(|e| format!("kwriteconfig6 count update failed: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "kwriteconfig6 count failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    }
+
+    // Tell KWin to reload rules
+    let output = std::process::Command::new("qdbus6")
+        .args(["org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"])
+        .output()
+        .map_err(|e| format!("qdbus6 reconfigure failed: {}", e))?;
+
+    if !output.status.success() {
+        log::warn!(
+            "KWin reconfigure failed (non-fatal): {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    log::info!("KWin window rule set for native title bar (group {})", rule_num);
+    Ok(())
+}
+
+/// Remove the KWin window rule for QBZ when system title bar is disabled.
+#[allow(dead_code)]
+fn remove_kwin_window_rule() {
+    // Find and remove QBZ rule from kwinrulesrc
+    let config_path = match dirs::config_dir() {
+        Some(p) => p.join("kwinrulesrc"),
+        None => return,
+    };
+
+    let existing = match std::fs::read_to_string(&config_path) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+
+    // Find the QBZ rule group number
+    let mut current_group: Option<String> = None;
+    let mut qbz_group: Option<String> = None;
+
+    for line in existing.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            current_group = Some(trimmed[1..trimmed.len() - 1].to_string());
+        }
+        if trimmed == "Description=QBZ Native Title Bar" {
+            qbz_group = current_group.clone();
+        }
+    }
+
+    if let Some(group) = qbz_group {
+        // Delete the group using kwriteconfig6
+        let _ = std::process::Command::new("kwriteconfig6")
+            .args(["--file", "kwinrulesrc", "--group", &group, "--delete-group"])
+            .output();
+
+        // Decrement count
+        let mut count: u32 = 0;
+        for line in existing.lines() {
+            if line.starts_with("count=") {
+                count = line.trim_start_matches("count=").parse().unwrap_or(0);
+            }
+        }
+        if count > 0 {
+            let new_count = (count - 1).to_string();
+            let _ = std::process::Command::new("kwriteconfig6")
+                .args(["--file", "kwinrulesrc", "--group", "General", "--key", "count", &new_count])
+                .output();
+        }
+
+        // Reconfigure KWin
+        let _ = std::process::Command::new("qdbus6")
+            .args(["org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"])
+            .output();
+
+        log::info!("KWin window rule for QBZ removed");
+    }
 }
 
 pub fn run() {
@@ -172,9 +356,10 @@ pub fn run() {
     let (saved_device, audio_settings) = config::audio_settings::AudioSettingsStore::new()
         .ok()
         .and_then(|store| {
-            store.get_settings().ok().map(|settings| {
-                (settings.output_device.clone(), settings)
-            })
+            store
+                .get_settings()
+                .ok()
+                .map(|settings| (settings.output_device.clone(), settings))
         })
         .unwrap_or_else(|| {
             log::info!("No saved audio settings found, using defaults");
@@ -191,10 +376,29 @@ pub fn run() {
         audio_settings.preferred_sample_rate
     );
 
-    // Read tray settings from flat path once for tray initialization.
-    let tray_settings = config::tray_settings::TraySettingsStore::new()
-        .and_then(|store| store.get_settings())
-        .unwrap_or_default();
+    // Read tray settings for startup tray initialization.
+    // Prefer last active user-scoped settings, then fallback to global flat path.
+    let tray_settings = if let Some(last_uid) = user_data::UserDataPaths::load_last_user_id() {
+        let user_settings = dirs::data_dir()
+            .map(|d| d.join("qbz").join("users").join(last_uid.to_string()))
+            .and_then(|user_dir| {
+                config::tray_settings::TraySettingsStore::new_at(&user_dir)
+                    .and_then(|store| store.get_settings())
+                    .ok()
+            });
+        if let Some(settings) = user_settings {
+            log::info!("Loaded tray settings from last active user {}", last_uid);
+            settings
+        } else {
+            config::tray_settings::TraySettingsStore::new()
+                .and_then(|store| store.get_settings())
+                .unwrap_or_default()
+        }
+    } else {
+        config::tray_settings::TraySettingsStore::new()
+            .and_then(|store| store.get_settings())
+            .unwrap_or_default()
+    };
     log::info!(
         "Tray settings: enable={}, minimize_to_tray={}, close_to_tray={}",
         tray_settings.enable_tray,
@@ -212,22 +416,56 @@ pub fn run() {
     );
     let use_system_titlebar = window_settings.use_system_titlebar;
 
+    // One-time cleanup: remove the KWin SSD window rule written by QBZ 1.1.14.
+    // That version wrote a kwinrulesrc entry forcing server-side decorations; it
+    // was removed in 1.1.15 due to a GTK3/WebKit heap corruption bug. We silently
+    // delete the stale rule so KWin stops applying SSD on existing installs.
+    // No qdbus6 reconfigure call here — KWin picks it up on next restart, and
+    // users affected can run `qdbus6 org.kde.KWin /KWin reconfigure` manually or
+    // just restart their session. This block does nothing if the rule is absent.
+    {
+        if let Some(path) = dirs::config_dir().map(|d| d.join("kwinrulesrc")) {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if content.contains("Description=QBZ Native Title Bar") {
+                    // Strip the [N] group that contains our rule
+                    let mut out = String::with_capacity(content.len());
+                    let mut skip = false;
+                    for line in content.lines() {
+                        let trimmed = line.trim();
+                        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                            skip = false;
+                        }
+                        if trimmed == "Description=QBZ Native Title Bar" {
+                            // Remove the header we already wrote + this section
+                            // by trimming back to the previous newline
+                            if let Some(pos) = out.rfind('[') {
+                                out.truncate(pos);
+                            }
+                            skip = true;
+                            continue;
+                        }
+                        if !skip {
+                            out.push_str(line);
+                            out.push('\n');
+                        }
+                    }
+                    if let Err(e) = std::fs::write(&path, out) {
+                        log::warn!("[Cleanup] Failed to remove stale KWin rule: {}", e);
+                    } else {
+                        log::info!("[Cleanup] Removed stale KWin SSD rule from kwinrulesrc");
+                    }
+                }
+            }
+        }
+    }
+
     // Initialize casting state (Chromecast, DLNA) — device-level, not per-user
-    let cast_state = cast::CastState::new()
-        .expect("Failed to initialize Chromecast state");
-    let dlna_state = cast::dlna::commands::DlnaState::new(cast_state.media_server.clone())
+    let cast_state = cast::CastState::new().expect("Failed to initialize Chromecast state");
+    let dlna_state = cast::DlnaState::new(cast_state.media_server.clone())
         .expect("Failed to initialize DLNA state");
 
     // Initialize API server state for remote control (device-level)
     let api_server_state = api_server::ApiServerState::new();
-
-    // Initialize remote metadata state (device-level, uses its own MusicBrainz instance)
-    let remote_metadata_state = commands::RemoteMetadataSharedState {
-        inner: Arc::new(Mutex::new(library::remote_metadata::RemoteMetadataState::new(
-            Some(Arc::new(musicbrainz::MusicBrainzSharedState::new()
-                .expect("Failed to initialize MusicBrainz for remote metadata")))
-        ))),
-    };
 
     // ── Phase 2: Per-user states (empty until activate_user_session) ──
     let library_state = library::init_library_state_empty();
@@ -240,32 +478,57 @@ pub fn run() {
     let download_settings_state = config::download_settings::create_empty_download_settings_state();
     let offline_state = offline::OfflineState::new_empty();
     let playback_prefs_state = config::playback_preferences::PlaybackPreferencesState::new_empty();
-    let favorites_prefs_state = config::favorites_preferences::FavoritesPreferencesState::new_empty();
+    let favorites_prefs_state =
+        config::favorites_preferences::FavoritesPreferencesState::new_empty();
     let favorites_cache_state = config::favorites_cache::FavoritesCacheState::new_empty();
     let tray_settings_state = config::tray_settings::TraySettingsState::new_empty();
-    let remote_control_settings_state = config::remote_control_settings::RemoteControlSettingsState::new_empty();
+    let remote_control_settings_state =
+        config::remote_control_settings::RemoteControlSettingsState::new_empty();
     let allowed_origins_state = config::remote_control_settings::AllowedOriginsState::new_empty();
-    let legal_settings_state = config::legal_settings::create_empty_legal_settings_state();
-    let updates_state = updates::UpdatesState::new_empty()
-        .expect("Failed to initialize empty updates state");
+    // LegalSettings is GLOBAL (not per-user) - must be initialized at startup
+    // so ToS acceptance can be checked BEFORE attempting auto-login
+    let legal_settings_state = config::legal_settings::create_legal_settings_state()
+        .unwrap_or_else(|e| {
+            log::warn!(
+                "Failed to initialize legal settings: {}. Using empty state.",
+                e
+            );
+            config::legal_settings::create_empty_legal_settings_state()
+        });
+    let updates_state =
+        updates::UpdatesState::new_empty().expect("Failed to initialize empty updates state");
     let subscription_state = config::create_empty_subscription_state();
     let musicbrainz_state = musicbrainz::MusicBrainzSharedState::new_empty();
     let artist_vectors_state = artist_vectors::ArtistVectorStoreState::new_empty();
     let blacklist_state = artist_blacklist::BlacklistState::new_empty();
     let listenbrainz_state = listenbrainz::ListenBrainzSharedState::new_empty();
+
+    // V2 integration states (using qbz-integrations crate)
+    let listenbrainz_v2_state = integrations_v2::ListenBrainzV2State::new();
+    let musicbrainz_v2_state = integrations_v2::MusicBrainzV2State::new();
+    let lastfm_v2_state = integrations_v2::LastFmV2State::new();
     let developer_settings_state = config::developer_settings::DeveloperSettingsState::new()
         .unwrap_or_else(|e| {
-            log::warn!("Failed to initialize developer settings: {}. Using empty state.", e);
+            log::warn!(
+                "Failed to initialize developer settings: {}. Using empty state.",
+                e
+            );
             config::developer_settings::DeveloperSettingsState::new_empty()
         });
     let graphics_settings_state = config::graphics_settings::GraphicsSettingsState::new()
         .unwrap_or_else(|e| {
-            log::warn!("Failed to initialize graphics settings: {}. Using empty state.", e);
+            log::warn!(
+                "Failed to initialize graphics settings: {}. Using empty state.",
+                e
+            );
             config::graphics_settings::GraphicsSettingsState::new_empty()
         });
-    let window_settings_state = config::window_settings::WindowSettingsState::new()
-        .unwrap_or_else(|e| {
-            log::warn!("Failed to initialize window settings: {}. Using empty state.", e);
+    let window_settings_state =
+        config::window_settings::WindowSettingsState::new().unwrap_or_else(|e| {
+            log::warn!(
+                "Failed to initialize window settings: {}. Using empty state.",
+                e
+            );
             config::window_settings::WindowSettingsState::new_empty()
         });
 
@@ -276,29 +539,69 @@ pub fn run() {
     let user_data_paths = user_data::UserDataPaths::new();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // Second instance launched — bring existing window to front
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.show();
                 let _ = window.unminimize();
                 let _ = window.set_focus();
             }
+
+            // Check if second instance was launched with a Qobuz link arg
+            for arg in &args {
+                if arg.starts_with("qobuzapp://")
+                    || arg.contains("play.qobuz.com/")
+                    || arg.contains("open.qobuz.com/")
+                {
+                    if let Ok(resolved) = qbz_qobuz::resolve_link(arg) {
+                        log::info!("Single-instance forwarding link: {:?}", resolved);
+                        let _ = app.emit("link:resolved", &resolved);
+                    }
+                    break;
+                }
+            }
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .manage(AppState::with_device_and_settings(saved_device, audio_settings))
+        .manage(AppState::with_device_and_settings(
+            saved_device,
+            audio_settings,
+        ))
+        .manage(core_bridge::CoreBridgeState::new())
+        .manage(runtime::RuntimeManagerState::new())
         .manage(user_data_paths)
         .setup(move |app| {
-            // Create main window programmatically so we can set the correct
-            // decoration state at creation time. On Linux/Wayland, windows
-            // created with decorations:false cannot reliably switch to
-            // decorations:true at runtime (WM buttons don't work). By
-            // creating the window with the right value from the start, the
-            // WM sees the correct state when the window is first mapped.
-            log::info!(
-                "Creating main window (decorations={})",
+            // On KDE Plasma + Wayland, GTK3 always uses client-side decorations
+            // (CSD) regardless of GTK_CSD env var, because it hardcodes
+            // CLIENT_SIDE in the xdg-decoration protocol. This means
+            // decorations(true) shows a GTK/Breeze-GTK title bar, not the
+            // native KDE Breeze one.
+            //
+            // Workaround: create the window with decorations=false (no GTK CSD),
+            // then load a KWin script via D-Bus that forces KWin to draw its own
+            // server-side decorations (SSD) for QBZ. This gives a single, native
+            // KDE title bar identical to Dolphin/Konsole.
+            let is_kde_wayland = std::env::var("GDK_BACKEND")
+                .map(|v| v == "wayland")
+                .unwrap_or(false)
+                && auto_theme::system::detect_desktop_environment()
+                    == auto_theme::system::DesktopEnvironment::KdePlasma;
+
+            let use_kwin_ssd = use_system_titlebar && is_kde_wayland;
+
+            // On KDE Wayland: always decorations=false, KWin script adds SSD
+            // On other DEs: use decorations directly (GTK CSD is acceptable)
+            let gtk_decorations = if use_kwin_ssd {
+                false
+            } else {
                 use_system_titlebar
+            };
+
+            log::info!(
+                "Creating main window (decorations={}, kwin_ssd={})",
+                gtk_decorations,
+                use_kwin_ssd
             );
             tauri::WebviewWindowBuilder::new(
                 app,
@@ -308,7 +611,7 @@ pub fn run() {
             .title("QBZ")
             .inner_size(1280.0, 800.0)
             .min_inner_size(800.0, 600.0)
-            .decorations(use_system_titlebar)
+            .decorations(gtk_decorations)
             .transparent(true)
             .resizable(true)
             .zoom_hotkeys_enabled(true)
@@ -317,6 +620,15 @@ pub fn run() {
                 log::error!("Failed to create main window: {}", e);
                 e
             })?;
+
+            // Add KWin window rule to force server-side decorations for QBZ
+            if use_kwin_ssd {
+                std::thread::spawn(|| {
+                    if let Err(e) = setup_kwin_window_rule() {
+                        log::warn!("Failed to set KWin window rule: {}", e);
+                    }
+                });
+            }
 
             // Initialize system tray icon (only if enabled)
             if enable_tray {
@@ -332,6 +644,39 @@ pub fn run() {
                 .media_controls
                 .init(app.handle().clone());
 
+            // Initialize CoreBridge (new multi-crate architecture)
+            // Store V2 player state for event loop access
+            let v2_player_state: Arc<tokio::sync::RwLock<Option<qbz_player::SharedState>>> =
+                Arc::new(tokio::sync::RwLock::new(None));
+            let v2_player_state_setter = v2_player_state.clone();
+            {
+                let core_bridge_arc = app.state::<core_bridge::CoreBridgeState>().0.clone();
+                let adapter = tauri_adapter::TauriAdapter::new(app.handle().clone());
+                let v1_viz_tap = app.state::<AppState>().visualizer.get_tap();
+                let v2_viz_tap = qbz_audio::VisualizerTap {
+                    ring_buffer: v1_viz_tap.ring_buffer.clone(),
+                    enabled: v1_viz_tap.enabled.clone(),
+                    sample_rate: v1_viz_tap.sample_rate.clone(),
+                };
+                tauri::async_runtime::spawn(async move {
+                    let bridge = core_bridge::CoreBridge::new(adapter, Some(v2_viz_tap)).await;
+                    match bridge {
+                        Ok(b) => {
+                            // Store V2 player state for event loop
+                            let v2_state = b.player().state.clone();
+                            *v2_player_state_setter.write().await = Some(v2_state);
+                            *core_bridge_arc.write().await = Some(b);
+                            log::info!(
+                                "CoreBridge initialized successfully (V2 player state captured)"
+                            );
+                        }
+                        Err(e) => {
+                            log::error!("Failed to initialize CoreBridge: {}", e);
+                        }
+                    }
+                });
+            }
+
             // NOTE: Visualizer FFT thread and Remote Control API server are started
             // in activate_user_session (post-login), not here. They need per-user
             // state to be initialized first.
@@ -339,53 +684,120 @@ pub fn run() {
             // NOTE: Subscription purge check moved to activate_user_session
             // (runs after login when per-user state is available)
 
+            // Check if app was launched with a Qobuz link argument
+            // (first launch, not single-instance — that's handled by the plugin above)
+            {
+                let launch_handle = app.handle().clone();
+                let args: Vec<String> = std::env::args().collect();
+                for arg in &args[1..] {
+                    // skip binary name
+                    if arg.starts_with("qobuzapp://")
+                        || arg.contains("play.qobuz.com/")
+                        || arg.contains("open.qobuz.com/")
+                    {
+                        if let Ok(resolved) = qbz_qobuz::resolve_link(arg) {
+                            log::info!("Launch arg link resolved: {:?}", resolved);
+                            // Delay emission to give frontend time to mount
+                            tauri::async_runtime::spawn(async move {
+                                tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+                                let _ = launch_handle.emit("link:resolved", &resolved);
+                            });
+                        }
+                        break;
+                    }
+                }
+            }
+
             // Start background task to emit playback events
             let app_handle = app.handle().clone();
-            let player_state = app.state::<AppState>().player.state.clone();
+            let legacy_player_state = app.state::<AppState>().player.state.clone();
 
-            std::thread::spawn(move || {
+            tauri::async_runtime::spawn(async move {
                 let mut last_position: u64 = 0;
                 let mut last_is_playing: bool = false;
                 let mut last_track_id: u64 = 0;
 
                 loop {
-                    // Check playing/track state first to determine sleep duration
-                    let is_playing = player_state.is_playing();
-                    let track_id = player_state.current_track_id();
+                    // Check V2 player state first (takes priority if active)
+                    // V2 player is accessed via async lock, but we only need a clone
+                    let v2_state_opt: Option<qbz_player::SharedState> =
+                        v2_player_state.read().await.clone();
 
-                    // Adaptive polling:
-                    // - fast (500ms) when playing - balances UI responsiveness vs CPU
-                    // - slow (1000ms) when paused/stopped with a track loaded
-                    // - very slow (5000ms) when no track is loaded (idle)
-                    let sleep_duration = if is_playing {
-                        std::time::Duration::from_millis(500)
-                    } else if track_id == 0 {
-                        std::time::Duration::from_millis(5000)
+                    // Determine which player is active (V2 takes priority if it has a track)
+                    let (
+                        is_playing,
+                        track_id,
+                        position,
+                        duration,
+                        volume,
+                        sample_rate,
+                        bit_depth,
+                        normalization_gain,
+                        gapless_ready,
+                        gapless_next_track_id,
+                    ) = if let Some(ref v2_state) = v2_state_opt {
+                        let v2_track_id = v2_state.current_track_id();
+                        if v2_track_id != 0 {
+                            // V2 player is active
+                            (
+                                v2_state.is_playing(),
+                                v2_track_id,
+                                v2_state.current_position(),
+                                v2_state.duration(),
+                                v2_state.volume(),
+                                v2_state.get_sample_rate(),
+                                v2_state.get_bit_depth(),
+                                v2_state.get_normalization_gain(),
+                                v2_state.is_gapless_ready(),
+                                v2_state.get_gapless_next_track_id(),
+                            )
+                        } else {
+                            // Fallback to legacy player
+                            (
+                                legacy_player_state.is_playing(),
+                                legacy_player_state.current_track_id(),
+                                legacy_player_state.current_position(),
+                                legacy_player_state.duration(),
+                                legacy_player_state.volume(),
+                                legacy_player_state.get_sample_rate(),
+                                legacy_player_state.get_bit_depth(),
+                                legacy_player_state.get_normalization_gain(),
+                                legacy_player_state.is_gapless_ready(),
+                                legacy_player_state.get_gapless_next_track_id(),
+                            )
+                        }
                     } else {
-                        std::time::Duration::from_millis(1000)
+                        // V2 not initialized yet, use legacy
+                        (
+                            legacy_player_state.is_playing(),
+                            legacy_player_state.current_track_id(),
+                            legacy_player_state.current_position(),
+                            legacy_player_state.duration(),
+                            legacy_player_state.volume(),
+                            legacy_player_state.get_sample_rate(),
+                            legacy_player_state.get_bit_depth(),
+                            legacy_player_state.get_normalization_gain(),
+                            legacy_player_state.is_gapless_ready(),
+                            legacy_player_state.get_gapless_next_track_id(),
+                        )
                     };
-                    std::thread::sleep(sleep_duration);
 
-                    // Re-check after sleep (state might have changed)
-                    let is_playing = player_state.is_playing();
-                    let position = player_state.current_position();
-                    let duration = player_state.duration();
-                    let track_id = player_state.current_track_id();
-                    let volume = player_state.volume();
-
-                    // Only emit if state changed or position advanced
-                    let should_emit = track_id != 0 && (
-                        is_playing != last_is_playing
-                        || track_id != last_track_id
-                        || (is_playing && position != last_position)
-                    );
+                    // Emit when:
+                    // 1) normal in-track state changes/position updates, or
+                    // 2) terminal transition to no-track (track_id becomes 0).
+                    // Case (2) is required so frontend can run end-of-track fallback
+                    // auto-advance paths reliably.
+                    let track_cleared = track_id == 0 && last_track_id != 0;
+                    let should_emit = (track_id != 0
+                        && (is_playing != last_is_playing
+                            || track_id != last_track_id
+                            || (is_playing && position != last_position)))
+                        || track_cleared;
 
                     let should_update_mpris = should_emit || (track_id == 0 && last_track_id != 0);
 
                     if should_emit {
-                        let sample_rate = player_state.get_sample_rate();
-                        let bit_depth = player_state.get_bit_depth();
-                        // Get queue state for shuffle/repeat
+                        // Get queue state for shuffle/repeat (still from legacy queue)
                         let queue_state = &app_handle.state::<AppState>().queue;
                         let shuffle = queue_state.is_shuffle();
                         let repeat = match queue_state.get_repeat() {
@@ -393,20 +805,24 @@ pub fn run() {
                             queue::RepeatMode::All => "all",
                             queue::RepeatMode::One => "one",
                         };
-                        let normalization_gain = player_state.get_normalization_gain();
+                        // Use values collected from active player (V2 or legacy)
                         let event = player::PlaybackEvent {
                             is_playing,
                             position,
                             duration,
                             track_id,
                             volume,
-                            sample_rate: if sample_rate > 0 { Some(sample_rate) } else { None },
+                            sample_rate: if sample_rate > 0 {
+                                Some(sample_rate)
+                            } else {
+                                None
+                            },
                             bit_depth: if bit_depth > 0 { Some(bit_depth) } else { None },
                             shuffle: Some(shuffle),
                             repeat: Some(repeat.to_string()),
                             normalization_gain,
-                            gapless_ready: player_state.is_gapless_ready(),
-                            gapless_next_track_id: player_state.get_gapless_next_track_id(),
+                            gapless_ready,
+                            gapless_next_track_id,
                         };
                         let _ = app_handle.emit("playback:state", &event);
                         api_server::broadcast_playback_event(&app_handle, &event);
@@ -423,6 +839,19 @@ pub fn run() {
                             media_controls.set_playback_with_progress(is_playing, position);
                         }
                     }
+
+                    // Adaptive polling:
+                    // - fast (250ms) when playing - improves seekbar/lyrics sync
+                    // - slow (1000ms) when paused/stopped with a track loaded
+                    // - very slow (5000ms) when no track is loaded (idle)
+                    let sleep_duration = if is_playing {
+                        std::time::Duration::from_millis(250)
+                    } else if track_id == 0 {
+                        std::time::Duration::from_millis(5000)
+                    } else {
+                        std::time::Duration::from_millis(1000)
+                    };
+                    tokio::time::sleep(sleep_duration).await;
                 }
             });
 
@@ -432,7 +861,8 @@ pub fn run() {
             // Handle close to tray — read dynamically from state so per-user
             // settings take effect after login without needing a restart.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                let close_to_tray = window.app_handle()
+                let close_to_tray = window
+                    .app_handle()
                     .try_state::<config::tray_settings::TraySettingsState>()
                     .and_then(|state| state.get_settings().ok())
                     .map(|s| s.close_to_tray)
@@ -444,13 +874,13 @@ pub fn run() {
                 } else {
                     // Cleanup cast devices on actual close
                     log::info!("App closing: cleaning up cast devices");
-                    
+
                     // Disconnect Chromecast if connected (sends message through channel)
                     if let Some(cast_state) = window.app_handle().try_state::<cast::CastState>() {
                         log::info!("Disconnecting Chromecast on app exit");
                         let _ = cast_state.chromecast.disconnect();
                     }
-                    
+
                     // Note: DLNA connection will be dropped when the app exits,
                     // which will naturally close the connection. The tokio Mutex
                     // prevents us from synchronously stopping playback here.
@@ -482,539 +912,459 @@ pub fn run() {
         .manage(updates_state)
         .manage(musicbrainz_state)
         .manage(listenbrainz_state)
-        .manage(remote_metadata_state)
         .manage(artist_vectors_state)
         .manage(blacklist_state)
         .manage(developer_settings_state)
         .manage(graphics_settings_state)
         .manage(window_settings_state)
+        // V2 integration states (qbz-integrations crate)
+        .manage(listenbrainz_v2_state)
+        .manage(musicbrainz_v2_state)
+        .manage(lastfm_v2_state)
         .invoke_handler(tauri::generate_handler![
-            // Auth commands
-            commands::init_client,
-            commands::login,
-            commands::logout,
-            commands::is_logged_in,
-            commands::get_user_info,
-            commands::set_api_locale,
-            // Credential persistence commands
-            commands::has_saved_credentials,
-            commands::save_credentials,
-            commands::clear_saved_credentials,
-            commands::auto_login,
-            // User session lifecycle
-            commands::get_last_user_id,
-            commands::activate_user_session,
-            commands::deactivate_user_session,
-            commands::factory_reset,
-            // Search commands
-            commands::search_albums,
-            commands::search_tracks,
-            commands::search_artists,
-            commands::search_all,
-            commands::get_album,
-            commands::get_featured_albums,
-            commands::get_genres,
-            commands::get_discover_index,
-            commands::get_discover_playlists,
-            commands::get_playlist_tags,
-            commands::get_discover_albums,
-            commands::get_track,
-            commands::get_artist,
-            commands::get_artist_basic,
-            commands::get_artist_detail,
-            commands::get_artist_tracks,
-            commands::get_artist_albums,
-            commands::get_similar_artists,
-            commands::get_artist_page,
-            commands::get_releases_grid,
-            commands::get_label,
-            // Playback commands
-            commands::play_track,
-            commands::prefetch_track,
-            commands::pause_playback,
-            commands::resume_playback,
-            commands::stop_playback,
-            commands::play_next_gapless,
-            commands::set_volume,
-            commands::seek,
-            commands::get_playback_state,
-            commands::set_media_metadata,
-            commands::get_audio_devices,
-            commands::get_audio_output_status,
-            commands::get_pipewire_sinks,
-            commands::debug_get_cpal_devices,
-            commands::set_pipewire_default_sink,
-            commands::reinit_audio_device,
-            commands::get_hardware_audio_status,
-            commands::start_bitdepth_capture,
-            commands::stop_bitdepth_capture,
-            // Queue commands
-            commands::add_to_queue,
-            commands::add_to_queue_next,
-            commands::add_tracks_to_queue,
-            commands::set_queue,
-            commands::clear_queue,
-            commands::remove_from_queue,
-            commands::move_queue_track,
-            commands::get_current_queue_track,
-            commands::peek_next_track,
-            commands::next_track,
-            commands::previous_track,
-            commands::play_queue_index,
-            commands::set_shuffle,
-            commands::get_shuffle,
-            commands::set_repeat,
-            commands::get_repeat,
-            commands::get_queue_state,
-            // Radio engine commands
-            commands::create_artist_radio,
-            commands::create_track_radio,
-            commands::refill_radio_queue,
-            commands::get_queue_remaining,
-            commands::create_infinite_radio,
-            // Playback context commands
-            commands::get_playback_context,
-            commands::set_playback_context,
-            commands::clear_playback_context,
-            commands::has_playback_context,
-            // Playlist commands
-            commands::get_user_playlists,
-            commands::get_playlist,
-            commands::get_playlist_track_ids,
-            commands::get_tracks_batch,
-            commands::check_playlist_duplicates,
-            commands::search_playlists,
-            commands::create_playlist,
-            commands::delete_playlist,
-            commands::add_tracks_to_playlist,
-            commands::remove_tracks_from_playlist,
-            commands::update_playlist,
-            commands::get_tracks_by_ids,
-            commands::get_current_user_id,
-            commands::subscribe_playlist,
-            commands::get_track_info,
-            commands::get_album_credits,
-            // Playlist import commands
-            commands::playlist_import_preview,
-            commands::playlist_import_execute,
-            // Playlist suggestions commands (v2 vector-based)
-            commands::get_playlist_suggestions_v2,
-            commands::get_vector_store_stats,
-            commands::cleanup_vector_store,
-            commands::clear_vector_store,
-            // Favorites commands
-            commands::get_favorites,
-            commands::add_favorite,
-            commands::remove_favorite,
-            // Notification commands
-            commands::show_track_notification,
-            commands::show_notification,
-            // Cache commands
-            commands::get_cache_stats,
-            commands::clear_cache,
-            commands::clear_artist_cache,
-            // Last.fm commands
-            commands::lastfm_has_embedded_credentials,
-            commands::lastfm_has_credentials,
-            commands::lastfm_set_credentials,
-            commands::lastfm_is_authenticated,
-            commands::lastfm_get_auth_url,
-            commands::lastfm_open_auth_url,
-            commands::lastfm_authenticate,
-            commands::lastfm_set_session,
-            commands::lastfm_disconnect,
-            commands::lastfm_scrobble,
-            commands::lastfm_now_playing,
-            // Share commands
-            commands::share_track_songlink,
-            commands::share_album_songlink,
-            commands::get_qobuz_track_url,
-            commands::get_qobuz_album_url,
-            commands::get_qobuz_artist_url,
-            // Local library commands
-            library::commands::library_add_folder,
-            library::commands::library_remove_folder,
-            library::commands::library_cleanup_missing_files,
-            library::commands::library_get_cache_stats,
-            library::commands::library_clear_artwork_cache,
-            library::commands::library_clear_thumbnails_cache,
-            library::commands::library_get_folders,
-            library::commands::library_get_folders_with_metadata,
-            library::commands::library_get_folder,
-            library::commands::library_update_folder_settings,
-            library::commands::library_set_folder_enabled,
-            library::commands::library_update_folder_path,
-            library::commands::library_check_folder_accessible,
-            library::commands::library_scan,
-            library::commands::library_scan_folder,
-            library::commands::library_get_scan_progress,
-            library::commands::library_stop_scan,
-            library::commands::library_get_albums,
-            library::commands::library_get_album_tracks,
-            library::commands::library_get_artists,
-            library::commands::library_search,
-            library::commands::library_get_stats,
-            library::commands::library_clear,
-            library::commands::library_get_track,
-            library::commands::get_track_by_path,
-            library::commands::library_play_track,
-            library::commands::library_get_tracks_by_ids,
-            // Playlist local settings commands
-            library::commands::playlist_get_settings,
-            library::commands::playlist_save_settings,
-            library::commands::playlist_set_sort,
-            library::commands::playlist_set_artwork,
-            library::commands::playlist_add_local_track,
-            library::commands::playlist_remove_local_track,
-            library::commands::playlist_get_local_tracks,
-            library::commands::playlist_get_local_tracks_with_position,
-            library::commands::playlist_get_all_local_track_counts,
-            library::commands::playlist_clear_local_tracks,
-            // Playlist management commands
-            library::commands::playlist_get_all_settings,
-            library::commands::playlist_set_hidden,
-            library::commands::playlist_set_favorite,
-            library::commands::playlist_get_favorites,
-            library::commands::playlist_set_position,
-            library::commands::playlist_reorder,
-            library::commands::playlist_get_stats,
-            library::commands::playlist_get_all_stats,
-            library::commands::playlist_increment_play_count,
-            // Playlist custom order commands
-            library::commands::playlist_get_custom_order,
-            library::commands::playlist_init_custom_order,
-            library::commands::playlist_set_custom_order,
-            library::commands::playlist_move_track,
-            library::commands::playlist_has_custom_order,
-            library::commands::playlist_clear_custom_order,
-            // Playlist folders commands
-            library::commands::create_playlist_folder,
-            library::commands::get_playlist_folders,
-            library::commands::update_playlist_folder,
-            library::commands::delete_playlist_folder,
-            library::commands::reorder_playlist_folders,
-            library::commands::move_playlist_to_folder,
-            // Discogs artwork commands
-            library::commands::discogs_has_credentials,
-            library::commands::discogs_search_artist,
-            library::commands::discogs_search_artwork,
-            library::commands::discogs_download_artwork,
-            // Thumbnail commands
-            library::commands::library_get_thumbnail,
-            library::commands::library_clear_thumbnails,
-            library::commands::library_get_thumbnails_cache_size,
-            // Artwork commands
-            library::commands::library_fetch_missing_artwork,
-            library::commands::library_fetch_album_artwork,
-            library::commands::library_set_album_artwork,
-            // Album settings commands
-            library::commands::library_get_album_settings,
-            library::commands::library_set_album_hidden,
-            library::commands::library_update_album_metadata,
-            library::commands::library_write_album_metadata_to_files,
-            library::commands::library_refresh_album_metadata_from_files,
-            library::commands::library_get_hidden_albums,
-            library::commands::library_backfill_downloads,
-            // Artist images commands
-            library::commands::library_get_artist_image,
-            library::commands::library_get_artist_images,
-            library::commands::library_cache_artist_image,
-            library::commands::library_set_custom_artist_image,
-            library::commands::library_get_canonical_names,
-            // Playlist local content analysis commands (offline mode)
-            library::commands::playlist_analyze_local_content,
-            library::commands::playlist_get_local_content_status,
-            library::commands::playlist_track_is_local,
-            library::commands::playlist_get_local_track_id,
-            library::commands::playlist_get_tracks_with_local_copies,
-            library::commands::playlist_get_offline_available,
-            // Chromecast casting commands
-            cast::commands::cast_start_discovery,
-            cast::commands::cast_stop_discovery,
-            cast::commands::cast_get_devices,
-            cast::commands::cast_connect,
-            cast::commands::cast_disconnect,
-            cast::commands::cast_get_status,
-            cast::commands::cast_get_position,
-            cast::commands::cast_play_track,
-            cast::commands::cast_play_local_track,
-            cast::commands::cast_play,
-            cast::commands::cast_pause,
-            cast::commands::cast_stop,
-            cast::commands::cast_seek,
-            cast::commands::cast_set_volume,
-            // DLNA casting commands
-            cast::dlna::commands::dlna_start_discovery,
-            cast::dlna::commands::dlna_stop_discovery,
-            cast::dlna::commands::dlna_get_devices,
-            cast::dlna::commands::dlna_connect,
-            cast::dlna::commands::dlna_disconnect,
-            cast::dlna::commands::dlna_get_status,
-            cast::dlna::commands::dlna_get_position,
-            cast::dlna::commands::dlna_play_track,
-            cast::dlna::commands::dlna_load_media,
-            cast::dlna::commands::dlna_play,
-            cast::dlna::commands::dlna_pause,
-            cast::dlna::commands::dlna_stop,
-            cast::dlna::commands::dlna_seek,
-            cast::dlna::commands::dlna_set_volume,
-            // Plex LAN-only POC commands
-            plex::plex_ping,
-            plex::plex_get_music_sections,
-            plex::plex_get_section_tracks,
-            plex::plex_get_track_metadata,
-            plex::plex_play_track,
-            plex::plex_auth_pin_start,
-            plex::plex_auth_pin_check,
-            plex::plex_open_auth_url,
-            plex::plex_cache_get_sections,
-            plex::plex_cache_save_sections,
-            plex::plex_cache_get_tracks,
-            plex::plex_cache_save_tracks,
-            plex::plex_cache_update_track_quality,
-            plex::plex_cache_get_albums,
-            plex::plex_cache_get_album_tracks,
-            plex::plex_cache_search_tracks,
-            plex::plex_cache_get_tracks_needing_hydration,
-            plex::plex_cache_clear,
-            // AirPlay casting commands - DISABLED until RAOP implementation is complete
-            // See docs/AIRPLAY_IMPLEMENTATION_STATUS.md for details
-            // cast::airplay::commands::airplay_start_discovery,
-            // cast::airplay::commands::airplay_stop_discovery,
-            // cast::airplay::commands::airplay_get_devices,
-            // cast::airplay::commands::airplay_connect,
-            // cast::airplay::commands::airplay_disconnect,
-            // cast::airplay::commands::airplay_get_status,
-            // cast::airplay::commands::airplay_load_media,
-            // cast::airplay::commands::airplay_play,
-            // cast::airplay::commands::airplay_pause,
-            // cast::airplay::commands::airplay_stop,
-            // cast::airplay::commands::airplay_set_volume,
-            // Offline cache commands
-            offline_cache::commands::cache_track_for_offline,
-            offline_cache::commands::is_track_cached,
-            offline_cache::commands::get_cached_track_path,
-            offline_cache::commands::get_cached_track,
-            offline_cache::commands::get_cached_tracks,
-            offline_cache::commands::get_offline_cache_stats,
-            offline_cache::commands::remove_cached_track,
-            offline_cache::commands::clear_offline_cache,
-            offline_cache::commands::set_offline_cache_limit,
-            offline_cache::commands::open_offline_cache_folder,
-            offline_cache::commands::open_album_folder,
-            offline_cache::commands::open_track_folder,
+            commands_v2::runtime_get_status,
+            commands_v2::runtime_bootstrap,
+            commands_v2::v2_is_logged_in,
+            commands_v2::v2_login,
+            commands_v2::v2_logout,
+            commands_v2::v2_activate_offline_session,
+            commands_v2::v2_init_client,
+            commands_v2::v2_auto_login,
+            commands_v2::v2_manual_login,
+            commands_v2::v2_get_user_info,
+            commands_v2::v2_save_credentials,
+            commands_v2::v2_clear_saved_credentials,
+            // Temporary compatibility commands still invoked by frontend during migration
             offline_cache::commands::check_album_fully_cached,
-            offline_cache::commands::check_offline_root_mounted,
-            offline_cache::commands::validate_offline_path,
-            offline_cache::commands::move_offline_cache_to_path,
-            offline_cache::commands::detect_legacy_cached_files,
-            offline_cache::commands::start_legacy_migration,
-            offline_cache::commands::sync_offline_cache_to_library,
-            // Lyrics commands
-            lyrics::commands::lyrics_get,
-            lyrics::commands::lyrics_get_cache_stats,
-            lyrics::commands::lyrics_clear_cache,
-            // Recommendation store commands
-            reco_store::commands::reco_log_event,
-            reco_store::commands::reco_get_home,
-            reco_store::commands::reco_train_scores,
-            reco_store::commands::reco_get_home_ml,
-            reco_store::commands::get_playlist_suggestions,
-            reco_store::commands::reco_backfill_genres,
-            reco_store::commands::reco_needs_genre_backfill,
-            reco_store::commands::reco_get_home_resolved,
-            // Session persistence commands
-            session_store::save_session_state,
-            session_store::load_session_state,
-            session_store::save_session_volume,
-            session_store::save_session_position,
-            session_store::save_session_playback_mode,
-            session_store::clear_session,
-            // Audio settings commands
-            config::audio_settings::get_audio_settings,
-            config::audio_settings::set_audio_output_device,
-            config::audio_settings::set_audio_exclusive_mode,
-            config::audio_settings::set_audio_dac_passthrough,
-            config::audio_settings::set_audio_sample_rate,
-            config::audio_settings::set_audio_backend_type,
-            config::audio_settings::set_audio_alsa_plugin,
-            config::audio_settings::set_audio_alsa_hardware_volume,
-            config::audio_settings::set_audio_stream_first_track,
-            config::audio_settings::set_audio_stream_buffer_seconds,
-            config::audio_settings::set_audio_streaming_only,
-            config::audio_settings::set_audio_limit_quality_to_device,
-            config::audio_settings::set_audio_device_max_sample_rate,
-            config::audio_settings::set_audio_normalization_enabled,
-            config::audio_settings::set_audio_normalization_target,
-            config::audio_settings::set_audio_gapless_enabled,
-            config::audio_settings::reset_audio_settings,
-            // Audio backend commands
-            commands::get_available_backends,
-            commands::get_devices_for_backend,
-            commands::get_alsa_plugins,
-            commands::check_alsa_utils_installed,
-            commands::get_linux_distro,
-            commands::query_dac_capabilities,
-            // Download settings commands
-            config::download_settings::get_download_settings,
-            config::download_settings::set_download_root,
-            config::download_settings::set_show_downloads_in_library,
-            config::download_settings::validate_download_root,
-            // Offline mode commands
-            offline::commands::get_offline_status,
-            offline::commands::get_offline_settings,
-            offline::commands::set_manual_offline,
-            offline::commands::set_show_partial_playlists,
-            offline::commands::set_allow_cast_while_offline,
-            // Playback preferences commands
-            config::playback_preferences::get_playback_preferences,
-            config::playback_preferences::set_autoplay_mode,
-            config::playback_preferences::set_show_context_icon,
-            config::favorites_preferences::get_favorites_preferences,
-            config::favorites_preferences::save_favorites_preferences,
-            // Favorites cache commands (local persistence)
-            config::favorites_cache::get_cached_favorite_tracks,
-            config::favorites_cache::get_cached_favorite_albums,
-            config::favorites_cache::get_cached_favorite_artists,
-            config::favorites_cache::cache_favorite_track,
-            config::favorites_cache::uncache_favorite_track,
-            config::favorites_cache::cache_favorite_album,
-            config::favorites_cache::uncache_favorite_album,
-            config::favorites_cache::cache_favorite_artist,
-            config::favorites_cache::uncache_favorite_artist,
-            config::favorites_cache::sync_cached_favorite_tracks,
-            config::favorites_cache::sync_cached_favorite_albums,
-            config::favorites_cache::sync_cached_favorite_artists,
-            config::favorites_cache::clear_favorites_cache,
-            // Updates commands
-            updates::get_update_preferences,
-            updates::set_update_check_on_launch,
-            updates::set_show_whats_new_on_launch,
-            updates::acknowledge_release,
-            updates::ignore_release,
-            updates::is_release_acknowledged,
-            updates::is_release_ignored,
-            updates::has_whats_new_been_shown,
-            updates::mark_whats_new_shown,
-            updates::has_flatpak_welcome_been_shown,
-            updates::mark_flatpak_welcome_shown,
-            updates::get_current_version,
-            updates::check_for_updates,
-            updates::fetch_release_for_version,
-            offline::commands::set_allow_immediate_scrobbling,
-            offline::commands::set_allow_accumulated_scrobbling,
-            offline::commands::set_show_network_folders_in_manual_offline,
-            offline::commands::check_network,
-            // Offline playlist sync queue commands
+            network::commands::check_network_path,
             offline::commands::create_pending_playlist,
-            offline::commands::get_pending_playlists,
-            offline::commands::add_tracks_to_pending_playlist,
             offline::commands::get_pending_playlist_count,
-            offline::commands::update_pending_playlist_qobuz_id,
-            offline::commands::mark_pending_playlist_synced,
-            offline::commands::delete_pending_playlist,
-            // Scrobble queue commands (for offline Last.fm scrobbling)
             offline::commands::queue_scrobble,
             offline::commands::get_queued_scrobbles,
-            offline::commands::mark_scrobbles_sent,
             offline::commands::get_queued_scrobble_count,
             offline::commands::cleanup_sent_scrobbles,
-            // Network folder detection commands
-            network::commands::check_network_path,
-            network::commands::get_network_mounts_cmd,
-            network::commands::check_mount_accessible,
-            network::commands::check_network_paths_batch,
-            // Flatpak detection commands
-            flatpak::is_running_in_flatpak,
+            library::commands::discogs_has_credentials,
+            library::commands::discogs_search_artwork,
+            library::commands::discogs_download_artwork,
+            library::commands::library_update_folder_settings,
+            library::commands::get_track_by_path,
+            commands::search::get_artist_basic,
+            commands::search::get_artist_detail,
+            commands::search::get_artist_tracks,
+            commands::search::get_artist_albums,
+            commands::search::get_releases_grid,
+            commands::playback::get_pipewire_sinks,
+            commands::playback::get_audio_output_status,
             flatpak::get_flatpak_help_text,
-            // Tray settings commands
-            config::tray_settings::get_tray_settings,
-            config::tray_settings::set_enable_tray,
-            config::tray_settings::set_minimize_to_tray,
-            config::tray_settings::set_close_to_tray,
-            // Remote control commands
-            api_server::remote_control_get_status,
-            api_server::remote_control_set_enabled,
-            api_server::remote_control_set_port,
-            api_server::remote_control_set_secure,
-            api_server::remote_control_get_pairing_qr,
-            api_server::remote_control_regenerate_token,
-            api_server::remote_control_get_allowed_origins,
-            api_server::remote_control_add_allowed_origin,
-            api_server::remote_control_remove_allowed_origin,
-            api_server::remote_control_restore_default_origins,
-            // Legal settings commands
-            config::legal_settings::get_legal_settings,
             config::legal_settings::get_qobuz_tos_accepted,
-            config::legal_settings::set_qobuz_tos_accepted,
-            // MusicBrainz integration commands
-            commands::musicbrainz_resolve_track,
-            commands::musicbrainz_resolve_artist,
-            commands::musicbrainz_resolve_release,
-            commands::musicbrainz_get_artist_relationships,
-            commands::musicbrainz_is_enabled,
-            commands::musicbrainz_set_enabled,
-            commands::musicbrainz_get_cache_stats,
-            commands::musicbrainz_clear_cache,
-            commands::musicbrainz_cleanup_cache,
-            // Musician resolution commands
-            commands::resolve_musician,
-            commands::get_musician_appearances,
-            // ListenBrainz integration commands
-            commands::listenbrainz_get_status,
-            commands::listenbrainz_is_enabled,
-            commands::listenbrainz_set_enabled,
-            commands::listenbrainz_connect,
-            commands::listenbrainz_disconnect,
-            commands::listenbrainz_now_playing,
-            commands::listenbrainz_scrobble,
-            commands::listenbrainz_queue_listen,
-            commands::listenbrainz_get_queue,
-            commands::listenbrainz_get_queue_count,
-            commands::listenbrainz_mark_sent,
-            commands::listenbrainz_flush_queue,
-            commands::listenbrainz_clear_queue,
-            commands::listenbrainz_cleanup_queue,
-            // Smart playlist generation commands
-            commands::smart_playlist_preview,
-            commands::smart_playlist_resolve_artist,
-            commands::smart_playlist_get_available_types,
-            // Remote metadata commands (Tag Editor service integration)
-            commands::remote_metadata_search,
-            commands::remote_metadata_get_album,
-            commands::remote_metadata_cache_stats,
-            commands::remote_metadata_clear_cache,
-            // Visualizer commands
-            commands::set_visualizer_enabled,
-            commands::is_visualizer_enabled,
-            // Artist blacklist commands
-            commands::get_artist_blacklist,
-            commands::add_to_artist_blacklist,
-            commands::remove_from_artist_blacklist,
-            commands::is_artist_blacklisted,
-            commands::set_blacklist_enabled,
-            commands::is_blacklist_enabled,
-            commands::get_blacklist_settings,
-            commands::get_blacklist_count,
-            commands::clear_artist_blacklist,
-            // Developer settings commands
-            config::developer_settings::get_developer_settings,
-            config::developer_settings::set_developer_force_dmabuf,
-            // Graphics settings commands
-            config::graphics_settings::get_graphics_settings,
-            config::graphics_settings::get_graphics_startup_status,
-            config::graphics_settings::set_hardware_acceleration,
-            config::graphics_settings::set_force_x11,
-            config::graphics_settings::set_gdk_scale,
-            config::graphics_settings::set_gdk_dpi_scale,
-            // Window settings commands
-            config::window_settings::get_window_settings,
-            config::window_settings::set_use_system_titlebar,
-            // App lifecycle commands
-            restart_app,
-            // Log capture commands
-            logging::get_backend_logs,
-            logging::upload_logs_to_paste,
+            updates::has_flatpak_welcome_been_shown,
+            lyrics::commands::lyrics_get,
+            config::favorites_cache::is_track_favorite,
+            commands_v2::v2_set_api_locale,
+            commands_v2::v2_set_use_system_titlebar,
+            commands_v2::v2_set_enable_tray,
+            commands_v2::v2_set_minimize_to_tray,
+            commands_v2::v2_set_close_to_tray,
+            commands_v2::v2_get_tray_settings,
+            commands_v2::v2_set_autoplay_mode,
+            commands_v2::v2_set_show_context_icon,
+            commands_v2::v2_set_persist_session,
+            commands_v2::v2_get_playback_preferences,
+            commands_v2::v2_get_favorites_preferences,
+            commands_v2::v2_save_favorites_preferences,
+            commands_v2::v2_get_cache_stats,
+            commands_v2::v2_get_available_backends,
+            commands_v2::v2_get_devices_for_backend,
+            commands_v2::v2_get_hardware_audio_status,
+            commands_v2::v2_get_default_device_name,
+            commands_v2::v2_query_dac_capabilities,
+            commands_v2::v2_get_alsa_plugins,
+            commands_v2::v2_plex_ping,
+            commands_v2::v2_plex_get_music_sections,
+            commands_v2::v2_plex_get_section_tracks,
+            commands_v2::v2_plex_get_track_metadata,
+            commands_v2::v2_plex_auth_pin_start,
+            commands_v2::v2_plex_auth_pin_check,
+            commands_v2::v2_plex_play_track,
+            commands_v2::v2_set_visualizer_enabled,
+            commands_v2::v2_get_developer_settings,
+            commands_v2::v2_set_developer_force_dmabuf,
+            commands_v2::v2_get_graphics_settings,
+            commands_v2::v2_get_graphics_startup_status,
+            commands_v2::v2_set_hardware_acceleration,
+            commands_v2::v2_set_gdk_scale,
+            commands_v2::v2_set_gdk_dpi_scale,
+            commands_v2::v2_clear_cache,
+            commands_v2::v2_clear_artist_cache,
+            commands_v2::v2_get_vector_store_stats,
+            commands_v2::v2_get_playlist_suggestions,
+            commands_v2::v2_clear_vector_store,
+            commands_v2::v2_add_to_artist_blacklist,
+            commands_v2::v2_remove_from_artist_blacklist,
+            commands_v2::v2_set_blacklist_enabled,
+            commands_v2::v2_get_artist_blacklist,
+            commands_v2::v2_get_blacklist_settings,
+            commands_v2::v2_clear_artist_blacklist,
+            commands_v2::v2_plex_open_auth_url,
+            commands_v2::v2_plex_cache_get_sections,
+            commands_v2::v2_plex_cache_save_sections,
+            commands_v2::v2_plex_cache_save_tracks,
+            commands_v2::v2_plex_cache_get_tracks,
+            commands_v2::v2_plex_cache_get_albums,
+            commands_v2::v2_plex_cache_get_album_tracks,
+            commands_v2::v2_plex_cache_search_tracks,
+            commands_v2::v2_plex_cache_update_track_quality,
+            commands_v2::v2_plex_cache_get_tracks_needing_hydration,
+            commands_v2::v2_plex_cache_clear,
+            commands_v2::v2_cast_start_discovery,
+            commands_v2::v2_cast_stop_discovery,
+            commands_v2::v2_cast_get_devices,
+            commands_v2::v2_cast_connect,
+            commands_v2::v2_cast_disconnect,
+            commands_v2::v2_cast_play_track,
+            commands_v2::v2_cast_play,
+            commands_v2::v2_cast_pause,
+            commands_v2::v2_cast_stop,
+            commands_v2::v2_cast_seek,
+            commands_v2::v2_cast_get_position,
+            commands_v2::v2_cast_set_volume,
+            commands_v2::v2_dlna_start_discovery,
+            commands_v2::v2_dlna_stop_discovery,
+            commands_v2::v2_dlna_get_devices,
+            commands_v2::v2_dlna_connect,
+            commands_v2::v2_dlna_disconnect,
+            commands_v2::v2_dlna_play_track,
+            commands_v2::v2_dlna_play,
+            commands_v2::v2_dlna_pause,
+            commands_v2::v2_dlna_stop,
+            commands_v2::v2_dlna_seek,
+            commands_v2::v2_dlna_get_position,
+            commands_v2::v2_dlna_set_volume,
+            commands_v2::v2_airplay_start_discovery,
+            commands_v2::v2_airplay_stop_discovery,
+            commands_v2::v2_airplay_get_devices,
+            commands_v2::v2_airplay_connect,
+            commands_v2::v2_airplay_disconnect,
+            commands_v2::v2_airplay_load_media,
+            commands_v2::v2_airplay_play,
+            commands_v2::v2_airplay_pause,
+            commands_v2::v2_airplay_stop,
+            commands_v2::v2_airplay_set_volume,
+            commands_v2::v2_clear_offline_cache,
+            commands_v2::v2_library_remove_folder,
+            commands_v2::v2_library_check_folder_accessible,
+            commands_v2::v2_library_clear_artwork_cache,
+            commands_v2::v2_library_clear_thumbnails_cache,
+            commands_v2::v2_library_get_thumbnail,
+            commands_v2::v2_library_get_thumbnails_cache_size,
+            commands_v2::v2_library_get_scan_progress,
+            commands_v2::v2_library_get_tracks_by_ids,
+            commands_v2::v2_library_play_track,
+            commands_v2::v2_playlist_set_sort,
+            commands_v2::v2_playlist_set_artwork,
+            commands_v2::v2_playlist_get_all_settings,
+            commands_v2::v2_playlist_get_favorites,
+            commands_v2::v2_playlist_get_local_tracks_with_position,
+            commands_v2::v2_playlist_get_settings,
+            commands_v2::v2_playlist_get_stats,
+            commands_v2::v2_playlist_increment_play_count,
+            commands_v2::v2_playlist_get_all_stats,
+            commands_v2::v2_playlist_get_all_local_track_counts,
+            commands_v2::v2_playlist_add_local_track,
+            commands_v2::v2_playlist_remove_local_track,
+            commands_v2::v2_playlist_set_hidden,
+            commands_v2::v2_playlist_set_favorite,
+            commands_v2::v2_playlist_reorder,
+            commands_v2::v2_playlist_init_custom_order,
+            commands_v2::v2_playlist_set_custom_order,
+            commands_v2::v2_playlist_move_track,
+            commands_v2::v2_playlist_get_custom_order,
+            commands_v2::v2_playlist_has_custom_order,
+            commands_v2::v2_playlist_get_tracks_with_local_copies,
+            commands_v2::v2_library_set_album_artwork,
+            commands_v2::v2_library_set_album_hidden,
+            commands_v2::v2_create_artist_radio,
+            commands_v2::v2_create_track_radio,
+            commands_v2::v2_create_album_radio,
+            commands_v2::v2_create_qobuz_artist_radio,
+            commands_v2::v2_create_qobuz_track_radio,
+            commands_v2::v2_delete_playlist_folder,
+            commands_v2::v2_reorder_playlist_folders,
+            commands_v2::v2_move_playlist_to_folder,
+            commands_v2::v2_get_playlist_folders,
+            commands_v2::v2_create_playlist_folder,
+            commands_v2::v2_update_playlist_folder,
+            commands_v2::v2_lyrics_clear_cache,
+            commands_v2::v2_lyrics_get_cache_stats,
+            commands_v2::v2_musicbrainz_get_cache_stats,
+            commands_v2::v2_musicbrainz_clear_cache,
+            commands_v2::v2_set_show_partial_playlists,
+            commands_v2::v2_set_allow_cast_while_offline,
+            commands_v2::v2_set_allow_immediate_scrobbling,
+            commands_v2::v2_set_allow_accumulated_scrobbling,
+            commands_v2::v2_set_show_network_folders_in_manual_offline,
+            commands_v2::v2_get_offline_status,
+            commands_v2::v2_get_offline_settings,
+            commands_v2::v2_set_manual_offline,
+            commands_v2::v2_check_network,
+            commands_v2::v2_add_tracks_to_pending_playlist,
+            commands_v2::v2_get_pending_playlists,
+            commands_v2::v2_update_pending_playlist_qobuz_id,
+            commands_v2::v2_mark_pending_playlist_synced,
+            commands_v2::v2_delete_pending_playlist,
+            commands_v2::v2_mark_scrobbles_sent,
+            commands_v2::v2_remove_cached_track,
+            commands_v2::v2_get_cached_tracks,
+            commands_v2::v2_get_offline_cache_stats,
+            commands_v2::v2_set_offline_cache_limit,
+            commands_v2::v2_open_offline_cache_folder,
+            commands_v2::v2_open_album_folder,
+            commands_v2::v2_open_track_folder,
+            commands_v2::v2_lastfm_open_auth_url,
+            commands_v2::v2_lastfm_set_credentials,
+            commands_v2::v2_lastfm_has_embedded_credentials,
+            commands_v2::v2_remote_control_get_status,
+            commands_v2::v2_remote_control_set_enabled,
+            commands_v2::v2_remote_control_set_port,
+            commands_v2::v2_remote_control_set_secure,
+            commands_v2::v2_remote_control_regenerate_token,
+            commands_v2::v2_remote_control_get_pairing_qr,
+            commands_v2::v2_is_running_in_flatpak,
+            commands_v2::v2_detect_legacy_cached_files,
+            commands_v2::v2_reco_log_event,
+            commands_v2::v2_reco_train_scores,
+            commands_v2::v2_reco_get_home,
+            commands_v2::v2_reco_get_home_ml,
+            commands_v2::v2_reco_get_home_resolved,
+            commands_v2::v2_library_get_cache_stats,
+            commands_v2::v2_library_get_stats,
+            commands_v2::v2_library_get_albums,
+            commands_v2::v2_library_get_folders,
+            commands_v2::v2_library_get_folders_with_metadata,
+            commands_v2::v2_library_add_folder,
+            commands_v2::v2_library_cleanup_missing_files,
+            commands_v2::v2_library_fetch_missing_artwork,
+            commands_v2::v2_library_get_artists,
+            commands_v2::v2_library_search,
+            commands_v2::v2_library_get_album_tracks,
+            commands_v2::v2_library_update_folder_path,
+            commands_v2::v2_library_cache_artist_image,
+            commands_v2::v2_library_set_custom_artist_image,
+            commands_v2::v2_library_remove_custom_artist_image,
+            commands_v2::v2_library_get_artist_image,
+            commands_v2::v2_library_get_all_custom_artist_images,
+            commands_v2::v2_show_track_notification,
+            commands_v2::v2_subscribe_playlist,
+            commands_v2::v2_cache_track_for_offline,
+            commands_v2::v2_cache_tracks_batch_for_offline,
+            commands_v2::v2_start_legacy_migration,
+            commands_v2::v2_library_scan,
+            commands_v2::v2_library_stop_scan,
+            commands_v2::v2_library_scan_folder,
+            commands_v2::v2_library_clear,
+            commands_v2::v2_library_update_album_metadata,
+            commands_v2::v2_library_write_album_metadata_to_files,
+            commands_v2::v2_library_refresh_album_metadata_from_files,
+            commands_v2::v2_factory_reset,
+            commands_v2::v2_set_qobuz_tos_accepted,
+            commands_v2::v2_get_update_preferences,
+            commands_v2::v2_get_current_version,
+            commands_v2::v2_check_for_updates,
+            commands_v2::v2_fetch_release_for_version,
+            commands_v2::v2_set_update_check_on_launch,
+            commands_v2::v2_set_show_whats_new_on_launch,
+            commands_v2::v2_acknowledge_release,
+            commands_v2::v2_ignore_release,
+            commands_v2::v2_has_whats_new_been_shown,
+            commands_v2::v2_mark_whats_new_shown,
+            commands_v2::v2_mark_flatpak_welcome_shown,
+            commands_v2::v2_get_backend_logs,
+            commands_v2::v2_upload_logs_to_paste,
+            commands_v2::v2_get_download_settings,
+            commands_v2::v2_set_show_downloads_in_library,
+            commands_v2::v2_get_device_sample_rate_limit,
+            commands_v2::v2_set_device_sample_rate_limit,
+            commands_v2::v2_set_force_x11,
+            commands_v2::v2_restart_app,
+            commands_v2::v2_get_queue_state,
+            commands_v2::v2_get_all_queue_tracks,
+            commands_v2::v2_get_current_queue_track,
+            commands_v2::v2_set_repeat_mode,
+            commands_v2::v2_toggle_shuffle,
+            commands_v2::v2_set_shuffle,
+            commands_v2::v2_clear_queue,
+            commands_v2::v2_add_to_queue,
+            commands_v2::v2_add_to_queue_next,
+            commands_v2::v2_bulk_add_to_queue,
+            commands_v2::v2_bulk_add_to_queue_next,
+            commands_v2::v2_set_queue,
+            commands_v2::v2_remove_from_queue,
+            commands_v2::v2_remove_upcoming_track,
+            commands_v2::v2_next_track,
+            commands_v2::v2_previous_track,
+            commands_v2::v2_play_queue_index,
+            commands_v2::v2_move_queue_track,
+            commands_v2::v2_add_tracks_to_queue,
+            commands_v2::v2_add_tracks_to_queue_next,
+            commands_v2::v2_search_albums,
+            commands_v2::v2_search_tracks,
+            commands_v2::v2_search_artists,
+            commands_v2::v2_search_all,
+            commands_v2::v2_get_album,
+            commands_v2::v2_get_track,
+            commands_v2::v2_get_artist,
+            commands_v2::v2_get_favorites,
+            commands_v2::v2_add_favorite,
+            commands_v2::v2_remove_favorite,
+            commands_v2::v2_get_user_playlists,
+            commands_v2::v2_get_playlist,
+            commands_v2::v2_playlist_import_preview,
+            commands_v2::v2_playlist_import_execute,
+            commands_v2::v2_get_playlist_track_ids,
+            commands_v2::v2_check_playlist_duplicates,
+            commands_v2::v2_add_tracks_to_playlist,
+            commands_v2::v2_remove_tracks_from_playlist,
+            commands_v2::v2_create_playlist,
+            commands_v2::v2_delete_playlist,
+            commands_v2::v2_update_playlist,
+            commands_v2::v2_search_playlists,
+            commands_v2::v2_get_tracks_batch,
+            commands_v2::v2_get_genres,
+            commands_v2::v2_get_discover_index,
+            commands_v2::v2_get_discover_playlists,
+            commands_v2::v2_get_playlist_tags,
+            commands_v2::v2_get_discover_albums,
+            commands_v2::v2_get_featured_albums,
+            commands_v2::v2_get_artist_page,
+            commands_v2::v2_get_similar_artists,
+            commands_v2::v2_get_artist_with_albums,
+            commands_v2::v2_get_label,
+            commands_v2::v2_get_label_page,
+            commands_v2::v2_get_label_explore,
+            commands_v2::v2_pause_playback,
+            commands_v2::v2_resume_playback,
+            commands_v2::v2_stop_playback,
+            commands_v2::v2_seek,
+            commands_v2::v2_set_volume,
+            commands_v2::v2_get_playback_state,
+            commands_v2::v2_play_track,
+            commands_v2::v2_set_media_metadata,
+            commands_v2::v2_play_next_gapless,
+            commands_v2::v2_prefetch_track,
+            commands_v2::v2_reinit_audio_device,
+            commands_v2::v2_get_audio_settings,
+            commands_v2::v2_set_audio_output_device,
+            commands_v2::v2_set_audio_exclusive_mode,
+            commands_v2::v2_set_audio_dac_passthrough,
+            commands_v2::v2_set_audio_pw_force_bitperfect,
+            commands_v2::v2_set_sync_audio_on_startup,
+            commands_v2::v2_set_audio_sample_rate,
+            commands_v2::v2_set_audio_backend_type,
+            commands_v2::v2_set_audio_alsa_plugin,
+            commands_v2::v2_set_audio_gapless_enabled,
+            commands_v2::v2_set_audio_normalization_enabled,
+            commands_v2::v2_set_audio_normalization_target,
+            commands_v2::v2_set_audio_device_max_sample_rate,
+            commands_v2::v2_set_audio_limit_quality_to_device,
+            commands_v2::v2_set_audio_streaming_only,
+            commands_v2::v2_reset_audio_settings,
+            commands_v2::v2_set_audio_stream_first_track,
+            commands_v2::v2_set_audio_stream_buffer_seconds,
+            commands_v2::v2_set_audio_alsa_hardware_volume,
+            commands_v2::v2_listenbrainz_get_status,
+            commands_v2::v2_listenbrainz_is_enabled,
+            commands_v2::v2_listenbrainz_set_enabled,
+            commands_v2::v2_listenbrainz_connect,
+            commands_v2::v2_listenbrainz_disconnect,
+            commands_v2::v2_listenbrainz_now_playing,
+            commands_v2::v2_listenbrainz_scrobble,
+            commands_v2::v2_musicbrainz_is_enabled,
+            commands_v2::v2_musicbrainz_set_enabled,
+            commands_v2::v2_musicbrainz_resolve_track,
+            commands_v2::v2_musicbrainz_resolve_artist,
+            commands_v2::v2_resolve_musician,
+            commands_v2::v2_get_musician_appearances,
+            commands_v2::v2_remote_metadata_search,
+            commands_v2::v2_remote_metadata_get_album,
+            commands_v2::v2_musicbrainz_get_artist_relationships,
+            commands_v2::v2_lastfm_get_auth_url,
+            commands_v2::v2_lastfm_complete_auth,
+            commands_v2::v2_lastfm_is_authenticated,
+            commands_v2::v2_lastfm_disconnect,
+            commands_v2::v2_lastfm_now_playing,
+            commands_v2::v2_lastfm_scrobble,
+            commands_v2::v2_lastfm_set_session,
+            commands_v2::v2_listenbrainz_queue_listen,
+            commands_v2::v2_listenbrainz_flush_queue,
+            commands_v2::v2_get_playback_context,
+            commands_v2::v2_set_playback_context,
+            commands_v2::v2_clear_playback_context,
+            commands_v2::v2_has_playback_context,
+            commands_v2::v2_save_session_state,
+            commands_v2::v2_load_session_state,
+            commands_v2::v2_save_session_position,
+            commands_v2::v2_save_session_volume,
+            commands_v2::v2_save_session_playback_mode,
+            commands_v2::v2_clear_session,
+            commands_v2::v2_get_cached_favorite_tracks,
+            commands_v2::v2_sync_cached_favorite_tracks,
+            commands_v2::v2_cache_favorite_track,
+            commands_v2::v2_uncache_favorite_track,
+            commands_v2::v2_bulk_add_favorites,
+            commands_v2::v2_clear_favorites_cache,
+            commands_v2::v2_get_cached_favorite_albums,
+            commands_v2::v2_sync_cached_favorite_albums,
+            commands_v2::v2_cache_favorite_album,
+            commands_v2::v2_uncache_favorite_album,
+            commands_v2::v2_get_cached_favorite_artists,
+            commands_v2::v2_sync_cached_favorite_artists,
+            commands_v2::v2_cache_favorite_artist,
+            commands_v2::v2_uncache_favorite_artist,
+            commands_v2::v2_share_track_songlink,
+            commands_v2::v2_share_album_songlink,
+            commands_v2::v2_library_backfill_downloads,
+            commands_v2::v2_lyrics_get,
+            commands_v2::v2_create_pending_playlist,
+            commands_v2::v2_get_pending_playlist_count,
+            commands_v2::v2_queue_scrobble,
+            commands_v2::v2_get_queued_scrobbles,
+            commands_v2::v2_get_queued_scrobble_count,
+            commands_v2::v2_cleanup_sent_scrobbles,
+            commands_v2::v2_get_track_by_path,
+            commands_v2::v2_check_network_path,
+            commands_v2::v2_library_update_folder_settings,
+            commands_v2::v2_discogs_has_credentials,
+            commands_v2::v2_discogs_search_artwork,
+            commands_v2::v2_discogs_download_artwork,
+            commands_v2::v2_check_album_fully_cached,
+            commands_v2::v2_purchases_get_all,
+            commands_v2::v2_purchases_get_ids,
+            commands_v2::v2_purchases_get_by_type,
+            commands_v2::v2_purchases_search,
+            commands_v2::v2_purchases_get_album,
+            commands_v2::v2_purchases_get_formats,
+            commands_v2::v2_purchases_download_album,
+            commands_v2::v2_purchases_download_track,
+            commands_v2::v2_purchases_mark_downloaded,
+            commands_v2::v2_purchases_remove_downloaded,
+            commands_v2::v2_purchases_get_downloaded_track_ids,
+            commands_v2::v2_dynamic_suggest,
+            commands_v2::v2_dynamic_suggest_raw,
+            commands_v2::v2_resolve_music_link,
+            commands_v2::v2_resolve_qobuz_link,
+            commands_v2::v2_get_qobuz_track_url,
+            commands_v2::v2_check_qobuzapp_handler,
+            commands_v2::v2_register_qobuzapp_handler,
+            commands_v2::v2_deregister_qobuzapp_handler,
+            // Auto-theme
+            commands_v2::v2_detect_desktop_environment,
+            commands_v2::v2_get_system_wallpaper,
+            commands_v2::v2_get_system_accent_color,
+            commands_v2::v2_generate_theme_from_image,
+            commands_v2::v2_generate_theme_from_wallpaper,
+            commands_v2::v2_generate_theme_from_system_colors,
+            commands_v2::v2_get_system_color_scheme,
+            commands_v2::v2_extract_palette,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

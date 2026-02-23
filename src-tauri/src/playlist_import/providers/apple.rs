@@ -5,6 +5,50 @@ use serde_json::Value;
 use crate::playlist_import::errors::PlaylistImportError;
 use crate::playlist_import::models::{ImportPlaylist, ImportProvider, ImportTrack};
 
+/// Detect if a URL is an Apple Music track, album, or playlist.
+///
+/// Apple Music URLs:
+/// - Track: `music.apple.com/{storefront}/album/{name}/{id}?i={track_id}`
+/// - Album: `music.apple.com/{storefront}/album/{name}/{id}` (no `?i=`)
+/// - Playlist: `music.apple.com/{storefront}/playlist/{name}/{pl.xxx}`
+/// - Song: `music.apple.com/{storefront}/song/{name}/{id}`
+pub fn detect_resource(url: &str) -> Option<super::MusicResource> {
+    if !url.contains("music.apple.com/") {
+        return None;
+    }
+
+    // Playlist
+    if parse_playlist_id(url).is_some() {
+        return Some(super::MusicResource::Playlist {
+            provider: super::MusicProvider::AppleMusic,
+        });
+    }
+
+    // Song page (explicit song URL)
+    if url.contains("/song/") {
+        return Some(super::MusicResource::Track {
+            provider: super::MusicProvider::AppleMusic,
+            url: url.to_string(),
+        });
+    }
+
+    // Album page — with ?i= parameter means specific track
+    if url.contains("/album/") {
+        if url.contains("?i=") || url.contains("&i=") {
+            return Some(super::MusicResource::Track {
+                provider: super::MusicProvider::AppleMusic,
+                url: url.to_string(),
+            });
+        }
+        return Some(super::MusicResource::Album {
+            provider: super::MusicProvider::AppleMusic,
+            url: url.to_string(),
+        });
+    }
+
+    None
+}
+
 pub fn parse_playlist_id(url: &str) -> Option<(String, String)> {
     if !url.contains("music.apple.com/") {
         return None;
@@ -25,8 +69,14 @@ pub fn parse_playlist_id(url: &str) -> Option<(String, String)> {
     }
 }
 
-pub async fn fetch_playlist(storefront: &str, playlist_id: &str) -> Result<ImportPlaylist, PlaylistImportError> {
-    let url = format!("https://music.apple.com/{}/playlist/{}", storefront, playlist_id);
+pub async fn fetch_playlist(
+    storefront: &str,
+    playlist_id: &str,
+) -> Result<ImportPlaylist, PlaylistImportError> {
+    let url = format!(
+        "https://music.apple.com/{}/playlist/{}",
+        storefront, playlist_id
+    );
     let html = reqwest::get(&url)
         .await
         .map_err(|e| PlaylistImportError::Http(e.to_string()))?
@@ -34,17 +84,20 @@ pub async fn fetch_playlist(storefront: &str, playlist_id: &str) -> Result<Impor
         .await
         .map_err(|e| PlaylistImportError::Http(e.to_string()))?;
 
-    let name = extract_meta(&html, "og:title").unwrap_or_else(|| "Apple Music Playlist".to_string());
+    let name =
+        extract_meta(&html, "og:title").unwrap_or_else(|| "Apple Music Playlist".to_string());
     let description = extract_meta(&html, "og:description").filter(|v| !v.is_empty());
 
-    let json_text = extract_script(&html, "serialized-server-data")
-        .ok_or_else(|| PlaylistImportError::Parse("Apple Music serialized-server-data not found".to_string()))?;
+    let json_text = extract_script(&html, "serialized-server-data").ok_or_else(|| {
+        PlaylistImportError::Parse("Apple Music serialized-server-data not found".to_string())
+    })?;
 
-    let data: Value = serde_json::from_str(&json_text)
-        .map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
+    let data: Value =
+        serde_json::from_str(&json_text).map_err(|e| PlaylistImportError::Parse(e.to_string()))?;
 
-    let items = find_track_items(&data)
-        .ok_or_else(|| PlaylistImportError::Parse("Apple Music track list not found".to_string()))?;
+    let items = find_track_items(&data).ok_or_else(|| {
+        PlaylistImportError::Parse("Apple Music track list not found".to_string())
+    })?;
 
     let mut tracks = Vec::new();
     for item in items {
@@ -58,9 +111,7 @@ pub async fn fetch_playlist(storefront: &str, playlist_id: &str) -> Result<Impor
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown")
             .to_string();
-        let duration_ms = item
-            .get("duration")
-            .and_then(|v| v.as_u64());
+        let duration_ms = item.get("duration").and_then(|v| v.as_u64());
         let provider_id = item
             .get("contentDescriptor")
             .and_then(|v| v.get("identifiers"))

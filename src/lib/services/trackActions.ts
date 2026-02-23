@@ -15,7 +15,7 @@ import {
 import { addTrackToFavorites } from '$lib/services/playbackService';
 import { openPlaylistModal } from '$lib/stores/uiStore';
 import { showToast as storeShowToast, type ToastType } from '$lib/stores/toastStore';
-import type { QobuzTrack, Track, PlaylistTrack, LocalLibraryTrack } from '$lib/types';
+import type { QobuzTrack, Track, PlaylistTrack, LocalLibraryTrack, DisplayTrack } from '$lib/types';
 
 // ============ Toast Integration ============
 
@@ -179,6 +179,31 @@ export async function queueLocalTrackLater(track: LocalLibraryTrack): Promise<vo
   await queueTrackLater(buildQueueTrackFromLocalTrack(track), !isPlexTrack);
 }
 
+export function buildQueueTrackFromDisplayTrack(track: DisplayTrack): BackendQueueTrack {
+  return {
+    id: track.id,
+    title: track.title,
+    artist: track.artist || 'Unknown Artist',
+    album: track.album || '',
+    duration_secs: track.durationSeconds,
+    artwork_url: track.albumArt || null,
+    hires: track.hires ?? false,
+    bit_depth: track.bitDepth ?? null,
+    sample_rate: track.samplingRate ?? null,
+    is_local: track.isLocal ?? false,
+    album_id: track.albumId || null,
+    artist_id: track.artistId ?? null
+  };
+}
+
+export async function queueDisplayTrackNext(track: DisplayTrack): Promise<void> {
+  await queueTrackNext(buildQueueTrackFromDisplayTrack(track), track.isLocal ?? false);
+}
+
+export async function queueDisplayTrackLater(track: DisplayTrack): Promise<void> {
+  await queueTrackLater(buildQueueTrackFromDisplayTrack(track), track.isLocal ?? false);
+}
+
 // ============ Favorites ============
 
 export async function handleAddToFavorites(trackId: number): Promise<void> {
@@ -208,13 +233,24 @@ async function copyToClipboard(text: string, successMessage: string): Promise<vo
   }
 }
 
+/** Extract a human-readable message from a Tauri RuntimeError or unknown throw. */
+function errorMessage(err: unknown): string {
+  if (typeof err === 'string') return err;
+  if (err && typeof err === 'object') {
+    const obj = err as Record<string, unknown>;
+    if (typeof obj.details === 'string') return obj.details;
+    if (typeof obj.message === 'string') return obj.message;
+  }
+  return 'Unknown error';
+}
+
 export async function shareQobuzTrackLink(trackId: number): Promise<void> {
   try {
-    const url = await invoke<string>('get_qobuz_track_url', { trackId });
+    const url = await invoke<string>('v2_get_qobuz_track_url', { trackId });
     await copyToClipboard(url, 'Qobuz link copied');
   } catch (err) {
     console.error('Failed to get Qobuz link:', err);
-    showToast(`Failed to share Qobuz link: ${err}`, 'error');
+    showToast(`Failed to share Qobuz link: ${errorMessage(err)}`, 'error');
   }
 }
 
@@ -233,7 +269,7 @@ export async function shareSonglinkTrack(trackId: number, isrc?: string): Promis
   const resolvedIsrc = isrc?.trim();
   try {
     showToast('Fetching Song.link...', 'info');
-    const response = await invoke<SongLinkResponse>('share_track_songlink', {
+    const response = await invoke<SongLinkResponse>('v2_share_track_songlink', {
       isrc: resolvedIsrc?.length ? resolvedIsrc : null,
       url: qobuzUrl,
       trackId
@@ -241,6 +277,6 @@ export async function shareSonglinkTrack(trackId: number, isrc?: string): Promis
     await copyToClipboard(response.pageUrl, 'Song.link copied');
   } catch (err) {
     console.error('Failed to get Song.link:', err);
-    showToast(`Song.link error: ${err}`, 'error');
+    showToast(`Song.link error: ${errorMessage(err)}`, 'error');
   }
 }

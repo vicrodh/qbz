@@ -70,9 +70,10 @@
     loading = true;
     searched = true;
     try {
-      const response = await invoke<SearchResultsPage>('search_tracks', {
+      const response = await invoke<SearchResultsPage>('v2_search_tracks', {
         query: searchQuery.trim(),
-        limit: 20
+        limit: 20,
+        offset: 0
       });
       // Filter out non-streamable tracks
       results = response.items.filter(trk => trk.streamable !== false);

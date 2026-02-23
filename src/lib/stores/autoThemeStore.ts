@@ -1,0 +1,344 @@
+/**
+ * Auto-Theme Store
+ *
+ * Manages dynamic theme generation from system accent colors, wallpaper, or custom images.
+ * Injects CSS custom properties at runtime without modifying app.css.
+ *
+ * Source cascade for 'system' mode:
+ *   1. Try DE accent color → build theme from accent
+ *   2. If accent unavailable → try wallpaper image → extract palette
+ *   3. If both fail → throw error (caller handles fallback to static theme)
+ */
+
+import { writable, get } from 'svelte/store';
+import { invoke } from '@tauri-apps/api/core';
+
+// ── Types ───────────────────────────────────────────────────────────────────
+
+export interface GeneratedTheme {
+  variables: Record<string, string>;
+  is_dark: boolean;
+  source: string;
+}
+
+/**
+ * - 'system': accent color first, wallpaper fallback (default)
+ * - 'wallpaper': explicitly use wallpaper image
+ * - 'image': user-selected custom image
+ */
+export type AutoThemeSource = 'system' | 'wallpaper' | 'image';
+
+interface AutoThemePrefs {
+  enabled: boolean;
+  source: AutoThemeSource;
+  customImagePath?: string;
+}
+
+interface AutoThemeState {
+  active: boolean;
+  generating: boolean;
+  error: string | null;
+  theme: GeneratedTheme | null;
+  detectedDE: string | null;
+}
+
+// ── Constants ───────────────────────────────────────────────────────────────
+
+const STORAGE_KEY_THEME = 'qbz-theme';
+const STORAGE_KEY_VARS = 'qbz-auto-theme-vars';
+const STORAGE_KEY_PREFS = 'qbz-auto-theme';
+const AUTO_THEME_VALUE = 'auto';
+
+// ── Store ───────────────────────────────────────────────────────────────────
+
+const autoThemeStore = writable<AutoThemeState>({
+  active: false,
+  generating: false,
+  error: null,
+  theme: null,
+
+
+  detectedDE: null,
+});
+
+// ── CSS Injection ───────────────────────────────────────────────────────────
+
+/** Inject all CSS variables from a generated theme onto the document root. */
+function injectCssVariables(variables: Record<string, string>): void {
+  const root = document.documentElement;
+  for (const [name, value] of Object.entries(variables)) {
+    root.style.setProperty(name, value);
+  }
+}
+
+/** Remove all auto-theme CSS variables from the document root. */
+function removeCssVariables(variables: Record<string, string>): void {
+  const root = document.documentElement;
+  for (const name of Object.keys(variables)) {
+    root.style.removeProperty(name);
+  }
+}
+
+// ── Persistence ─────────────────────────────────────────────────────────────
+
+function saveAutoThemeVars(variables: Record<string, string>): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_VARS, JSON.stringify(variables));
+  } catch {
+    // localStorage might be full, ignore
+  }
+}
+
+function loadAutoThemeVars(): Record<string, string> | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_VARS);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // corrupted data, ignore
+  }
+  return null;
+}
+
+function savePrefs(prefs: AutoThemePrefs): void {
+  try {
+    localStorage.setItem(STORAGE_KEY_PREFS, JSON.stringify(prefs));
+  } catch {
+    // ignore
+  }
+}
+
+function loadPrefs(): AutoThemePrefs | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PREFS);
+    if (raw) return JSON.parse(raw);
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function clearAutoThemeStorage(): void {
+  localStorage.removeItem(STORAGE_KEY_VARS);
+  localStorage.removeItem(STORAGE_KEY_PREFS);
+  const current = localStorage.getItem(STORAGE_KEY_THEME);
+  if (current === AUTO_THEME_VALUE) {
+    localStorage.removeItem(STORAGE_KEY_THEME);
+  }
+}
+
+// ── Internal: Theme generation strategies ───────────────────────────────────
+
+/**
+ * Try to generate theme from the DE's full color scheme.
+ * This reads backgrounds, text, accent, and all semantic colors directly
+ * from the DE configuration (kdeglobals for KDE, dconf for GNOME, etc.)
+ * — no wallpaper extraction or k-means needed.
+ */
+async function trySystemColorSchemeTheme(): Promise<GeneratedTheme | null> {
+  try {
+    return await invoke<GeneratedTheme>('v2_generate_theme_from_system_colors');
+  } catch {
+    return null;
+  }
+}
+
+/** Try to generate theme from system wallpaper. Throws if wallpaper unavailable. */
+async function generateFromWallpaper(): Promise<GeneratedTheme> {
+  return invoke<GeneratedTheme>('v2_generate_theme_from_wallpaper');
+}
+
+/** Generate theme from a specific image path. */
+async function generateFromImage(imagePath: string): Promise<GeneratedTheme> {
+  return invoke<GeneratedTheme>('v2_generate_theme_from_image', { imagePath });
+}
+
+// ── Public API ──────────────────────────────────────────────────────────────
+
+/**
+ * Enable auto-theme from the given source.
+ *
+ * - 'system': try accent color first, fall back to wallpaper, throw if both fail
+ * - 'wallpaper': generate directly from system wallpaper
+ * - 'image': generate from user-selected image (imagePath required)
+ */
+export async function enableAutoTheme(
+  source: AutoThemeSource,
+  imagePath?: string
+): Promise<void> {
+  autoThemeStore.update(s => ({ ...s, generating: true, error: null }));
+
+  try {
+    // Detect DE for display
+    let detectedDE: string | null = null;
+    try {
+      const de = await invoke<string | { Unknown: string }>('v2_detect_desktop_environment');
+      detectedDE = typeof de === 'string' ? de : de.Unknown ?? 'Unknown';
+    } catch {
+      // non-critical
+    }
+
+    let theme: GeneratedTheme;
+
+    if (source === 'system') {
+      // Cascade: full color scheme → wallpaper → error
+      const schemeTheme = await trySystemColorSchemeTheme();
+      if (schemeTheme) {
+        theme = schemeTheme;
+      } else {
+        // Fallback to wallpaper if DE color scheme is unavailable
+        try {
+          theme = await generateFromWallpaper();
+        } catch (wallpaperErr) {
+          throw new Error(
+            `Could not read system color scheme or wallpaper. ${wallpaperErr instanceof Error ? wallpaperErr.message : String(wallpaperErr)}`
+          );
+        }
+      }
+    } else if (source === 'wallpaper') {
+      theme = await generateFromWallpaper();
+    } else {
+      if (!imagePath) {
+        throw new Error('Image path required for custom image source');
+      }
+      theme = await generateFromImage(imagePath);
+    }
+
+    // Apply: set data-theme to 'auto' (no static CSS matches)
+    document.documentElement.setAttribute('data-theme', AUTO_THEME_VALUE);
+    injectCssVariables(theme.variables);
+
+    // Persist
+    localStorage.setItem(STORAGE_KEY_THEME, AUTO_THEME_VALUE);
+    saveAutoThemeVars(theme.variables);
+    savePrefs({ enabled: true, source, customImagePath: imagePath });
+
+    autoThemeStore.set({
+      active: true,
+      generating: false,
+      error: null,
+      theme,
+      detectedDE,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    autoThemeStore.update(s => ({
+      ...s,
+      generating: false,
+      error: message,
+    }));
+    throw err;
+  }
+}
+
+/**
+ * Disable auto-theme and clean up CSS variables.
+ * Does NOT apply a static theme — the caller (SettingsView) handles that.
+ */
+export function disableAutoTheme(): void {
+  const state = get(autoThemeStore);
+  if (state.theme) {
+    removeCssVariables(state.theme.variables);
+  } else {
+    // Fallback: remove vars from localStorage cache
+    const cached = loadAutoThemeVars();
+    if (cached) removeCssVariables(cached);
+  }
+
+  document.documentElement.removeAttribute('data-theme');
+  clearAutoThemeStorage();
+
+  autoThemeStore.set({
+    active: false,
+    generating: false,
+    error: null,
+    theme: null,
+  
+
+    detectedDE: null,
+  });
+}
+
+/** Check if auto-theme is currently active. */
+export function isAutoThemeActive(): boolean {
+  return get(autoThemeStore).active;
+}
+
+/** Get current auto-theme preferences from localStorage (for restoring UI state). */
+export function getAutoThemePrefs(): AutoThemePrefs | null {
+  return loadPrefs();
+}
+
+/** Subscribe to auto-theme state changes. */
+export function subscribeAutoTheme(
+  listener: (state: AutoThemeState) => void
+): () => void {
+  return autoThemeStore.subscribe(listener);
+}
+
+/**
+ * Update a single CSS variable in the active auto-theme.
+ * Used for fine-tuning individual colors from the Settings UI.
+ */
+export function updateThemeVariable(varName: string, value: string): void {
+  const state = get(autoThemeStore);
+  if (!state.active || !state.theme) return;
+
+  // Apply to DOM
+  document.documentElement.style.setProperty(varName, value);
+
+  // Update store
+  const updatedVars = { ...state.theme.variables, [varName]: value };
+  autoThemeStore.update(s => ({
+    ...s,
+    theme: s.theme ? { ...s.theme, variables: updatedVars } : null,
+  }));
+
+  // Persist
+  saveAutoThemeVars(updatedVars);
+}
+
+/**
+ * The key CSS variables that are user-editable in the Settings panel.
+ * Each entry maps a CSS var name to an i18n label key.
+ */
+export const EDITABLE_THEME_VARS = [
+  { varName: '--bg-primary', labelKey: 'settings.appearance.colorBg' },
+  { varName: '--bg-secondary', labelKey: 'settings.appearance.colorSurface' },
+  { varName: '--bg-tertiary', labelKey: 'settings.appearance.colorElevated' },
+  { varName: '--accent-primary', labelKey: 'settings.appearance.colorAccent' },
+  { varName: '--text-primary', labelKey: 'settings.appearance.colorText' },
+  { varName: '--text-muted', labelKey: 'settings.appearance.colorMuted' },
+  { varName: '--border-subtle', labelKey: 'settings.appearance.colorBorder' },
+  { varName: '--danger', labelKey: 'settings.appearance.colorDanger' },
+] as const;
+
+/** Export the store itself for use with $ syntax in Svelte components. */
+export { autoThemeStore };
+
+// ── Bootstrap ───────────────────────────────────────────────────────────────
+
+/**
+ * Restore auto-theme CSS variables from localStorage for instant display.
+ * Call this early in bootstrap (before backend is ready) to prevent FOUC.
+ */
+export function restoreAutoThemeVars(): void {
+  const savedTheme = localStorage.getItem(STORAGE_KEY_THEME);
+  if (savedTheme !== AUTO_THEME_VALUE) return;
+
+  const vars = loadAutoThemeVars();
+  if (!vars) return;
+
+  document.documentElement.setAttribute('data-theme', AUTO_THEME_VALUE);
+  injectCssVariables(vars);
+
+  // Mark store as active (will be re-synced when Settings loads)
+  autoThemeStore.set({
+    active: true,
+    generating: false,
+    error: null,
+    theme: { variables: vars, is_dark: true, source: 'cached' },
+  
+
+    detectedDE: null,
+  });
+}

@@ -81,7 +81,7 @@
   // Detect if the current path is on a network mount
   async function detectNetworkStatus() {
     try {
-      const info = await invoke<{ isNetwork: boolean }>('check_network_path', { path: currentPath });
+      const info = await invoke<{ isNetwork: boolean }>('v2_check_network_path', { path: currentPath });
       detectedIsNetwork = info.isNetwork;
     } catch (err) {
       console.error('Failed to detect network status:', err);
@@ -94,7 +94,7 @@
 
     checkingAccessibility = true;
     try {
-      accessible = await invoke<boolean>('library_check_folder_accessible', { path: folder.path });
+      accessible = await invoke<boolean>('v2_library_check_folder_accessible', { path: folder.path });
     } catch (err) {
       console.error('Failed to check folder accessibility:', err);
       accessible = false;
@@ -112,13 +112,13 @@
     try {
       // If path was changed, update it first
       if (pathChanged && currentPath !== folder.path) {
-        await invoke('library_update_folder_path', {
+        await invoke('v2_library_update_folder_path', {
           id: folder.id,
           newPath: currentPath
         });
       }
 
-      const updatedFolder = await invoke<LibraryFolder>('library_update_folder_settings', {
+      const updatedFolder = await invoke<LibraryFolder>('v2_library_update_folder_settings', {
         id: folder.id,
         alias: alias.trim() || null,
         enabled,
@@ -151,7 +151,7 @@
         // Re-check accessibility for the new path
         checkingAccessibility = true;
         try {
-          accessible = await invoke<boolean>('library_check_folder_accessible', { path: currentPath });
+          accessible = await invoke<boolean>('v2_library_check_folder_accessible', { path: currentPath });
         } catch (err) {
           accessible = false;
         } finally {

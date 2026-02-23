@@ -48,7 +48,9 @@ pub async fn reco_log_event(
     );
 
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     db.insert_event(&event)
 }
 
@@ -66,7 +68,9 @@ pub async fn reco_get_home(
     let limit_favorites = limit_favorites.unwrap_or(12);
 
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
 
     let recently_played_album_ids = db.get_recent_album_ids(limit_recent_albums)?;
     let continue_listening_track_ids = db.get_recent_track_ids(limit_continue_tracks)?;
@@ -100,7 +104,9 @@ pub async fn reco_train_scores(
     let since_ts = now_ts.saturating_sub(lookback_days * 86_400);
 
     let mut guard__ = state.db.lock().await;
-    let db = guard__.as_mut().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_mut()
+        .ok_or("No active session - please log in")?;
     let events = db.get_events_since(since_ts, Some(max_events))?;
     let total_events = events.len();
     let total_favorite_events = events
@@ -157,7 +163,9 @@ pub async fn reco_get_home_ml(
     let limit_favorites = limit_favorites.unwrap_or(12);
 
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
 
     get_home_seeds_internal(
         db,
@@ -349,7 +357,9 @@ pub async fn get_playlist_suggestions(
 ) -> Result<Vec<u64>, String> {
     let limit = limit.unwrap_or(10);
     let guard__ = state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
 
     // Get user's top scored tracks (get more than needed for filtering)
     let fetch_limit = (limit * 5).max(50);
@@ -363,7 +373,8 @@ pub async fn get_playlist_suggestions(
 
     // Build a set of tracks already in playlist for fast lookup
     let existing: std::collections::HashSet<u64> = playlist_track_ids.iter().cloned().collect();
-    let playlist_artists: std::collections::HashSet<u64> = playlist_artist_ids.iter().cloned().collect();
+    let playlist_artists: std::collections::HashSet<u64> =
+        playlist_artist_ids.iter().cloned().collect();
 
     // Score candidates: favorites get bonus, same-artist tracks get bonus
     let mut candidates: HashMap<u64, f64> = HashMap::new();
@@ -434,7 +445,9 @@ pub async fn reco_backfill_genres(
     // Get album IDs first (scoped lock to avoid Send issue)
     let album_ids = {
         let guard__ = reco_state.db.lock().await;
-        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         db.get_album_ids_without_genre(batch_size)?
     };
 
@@ -470,11 +483,16 @@ pub async fn reco_backfill_genres(
 
         if let Some(genre_opt) = genre_info {
             let genre_id = genre_opt.as_ref().map(|(id, _)| *id).unwrap_or(0);
-            let genre_name = genre_opt.as_ref().map(|(_, name)| name.as_str()).unwrap_or("none");
+            let genre_name = genre_opt
+                .as_ref()
+                .map(|(_, name)| name.as_str())
+                .unwrap_or("none");
 
             // Re-acquire DB lock for update
             let guard__ = reco_state.db.lock().await;
-            let db = guard__.as_ref().ok_or("No active session - please log in")?;
+            let db = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
             match db.update_genre_for_album(album_id, genre_id) {
                 Ok(updated) => {
                     events_updated += updated;
@@ -482,7 +500,10 @@ pub async fn reco_backfill_genres(
                     if genre_id > 0 {
                         log::debug!(
                             "Updated {} events for album {} with genre {} ({})",
-                            updated, album_id, genre_id, genre_name
+                            updated,
+                            album_id,
+                            genre_id,
+                            genre_name
                         );
                     } else {
                         log::debug!("Album {} has no genre, set to 0", album_id);
@@ -502,7 +523,9 @@ pub async fn reco_backfill_genres(
     // Check how many albums still need backfill
     let albums_remaining = {
         let guard__ = reco_state.db.lock().await;
-        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         let remaining = db.get_album_ids_without_genre(1)?;
         if remaining.is_empty() {
             0
@@ -529,11 +552,11 @@ pub async fn reco_backfill_genres(
 
 /// Check if genre backfill is needed
 #[tauri::command]
-pub async fn reco_needs_genre_backfill(
-    reco_state: State<'_, RecoState>,
-) -> Result<bool, String> {
+pub async fn reco_needs_genre_backfill(reco_state: State<'_, RecoState>) -> Result<bool, String> {
     let guard__ = reco_state.db.lock().await;
-    let db = guard__.as_ref().ok_or("No active session - please log in")?;
+    let db = guard__
+        .as_ref()
+        .ok_or("No active session - please log in")?;
     let albums = db.get_album_ids_without_genre(1)?;
     Ok(!albums.is_empty())
 }
@@ -610,13 +633,10 @@ fn track_to_display_meta(track: &Track) -> TrackDisplayMeta {
             .map(|a| get_image(&a.image))
             .unwrap_or_default(),
         album_id: track.album.as_ref().map(|a| a.id.clone()),
-        artist_id: track.performer.as_ref().and_then(|p| {
-            if p.id > 0 {
-                Some(p.id)
-            } else {
-                None
-            }
-        }),
+        artist_id: track
+            .performer
+            .as_ref()
+            .and_then(|p| if p.id > 0 { Some(p.id) } else { None }),
         duration: format_duration(track.duration),
         duration_seconds: track.duration,
         hires: track.hires_streamable,
@@ -630,7 +650,11 @@ fn artist_to_card_meta(artist: &Artist, play_count: Option<u32>) -> ArtistCardMe
     ArtistCardMeta {
         id: artist.id,
         name: artist.name.clone(),
-        image: artist.image.as_ref().map(|img| get_image(img)).filter(|s| !s.is_empty()),
+        image: artist
+            .image
+            .as_ref()
+            .map(|img| get_image(img))
+            .filter(|s| !s.is_empty()),
         play_count,
     }
 }
@@ -736,7 +760,9 @@ pub async fn reco_get_home_resolved(
     // Step 1: Get seeds (IDs) from reco DB
     let seeds = {
         let guard__ = reco_state.db.lock().await;
-        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         get_home_seeds_internal(
             db,
             limit_recent_albums,
@@ -757,11 +783,7 @@ pub async fn reco_get_home_resolved(
         ids
     };
 
-    let all_artist_ids: Vec<u64> = seeds
-        .top_artist_ids
-        .iter()
-        .map(|s| s.artist_id)
-        .collect();
+    let all_artist_ids: Vec<u64> = seeds.top_artist_ids.iter().map(|s| s.artist_id).collect();
 
     // Build play_count map for artists
     let artist_play_counts: HashMap<u64, u32> = seeds
@@ -771,12 +793,16 @@ pub async fn reco_get_home_resolved(
         .collect();
 
     // Step 3: Resolve albums (recent + favorite)
-    let recently_played_albums =
-        resolve_albums(&seeds.recently_played_album_ids, &reco_state, &app_state, &cache_state).await?;
+    let recently_played_albums = resolve_albums(
+        &seeds.recently_played_album_ids,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    )
+    .await?;
 
     // Step 4: Resolve tracks (continue + favorite)
-    let all_tracks =
-        resolve_tracks(&all_track_ids, &reco_state, &app_state, &cache_state).await?;
+    let all_tracks = resolve_tracks(&all_track_ids, &reco_state, &app_state, &cache_state).await?;
 
     // Build track lookup
     let track_map: HashMap<u64, &TrackDisplayMeta> =
@@ -809,8 +835,14 @@ pub async fn reco_get_home_resolved(
         resolve_albums(&favorite_album_ids, &reco_state, &app_state, &cache_state).await?;
 
     // Step 6: Resolve artists
-    let top_artists =
-        resolve_artists(&all_artist_ids, &artist_play_counts, &reco_state, &app_state, &cache_state).await?;
+    let top_artists = resolve_artists(
+        &all_artist_ids,
+        &artist_play_counts,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    )
+    .await?;
 
     Ok(HomeResolved {
         recently_played_albums,
@@ -834,7 +866,9 @@ async fn resolve_albums(
     // Tier 1: reco meta cache (no TTL)
     let meta_hits = {
         let guard__ = reco_state.db.lock().await;
-        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         db.get_album_metas(ids)?
     };
     let meta_map: HashMap<String, AlbumCardMeta> =
@@ -851,7 +885,9 @@ async fn resolve_albums(
     if !missing_ids.is_empty() {
         let cached = {
             let guard__ = cache_state.cache.lock().await;
-            let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+            let cache = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
             cache.get_albums(&missing_ids, None)?
         };
         for (album_id, json_str) in cached {
@@ -958,7 +994,9 @@ async fn resolve_tracks(
     // Tier 1: reco meta
     let meta_hits = {
         let guard__ = reco_state.db.lock().await;
-        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         db.get_track_metas(ids)?
     };
     let meta_map: HashMap<u64, TrackDisplayMeta> =
@@ -975,7 +1013,9 @@ async fn resolve_tracks(
     if !missing_ids.is_empty() {
         let cached = {
             let guard__ = cache_state.cache.lock().await;
-            let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+            let cache = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
             cache.get_tracks(&missing_ids, None)?
         };
         for (track_id, json_str) in cached {
@@ -1079,11 +1119,12 @@ async fn resolve_artists(
     // Tier 1: reco meta
     let meta_hits = {
         let guard__ = reco_state.db.lock().await;
-        let db = guard__.as_ref().ok_or("No active session - please log in")?;
+        let db = guard__
+            .as_ref()
+            .ok_or("No active session - please log in")?;
         db.get_artist_metas(ids)?
     };
-    let meta_map: HashMap<u64, ArtistCardMeta> =
-        meta_hits.into_iter().map(|m| (m.id, m)).collect();
+    let meta_map: HashMap<u64, ArtistCardMeta> = meta_hits.into_iter().map(|m| (m.id, m)).collect();
 
     let missing_ids: Vec<u64> = ids
         .iter()
@@ -1101,7 +1142,9 @@ async fn resolve_artists(
     if !missing_ids.is_empty() {
         let cached = {
             let guard__ = cache_state.cache.lock().await;
-            let cache = guard__.as_ref().ok_or("No active session - please log in")?;
+            let cache = guard__
+                .as_ref()
+                .ok_or("No active session - please log in")?;
             cache.get_artists(&missing_ids, &locale, None)?
         };
         for (artist_id, json_str) in cached {

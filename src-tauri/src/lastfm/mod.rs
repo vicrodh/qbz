@@ -122,9 +122,9 @@ impl LastFmClient {
 
         match data {
             LastFmResponse::Success(r) => {
-                let auth_url = r.auth_url.unwrap_or_else(|| {
-                    format!("https://www.last.fm/api/auth/?token={}", r.token)
-                });
+                let auth_url = r
+                    .auth_url
+                    .unwrap_or_else(|| format!("https://www.last.fm/api/auth/?token={}", r.token));
                 Ok((r.token, auth_url))
             }
             LastFmResponse::Error { message, .. } => Err(message),
@@ -133,7 +133,10 @@ impl LastFmClient {
 
     /// Get session key after user has authorized
     pub async fn get_session(&mut self, token: &str) -> Result<LastFmSession, String> {
-        log::info!("Getting Last.fm session with token: {}...", &token[..token.len().min(8)]);
+        log::info!(
+            "Getting Last.fm session with token: {}...",
+            &token[..token.len().min(8)]
+        );
 
         let url = format!("{}/auth.getSession", LASTFM_PROXY_URL);
 

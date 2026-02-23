@@ -33,6 +33,10 @@
     isAlbumFullyDownloaded?: boolean;
     onOpenContainingFolder?: () => void;
     onReDownloadAlbum?: () => void;
+    /** When true, programmatically open the menu (e.g. from right-click on parent) */
+    externalOpen?: boolean;
+    /** Screen coordinates for positioning from right-click (overrides trigger-based positioning) */
+    contextMenuPosition?: { x: number; y: number } | null;
   }
 
   let {
@@ -46,7 +50,9 @@
     onOpenChange,
     isAlbumFullyDownloaded = false,
     onOpenContainingFolder: _onOpenContainingFolder,
-    onReDownloadAlbum
+    onReDownloadAlbum,
+    externalOpen = false,
+    contextMenuPosition = null
   }: Props = $props();
 
   let isOpen = $state(false);
@@ -119,7 +125,7 @@
 
   async function setMenuPosition(retries = 2) {
     await tick();
-    if (!triggerRef || !menuEl) {
+    if (!menuEl) {
       if (retries > 0) {
         await tick();
         return setMenuPosition(retries - 1);
@@ -127,12 +133,23 @@
       return;
     }
 
-    const triggerRect = triggerRef.getBoundingClientRect();
     const menuRect = menuEl.getBoundingClientRect();
     const padding = 8;
+    let left: number;
+    let top: number;
 
-    let left = triggerRect.right - menuRect.width;
-    let top = triggerRect.bottom + 6;
+    if (contextMenuPosition) {
+      // Position at right-click coordinates
+      left = contextMenuPosition.x;
+      top = contextMenuPosition.y;
+    } else if (triggerRef) {
+      // Position relative to trigger button
+      const triggerRect = triggerRef.getBoundingClientRect();
+      left = triggerRect.right - menuRect.width;
+      top = triggerRect.bottom + 6;
+    } else {
+      return;
+    }
 
     if (left < padding) left = padding;
     if (left + menuRect.width > window.innerWidth - padding) {
@@ -140,7 +157,11 @@
     }
 
     if (top + menuRect.height > window.innerHeight - padding) {
-      top = triggerRect.top - menuRect.height - 6;
+      if (contextMenuPosition) {
+        top = contextMenuPosition.y - menuRect.height;
+      } else if (triggerRef) {
+        top = triggerRef.getBoundingClientRect().top - menuRect.height - 6;
+      }
       if (top < padding) top = padding;
     }
 
@@ -222,6 +243,13 @@
     action();
     closeMenu();
   }
+
+  // React to external open requests (e.g. right-click on AlbumCard)
+  $effect(() => {
+    if (externalOpen && !isOpen) {
+      doOpenMenu();
+    }
+  });
 
   $effect(() => {
     if (isOpen) {

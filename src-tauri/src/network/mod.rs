@@ -169,10 +169,9 @@ fn classify_fs_type(fs_type: &str, source: &str) -> MountKind {
 
     // Virtual/pseudo filesystems
     match fs_lower.as_str() {
-        "proc" | "sysfs" | "devtmpfs" | "devpts" | "tmpfs" | "ramfs"
-        | "securityfs" | "debugfs" | "tracefs" | "configfs" | "cgroup"
-        | "cgroup2" | "pstore" | "efivarfs" | "bpf" | "autofs"
-        | "mqueue" | "hugetlbfs" | "fusectl" | "overlay" | "squashfs" => {
+        "proc" | "sysfs" | "devtmpfs" | "devpts" | "tmpfs" | "ramfs" | "securityfs" | "debugfs"
+        | "tracefs" | "configfs" | "cgroup" | "cgroup2" | "pstore" | "efivarfs" | "bpf"
+        | "autofs" | "mqueue" | "hugetlbfs" | "fusectl" | "overlay" | "squashfs" => {
             return MountKind::Virtual;
         }
         _ => {}
@@ -180,9 +179,8 @@ fn classify_fs_type(fs_type: &str, source: &str) -> MountKind {
 
     // Local filesystems
     match fs_lower.as_str() {
-        "ext2" | "ext3" | "ext4" | "xfs" | "btrfs" | "zfs"
-        | "ntfs" | "ntfs3" | "vfat" | "fat32" | "exfat" | "hfs"
-        | "hfsplus" | "apfs" | "f2fs" | "jfs" | "reiserfs" | "udf"
+        "ext2" | "ext3" | "ext4" | "xfs" | "btrfs" | "zfs" | "ntfs" | "ntfs3" | "vfat"
+        | "fat32" | "exfat" | "hfs" | "hfsplus" | "apfs" | "f2fs" | "jfs" | "reiserfs" | "udf"
         | "iso9660" | "ufs" => {
             return MountKind::Local;
         }
@@ -235,8 +233,7 @@ fn parse_mount_line(line: &str) -> Option<MountInfo> {
     let kind = classify_fs_type(&fs_type, &source);
 
     // Check accessibility with a quick stat
-    let accessible = Path::new(&mount_point).exists()
-        && std::fs::metadata(&mount_point).is_ok();
+    let accessible = Path::new(&mount_point).exists() && std::fs::metadata(&mount_point).is_ok();
 
     Some(MountInfo {
         fs_type,
@@ -427,10 +424,22 @@ mod tests {
     #[test]
     fn test_classify_fs_type() {
         assert!(matches!(classify_fs_type("ext4", ""), MountKind::Local));
-        assert!(matches!(classify_fs_type("cifs", "//server/share"), MountKind::Network(NetworkFs::Cifs)));
-        assert!(matches!(classify_fs_type("nfs", "server:/export"), MountKind::Network(NetworkFs::Nfs)));
-        assert!(matches!(classify_fs_type("tmpfs", "tmpfs"), MountKind::Virtual));
-        assert!(matches!(classify_fs_type("fuse.sshfs", "user@host:/path"), MountKind::Network(NetworkFs::Sshfs)));
+        assert!(matches!(
+            classify_fs_type("cifs", "//server/share"),
+            MountKind::Network(NetworkFs::Cifs)
+        ));
+        assert!(matches!(
+            classify_fs_type("nfs", "server:/export"),
+            MountKind::Network(NetworkFs::Nfs)
+        ));
+        assert!(matches!(
+            classify_fs_type("tmpfs", "tmpfs"),
+            MountKind::Virtual
+        ));
+        assert!(matches!(
+            classify_fs_type("fuse.sshfs", "user@host:/path"),
+            MountKind::Network(NetworkFs::Sshfs)
+        ));
     }
 
     #[test]

@@ -1,10 +1,12 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import { t } from 'svelte-i18n';
-  import { ArrowLeft, Play, Shuffle, Heart, CloudDownload, ChevronLeft, ChevronRight } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, Loader2, CheckSquare } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
+  import BulkActionBar from '../BulkActionBar.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { getOfflineCacheState, type OfflineCacheStatus, isAlbumFullyCached } from '$lib/stores/offlineCacheState';
   import { consumeContextTrackFocus } from '$lib/stores/playbackContextStore';
@@ -16,6 +18,7 @@
     toggleAlbumFavorite
   } from '$lib/stores/albumFavoritesStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
+  import ImageLightbox from '../ImageLightbox.svelte';
 
   interface Track {
     id: number;
@@ -100,6 +103,8 @@
     onViewArtistDiscography?: () => void;
     checkRelatedAlbumDownloaded?: (albumId: string) => Promise<boolean>;
     onShowAlbumCredits?: () => void;
+    onCreateAlbumRadio?: () => void;
+    radioLoading?: boolean;
   }
 
   let {
@@ -144,12 +149,69 @@
     onRelatedAlbumShareSonglink,
     onViewArtistDiscography,
     checkRelatedAlbumDownloaded,
-    onShowAlbumCredits
+    onShowAlbumCredits,
+    onCreateAlbumRadio,
+    radioLoading = false
   }: Props = $props();
 
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
+  let lightboxOpen = $state(false);
   let scrollContainer: HTMLDivElement | null = $state(null);
+
+  // Multi-select
+  let multiSelectMode = $state(false);
+  let multiSelectedIds = $state(new Set<number>());
+
+  function toggleMultiSelectMode() {
+    multiSelectMode = !multiSelectMode;
+    if (!multiSelectMode) multiSelectedIds = new Set();
+  }
+
+  function toggleMultiSelect(id: number) {
+    const next = new Set(multiSelectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    multiSelectedIds = next;
+  }
+
+  function buildAlbumQueueTracks(tracks: Track[]) {
+    return tracks.map(trk => ({
+      id: trk.id,
+      title: trk.title,
+      artist: trk.artist || album.artist,
+      album: album.title,
+      duration_secs: trk.durationSeconds,
+      artwork_url: album.artwork || null,
+      hires: trk.hires ?? false,
+      bit_depth: trk.bitDepth ?? null,
+      sample_rate: trk.samplingRate ?? null,
+      is_local: false,
+      album_id: album.id || null,
+      artist_id: album.artistId ?? null,
+    }));
+  }
+
+  async function handleBulkPlayNext() {
+    const selected = album.tracks.filter(track => multiSelectedIds.has(track.id));
+    await invoke('v2_add_tracks_to_queue_next', { tracks: buildAlbumQueueTracks(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkPlayLater() {
+    const selected = album.tracks.filter(track => multiSelectedIds.has(track.id));
+    await invoke('v2_add_tracks_to_queue', { tracks: buildAlbumQueueTracks(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddToPlaylist() {
+    for (const id of multiSelectedIds) { onAddTrackToPlaylist?.(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddFavorites() {
+    for (const id of multiSelectedIds) { onTrackAddFavorite?.(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
 
   // Carousel state for "By the same artist" section
   let carouselContainer: HTMLDivElement | null = $state(null);
@@ -263,7 +325,7 @@
 
     // Restore scroll position
     requestAnimationFrame(() => {
-      const saved = getSavedScrollPosition('album');
+      const saved = getSavedScrollPosition('album', album.id);
       if (scrollContainer && saved > 0) {
         scrollContainer.scrollTop = saved;
       }
@@ -313,7 +375,7 @@
 </script>
 
 <ViewTransition duration={200} distance={12} direction="up">
-<div class="album-detail" bind:this={scrollContainer} onscroll={(e) => saveScrollPosition('album', (e.target as HTMLElement).scrollTop)}>
+<div class="album-detail" bind:this={scrollContainer} onscroll={(e) => saveScrollPosition('album', (e.target as HTMLElement).scrollTop, album.id)}>
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />
@@ -323,7 +385,13 @@
   <!-- Album Header -->
   <div class="album-header">
     <!-- Album Artwork -->
-    <div class="artwork">
+    <div
+      class="artwork"
+      onclick={() => lightboxOpen = true}
+      onkeydown={(e) => { if (e.key === 'Enter') lightboxOpen = true; }}
+      role="button"
+      tabindex="0"
+    >
       <img src={album.artwork} alt={album.title} />
     </div>
 
@@ -380,6 +448,20 @@
             fill={isFavorite ? 'var(--accent-primary)' : 'none'}
           />
         </button>
+        {#if onCreateAlbumRadio}
+          <button
+            class="action-btn-circle"
+            onclick={onCreateAlbumRadio}
+            title={$t('radio.albumRadio')}
+            disabled={radioLoading}
+          >
+            {#if radioLoading}
+              <Loader2 size={18} class="spin" />
+            {:else}
+              <Radio size={18} />
+            {/if}
+          </button>
+        {/if}
         {#if onShowAlbumCredits}
           <button
             class="action-btn-circle"
@@ -403,6 +485,14 @@
           onOpenContainingFolder={onOpenAlbumFolder}
           onReDownloadAlbum={onReDownloadAlbum}
         />
+        <button
+          class="action-btn-circle"
+          class:is-active={multiSelectMode}
+          onclick={toggleMultiSelectMode}
+          title={multiSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+        >
+          <CheckSquare size={18} />
+        </button>
       </div>
     </div>
   </div>
@@ -431,7 +521,7 @@
           <button class="retry-btn" onclick={onBack}>{$t('actions.back')}</button>
         </div>
       {:else}
-      {#each album.tracks as track, trackIndex (`${track.id}-${downloadStateVersion}`)}
+      {#each album.tracks as track, trackIndex (track.id)}
         {@const downloadInfo = getTrackOfflineCacheStatus?.(track.id) ?? { status: 'none' as const, progress: 0 }}
         {@const isTrackDownloaded = downloadInfo.status === 'ready'}
         {@const trackArtistId = track.artistId ?? album.artistId}
@@ -445,6 +535,9 @@
           quality={track.quality}
           isPlaying={activeTrackId === track.id}
           isBlacklisted={trackBlacklisted}
+          selectable={multiSelectMode}
+          selected={multiSelectedIds.has(track.id)}
+          onToggleSelect={() => toggleMultiSelect(track.id)}
           downloadStatus={downloadInfo.status}
           downloadProgress={downloadInfo.progress}
           hideFavorite={trackBlacklisted}
@@ -478,6 +571,14 @@
       {/each}
       {/if}
     </div>
+    <BulkActionBar
+      count={multiSelectedIds.size}
+      onPlayNext={handleBulkPlayNext}
+      onPlayLater={handleBulkPlayLater}
+      onAddToPlaylist={handleBulkAddToPlaylist}
+      onAddFavorites={onTrackAddFavorite ? handleBulkAddFavorites : undefined}
+      onClearSelection={() => { multiSelectedIds = new Set(); }}
+    />
   </div>
 
   <!-- By the same artist Section -->
@@ -554,6 +655,13 @@
 </div>
 </ViewTransition>
 
+<ImageLightbox
+  isOpen={lightboxOpen}
+  onClose={() => lightboxOpen = false}
+  src={album.artwork}
+  alt={album.title}
+/>
+
 <style>
   .album-detail {
     width: 100%;
@@ -613,6 +721,7 @@
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
   }
 
   .artwork img {
@@ -916,5 +1025,13 @@
 
   .retry-btn:hover {
     background: var(--bg-hover);
+  }
+
+  :global(.spin) {
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>

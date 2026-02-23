@@ -32,15 +32,11 @@
     is_active: boolean;
   }
 
-  interface AlsaDevice {
+  interface BackendAudioDevice {
     id: string;
     name: string;
     description: string | null;
     is_default: boolean;
-    max_sample_rate: number | null;
-    supported_sample_rates: number[] | null;
-    device_bus: string | null;
-    is_hardware: boolean;
   }
 
   // Props
@@ -55,7 +51,7 @@
   let settings = $state<AudioSettings | null>(null);
   let outputStatus = $state<AudioOutputStatus | null>(null);
   let pipewireSinks = $state<PipewireSink[]>([]);
-  let alsaDevices = $state<AlsaDevice[]>([]);
+  let alsaDevices = $state<BackendAudioDevice[]>([]);
   let hardwareStatus = $state<HardwareAudioStatus | null>(null);
   let isHovering = $state(false);
   
@@ -82,7 +78,7 @@
     return sink?.description ?? null;
   });
 
-  // Get ALSA description for current device (fancy name from aplay -L)
+  // Get ALSA description for current device (backend-provided when available)
   const alsaDescription = $derived.by(() => {
     if (!currentDevice) return null;
     const device = alsaDevices.find(d => d.id === currentDevice || d.name === currentDevice);
@@ -148,11 +144,11 @@
   async function loadStatus() {
     try {
       const [settingsResult, statusResult, sinksResult, alsaResult, hwStatus] = await Promise.all([
-        invoke<AudioSettings>('get_audio_settings'),
+        invoke<AudioSettings>('v2_get_audio_settings'),
         invoke<AudioOutputStatus>('get_audio_output_status'),
         invoke<PipewireSink[]>('get_pipewire_sinks').catch(() => [] as PipewireSink[]),
-        invoke<AlsaDevice[]>('get_alsa_devices').catch(() => [] as AlsaDevice[]),
-        invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null)
+        invoke<BackendAudioDevice[]>('v2_get_devices_for_backend', { backendType: 'Alsa' }).catch(() => [] as BackendAudioDevice[]),
+        invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null)
       ]);
       settings = settingsResult;
       outputStatus = statusResult;
@@ -192,7 +188,7 @@
       // Only poll if using bit-perfect modes AND not casting
       if (!castConnected && (settings?.dac_passthrough || settings?.backend_type === 'Alsa')) {
         try {
-          hardwareStatus = await invoke<HardwareAudioStatus>('get_hardware_audio_status').catch(() => null);
+          hardwareStatus = await invoke<HardwareAudioStatus>('v2_get_hardware_audio_status').catch(() => null);
         } catch (err) {
           // Silently fail - don't spam console
         }
@@ -311,7 +307,7 @@
               </span>
             </div>
           {/if}
-          {#if settings.dac_passthrough}
+          {#if settings?.dac_passthrough}
             <div class="tooltip-setting" class:warning={dacBadgeState === 'warning'}>
               <span class="setting-icon" class:active={dacBadgeState === 'active'} class:warning={dacBadgeState === 'warning'}>●</span>
               <span class="setting-text">
@@ -332,7 +328,7 @@
               </span>
             </div>
           {/if}
-          {#if settings.exclusive_mode}
+          {#if settings?.exclusive_mode}
             <div class="tooltip-setting">
               <span class="setting-icon" class:active={exclusiveModeActive}>●</span>
               <span class="setting-text">{$t('audioBadges.exclusiveMode')}</span>

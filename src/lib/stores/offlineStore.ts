@@ -115,7 +115,7 @@ export function getOfflineReason(): OfflineReason | null {
 async function fetchStatus(): Promise<void> {
   try {
     const wasOffline = status.isOffline;
-    const newStatus = await invoke<OfflineStatus>('get_offline_status');
+    const newStatus = await invoke<OfflineStatus>('v2_get_offline_status');
     const changed = JSON.stringify(status) !== JSON.stringify(newStatus);
     status = newStatus;
     if (changed) {
@@ -149,7 +149,7 @@ async function fetchStatus(): Promise<void> {
  */
 async function fetchSettings(): Promise<void> {
   try {
-    settings = await invoke<OfflineSettings>('get_offline_settings');
+    settings = await invoke<OfflineSettings>('v2_get_offline_settings');
     notifyListeners();
   } catch (error) {
     const msg = String(error);
@@ -166,7 +166,7 @@ async function fetchSettings(): Promise<void> {
  */
 export async function checkNetwork(): Promise<boolean> {
   try {
-    return await invoke<boolean>('check_network');
+    return await invoke<boolean>('v2_check_network');
   } catch (error) {
     console.error('Failed to check network:', error);
     return false;
@@ -184,7 +184,7 @@ export async function setManualOffline(enabled: boolean): Promise<void> {
     console.log('[Offline] wasOffline:', wasOffline);
     console.log('[Offline] ========================================');
 
-    const newStatus = await invoke<OfflineStatus>('set_manual_offline', { enabled });
+    const newStatus = await invoke<OfflineStatus>('v2_set_manual_offline', { enabled });
     status = newStatus;
     settings.manualOfflineMode = enabled;
 
@@ -214,7 +214,7 @@ export async function setManualOffline(enabled: boolean): Promise<void> {
  */
 export async function setShowPartialPlaylists(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_show_partial_playlists', { enabled });
+    await invoke('v2_set_show_partial_playlists', { enabled });
     settings.showPartialPlaylists = enabled;
     notifyListeners();
   } catch (error) {
@@ -228,7 +228,7 @@ export async function setShowPartialPlaylists(enabled: boolean): Promise<void> {
  */
 export async function setAllowCastWhileOffline(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_allow_cast_while_offline', { enabled });
+    await invoke('v2_set_allow_cast_while_offline', { enabled });
     settings.allowCastWhileOffline = enabled;
     notifyListeners();
   } catch (error) {
@@ -242,7 +242,7 @@ export async function setAllowCastWhileOffline(enabled: boolean): Promise<void> 
  */
 export async function setAllowImmediateScrobbling(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_allow_immediate_scrobbling', { enabled });
+    await invoke('v2_set_allow_immediate_scrobbling', { enabled });
     settings.allowImmediateScrobbling = enabled;
     notifyListeners();
   } catch (error) {
@@ -256,7 +256,7 @@ export async function setAllowImmediateScrobbling(enabled: boolean): Promise<voi
  */
 export async function setAllowAccumulatedScrobbling(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_allow_accumulated_scrobbling', { enabled });
+    await invoke('v2_set_allow_accumulated_scrobbling', { enabled });
     settings.allowAccumulatedScrobbling = enabled;
     notifyListeners();
   } catch (error) {
@@ -270,7 +270,7 @@ export async function setAllowAccumulatedScrobbling(enabled: boolean): Promise<v
  */
 export async function setShowNetworkFoldersInManualOffline(enabled: boolean): Promise<void> {
   try {
-    await invoke('set_show_network_folders_in_manual_offline', { enabled });
+    await invoke('v2_set_show_network_folders_in_manual_offline', { enabled });
     settings.showNetworkFoldersInManualOffline = enabled;
     notifyListeners();
   } catch (error) {
@@ -351,7 +351,7 @@ export async function createPendingPlaylist(
   trackIds: number[],
   localTrackPaths: string[]
 ): Promise<number> {
-  return invoke<number>('create_pending_playlist', {
+  return invoke<number>('v2_create_pending_playlist', {
     name,
     description,
     isPublic,
@@ -364,14 +364,14 @@ export async function createPendingPlaylist(
  * Get all playlists pending sync
  */
 export async function getPendingPlaylists(): Promise<PendingPlaylist[]> {
-  return invoke<PendingPlaylist[]>('get_pending_playlists');
+  return invoke<PendingPlaylist[]>('v2_get_pending_playlists');
 }
 
 /**
  * Get count of pending playlists
  */
 export async function getPendingPlaylistCount(): Promise<number> {
-  return invoke<number>('get_pending_playlist_count');
+  return invoke<number>('v2_get_pending_playlist_count');
 }
 
 /**
@@ -381,14 +381,14 @@ export async function markPendingPlaylistSynced(
   pendingId: number,
   qobuzPlaylistId: number
 ): Promise<void> {
-  await invoke('mark_pending_playlist_synced', { pendingId, qobuzPlaylistId });
+  await invoke('v2_mark_pending_playlist_synced', { pendingId, qobuzPlaylistId });
 }
 
 /**
  * Delete a pending playlist
  */
 export async function deletePendingPlaylist(pendingId: number): Promise<void> {
-  await invoke('delete_pending_playlist', { pendingId });
+  await invoke('v2_delete_pending_playlist', { pendingId });
 }
 
 // ============ Scrobble Queue ============
@@ -412,7 +412,7 @@ export async function queueScrobble(
   album: string | null,
   timestamp: number
 ): Promise<number> {
-  return invoke<number>('queue_scrobble', {
+  return invoke<number>('v2_queue_scrobble', {
     artist,
     track,
     album,
@@ -424,28 +424,28 @@ export async function queueScrobble(
  * Get queued scrobbles (up to limit)
  */
 export async function getQueuedScrobbles(limit?: number): Promise<QueuedScrobble[]> {
-  return invoke<QueuedScrobble[]>('get_queued_scrobbles', { limit });
+  return invoke<QueuedScrobble[]>('v2_get_queued_scrobbles', { limit });
 }
 
 /**
  * Mark scrobbles as sent after successful Last.fm submission
  */
 export async function markScrobblesSent(ids: number[]): Promise<void> {
-  await invoke('mark_scrobbles_sent', { ids });
+  await invoke('v2_mark_scrobbles_sent', { ids });
 }
 
 /**
  * Get count of queued (unsent) scrobbles
  */
 export async function getQueuedScrobbleCount(): Promise<number> {
-  return invoke<number>('get_queued_scrobble_count');
+  return invoke<number>('v2_get_queued_scrobble_count');
 }
 
 /**
  * Cleanup old sent scrobbles
  */
 export async function cleanupSentScrobbles(olderThanDays?: number): Promise<number> {
-  return invoke<number>('cleanup_sent_scrobbles', { olderThanDays });
+  return invoke<number>('v2_cleanup_sent_scrobbles', { olderThanDays });
 }
 
 /**
@@ -475,7 +475,7 @@ export async function syncPendingPlaylists(): Promise<void> {
           console.log(`[Offline] Using existing Qobuz playlist ID: ${qobuzPlaylistId}`);
         } else {
           // Create playlist on Qobuz
-          const createdPlaylist = await invoke<{ id: number }>('create_playlist', {
+          const createdPlaylist = await invoke<{ id: number }>('v2_create_playlist', {
             name: playlist.name,
             description: playlist.description,
             isPublic: playlist.isPublic
@@ -485,7 +485,7 @@ export async function syncPendingPlaylists(): Promise<void> {
           console.log(`[Offline] Created playlist on Qobuz with ID: ${qobuzPlaylistId}`);
 
           // Save the Qobuz ID immediately (but keep synced=0 until fully complete)
-          await invoke('update_pending_playlist_qobuz_id', {
+          await invoke('v2_update_pending_playlist_qobuz_id', {
             pendingId: playlist.id,
             qobuzPlaylistId
           });
@@ -494,7 +494,7 @@ export async function syncPendingPlaylists(): Promise<void> {
         // Add Qobuz tracks if any
         if (playlist.trackIds.length > 0) {
           console.log(`[Offline] Adding ${playlist.trackIds.length} Qobuz tracks`);
-          await invoke('add_tracks_to_playlist', {
+          await invoke('v2_add_tracks_to_playlist', {
             playlistId: qobuzPlaylistId,
             trackIds: playlist.trackIds
           });
@@ -530,7 +530,7 @@ export async function syncPendingPlaylists(): Promise<void> {
                 console.log(`[Offline] Resolving path: ${filePath}`);
 
                 // Get track ID from file path
-                const trackInfo = await invoke<{ id: number } | null>('get_track_by_path', {
+                const trackInfo = await invoke<{ id: number } | null>('v2_get_track_by_path', {
                   filePath
                 });
 
@@ -555,7 +555,7 @@ export async function syncPendingPlaylists(): Promise<void> {
                 position: position
               });
 
-              await invoke('playlist_add_local_track', {
+              await invoke('v2_playlist_add_local_track', {
                 playlistId: qobuzPlaylistId,
                 localTrackId: localTrackId,
                 position: position

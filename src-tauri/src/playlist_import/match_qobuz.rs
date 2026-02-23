@@ -31,7 +31,11 @@ pub async fn match_tracks(
     let results: Arc<tokio::sync::Mutex<Vec<Option<TrackMatch>>>> =
         Arc::new(tokio::sync::Mutex::new(vec![None; tracks.len()]));
 
-    let owned_tracks: Vec<(usize, ImportTrack)> = tracks.iter().enumerate().map(|(i, tr)| (i, tr.clone())).collect();
+    let owned_tracks: Vec<(usize, ImportTrack)> = tracks
+        .iter()
+        .enumerate()
+        .map(|(i, tr)| (i, tr.clone()))
+        .collect();
 
     stream::iter(owned_tracks)
         .map(|(idx, track)| {
@@ -43,9 +47,7 @@ pub async fn match_tracks(
 
             async move {
                 let query = format!("{} {}", track.artist, track.title);
-                let search_result = client
-                    .search_tracks(&query, SEARCH_LIMIT, 0, None)
-                    .await;
+                let search_result = client.search_tracks(&query, SEARCH_LIMIT, 0, None).await;
 
                 let match_entry = match search_result {
                     Ok(search) => {
@@ -161,7 +163,14 @@ fn score_candidate(track: &ImportTrack, candidate: &Track) -> f32 {
     }
 
     let title_score = similarity(&track.title, &candidate.title);
-    let artist_score = similarity(&track.artist, candidate.performer.as_ref().map(|a| a.name.as_str()).unwrap_or(""));
+    let artist_score = similarity(
+        &track.artist,
+        candidate
+            .performer
+            .as_ref()
+            .map(|a| a.name.as_str())
+            .unwrap_or(""),
+    );
     let album_score = track
         .album
         .as_ref()
@@ -174,9 +183,13 @@ fn score_candidate(track: &ImportTrack, candidate: &Track) -> f32 {
         })
         .unwrap_or(0.0);
 
-    let mut score = title_score * TITLE_WEIGHT + artist_score * ARTIST_WEIGHT + album_score * ALBUM_WEIGHT;
+    let mut score =
+        title_score * TITLE_WEIGHT + artist_score * ARTIST_WEIGHT + album_score * ALBUM_WEIGHT;
 
-    if let (Some(import_duration), Some(candidate_duration)) = (track.duration_ms, Some((candidate.duration as u64).saturating_mul(1000))) {
+    if let (Some(import_duration), Some(candidate_duration)) = (
+        track.duration_ms,
+        Some((candidate.duration as u64).saturating_mul(1000)),
+    ) {
         let diff = if import_duration > candidate_duration {
             import_duration - candidate_duration
         } else {

@@ -2,12 +2,11 @@
 <component type="desktop-application">
   <id>com.blitzfc.qbz</id>
   <name>QBZ</name>
-  <summary>Native Qobuz client with hi-res audio support</summary>
+  <summary>Stream hi-res music from Qobuz</summary>
   <description>
     <p>
       QBZ is a native Qobuz client for Linux focused on reliable hi-res playback and desktop integration.
     </p>
-    <p>Features:</p>
     <ul>
       <li>Bit-perfect playback up to 24-bit/192kHz</li>
       <li>PipeWire and PulseAudio audio output</li>
@@ -23,6 +22,10 @@
   <url type="vcs-browser">https://github.com/vicrodh/qbz</url>
   <metadata_license>CC0-1.0</metadata_license>
   <project_license>MIT</project_license>
+  <branding>
+    <color type="primary" scheme_preference="light">#2b6cb0</color>
+    <color type="primary" scheme_preference="dark">#63b3ed</color>
+  </branding>
   <categories>
     <category>AudioVideo</category>
     <category>Audio</category>
@@ -44,19 +47,24 @@
   <content_rating type="oars-1.1" />
   <screenshots>
     <screenshot type="default">
-      <caption>Home and discovery view</caption>
+      <caption xml:lang="en">Home and discovery view</caption>
       <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5d47f3b44568af93679e17f07d2b836999/packaging/flatpak/screenshots/home-discover.png</image>
     </screenshot>
     <screenshot>
-      <caption>Immersive cover flow mode</caption>
+      <caption xml:lang="en">Immersive cover flow mode</caption>
       <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5d47f3b44568af93679e17f07d2b836999/packaging/flatpak/screenshots/immersive-cover-flow.png</image>
     </screenshot>
     <screenshot>
-      <caption>Local library view</caption>
+      <caption xml:lang="en">Local library view</caption>
       <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5d47f3b44568af93679e17f07d2b836999/packaging/flatpak/screenshots/local-library.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.1.15" date="2026-02-23">
+      <description>
+        <p>Multi-select tracks across all views (Album, Artist, Playlist, Favorites, Label, Daily/Weekly/Fav/Top mixes) with bulk queue and playlist actions. Scroll position now scoped per item and expires after one hour.</p>
+      </description>
+    </release>
     <release version="1.1.11" date="2026-02-10">
       <description>
         <p>Discover browse pages for albums and playlists, localized playlist tags, preserved Qobuz artwork on playlist copy, and UI fixes.</p>

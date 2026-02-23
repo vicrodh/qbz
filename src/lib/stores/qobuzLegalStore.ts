@@ -27,7 +27,7 @@ export async function loadTosAcceptance(): Promise<boolean> {
     if (localValue) {
       // Migrate to Rust storage
       try {
-        await invoke('set_qobuz_tos_accepted', { accepted: true });
+        await invoke('v2_set_qobuz_tos_accepted', { accepted: true });
         qobuzTosAccepted.set(true);
         localStorage.removeItem('qbz-qobuz-tos-accepted');
         console.log('Migrated ToS acceptance to Rust storage');
@@ -48,7 +48,7 @@ export async function setTosAcceptance(accepted: boolean): Promise<void> {
   if (!browser) return;
 
   try {
-    await invoke('set_qobuz_tos_accepted', { accepted });
+    await invoke('v2_set_qobuz_tos_accepted', { accepted });
     qobuzTosAccepted.set(accepted);
   } catch (err) {
     console.error('Failed to save ToS acceptance:', err);
@@ -72,7 +72,7 @@ if (browser) {
     lastValue = value;
 
     // Persist to Rust (fire and forget, errors logged in setTosAcceptance)
-    invoke('set_qobuz_tos_accepted', { accepted: value }).catch((err) => {
+    invoke('v2_set_qobuz_tos_accepted', { accepted: value }).catch((err) => {
       console.debug('Failed to persist ToS acceptance:', err);
     });
   });

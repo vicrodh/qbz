@@ -34,7 +34,8 @@
     onPlayFromHere?: () => void;
     onPlayNext?: () => void;
     onPlayLater?: () => void;
-    onCreateRadio?: () => void;
+    onCreateQbzRadio?: () => void;
+    onCreateQobuzRadio?: () => void;
     onAddFavorite?: () => void;
     onAddToPlaylist?: () => void;
     onRemoveFromPlaylist?: () => void;
@@ -48,6 +49,8 @@
     isTrackDownloaded?: boolean;
     onReDownload?: () => void;
     onRemoveDownload?: () => void;
+    contextMenuPosition?: { x: number; y: number } | null;
+    onContextMenuClosed?: () => void;
   }
 
   let {
@@ -56,7 +59,8 @@
     onPlayFromHere,
     onPlayNext,
     onPlayLater,
-    onCreateRadio,
+    onCreateQbzRadio,
+    onCreateQobuzRadio,
     onAddFavorite,
     onAddToPlaylist,
     onRemoveFromPlaylist,
@@ -69,7 +73,9 @@
     onDownload,
     isTrackDownloaded = false,
     onReDownload,
-    onRemoveDownload
+    onRemoveDownload,
+    contextMenuPosition = null,
+    onContextMenuClosed
   }: Props = $props();
 
   const menuId = allocateTrackMenuId();
@@ -88,7 +94,15 @@
   let menuStyle = $state('');
   let submenuStyle = $state('');
   let downloadSubmenuStyle = $state('');
+  let radioOpen = $state(false);
+  let radioTriggerRef = $state<HTMLDivElement | null>(null);
+  let radioSubmenuEl = $state<HTMLDivElement | null>(null);
+  let radioSubmenuStyle = $state('');
   let isHoveringAnyMenu = $state(false);
+  let isHoveringShareSubmenu = $state(false);
+  let isHoveringDownloadSubmenu = $state(false);
+  let isHoveringRadioSubmenu = $state(false);
+  let contextMode = $state(false);
 
   // Portal action - moves element to body to escape stacking context
   function portal(node: HTMLElement) {
@@ -102,7 +116,8 @@
     };
   }
 
-  const hasPlayback = $derived(!!(onPlayNow || onPlayTrackOnly || onPlayFromHere || onPlayNext || onPlayLater || onCreateRadio));
+  const hasRadio = $derived(!!(onCreateQbzRadio || onCreateQobuzRadio));
+  const hasPlayback = $derived(!!(onPlayNow || onPlayTrackOnly || onPlayFromHere || onPlayNext || onPlayLater || hasRadio));
   const hasLibrary = $derived(!!(onAddFavorite || onAddToPlaylist || onRemoveFromPlaylist || onFindReplacement));
   const hasShare = $derived(!!(onShareQobuz || onShareSonglink));
   const hasDownload = $derived(!!onDownload || isTrackDownloaded);
@@ -113,6 +128,14 @@
     isOpen = false;
     shareOpen = false;
     downloadOpen = false;
+    radioOpen = false;
+    isHoveringShareSubmenu = false;
+    isHoveringDownloadSubmenu = false;
+    isHoveringRadioSubmenu = false;
+    if (contextMode) {
+      contextMode = false;
+      onContextMenuClosed?.();
+    }
     if (options?.clearActive !== false && getActiveTrackMenuId() === menuId) {
       setActiveTrackMenuId(null);
     }
@@ -123,13 +146,29 @@
     isOpen = true;
     shareOpen = false;
     downloadOpen = false;
-    await setMenuPosition();
+    radioOpen = false;
+    if (!contextMode) {
+      await setMenuPosition();
+    }
   }
 
   function handleClickOutside(event: Event) {
     const target = event.target as Node | null;
     if (!target) return;
-    // Check if click is outside both the trigger container and the menu (which is in portal)
+
+    // In context mode, ANY click anywhere dismisses the menu (standard OS behavior).
+    if (contextMode) {
+      const isInsideMenu = (menuEl && menuEl.contains(target))
+        || (submenuEl && submenuEl.contains(target))
+        || (downloadSubmenuEl && downloadSubmenuEl.contains(target))
+        || (radioSubmenuEl && radioSubmenuEl.contains(target));
+      if (!isInsideMenu) {
+        closeMenu();
+      }
+      return;
+    }
+
+    // Trigger-button mode: check if click is outside both the trigger container and the menu (which is in portal)
     const isOutsideTrigger = menuRef && !menuRef.contains(target);
     const isOutsideMenu = menuEl && !menuEl.contains(target);
     const isOutsideSubmenu = submenuEl && !submenuEl.contains(target);
@@ -179,6 +218,29 @@
     const arrowTop = Math.max(arrowPadding, Math.min(menuRect.height - arrowPadding, arrowTopUnclamped));
 
     menuStyle = `left: ${left}px; top: ${top}px; --arrow-top: ${arrowTop}px;`;
+  }
+
+  async function setMenuPositionAtPoint(x: number, y: number) {
+    await tick();
+    if (!menuEl) return;
+
+    const menuRect = menuEl.getBoundingClientRect();
+    const padding = 8;
+
+    let left = x;
+    let top = y;
+
+    if (left + menuRect.width > window.innerWidth - padding) {
+      left = Math.max(padding, window.innerWidth - menuRect.width - padding);
+    }
+    if (left < padding) left = padding;
+
+    if (top + menuRect.height > window.innerHeight - padding) {
+      top = Math.max(padding, window.innerHeight - menuRect.height - padding);
+    }
+    if (top < padding) top = padding;
+
+    menuStyle = `left: ${left}px; top: ${top}px;`;
   }
 
   async function setSubmenuPosition() {
@@ -239,6 +301,35 @@
     downloadSubmenuStyle = `left: ${left}px; top: ${top}px;`;
   }
 
+  async function setRadioSubmenuPosition() {
+    await tick();
+    if (!radioTriggerRef || !radioSubmenuEl) return;
+
+    const triggerRect = radioTriggerRef.getBoundingClientRect();
+    const submenuRect = radioSubmenuEl.getBoundingClientRect();
+    const padding = 8;
+
+    const spaceRight = window.innerWidth - triggerRect.right;
+    const openRight = spaceRight >= submenuRect.width + padding;
+
+    let left = openRight
+      ? triggerRect.right + 6
+      : triggerRect.left - submenuRect.width - 6;
+    let top = triggerRect.top - 6;
+
+    if (left < padding) left = padding;
+    if (left + submenuRect.width > window.innerWidth - padding) {
+      left = Math.max(padding, window.innerWidth - submenuRect.width - padding);
+    }
+
+    if (top + submenuRect.height > window.innerHeight - padding) {
+      top = window.innerHeight - submenuRect.height - padding;
+    }
+    if (top < padding) top = padding;
+
+    radioSubmenuStyle = `left: ${left}px; top: ${top}px;`;
+  }
+
   function handleAction(action?: () => void) {
     if (!action) return;
     action();
@@ -255,10 +346,44 @@
   });
 
   $effect(() => {
+    const pos = contextMenuPosition;
+    if (pos && hasMenu) {
+      contextMode = true;
+      void openMenu().then(() => setMenuPositionAtPoint(pos.x, pos.y));
+    }
+  });
+
+  // Auto-close Share submenu after 1s of inactivity (not hovering it).
+  $effect(() => {
+    if (!shareOpen) return;
+    if (isHoveringShareSubmenu) return;
+    const timer = setTimeout(() => { shareOpen = false; }, 1000);
+    return () => clearTimeout(timer);
+  });
+
+  // Auto-close Download submenu after 1s of inactivity (not hovering it).
+  $effect(() => {
+    if (!downloadOpen) return;
+    if (isHoveringDownloadSubmenu) return;
+    const timer = setTimeout(() => { downloadOpen = false; }, 1000);
+    return () => clearTimeout(timer);
+  });
+
+  // Auto-close Radio submenu after 1s of inactivity (not hovering it).
+  $effect(() => {
+    if (!radioOpen) return;
+    if (isHoveringRadioSubmenu) return;
+    const timer = setTimeout(() => { radioOpen = false; }, 1000);
+    return () => clearTimeout(timer);
+  });
+
+  $effect(() => {
     if (isOpen) {
       // Ensure position + openSide classes are applied even if the initial openMenu()
       // call returns early due to timing.
-      setMenuPosition();
+      if (!contextMode) {
+        setMenuPosition();
+      }
 
       // Use capture phase so stopPropagation in other UI doesn't prevent close.
       // Register multiple event types for better cross-platform reliability.
@@ -266,10 +391,12 @@
       document.addEventListener('pointerdown', handleClickOutside, outsideListenerOptions);
       document.addEventListener('mousedown', handleClickOutside, outsideListenerOptions);
       document.addEventListener('touchstart', handleClickOutside, outsideListenerOptions);
+      document.addEventListener('contextmenu', handleClickOutside, outsideListenerOptions);
 
       // Auto-close after inactivity when the cursor is not hovering any menu/submenu.
+      // Context menus use half the idle timeout for snappier dismissal.
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
-      const idleMs = MENU_INACTIVITY_TIMEOUT;
+      const idleMs = contextMode ? MENU_INACTIVITY_TIMEOUT / 2 : MENU_INACTIVITY_TIMEOUT;
 
       const scheduleIdleClose = () => {
         if (idleTimer) clearTimeout(idleTimer);
@@ -296,11 +423,16 @@
       window.addEventListener('wheel', onAnyActivity, true);
       window.addEventListener('keydown', onAnyActivity, true);
 
-      const handleResize = () => setMenuPosition();
+      const handleResize = () => {
+        if (contextMode) { closeMenu(); return; }
+        setMenuPosition();
+      };
       const handleScroll = () => {
+        if (contextMode) { closeMenu(); return; }
         setMenuPosition();
         if (shareOpen) setSubmenuPosition();
         if (downloadOpen) setDownloadSubmenuPosition();
+        if (radioOpen) setRadioSubmenuPosition();
       };
 
       window.addEventListener('resize', handleResize);
@@ -309,6 +441,7 @@
         document.removeEventListener('pointerdown', handleClickOutside, outsideListenerOptions);
         document.removeEventListener('mousedown', handleClickOutside, outsideListenerOptions);
         document.removeEventListener('touchstart', handleClickOutside, outsideListenerOptions);
+        document.removeEventListener('contextmenu', handleClickOutside, outsideListenerOptions);
         window.removeEventListener('pointermove', onAnyActivity, true);
         window.removeEventListener('wheel', onAnyActivity, true);
         window.removeEventListener('keydown', onAnyActivity, true);
@@ -348,6 +481,7 @@
         class="menu"
         class:open-left={openSide === 'left'}
         class:open-right={openSide === 'right'}
+        class:context-mode={contextMode}
         bind:this={menuEl}
         style={menuStyle}
         use:portal
@@ -386,11 +520,51 @@
                 <span>Add to queue</span>
               </button>
             {/if}
-            {#if onCreateRadio}
-              <button class="menu-item" onclick={() => handleAction(onCreateRadio)}>
-                <Radio size={14} />
-                <span>Create radio</span>
-              </button>
+            {#if hasRadio}
+              {#if onCreateQbzRadio && onCreateQobuzRadio}
+                <div
+                  class="menu-item submenu-trigger"
+                  bind:this={radioTriggerRef}
+                  onmouseenter={() => {
+                    radioOpen = true;
+                    shareOpen = false;
+                    downloadOpen = false;
+                    setRadioSubmenuPosition();
+                  }}
+                  onclick={() => {
+                    radioOpen = !radioOpen;
+                    if (radioOpen) { shareOpen = false; downloadOpen = false; }
+                    if (radioOpen) setRadioSubmenuPosition();
+                  }}
+                >
+                  <Radio size={14} />
+                  <span>Create radio</span>
+                  <ChevronRight size={14} class="chevron" />
+                  {#if radioOpen}
+                    <div
+                      class="submenu"
+                      bind:this={radioSubmenuEl}
+                      style={radioSubmenuStyle}
+                      onmouseenter={() => { isHoveringRadioSubmenu = true; }}
+                      onmouseleave={() => { isHoveringRadioSubmenu = false; }}
+                    >
+                      <button class="menu-item" onclick={() => handleAction(onCreateQbzRadio)}>
+                        <Radio size={14} />
+                        <span>QBZ Radio</span>
+                      </button>
+                      <button class="menu-item" onclick={() => handleAction(onCreateQobuzRadio)}>
+                        <Radio size={14} />
+                        <span>Qobuz Radio</span>
+                      </button>
+                    </div>
+                  {/if}
+                </div>
+              {:else}
+                <button class="menu-item" onclick={() => handleAction(onCreateQbzRadio || onCreateQobuzRadio)}>
+                  <Radio size={14} />
+                  <span>Create radio</span>
+                </button>
+              {/if}
             {/if}
           {/if}
 
@@ -435,10 +609,13 @@
               bind:this={shareTriggerRef}
               onmouseenter={() => {
                 shareOpen = true;
+                downloadOpen = false;
+                radioOpen = false;
                 setSubmenuPosition();
               }}
               onclick={() => {
                 shareOpen = !shareOpen;
+                if (shareOpen) { downloadOpen = false; radioOpen = false; }
                 if (shareOpen) setSubmenuPosition();
               }}
             >
@@ -446,7 +623,13 @@
               <span>Share</span>
               <ChevronRight size={14} class="chevron" />
               {#if shareOpen}
-                <div class="submenu" bind:this={submenuEl} style={submenuStyle}>
+                <div
+                  class="submenu"
+                  bind:this={submenuEl}
+                  style={submenuStyle}
+                  onmouseenter={() => { isHoveringShareSubmenu = true; }}
+                  onmouseleave={() => { isHoveringShareSubmenu = false; }}
+                >
                   {#if onShareQobuz}
                     <button class="menu-item" onclick={() => handleAction(onShareQobuz)}>
                       <Link size={14} />
@@ -476,11 +659,12 @@
                 onmouseenter={() => {
                   downloadOpen = true;
                   shareOpen = false;
+                  radioOpen = false;
                   setDownloadSubmenuPosition();
                 }}
                 onclick={() => {
                   downloadOpen = !downloadOpen;
-                  shareOpen = false;
+                  if (downloadOpen) { shareOpen = false; radioOpen = false; }
                   if (downloadOpen) setDownloadSubmenuPosition();
                 }}
               >
@@ -488,7 +672,13 @@
                 <span>Make available offline</span>
                 <ChevronRight size={14} class="chevron" />
                 {#if downloadOpen}
-                  <div class="submenu" bind:this={downloadSubmenuEl} style={downloadSubmenuStyle}>
+                  <div
+                    class="submenu"
+                    bind:this={downloadSubmenuEl}
+                    style={downloadSubmenuStyle}
+                    onmouseenter={() => { isHoveringDownloadSubmenu = true; }}
+                    onmouseleave={() => { isHoveringDownloadSubmenu = false; }}
+                  >
                     {#if onReDownload}
                       <button class="menu-item" onclick={() => handleAction(onReDownload)}>
                         <RefreshCw size={14} />
@@ -640,6 +830,11 @@
   .menu.open-left::after,
   .menu.open-right::after {
     z-index: 1;
+  }
+
+  .menu.context-mode::after,
+  .menu.context-mode::before {
+    display: none;
   }
 
   .menu-item {

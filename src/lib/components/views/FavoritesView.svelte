@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { invoke } from '@tauri-apps/api/core';
+  import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { onMount, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
-  import { Heart, Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, Star, Folder, Library, CloudDownload, Shuffle, MoreHorizontal, PanelLeftClose, Loader2, ArrowLeft } from 'lucide-svelte';
+  import { Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, CloudDownload, Shuffle, MoreHorizontal, PanelLeftClose, Loader2, ArrowLeft, CheckSquare } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import QualityBadge from '../QualityBadge.svelte';
@@ -13,6 +14,7 @@
   import VirtualizedFavoritesAlbumGrid from '../VirtualizedFavoritesAlbumGrid.svelte';
   import FavoritePlaylistCard from '../FavoritePlaylistCard.svelte';
   import FavoritesEditModal from '../FavoritesEditModal.svelte';
+  import BulkActionBar from '../BulkActionBar.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
@@ -32,6 +34,7 @@
   import { saveScrollPosition, getSavedScrollPosition, getActiveView } from '$lib/stores/navigationStore';
 
   const GENRE_CONTEXT: GenreFilterContext = 'favorites';
+  const GENRE_CONTEXT_TRACKS: GenreFilterContext = 'favorites-tracks';
 
   interface FavoriteAlbum {
     id: string;
@@ -51,7 +54,7 @@
     duration: number;
     track_number: number;
     performer?: { id?: number; name: string };
-    album?: { id: string; title: string; image: { small?: string; thumbnail?: string; large?: string } };
+    album?: { id: string; title: string; image: { small?: string; thumbnail?: string; large?: string }; genre?: { name: string } };
     hires: boolean;
     maximum_bit_depth?: number;
     maximum_sampling_rate?: number;
@@ -101,6 +104,8 @@
     onTrackDownload?: (track: DisplayTrack) => void;
     onTrackRemoveDownload?: (trackId: number) => void;
     onTrackReDownload?: (track: DisplayTrack) => void;
+    onTrackCreateQbzRadio?: (trackId: number, trackTitle: string, artistId?: number) => void;
+    onTrackCreateQobuzRadio?: (trackId: number, trackTitle: string) => void;
     getTrackOfflineCacheStatus?: (trackId: number) => { status: OfflineCacheStatus; progress: number };
     onPlaylistSelect?: (playlistId: number) => void;
     onPlaylistPlay?: (playlistId: number) => void;
@@ -110,6 +115,7 @@
     onPlaylistShareQobuz?: (playlistId: number) => void;
     selectedTab?: TabType;
     onTabNavigate?: (tab: TabType) => void;
+    onRandomArtist?: (artistId: number) => void;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
   }
@@ -158,6 +164,8 @@
     onTrackDownload,
     onTrackRemoveDownload,
     onTrackReDownload,
+    onTrackCreateQbzRadio,
+    onTrackCreateQobuzRadio,
     getTrackOfflineCacheStatus,
     onPlaylistSelect,
     onPlaylistPlay,
@@ -167,6 +175,7 @@
     onPlaylistShareQobuz,
     selectedTab,
     onTabNavigate,
+    onRandomArtist,
     activeTrackId = null,
     isPlaybackActive = false
   }: Props = $props();
@@ -234,6 +243,56 @@
   let artistSearch = $state('');
   let playlistSearch = $state('');
   let searchExpanded = $state(false);
+
+  // Multi-select (tracks tab)
+  let trackSelectMode = $state(false);
+  let selectedTrackIds = $state(new Set<number>());
+
+  function toggleTrackSelectMode() {
+    trackSelectMode = !trackSelectMode;
+    if (!trackSelectMode) selectedTrackIds = new Set();
+  }
+
+  function toggleTrackSelect(id: number) {
+    const next = new Set(selectedTrackIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    selectedTrackIds = next;
+  }
+
+  async function handleBulkPlayNext() {
+    const selected = filteredTracks.filter(trk => selectedTrackIds.has(trk.id));
+    const tracks = buildFavoritesQueueTracks(selected);
+    await invoke('v2_add_tracks_to_queue_next', { tracks });
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  async function handleBulkPlayLater() {
+    const selected = filteredTracks.filter(trk => selectedTrackIds.has(trk.id));
+    const tracks = buildFavoritesQueueTracks(selected);
+    await invoke('v2_add_tracks_to_queue', { tracks });
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  async function handleBulkAddToPlaylist() {
+    for (const id of selectedTrackIds) {
+      onTrackAddToPlaylist?.(id);
+    }
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  async function handleBulkRemoveFavorites() {
+    for (const id of selectedTrackIds) {
+      await invoke('v2_remove_favorite', { favType: 'track', itemId: String(id) });
+      await invoke('v2_uncache_favorite_track', { trackId: id });
+    }
+    // Refresh favorites list
+    await loadTabIfNeeded('tracks');
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
 
   let albumViewMode = $state<'grid' | 'list'>('grid');
   type AlbumGroupMode = 'alpha' | 'artist';
@@ -367,18 +426,6 @@
   }
 
   let showTracksContextMenu = $state(false);
-  function resolveCustomIconSrc(path: string | null): string | null {
-    if (!path) return null;
-    if (path.startsWith('asset://') || path.startsWith('http://asset.localhost') || path.startsWith('https://asset.localhost')) {
-      return path;
-    }
-    if (path.startsWith('file://')) {
-      return path;
-    }
-    return convertFileSrc(path);
-  }
-
-  let customIconSrc = $derived.by(() => resolveCustomIconSrc(favoritesPreferences.custom_icon_path));
 
   async function scrollToTrack(trackId: number) {
     await tick();
@@ -388,9 +435,22 @@
 
   // Filtered lists based on search
   let filteredTracks = $derived.by(() => {
-    if (!trackSearch.trim()) return favoriteTracks;
+    void genreFilterVersion;
+
+    let tracks = favoriteTracks;
+
+    const filterGenreNames = getFilterGenreNames(GENRE_CONTEXT_TRACKS);
+    if (filterGenreNames.length > 0) {
+      tracks = tracks.filter(track =>
+        track.album?.genre && filterGenreNames.some(genreName =>
+          track.album!.genre!.name.toLowerCase().includes(genreName.toLowerCase())
+        )
+      );
+    }
+
+    if (!trackSearch.trim()) return tracks;
     const query = trackSearch.toLowerCase();
-    return favoriteTracks.filter(track =>
+    return tracks.filter(track =>
       track.title.toLowerCase().includes(query) ||
       track.performer?.name?.toLowerCase().includes(query) ||
       track.album?.title?.toLowerCase().includes(query)
@@ -571,7 +631,7 @@
 
   async function loadFavoritesPreferences() {
     try {
-      const prefs = await invoke<FavoritesPreferences>('get_favorites_preferences');
+      const prefs = await invoke<FavoritesPreferences>('v2_get_favorites_preferences');
       favoritesPreferences = {
         ...prefs,
         tab_order: normalizeFavoritesTabOrder(prefs.tab_order)
@@ -645,7 +705,7 @@
     const collected: any[] = [];
 
     while (page < FAVORITES_MAX_PAGES) {
-      const result = await invoke<any>('get_favorites', {
+      const result = await invoke<any>('v2_get_favorites', {
         favType: type,
         limit: FAVORITES_PAGE_SIZE,
         offset
@@ -712,7 +772,7 @@
     error = null;
     try {
       // Get IDs of favorited playlists from local DB
-      const favoriteIds = await invoke<number[]>('playlist_get_favorites');
+      const favoriteIds = await invoke<number[]>('v2_playlist_get_favorites');
       if (favoriteIds.length === 0) {
         favoritePlaylists = [];
         return;
@@ -721,7 +781,7 @@
       const playlists: FavoritePlaylist[] = [];
       for (const id of favoriteIds) {
         try {
-          const playlist = await invoke<FavoritePlaylist>('get_playlist', { playlistId: id });
+          const playlist = await invoke<FavoritePlaylist>('v2_get_playlist', { playlistId: id });
           playlists.push(playlist);
         } catch (err) {
           console.warn(`Failed to load playlist ${id}:`, err);
@@ -889,6 +949,17 @@
     }));
   }
 
+  function withCustomImages(artists: FavoriteArtist[]): FavoriteArtist[] {
+    return artists.map(artist => {
+      const defaultUrl = artist.image?.large || artist.image?.thumbnail || artist.image?.small || '';
+      const resolved = resolveArtistImage(artist.name, defaultUrl);
+      if (resolved !== defaultUrl) {
+        return { ...artist, image: { large: resolved, thumbnail: resolved, small: resolved } };
+      }
+      return artist;
+    });
+  }
+
   function groupArtists(items: FavoriteArtist[]) {
     const prefix = 'artist-alpha';
     const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
@@ -1047,6 +1118,8 @@
   const getFavoriteTrackDuration = (trk: FavoriteTrack) => trk.duration;
   const getFavoriteTrackAlbumKey = (trk: FavoriteTrack) => trk.album?.id;
   const getFavoriteTrackAlbum = (trk: FavoriteTrack) => trk.album?.title;
+  const getFavoriteTrackArtworkUrl = (trk: FavoriteTrack) =>
+    trk.album?.image?.small ?? trk.album?.image?.thumbnail;
   const getFavoriteArtistId = (trk: FavoriteTrack) => trk.performer?.id;
   const getFavoriteAlbumId = (trk: FavoriteTrack) => trk.album?.id;
 
@@ -1082,7 +1155,7 @@
   async function setFavoritesQueue(startIndex: number) {
     if (filteredTracks.length === 0) return;
     const queueTracks = buildFavoritesQueueTracks(filteredTracks);
-    await invoke('set_queue', { tracks: queueTracks, startIndex });
+    await invoke('v2_set_queue', { tracks: queueTracks, startIndex });
   }
 
   async function handleTrackClick(track: FavoriteTrack, index: number) {
@@ -1119,7 +1192,7 @@
       // Shuffle the tracks
       const shuffled = [...filteredTracks].sort(() => Math.random() - 0.5);
       const queueTracks = buildFavoritesQueueTracks(shuffled);
-      await invoke('set_queue', { tracks: queueTracks, startIndex: 0 });
+      await invoke('v2_set_queue', { tracks: queueTracks, startIndex: 0 });
       await setFavoritesContext(shuffled.map(trk => trk.id), 0);
       onTrackPlay(buildDisplayTrack(shuffled[0], 0));
     } catch (err) {
@@ -1127,12 +1200,24 @@
     }
   }
 
+  function handleRandomAlbum() {
+    if (filteredAlbums.length === 0 || !onAlbumPlay) return;
+    const idx = Math.floor(Math.random() * filteredAlbums.length);
+    onAlbumPlay(String(filteredAlbums[idx].id));
+  }
+
+  function handleRandomArtist() {
+    if (filteredArtists.length === 0 || !onRandomArtist) return;
+    const idx = Math.floor(Math.random() * filteredArtists.length);
+    onRandomArtist(filteredArtists[idx].id);
+  }
+
   async function handlePlayAllTracksNext() {
     if (filteredTracks.length === 0) return;
 
     try {
       const queueTracks = buildFavoritesQueueTracks(filteredTracks);
-      await invoke('add_to_queue_next', { tracks: queueTracks });
+      await invoke('v2_add_tracks_to_queue_next', { tracks: queueTracks });
     } catch (err) {
       console.error('Failed to add tracks next:', err);
     }
@@ -1143,7 +1228,7 @@
 
     try {
       const queueTracks = buildFavoritesQueueTracks(filteredTracks);
-      await invoke('add_to_queue', { tracks: queueTracks });
+      await invoke('v2_add_tracks_to_queue', { tracks: queueTracks });
     } catch (err) {
       console.error('Failed to add tracks to queue:', err);
     }
@@ -1166,64 +1251,70 @@
   </div>
   <!-- Header -->
   <div class="header">
-    <div
-      class="header-icon"
-      style={favoritesPreferences.icon_background ? `background: ${favoritesPreferences.icon_background};` : ''}
-    >
-      {#if customIconSrc}
-        <img
-          src={customIconSrc}
-          alt="Custom Icon"
-          class="custom-icon-img"
-        />
-      {:else if favoritesPreferences.custom_icon_preset}
-        {#if favoritesPreferences.custom_icon_preset === 'heart'}
-          <Heart size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
-        {:else if favoritesPreferences.custom_icon_preset === 'star'}
-          <svelte:component this={Star} size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
-        {:else if favoritesPreferences.custom_icon_preset === 'music'}
-          <Music size={32} color="var(--accent-primary)" />
-        {:else if favoritesPreferences.custom_icon_preset === 'folder'}
-          <svelte:component this={Folder} size={32} color="var(--accent-primary)" />
-        {:else if favoritesPreferences.custom_icon_preset === 'disc'}
-          <Disc3 size={32} color="var(--accent-primary)" />
-        {:else if favoritesPreferences.custom_icon_preset === 'library'}
-          <svelte:component this={Library} size={32} color="var(--accent-primary)" />
-        {/if}
+    <h1>{$t('favorites.title')}</h1>
+    {#if activeTab === 'tracks' && !loading && filteredTracks.length > 0}
+      <div class="header-actions">
+        <button class="action-btn-circle" onclick={handlePlayAllTracks} title={$t('actions.playAll')}>
+          <Play size={18} fill="currentColor" color="currentColor" />
+        </button>
+        <button class="action-btn-circle" onclick={handleShuffleAllTracks} title={$t('actions.shuffle')}>
+          <Shuffle size={18} />
+        </button>
+        <div class="context-menu-wrapper">
+          <button
+            class="action-btn-circle"
+            onclick={() => showTracksContextMenu = !showTracksContextMenu}
+            title={$t('actions.more')}
+          >
+            <MoreHorizontal size={18} />
+          </button>
+          {#if showTracksContextMenu}
+            <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
+            <div class="context-menu">
+              <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
+                {$t('actions.playNext')}
+              </button>
+              <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
+                {$t('actions.addToQueue')}
+              </button>
+            </div>
+          {/if}
+        </div>
+      </div>
+    {/if}
+    {#if activeTab === 'albums' && !loading && filteredAlbums.length > 0}
+      <div class="header-actions">
+        <button class="action-btn-circle" onclick={handleRandomAlbum} title={$t('favorites.randomAlbum')}>
+          <Shuffle size={18} />
+        </button>
+      </div>
+    {/if}
+    {#if activeTab === 'artists' && !loading && filteredArtists.length > 0}
+      <div class="header-actions">
+        <button class="action-btn-circle" onclick={handleRandomArtist} title={$t('favorites.randomArtist')}>
+          <Shuffle size={18} />
+        </button>
+      </div>
+    {/if}
+    <div class="header-search">
+      {#if !searchExpanded}
+        <button class="search-icon-btn" onclick={() => searchExpanded = true} title={$t('nav.search')}>
+          <Search size={16} />
+        </button>
       {:else}
-        <Heart size={32} fill="var(--accent-primary)" color="var(--accent-primary)" />
-      {/if}
-    </div>
-    <div class="header-content">
-      <h1>{$t('favorites.title')}</h1>
-      {#if activeTab === 'tracks' && !loading && filteredTracks.length > 0}
-        <div class="header-actions">
-          <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title={$t('actions.playAll')}>
-            <Play size={20} fill="currentColor" color="currentColor" />
+        <div class="search-expanded">
+          <Search size={16} class="search-icon-inline" />
+          <input
+            type="text"
+            placeholder={$t('placeholders.search')}
+            value={getCurrentSearchValue()}
+            oninput={(e) => setCurrentSearchValue(e.currentTarget.value)}
+            class="search-input-inline"
+            autofocus
+          />
+          <button class="search-clear-btn" onclick={() => { clearCurrentSearch(); searchExpanded = false; }} title={$t('actions.close')}>
+            <X size={14} />
           </button>
-          <button class="action-btn-circle" onclick={handleShuffleAllTracks} title={$t('actions.shuffle')}>
-            <Shuffle size={18} />
-          </button>
-          <div class="context-menu-wrapper">
-            <button
-              class="action-btn-circle"
-              onclick={() => showTracksContextMenu = !showTracksContextMenu}
-              title={$t('actions.more')}
-            >
-              <MoreHorizontal size={18} />
-            </button>
-            {#if showTracksContextMenu}
-              <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
-              <div class="context-menu">
-                <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
-                  {$t('actions.playNext')}
-                </button>
-                <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
-                  {$t('actions.addToQueue')}
-                </button>
-              </div>
-            {/if}
-          </div>
         </div>
       {/if}
     </div>
@@ -1244,35 +1335,18 @@
       {/each}
     </div>
     <div class="nav-right">
-      {#if !searchExpanded}
-        <button class="search-icon-btn" onclick={() => searchExpanded = true} title={$t('nav.search')}>
-          <Search size={16} />
-        </button>
-      {:else}
-        <div class="search-expanded">
-          <Search size={16} class="search-icon-inline" />
-          <input
-            type="text"
-            placeholder={$t('placeholders.search')}
-            value={getCurrentSearchValue()}
-            oninput={(e) => setCurrentSearchValue(e.currentTarget.value)}
-            class="search-input-inline"
-            autofocus
-          />
-          {#if getCurrentSearchValue()}
-            <button class="search-clear-btn" onclick={clearCurrentSearch} title={$t('actions.clear')}>
-              <X size={14} />
-            </button>
-          {/if}
-        </div>
-      {/if}
-    </div>
-  </div>
-
-  <!-- Toolbar with actions -->
-  <div class="toolbar">
-    {#if activeTab === 'albums'}
-      <div class="toolbar-controls">
+      <span class="results-count">
+        {#if activeTab === 'tracks'}
+          {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} tracks
+        {:else if activeTab === 'albums'}
+          {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} albums
+        {:else if activeTab === 'artists'}
+          {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} artists
+        {:else}
+          {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} playlists
+        {/if}
+      </span>
+      {#if activeTab === 'albums'}
         <GenreFilterButton context={GENRE_CONTEXT} variant="control" align="right" onFilterChange={handleGenreFilterChange} />
         <div class="dropdown-container">
           <button class="control-btn" onclick={() => (showAlbumGroupMenu = !showAlbumGroupMenu)}>
@@ -1344,9 +1418,16 @@
             <LayoutGrid size={16} />
           {/if}
         </button>
-      </div>
-    {:else if activeTab === 'tracks'}
-      <div class="toolbar-controls">
+      {:else if activeTab === 'tracks'}
+        <button
+          class="control-btn icon-only"
+          class:active={trackSelectMode}
+          onclick={toggleTrackSelectMode}
+          title={trackSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+        >
+          <CheckSquare size={16} />
+        </button>
+        <GenreFilterButton context={GENRE_CONTEXT_TRACKS} variant="control" align="right" onFilterChange={handleGenreFilterChange} />
         <div class="dropdown-container">
           <button class="control-btn" onclick={() => (showTrackGroupMenu = !showTrackGroupMenu)}>
             <span>
@@ -1393,10 +1474,7 @@
             </div>
           {/if}
         </div>
-      </div>
-    {:else if activeTab === 'artists'}
-      <div class="toolbar-controls">
-        <!-- Single toggle button: Grid <-> Browse (sidepanel) -->
+      {:else if activeTab === 'artists'}
         <button
           class="control-btn icon-only"
           onclick={() => {
@@ -1441,70 +1519,57 @@
             {/if}
           </div>
         {/if}
-      </div>
-    {/if}
-
-    <!-- Alpha Index inline for artists in Browse (sidepanel) view -->
-    {#if activeTab === 'artists' && artistViewMode === 'sidepanel' && filteredArtists.length > 0}
-      {@const groupedArtistsForIndex = groupArtists(filteredArtists)}
-      {@const artistAlphaGroupsForIndex = new Set(groupedArtistsForIndex.map(group => group.key))}
-      <div class="alpha-index-inline">
-        {#each alphaIndexLetters as letter}
-          <button
-            class="alpha-letter"
-            class:disabled={!artistAlphaGroupsForIndex.has(letter)}
-            onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroupsForIndex)}
-          >
-            {letter}
-          </button>
-        {/each}
-      </div>
-    {/if}
-
-    <!-- Alpha Index (inline in toolbar for tracks when grouping by name or artist) -->
-    {#if activeTab === 'tracks' && !loading && trackGroupingEnabled && (trackGroupMode === 'name' || trackGroupMode === 'artist')}
-      {@const groupedTracks = groupTracks(filteredTracks, trackGroupMode)}
-      {@const trackIndexTargets = trackGroupMode === 'artist'
-        ? (() => {
-            const map = new Map<string, string>();
-            for (const group of groupedTracks) {
-              const letter = alphaGroupKey(group.title);
-              if (!map.has(letter)) {
-                map.set(letter, group.id);
-              }
-            }
-            return map;
-          })()
-        : new Map<string, string>()}
-      {@const trackAlphaGroups = trackGroupMode === 'name'
-        ? new Set(groupedTracks.map(group => group.key))
-        : new Set(trackIndexTargets.keys())}
-      <div class="alpha-index-inline">
-        {#each alphaIndexLetters as letter}
-          <button
-            class="alpha-letter"
-            class:disabled={!trackAlphaGroups.has(letter)}
-            onclick={() => scrollToTrackGroup(letter, trackAlphaGroups, trackIndexTargets)}
-          >
-            {letter}
-          </button>
-        {/each}
-      </div>
-    {/if}
-
-    <!-- Results count -->
-    <span class="results-count">
-      {#if activeTab === 'tracks'}
-        {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} tracks
-      {:else if activeTab === 'albums'}
-        {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} albums
-      {:else if activeTab === 'artists'}
-        {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} artists
-      {:else}
-        {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} playlists
       {/if}
-    </span>
+    </div>
   </div>
+
+  <!-- Alpha Index inline for artists in Browse (sidepanel) view -->
+  {#if activeTab === 'artists' && artistViewMode === 'sidepanel' && filteredArtists.length > 0}
+    {@const groupedArtistsForIndex = groupArtists(withCustomImages(filteredArtists))}
+    {@const artistAlphaGroupsForIndex = new Set(groupedArtistsForIndex.map(group => group.key))}
+    <div class="alpha-index-inline">
+      {#each alphaIndexLetters as letter}
+        <button
+          class="alpha-letter"
+          class:disabled={!artistAlphaGroupsForIndex.has(letter)}
+          onclick={() => scrollToGroup('artist-alpha', letter, artistAlphaGroupsForIndex)}
+        >
+          {letter}
+        </button>
+      {/each}
+    </div>
+  {/if}
+
+  <!-- Alpha Index (inline for tracks when grouping by name or artist) -->
+  {#if activeTab === 'tracks' && !loading && trackGroupingEnabled && (trackGroupMode === 'name' || trackGroupMode === 'artist')}
+    {@const groupedTracks = groupTracks(filteredTracks, trackGroupMode)}
+    {@const trackIndexTargets = trackGroupMode === 'artist'
+      ? (() => {
+          const map = new Map<string, string>();
+          for (const group of groupedTracks) {
+            const letter = alphaGroupKey(group.title);
+            if (!map.has(letter)) {
+              map.set(letter, group.id);
+            }
+          }
+          return map;
+        })()
+      : new Map<string, string>()}
+    {@const trackAlphaGroups = trackGroupMode === 'name'
+      ? new Set(groupedTracks.map(group => group.key))
+      : new Set(trackIndexTargets.keys())}
+    <div class="alpha-index-inline">
+      {#each alphaIndexLetters as letter}
+        <button
+          class="alpha-letter"
+          class:disabled={!trackAlphaGroups.has(letter)}
+          onclick={() => scrollToTrackGroup(letter, trackAlphaGroups, trackIndexTargets)}
+        >
+          {letter}
+        </button>
+      {/each}
+    </div>
+  {/if}
 
   <!-- Content -->
   <div class="content">
@@ -1565,6 +1630,8 @@
               getTrackDuration={getFavoriteTrackDuration}
               getTrackAlbumKey={getFavoriteTrackAlbumKey}
               getTrackAlbum={getFavoriteTrackAlbum}
+              showArtwork={true}
+              getArtworkUrl={getFavoriteTrackArtworkUrl}
               showAlbum={!trackGroupingEnabled || trackGroupMode !== 'album'}
               getArtistId={getFavoriteArtistId}
               getAlbumId={getFavoriteAlbumId}
@@ -1581,9 +1648,22 @@
               onGoToArtist={onTrackGoToArtist}
               onShowInfo={onTrackShowInfo}
               onReDownload={onTrackReDownload ? (trk) => onTrackReDownload(buildDisplayTrackFromFavorite(trk)) : undefined}
+              onCreateQbzRadio={onTrackCreateQbzRadio}
+              onCreateQobuzRadio={onTrackCreateQobuzRadio}
+              selectable={trackSelectMode}
+              selectedIds={selectedTrackIds}
+              onToggleSelect={toggleTrackSelect}
             />
           </div>
         </div>
+        <BulkActionBar
+          count={selectedTrackIds.size}
+          onPlayNext={handleBulkPlayNext}
+          onPlayLater={handleBulkPlayLater}
+          onAddToPlaylist={handleBulkAddToPlaylist}
+          onRemoveFavorites={handleBulkRemoveFavorites}
+          onClearSelection={() => { selectedTrackIds = new Set(); }}
+        />
       {/if}
       </ViewTransition>
     {:else if activeTab === 'albums'}
@@ -1663,7 +1743,7 @@
         </div>
       {:else if artistViewMode === 'sidepanel'}
         <!-- Two-column sidepanel view -->
-        {@const groupedArtistsSidepanel = groupArtists(filteredArtists)}
+        {@const groupedArtistsSidepanel = groupArtists(withCustomImages(filteredArtists))}
         <div class="artist-two-column-layout">
           <!-- Left column: Artists list grouped A-Z (virtualized) -->
           <div class="artist-column">
@@ -1877,7 +1957,7 @@
       {:else}
         <!-- Virtualized artist grid (grouped or ungrouped) -->
         {@const artistGridGroups = artistGroupingEnabled
-          ? groupArtists(filteredArtists)
+          ? groupArtists(withCustomImages(filteredArtists))
           : [{ key: '', id: 'all', artists: filteredArtists }]}
         {@const artistAlphaGroups = artistGroupingEnabled
           ? new Set(artistGridGroups.map(grp => grp.key))
@@ -2040,28 +2120,7 @@
     margin-bottom: 16px;
   }
 
-  .header-icon {
-    width: 94px;
-    height: 94px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: linear-gradient(135deg, var(--accent-primary) 0%, #ff6b9d 100%);
-    border-radius: 16px;
-    overflow: hidden;
-  }
-
-  .custom-icon-img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
-
-  .header-content {
-    flex: 1;
-  }
-
-  .header-content h1 {
+  .header h1 {
     font-size: 24px;
     font-weight: 700;
     color: var(--text-primary);
@@ -2072,7 +2131,12 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 12px;
+  }
+
+  .header-search {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
   }
 
   .edit-btn {
@@ -2096,6 +2160,7 @@
   .favorites-nav {
     position: sticky;
     top: -24px;
+    z-index: 10;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -2106,6 +2171,7 @@
     background: var(--bg-primary);
     border-bottom: 1px solid var(--alpha-6);
     box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
+    overflow: visible;
   }
 
   .nav-left {
@@ -2113,6 +2179,12 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 20px;
+  }
+
+  .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 
   .nav-link {
@@ -2136,12 +2208,6 @@
   .nav-link.active {
     color: var(--text-primary);
     border-bottom-color: var(--accent-primary);
-  }
-
-  .nav-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
 
   .search-icon-btn {
@@ -2212,19 +2278,6 @@
     background: var(--bg-tertiary);
   }
 
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-
-  .toolbar-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
   .dropdown-container {
     position: relative;
   }
@@ -2281,7 +2334,7 @@
     border-radius: 8px;
     padding: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-    z-index: 100;
+    z-index: 20;
     max-height: 260px;
     overflow-y: auto;
     scrollbar-width: thin;
@@ -2333,9 +2386,10 @@
   }
 
   .results-count {
-    margin-left: auto;
     font-size: 13px;
     color: var(--text-muted);
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .context-menu-wrapper {
@@ -2461,19 +2515,23 @@
     display: flex;
     gap: 12px;
     align-items: flex-start;
+    flex: 1;
+    min-height: 0;
   }
 
   .artist-sections {
     display: flex;
     gap: 12px;
     align-items: flex-start;
+    flex: 1;
+    min-height: 0;
   }
 
   .virtualized-artist-grid-container,
   .virtualized-album-grid-container {
     flex: 1;
-    height: calc(100vh - 380px);
-    min-height: 400px;
+    height: 100%;
+    min-height: 300px;
     min-width: 0;
     overflow: hidden;
   }
@@ -2494,7 +2552,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
-    flex: 1;
+    flex-shrink: 0;
     justify-content: center;
   }
 

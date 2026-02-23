@@ -139,7 +139,7 @@ export async function loadFolders(): Promise<void> {
   notifyListeners();
 
   try {
-    const result = await invoke<PlaylistFolder[]>('get_playlist_folders');
+    const result = await invoke<PlaylistFolder[]>('v2_get_playlist_folders');
     folders = result;
     lastError = null;
   } catch (err) {
@@ -161,7 +161,7 @@ export async function createFolder(
   iconColor?: string
 ): Promise<PlaylistFolder | null> {
   try {
-    const folder = await invoke<PlaylistFolder>('create_playlist_folder', {
+    const folder = await invoke<PlaylistFolder>('v2_create_playlist_folder', {
       name,
       iconType,
       iconPreset,
@@ -193,7 +193,7 @@ export async function updateFolder(
   }
 ): Promise<PlaylistFolder | null> {
   try {
-    const folder = await invoke<PlaylistFolder>('update_playlist_folder', {
+    const folder = await invoke<PlaylistFolder>('v2_update_playlist_folder', {
       id,
       name: updates.name,
       iconType: updates.iconType,
@@ -223,7 +223,7 @@ export async function updateFolder(
  */
 export async function deleteFolder(id: string): Promise<boolean> {
   try {
-    await invoke('delete_playlist_folder', { id });
+    await invoke('v2_delete_playlist_folder', { id });
     folders = folders.filter(f => f.id !== id);
     expandedFolders.delete(id);
     notifyListeners();
@@ -241,7 +241,7 @@ export async function deleteFolder(id: string): Promise<boolean> {
  */
 export async function reorderFolders(folderIds: string[]): Promise<boolean> {
   try {
-    await invoke('reorder_playlist_folders', { folderIds });
+    await invoke('v2_reorder_playlist_folders', { folderIds });
 
     // Update local positions
     const folderMap = new Map(folders.map(f => [f.id, f]));
@@ -280,7 +280,7 @@ export async function movePlaylistToFolder(
   folderId: string | null
 ): Promise<boolean> {
   try {
-    await invoke('move_playlist_to_folder', {
+    await invoke('v2_move_playlist_to_folder', {
       playlistId,
       folderId
     });

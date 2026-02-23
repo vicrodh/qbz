@@ -73,7 +73,7 @@
       if (qState) {
         isShuffle = qState.isShuffle ?? false;
         repeatMode = qState.repeatMode ?? 'off';
-        queueCount = qState.tracks?.length ?? 0;
+        queueCount = qState.queue?.length ?? 0;
       }
     });
 
@@ -81,7 +81,7 @@
     if (qState) {
       isShuffle = qState.isShuffle ?? false;
       repeatMode = qState.repeatMode ?? 'off';
-      queueCount = qState.tracks?.length ?? 0;
+      queueCount = qState.queue?.length ?? 0;
     }
   });
 

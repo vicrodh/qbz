@@ -73,6 +73,7 @@
     normalizationEnabled?: boolean;
     normalizationGain?: number | null;
     onToggleNormalization?: () => void;
+    controlsDisabled?: boolean;
   }
 
   let {
@@ -118,6 +119,7 @@
     normalizationEnabled = false,
     normalizationGain = null,
     onToggleNormalization,
+    controlsDisabled = false,
   }: Props = $props();
 
   let progressRef: HTMLDivElement;
@@ -125,6 +127,7 @@
   let isDraggingProgress = $state(false);
   let isDraggingVolume = $state(false);
   let showArtworkPreview = $state(false);
+  let dragPreviewTime = $state<number | null>(null);
 
   // Offline state
   let isOffline = $state(checkIsOffline());
@@ -152,9 +155,10 @@
     }
   }
 
-  const progress = $derived(duration > 0 ? (currentTime / duration) * 100 : 0);
+  const effectiveTime = $derived(dragPreviewTime ?? currentTime);
+  const progress = $derived(duration > 0 ? (effectiveTime / duration) * 100 : 0);
   const hasTrack = $derived(trackTitle !== '');
-  const remainingTime = $derived(Math.max(0, duration - currentTime));
+  const remainingTime = $derived(Math.max(0, duration - effectiveTime));
 
   function formatTime(seconds: number): string {
     const mins = Math.floor(seconds / 60);
@@ -172,7 +176,7 @@
       const rect = progressRef.getBoundingClientRect();
       const percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
       const newTime = Math.round((percentage / 100) * duration);
-      onSeek?.(newTime);
+      dragPreviewTime = newTime;
     }
   }
 
@@ -195,8 +199,12 @@
   }
 
   function handleMouseUp() {
+    if (isDraggingProgress && dragPreviewTime !== null) {
+      onSeek?.(dragPreviewTime);
+    }
     isDraggingProgress = false;
     isDraggingVolume = false;
+    dragPreviewTime = null;
   }
 
   $effect(() => {
@@ -239,18 +247,32 @@
     <div class="left-section">
       <button
         class="control-btn"
-        class:active={isShuffle}
-        onclick={onToggleShuffle}
+        class:active={isShuffle && !controlsDisabled}
+        class:disabled={controlsDisabled}
+        disabled={controlsDisabled}
+        onclick={controlsDisabled ? undefined : onToggleShuffle}
         title={$t('player.shuffle')}
       >
         <Shuffle size={16} />
       </button>
 
-      <button class="control-btn" onclick={onSkipBack} title={$t('player.previous')}>
+      <button
+        class="control-btn"
+        class:disabled={controlsDisabled}
+        disabled={controlsDisabled}
+        onclick={controlsDisabled ? undefined : onSkipBack}
+        title={$t('player.previous')}
+      >
         <SkipBack size={18} />
       </button>
 
-      <button class="control-btn play-btn" onclick={onTogglePlay} title={isPlaying ? $t('player.pause') : $t('player.play')}>
+      <button
+        class="control-btn play-btn"
+        class:disabled={controlsDisabled}
+        disabled={controlsDisabled}
+        onclick={controlsDisabled ? undefined : onTogglePlay}
+        title={isPlaying ? $t('player.pause') : $t('player.play')}
+      >
         {#if isPlaying}
           <Pause size={20} />
         {:else}
@@ -258,14 +280,22 @@
         {/if}
       </button>
 
-      <button class="control-btn" onclick={onSkipForward} title={$t('player.next')}>
+      <button
+        class="control-btn"
+        class:disabled={controlsDisabled}
+        disabled={controlsDisabled}
+        onclick={controlsDisabled ? undefined : onSkipForward}
+        title={$t('player.next')}
+      >
         <SkipForward size={18} />
       </button>
 
       <button
         class="control-btn"
-        class:active={repeatMode !== 'off'}
-        onclick={onToggleRepeat}
+        class:active={repeatMode !== 'off' && !controlsDisabled}
+        class:disabled={controlsDisabled}
+        disabled={controlsDisabled}
+        onclick={controlsDisabled ? undefined : onToggleRepeat}
         title={repeatMode === 'off' ? $t('player.repeat') : repeatMode === 'all' ? $t('player.repeatAll') : $t('player.repeatOne')}
       >
         {#if repeatMode === 'one'}
@@ -275,14 +305,22 @@
         {/if}
       </button>
 
-      <button class="control-btn" onclick={onAddToPlaylist} title={$t('actions.addToPlaylist')}>
+      <button
+        class="control-btn"
+        class:disabled={controlsDisabled}
+        disabled={controlsDisabled}
+        onclick={controlsDisabled ? undefined : onAddToPlaylist}
+        title={$t('actions.addToPlaylist')}
+      >
         <Plus size={16} />
       </button>
 
       <button
         class="control-btn"
-        class:active={isFavorite}
-        onclick={onToggleFavorite}
+        class:active={isFavorite && !controlsDisabled}
+        class:disabled={controlsDisabled}
+        disabled={controlsDisabled}
+        onclick={controlsDisabled ? undefined : onToggleFavorite}
         title={isFavorite ? $t('actions.removeFromFavorites') : $t('actions.addToFavorites')}
       >
         <Heart size={16} fill={isFavorite ? 'currentColor' : 'none'} />
@@ -485,7 +523,7 @@
     background: var(--bg-secondary);
     backdrop-filter: blur(20px);
     border-top: 1px solid var(--border-subtle);
-    z-index: 100;
+    z-index: 2001;
     display: flex;
     flex-direction: column;
   }
@@ -529,14 +567,14 @@
     width: 100%;
     height: 3px;
     background: var(--border-subtle);
-    border-radius: 2px;
+    border-radius: 999px;
     overflow: hidden;
   }
 
   .seekbar-fill {
     height: 100%;
     background: var(--accent-primary, #6366f1);
-    border-radius: 2px;
+    border-radius: 999px;
     transition: width 100ms linear;
   }
 
@@ -558,7 +596,7 @@
   }
 
   .seekbar:hover .seekbar-track {
-    height: 4px;
+    /* keep both layers stable on hover */
   }
 
   /* ===== Controls Row ===== */
@@ -725,6 +763,14 @@
 
   .play-btn:hover {
     color: var(--accent-primary, #6366f1);
+  }
+
+  .play-btn.disabled {
+    color: var(--text-disabled);
+  }
+
+  .play-btn.disabled:hover {
+    color: var(--text-disabled);
   }
 
   /* ===== Song Card ===== */

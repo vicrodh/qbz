@@ -19,10 +19,7 @@ pub fn generate_signature(method: &str, params: &str, timestamp: u64, secret: &s
 
 /// Generate signature for track/getFileUrl endpoint
 pub fn sign_get_file_url(track_id: u64, format_id: u32, timestamp: u64, secret: &str) -> String {
-    let params = format!(
-        "format_id{}intentstreamtrack_id{}",
-        format_id, track_id
-    );
+    let params = format!("format_id{}intentstreamtrack_id{}", format_id, track_id);
     generate_signature("trackgetFileUrl", &params, timestamp, secret)
 }
 
@@ -97,7 +94,12 @@ pub fn parse_login_response(response: &serde_json::Value) -> Result<UserSession>
         }
 
         // Try common timestamp fields (seconds).
-        let ts_keys = ["end_date_ts", "expires_at_ts", "expiration_ts", "valid_until_ts"];
+        let ts_keys = [
+            "end_date_ts",
+            "expires_at_ts",
+            "expiration_ts",
+            "valid_until_ts",
+        ];
         for key in ts_keys {
             if let Some(ts) = parameters.get(key).and_then(|v| v.as_i64()) {
                 if ts > 0 {
