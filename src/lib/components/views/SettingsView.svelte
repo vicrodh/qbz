@@ -4075,20 +4075,21 @@
               onblur={handleGdkScaleChange}
             />
           </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <span class="setting-label">{$t('settings.appearance.composition.gdkDpiScale')}</span>
-              <span class="setting-desc">{$t('settings.appearance.composition.gdkDpiScaleDesc')}</span>
-            </div>
-            <input
-              class="composition-input"
-              type="text"
-              placeholder="auto"
-              bind:value={gdkDpiScale}
-              onblur={handleGdkDpiScaleChange}
-            />
-          </div>
         {/if}
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">{$t('settings.appearance.composition.gdkDpiScale')}</span>
+            <span class="setting-desc">{$t('settings.appearance.composition.gdkDpiScaleDesc')}</span>
+          </div>
+          <input
+            class="composition-input"
+            type="text"
+            placeholder="auto"
+            bind:value={gdkDpiScale}
+            onblur={handleGdkDpiScaleChange}
+          />
+        </div>
 
         <div class="composition-env-section">
           <span class="composition-env-title">{$t('settings.appearance.composition.envVarsTitle')}</span>
