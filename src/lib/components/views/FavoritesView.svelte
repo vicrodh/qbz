@@ -1172,53 +1172,51 @@
   </div>
   <!-- Header -->
   <div class="header">
-    <div class="header-content">
-      <h1>{$t('favorites.title')}</h1>
-      {#if activeTab === 'tracks' && !loading && filteredTracks.length > 0}
-        <div class="header-actions">
-          <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title={$t('actions.playAll')}>
-            <Play size={20} fill="currentColor" color="currentColor" />
+    <h1>{$t('favorites.title')}</h1>
+    {#if activeTab === 'tracks' && !loading && filteredTracks.length > 0}
+      <div class="header-actions">
+        <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title={$t('actions.playAll')}>
+          <Play size={20} fill="currentColor" color="currentColor" />
+        </button>
+        <button class="action-btn-circle" onclick={handleShuffleAllTracks} title={$t('actions.shuffle')}>
+          <Shuffle size={18} />
+        </button>
+        <div class="context-menu-wrapper">
+          <button
+            class="action-btn-circle"
+            onclick={() => showTracksContextMenu = !showTracksContextMenu}
+            title={$t('actions.more')}
+          >
+            <MoreHorizontal size={18} />
           </button>
-          <button class="action-btn-circle" onclick={handleShuffleAllTracks} title={$t('actions.shuffle')}>
-            <Shuffle size={18} />
-          </button>
-          <div class="context-menu-wrapper">
-            <button
-              class="action-btn-circle"
-              onclick={() => showTracksContextMenu = !showTracksContextMenu}
-              title={$t('actions.more')}
-            >
-              <MoreHorizontal size={18} />
-            </button>
-            {#if showTracksContextMenu}
-              <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
-              <div class="context-menu">
-                <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
-                  {$t('actions.playNext')}
-                </button>
-                <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
-                  {$t('actions.addToQueue')}
-                </button>
-              </div>
-            {/if}
-          </div>
+          {#if showTracksContextMenu}
+            <div class="context-menu-backdrop" onclick={() => showTracksContextMenu = false} role="presentation"></div>
+            <div class="context-menu">
+              <button class="context-menu-item" onclick={() => { handlePlayAllTracksNext(); showTracksContextMenu = false; }}>
+                {$t('actions.playNext')}
+              </button>
+              <button class="context-menu-item" onclick={() => { handlePlayAllTracksLater(); showTracksContextMenu = false; }}>
+                {$t('actions.addToQueue')}
+              </button>
+            </div>
+          {/if}
         </div>
-      {/if}
-      {#if activeTab === 'albums' && !loading && filteredAlbums.length > 0}
-        <div class="header-actions">
-          <button class="action-btn-circle" onclick={handleRandomAlbum} title={$t('favorites.randomAlbum')}>
-            <Shuffle size={18} />
-          </button>
-        </div>
-      {/if}
-      {#if activeTab === 'artists' && !loading && filteredArtists.length > 0}
-        <div class="header-actions">
-          <button class="action-btn-circle" onclick={handleRandomArtist} title={$t('favorites.randomArtist')}>
-            <Shuffle size={18} />
-          </button>
-        </div>
-      {/if}
-    </div>
+      </div>
+    {/if}
+    {#if activeTab === 'albums' && !loading && filteredAlbums.length > 0}
+      <div class="header-actions">
+        <button class="action-btn-circle" onclick={handleRandomAlbum} title={$t('favorites.randomAlbum')}>
+          <Shuffle size={18} />
+        </button>
+      </div>
+    {/if}
+    {#if activeTab === 'artists' && !loading && filteredArtists.length > 0}
+      <div class="header-actions">
+        <button class="action-btn-circle" onclick={handleRandomArtist} title={$t('favorites.randomArtist')}>
+          <Shuffle size={18} />
+        </button>
+      </div>
+    {/if}
   </div>
 
   <!-- Navigation Bar (Artist-style) -->
@@ -2034,13 +2032,7 @@
     margin-bottom: 16px;
   }
 
-
-
-  .header-content {
-    flex: 1;
-  }
-
-  .header-content h1 {
+  .header h1 {
     font-size: 24px;
     font-weight: 700;
     color: var(--text-primary);
@@ -2051,7 +2043,6 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    margin-top: 12px;
   }
 
   .edit-btn {
