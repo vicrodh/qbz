@@ -137,8 +137,8 @@ pub struct V2SearchAllResults {
 }
 
 /// Convert config AudioSettings to qbz_audio::AudioSettings.
-/// Used by v2_play_track and v2_reinit_audio_device to ensure the Player
-/// has fresh settings from the database before creating/recreating streams.
+/// Used by runtime_bootstrap (once at startup) and v2_reinit_audio_device
+/// to ensure the Player has fresh settings from the database.
 fn convert_to_qbz_audio_settings(settings: &AudioSettings) -> qbz_audio::AudioSettings {
     qbz_audio::AudioSettings {
         output_device: settings.output_device.clone(),
@@ -403,6 +403,7 @@ pub async fn runtime_bootstrap(
     runtime: State<'_, RuntimeManagerState>,
     app_state: State<'_, AppState>,
     core_bridge: State<'_, CoreBridgeState>,
+    audio_settings: State<'_, AudioSettingsState>,
 ) -> Result<RuntimeStatus, RuntimeError> {
     let manager = runtime.manager();
 
@@ -565,6 +566,21 @@ pub async fn runtime_bootstrap(
                         },
                     );
                     return Err(RuntimeError::RuntimeDegraded(reason));
+                }
+
+                // Step 6: Sync audio settings once after session activation.
+                // Per-user stores are now ready; reload settings so the audio
+                // thread has fresh DB values for DAC passthrough, backend, etc.
+                if let Some(bridge) = core_bridge.try_get().await {
+                    let player = bridge.player();
+                    if let Ok(guard) = audio_settings.store.lock() {
+                        if let Some(store) = guard.as_ref() {
+                            if let Ok(fresh) = store.get_settings() {
+                                log::info!("[Runtime] Syncing audio settings to player after session activation");
+                                let _ = player.reload_settings(convert_to_qbz_audio_settings(&fresh));
+                            }
+                        }
+                    }
                 }
             }
             Err(e) => {
@@ -5860,18 +5876,6 @@ pub async fn v2_play_track(
 
     let bridge_guard = bridge.get().await;
     let player = bridge_guard.player();
-
-    // Ensure Player has fresh audio settings from DB before playback.
-    // On first play after app start the audio thread holds stale settings from
-    // Player::new() — this mirrors what v2_reinit_audio_device does and prevents
-    // the stream from being created with wrong backend/device/sample-rate config.
-    if let Ok(guard) = audio_settings.store.lock() {
-        if let Some(store) = guard.as_ref() {
-            if let Ok(fresh) = store.get_settings() {
-                let _ = player.reload_settings(convert_to_qbz_audio_settings(&fresh));
-            }
-        }
-    }
 
     // Check offline cache (persistent disk cache)
     {
