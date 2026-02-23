@@ -1104,6 +1104,13 @@ pub fn run() {
             commands_v2::v2_check_qobuzapp_handler,
             commands_v2::v2_register_qobuzapp_handler,
             commands_v2::v2_deregister_qobuzapp_handler,
+            // Auto-theme
+            commands_v2::v2_detect_desktop_environment,
+            commands_v2::v2_get_system_wallpaper,
+            commands_v2::v2_get_system_accent_color,
+            commands_v2::v2_generate_theme_from_image,
+            commands_v2::v2_generate_theme_from_wallpaper,
+            commands_v2::v2_extract_palette,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

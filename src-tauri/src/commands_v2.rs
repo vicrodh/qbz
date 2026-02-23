@@ -10125,3 +10125,50 @@ pub async fn v2_dynamic_suggest_raw(
         .await
         .map_err(|e| format!("Failed to fetch raw dynamic suggestions: {}", e))
 }
+
+// ── Auto-Theme commands ─────────────────────────────────────────────────────
+
+#[tauri::command]
+pub fn v2_detect_desktop_environment() -> crate::auto_theme::system::DesktopEnvironment {
+    crate::auto_theme::system::detect_desktop_environment()
+}
+
+#[tauri::command]
+pub fn v2_get_system_wallpaper() -> Result<String, String> {
+    crate::auto_theme::system::get_system_wallpaper()
+}
+
+#[tauri::command]
+pub fn v2_get_system_accent_color() -> Result<crate::auto_theme::PaletteColor, String> {
+    crate::auto_theme::system::get_system_accent_color()
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_generate_theme_from_image(
+    imagePath: String,
+) -> Result<crate::auto_theme::GeneratedTheme, String> {
+    let palette = crate::auto_theme::palette::extract_palette(&imagePath)?;
+    Ok(crate::auto_theme::generator::generate_theme(
+        &palette,
+        &imagePath,
+    ))
+}
+
+#[tauri::command]
+pub fn v2_generate_theme_from_wallpaper() -> Result<crate::auto_theme::GeneratedTheme, String> {
+    let wallpaper = crate::auto_theme::system::get_system_wallpaper()?;
+    let palette = crate::auto_theme::palette::extract_palette(&wallpaper)?;
+    Ok(crate::auto_theme::generator::generate_theme(
+        &palette,
+        &wallpaper,
+    ))
+}
+
+#[tauri::command]
+#[allow(non_snake_case)]
+pub fn v2_extract_palette(
+    imagePath: String,
+) -> Result<crate::auto_theme::ThemePalette, String> {
+    crate::auto_theme::palette::extract_palette(&imagePath)
+}
