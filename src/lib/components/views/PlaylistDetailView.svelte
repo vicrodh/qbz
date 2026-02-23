@@ -959,8 +959,8 @@
   async function initCustomOrderFromCurrentTracks() {
     // Get all tracks in current display order (before custom sort applied)
     const allTracks = [...tracks];
-    const localTracksInPlaylist = localTracks.map((t, idx) => ({
-      ...t,
+    const localTracksInPlaylist = localTracks.map((trackItem, idx) => ({
+      ...trackItem,
       playlist_position: idx
     }));
 

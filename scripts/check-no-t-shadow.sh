@@ -24,10 +24,10 @@ check_pattern "template each-loop shadowing (as t)" '\{#each[^\n]* as t\b'
 
 # Dangerous callbacks in files using $t(...).
 while IFS= read -r file; do
-  if rg -q '\b(map|forEach|filter|find|some|every|reduce)\(\s*t\s*=>|\b(map|forEach|filter|find|some|every|reduce)\(\s*\([^)]*,\s*t\s*\)\s*=>' "${file}"; then
+  if rg -q '\b(map|forEach|filter|find|some|every|reduce)\(\s*t\s*=>|\b(map|forEach|filter|find|some|every|reduce)\(\s*\(\s*t\b[^)]*\)\s*=>|\b(map|forEach|filter|find|some|every|reduce)\(\s*\([^)]*,\s*t\b[^)]*\)\s*=>' "${file}"; then
     echo
     echo "Found callback shadowing in file using \$t(...): ${file}"
-    rg -n '\b(map|forEach|filter|find|some|every|reduce)\(\s*t\s*=>|\b(map|forEach|filter|find|some|every|reduce)\(\s*\([^)]*,\s*t\s*\)\s*=>' "${file}"
+    rg -n '\b(map|forEach|filter|find|some|every|reduce)\(\s*t\s*=>|\b(map|forEach|filter|find|some|every|reduce)\(\s*\(\s*t\b[^)]*\)\s*=>|\b(map|forEach|filter|find|some|every|reduce)\(\s*\([^)]*,\s*t\b[^)]*\)\s*=>' "${file}"
     had_issues=1
   fi
 done < <(rg -l --glob '*.svelte' '\$t\(' "${SRC_DIR}")
