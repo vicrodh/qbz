@@ -5023,6 +5023,45 @@ pub async fn v2_add_to_queue_next(
     Ok(())
 }
 
+/// Add multiple tracks to end of queue (V2 - bulk)
+#[tauri::command]
+pub async fn v2_bulk_add_to_queue(
+    tracks: Vec<V2QueueTrack>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<(), RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+    log::info!("[V2] bulk_add_to_queue: {} tracks", tracks.len());
+    let bridge = bridge.get().await;
+    for track in tracks {
+        bridge.add_track(track.into()).await;
+    }
+    Ok(())
+}
+
+/// Add multiple tracks as play next (V2 - bulk, reversed to preserve order)
+#[tauri::command]
+pub async fn v2_bulk_add_to_queue_next(
+    tracks: Vec<V2QueueTrack>,
+    bridge: State<'_, CoreBridgeState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<(), RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresUserSession)
+        .await?;
+    log::info!("[V2] bulk_add_to_queue_next: {} tracks", tracks.len());
+    let bridge = bridge.get().await;
+    // Reverse so the first track in the selection ends up as "next"
+    for track in tracks.into_iter().rev() {
+        bridge.add_track_next(track.into()).await;
+    }
+    Ok(())
+}
+
 /// Set the entire queue and start playing from index (V2 - uses CoreBridge)
 #[tauri::command]
 pub async fn v2_set_queue(
@@ -8362,6 +8401,43 @@ pub async fn v2_uncache_favorite_track(
     store
         .remove_favorite_track(trackId)
         .map_err(|e| RuntimeError::Internal(e))
+}
+
+/// Bulk add tracks to favorites (V2) — adds via API then updates local cache
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_bulk_add_favorites(
+    trackIds: Vec<i64>,
+    bridge: State<'_, CoreBridgeState>,
+    cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<(), RuntimeError> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await?;
+    log::info!("[V2] bulk_add_favorites: {} tracks", trackIds.len());
+    let bridge = bridge.get().await;
+    // Phase 1: API calls (async — no lock held across awaits)
+    for id in &trackIds {
+        bridge
+            .add_favorite("track", &id.to_string())
+            .await
+            .map_err(RuntimeError::Internal)?;
+    }
+    // Phase 2: cache update (sync, lock acquired and released atomically)
+    {
+        let guard = cache_state
+            .store
+            .lock()
+            .map_err(|_| RuntimeError::Internal("Failed to lock favorites cache".to_string()))?;
+        if let Some(store) = guard.as_ref() {
+            for id in &trackIds {
+                let _ = store.add_favorite_track(*id);
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Clear favorites cache (V2)
