@@ -206,19 +206,30 @@ impl QobuzClient {
             HeaderValue::from_str(&app_id).map_err(|_| ApiError::InvalidAppId)?,
         );
 
-        log::info!("[OAuth] Exchanging code at /oauth/callback");
+        log::info!(
+            "[OAuth] Exchanging code at /oauth/callback (app_id={}, key={})",
+            app_id,
+            private_key
+        );
         let resp = self
             .http
             .get(&callback_url)
             .headers(headers)
-            .query(&[("code_autorisation", code), ("private_key", &private_key)])
+            .query(&[
+                ("code_autorisation", code),
+                ("private_key", &private_key),
+                ("app_id", &app_id),
+            ])
             .send()
             .await?;
 
         if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            log::error!("[OAuth] /oauth/callback failed {}: {}", status, body);
             return Err(ApiError::ApiResponse(format!(
-                "OAuth callback failed: {}",
-                resp.status()
+                "OAuth callback failed: {} — {}",
+                status, body
             )));
         }
 
