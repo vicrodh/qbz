@@ -160,96 +160,173 @@ pub fn update_media_controls_metadata(
     media_controls.set_metadata(&track_info);
 }
 
-/// Load a KWin script via D-Bus that forces server-side decorations for QBZ.
+/// Add a KWin window rule that forces server-side decorations (SSD) for QBZ.
 ///
 /// GTK3 on Wayland hardcodes CLIENT_SIDE in the xdg-decoration protocol,
-/// so KWin respects that and doesn't draw its own title bar. This script
-/// tells KWin to force its native decorations (SSD) for QBZ windows,
-/// giving a title bar identical to Dolphin, Konsole, etc.
-fn load_kwin_ssd_script() -> Result<(), String> {
-    use std::io::Write;
+/// so KWin scripting alone can't override it. Window rules operate at a
+/// deeper level (applied during window setup, before protocol negotiation)
+/// and can force KWin to draw native SSD.
+///
+/// The rule is written to ~/.config/kwinrulesrc and persists across sessions.
+/// It's removed when the user disables system title bar.
+fn setup_kwin_window_rule() -> Result<(), String> {
+    let config_path = dirs::config_dir()
+        .ok_or_else(|| "Could not determine config directory".to_string())?
+        .join("kwinrulesrc");
 
-    let script_content = r#"
-function isQbzWindow(client) {
-    var rc = client.resourceClass.toLowerCase();
-    return rc === "com.blitzfc.qbz" || rc === "qbz" || rc === "qbz-nix";
-}
-function forceDecorations(client) {
-    if (isQbzWindow(client)) {
-        client.noBorder = false;
+    // Read existing rules to find next available slot and check for existing QBZ rule
+    let existing = std::fs::read_to_string(&config_path).unwrap_or_default();
+    let mut existing_count: u32 = 0;
+    let mut qbz_rule_group: Option<u32> = None;
+
+    for line in existing.lines() {
+        // Parse [General] count=N
+        if line.starts_with("count=") {
+            if let Ok(n) = line.trim_start_matches("count=").parse::<u32>() {
+                existing_count = n;
+            }
+        }
+        // Check if we already have a QBZ rule
+        if line.contains("Description=QBZ Native Title Bar") {
+            // Find the group number from context — we'll just scan backwards
+            // Simpler: track current group
+        }
     }
-}
-var clients = workspace.windowList();
-for (var i = 0; i < clients.length; i++) {
-    forceDecorations(clients[i]);
-}
-workspace.windowAdded.connect(forceDecorations);
-"#;
 
-    // Write script to a temporary file
-    let script_dir = std::env::var("XDG_RUNTIME_DIR")
-        .unwrap_or_else(|_| "/tmp".to_string());
-    let script_path = format!("{}/qbz-kwin-ssd.js", script_dir);
+    // Parse INI to find existing QBZ rule group
+    let mut current_group: Option<u32> = None;
+    for line in existing.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            let inner = &trimmed[1..trimmed.len() - 1];
+            current_group = inner.parse::<u32>().ok();
+        }
+        if trimmed == "Description=QBZ Native Title Bar" {
+            qbz_rule_group = current_group;
+        }
+    }
 
-    let mut file = std::fs::File::create(&script_path)
-        .map_err(|e| format!("Failed to create KWin script file: {}", e))?;
-    file.write_all(script_content.as_bytes())
-        .map_err(|e| format!("Failed to write KWin script: {}", e))?;
+    let rule_num = if let Some(num) = qbz_rule_group {
+        log::info!("KWin window rule for QBZ already exists (group {}), updating", num);
+        num
+    } else {
+        existing_count + 1
+    };
 
-    // Unload previous script instance if it exists
-    let _ = std::process::Command::new("qdbus6")
-        .args([
-            "org.kde.KWin",
-            "/Scripting",
-            "org.kde.kwin.Scripting.unloadScript",
-            "qbz-ssd",
-        ])
-        .output();
+    // Write the rule using kwriteconfig6
+    let group = rule_num.to_string();
+    let rules: &[(&str, &str)] = &[
+        ("Description", "QBZ Native Title Bar"),
+        ("noborder", "false"),
+        ("noborderrule", "2"),       // 2 = Force
+        ("wmclass", "qbz"),
+        ("wmclasscomplete", "false"),
+        ("wmclassmatch", "1"),       // 1 = Exact match
+        ("types", "1"),              // 1 = Normal windows
+    ];
 
-    // Load script via qdbus6 (KDE Plasma 6)
+    for (key, value) in rules {
+        let output = std::process::Command::new("kwriteconfig6")
+            .args(["--file", "kwinrulesrc", "--group", &group, "--key", key, value])
+            .output()
+            .map_err(|e| format!("kwriteconfig6 failed: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "kwriteconfig6 --key {} failed: {}",
+                key,
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    }
+
+    // Update the count in [General] if we added a new rule
+    if qbz_rule_group.is_none() {
+        let new_count = (existing_count + 1).to_string();
+        let output = std::process::Command::new("kwriteconfig6")
+            .args(["--file", "kwinrulesrc", "--group", "General", "--key", "count", &new_count])
+            .output()
+            .map_err(|e| format!("kwriteconfig6 count update failed: {}", e))?;
+
+        if !output.status.success() {
+            return Err(format!(
+                "kwriteconfig6 count failed: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ));
+        }
+    }
+
+    // Tell KWin to reload rules
     let output = std::process::Command::new("qdbus6")
-        .args([
-            "org.kde.KWin",
-            "/Scripting",
-            "org.kde.kwin.Scripting.loadScript",
-            &script_path,
-            "qbz-ssd",
-        ])
+        .args(["org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"])
         .output()
-        .map_err(|e| format!("Failed to run qdbus6: {}", e))?;
+        .map_err(|e| format!("qdbus6 reconfigure failed: {}", e))?;
 
     if !output.status.success() {
-        return Err(format!(
-            "qdbus6 loadScript failed: {}",
+        log::warn!(
+            "KWin reconfigure failed (non-fatal): {}",
             String::from_utf8_lossy(&output.stderr)
-        ));
+        );
     }
 
-    // Parse script ID from loadScript output (returns an integer)
-    let script_id = String::from_utf8_lossy(&output.stdout)
-        .trim()
-        .to_string();
-
-    // Run the specific script using its D-Bus object path
-    let script_path_dbus = format!("/Scripting/Script{}", script_id);
-    let output = std::process::Command::new("qdbus6")
-        .args([
-            "org.kde.KWin",
-            &script_path_dbus,
-            "org.kde.kwin.Script.run",
-        ])
-        .output()
-        .map_err(|e| format!("Failed to run KWin script: {}", e))?;
-
-    if !output.status.success() {
-        return Err(format!(
-            "qdbus6 Script.run failed: {}",
-            String::from_utf8_lossy(&output.stderr)
-        ));
-    }
-
-    log::info!("KWin SSD script loaded for native title bar on KDE Plasma");
+    log::info!("KWin window rule set for native title bar (group {})", rule_num);
     Ok(())
+}
+
+/// Remove the KWin window rule for QBZ when system title bar is disabled.
+fn remove_kwin_window_rule() {
+    // Find and remove QBZ rule from kwinrulesrc
+    let config_path = match dirs::config_dir() {
+        Some(p) => p.join("kwinrulesrc"),
+        None => return,
+    };
+
+    let existing = match std::fs::read_to_string(&config_path) {
+        Ok(s) => s,
+        Err(_) => return,
+    };
+
+    // Find the QBZ rule group number
+    let mut current_group: Option<String> = None;
+    let mut qbz_group: Option<String> = None;
+
+    for line in existing.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            current_group = Some(trimmed[1..trimmed.len() - 1].to_string());
+        }
+        if trimmed == "Description=QBZ Native Title Bar" {
+            qbz_group = current_group.clone();
+        }
+    }
+
+    if let Some(group) = qbz_group {
+        // Delete the group using kwriteconfig6
+        let _ = std::process::Command::new("kwriteconfig6")
+            .args(["--file", "kwinrulesrc", "--group", &group, "--delete-group"])
+            .output();
+
+        // Decrement count
+        let mut count: u32 = 0;
+        for line in existing.lines() {
+            if line.starts_with("count=") {
+                count = line.trim_start_matches("count=").parse().unwrap_or(0);
+            }
+        }
+        if count > 0 {
+            let new_count = (count - 1).to_string();
+            let _ = std::process::Command::new("kwriteconfig6")
+                .args(["--file", "kwinrulesrc", "--group", "General", "--key", "count", &new_count])
+                .output();
+        }
+
+        // Reconfigure KWin
+        let _ = std::process::Command::new("qdbus6")
+            .args(["org.kde.KWin", "/KWin", "org.kde.KWin.reconfigure"])
+            .output();
+
+        log::info!("KWin window rule for QBZ removed");
+    }
 }
 
 pub fn run() {
@@ -500,13 +577,11 @@ pub fn run() {
                 e
             })?;
 
-            // Load KWin script to force server-side decorations for QBZ
-            // Small delay ensures the window is mapped in KWin before script runs
+            // Add KWin window rule to force server-side decorations for QBZ
             if use_kwin_ssd {
                 std::thread::spawn(|| {
-                    std::thread::sleep(std::time::Duration::from_millis(500));
-                    if let Err(e) = load_kwin_ssd_script() {
-                        log::warn!("Failed to load KWin SSD script: {}", e);
+                    if let Err(e) = setup_kwin_window_rule() {
+                        log::warn!("Failed to set KWin window rule: {}", e);
                     }
                 });
             }
