@@ -1078,10 +1078,10 @@ pub async fn v2_start_oauth_login(
     .resizable(true)
     .on_navigation(move |url| {
         log::info!("[OAuth] on_navigation: {}", url);
-        // Intercept redirect to play.qobuz.com/discover?code=...
+        // Intercept redirect to play.qobuz.com/discover?code_autorisation=...
         if url.host_str() == Some("play.qobuz.com") {
             for (key, value) in url.query_pairs() {
-                if key == "code" {
+                if key == "code_autorisation" || key == "code" {
                     let mut holder = code_holder_nav.lock().unwrap();
                     // Only act on the first code (idempotent)
                     if holder.is_none() {
