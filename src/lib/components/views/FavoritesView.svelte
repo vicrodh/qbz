@@ -112,6 +112,7 @@
     onPlaylistShareQobuz?: (playlistId: number) => void;
     selectedTab?: TabType;
     onTabNavigate?: (tab: TabType) => void;
+    onRandomArtist?: (artistId: number) => void;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
   }
@@ -171,6 +172,7 @@
     onPlaylistShareQobuz,
     selectedTab,
     onTabNavigate,
+    onRandomArtist,
     activeTrackId = null,
     isPlaybackActive = false
   }: Props = $props();
@@ -1131,6 +1133,18 @@
     }
   }
 
+  function handleRandomAlbum() {
+    if (filteredAlbums.length === 0 || !onAlbumPlay) return;
+    const idx = Math.floor(Math.random() * filteredAlbums.length);
+    onAlbumPlay(String(filteredAlbums[idx].id));
+  }
+
+  function handleRandomArtist() {
+    if (filteredArtists.length === 0 || !onRandomArtist) return;
+    const idx = Math.floor(Math.random() * filteredArtists.length);
+    onRandomArtist(filteredArtists[idx].id);
+  }
+
   async function handlePlayAllTracksNext() {
     if (filteredTracks.length === 0) return;
 
@@ -1228,6 +1242,20 @@
               </div>
             {/if}
           </div>
+        </div>
+      {/if}
+      {#if activeTab === 'albums' && !loading && filteredAlbums.length > 0}
+        <div class="header-actions">
+          <button class="action-btn-circle" onclick={handleRandomAlbum} title={$t('favorites.randomAlbum')}>
+            <Shuffle size={18} />
+          </button>
+        </div>
+      {/if}
+      {#if activeTab === 'artists' && !loading && filteredArtists.length > 0}
+        <div class="header-actions">
+          <button class="action-btn-circle" onclick={handleRandomArtist} title={$t('favorites.randomArtist')}>
+            <Shuffle size={18} />
+          </button>
         </div>
       {/if}
     </div>

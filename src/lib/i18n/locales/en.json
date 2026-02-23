@@ -356,6 +356,8 @@
     "likeAlbumsHint": "Like albums to see them here",
     "likeArtistsHint": "Like artists to see them here",
     "likePlaylistsHint": "Click the heart icon on playlists to add them here",
+    "randomAlbum": "Play random album",
+    "randomArtist": "Go to random artist",
     "selectArtistHint": "Select an artist to see their albums",
     "loadingAlbums": "Loading albums...",
     "failedLoadAlbums": "Failed to load albums",

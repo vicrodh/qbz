@@ -356,6 +356,8 @@
     "likeAlbumsHint": "Da me gusta a álbumes para verlos aquí",
     "likeArtistsHint": "Da me gusta a artistas para verlos aquí",
     "likePlaylistsHint": "Haz clic en el corazón de las listas para agregarlas aquí",
+    "randomAlbum": "Reproducir album aleatorio",
+    "randomArtist": "Ir a artista aleatorio",
     "selectArtistHint": "Selecciona un artista para ver sus álbumes",
     "loadingAlbums": "Cargando álbumes...",
     "failedLoadAlbums": "Error al cargar álbumes",

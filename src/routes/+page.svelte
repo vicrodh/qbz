@@ -3918,6 +3918,7 @@
             onPlaylistPlayLater={queuePlaylistLaterById}
             onPlaylistRemoveFavorite={removePlaylistFavoriteById}
             onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
+            onRandomArtist={(artistId) => handleArtistClick(artistId)}
             selectedTab={getFavoritesTabFromView(activeView) ?? favoritesDefaultTab}
             onTabNavigate={(tab) => navigateToFavorites(tab)}
             activeTrackId={currentTrack?.id ?? null}
