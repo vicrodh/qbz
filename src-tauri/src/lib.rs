@@ -93,8 +93,8 @@ impl AppState {
         device_name: Option<String>,
         audio_settings: config::audio_settings::AudioSettings,
     ) -> Self {
-        // Create playback cache (L2 - disk, 500MB)
-        let playback_cache = match PlaybackCache::new(500 * 1024 * 1024) {
+        // Create playback cache (L2 - disk, 800MB)
+        let playback_cache = match PlaybackCache::new(800 * 1024 * 1024) {
             Ok(cache) => Some(Arc::new(cache)),
             Err(e) => {
                 log::warn!(
@@ -105,9 +105,9 @@ impl AppState {
             }
         };
 
-        // Create audio cache (L1 - memory, 300MB) with optional disk spillover
+        // Create audio cache (L1 - memory, 400MB) with optional disk spillover
         let audio_cache = if let Some(pc) = playback_cache {
-            Arc::new(AudioCache::with_playback_cache(300 * 1024 * 1024, pc))
+            Arc::new(AudioCache::with_playback_cache(400 * 1024 * 1024, pc))
         } else {
             Arc::new(AudioCache::default())
         };

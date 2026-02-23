@@ -43,7 +43,7 @@ pub struct AudioCache {
 
 impl Default for AudioCache {
     fn default() -> Self {
-        Self::new(300 * 1024 * 1024) // 300MB for ~3-4 Hi-Res tracks
+        Self::new(400 * 1024 * 1024) // 400MB for ~4-5 Hi-Res tracks
     }
 }
 
