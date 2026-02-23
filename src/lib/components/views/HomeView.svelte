@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { Music, User, Loader2, ArrowRight } from 'lucide-svelte';
   import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import {
@@ -585,7 +586,7 @@
     return {
       id: artist.id,
       name: artist.name,
-      image: getQobuzImage(artist.image),
+      image: resolveArtistImage(artist.name, getQobuzImage(artist.image)),
       playCount
     };
   }
