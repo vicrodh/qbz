@@ -341,8 +341,8 @@
     "likeAlbumsHint": "Aimez des albums pour les voir ici",
     "likeArtistsHint": "Aimez des artistes pour les voir ici",
     "likePlaylistsHint": "Cliquez sur l'icône en forme de cœur sur les playlists pour les ajouter ici",
-    "randomAlbum": "Lire un album aleatoire",
-    "randomArtist": "Aller a un artiste aleatoire",
+    "randomAlbum": "Lire un album aléatoire",
+    "randomArtist": "Aller à un artiste aléatoire",
     "selectArtistHint": "Sélectionnez un artiste pour voir ses albums",
     "loadingAlbums": "Chargement des albums...",
     "failedLoadAlbums": "Échec du chargement des albums",
@@ -620,8 +620,8 @@
       "playOnlySelectedTrack": "Lire uniquement la piste sélectionnée",
       "showContextIcon": "Afficher le contexte de la piste en cours de lecture dans le lecteur",
       "showContextIconTooltip": "Affiche le contexte depuis lequel la piste actuelle est lue (album, artiste, playlist, etc.)",
-      "persistSession": "Restaurer la session au demarrage",
-      "persistSessionDesc": "Se souvenir de votre file d'attente, position de lecture et vue actuelle au redemarrage",
+      "persistSession": "Restaurer la session au démarrage",
+      "persistSessionDesc": "Se souvenir de votre file d'attente, position de lecture et vue actuelle au redémarrage",
       "streamUncached": "Streamer les pistes non mises en cache",
       "streamUncachedDesc": "Démarrez la lecture plus rapidement lorsque la piste n'est pas dans le cache. La recherche peut être limitée pendant la mise en tampon initiale.",
       "initialBuffer": "Taille du tampon initiale",
@@ -1609,6 +1609,6 @@
     "createRadio": "Créer une radio",
     "qbzRadio": "Radio QBZ",
     "qobuzRadio": "Radio Qobuz",
-    "creating": "Creation de la radio..."
+    "creating": "Création de la radio..."
   }
 }
