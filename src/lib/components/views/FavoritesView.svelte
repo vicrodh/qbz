@@ -4,7 +4,7 @@
   import { onMount, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
-  import { Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, CloudDownload, Shuffle, MoreHorizontal, PanelLeftClose, Loader2, ArrowLeft } from 'lucide-svelte';
+  import { Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, CloudDownload, Shuffle, MoreHorizontal, PanelLeftClose, Loader2, ArrowLeft, CheckSquare } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import QualityBadge from '../QualityBadge.svelte';
@@ -14,6 +14,7 @@
   import VirtualizedFavoritesAlbumGrid from '../VirtualizedFavoritesAlbumGrid.svelte';
   import FavoritePlaylistCard from '../FavoritePlaylistCard.svelte';
   import FavoritesEditModal from '../FavoritesEditModal.svelte';
+  import BulkActionBar from '../BulkActionBar.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
@@ -242,6 +243,52 @@
   let artistSearch = $state('');
   let playlistSearch = $state('');
   let searchExpanded = $state(false);
+
+  // Multi-select (tracks tab)
+  let trackSelectMode = $state(false);
+  let selectedTrackIds = $state(new Set<number>());
+
+  function toggleTrackSelectMode() {
+    trackSelectMode = !trackSelectMode;
+    if (!trackSelectMode) selectedTrackIds = new Set();
+  }
+
+  function toggleTrackSelect(id: number) {
+    const next = new Set(selectedTrackIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    selectedTrackIds = next;
+  }
+
+  async function handleBulkPlayNext() {
+    const selected = filteredTracks.filter(trk => selectedTrackIds.has(trk.id));
+    const tracks = buildFavoritesQueueTracks(selected);
+    await invoke('v2_add_tracks_to_queue_next', { tracks });
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  async function handleBulkPlayLater() {
+    const selected = filteredTracks.filter(trk => selectedTrackIds.has(trk.id));
+    const tracks = buildFavoritesQueueTracks(selected);
+    await invoke('v2_add_tracks_to_queue', { tracks });
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  async function handleBulkAddToPlaylist() {
+    for (const id of selectedTrackIds) {
+      onTrackAddToPlaylist?.(id);
+    }
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
+
+  async function handleBulkAddFavorites() {
+    const ids = Array.from(selectedTrackIds);
+    await invoke('v2_bulk_add_favorites', { trackIds: ids });
+    trackSelectMode = false;
+    selectedTrackIds = new Set();
+  }
 
   let albumViewMode = $state<'grid' | 'list'>('grid');
   type AlbumGroupMode = 'alpha' | 'artist';
@@ -1368,6 +1415,14 @@
           {/if}
         </button>
       {:else if activeTab === 'tracks'}
+        <button
+          class="control-btn icon-only"
+          class:active={trackSelectMode}
+          onclick={toggleTrackSelectMode}
+          title={trackSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+        >
+          <CheckSquare size={16} />
+        </button>
         <GenreFilterButton context={GENRE_CONTEXT_TRACKS} variant="control" align="right" onFilterChange={handleGenreFilterChange} />
         <div class="dropdown-container">
           <button class="control-btn" onclick={() => (showTrackGroupMenu = !showTrackGroupMenu)}>
@@ -1591,9 +1646,20 @@
               onReDownload={onTrackReDownload ? (trk) => onTrackReDownload(buildDisplayTrackFromFavorite(trk)) : undefined}
               onCreateQbzRadio={onTrackCreateQbzRadio}
               onCreateQobuzRadio={onTrackCreateQobuzRadio}
+              selectable={trackSelectMode}
+              selectedIds={selectedTrackIds}
+              onToggleSelect={toggleTrackSelect}
             />
           </div>
         </div>
+        <BulkActionBar
+          count={selectedTrackIds.size}
+          onPlayNext={handleBulkPlayNext}
+          onPlayLater={handleBulkPlayLater}
+          onAddToPlaylist={handleBulkAddToPlaylist}
+          onAddFavorites={handleBulkAddFavorites}
+          onClearSelection={() => { selectedTrackIds = new Set(); }}
+        />
       {/if}
       </ViewTransition>
     {:else if activeTab === 'albums'}

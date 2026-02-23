@@ -66,6 +66,10 @@
     // Album artwork column (same as Playlist view)
     showArtwork?: boolean;
     getArtworkUrl?: (track: Track) => string | undefined;
+    // Multi-select support
+    selectable?: boolean;
+    selectedIds?: Set<number>;
+    onToggleSelect?: (trackId: number) => void;
   }
 
   let {
@@ -112,6 +116,9 @@
     getAlbumId,
     showArtwork = false,
     getArtworkUrl,
+    selectable = false,
+    selectedIds,
+    onToggleSelect,
   }: Props = $props();
 
   // Constants
@@ -338,6 +345,9 @@
             quality={getQualityBadge(item.track)}
             isPlaying={isPlaybackActive && activeTrackId === trackId}
             isBlacklisted={trackBlacklisted}
+            selectable={selectable}
+            selected={selectedIds?.has(trackId) ?? false}
+            onToggleSelect={onToggleSelect ? () => onToggleSelect(trackId) : undefined}
             {isLocal}
             hideDownload={hideDownload || trackBlacklisted}
             hideFavorite={hideFavorite || trackBlacklisted}

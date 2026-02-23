@@ -37,6 +37,9 @@
     compact?: boolean; // Compact mode: smaller height, artist as column
     showArtwork?: boolean; // Optional artwork column (e.g., playlist detail)
     artworkUrl?: string;
+    selectable?: boolean; // Multi-select mode: show checkbox
+    selected?: boolean;
+    onToggleSelect?: (e: MouseEvent) => void;
     onPlay?: () => void;
     onArtistClick?: () => void;
     onAlbumClick?: () => void;
@@ -89,6 +92,9 @@
     compact = false,
     showArtwork = false,
     artworkUrl,
+    selectable = false,
+    selected = false,
+    onToggleSelect,
     onPlay,
     onArtistClick,
     onAlbumClick,
@@ -151,19 +157,32 @@
   class:hovered={isHovered && !isPlaying && !isBlacklisted}
   class:compact
   class:blacklisted={isBlacklisted}
+  class:selected
   data-track-id={trackId ?? undefined}
   onmouseenter={() => (isHovered = true)}
   onmouseleave={() => (isHovered = false)}
-  onclick={isBlacklisted ? undefined : onPlay}
+  onclick={selectable ? onToggleSelect : (isBlacklisted ? undefined : onPlay)}
   oncontextmenu={(e) => {
-    if (isBlacklisted) return;
+    if (isBlacklisted || selectable) return;
     e.preventDefault();
     contextMenuPos = { x: e.clientX, y: e.clientY };
   }}
   role="button"
   tabindex={isBlacklisted ? -1 : 0}
-  onkeydown={(e) => e.key === 'Enter' && !isBlacklisted && onPlay?.()}
+  onkeydown={(e) => e.key === 'Enter' && !isBlacklisted && (selectable ? onToggleSelect?.(e as unknown as MouseEvent) : onPlay?.())}
 >
+  <!-- Checkbox (select mode) -->
+  {#if selectable}
+    <div class="track-checkbox" onclick={(e) => e.stopPropagation()}>
+      <input
+        type="checkbox"
+        checked={selected}
+        onchange={onToggleSelect as unknown as (e: Event) => void}
+        aria-label="Select track"
+      />
+    </div>
+  {/if}
+
   <!-- Track Number / Play Button / Unavailable Indicator -->
   <div class="track-number" class:unavailable={isUnavailable} class:blacklisted={isBlacklisted}>
     {#if isBlacklisted}
@@ -354,6 +373,29 @@
 
   .track-row.compact .track-number {
     width: 32px;
+  }
+
+  .track-row.selected {
+    background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
+  }
+
+  .track-row.selected.hovered {
+    background-color: color-mix(in srgb, var(--accent-primary) 20%, transparent);
+  }
+
+  .track-checkbox {
+    width: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .track-checkbox input[type='checkbox'] {
+    width: 15px;
+    height: 15px;
+    cursor: pointer;
+    accent-color: var(--accent-primary);
   }
 
   .track-number {
