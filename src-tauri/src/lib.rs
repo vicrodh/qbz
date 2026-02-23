@@ -170,18 +170,22 @@ fn load_kwin_ssd_script() -> Result<(), String> {
     use std::io::Write;
 
     let script_content = r#"
-const clients = workspace.windowList();
-for (let i = 0; i < clients.length; i++) {
-    const c = clients[i];
-    if (c.resourceClass === "qbz") {
-        c.noBorder = false;
-    }
+function isQbzWindow(client) {
+    var rc = client.resourceClass.toLowerCase();
+    return rc === "com.blitzfc.qbz" || rc === "qbz" || rc === "qbz-nix";
 }
-workspace.windowAdded.connect(function(client) {
-    if (client.resourceClass === "qbz") {
+function forceDecorations(client) {
+    print("[QBZ-SSD] checking: resourceClass=" + client.resourceClass + " caption=" + client.caption);
+    if (isQbzWindow(client)) {
+        print("[QBZ-SSD] forcing SSD on: " + client.resourceClass);
         client.noBorder = false;
     }
-});
+}
+var clients = workspace.windowList();
+for (var i = 0; i < clients.length; i++) {
+    forceDecorations(clients[i]);
+}
+workspace.windowAdded.connect(forceDecorations);
 "#;
 
     // Write script to a temporary file
