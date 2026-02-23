@@ -450,6 +450,7 @@
     "restore": "Wiederherstellen",
     "minimize": "Minimieren",
     "exitImmersive": "Immersiv-Modus beenden",
+    "dragWindow": "Fenster verschieben",
     "normalizationOff": "Lautstärkenormalisierung: Aus",
     "normalizationOn": "Lautstärkenormalisierung: Ein",
     "normalizationApplied": "Lautstärkenormalisierung: Aktiv"

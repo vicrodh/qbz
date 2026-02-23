@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Disc3, Disc, Mic2, ListMusic, Music2, Info, Radio, Maximize, Minimize, ChevronDown, X, Square, Copy, Minus, Image, Activity, AudioWaveform, CircleDot, Crosshair, Zap, HeartPulse } from 'lucide-svelte';
+  import { Disc3, Disc, Mic2, ListMusic, Music2, Info, Radio, Maximize, Minimize, ChevronDown, X, Square, Copy, Minus, Image, Activity, AudioWaveform, CircleDot, Crosshair, Zap, HeartPulse, Move } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import { getCurrentWindow } from '@tauri-apps/api/window';
 
@@ -96,6 +96,15 @@
     } else {
       const window = getCurrentWindow();
       await window.close();
+    }
+  }
+
+  async function handleDragStart() {
+    try {
+      const window = getCurrentWindow();
+      await window.startDragging();
+    } catch {
+      // Ignore drag errors (e.g., fullscreen mode)
     }
   }
 
@@ -249,6 +258,13 @@
     >
       <!-- Expanded buttons (appear on hover) -->
       <div class="expanded-buttons">
+        <button
+          class="window-btn drag-btn"
+          onmousedown={handleDragStart}
+          title={$t('player.dragWindow')}
+        >
+          <Move size={16} />
+        </button>
         <button
           class="window-btn"
           onclick={onToggleFullscreen}
@@ -535,7 +551,7 @@
   }
 
   .window-controls.expanded .expanded-buttons {
-    max-width: 200px;
+    max-width: 240px;
     opacity: 1;
     margin-right: 4px;
   }
@@ -558,6 +574,14 @@
   .window-btn:hover {
     color: var(--text-primary, white);
     background: var(--alpha-15, rgba(255, 255, 255, 0.15));
+  }
+
+  .window-btn.drag-btn {
+    cursor: grab;
+  }
+
+  .window-btn.drag-btn:active {
+    cursor: grabbing;
   }
 
   .window-btn.close:hover {

@@ -465,6 +465,7 @@
     "restore": "Restore",
     "minimize": "Minimize",
     "exitImmersive": "Exit Immersive",
+    "dragWindow": "Move Window",
     "normalizationOff": "Volume Normalization: Off",
     "normalizationOn": "Volume Normalization: On",
     "normalizationApplied": "Volume Normalization: Active"

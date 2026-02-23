@@ -450,6 +450,7 @@
     "restore": "Restaurer",
     "minimize": "Réduire",
     "exitImmersive": "Quitter le mode immersif",
+    "dragWindow": "Déplacer la fenêtre",
     "normalizationOff": "Normalisation du volume : Désactivée",
     "normalizationOn": "Normalisation du volume : Activée",
     "normalizationApplied": "Normalisation du volume : Active"
