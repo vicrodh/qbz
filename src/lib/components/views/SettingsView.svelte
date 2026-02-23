@@ -71,6 +71,7 @@
     getPlaybackPreferences,
     setAutoplayMode,
     setShowContextIcon,
+    setPersistSession,
     type AutoplayMode
   } from '$lib/stores/playbackPreferencesStore';
   import {
@@ -769,6 +770,7 @@
   // Playback settings
   let autoplayMode = $state<AutoplayMode>('continue');
   let showContextIcon = $state(true);
+  let persistSession = $state(false);
   let gaplessPlayback = $state(true);
   let crossfade = $state(0);
   let normalizeVolume = $state(false);
@@ -2657,8 +2659,10 @@
       console.log('[Settings] Loaded preferences:', prefs);
       autoplayMode = prefs.autoplay_mode;
       showContextIcon = prefs.show_context_icon;
+      persistSession = prefs.persist_session;
       console.log('[Settings] Set autoplayMode to:', autoplayMode);
       console.log('[Settings] Set showContextIcon to:', showContextIcon);
+      console.log('[Settings] Set persistSession to:', persistSession);
     } catch (err) {
       console.error('Failed to load playback preferences:', err);
     }
@@ -2733,6 +2737,17 @@
     } catch (err) {
       console.error('[Settings] Failed to set show context icon:', err);
       showToast($t('toast.failedSaveIconVisibility'), 'error');
+    }
+  }
+
+  async function handlePersistSessionChange(persist: boolean) {
+    console.log('[Settings] Changing persist session to:', persist);
+    try {
+      await setPersistSession(persist);
+      persistSession = persist;
+      console.log('[Settings] Persist session saved successfully');
+    } catch (err) {
+      console.error('[Settings] Failed to set persist session:', err);
     }
   }
 
@@ -3463,6 +3478,13 @@
         <span class="setting-desc">{$t('settings.playback.showContextIconTooltip')}</span>
       </div>
       <Toggle enabled={showContextIcon} onchange={handleShowContextIconChange} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.playback.persistSession')}</span>
+        <span class="setting-desc">{$t('settings.playback.persistSessionDesc')}</span>
+      </div>
+      <Toggle enabled={persistSession} onchange={handlePersistSessionChange} />
     </div>
     <div class="setting-row">
       <div class="setting-info">

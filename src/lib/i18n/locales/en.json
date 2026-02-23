@@ -635,6 +635,8 @@
       "playOnlySelectedTrack": "Play only selected track",
       "showContextIcon": "Show track playing context in player",
       "showContextIconTooltip": "Shows the context from which the current track is being played (album, artist, playlist, etc.)",
+      "persistSession": "Restore session on startup",
+      "persistSessionDesc": "Remember your queue, playback position, and current view when restarting",
       "streamUncached": "Stream Uncached Tracks",
       "streamUncachedDesc": "Start playback faster when track is not in cache. Seeking may be limited during initial buffering.",
       "initialBuffer": "Initial Buffer Size",

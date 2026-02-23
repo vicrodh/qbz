@@ -618,6 +618,8 @@
       "playOnlySelectedTrack": "Nur ausgewählten Titel abspielen",
       "showContextIcon": "Kontext des abgespielten Titels im Player anzeigen",
       "showContextIconTooltip": "Zeigt den Kontext, aus dem der aktuelle Titel abgespielt wird (Album, Künstler, Playlist usw.)",
+      "persistSession": "Sitzung beim Start wiederherstellen",
+      "persistSessionDesc": "Warteschlange, Wiedergabeposition und aktuelle Ansicht beim Neustart merken",
       "streamUncached": "Nicht zwischengespeicherte Titel streamen",
       "streamUncachedDesc": "Startet die Wiedergabe schneller, wenn der Titel nicht im Cache ist. Vorspulen kann während der initialen Pufferung eingeschränkt sein.",
       "initialBuffer": "Initiale Puffergröße",

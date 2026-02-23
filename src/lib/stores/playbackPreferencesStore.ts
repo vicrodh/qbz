@@ -13,13 +13,15 @@ export type AutoplayMode = 'continue' | 'track_only';
 export interface PlaybackPreferences {
   autoplay_mode: AutoplayMode;
   show_context_icon: boolean;
+  persist_session: boolean;
 }
 
 // ============ State ============
 
 let preferences: PlaybackPreferences = {
   autoplay_mode: 'continue',
-  show_context_icon: true
+  show_context_icon: true,
+  persist_session: false
 };
 
 const listeners = new Set<() => void>();
@@ -57,6 +59,15 @@ export async function setAutoplayMode(mode: AutoplayMode): Promise<void> {
 export async function setShowContextIcon(show: boolean): Promise<void> {
   await invoke('v2_set_show_context_icon', { show });
   preferences.show_context_icon = show;
+  notifyListeners();
+}
+
+/**
+ * Set whether to persist session on close/restart
+ */
+export async function setPersistSession(persist: boolean): Promise<void> {
+  await invoke('v2_set_persist_session', { persist });
+  preferences.persist_session = persist;
   notifyListeners();
 }
 

@@ -620,6 +620,7 @@
   let queueRemainingTracks = $state(0); // Actual remaining tracks (total - current_index - 1)
   let historyTracks = $state<QueueTrack[]>([]);
   let infinitePlayEnabled = $state(false);
+  let sessionPersistEnabled = $state(false);
 
   // Toast State (from store subscription)
   let toast = $state<ToastData | null>(null);
@@ -2560,7 +2561,10 @@
 
     // Initialize per-user stores now that the backend session is active
     initOfflineCacheStates(); // has internal try/catch
-    initPlaybackPreferences().catch(err => console.debug('[PlaybackPrefs] Init deferred:', err));
+    await initPlaybackPreferences().then(() => {
+      sessionPersistEnabled = getCachedPreferences().persist_session;
+      console.log('[Session] Persist session enabled:', sessionPersistEnabled);
+    }).catch(err => console.debug('[PlaybackPrefs] Init deferred:', err));
     initBlacklistStore().catch(err => console.debug('[Blacklist] Init deferred:', err));
     refreshUpdatePreferences().catch(err => console.debug('[Updates] Prefs refresh deferred:', err));
 
@@ -2586,8 +2590,11 @@
       console.debug('[Reco] Score training failed:', err);
     });
 
-    // Restore previous session if available
-    try {
+    // Restore previous session if available (only when persist_session is enabled)
+    if (!sessionPersistEnabled) {
+      console.log('[Session] Session persistence disabled, skipping restore');
+    }
+    if (sessionPersistEnabled) try {
       const session = await loadSessionState();
 
       // Restore queue + track (visual only — paused at 0:00)
@@ -2735,7 +2742,7 @@
 
   // Save session state before window closes
   async function saveSessionBeforeClose() {
-    if (!isLoggedIn) return;
+    if (!isLoggedIn || !sessionPersistEnabled) return;
 
     try {
       // Build view context from current navigation state

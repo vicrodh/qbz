@@ -720,6 +720,7 @@ pub fn run() {
             commands_v2::v2_get_tray_settings,
             commands_v2::v2_set_autoplay_mode,
             commands_v2::v2_set_show_context_icon,
+            commands_v2::v2_set_persist_session,
             commands_v2::v2_get_playback_preferences,
             commands_v2::v2_get_favorites_preferences,
             commands_v2::v2_save_favorites_preferences,

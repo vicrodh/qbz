@@ -49,6 +49,7 @@ impl AutoplayMode {
 pub struct PlaybackPreferences {
     pub autoplay_mode: AutoplayMode,
     pub show_context_icon: bool,
+    pub persist_session: bool,
 }
 
 impl Default for PlaybackPreferences {
@@ -56,6 +57,7 @@ impl Default for PlaybackPreferences {
         Self {
             autoplay_mode: AutoplayMode::ContinueWithinSource,
             show_context_icon: false,
+            persist_session: false,
         }
     }
 }
@@ -117,10 +119,31 @@ impl PlaybackPreferencesStore {
             info!("[PlaybackPrefs] Migration successful");
         }
 
+        // Step 3b: Check if persist_session column exists
+        let persist_session_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('playback_preferences') WHERE name='persist_session'",
+                [],
+                |row| {
+                    let count: i32 = row.get(0)?;
+                    Ok(count > 0)
+                }
+            )
+            .unwrap_or(false);
+
+        if !persist_session_exists {
+            info!("[PlaybackPrefs] Migrating: adding persist_session column");
+            conn.execute(
+                "ALTER TABLE playback_preferences ADD COLUMN persist_session INTEGER NOT NULL DEFAULT 0",
+                []
+            ).map_err(|e| format!("Failed to add persist_session column: {}", e))?;
+            info!("[PlaybackPrefs] persist_session migration successful");
+        }
+
         // Step 4: Insert default row if it doesn't exist
         conn.execute(
-            "INSERT OR IGNORE INTO playback_preferences (id, autoplay_mode, show_context_icon)
-            VALUES (1, 'continue', 0)",
+            "INSERT OR IGNORE INTO playback_preferences (id, autoplay_mode, show_context_icon, persist_session)
+            VALUES (1, 'continue', 0, 0)",
             [],
         )
         .map_err(|e| format!("Failed to insert default preferences: {}", e))?;
@@ -142,14 +165,16 @@ impl PlaybackPreferencesStore {
     pub fn get_preferences(&self) -> Result<PlaybackPreferences, String> {
         self.conn
             .query_row(
-                "SELECT autoplay_mode, show_context_icon FROM playback_preferences WHERE id = 1",
+                "SELECT autoplay_mode, show_context_icon, persist_session FROM playback_preferences WHERE id = 1",
                 [],
                 |row| {
                     let autoplay_str: String = row.get(0)?;
                     let show_icon: i32 = row.get(1)?;
+                    let persist: i32 = row.get(2)?;
                     Ok(PlaybackPreferences {
                         autoplay_mode: AutoplayMode::from_db_value(&autoplay_str),
                         show_context_icon: show_icon != 0,
+                        persist_session: persist != 0,
                     })
                 },
             )
@@ -176,13 +201,23 @@ impl PlaybackPreferencesStore {
         Ok(())
     }
 
+    pub fn set_persist_session(&self, persist: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE playback_preferences SET persist_session = ?1 WHERE id = 1",
+                params![if persist { 1 } else { 0 }],
+            )
+            .map_err(|e| format!("Failed to set persist session: {}", e))?;
+        Ok(())
+    }
+
     /// Reset all playback preferences to their default values
     pub fn reset_all(&self) -> Result<PlaybackPreferences, String> {
         let defaults = PlaybackPreferences::default();
         self.conn
             .execute(
-                "UPDATE playback_preferences SET autoplay_mode = ?1, show_context_icon = ?2 WHERE id = 1",
-                params![defaults.autoplay_mode.to_db_value(), if defaults.show_context_icon { 1 } else { 0 }],
+                "UPDATE playback_preferences SET autoplay_mode = ?1, show_context_icon = ?2, persist_session = ?3 WHERE id = 1",
+                params![defaults.autoplay_mode.to_db_value(), if defaults.show_context_icon { 1 } else { 0 }, if defaults.persist_session { 1 } else { 0 }],
             )
             .map_err(|e| format!("Failed to reset playback preferences: {}", e))?;
         Ok(defaults)
@@ -253,6 +288,15 @@ impl PlaybackPreferencesState {
         let store = guard.as_ref().ok_or("No active session - please log in")?;
         store.set_show_context_icon(show)
     }
+
+    pub fn set_persist_session(&self, persist: bool) -> Result<(), String> {
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock playback preferences store".to_string())?;
+        let store = guard.as_ref().ok_or("No active session - please log in")?;
+        store.set_persist_session(persist)
+    }
 }
 
 // Tauri commands
@@ -284,4 +328,12 @@ pub fn set_show_context_icon(
     state: tauri::State<PlaybackPreferencesState>,
 ) -> Result<(), String> {
     state.set_show_context_icon(show)
+}
+
+#[tauri::command]
+pub fn set_persist_session(
+    persist: bool,
+    state: tauri::State<PlaybackPreferencesState>,
+) -> Result<(), String> {
+    state.set_persist_session(persist)
 }

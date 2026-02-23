@@ -1299,6 +1299,14 @@ pub fn v2_set_show_context_icon(
 }
 
 #[tauri::command]
+pub fn v2_set_persist_session(
+    persist: bool,
+    state: State<'_, PlaybackPreferencesState>,
+) -> Result<(), String> {
+    state.set_persist_session(persist)
+}
+
+#[tauri::command]
 pub fn v2_get_playback_preferences(
     state: State<'_, PlaybackPreferencesState>,
 ) -> Result<PlaybackPreferences, String> {

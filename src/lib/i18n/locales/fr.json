@@ -618,6 +618,8 @@
       "playOnlySelectedTrack": "Lire uniquement la piste sélectionnée",
       "showContextIcon": "Afficher le contexte de la piste en cours de lecture dans le lecteur",
       "showContextIconTooltip": "Affiche le contexte depuis lequel la piste actuelle est lue (album, artiste, playlist, etc.)",
+      "persistSession": "Restaurer la session au demarrage",
+      "persistSessionDesc": "Se souvenir de votre file d'attente, position de lecture et vue actuelle au redemarrage",
       "streamUncached": "Streamer les pistes non mises en cache",
       "streamUncachedDesc": "Démarrez la lecture plus rapidement lorsque la piste n'est pas dans le cache. La recherche peut être limitée pendant la mise en tampon initiale.",
       "initialBuffer": "Taille du tampon initiale",
