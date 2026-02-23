@@ -14,6 +14,7 @@ import { initOfflineStore, cleanupOfflineStore, onOnlineTransition, syncPendingP
 import { loadUnavailableTracks } from '$lib/stores/unavailableTracksStore';
 import { getNextZoomLevel } from '$lib/utils/zoom';
 import { getZoom, setZoom } from '$lib/stores/zoomStore';
+import { restoreAutoThemeVars } from '$lib/stores/autoThemeStore';
 
 // ============ Theme Management ============
 
@@ -134,7 +135,8 @@ export interface BootstrapResult {
  * @returns Object with cleanup function for onDestroy
  */
 export function bootstrapApp(): BootstrapResult {
-  // Load theme and font
+  // Load theme and font (auto-theme vars first to prevent FOUC)
+  restoreAutoThemeVars();
   loadSavedTheme();
   loadSavedFont();
   void applySavedZoom();
