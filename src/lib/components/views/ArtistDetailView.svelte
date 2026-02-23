@@ -25,6 +25,7 @@
     toggleTrackFavorite
   } from '$lib/stores/favoritesStore';
   import { tick, onMount, onDestroy } from 'svelte';
+  import ImageLightbox from '../ImageLightbox.svelte';
 
   interface Track {
     id: number;
@@ -135,6 +136,7 @@
 
   let bioExpanded = $state(false);
   let imageError = $state(false);
+  let lightboxOpen = $state(false);
   let topTracks = $state<Track[]>([]);
   let tracksLoading = $state(false);
   let isFavorite = $state(false);
@@ -1298,7 +1300,13 @@
   <div class="artist-header section-anchor" bind:this={aboutSection}>
     <!-- Artist Image -->
     <div class="artist-image-column">
-      <div class="artist-image-container">
+      <div
+        class="artist-image-container"
+        onclick={() => { if (!imageError && artist.image) lightboxOpen = true; }}
+        onkeydown={(e) => { if (e.key === 'Enter' && !imageError && artist.image) lightboxOpen = true; }}
+        role="button"
+        tabindex="0"
+      >
         {#if imageError || !artist.image}
           <div class="artist-image-placeholder">
             <User size={60} />
@@ -2437,6 +2445,14 @@
   {/if}
 </div>
 
+<ImageLightbox
+  isOpen={lightboxOpen}
+  onClose={() => lightboxOpen = false}
+  src={artist.image ?? ''}
+  alt={artist.name}
+  round={true}
+/>
+
 <style>
   .artist-detail {
     width: 100%;
@@ -2675,6 +2691,7 @@
 
   .artist-image-container {
     flex-shrink: 0;
+    cursor: pointer;
   }
 
   .artist-image {
