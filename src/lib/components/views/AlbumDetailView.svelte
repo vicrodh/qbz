@@ -16,6 +16,7 @@
     toggleAlbumFavorite
   } from '$lib/stores/albumFavoritesStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
+  import ImageLightbox from '../ImageLightbox.svelte';
 
   interface Track {
     id: number;
@@ -153,6 +154,7 @@
 
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
+  let lightboxOpen = $state(false);
   let scrollContainer: HTMLDivElement | null = $state(null);
 
   // Carousel state for "By the same artist" section
@@ -327,7 +329,13 @@
   <!-- Album Header -->
   <div class="album-header">
     <!-- Album Artwork -->
-    <div class="artwork">
+    <div
+      class="artwork"
+      onclick={() => lightboxOpen = true}
+      onkeydown={(e) => { if (e.key === 'Enter') lightboxOpen = true; }}
+      role="button"
+      tabindex="0"
+    >
       <img src={album.artwork} alt={album.title} />
     </div>
 
@@ -572,6 +580,13 @@
 </div>
 </ViewTransition>
 
+<ImageLightbox
+  isOpen={lightboxOpen}
+  onClose={() => lightboxOpen = false}
+  src={album.artwork}
+  alt={album.title}
+/>
+
 <style>
   .album-detail {
     width: 100%;
@@ -631,6 +646,7 @@
     border-radius: 12px;
     overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+    cursor: pointer;
   }
 
   .artwork img {

@@ -50,6 +50,7 @@
     isAutoplayEnabled
   } from '$lib/stores/playbackPreferencesStore';
   import { initBlacklistStore, isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
+  import { initCustomArtistImageStore, clearCustomArtistImages } from '$lib/stores/customArtistImageStore';
 
   // UI state management
   import {
@@ -2583,6 +2584,7 @@
       console.log('[Session] Persist session enabled:', sessionPersistEnabled);
     }).catch(err => console.debug('[PlaybackPrefs] Init deferred:', err));
     initBlacklistStore().catch(err => console.debug('[Blacklist] Init deferred:', err));
+    initCustomArtistImageStore().catch(err => console.debug('[CustomArtistImages] Init deferred:', err));
     refreshUpdatePreferences().catch(err => console.debug('[Updates] Prefs refresh deferred:', err));
 
     // Load audio settings (normalization state) now that session is active
@@ -2701,6 +2703,7 @@
       setStorageUserId(null);
       // Clear session state
       await clearSession();
+      clearCustomArtistImages();
       setLoggedOut();
       sessionReady = false;
       updatesLaunchTriggered = false;

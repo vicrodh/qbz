@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
+  import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { Search, Disc3, Music, Mic2, User, X, ChevronLeft, ChevronRight, Crown, Heart, Play, MoreHorizontal, ListPlus } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import SearchPlaylistCard from '../SearchPlaylistCard.svelte';
@@ -742,7 +743,8 @@
   }
 
   function getArtistImage(artist: Artist): string {
-    return artist.image?.large || artist.image?.thumbnail || artist.image?.small || '';
+    const defaultUrl = artist.image?.large || artist.image?.thumbnail || artist.image?.small || '';
+    return resolveArtistImage(artist.name, defaultUrl);
   }
 
   // Title case query for better API results (Qobuz returns most_popular more consistently with proper capitalization)

@@ -3457,6 +3457,34 @@ impl LibraryDatabase {
         Ok(result)
     }
 
+    /// Get all custom artist images (for bulk lookup)
+    pub fn get_all_custom_artist_images(
+        &self,
+    ) -> Result<std::collections::HashMap<String, String>, LibraryError> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                "SELECT artist_name, custom_image_path FROM artist_images WHERE custom_image_path IS NOT NULL",
+            )
+            .map_err(|e| LibraryError::Database(format!("Failed to prepare query: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| {
+                LibraryError::Database(format!("Failed to query custom artist images: {}", e))
+            })?;
+
+        let mut map = std::collections::HashMap::new();
+        for row in rows {
+            if let Ok((artist_name, custom_image_path)) = row {
+                map.insert(artist_name, custom_image_path);
+            }
+        }
+        Ok(map)
+    }
+
     /// Get all canonical artist names mapping (for bulk lookup)
     pub fn get_all_canonical_names(
         &self,

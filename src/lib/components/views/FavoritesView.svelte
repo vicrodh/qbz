@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { onMount, tick } from 'svelte';
   import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
@@ -897,6 +898,17 @@
     }));
   }
 
+  function withCustomImages(artists: FavoriteArtist[]): FavoriteArtist[] {
+    return artists.map(artist => {
+      const defaultUrl = artist.image?.large || artist.image?.thumbnail || artist.image?.small || '';
+      const resolved = resolveArtistImage(artist.name, defaultUrl);
+      if (resolved !== defaultUrl) {
+        return { ...artist, image: { large: resolved, thumbnail: resolved, small: resolved } };
+      }
+      return artist;
+    });
+  }
+
   function groupArtists(items: FavoriteArtist[]) {
     const prefix = 'artist-alpha';
     const sorted = [...items].sort((a, b) => a.name.localeCompare(b.name));
@@ -1452,7 +1464,7 @@
 
   <!-- Alpha Index inline for artists in Browse (sidepanel) view -->
   {#if activeTab === 'artists' && artistViewMode === 'sidepanel' && filteredArtists.length > 0}
-    {@const groupedArtistsForIndex = groupArtists(filteredArtists)}
+    {@const groupedArtistsForIndex = groupArtists(withCustomImages(filteredArtists))}
     {@const artistAlphaGroupsForIndex = new Set(groupedArtistsForIndex.map(group => group.key))}
     <div class="alpha-index-inline">
       {#each alphaIndexLetters as letter}
@@ -1657,7 +1669,7 @@
         </div>
       {:else if artistViewMode === 'sidepanel'}
         <!-- Two-column sidepanel view -->
-        {@const groupedArtistsSidepanel = groupArtists(filteredArtists)}
+        {@const groupedArtistsSidepanel = groupArtists(withCustomImages(filteredArtists))}
         <div class="artist-two-column-layout">
           <!-- Left column: Artists list grouped A-Z (virtualized) -->
           <div class="artist-column">
@@ -1871,7 +1883,7 @@
       {:else}
         <!-- Virtualized artist grid (grouped or ungrouped) -->
         {@const artistGridGroups = artistGroupingEnabled
-          ? groupArtists(filteredArtists)
+          ? groupArtists(withCustomImages(filteredArtists))
           : [{ key: '', id: 'all', artists: filteredArtists }]}
         {@const artistAlphaGroups = artistGroupingEnabled
           ? new Set(artistGridGroups.map(grp => grp.key))

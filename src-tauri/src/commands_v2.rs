@@ -4218,12 +4218,18 @@ pub async fn v2_library_cache_artist_image(
     .map_err(|e| e.to_string())
 }
 
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CustomArtistImageResult {
+    pub image_path: String,
+    pub thumbnail_path: String,
+}
+
 #[tauri::command]
 pub async fn v2_library_set_custom_artist_image(
     artist_name: String,
     custom_image_path: String,
     state: State<'_, LibraryState>,
-) -> Result<(), String> {
+) -> Result<CustomArtistImageResult, String> {
     let artwork_dir = get_artwork_cache_dir();
     let source = std::path::Path::new(&custom_image_path);
     if !source.exists() {
@@ -4232,20 +4238,43 @@ pub async fn v2_library_set_custom_artist_image(
             custom_image_path
         ));
     }
-    let extension = source.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
-    use md5::{Digest, Md5};
+
+    // Validate extension
+    let extension = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+    if !["png", "jpg", "jpeg", "webp"].contains(&extension.as_str()) {
+        return Err(format!(
+            "Unsupported image format: {}. Use png, jpg, jpeg, or webp.",
+            extension
+        ));
+    }
+
+    // Generate filename using MD5 hash of artist name
     let mut hasher = Md5::new();
     hasher.update(artist_name.as_bytes());
     let artist_hash = format!("{:x}", hasher.finalize());
-    let filename = format!(
-        "artist_custom_{}_{}.{}",
-        artist_hash,
-        chrono::Utc::now().timestamp(),
-        extension
-    );
-    let dest_path = artwork_dir.join(filename);
-    std::fs::copy(source, &dest_path).map_err(|e| format!("Failed to copy artwork: {}", e))?;
+    let timestamp = chrono::Utc::now().timestamp();
+    let filename = format!("artist_custom_{}_{}.jpg", artist_hash, timestamp);
+    let dest_path = artwork_dir.join(&filename);
 
+    // Decode, resize to max 1000x1000, save as JPEG
+    let img = image::ImageReader::open(source)
+        .map_err(|e| format!("Failed to open image: {}", e))?
+        .decode()
+        .map_err(|e| format!("Failed to decode image: {}", e))?;
+    let resized = img.resize(1000, 1000, image::imageops::FilterType::Lanczos3);
+    resized
+        .save(&dest_path)
+        .map_err(|e| format!("Failed to save resized image: {}", e))?;
+
+    // Generate 500x500 thumbnail using qbz-library
+    let thumbnail_path = thumbnails::generate_thumbnail(&dest_path)
+        .map_err(|e| format!("Failed to generate thumbnail: {}", e))?;
+
+    // Update database
     let guard = state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
     db.cache_artist_image(
@@ -4254,7 +4283,67 @@ pub async fn v2_library_set_custom_artist_image(
         "custom",
         Some(&dest_path.to_string_lossy()),
     )
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+
+    Ok(CustomArtistImageResult {
+        image_path: dest_path.to_string_lossy().into_owned(),
+        thumbnail_path: thumbnail_path.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+pub async fn v2_library_remove_custom_artist_image(
+    artist_name: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    // Get current info to find file paths to delete
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    let info = db.get_artist_image(&artist_name).map_err(|e| e.to_string())?;
+
+    if let Some(info) = info {
+        // Delete custom image file if it exists
+        if let Some(ref path) = info.custom_image_path {
+            let p = std::path::Path::new(path);
+            if p.exists() {
+                // Also remove thumbnail
+                if let Ok(thumb) = thumbnails::get_thumbnail_path(p) {
+                    let _ = std::fs::remove_file(thumb);
+                }
+                let _ = std::fs::remove_file(p);
+            }
+        }
+
+        // Reset to original image (clear custom_image_path, keep image_url)
+        db.cache_artist_image(
+            &artist_name,
+            info.image_url.as_deref(),
+            info.source.as_deref().unwrap_or("qobuz"),
+            None,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_library_get_artist_image(
+    artist_name: String,
+    state: State<'_, LibraryState>,
+) -> Result<Option<crate::library::ArtistImageInfo>, String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.get_artist_image(&artist_name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn v2_library_get_all_custom_artist_images(
+    state: State<'_, LibraryState>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.get_all_custom_artist_images().map_err(|e| e.to_string())
 }
 
 #[tauri::command]
