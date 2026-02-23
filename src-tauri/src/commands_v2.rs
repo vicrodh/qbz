@@ -568,16 +568,26 @@ pub async fn runtime_bootstrap(
                     return Err(RuntimeError::RuntimeDegraded(reason));
                 }
 
-                // Step 6: Sync audio settings once after session activation.
-                // Per-user stores are now ready; reload settings so the audio
-                // thread has fresh DB values for DAC passthrough, backend, etc.
-                if let Some(bridge) = core_bridge.try_get().await {
-                    let player = bridge.player();
-                    if let Ok(guard) = audio_settings.store.lock() {
-                        if let Some(store) = guard.as_ref() {
-                            if let Ok(fresh) = store.get_settings() {
-                                log::info!("[Runtime] Syncing audio settings to player after session activation");
-                                let _ = player.reload_settings(convert_to_qbz_audio_settings(&fresh));
+                // Step 6: Optionally sync audio settings after session activation.
+                // Only runs if user has enabled sync_audio_on_startup (opt-in).
+                // Useful when Player::new() may hold stale settings (e.g., Flatpak updates).
+                let should_sync = audio_settings
+                    .store
+                    .lock()
+                    .ok()
+                    .and_then(|g| g.as_ref().and_then(|s| s.get_settings().ok()))
+                    .map(|s| s.sync_audio_on_startup)
+                    .unwrap_or(false);
+
+                if should_sync {
+                    if let Some(bridge) = core_bridge.try_get().await {
+                        let player = bridge.player();
+                        if let Ok(guard) = audio_settings.store.lock() {
+                            if let Some(store) = guard.as_ref() {
+                                if let Ok(fresh) = store.get_settings() {
+                                    log::info!("[Runtime] Syncing audio settings to player (sync_audio_on_startup=true)");
+                                    let _ = player.reload_settings(convert_to_qbz_audio_settings(&fresh));
+                                }
                             }
                         }
                     }
@@ -6392,6 +6402,25 @@ pub fn v2_set_audio_pw_force_bitperfect(
         .ok_or(RuntimeError::UserSessionNotActivated)?;
     store
         .set_pw_force_bitperfect(enabled)
+        .map_err(RuntimeError::Internal)
+}
+
+/// Set sync audio settings on startup (V2)
+#[tauri::command]
+pub fn v2_set_sync_audio_on_startup(
+    enabled: bool,
+    state: State<'_, AudioSettingsState>,
+) -> Result<(), RuntimeError> {
+    log::info!("[V2] set_sync_audio_on_startup: {}", enabled);
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+    let store = guard
+        .as_ref()
+        .ok_or(RuntimeError::UserSessionNotActivated)?;
+    store
+        .set_sync_audio_on_startup(enabled)
         .map_err(RuntimeError::Internal)
 }
 

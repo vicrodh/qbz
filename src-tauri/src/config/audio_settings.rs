@@ -47,6 +47,10 @@ pub struct AudioSettings {
     /// When true, force PipeWire clock.force-quantum alongside clock.force-rate for bit-perfect.
     /// Reset both to 0 on stop. PipeWire-only, requires dac_passthrough.
     pub pw_force_bitperfect: bool,
+    /// When true, reload audio settings from DB into the player on app startup.
+    /// Useful when Player::new() may hold stale settings (e.g., after Flatpak updates).
+    /// Default: false (most users don't need this).
+    pub sync_audio_on_startup: bool,
 }
 
 impl Default for AudioSettings {
@@ -69,6 +73,7 @@ impl Default for AudioSettings {
             normalization_target_lufs: -14.0, // Spotify/YouTube standard
             gapless_enabled: false, // Off by default — user opts in
             pw_force_bitperfect: false, // Off by default — experimental PipeWire feature
+            sync_audio_on_startup: false, // Off by default — opt-in for stale-settings edge case
         }
     }
 }
@@ -157,6 +162,10 @@ impl AudioSettingsStore {
             "ALTER TABLE audio_settings ADD COLUMN pw_force_bitperfect INTEGER DEFAULT 0",
             [],
         );
+        let _ = conn.execute(
+            "ALTER TABLE audio_settings ADD COLUMN sync_audio_on_startup INTEGER DEFAULT 0",
+            [],
+        );
 
         Ok(Self { conn })
     }
@@ -175,7 +184,7 @@ impl AudioSettingsStore {
     pub fn get_settings(&self) -> Result<AudioSettings, String> {
         self.conn
             .query_row(
-                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate, normalization_enabled, normalization_target_lufs, gapless_enabled, device_sample_rate_limits, pw_force_bitperfect FROM audio_settings WHERE id = 1",
+                "SELECT output_device, exclusive_mode, dac_passthrough, preferred_sample_rate, backend_type, alsa_plugin, alsa_hardware_volume, stream_first_track, stream_buffer_seconds, streaming_only, limit_quality_to_device, device_max_sample_rate, normalization_enabled, normalization_target_lufs, gapless_enabled, device_sample_rate_limits, pw_force_bitperfect, sync_audio_on_startup FROM audio_settings WHERE id = 1",
                 [],
                 |row| {
                     // Parse backend_type from JSON string
@@ -212,6 +221,7 @@ impl AudioSettingsStore {
                         normalization_target_lufs: row.get::<_, Option<f64>>(13)?.unwrap_or(-14.0) as f32,
                         gapless_enabled: row.get::<_, Option<i64>>(14)?.unwrap_or(0) != 0,
                         pw_force_bitperfect: row.get::<_, Option<i64>>(16)?.unwrap_or(0) != 0,
+                        sync_audio_on_startup: row.get::<_, Option<i64>>(17)?.unwrap_or(0) != 0,
                     })
                 },
             )
@@ -435,6 +445,16 @@ impl AudioSettingsStore {
         Ok(())
     }
 
+    pub fn set_sync_audio_on_startup(&self, enabled: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE audio_settings SET sync_audio_on_startup = ?1 WHERE id = 1",
+                params![enabled as i64],
+            )
+            .map_err(|e| format!("Failed to set sync_audio_on_startup: {}", e))?;
+        Ok(())
+    }
+
     pub fn set_normalization_target_lufs(&self, target: f32) -> Result<(), String> {
         self.conn
             .execute(
@@ -482,7 +502,8 @@ impl AudioSettingsStore {
                     normalization_target_lufs = ?14,
                     gapless_enabled = ?15,
                     device_sample_rate_limits = ?16,
-                    pw_force_bitperfect = ?17
+                    pw_force_bitperfect = ?17,
+                    sync_audio_on_startup = ?18
                 WHERE id = 1",
                 params![
                     defaults.output_device,
@@ -502,6 +523,7 @@ impl AudioSettingsStore {
                     defaults.gapless_enabled as i64,
                     limits_json,
                     defaults.pw_force_bitperfect as i64,
+                    defaults.sync_audio_on_startup as i64,
                 ],
             )
             .map_err(|e| format!("Failed to reset audio settings: {}", e))?;

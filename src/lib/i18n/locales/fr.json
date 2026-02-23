@@ -566,6 +566,8 @@
       "pwForceBitperfect": "Forcer Bit-Perfect (Expérimental)",
       "pwForceBitperfectDesc": "Force le quantum et le taux d'échantillonnage PipeWire pour correspondre à la piste, réinitialisation à l'arrêt. Nécessite le Passthrough DAC.",
       "pwForceBitperfectNote": "Expérimental. Peut causer des artefacts audio sur certains systèmes. N'affecte que le backend PipeWire.",
+      "syncAudioOnStartup": "Synchroniser la configuration audio au démarrage",
+      "syncAudioOnStartupDesc": "Recharge la configuration audio depuis la base de données au démarrage de l'application. Activez si votre appareil ou vos paramètres audio semblent incorrects après le lancement.",
       "audioBackend": "Backend audio",
       "audioBackendDesc": "Choisissez le système audio : Auto (recommandé), PipeWire (moderne), ALSA Direct (bit-perfect, exclusif) ou PulseAudio (ancien).",
       "currentSampleRate": "Taux d'échantillonnage actuel",

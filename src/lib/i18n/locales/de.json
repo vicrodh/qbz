@@ -566,6 +566,8 @@
       "pwForceBitperfect": "Bit-Perfect erzwingen (Experimentell)",
       "pwForceBitperfectDesc": "Erzwingt PipeWire-Quantum und Abtastrate passend zum Track, Zurücksetzen beim Stoppen. Erfordert DAC-Passthrough.",
       "pwForceBitperfectNote": "Experimentell. Kann auf einigen Systemen Audio-Artefakte verursachen. Betrifft nur das PipeWire-Backend.",
+      "syncAudioOnStartup": "Audio-Einstellungen beim Start synchronisieren",
+      "syncAudioOnStartupDesc": "Audiokonfiguration beim App-Start aus der Datenbank neu laden. Aktiviere dies, wenn dein Audiogerät oder deine Einstellungen nach dem Starten falsch erscheinen.",
       "audioBackend": "Audio-Backend",
       "audioBackendDesc": "Wähle Audiosystem: Auto (empfohlen), PipeWire (modern), ALSA Direct (bitperfekt, exklusiv) oder PulseAudio (veraltet).",
       "currentSampleRate": "Aktuelle Abtastrate",

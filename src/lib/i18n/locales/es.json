@@ -583,6 +583,8 @@
       "pwForceBitperfect": "Forzar Bit-Perfect (Experimental)",
       "pwForceBitperfectDesc": "Fuerza el quantum y la tasa de muestreo de PipeWire para coincidir con la pista, restableciendo al detener. Requiere Passthrough DAC.",
       "pwForceBitperfectNote": "Experimental. Puede causar artefactos de audio en algunos sistemas. Solo afecta al backend PipeWire.",
+      "syncAudioOnStartup": "Sincronizar configuración de audio al iniciar",
+      "syncAudioOnStartupDesc": "Recarga la configuración de audio desde la base de datos al iniciar la app. Actívalo si tu dispositivo o configuración de audio aparecen incorrectos al abrir.",
       "audioBackend": "Backend de Audio",
       "audioBackendDesc": "Elige el sistema de audio: Auto (recomendado), PipeWire (moderno), ALSA Direct (bit-perfect, exclusivo), o PulseAudio (legacy).",
       "currentSampleRate": "Tasa de Muestreo Actual",

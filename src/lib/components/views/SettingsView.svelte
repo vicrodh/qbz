@@ -587,6 +587,7 @@
   let exclusiveMode = $state(false);
   let dacPassthrough = $state(false);
   let pwForceBitperfect = $state(false);
+  let syncAudioOnStartup = $state(false);
   let selectedBackend = $state<string>('Auto');
   let selectedAlsaPlugin = $state<string>('hw (Direct Hardware)');
   let alsaHardwareVolume = $state(false);
@@ -2088,6 +2089,7 @@
     device_max_sample_rate: number | null;
     gapless_enabled: boolean;
     pw_force_bitperfect: boolean;
+    sync_audio_on_startup: boolean;
   }
 
   interface BackendInfo {
@@ -2233,6 +2235,7 @@
       exclusiveMode = settings.exclusive_mode;
       dacPassthrough = settings.dac_passthrough;
       pwForceBitperfect = settings.pw_force_bitperfect;
+      syncAudioOnStartup = settings.sync_audio_on_startup;
 
       // Load backend and plugin settings
       if (settings.backend_type) {
@@ -2386,6 +2389,16 @@
       console.log('[Audio] PW force bit-perfect changed:', enabled);
     } catch (err) {
       console.error('[Audio] Failed to change PW force bit-perfect:', err);
+    }
+  }
+
+  async function handleSyncAudioOnStartupChange(enabled: boolean) {
+    syncAudioOnStartup = enabled;
+    try {
+      await invoke('v2_set_sync_audio_on_startup', { enabled });
+      console.log('[Audio] Sync audio on startup changed:', enabled);
+    } catch (err) {
+      console.error('[Audio] Failed to change sync audio on startup:', err);
     }
   }
 
@@ -3434,6 +3447,13 @@
     <small class="setting-note">{$t('settings.audio.pwForceBitperfectNote')}</small>
     {/if}
     {/if}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.audio.syncAudioOnStartup')}</span>
+        <span class="setting-desc">{$t('settings.audio.syncAudioOnStartupDesc')}</span>
+      </div>
+      <Toggle enabled={syncAudioOnStartup} onchange={handleSyncAudioOnStartupChange} />
+    </div>
     <div class="setting-row">
       <span class="setting-label">{$t('settings.audio.currentSampleRate')}</span>
       <span class="setting-value" class:muted={!hardwareStatus?.is_active}>

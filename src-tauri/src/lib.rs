@@ -1004,6 +1004,7 @@ pub fn run() {
             commands_v2::v2_set_audio_exclusive_mode,
             commands_v2::v2_set_audio_dac_passthrough,
             commands_v2::v2_set_audio_pw_force_bitperfect,
+            commands_v2::v2_set_sync_audio_on_startup,
             commands_v2::v2_set_audio_sample_rate,
             commands_v2::v2_set_audio_backend_type,
             commands_v2::v2_set_audio_alsa_plugin,
