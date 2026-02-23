@@ -406,15 +406,21 @@ pub fn run() {
         tray_settings.close_to_tray
     );
 
-    // Read window settings for decoration configuration before window creation.
+    // Read window settings for decoration and size configuration before window creation.
     let window_settings = config::window_settings::WindowSettingsStore::new()
         .and_then(|store| store.get_settings())
         .unwrap_or_default();
     log::info!(
-        "Window settings: use_system_titlebar={}",
-        window_settings.use_system_titlebar
+        "Window settings: use_system_titlebar={}, size={}x{}, maximized={}",
+        window_settings.use_system_titlebar,
+        window_settings.window_width as u32,
+        window_settings.window_height as u32,
+        window_settings.is_maximized,
     );
     let use_system_titlebar = window_settings.use_system_titlebar;
+    let saved_win_width = window_settings.window_width;
+    let saved_win_height = window_settings.window_height;
+    let saved_win_maximized = window_settings.is_maximized;
 
     // One-time cleanup: remove the KWin SSD window rule written by QBZ 1.1.14.
     // That version wrote a kwinrulesrc entry forcing server-side decorations; it
@@ -603,13 +609,13 @@ pub fn run() {
                 gtk_decorations,
                 use_kwin_ssd
             );
-            tauri::WebviewWindowBuilder::new(
+            let main_window = tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
                 tauri::WebviewUrl::App(std::path::PathBuf::from("index.html")),
             )
             .title("QBZ")
-            .inner_size(1280.0, 800.0)
+            .inner_size(saved_win_width, saved_win_height)
             .min_inner_size(800.0, 600.0)
             .decorations(gtk_decorations)
             .transparent(true)
@@ -620,6 +626,48 @@ pub fn run() {
                 log::error!("Failed to create main window: {}", e);
                 e
             })?;
+
+            // Restore maximized state
+            if saved_win_maximized {
+                let _ = main_window.maximize();
+            }
+
+            // Persist window size across sessions.
+            // - Resize (non-maximized): saves width/height so last user size is remembered.
+            // - CloseRequested: saves the maximized flag.
+            {
+                let ws_state = app.state::<config::window_settings::WindowSettingsState>();
+                let store = std::sync::Arc::clone(&ws_state.store);
+                let win_for_events = main_window.clone();
+                main_window.on_window_event(move |event| {
+                    match event {
+                        tauri::WindowEvent::Resized(size) => {
+                            if size.width > 0 && size.height > 0 {
+                                let maximized = win_for_events.is_maximized().unwrap_or(false);
+                                if !maximized {
+                                    if let Ok(guard) = store.lock() {
+                                        if let Some(s) = guard.as_ref() {
+                                            let _ = s.set_window_size(
+                                                size.width as f64,
+                                                size.height as f64,
+                                            );
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        tauri::WindowEvent::CloseRequested { .. } => {
+                            let maximized = win_for_events.is_maximized().unwrap_or(false);
+                            if let Ok(guard) = store.lock() {
+                                if let Some(s) = guard.as_ref() {
+                                    let _ = s.set_is_maximized(maximized);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
+                });
+            }
 
             // Add KWin window rule to force server-side decorations for QBZ
             if use_kwin_ssd {

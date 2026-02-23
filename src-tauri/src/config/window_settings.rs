@@ -13,12 +13,21 @@ use std::sync::{Arc, Mutex};
 pub struct WindowSettings {
     /// Use OS native window decorations instead of custom title bar
     pub use_system_titlebar: bool,
+    /// Last saved window width (logical pixels, non-maximized)
+    pub window_width: f64,
+    /// Last saved window height (logical pixels, non-maximized)
+    pub window_height: f64,
+    /// Whether the window was maximized when last closed
+    pub is_maximized: bool,
 }
 
 impl Default for WindowSettings {
     fn default() -> Self {
         Self {
             use_system_titlebar: false,
+            window_width: 1280.0,
+            window_height: 800.0,
+            is_maximized: false,
         }
     }
 }
@@ -54,6 +63,11 @@ impl WindowSettingsStore {
         )
         .map_err(|e| format!("Failed to insert default window settings: {}", e))?;
 
+        // Migrations: add window size columns on existing DBs (errors ignored when column exists)
+        let _ = conn.execute("ALTER TABLE window_settings ADD COLUMN window_width REAL NOT NULL DEFAULT 1280.0", []);
+        let _ = conn.execute("ALTER TABLE window_settings ADD COLUMN window_height REAL NOT NULL DEFAULT 800.0", []);
+        let _ = conn.execute("ALTER TABLE window_settings ADD COLUMN is_maximized INTEGER NOT NULL DEFAULT 0", []);
+
         info!("[WindowSettings] Database initialized");
 
         Ok(Self { conn })
@@ -73,12 +87,19 @@ impl WindowSettingsStore {
     pub fn get_settings(&self) -> Result<WindowSettings, String> {
         self.conn
             .query_row(
-                "SELECT use_system_titlebar FROM window_settings WHERE id = 1",
+                "SELECT use_system_titlebar, window_width, window_height, is_maximized
+                 FROM window_settings WHERE id = 1",
                 [],
                 |row| {
                     let use_system_titlebar: i32 = row.get(0)?;
+                    let window_width: f64 = row.get(1)?;
+                    let window_height: f64 = row.get(2)?;
+                    let is_maximized: i32 = row.get(3)?;
                     Ok(WindowSettings {
                         use_system_titlebar: use_system_titlebar != 0,
+                        window_width,
+                        window_height,
+                        is_maximized: is_maximized != 0,
                     })
                 },
             )
@@ -92,6 +113,28 @@ impl WindowSettingsStore {
                 params![if value { 1 } else { 0 }],
             )
             .map_err(|e| format!("Failed to set use_system_titlebar: {}", e))?;
+        Ok(())
+    }
+
+    /// Save the non-maximized window dimensions (called on resize while not maximized).
+    pub fn set_window_size(&self, width: f64, height: f64) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE window_settings SET window_width = ?1, window_height = ?2 WHERE id = 1",
+                params![width, height],
+            )
+            .map_err(|e| format!("Failed to save window size: {}", e))?;
+        Ok(())
+    }
+
+    /// Save the maximized state (called on window close).
+    pub fn set_is_maximized(&self, value: bool) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE window_settings SET is_maximized = ?1 WHERE id = 1",
+                params![if value { 1 } else { 0 }],
+            )
+            .map_err(|e| format!("Failed to save maximized state: {}", e))?;
         Ok(())
     }
 }
@@ -135,6 +178,28 @@ impl WindowSettingsState {
             .as_ref()
             .ok_or("Window settings store not initialized")?;
         store.set_use_system_titlebar(value)
+    }
+
+    pub fn set_window_size(&self, width: f64, height: f64) -> Result<(), String> {
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock window settings store".to_string())?;
+        let store = guard
+            .as_ref()
+            .ok_or("Window settings store not initialized")?;
+        store.set_window_size(width, height)
+    }
+
+    pub fn set_is_maximized(&self, value: bool) -> Result<(), String> {
+        let guard = self
+            .store
+            .lock()
+            .map_err(|_| "Failed to lock window settings store".to_string())?;
+        let store = guard
+            .as_ref()
+            .ok_or("Window settings store not initialized")?;
+        store.set_is_maximized(value)
     }
 }
 
