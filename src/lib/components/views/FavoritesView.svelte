@@ -2453,7 +2453,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: 2px;
-    flex: 1;
+    flex-shrink: 0;
     justify-content: center;
   }
 
