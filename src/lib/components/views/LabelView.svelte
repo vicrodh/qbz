@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { onMount, onDestroy } from 'svelte';
   import { ArrowLeft, Disc3, Play, Music, MoreHorizontal, Heart, User, ChevronDown, ChevronUp } from 'lucide-svelte';
   import { t } from '$lib/i18n';
@@ -525,7 +526,11 @@
   }
 
   function getArtistImageUrl(artist: Record<string, unknown>): string | null {
-    // 0. Check fetched image cache
+    // 0a. Check custom artist image overrides
+    const artistName = getArtistName(artist);
+    const customUrl = resolveArtistImage(artistName, '');
+    if (customUrl) return customUrl;
+    // 0b. Check fetched image cache
     const cached = artistImageMap.get(artist.id as number);
     if (cached) return cached;
     // 1. image object (most common in search results)
