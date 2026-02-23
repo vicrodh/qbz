@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ListPlus, ListEnd, ListMusic, Heart, Trash2, X, ChevronDown } from 'lucide-svelte';
+  import { ListPlus, ListEnd, ListMusic, Heart, HeartOff, Trash2, X, ChevronDown } from 'lucide-svelte';
   import { t } from 'svelte-i18n';
 
   interface Props {
@@ -8,6 +8,7 @@
     onPlayLater: () => void;
     onAddToPlaylist: () => void;
     onAddFavorites?: () => void;
+    onRemoveFavorites?: () => void;
     onRemoveFromPlaylist?: () => void;
     onClearSelection: () => void;
   }
@@ -18,6 +19,7 @@
     onPlayLater,
     onAddToPlaylist,
     onAddFavorites,
+    onRemoveFavorites,
     onRemoveFromPlaylist,
     onClearSelection,
   }: Props = $props();
@@ -92,6 +94,13 @@
         <button class="action-btn" onclick={onAddFavorites} title={$t('actions.addToFavorites')}>
           <Heart size={15} />
           <span>{$t('actions.addToFavorites')}</span>
+        </button>
+      {/if}
+
+      {#if onRemoveFavorites}
+        <button class="action-btn danger" onclick={onRemoveFavorites} title={$t('actions.removeFromFavorites')}>
+          <HeartOff size={15} />
+          <span>{$t('actions.removeFromFavorites')}</span>
         </button>
       {/if}
 

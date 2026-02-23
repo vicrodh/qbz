@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ChevronUp, ImagePlus, Edit3, BarChart2, Heart, CloudDownload, ListPlus, GripVertical } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, ListMusic, Search, X, ChevronDown, ChevronRight, ChevronUp, ImagePlus, Edit3, BarChart2, Heart, CloudDownload, ListPlus, GripVertical, CheckSquare } from 'lucide-svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
   import PlaylistCollage from '../PlaylistCollage.svelte';
   import PlaylistModal from '../PlaylistModal.svelte';
@@ -10,6 +10,7 @@
   import { open, ask } from '@tauri-apps/plugin-dialog';
   import TrackRow from '../TrackRow.svelte';
   import PlaylistSuggestions from '../PlaylistSuggestions.svelte';
+  import BulkActionBar from '../BulkActionBar.svelte';
   import { extractAdaptiveArtists } from '$lib/services/playlistSuggestionsService';
   import { type OfflineCacheStatus, cacheTrackForOffline, cacheTracksForOfflineBatch, getOfflineCacheState } from '$lib/stores/offlineCacheState';
   import {
@@ -294,6 +295,10 @@
   // Batch selection state (for custom order mode)
   let selectedTrackKeys = $state<Set<string>>(new Set());  // Set of "trackId:isLocal" keys
   let isSelectionMode = $derived(isCustomOrderMode && selectedTrackKeys.size > 0);
+
+  // Multi-select state (bulk actions, works in all sort modes)
+  let multiSelectMode = $state(false);
+  let multiSelectedKeys = $state(new Set<string>());
 
   // User ownership state (to show "Copy to Library" button for non-owned playlists)
   let currentUserId = $state<number | null>(null);
@@ -1125,6 +1130,78 @@
       newSet.add(getTrackKey(track));
     }
     selectedTrackKeys = newSet;
+  }
+
+  function toggleMultiSelectMode() {
+    multiSelectMode = !multiSelectMode;
+    if (!multiSelectMode) multiSelectedKeys = new Set();
+  }
+
+  function toggleMultiSelect(track: DisplayTrack) {
+    const key = getTrackKey(track);
+    const next = new Set(multiSelectedKeys);
+    if (next.has(key)) next.delete(key); else next.add(key);
+    multiSelectedKeys = next;
+  }
+
+  async function handleBulkPlayNext() {
+    const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
+    const { queueTracks } = buildQueueTracks(selected);
+    await invoke('v2_add_tracks_to_queue_next', { tracks: queueTracks });
+    multiSelectedKeys = new Set();
+    multiSelectMode = false;
+  }
+
+  async function handleBulkPlayLater() {
+    const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
+    const { queueTracks } = buildQueueTracks(selected);
+    await invoke('v2_add_tracks_to_queue', { tracks: queueTracks });
+    multiSelectedKeys = new Set();
+    multiSelectMode = false;
+  }
+
+  async function handleBulkAddToPlaylist() {
+    for (const trk of displayTracks) {
+      if (multiSelectedKeys.has(getTrackKey(trk)) && !trk.isLocal) {
+        onTrackAddToPlaylist?.(trk.id);
+      }
+    }
+    multiSelectedKeys = new Set();
+    multiSelectMode = false;
+  }
+
+  async function handleBulkRemoveFromPlaylist() {
+    const selected = displayTracks.filter(trk => multiSelectedKeys.has(getTrackKey(trk)));
+    const localTrackIds: number[] = [];
+    const playlistTrackIds: number[] = [];
+    const fallbackTrackIds: number[] = [];
+
+    for (const trk of selected) {
+      if (trk.isLocal && trk.localTrackId) {
+        localTrackIds.push(trk.localTrackId);
+      } else if (trk.playlistTrackId) {
+        playlistTrackIds.push(trk.playlistTrackId);
+      } else {
+        fallbackTrackIds.push(trk.id);
+      }
+    }
+
+    for (const localTrackId of localTrackIds) {
+      await invoke('v2_playlist_remove_local_track', { playlistId, localTrackId });
+    }
+    if (playlistTrackIds.length > 0) {
+      await invoke('v2_remove_tracks_from_playlist', { playlistId, playlistTrackIds });
+    }
+    if (fallbackTrackIds.length > 0) {
+      await invoke('v2_remove_tracks_from_playlist', { playlistId, trackIds: fallbackTrackIds });
+    }
+
+    multiSelectedKeys = new Set();
+    multiSelectMode = false;
+    await loadPlaylist();
+    if (localTrackIds.length > 0) await loadLocalTracks();
+    notifyParentOfCounts();
+    onPlaylistUpdated?.();
   }
 
   // Move all selected tracks up one position (as a group)
@@ -2129,6 +2206,15 @@
         {/if}
       </div>
 
+      <!-- Multi-select toggle -->
+      <button
+        class="sort-btn icon-only"
+        class:active={multiSelectMode}
+        onclick={toggleMultiSelectMode}
+        title={multiSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+      >
+        <CheckSquare size={16} />
+      </button>
     </div>
 
     <!-- Track List (virtualized) -->
@@ -2156,7 +2242,7 @@
         </div>
       {/if}
       <div class="track-list-header">
-        {#if isCustomOrderMode}
+        {#if isCustomOrderMode || multiSelectMode}
           <div class="col-checkbox"></div>
         {/if}
         <div class="col-number">#</div>
@@ -2188,6 +2274,7 @@
             class:unavailable={!available}
             class:removed-from-qobuz={removedFromQobuz}
             class:custom-order-mode={isCustomOrderMode}
+            class:multi-selected={multiSelectMode && multiSelectedKeys.has(getTrackKey(track))}
             class:dragging={draggedTrackIdx === idx}
             class:drag-over={dragOverIdx === idx && draggedTrackIdx !== idx}
             style="transform: translateY({idx * TRACK_ROW_HEIGHT}px); height: {TRACK_ROW_HEIGHT}px;"
@@ -2200,6 +2287,16 @@
             ondragend={handleDragEnd}
             ondrop={(e) => handleDrop(e, idx)}
           >
+            {#if multiSelectMode && !isCustomOrderMode}
+              {@const trackKey = getTrackKey(track)}
+              <label class="track-checkbox" onclick={(e) => e.stopPropagation()}>
+                <input
+                  type="checkbox"
+                  checked={multiSelectedKeys.has(trackKey)}
+                  onchange={() => toggleMultiSelect(track)}
+                />
+              </label>
+            {/if}
             {#if isCustomOrderMode}
               {@const trackKey = getTrackKey(track)}
               <label class="track-checkbox" onclick={(e) => e.stopPropagation()}>
@@ -2293,6 +2390,15 @@
         </div>
       {/if}
     </div>
+
+    <BulkActionBar
+      count={multiSelectedKeys.size}
+      onPlayNext={handleBulkPlayNext}
+      onPlayLater={handleBulkPlayLater}
+      onAddToPlaylist={handleBulkAddToPlaylist}
+      onRemoveFromPlaylist={handleBulkRemoveFromPlaylist}
+      onClearSelection={() => { multiSelectedKeys = new Set(); }}
+    />
 
     <!-- Bottom spacer when no suggestions will render (prevents back-to-top covering last track actions) -->
     {#if !isOwnPlaylist || !suggestionsEnabled || searchQuery}
@@ -2803,6 +2909,17 @@
     color: var(--text-primary);
   }
 
+  .sort-btn.icon-only {
+    min-width: unset;
+    padding: 6px 8px;
+    justify-content: center;
+  }
+
+  .sort-btn.active {
+    color: var(--accent-primary);
+    border-color: var(--accent-primary);
+  }
+
   .sort-btn .chevron {
     display: flex;
     transition: transform 150ms ease;
@@ -2921,6 +3038,10 @@
   .track-row-wrapper.removed-from-qobuz :global(.track-row .track-number),
   .track-row-wrapper.removed-from-qobuz :global(.track-row .play-button) {
     pointer-events: none;
+  }
+
+  .track-row-wrapper.multi-selected :global(.track-row) {
+    background-color: color-mix(in srgb, var(--accent-primary) 12%, transparent);
   }
 
   /* Custom order mode */

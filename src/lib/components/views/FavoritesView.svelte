@@ -283,9 +283,13 @@
     selectedTrackIds = new Set();
   }
 
-  async function handleBulkAddFavorites() {
-    const ids = Array.from(selectedTrackIds);
-    await invoke('v2_bulk_add_favorites', { trackIds: ids });
+  async function handleBulkRemoveFavorites() {
+    for (const id of selectedTrackIds) {
+      await invoke('v2_remove_favorite', { favType: 'track', itemId: String(id) });
+      await invoke('v2_uncache_favorite_track', { trackId: id });
+    }
+    // Refresh favorites list
+    await loadTabIfNeeded('tracks');
     trackSelectMode = false;
     selectedTrackIds = new Set();
   }
@@ -1657,7 +1661,7 @@
           onPlayNext={handleBulkPlayNext}
           onPlayLater={handleBulkPlayLater}
           onAddToPlaylist={handleBulkAddToPlaylist}
-          onAddFavorites={handleBulkAddFavorites}
+          onRemoveFavorites={handleBulkRemoveFavorites}
           onClearSelection={() => { selectedTrackIds = new Set(); }}
         />
       {/if}
