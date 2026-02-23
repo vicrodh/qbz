@@ -1061,13 +1061,14 @@ pub async fn v2_start_oauth_login(
 
     let code_holder_nav = Arc::clone(&code_holder);
     let notify_nav = Arc::clone(&notify);
+    let app_for_nav = app.clone();
 
     // Build and open the OAuth WebView window
     let parsed_url: tauri::Url = oauth_url
         .parse()
         .map_err(|e| format!("Invalid OAuth URL: {}", e))?;
 
-    let oauth_window = tauri::WebviewWindowBuilder::new(
+    let _oauth_window = tauri::WebviewWindowBuilder::new(
         &app,
         "qobuz-oauth",
         tauri::WebviewUrl::External(parsed_url),
@@ -1076,18 +1077,29 @@ pub async fn v2_start_oauth_login(
     .inner_size(520.0, 720.0)
     .resizable(true)
     .on_navigation(move |url| {
+        log::info!("[OAuth] on_navigation: {}", url);
         // Intercept redirect to play.qobuz.com/discover?code=...
         if url.host_str() == Some("play.qobuz.com") {
             for (key, value) in url.query_pairs() {
                 if key == "code" {
-                    log::info!("[OAuth] Intercepted OAuth code from navigation");
-                    *code_holder_nav.lock().unwrap() = Some(value.to_string());
-                    notify_nav.notify_one();
-                    return false; // Block — we handle the code, don't load discover
+                    let mut holder = code_holder_nav.lock().unwrap();
+                    // Only act on the first code (idempotent)
+                    if holder.is_none() {
+                        log::info!("[OAuth] Intercepted OAuth code from navigation");
+                        *holder = Some(value.to_string());
+                        drop(holder);
+                        notify_nav.notify_one();
+                        // Close from within the navigation callback — more reliable on WebKitGTK
+                        if let Some(win) = app_for_nav.get_webview_window("qobuz-oauth") {
+                            let _ = win.close();
+                            log::info!("[OAuth] OAuth window closed from navigation callback");
+                        }
+                    }
+                    break;
                 }
             }
         }
-        true // Allow all other navigation (login form, CSRF redirects, etc.)
+        true // Always allow navigation — never block (blocking is unreliable on WebKitGTK)
     })
     .build()
     .map_err(|e| format!("Failed to open OAuth window: {}", e))?;
@@ -1100,8 +1112,10 @@ pub async fn v2_start_oauth_login(
     .await
     .is_err();
 
-    // Always close the OAuth window
-    let _ = oauth_window.close();
+    // Best-effort close in case callback didn't fire (timeout, window manually closed, etc.)
+    if let Some(win) = app.get_webview_window("qobuz-oauth") {
+        let _ = win.close();
+    }
 
     if timed_out {
         return Ok(V2LoginResponse {
