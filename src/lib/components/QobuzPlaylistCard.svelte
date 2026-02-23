@@ -1,7 +1,13 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { tick, onMount } from 'svelte';
   import { Play, ListMusic, Plus, MoreHorizontal, ListPlus, Library, Share2 } from 'lucide-svelte';
   import { t } from '$lib/i18n';
+  import {
+    openMenu as openGlobalMenu,
+    closeMenu as closeGlobalMenu,
+    subscribe as subscribeGlobal,
+    getActiveMenuId
+  } from '$lib/stores/floatingMenuStore';
 
   interface Props {
     playlistId: number;
@@ -43,6 +49,19 @@
   let menuStyle = $state('');
 
   const cardSize = 180;
+
+  // Global floating menu coordination
+  const menuId = `qobuz-playlist-${playlistId}-${Date.now()}`;
+
+  onMount(() => {
+    const unsubscribe = subscribeGlobal(() => {
+      const activeId = getActiveMenuId();
+      if (activeId !== null && activeId !== menuId && menuOpen) {
+        menuOpen = false;
+      }
+    });
+    return unsubscribe;
+  });
 
   function handleImageError() {
     imageError = true;
@@ -87,19 +106,32 @@
     };
   }
 
-  async function positionMenu() {
+  async function positionMenu(coords?: { x: number; y: number }) {
     await tick();
-    if (!menuTriggerRef || !menuEl) return;
-    const triggerRect = menuTriggerRef.getBoundingClientRect();
+    if (!menuEl) return;
     const menuRect = menuEl.getBoundingClientRect();
-    let left = triggerRect.right - menuRect.width;
-    let top = triggerRect.bottom + 8;
-    if (left < 8) left = 8;
-    if (left + menuRect.width > window.innerWidth - 8) {
-      left = window.innerWidth - menuRect.width - 8;
+    const padding = 8;
+    let left: number;
+    let top: number;
+
+    if (coords) {
+      left = coords.x;
+      top = coords.y;
+    } else if (menuTriggerRef) {
+      const triggerRect = menuTriggerRef.getBoundingClientRect();
+      left = triggerRect.right - menuRect.width;
+      top = triggerRect.bottom + 8;
+    } else {
+      return;
     }
-    if (top + menuRect.height > window.innerHeight - 8) {
-      top = triggerRect.top - menuRect.height - 8;
+
+    if (left < padding) left = padding;
+    if (left + menuRect.width > window.innerWidth - padding) {
+      left = window.innerWidth - menuRect.width - padding;
+    }
+    if (top + menuRect.height > window.innerHeight - padding) {
+      top = coords ? coords.y - menuRect.height : (menuTriggerRef ? menuTriggerRef.getBoundingClientRect().top - menuRect.height - 8 : padding);
+      if (top < padding) top = padding;
     }
     menuStyle = `left: ${left}px; top: ${top}px;`;
   }
@@ -107,11 +139,17 @@
   function toggleMenu(event: MouseEvent) {
     event.stopPropagation();
     menuOpen = !menuOpen;
-    if (menuOpen) positionMenu();
+    if (menuOpen) {
+      openGlobalMenu(menuId);
+      positionMenu();
+    } else {
+      closeGlobalMenu(menuId);
+    }
   }
 
   function closeMenu() {
     menuOpen = false;
+    closeGlobalMenu(menuId);
   }
 
   function handleClickOutside(event: MouseEvent) {
@@ -136,6 +174,7 @@
   class:menu-open={menuOpen}
   style="width: {cardSize}px"
   onclick={handleCardClick}
+  oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); menuOpen = true; openGlobalMenu(menuId); positionMenu({ x: e.clientX, y: e.clientY }); }}
   role="button"
   tabindex="0"
   onkeydown={(e) => e.key === 'Enter' && onclick?.()}

@@ -98,6 +98,8 @@
   const favoriteAvailable = $derived(favoriteEnabled ?? !!albumId);
   const hasOverlay = $derived(!!(showFavoriteButton || onPlay || hasMenu));
   let menuOpen = $state(false);
+  let contextMenuOpen = $state(false);
+  let contextMenuPos = $state<{ x: number; y: number } | null>(null);
 
   function handleImageError() {
     imageError = true;
@@ -198,7 +200,7 @@
   style="width: {cardSize}px"
   data-search-id={searchId}
   onclick={handleCardClick}
-  oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); menuOpen = true; }}
+  oncontextmenu={(e) => { e.preventDefault(); e.stopPropagation(); menuOpen = true; contextMenuOpen = true; contextMenuPos = { x: e.clientX, y: e.clientY }; }}
   onmouseenter={measureOverflowOnce}
   onfocus={measureOverflowOnce}
   role="button"
@@ -267,7 +269,9 @@
                 isAlbumFullyDownloaded={isDownloaded}
                 onOpenContainingFolder={onOpenContainingFolder}
                 onReDownloadAlbum={onReDownloadAlbum}
-                onOpenChange={(open) => (menuOpen = open)}
+                externalOpen={contextMenuOpen}
+                contextMenuPosition={contextMenuPos}
+                onOpenChange={(open) => { menuOpen = open; if (!open) { contextMenuOpen = false; contextMenuPos = null; } }}
               />
             </div>
           {/if}
