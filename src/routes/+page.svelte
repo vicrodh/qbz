@@ -4279,6 +4279,7 @@
         queueOpen={isQueueOpen}
         {volume}
         onVolumeChange={handleVolumeChange}
+        controlsDisabled={queue.length === 0}
       />
     {/if}
 
