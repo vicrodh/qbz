@@ -210,7 +210,7 @@ impl QobuzClient {
             .http
             .get(&callback_url)
             .headers(headers)
-            .query(&[("code_autorisation", code), ("private_key", &private_key)])
+            .query(&[("code", code), ("private_key", &private_key), ("app_id", &app_id)])
             .send()
             .await?;
 

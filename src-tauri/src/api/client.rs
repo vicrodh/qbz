@@ -216,7 +216,7 @@ impl QobuzClient {
             .get(&callback_url)
             .headers(headers)
             .query(&[
-                ("code_autorisation", code),
+                ("code", code),
                 ("private_key", &private_key),
                 ("app_id", &app_id),
             ])
