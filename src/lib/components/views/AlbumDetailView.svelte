@@ -325,7 +325,7 @@
 
     // Restore scroll position
     requestAnimationFrame(() => {
-      const saved = getSavedScrollPosition('album');
+      const saved = getSavedScrollPosition('album', album.id);
       if (scrollContainer && saved > 0) {
         scrollContainer.scrollTop = saved;
       }
@@ -375,7 +375,7 @@
 </script>
 
 <ViewTransition duration={200} distance={12} direction="up">
-<div class="album-detail" bind:this={scrollContainer} onscroll={(e) => saveScrollPosition('album', (e.target as HTMLElement).scrollTop)}>
+<div class="album-detail" bind:this={scrollContainer} onscroll={(e) => saveScrollPosition('album', (e.target as HTMLElement).scrollTop, album.id)}>
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />

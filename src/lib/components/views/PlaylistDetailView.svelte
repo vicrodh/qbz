@@ -374,7 +374,7 @@
     requestAnimationFrame(() => {
       if (scrollContainer) {
         trackListViewHeight = scrollContainer.clientHeight;
-        const saved = getSavedScrollPosition('playlist');
+        const saved = getSavedScrollPosition('playlist', playlistId);
         if (saved > 0) {
           scrollContainer.scrollTop = saved;
         }
@@ -1464,7 +1464,7 @@
   function handlePlaylistScroll(e: Event) {
     const container = e.target as HTMLElement;
     // Save scroll position for navigation restoration
-    saveScrollPosition('playlist', container.scrollTop);
+    saveScrollPosition('playlist', container.scrollTop, playlistId);
     // Update virtual scroll state relative to the track list position
     if (trackListEl) {
       const trackListTop = trackListEl.offsetTop;

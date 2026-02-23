@@ -200,7 +200,7 @@
 
     // Restore scroll position
     requestAnimationFrame(() => {
-      const saved = getSavedScrollPosition('artist');
+      const saved = getSavedScrollPosition('artist', artist.id);
       if (artistDetailEl && saved > 0) {
         artistDetailEl.scrollTop = saved;
       }
@@ -1409,7 +1409,7 @@
   });
 </script>
 
-<div class="artist-detail" bind:this={artistDetailEl} onscroll={(e) => saveScrollPosition('artist', (e.target as HTMLElement).scrollTop)}>
+<div class="artist-detail" bind:this={artistDetailEl} onscroll={(e) => saveScrollPosition('artist', (e.target as HTMLElement).scrollTop, artist.id)}>
   <!-- Back Navigation -->
   <button class="back-btn" onclick={onBack}>
     <ArrowLeft size={16} />

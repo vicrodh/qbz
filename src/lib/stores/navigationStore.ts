@@ -44,8 +44,12 @@ let activeView: ViewType = 'home';
 let viewHistory: ViewType[] = ['home'];
 let forwardHistory: ViewType[] = [];
 
-// Scroll position memory — keyed by ViewType
-const scrollPositions = new Map<ViewType, number>();
+// Scroll position memory — keyed by "viewType" or "viewType:itemId"
+const scrollPositions = new Map<string, number>();
+
+function scrollKey(view: ViewType, itemId?: string | number): string {
+  return itemId != null ? `${view}:${itemId}` : view;
+}
 
 // Selected playlist ID (album/artist are full data objects in +page.svelte)
 let selectedPlaylistId: number | null = null;
@@ -272,17 +276,20 @@ export function setRestoredLocalAlbumId(albumId: string): void {
 // ============ Scroll Position ============
 
 /**
- * Save scroll position for a view (call before navigating away)
+ * Save scroll position for a view (call before navigating away).
+ * Pass itemId for item-specific views (album, artist, playlist) so
+ * different items don't share the same saved position.
  */
-export function saveScrollPosition(view: ViewType, scrollTop: number): void {
-  scrollPositions.set(view, scrollTop);
+export function saveScrollPosition(view: ViewType, scrollTop: number, itemId?: string | number): void {
+  scrollPositions.set(scrollKey(view, itemId), scrollTop);
 }
 
 /**
- * Get saved scroll position for a view (0 if none saved)
+ * Get saved scroll position for a view (0 if none saved).
+ * Pass the same itemId used in saveScrollPosition.
  */
-export function getSavedScrollPosition(view: ViewType): number {
-  return scrollPositions.get(view) ?? 0;
+export function getSavedScrollPosition(view: ViewType, itemId?: string | number): number {
+  return scrollPositions.get(scrollKey(view, itemId)) ?? 0;
 }
 
 // ============ Getters ============
