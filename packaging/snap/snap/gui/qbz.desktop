@@ -6,5 +6,6 @@ Icon=${SNAP}/meta/gui/qbz.png
 Type=Application
 Categories=AudioVideo;Audio;Music;Player;
 Terminal=false
-StartupWMClass=QBZ
+StartupWMClass=com.blitzfc.qbz
+StartupNotify=true
 MimeType=x-scheme-handler/qbz;x-scheme-handler/qobuzapp;

@@ -1937,6 +1937,55 @@ pub fn v2_get_qobuz_track_url(trackId: u64) -> Result<String, RuntimeError> {
     Ok(format!("https://play.qobuz.com/track/{}", trackId))
 }
 
+/// Known .desktop filenames across packaging formats.
+const QBZ_DESKTOP_CANDIDATES: &[&str] = &[
+    "com.blitzfc.qbz.desktop", // Tauri deb, Flatpak
+    "qbz.desktop",             // Arch, AUR, Snap
+    "qbz-nix.desktop",         // Possible alternative
+];
+
+/// Search standard directories for the installed QBZ .desktop file.
+fn find_qbz_desktop_file() -> String {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let search_dirs = [
+        "/usr/share/applications".to_string(),
+        "/usr/local/share/applications".to_string(),
+        format!("{}/.local/share/applications", home),
+        "/var/lib/flatpak/exports/share/applications".to_string(),
+        format!("{}/.local/share/flatpak/exports/share/applications", home),
+    ];
+
+    for candidate in QBZ_DESKTOP_CANDIDATES {
+        for dir in &search_dirs {
+            let path = format!("{}/{}", dir, candidate);
+            if std::path::Path::new(&path).exists() {
+                log::info!("[URI Handler] Found desktop file: {}", path);
+                return candidate.to_string();
+            }
+        }
+    }
+
+    log::warn!("[URI Handler] No desktop file found in standard dirs, using default");
+    "com.blitzfc.qbz.desktop".to_string()
+}
+
+/// Refresh the desktop MIME database so xdg-open picks up changes.
+fn refresh_desktop_database() {
+    // User-level applications dir
+    if let Some(data_dir) = dirs::data_dir() {
+        let user_apps = data_dir.join("applications");
+        if user_apps.exists() {
+            let _ = std::process::Command::new("update-desktop-database")
+                .arg(&user_apps)
+                .status();
+        }
+    }
+    // System-level (may fail without root, that's OK)
+    let _ = std::process::Command::new("update-desktop-database")
+        .arg("/usr/share/applications")
+        .status();
+}
+
 /// Check if QBZ is the default handler for qobuzapp:// links.
 #[tauri::command]
 pub fn v2_check_qobuzapp_handler() -> Result<bool, RuntimeError> {
@@ -1945,23 +1994,29 @@ pub fn v2_check_qobuzapp_handler() -> Result<bool, RuntimeError> {
         .output()
         .map_err(|e| RuntimeError::Internal(format!("Failed to run xdg-mime: {}", e)))?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(stdout.trim().contains("com.blitzfc.qbz"))
+    let result = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    Ok(QBZ_DESKTOP_CANDIDATES.iter().any(|c| *c == result))
 }
 
 /// Register QBZ as the default handler for qobuzapp:// links.
 #[tauri::command]
 pub fn v2_register_qobuzapp_handler() -> Result<bool, RuntimeError> {
+    let desktop_file = find_qbz_desktop_file();
+    log::info!("[URI Handler] Registering {} for x-scheme-handler/qobuzapp", desktop_file);
+
     let status = std::process::Command::new("xdg-mime")
-        .args([
-            "default",
-            "com.blitzfc.qbz.desktop",
-            "x-scheme-handler/qobuzapp",
-        ])
+        .args(["default", &desktop_file, "x-scheme-handler/qobuzapp"])
         .status()
         .map_err(|e| RuntimeError::Internal(format!("Failed to run xdg-mime: {}", e)))?;
 
-    Ok(status.success())
+    if !status.success() {
+        log::error!("[URI Handler] xdg-mime default failed");
+        return Ok(false);
+    }
+
+    refresh_desktop_database();
+    log::info!("[URI Handler] Registration complete, desktop database refreshed");
+    Ok(true)
 }
 
 /// Remove QBZ as the default handler for qobuzapp:// links.
@@ -1994,6 +2049,7 @@ pub fn v2_deregister_qobuzapp_handler() -> Result<bool, RuntimeError> {
     std::fs::write(&mimeapps, filtered)
         .map_err(|e| RuntimeError::Internal(format!("Failed to write mimeapps.list: {}", e)))?;
 
+    refresh_desktop_database();
     Ok(true)
 }
 
