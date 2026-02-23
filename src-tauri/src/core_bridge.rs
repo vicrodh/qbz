@@ -94,6 +94,15 @@ impl CoreBridge {
             .map_err(|e| e.to_string())
     }
 
+    /// Inject an already-authenticated session (for OAuth flow where we have
+    /// the UserSession from the legacy client but not email/password).
+    pub async fn login_with_session(&self, session: UserSession) -> Result<(), String> {
+        self.core
+            .set_session(session)
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     /// Logout current user
     pub async fn logout(&self) -> Result<(), String> {
         self.core.logout().await.map_err(|e| e.to_string())

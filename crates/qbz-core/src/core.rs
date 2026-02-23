@@ -109,6 +109,19 @@ impl<A: FrontendAdapter + Send + Sync + 'static> QbzCore<A> {
         }
     }
 
+    /// Inject an already-authenticated session (e.g. from OAuth flow).
+    /// Emits a LoggedIn event so the rest of the system knows auth state changed.
+    pub async fn set_session(&self, session: UserSession) -> Result<(), CoreError> {
+        let client = self.client.read().await;
+        let client = client.as_ref().ok_or(CoreError::NotInitialized)?;
+        client.set_session(session.clone()).await;
+        self.emit(CoreEvent::LoggedIn {
+            session,
+        })
+        .await;
+        Ok(())
+    }
+
     /// Logout the current user
     pub async fn logout(&self) -> Result<(), CoreError> {
         let client = self.client.read().await;
