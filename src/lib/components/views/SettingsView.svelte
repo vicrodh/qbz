@@ -4,7 +4,7 @@
   import ViewTransition from '../ViewTransition.svelte';
   import { getCurrentWebview } from '@tauri-apps/api/webview';
   import { writeText as copyToClipboard } from '@tauri-apps/plugin-clipboard-manager';
-  import { ask } from '@tauri-apps/plugin-dialog';
+  import { ask, open as openFileDialog } from '@tauri-apps/plugin-dialog';
   import { ArrowLeft, ChevronRight, ChevronDown, ChevronUp, Loader2, Sun, Moon, SunMoon, Ban, AlertTriangle, RefreshCw } from 'lucide-svelte';
   import Toggle from '../Toggle.svelte';
   import Dropdown from '../Dropdown.svelte';
@@ -40,6 +40,15 @@
   import { getUserItem, setUserItem, removeUserItem } from '$lib/utils/userStorage';
   import { ZOOM_OPTIONS, findZoomOption, getZoomLevelFromOption } from '$lib/utils/zoom';
   import { getZoom, setZoom, subscribeZoom } from '$lib/stores/zoomStore';
+  import {
+    enableAutoTheme,
+    disableAutoTheme,
+    isAutoThemeActive,
+    getAutoThemePrefs,
+    autoThemeStore,
+    type AutoThemeSource,
+    type PaletteColor,
+  } from '$lib/stores/autoThemeStore';
   import {
     subscribe as subscribeOffline,
     getStatus as getOfflineStatus,
@@ -472,9 +481,12 @@
   }
 
   const themes: Record<string, ThemeInfo> = {
-    // Dark themes
+    // Core themes
     'Dark':              { value: '',                 type: 'dark' },
     'OLED Black':        { value: 'oled',             type: 'dark' },
+    'Light':             { value: 'light',            type: 'light' },
+    'System':            { value: 'auto',             type: 'dark' },
+    // Dark themes
     'Warm':              { value: 'warm',             type: 'dark' },
     'Nord':              { value: 'nord',             type: 'dark' },
     'Dracula':           { value: 'dracula',          type: 'dark' },
@@ -491,7 +503,6 @@
     'Zoey':              { value: 'zoey',             type: 'dark' },
     'Mira':              { value: 'mira',             type: 'dark' },
     // Light themes
-    'Light':             { value: 'light',            type: 'light' },
     'Rose Pine Dawn':    { value: 'rose-pine-dawn',   type: 'light' },
     'Breeze Light':      { value: 'breeze-light',     type: 'light' },
     'Adwaita Light':     { value: 'adwaita-light',    type: 'light' },
@@ -528,6 +539,71 @@
     if (themeFilter === 'all') themeFilter = 'dark';
     else if (themeFilter === 'dark') themeFilter = 'light';
     else themeFilter = 'all';
+  }
+
+  // Auto-theme state
+  // Sources: 'system' = DE accent colors (fallback: wallpaper), 'wallpaper' = wallpaper-based, 'image' = user-picked image
+  let autoThemeSource = $state<AutoThemeSource>('wallpaper');
+  let autoThemeGenerating = $state(false);
+  let autoThemeError = $state<string | null>(null);
+  let autoThemeDE = $state<string | null>(null);
+  let autoThemePalette = $state<PaletteColor[] | null>(null);
+  let autoThemeCustomPath = $state<string | null>(null);
+
+  // Source options (use labelKey pattern to avoid $t() in $derived per ADR-001)
+  const autoThemeSourceOptions = [
+    { value: 'wallpaper' as AutoThemeSource, labelKey: 'settings.appearance.autoThemeSourceWallpaper' },
+    { value: 'image' as AutoThemeSource, labelKey: 'settings.appearance.autoThemeSourceImage' },
+  ];
+
+  async function handleAutoThemeGenerate() {
+    autoThemeGenerating = true;
+    autoThemeError = null;
+    try {
+      if (autoThemeSource === 'image' && autoThemeCustomPath) {
+        await enableAutoTheme('image', autoThemeCustomPath);
+      } else {
+        // 'wallpaper' source: generate from wallpaper
+        await enableAutoTheme('wallpaper');
+      }
+      // Update palette preview from store
+      const storeState = $autoThemeStore;
+      if (storeState.palette) {
+        autoThemePalette = storeState.palette.all_colors.slice(0, 5);
+      }
+      autoThemeDE = storeState.detectedDE;
+      showToast($t('settings.appearance.autoThemeApplied'), 'success');
+    } catch (err) {
+      autoThemeError = err instanceof Error ? err.message : String(err);
+    } finally {
+      autoThemeGenerating = false;
+    }
+  }
+
+  async function handleAutoThemeSelectImage() {
+    try {
+      const selected = await openFileDialog({
+        multiple: false,
+        filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'bmp'] }],
+      });
+      if (selected && typeof selected === 'string') {
+        autoThemeCustomPath = selected;
+        autoThemeSource = 'image';
+        await handleAutoThemeGenerate();
+      }
+    } catch (err) {
+      console.error('Failed to open file picker:', err);
+    }
+  }
+
+  function handleAutoThemeSourceChange(newSource: string) {
+    const match = autoThemeSourceOptions.find(opt => $t(opt.labelKey) === newSource);
+    if (match) {
+      autoThemeSource = match.value;
+      if (match.value === 'wallpaper') {
+        void handleAutoThemeGenerate();
+      }
+    }
   }
 
   // Language mapping: display name -> locale code
@@ -941,10 +1017,26 @@
 
   // Load saved settings on mount
   onMount(() => {
-    // Load theme
+    // Load theme (check for auto-theme first)
     const savedTheme = localStorage.getItem('qbz-theme') || '';
-    theme = themeReverseMap[savedTheme] || 'Dark';
-    applyTheme(savedTheme);
+    if (savedTheme === 'auto') {
+      theme = 'System';
+      // Restore auto-theme preferences
+      const prefs = getAutoThemePrefs();
+      if (prefs) {
+        autoThemeSource = prefs.source;
+        autoThemeCustomPath = prefs.customImagePath ?? null;
+      }
+      // Update palette preview from store state
+      const storeState = $autoThemeStore;
+      if (storeState.palette) {
+        autoThemePalette = storeState.palette.all_colors.slice(0, 5);
+      }
+      autoThemeDE = storeState.detectedDE;
+    } else {
+      theme = themeReverseMap[savedTheme] || 'Dark';
+      applyTheme(savedTheme);
+    }
 
     // Load font
     const savedFont = localStorage.getItem('qbz-font-family') || '';
@@ -3154,10 +3246,24 @@
   }
 
   function handleThemeChange(newTheme: string) {
+    // If switching away from System, disable auto-theme
+    if (theme === 'System' && newTheme !== 'System') {
+      disableAutoTheme();
+      autoThemePalette = null;
+      autoThemeDE = null;
+      autoThemeError = null;
+    }
+
     theme = newTheme;
-    const themeValue = themeMap[newTheme] || '';
-    applyTheme(themeValue);
-    localStorage.setItem('qbz-theme', themeValue);
+
+    if (newTheme === 'System') {
+      // Trigger auto-theme generation (wallpaper by default)
+      void handleAutoThemeGenerate();
+    } else {
+      const themeValue = themeMap[newTheme] || '';
+      applyTheme(themeValue);
+      localStorage.setItem('qbz-theme', themeValue);
+    }
   }
 
   async function handleZoomChange(value: string) {
@@ -3656,6 +3762,77 @@
         />
       </div>
     </div>
+
+    <!-- Auto-Theme controls (visible when System theme is selected) -->
+    {#if theme === 'System'}
+      <div class="auto-theme-panel">
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">{$t('settings.appearance.autoThemeSource')}</span>
+            <span class="setting-desc">{$t('settings.appearance.autoThemeDesc')}</span>
+          </div>
+          <Dropdown
+            value={autoThemeSourceOptions.find(opt => opt.value === autoThemeSource) ? $t(autoThemeSourceOptions.find(opt => opt.value === autoThemeSource)!.labelKey) : ''}
+            options={autoThemeSourceOptions.map(opt => $t(opt.labelKey))}
+            onchange={handleAutoThemeSourceChange}
+          />
+        </div>
+
+        {#if autoThemeSource === 'image'}
+          <div class="setting-row">
+            <span class="setting-label">
+              {#if autoThemeCustomPath}
+                {autoThemeCustomPath.split('/').pop()}
+              {:else}
+                {$t('settings.appearance.autoThemeSelectImage')}
+              {/if}
+            </span>
+            <button class="btn-secondary" onclick={handleAutoThemeSelectImage}>
+              {$t('settings.appearance.autoThemeSelectImage')}
+            </button>
+          </div>
+        {/if}
+
+        {#if autoThemeGenerating}
+          <div class="auto-theme-status">
+            <Loader2 size={14} class="spinner" />
+            <span>{$t('settings.appearance.autoThemeGenerating')}</span>
+          </div>
+        {/if}
+
+        {#if autoThemeError}
+          <div class="auto-theme-status error">
+            <span>{$t('settings.appearance.autoThemeError')}: {autoThemeError}</span>
+          </div>
+        {/if}
+
+        {#if autoThemeDE}
+          <div class="auto-theme-status">
+            <span>{$t('settings.appearance.autoThemeDetectedDE', { values: { de: autoThemeDE } })}</span>
+          </div>
+        {/if}
+
+        {#if autoThemePalette && autoThemePalette.length > 0}
+          <div class="auto-theme-palette">
+            {#each autoThemePalette as color}
+              <div
+                class="palette-swatch"
+                style="background-color: rgb({color.r}, {color.g}, {color.b})"
+                title="rgb({color.r}, {color.g}, {color.b})"
+              ></div>
+            {/each}
+          </div>
+        {/if}
+
+        <div class="setting-row">
+          <button class="btn-secondary" onclick={handleAutoThemeGenerate} disabled={autoThemeGenerating}>
+            <RefreshCw size={14} />
+            <span>{$t('settings.appearance.autoTheme')}</span>
+          </button>
+        </div>
+      </div>
+    {/if}
+
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.language')}</span>
       <Dropdown
@@ -6098,6 +6275,73 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .theme-filter-btn:hover {
     background: var(--bg-hover);
     color: var(--text-primary);
+  }
+
+  /* Auto-Theme Panel */
+  .auto-theme-panel {
+    margin: 0 0 8px 0;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .auto-theme-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    padding: 4px 0;
+  }
+
+  .auto-theme-status.error {
+    color: var(--danger);
+  }
+
+  .auto-theme-palette {
+    display: flex;
+    gap: 6px;
+    padding: 8px 0;
+  }
+
+  .palette-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 2px solid var(--border-subtle);
+    transition: transform 150ms ease;
+  }
+
+  .palette-swatch:hover {
+    transform: scale(1.15);
+  }
+
+  .btn-secondary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-size: 0.85rem;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+  }
+
+  .btn-secondary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   /* Content Filtering Section */
