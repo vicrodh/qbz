@@ -4292,6 +4292,52 @@ pub async fn v2_library_set_custom_artist_image(
 }
 
 #[tauri::command]
+pub async fn v2_library_remove_custom_artist_image(
+    artist_name: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    // Get current info to find file paths to delete
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    let info = db.get_artist_image(&artist_name).map_err(|e| e.to_string())?;
+
+    if let Some(info) = info {
+        // Delete custom image file if it exists
+        if let Some(ref path) = info.custom_image_path {
+            let p = std::path::Path::new(path);
+            if p.exists() {
+                // Also remove thumbnail
+                if let Ok(thumb) = thumbnails::get_thumbnail_path(p) {
+                    let _ = std::fs::remove_file(thumb);
+                }
+                let _ = std::fs::remove_file(p);
+            }
+        }
+
+        // Reset to original image (clear custom_image_path, keep image_url)
+        db.cache_artist_image(
+            &artist_name,
+            info.image_url.as_deref(),
+            info.source.as_deref().unwrap_or("qobuz"),
+            None,
+        )
+        .map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_library_get_artist_image(
+    artist_name: String,
+    state: State<'_, LibraryState>,
+) -> Result<Option<crate::library::ArtistImageInfo>, String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.get_artist_image(&artist_name).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn v2_create_artist_radio(
     artist_id: u64,
     artist_name: String,
