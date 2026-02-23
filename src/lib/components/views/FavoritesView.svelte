@@ -1217,23 +1217,7 @@
         </button>
       </div>
     {/if}
-  </div>
-
-  <!-- Navigation Bar (Artist-style) -->
-  <div class="favorites-nav">
-    <div class="nav-left">
-      {#each favoritesPreferences.tab_order as tab}
-        <button
-          class="nav-link"
-          class:active={activeTab === tab}
-          onclick={() => handleTabChange(tab as TabType)}
-        >
-          <svelte:component this={getTabIcon(tab as TabType)} size={16} />
-          <span>{getTabLabel(tab as TabType)}</span>
-        </button>
-      {/each}
-    </div>
-    <div class="nav-right">
+    <div class="header-search">
       {#if !searchExpanded}
         <button class="search-icon-btn" onclick={() => searchExpanded = true} title={$t('nav.search')}>
           <Search size={16} />
@@ -1256,6 +1240,22 @@
           {/if}
         </div>
       {/if}
+    </div>
+  </div>
+
+  <!-- Navigation Bar (Artist-style) -->
+  <div class="favorites-nav">
+    <div class="nav-left">
+      {#each favoritesPreferences.tab_order as tab}
+        <button
+          class="nav-link"
+          class:active={activeTab === tab}
+          onclick={() => handleTabChange(tab as TabType)}
+        >
+          <svelte:component this={getTabIcon(tab as TabType)} size={16} />
+          <span>{getTabLabel(tab as TabType)}</span>
+        </button>
+      {/each}
     </div>
   </div>
 
@@ -2045,6 +2045,12 @@
     gap: 10px;
   }
 
+  .header-search {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+  }
+
   .edit-btn {
     width: 36px;
     height: 36px;
@@ -2067,7 +2073,6 @@
     position: sticky;
     top: -24px;
     display: flex;
-    justify-content: space-between;
     align-items: center;
     gap: 10px;
     padding: 10px 24px;
@@ -2106,12 +2111,6 @@
   .nav-link.active {
     color: var(--text-primary);
     border-bottom-color: var(--accent-primary);
-  }
-
-  .nav-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
   }
 
   .search-icon-btn {
