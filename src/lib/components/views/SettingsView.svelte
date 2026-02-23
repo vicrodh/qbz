@@ -45,9 +45,10 @@
     disableAutoTheme,
     isAutoThemeActive,
     getAutoThemePrefs,
+    updateThemeVariable,
+    EDITABLE_THEME_VARS,
     autoThemeStore,
     type AutoThemeSource,
-    type PaletteColor,
   } from '$lib/stores/autoThemeStore';
   import {
     subscribe as subscribeOffline,
@@ -547,7 +548,7 @@
   let autoThemeGenerating = $state(false);
   let autoThemeError = $state<string | null>(null);
   let autoThemeDE = $state<string | null>(null);
-  let autoThemePalette = $state<PaletteColor[] | null>(null);
+  let autoThemeSwatches = $state<Record<string, string>>({});
   let autoThemeCustomPath = $state<string | null>(null);
   let autoThemeFailedModal = $state(false);
   let autoThemeFailedMessage = $state('');
@@ -572,10 +573,15 @@
         // 'system': accent first, wallpaper fallback (handled in store)
         await enableAutoTheme('system');
       }
-      // Update palette preview from store
+      // Update editable swatches from generated theme variables
       const storeState = $autoThemeStore;
-      if (storeState.palette) {
-        autoThemePalette = storeState.palette.all_colors.slice(0, 5);
+      if (storeState.theme) {
+        const vars = storeState.theme.variables;
+        const swatches: Record<string, string> = {};
+        for (const entry of EDITABLE_THEME_VARS) {
+          if (vars[entry.varName]) swatches[entry.varName] = vars[entry.varName];
+        }
+        autoThemeSwatches = swatches;
       }
       autoThemeDE = storeState.detectedDE;
       showToast($t('settings.appearance.autoThemeApplied'), 'success');
@@ -597,7 +603,7 @@
     theme = 'Dark';
     applyTheme('');
     localStorage.setItem('qbz-theme', '');
-    autoThemePalette = null;
+    autoThemeSwatches = {};
     autoThemeDE = null;
   }
 
@@ -1061,10 +1067,15 @@
         autoThemeSource = prefs.source;
         autoThemeCustomPath = prefs.customImagePath ?? null;
       }
-      // Update palette preview from store state
+      // Update editable swatches from store state
       const storeState = $autoThemeStore;
-      if (storeState.palette) {
-        autoThemePalette = storeState.palette.all_colors.slice(0, 5);
+      if (storeState.theme) {
+        const vars = storeState.theme.variables;
+        const swatches: Record<string, string> = {};
+        for (const entry of EDITABLE_THEME_VARS) {
+          if (vars[entry.varName]) swatches[entry.varName] = vars[entry.varName];
+        }
+        autoThemeSwatches = swatches;
       }
       autoThemeDE = storeState.detectedDE;
     } else {
@@ -3283,7 +3294,7 @@
     // If switching away from System, disable auto-theme
     if (theme === 'System' && newTheme !== 'System') {
       disableAutoTheme();
-      autoThemePalette = null;
+      autoThemeSwatches = {};
       autoThemeDE = null;
       autoThemeError = null;
       autoThemeFailedModal = false;
@@ -3866,14 +3877,28 @@
           </div>
         {/if}
 
-        {#if autoThemePalette && autoThemePalette.length > 0}
+        {#if Object.keys(autoThemeSwatches).length > 0}
           <div class="auto-theme-palette">
-            {#each autoThemePalette as color}
-              <div
-                class="palette-swatch"
-                style="background-color: rgb({color.r}, {color.g}, {color.b})"
-                title="rgb({color.r}, {color.g}, {color.b})"
-              ></div>
+            {#each EDITABLE_THEME_VARS as entry}
+              {#if autoThemeSwatches[entry.varName]}
+                <label class="palette-swatch-wrapper" title={$t(entry.labelKey)}>
+                  <div
+                    class="palette-swatch"
+                    style="background-color: {autoThemeSwatches[entry.varName]}"
+                  ></div>
+                  <span class="palette-swatch-label">{$t(entry.labelKey)}</span>
+                  <input
+                    type="color"
+                    class="palette-swatch-input"
+                    value={autoThemeSwatches[entry.varName]}
+                    oninput={(ev) => {
+                      const hex = ev.currentTarget.value;
+                      autoThemeSwatches[entry.varName] = hex;
+                      updateThemeVariable(entry.varName, hex);
+                    }}
+                  />
+                </label>
+              {/if}
             {/each}
           </div>
         {/if}
@@ -6360,20 +6385,51 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
 
   .auto-theme-palette {
     display: flex;
-    gap: 6px;
+    flex-wrap: wrap;
+    gap: 10px;
     padding: 8px 0;
   }
 
-  .palette-swatch {
-    width: 32px;
-    height: 32px;
-    border-radius: 8px;
-    border: 2px solid var(--border-subtle);
-    transition: transform 150ms ease;
+  .palette-swatch-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    position: relative;
   }
 
-  .palette-swatch:hover {
-    transform: scale(1.15);
+  .palette-swatch {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 2px solid var(--border-subtle);
+    transition: transform 150ms ease, border-color 150ms ease;
+  }
+
+  .palette-swatch-wrapper:hover .palette-swatch {
+    transform: scale(1.12);
+    border-color: var(--text-muted);
+  }
+
+  .palette-swatch-label {
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    text-align: center;
+    max-width: 48px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .palette-swatch-input {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 36px;
+    height: 36px;
+    opacity: 0;
+    cursor: pointer;
   }
 
   .btn-secondary {

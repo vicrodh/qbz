@@ -15,22 +15,6 @@ import { invoke } from '@tauri-apps/api/core';
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export interface PaletteColor {
-  r: number;
-  g: number;
-  b: number;
-}
-
-export interface ThemePalette {
-  bg_primary: PaletteColor;
-  bg_secondary: PaletteColor;
-  bg_tertiary: PaletteColor;
-  bg_hover: PaletteColor;
-  accent: PaletteColor;
-  is_dark: boolean;
-  all_colors: PaletteColor[];
-}
-
 export interface GeneratedTheme {
   variables: Record<string, string>;
   is_dark: boolean;
@@ -55,7 +39,6 @@ interface AutoThemeState {
   generating: boolean;
   error: string | null;
   theme: GeneratedTheme | null;
-  palette: ThemePalette | null;
   detectedDE: string | null;
 }
 
@@ -73,7 +56,8 @@ const autoThemeStore = writable<AutoThemeState>({
   generating: false,
   error: null,
   theme: null,
-  palette: null,
+
+
   detectedDE: null,
 });
 
@@ -194,7 +178,6 @@ export async function enableAutoTheme(
     }
 
     let theme: GeneratedTheme;
-    let palette: ThemePalette | null = null;
 
     if (source === 'system') {
       // Cascade: full color scheme → wallpaper → error
@@ -220,26 +203,6 @@ export async function enableAutoTheme(
       theme = await generateFromImage(imagePath);
     }
 
-    // Extract palette for preview
-    let palettePath: string | null = null;
-    if (source === 'image') {
-      palettePath = imagePath ?? null;
-    } else {
-      try {
-        palettePath = await invoke<string>('v2_get_system_wallpaper');
-      } catch {
-        // no wallpaper, skip palette preview
-      }
-    }
-
-    if (palettePath) {
-      try {
-        palette = await invoke<ThemePalette>('v2_extract_palette', { imagePath: palettePath });
-      } catch {
-        // non-critical, preview won't show
-      }
-    }
-
     // Apply: set data-theme to 'auto' (no static CSS matches)
     document.documentElement.setAttribute('data-theme', AUTO_THEME_VALUE);
     injectCssVariables(theme.variables);
@@ -254,7 +217,6 @@ export async function enableAutoTheme(
       generating: false,
       error: null,
       theme,
-      palette,
       detectedDE,
     });
   } catch (err) {
@@ -290,7 +252,8 @@ export function disableAutoTheme(): void {
     generating: false,
     error: null,
     theme: null,
-    palette: null,
+  
+
     detectedDE: null,
   });
 }
@@ -311,6 +274,43 @@ export function subscribeAutoTheme(
 ): () => void {
   return autoThemeStore.subscribe(listener);
 }
+
+/**
+ * Update a single CSS variable in the active auto-theme.
+ * Used for fine-tuning individual colors from the Settings UI.
+ */
+export function updateThemeVariable(varName: string, value: string): void {
+  const state = get(autoThemeStore);
+  if (!state.active || !state.theme) return;
+
+  // Apply to DOM
+  document.documentElement.style.setProperty(varName, value);
+
+  // Update store
+  const updatedVars = { ...state.theme.variables, [varName]: value };
+  autoThemeStore.update(s => ({
+    ...s,
+    theme: s.theme ? { ...s.theme, variables: updatedVars } : null,
+  }));
+
+  // Persist
+  saveAutoThemeVars(updatedVars);
+}
+
+/**
+ * The key CSS variables that are user-editable in the Settings panel.
+ * Each entry maps a CSS var name to an i18n label key.
+ */
+export const EDITABLE_THEME_VARS = [
+  { varName: '--bg-primary', labelKey: 'settings.appearance.colorBg' },
+  { varName: '--bg-secondary', labelKey: 'settings.appearance.colorSurface' },
+  { varName: '--bg-tertiary', labelKey: 'settings.appearance.colorElevated' },
+  { varName: '--accent-primary', labelKey: 'settings.appearance.colorAccent' },
+  { varName: '--text-primary', labelKey: 'settings.appearance.colorText' },
+  { varName: '--text-muted', labelKey: 'settings.appearance.colorMuted' },
+  { varName: '--border-subtle', labelKey: 'settings.appearance.colorBorder' },
+  { varName: '--danger', labelKey: 'settings.appearance.colorDanger' },
+] as const;
 
 /** Export the store itself for use with $ syntax in Svelte components. */
 export { autoThemeStore };
@@ -337,7 +337,8 @@ export function restoreAutoThemeVars(): void {
     generating: false,
     error: null,
     theme: { variables: vars, is_dark: true, source: 'cached' },
-    palette: null,
+  
+
     detectedDE: null,
   });
 }
