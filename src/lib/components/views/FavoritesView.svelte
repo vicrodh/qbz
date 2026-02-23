@@ -1175,8 +1175,8 @@
     <h1>{$t('favorites.title')}</h1>
     {#if activeTab === 'tracks' && !loading && filteredTracks.length > 0}
       <div class="header-actions">
-        <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title={$t('actions.playAll')}>
-          <Play size={20} fill="currentColor" color="currentColor" />
+        <button class="action-btn-circle" onclick={handlePlayAllTracks} title={$t('actions.playAll')}>
+          <Play size={18} fill="currentColor" color="currentColor" />
         </button>
         <button class="action-btn-circle" onclick={handleShuffleAllTracks} title={$t('actions.shuffle')}>
           <Shuffle size={18} />
