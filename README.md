@@ -472,54 +472,6 @@ After enabling Force X11, configure scaling in Settings → Appearance → Compo
 
 All settings require a restart to take effect.
 
-#### KDE Plasma: native title bar via KWin rule (advanced, manual)
-
-GTK3 (which QBZ uses internally via Tauri/WebKitGTK) hardcodes client-side
-decorations in the Wayland xdg-decoration protocol, so enabling "Use system
-title bar" in Settings gives you a Breeze-GTK bar instead of the native
-KDE/Plasma one. Attempts to apply a KWin SSD rule at runtime were abandoned
-in 1.1.15 due to a GTK3/WebKit heap corruption bug.
-
-However, you can get a true Plasma title bar manually by writing the KWin
-rule **before** launching QBZ and leaving both built-in title bar options
-**disabled** (Settings → Appearance → "Use system title bar" OFF):
-
-```bash
-# Write the KWin window rule
-kwriteconfig6 --file kwinrulesrc --group 99 --key Description "QBZ Native Title Bar"
-kwriteconfig6 --file kwinrulesrc --group 99 --key noborder "false"
-kwriteconfig6 --file kwinrulesrc --group 99 --key noborderrule "2"
-kwriteconfig6 --file kwinrulesrc --group 99 --key wmclass "qbz"
-kwriteconfig6 --file kwinrulesrc --group 99 --key wmclasscomplete "false"
-kwriteconfig6 --file kwinrulesrc --group 99 --key wmclassmatch "1"
-kwriteconfig6 --file kwinrulesrc --group 99 --key types "1"
-
-# Increment the rule count (change N to current count + 1)
-kwriteconfig6 --file kwinrulesrc --group General --key count "1"
-
-# Apply the rule without restarting KWin
-qdbus6 org.kde.KWin /KWin org.kde.KWin.reconfigure
-```
-
-> **Use group 99** (or any number not already in use) to avoid conflicts.
-> Check `~/.config/kwinrulesrc` for existing groups and adjust accordingly.
-
-With QBZ's custom title bar disabled and this rule active, KWin draws its
-own Plasma/Breeze decoration directly — identical to Dolphin or Konsole.
-
-To undo:
-```bash
-kwriteconfig6 --file kwinrulesrc --group 99 --delete-group 2>/dev/null || \
-  python3 -c "
-import os, re, pathlib
-p = pathlib.Path('~/.config/kwinrulesrc').expanduser()
-txt = p.read_text()
-txt = re.sub(r'\[99\][^\[]*', '', txt)
-p.write_text(txt)
-"
-qdbus6 org.kde.KWin /KWin org.kde.KWin.reconfigure
-```
-
 ## Contributing
 
 Contributions are welcome. Please read `CONTRIBUTING.md` before submitting issues or pull requests.

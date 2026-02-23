@@ -96,6 +96,8 @@
           <div class="info-grid">
             <span class="label">Version</span>
             <span class="value">{appVersion}</span>
+            <span class="label">Codename</span>
+            <span class="value codename">La marrano de engorda</span>
             <span class="label">License</span>
             <span class="value">MIT</span>
             <span class="label">Platform</span>
@@ -348,6 +350,12 @@
   .commit {
     color: var(--text-muted);
     font-size: 11px;
+  }
+
+  .codename {
+    font-family: var(--font-sans);
+    font-style: italic;
+    color: var(--text-secondary);
   }
 
   .attributions {

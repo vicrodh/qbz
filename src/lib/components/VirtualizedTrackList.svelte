@@ -63,6 +63,9 @@
     // For getting artist/album IDs from non-local tracks
     getArtistId?: (track: Track) => number | undefined;
     getAlbumId?: (track: Track) => string | undefined;
+    // Album artwork column (same as Playlist view)
+    showArtwork?: boolean;
+    getArtworkUrl?: (track: Track) => string | undefined;
   }
 
   let {
@@ -107,6 +110,8 @@
     onCreateQobuzRadio,
     getArtistId,
     getAlbumId,
+    showArtwork = false,
+    getArtworkUrl,
   }: Props = $props();
 
   // Constants
@@ -327,6 +332,8 @@
             title={getTrackTitle(item.track)}
             artist={trackArtist}
             album={albumName}
+            showArtwork={showArtwork}
+            artworkUrl={getArtworkUrl?.(item.track)}
             duration={formatDuration(getTrackDuration(item.track))}
             quality={getQualityBadge(item.track)}
             isPlaying={isPlaybackActive && activeTrackId === trackId}

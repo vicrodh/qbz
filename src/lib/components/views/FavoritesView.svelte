@@ -1067,6 +1067,8 @@
   const getFavoriteTrackDuration = (trk: FavoriteTrack) => trk.duration;
   const getFavoriteTrackAlbumKey = (trk: FavoriteTrack) => trk.album?.id;
   const getFavoriteTrackAlbum = (trk: FavoriteTrack) => trk.album?.title;
+  const getFavoriteTrackArtworkUrl = (trk: FavoriteTrack) =>
+    trk.album?.image?.small ?? trk.album?.image?.thumbnail;
   const getFavoriteArtistId = (trk: FavoriteTrack) => trk.performer?.id;
   const getFavoriteAlbumId = (trk: FavoriteTrack) => trk.album?.id;
 
@@ -1569,6 +1571,8 @@
               getTrackDuration={getFavoriteTrackDuration}
               getTrackAlbumKey={getFavoriteTrackAlbumKey}
               getTrackAlbum={getFavoriteTrackAlbum}
+              showArtwork={true}
+              getArtworkUrl={getFavoriteTrackArtworkUrl}
               showAlbum={!trackGroupingEnabled || trackGroupMode !== 'album'}
               getArtistId={getFavoriteArtistId}
               getAlbumId={getFavoriteAlbumId}
