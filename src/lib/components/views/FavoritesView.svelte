@@ -32,6 +32,7 @@
   import { saveScrollPosition, getSavedScrollPosition, getActiveView } from '$lib/stores/navigationStore';
 
   const GENRE_CONTEXT: GenreFilterContext = 'favorites';
+  const GENRE_CONTEXT_TRACKS: GenreFilterContext = 'favorites-tracks';
 
   interface FavoriteAlbum {
     id: string;
@@ -51,7 +52,7 @@
     duration: number;
     track_number: number;
     performer?: { id?: number; name: string };
-    album?: { id: string; title: string; image: { small?: string; thumbnail?: string; large?: string } };
+    album?: { id: string; title: string; image: { small?: string; thumbnail?: string; large?: string }; genre?: { name: string } };
     hires: boolean;
     maximum_bit_depth?: number;
     maximum_sampling_rate?: number;
@@ -382,9 +383,22 @@
 
   // Filtered lists based on search
   let filteredTracks = $derived.by(() => {
-    if (!trackSearch.trim()) return favoriteTracks;
+    void genreFilterVersion;
+
+    let tracks = favoriteTracks;
+
+    const filterGenreNames = getFilterGenreNames(GENRE_CONTEXT_TRACKS);
+    if (filterGenreNames.length > 0) {
+      tracks = tracks.filter(track =>
+        track.album?.genre && filterGenreNames.some(genreName =>
+          track.album!.genre!.name.toLowerCase().includes(genreName.toLowerCase())
+        )
+      );
+    }
+
+    if (!trackSearch.trim()) return tracks;
     const query = trackSearch.toLowerCase();
-    return favoriteTracks.filter(track =>
+    return tracks.filter(track =>
       track.title.toLowerCase().includes(query) ||
       track.performer?.name?.toLowerCase().includes(query) ||
       track.album?.title?.toLowerCase().includes(query)
@@ -1340,6 +1354,7 @@
           {/if}
         </button>
       {:else if activeTab === 'tracks'}
+        <GenreFilterButton context={GENRE_CONTEXT_TRACKS} variant="control" align="right" onFilterChange={handleGenreFilterChange} />
         <div class="dropdown-container">
           <button class="control-btn" onclick={() => (showTrackGroupMenu = !showTrackGroupMenu)}>
             <span>

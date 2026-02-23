@@ -20,7 +20,7 @@ export interface GenreTreeNode {
   loading?: boolean;
 }
 
-export type GenreFilterContext = 'home' | 'favorites' | 'discover-new-releases' | 'discover-ideal-discography' | 'discover-top-albums' | 'discover-qobuzissimes' | 'discover-albums-of-the-week' | 'discover-press-accolades' | 'discover-playlists';
+export type GenreFilterContext = 'home' | 'favorites' | 'favorites-tracks' | 'discover-new-releases' | 'discover-ideal-discography' | 'discover-top-albums' | 'discover-qobuzissimes' | 'discover-albums-of-the-week' | 'discover-press-accolades' | 'discover-playlists';
 
 interface ContextState {
   selectedGenreIds: Set<number>;
@@ -40,6 +40,7 @@ interface GenreFilterState {
 const STORAGE_KEYS: Record<GenreFilterContext, string> = {
   home: 'qbz_genre_filter_home',
   favorites: 'qbz_genre_filter_favorites',
+  'favorites-tracks': 'qbz_genre_filter_favorites_tracks',
   'discover-new-releases': 'qbz_genre_filter_discover_new_releases',
   'discover-ideal-discography': 'qbz_genre_filter_discover_ideal_discography',
   'discover-top-albums': 'qbz_genre_filter_discover_top_albums',
@@ -106,6 +107,11 @@ const state: GenreFilterState = {
       listeners: new Set(),
     },
     favorites: {
+      selectedGenreIds: new Set(),
+      rememberSelection: true,
+      listeners: new Set(),
+    },
+    'favorites-tracks': {
       selectedGenreIds: new Set(),
       rememberSelection: true,
       listeners: new Set(),
