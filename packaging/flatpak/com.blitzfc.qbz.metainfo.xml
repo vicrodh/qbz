@@ -60,6 +60,11 @@
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.1.15" date="2026-02-23">
+      <description>
+        <p>Multi-select tracks across all views (Album, Artist, Playlist, Favorites, Label, Daily/Weekly/Fav/Top mixes) with bulk queue and playlist actions. Scroll position now scoped per item and expires after one hour.</p>
+      </description>
+    </release>
     <release version="1.1.11" date="2026-02-10">
       <description>
         <p>Discover browse pages for albums and playlists, localized playlist tags, preserved Qobuz artwork on playlist copy, and UI fixes.</p>
