@@ -160,6 +160,80 @@ pub fn update_media_controls_metadata(
     media_controls.set_metadata(&track_info);
 }
 
+/// Load a KWin script via D-Bus that forces server-side decorations for QBZ.
+///
+/// GTK3 on Wayland hardcodes CLIENT_SIDE in the xdg-decoration protocol,
+/// so KWin respects that and doesn't draw its own title bar. This script
+/// tells KWin to force its native decorations (SSD) for QBZ windows,
+/// giving a title bar identical to Dolphin, Konsole, etc.
+fn load_kwin_ssd_script() -> Result<(), String> {
+    use std::io::Write;
+
+    let script_content = r#"
+const clients = workspace.windowList();
+for (let i = 0; i < clients.length; i++) {
+    const c = clients[i];
+    if (c.resourceClass === "qbz") {
+        c.noBorder = false;
+    }
+}
+workspace.windowAdded.connect(function(client) {
+    if (client.resourceClass === "qbz") {
+        client.noBorder = false;
+    }
+});
+"#;
+
+    // Write script to a temporary file
+    let script_dir = std::env::var("XDG_RUNTIME_DIR")
+        .unwrap_or_else(|_| "/tmp".to_string());
+    let script_path = format!("{}/qbz-kwin-ssd.js", script_dir);
+
+    let mut file = std::fs::File::create(&script_path)
+        .map_err(|e| format!("Failed to create KWin script file: {}", e))?;
+    file.write_all(script_content.as_bytes())
+        .map_err(|e| format!("Failed to write KWin script: {}", e))?;
+
+    // Load script via qdbus6 (KDE Plasma 6)
+    let output = std::process::Command::new("qdbus6")
+        .args([
+            "org.kde.KWin",
+            "/Scripting",
+            "org.kde.kwin.Scripting.loadScript",
+            &script_path,
+            "qbz-ssd",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to run qdbus6: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "qdbus6 loadScript failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    // Start the script
+    let output = std::process::Command::new("qdbus6")
+        .args([
+            "org.kde.KWin",
+            "/Scripting",
+            "org.kde.kwin.Scripting.start",
+        ])
+        .output()
+        .map_err(|e| format!("Failed to start KWin script: {}", e))?;
+
+    if !output.status.success() {
+        return Err(format!(
+            "qdbus6 start failed: {}",
+            String::from_utf8_lossy(&output.stderr)
+        ));
+    }
+
+    log::info!("KWin SSD script loaded for native title bar on KDE Plasma");
+    Ok(())
+}
+
 pub fn run() {
     // Load .env file if present (for development)
     // Silently ignore if not found (production builds use compile-time env vars)
@@ -359,13 +433,37 @@ pub fn run() {
         .manage(runtime::RuntimeManagerState::new())
         .manage(user_data_paths)
         .setup(move |app| {
-            // Create main window programmatically so we can set the correct
-            // decoration state at creation time. On Linux/Wayland, windows
-            // created with decorations:false cannot reliably switch to
-            // decorations:true at runtime (WM buttons don't work). By
-            // creating the window with the right value from the start, the
-            // WM sees the correct state when the window is first mapped.
-            log::info!("Creating main window (decorations={})", use_system_titlebar);
+            // On KDE Plasma + Wayland, GTK3 always uses client-side decorations
+            // (CSD) regardless of GTK_CSD env var, because it hardcodes
+            // CLIENT_SIDE in the xdg-decoration protocol. This means
+            // decorations(true) shows a GTK/Breeze-GTK title bar, not the
+            // native KDE Breeze one.
+            //
+            // Workaround: create the window with decorations=false (no GTK CSD),
+            // then load a KWin script via D-Bus that forces KWin to draw its own
+            // server-side decorations (SSD) for QBZ. This gives a single, native
+            // KDE title bar identical to Dolphin/Konsole.
+            let is_kde_wayland = std::env::var("GDK_BACKEND")
+                .map(|v| v == "wayland")
+                .unwrap_or(false)
+                && auto_theme::system::detect_desktop_environment()
+                    == auto_theme::system::DesktopEnvironment::KdePlasma;
+
+            let use_kwin_ssd = use_system_titlebar && is_kde_wayland;
+
+            // On KDE Wayland: always decorations=false, KWin script adds SSD
+            // On other DEs: use decorations directly (GTK CSD is acceptable)
+            let gtk_decorations = if use_kwin_ssd {
+                false
+            } else {
+                use_system_titlebar
+            };
+
+            log::info!(
+                "Creating main window (decorations={}, kwin_ssd={})",
+                gtk_decorations,
+                use_kwin_ssd
+            );
             tauri::WebviewWindowBuilder::new(
                 app,
                 "main",
@@ -374,7 +472,7 @@ pub fn run() {
             .title("QBZ")
             .inner_size(1280.0, 800.0)
             .min_inner_size(800.0, 600.0)
-            .decorations(use_system_titlebar)
+            .decorations(gtk_decorations)
             .transparent(true)
             .resizable(true)
             .zoom_hotkeys_enabled(true)
@@ -383,6 +481,15 @@ pub fn run() {
                 log::error!("Failed to create main window: {}", e);
                 e
             })?;
+
+            // Load KWin script to force server-side decorations for QBZ
+            if use_kwin_ssd {
+                std::thread::spawn(|| {
+                    if let Err(e) = load_kwin_ssd_script() {
+                        log::warn!("Failed to load KWin SSD script: {}", e);
+                    }
+                });
+            }
 
             // Initialize system tray icon (only if enabled)
             if enable_tray {
