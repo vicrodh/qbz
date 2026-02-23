@@ -542,16 +542,19 @@
   }
 
   // Auto-theme state
-  // Sources: 'system' = DE accent colors (fallback: wallpaper), 'wallpaper' = wallpaper-based, 'image' = user-picked image
-  let autoThemeSource = $state<AutoThemeSource>('wallpaper');
+  // Sources: 'system' = accent first + wallpaper fallback, 'wallpaper' = explicit wallpaper, 'image' = custom image
+  let autoThemeSource = $state<AutoThemeSource>('system');
   let autoThemeGenerating = $state(false);
   let autoThemeError = $state<string | null>(null);
   let autoThemeDE = $state<string | null>(null);
   let autoThemePalette = $state<PaletteColor[] | null>(null);
   let autoThemeCustomPath = $state<string | null>(null);
+  let autoThemeFailedModal = $state(false);
+  let autoThemeFailedMessage = $state('');
 
   // Source options (use labelKey pattern to avoid $t() in $derived per ADR-001)
   const autoThemeSourceOptions = [
+    { value: 'system' as AutoThemeSource, labelKey: 'settings.appearance.autoThemeSourceSystem' },
     { value: 'wallpaper' as AutoThemeSource, labelKey: 'settings.appearance.autoThemeSourceWallpaper' },
     { value: 'image' as AutoThemeSource, labelKey: 'settings.appearance.autoThemeSourceImage' },
   ];
@@ -559,12 +562,15 @@
   async function handleAutoThemeGenerate() {
     autoThemeGenerating = true;
     autoThemeError = null;
+    autoThemeFailedModal = false;
     try {
       if (autoThemeSource === 'image' && autoThemeCustomPath) {
         await enableAutoTheme('image', autoThemeCustomPath);
-      } else {
-        // 'wallpaper' source: generate from wallpaper
+      } else if (autoThemeSource === 'wallpaper') {
         await enableAutoTheme('wallpaper');
+      } else {
+        // 'system': accent first, wallpaper fallback (handled in store)
+        await enableAutoTheme('system');
       }
       // Update palette preview from store
       const storeState = $autoThemeStore;
@@ -574,10 +580,38 @@
       autoThemeDE = storeState.detectedDE;
       showToast($t('settings.appearance.autoThemeApplied'), 'success');
     } catch (err) {
-      autoThemeError = err instanceof Error ? err.message : String(err);
+      const message = err instanceof Error ? err.message : String(err);
+      autoThemeError = message;
+      // Show failure modal and fallback to dark theme
+      autoThemeFailedMessage = message;
+      autoThemeFailedModal = true;
+      fallbackToStaticTheme();
     } finally {
       autoThemeGenerating = false;
     }
+  }
+
+  /** Fallback to Dark theme when auto-theme fails */
+  function fallbackToStaticTheme() {
+    disableAutoTheme();
+    theme = 'Dark';
+    applyTheme('');
+    localStorage.setItem('qbz-theme', '');
+    autoThemePalette = null;
+    autoThemeDE = null;
+  }
+
+  function dismissAutoThemeFailedModal() {
+    autoThemeFailedModal = false;
+    autoThemeFailedMessage = '';
+  }
+
+  function handleAutoThemeFailedSelectImage() {
+    autoThemeFailedModal = false;
+    autoThemeFailedMessage = '';
+    theme = 'System';
+    autoThemeSource = 'image';
+    void handleAutoThemeSelectImage();
   }
 
   async function handleAutoThemeSelectImage() {
@@ -600,7 +634,7 @@
     const match = autoThemeSourceOptions.find(opt => $t(opt.labelKey) === newSource);
     if (match) {
       autoThemeSource = match.value;
-      if (match.value === 'wallpaper') {
+      if (match.value !== 'image') {
         void handleAutoThemeGenerate();
       }
     }
@@ -3252,12 +3286,14 @@
       autoThemePalette = null;
       autoThemeDE = null;
       autoThemeError = null;
+      autoThemeFailedModal = false;
     }
 
     theme = newTheme;
 
     if (newTheme === 'System') {
-      // Trigger auto-theme generation (wallpaper by default)
+      // Default source is 'system' (accent first, wallpaper fallback)
+      autoThemeSource = 'system';
       void handleAutoThemeGenerate();
     } else {
       const themeValue = themeMap[newTheme] || '';
@@ -3763,6 +3799,36 @@
       </div>
     </div>
 
+    <!-- Auto-Theme generating overlay -->
+    {#if autoThemeGenerating}
+      <div class="auto-theme-overlay">
+        <div class="auto-theme-overlay-content">
+          <Loader2 size={32} class="spinner" />
+          <span>{$t('settings.appearance.autoThemeGenerating')}</span>
+        </div>
+      </div>
+    {/if}
+
+    <!-- Auto-Theme failure modal -->
+    {#if autoThemeFailedModal}
+      <div class="auto-theme-modal-backdrop" role="presentation" onclick={dismissAutoThemeFailedModal}>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div class="auto-theme-modal" onclick={(e) => e.stopPropagation()}>
+          <h3>{$t('settings.appearance.autoThemeError')}</h3>
+          <p class="auto-theme-modal-message">{autoThemeFailedMessage}</p>
+          <p class="auto-theme-modal-hint">{$t('settings.appearance.autoThemeFailedHint')}</p>
+          <div class="auto-theme-modal-actions">
+            <button class="btn-secondary" onclick={dismissAutoThemeFailedModal}>
+              {$t('actions.ok')}
+            </button>
+            <button class="btn-primary" onclick={handleAutoThemeFailedSelectImage}>
+              {$t('settings.appearance.autoThemeSelectImage')}
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
+
     <!-- Auto-Theme controls (visible when System theme is selected) -->
     {#if theme === 'System'}
       <div class="auto-theme-panel">
@@ -3793,19 +3859,6 @@
           </div>
         {/if}
 
-        {#if autoThemeGenerating}
-          <div class="auto-theme-status">
-            <Loader2 size={14} class="spinner" />
-            <span>{$t('settings.appearance.autoThemeGenerating')}</span>
-          </div>
-        {/if}
-
-        {#if autoThemeError}
-          <div class="auto-theme-status error">
-            <span>{$t('settings.appearance.autoThemeError')}: {autoThemeError}</span>
-          </div>
-        {/if}
-
         {#if autoThemeDE}
           <div class="auto-theme-status">
             <span>{$t('settings.appearance.autoThemeDetectedDE', { values: { de: autoThemeDE } })}</span>
@@ -3827,7 +3880,7 @@
         <div class="setting-row">
           <button class="btn-secondary" onclick={handleAutoThemeGenerate} disabled={autoThemeGenerating}>
             <RefreshCw size={14} />
-            <span>{$t('settings.appearance.autoTheme')}</span>
+            <span>{$t('settings.appearance.autoThemeRegenerate')}</span>
           </button>
         </div>
       </div>
@@ -6298,10 +6351,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     padding: 4px 0;
   }
 
-  .auto-theme-status.error {
-    color: var(--danger);
-  }
-
   .auto-theme-palette {
     display: flex;
     gap: 6px;
@@ -6342,6 +6391,97 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .btn-secondary:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+
+  .btn-primary {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    background: var(--accent-primary);
+    border: none;
+    border-radius: 8px;
+    color: var(--btn-primary-text, #ffffff);
+    cursor: pointer;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: background-color 150ms ease;
+  }
+
+  .btn-primary:hover {
+    background: var(--accent-hover);
+  }
+
+  /* Auto-Theme Generating Overlay */
+  .auto-theme-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .auto-theme-overlay-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    color: #ffffff;
+    font-size: 1rem;
+  }
+
+  /* Auto-Theme Failure Modal */
+  .auto-theme-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 3100;
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+
+  .auto-theme-modal {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-strong);
+    border-radius: 14px;
+    padding: 28px 32px;
+    max-width: 440px;
+    width: 90%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .auto-theme-modal h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--danger);
+  }
+
+  .auto-theme-modal-message {
+    margin: 0;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  .auto-theme-modal-hint {
+    margin: 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+  }
+
+  .auto-theme-modal-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+    margin-top: 8px;
   }
 
   /* Content Filtering Section */
