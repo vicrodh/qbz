@@ -2059,6 +2059,7 @@
   .favorites-nav {
     position: sticky;
     top: -24px;
+    z-index: 10;
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -2069,6 +2070,7 @@
     background: var(--bg-primary);
     border-bottom: 1px solid var(--alpha-6);
     box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
+    overflow: visible;
   }
 
   .nav-left {
@@ -2231,7 +2233,7 @@
     border-radius: 8px;
     padding: 6px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-    z-index: 100;
+    z-index: 20;
     max-height: 260px;
     overflow-y: auto;
     scrollbar-width: thin;
@@ -2285,7 +2287,7 @@
   .results-count {
     font-size: 13px;
     color: var(--text-muted);
-    min-width: 100px;
+    min-width: 72px;
     text-align: right;
     white-space: nowrap;
     flex-shrink: 0;
