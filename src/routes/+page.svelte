@@ -1709,6 +1709,10 @@
     const success = await clearQueue();
     if (success) {
       showToast($t('toast.queueCleared'), 'info');
+      // Immediately persist the empty state so it survives app close
+      if (sessionPersistEnabled) {
+        saveSessionBeforeClose();
+      }
     } else {
       showToast($t('toast.failedClearQueue'), 'error');
     }
