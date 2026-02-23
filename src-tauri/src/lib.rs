@@ -246,6 +246,49 @@ pub fn run() {
     );
     let use_system_titlebar = window_settings.use_system_titlebar;
 
+    // One-time cleanup: remove the KWin SSD window rule written by QBZ 1.1.14.
+    // That version wrote a kwinrulesrc entry forcing server-side decorations; it
+    // was removed in 1.1.15 due to a GTK3/WebKit heap corruption bug. We silently
+    // delete the stale rule so KWin stops applying SSD on existing installs.
+    // No qdbus6 reconfigure call here — KWin picks it up on next restart, and
+    // users affected can run `qdbus6 org.kde.KWin /KWin reconfigure` manually or
+    // just restart their session. This block does nothing if the rule is absent.
+    {
+        if let Some(path) = dirs::config_dir().map(|d| d.join("kwinrulesrc")) {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                if content.contains("Description=QBZ Native Title Bar") {
+                    // Strip the [N] group that contains our rule
+                    let mut out = String::with_capacity(content.len());
+                    let mut skip = false;
+                    for line in content.lines() {
+                        let trimmed = line.trim();
+                        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                            skip = false;
+                        }
+                        if trimmed == "Description=QBZ Native Title Bar" {
+                            // Remove the header we already wrote + this section
+                            // by trimming back to the previous newline
+                            if let Some(pos) = out.rfind('[') {
+                                out.truncate(pos);
+                            }
+                            skip = true;
+                            continue;
+                        }
+                        if !skip {
+                            out.push_str(line);
+                            out.push('\n');
+                        }
+                    }
+                    if let Err(e) = std::fs::write(&path, out) {
+                        log::warn!("[Cleanup] Failed to remove stale KWin rule: {}", e);
+                    } else {
+                        log::info!("[Cleanup] Removed stale KWin SSD rule from kwinrulesrc");
+                    }
+                }
+            }
+        }
+    }
+
     // Initialize casting state (Chromecast, DLNA) — device-level, not per-user
     let cast_state = cast::CastState::new().expect("Failed to initialize Chromecast state");
     let dlna_state = cast::DlnaState::new(cast_state.media_server.clone())
