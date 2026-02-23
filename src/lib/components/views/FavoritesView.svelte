@@ -1239,17 +1239,6 @@
         </div>
       {/if}
     </div>
-    <span class="results-count">
-      {#if activeTab === 'tracks'}
-        {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} tracks
-      {:else if activeTab === 'albums'}
-        {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} albums
-      {:else if activeTab === 'artists'}
-        {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} artists
-      {:else}
-        {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} playlists
-      {/if}
-    </span>
   </div>
 
   <!-- Navigation Bar (Artist-style) -->
@@ -1267,6 +1256,17 @@
       {/each}
     </div>
     <div class="nav-right">
+      <span class="results-count">
+        {#if activeTab === 'tracks'}
+          {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} tracks
+        {:else if activeTab === 'albums'}
+          {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} albums
+        {:else if activeTab === 'artists'}
+          {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} artists
+        {:else}
+          {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} playlists
+        {/if}
+      </span>
       {#if activeTab === 'albums'}
         <GenreFilterButton context={GENRE_CONTEXT} variant="control" align="right" onFilterChange={handleGenreFilterChange} />
         <div class="dropdown-container">
@@ -2287,8 +2287,6 @@
   .results-count {
     font-size: 13px;
     color: var(--text-muted);
-    min-width: 72px;
-    text-align: right;
     white-space: nowrap;
     flex-shrink: 0;
   }
