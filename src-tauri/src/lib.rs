@@ -175,9 +175,7 @@ function isQbzWindow(client) {
     return rc === "com.blitzfc.qbz" || rc === "qbz" || rc === "qbz-nix";
 }
 function forceDecorations(client) {
-    print("[QBZ-SSD] checking: resourceClass=" + client.resourceClass + " caption=" + client.caption);
     if (isQbzWindow(client)) {
-        print("[QBZ-SSD] forcing SSD on: " + client.resourceClass);
         client.noBorder = false;
     }
 }
