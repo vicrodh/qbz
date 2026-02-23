@@ -1941,17 +1941,16 @@
             Load More
           </button>
         {/if}
+        <BulkActionBar
+          count={multiSelectedIds.size}
+          onPlayNext={handleBulkPlayNext}
+          onPlayLater={handleBulkPlayLater}
+          onAddToPlaylist={handleBulkAddToPlaylist}
+          onAddFavorites={handleBulkAddFavorites}
+          onClearSelection={() => { multiSelectedIds = new Set(); }}
+        />
       {/if}
     </div>
-
-    <BulkActionBar
-      count={multiSelectedIds.size}
-      onPlayNext={handleBulkPlayNext}
-      onPlayLater={handleBulkPlayLater}
-      onAddToPlaylist={handleBulkAddToPlaylist}
-      onAddFavorites={handleBulkAddFavorites}
-      onClearSelection={() => { multiSelectedIds = new Set(); }}
-    />
   {/if}
 
   <!-- Discography Section -->

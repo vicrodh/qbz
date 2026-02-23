@@ -11,6 +11,7 @@
     onRemoveFavorites?: () => void;
     onRemoveFromPlaylist?: () => void;
     onClearSelection: () => void;
+    placement?: 'top' | 'bottom';
   }
 
   let {
@@ -22,6 +23,7 @@
     onRemoveFavorites,
     onRemoveFromPlaylist,
     onClearSelection,
+    placement = 'bottom',
   }: Props = $props();
 
   let queueMenuOpen = $state(false);
@@ -50,7 +52,7 @@
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="bulk-bar-backdrop" class:queue-open={queueMenuOpen} onclick={handleClickOutside}>
   </div>
-  <div class="bulk-bar">
+  <div class="bulk-bar" class:placement-top={placement === 'top'}>
     <span class="count-label">
       {$t('actions.selectedTracks', { values: { count } })}
     </span>
@@ -146,8 +148,23 @@
     animation: slideUp 180ms ease;
   }
 
+  .bulk-bar.placement-top {
+    bottom: unset;
+    top: 0;
+    border-radius: 8px 8px 0 0;
+    border-top: none;
+    border-bottom: 1px solid var(--bg-tertiary);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+    animation: slideDown 180ms ease;
+  }
+
   @keyframes slideUp {
     from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slideDown {
+    from { opacity: 0; transform: translateY(-8px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 

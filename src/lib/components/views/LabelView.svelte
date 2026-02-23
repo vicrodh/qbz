@@ -2,7 +2,8 @@
   import { invoke } from '@tauri-apps/api/core';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { onMount, onDestroy } from 'svelte';
-  import { ArrowLeft, Disc3, Play, Music, MoreHorizontal, Heart, User, ChevronDown, ChevronUp } from 'lucide-svelte';
+  import { ArrowLeft, Disc3, Play, Music, MoreHorizontal, Heart, User, ChevronDown, ChevronUp, CheckSquare } from 'lucide-svelte';
+  import BulkActionBar from '../BulkActionBar.svelte';
   import { t } from '$lib/i18n';
   import AlbumCard from '../AlbumCard.svelte';
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
@@ -183,6 +184,43 @@
 
   let visibleTracks = $derived(topTracks.slice(0, visibleTracksCount));
   let canLoadMoreTracks = $derived(visibleTracksCount < 50 && topTracks.length > visibleTracksCount);
+
+  // Multi-select (popular tracks)
+  let multiSelectMode = $state(false);
+  let multiSelectedIds = $state(new Set<number>());
+
+  function toggleMultiSelectMode() {
+    multiSelectMode = !multiSelectMode;
+    if (!multiSelectMode) multiSelectedIds = new Set();
+  }
+
+  function toggleMultiSelect(id: number) {
+    const next = new Set(multiSelectedIds);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    multiSelectedIds = next;
+  }
+
+  async function handleBulkPlayNext() {
+    const selected = visibleTracks.filter(trk => multiSelectedIds.has(trk.id));
+    await invoke('v2_add_tracks_to_queue_next', { tracks: buildTopTracksQueue(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkPlayLater() {
+    const selected = visibleTracks.filter(trk => multiSelectedIds.has(trk.id));
+    await invoke('v2_add_tracks_to_queue', { tracks: buildTopTracksQueue(selected) });
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddToPlaylist() {
+    for (const id of multiSelectedIds) { onTrackAddToPlaylist?.(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
+
+  async function handleBulkAddFavorites() {
+    for (const id of multiSelectedIds) { onTrackAddFavorite?.(id); }
+    multiSelectMode = false; multiSelectedIds = new Set();
+  }
 
   function loadMoreTracks() {
     if (visibleTracksCount === 5) {
@@ -783,6 +821,15 @@
             <button class="action-btn-circle primary" onclick={handlePlayAllTracks} title="Play All">
               <Play size={20} fill="currentColor" color="currentColor" />
             </button>
+            <button
+              class="action-btn-circle"
+              class:is-active={multiSelectMode}
+              onclick={toggleMultiSelectMode}
+              disabled={topTracks.length === 0}
+              title={multiSelectMode ? $t('actions.cancelSelection') : $t('actions.select')}
+            >
+              <CheckSquare size={18} />
+            </button>
             <div class="context-menu-wrapper">
               <button
                 class="action-btn-circle"
@@ -818,16 +865,28 @@
             <div
               class="track-row"
               class:playing={isActiveTrack}
+              class:multi-selected={multiSelectMode && multiSelectedIds.has(track.id)}
               role="button"
               tabindex="0"
               data-track-id={track.id}
-              onclick={() => handleTrackPlay(track, index)}
-              onkeydown={(e) => e.key === 'Enter' && handleTrackPlay(track, index)}
+              onclick={() => multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index)}
+              onkeydown={(e) => e.key === 'Enter' && (multiSelectMode ? toggleMultiSelect(track.id) : handleTrackPlay(track, index))}
               oncontextmenu={(e) => {
+                if (multiSelectMode) return;
                 e.preventDefault();
                 trackContextMenu = { trackId: track.id, x: e.clientX, y: e.clientY };
               }}
             >
+              {#if multiSelectMode}
+                <label class="track-checkbox-wrap" onclick={(e) => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={multiSelectedIds.has(track.id)}
+                    onchange={() => toggleMultiSelect(track.id)}
+                    style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent-primary);"
+                  />
+                </label>
+              {/if}
               <div class="track-number">{index + 1}</div>
               <div class="track-artwork">
                 <div class="track-artwork-placeholder">
@@ -927,6 +986,14 @@
             </div>
           {/each}
         </div>
+        <BulkActionBar
+          count={multiSelectedIds.size}
+          onPlayNext={handleBulkPlayNext}
+          onPlayLater={handleBulkPlayLater}
+          onAddToPlaylist={handleBulkAddToPlaylist}
+          onAddFavorites={onTrackAddFavorite ? handleBulkAddFavorites : undefined}
+          onClearSelection={() => { multiSelectedIds = new Set(); }}
+        />
         {#if canLoadMoreTracks}
           <button class="load-more-link" onclick={loadMoreTracks}>
             {$t('label.showMore')} <ChevronDown size={14} />
@@ -1246,6 +1313,7 @@
   .action-btn-circle:hover { background-color: var(--bg-hover); color: var(--text-primary); }
   .action-btn-circle.primary { background-color: var(--accent-primary); color: white; }
   .action-btn-circle.primary:hover { opacity: 0.9; }
+  .action-btn-circle.is-active { background-color: var(--accent-primary); color: white; }
   .see-all-btn {
     background: none; border: none; color: var(--text-muted);
     font-size: 13px; font-weight: 500; cursor: pointer;
@@ -1280,6 +1348,8 @@
     width: 100%; transition: background-color 150ms ease;
   }
   .track-row:hover { background-color: var(--bg-tertiary); }
+  .track-row.multi-selected { background-color: rgba(var(--accent-primary-rgb, 92, 107, 192), 0.15); }
+  .track-checkbox-wrap { display: flex; align-items: center; flex-shrink: 0; }
   .track-number { width: 24px; font-size: 14px; color: var(--text-muted); text-align: center; }
   .track-artwork {
     width: 40px; height: 40px; border-radius: 4px;

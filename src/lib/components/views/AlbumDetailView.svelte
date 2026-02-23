@@ -192,13 +192,13 @@
   }
 
   async function handleBulkPlayNext() {
-    const selected = album.tracks.filter(t => multiSelectedIds.has(t.id));
+    const selected = album.tracks.filter(track => multiSelectedIds.has(track.id));
     await invoke('v2_add_tracks_to_queue_next', { tracks: buildAlbumQueueTracks(selected) });
     multiSelectMode = false; multiSelectedIds = new Set();
   }
 
   async function handleBulkPlayLater() {
-    const selected = album.tracks.filter(t => multiSelectedIds.has(t.id));
+    const selected = album.tracks.filter(track => multiSelectedIds.has(track.id));
     await invoke('v2_add_tracks_to_queue', { tracks: buildAlbumQueueTracks(selected) });
     multiSelectMode = false; multiSelectedIds = new Set();
   }
@@ -571,16 +571,15 @@
       {/each}
       {/if}
     </div>
+    <BulkActionBar
+      count={multiSelectedIds.size}
+      onPlayNext={handleBulkPlayNext}
+      onPlayLater={handleBulkPlayLater}
+      onAddToPlaylist={handleBulkAddToPlaylist}
+      onAddFavorites={onTrackAddFavorite ? handleBulkAddFavorites : undefined}
+      onClearSelection={() => { multiSelectedIds = new Set(); }}
+    />
   </div>
-
-  <BulkActionBar
-    count={multiSelectedIds.size}
-    onPlayNext={handleBulkPlayNext}
-    onPlayLater={handleBulkPlayLater}
-    onAddToPlaylist={handleBulkAddToPlaylist}
-    onAddFavorites={onTrackAddFavorite ? handleBulkAddFavorites : undefined}
-    onClearSelection={() => { multiSelectedIds = new Set(); }}
-  />
 
   <!-- By the same artist Section -->
   {#if filteredArtistAlbums.length > 0 && !isVariousArtists}

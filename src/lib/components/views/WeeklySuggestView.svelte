@@ -104,13 +104,13 @@
   }
 
   async function handleBulkPlayNext() {
-    const selected = filteredTracks.filter(t => multiSelectedIds.has(t.id));
+    const selected = filteredTracks.filter(trk => multiSelectedIds.has(trk.id));
     await invoke('v2_add_tracks_to_queue_next', { tracks: buildQueueTracks(selected) });
     multiSelectMode = false; multiSelectedIds = new Set();
   }
 
   async function handleBulkPlayLater() {
-    const selected = filteredTracks.filter(t => multiSelectedIds.has(t.id));
+    const selected = filteredTracks.filter(trk => multiSelectedIds.has(trk.id));
     await invoke('v2_add_tracks_to_queue', { tracks: buildQueueTracks(selected) });
     multiSelectMode = false; multiSelectedIds = new Set();
   }
@@ -570,16 +570,15 @@
           }}
         />
       {/each}
+      <BulkActionBar
+        count={multiSelectedIds.size}
+        onPlayNext={handleBulkPlayNext}
+        onPlayLater={handleBulkPlayLater}
+        onAddToPlaylist={handleBulkAddToPlaylist}
+        onClearSelection={() => { multiSelectedIds = new Set(); }}
+      />
     </div>
   {/if}
-
-  <BulkActionBar
-    count={multiSelectedIds.size}
-    onPlayNext={handleBulkPlayNext}
-    onPlayLater={handleBulkPlayLater}
-    onAddToPlaylist={handleBulkAddToPlaylist}
-    onClearSelection={() => { multiSelectedIds = new Set(); }}
-  />
 </div>
 
 <PlaylistModal
