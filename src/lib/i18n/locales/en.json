@@ -1094,7 +1094,10 @@
     "rememberMe": "Remember me",
     "ineligibleSubscription": "No active subscription. QBZ will run in offline mode only.",
     "v2AuthFailed": "Authentication with Qobuz failed. Please try again.",
-    "v2NotInitialized": "Could not connect to Qobuz. Please restart the app."
+    "v2NotInitialized": "Could not connect to Qobuz. Please restart the app.",
+    "connectionFailed": "Failed to connect to Qobuz™. Check your network and try again.",
+    "oauthButton": "Sign in via Browser",
+    "oauthLoading": "Opening browser..."
   },
   "legal": {
     "brandingLineSuffix": "",
@@ -1769,7 +1772,7 @@
       "probeRaw": "Probe Raw Response",
       "rawResponse": "Raw response"
     },
-    "algorithmInfo": "Powered by the Qobuz\u2122 suggestion algorithm, curated from your local listening history.",
+    "algorithmInfo": "Powered by the Qobuz™ suggestion algorithm, curated from your local listening history.",
     "result": {
       "algorithm": "Algorithm",
       "count": "{count} tracks",

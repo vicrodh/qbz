@@ -6,6 +6,7 @@ pub const BASE_URL: &str = "https://www.qobuz.com/api.json/0.2";
 pub mod paths {
     // User
     pub const USER_LOGIN: &str = "/user/login";
+    pub const OAUTH_CALLBACK: &str = "/oauth/callback";
     pub const PURCHASE_GET_USER_PURCHASES: &str = "/purchase/getUserPurchases";
     pub const PURCHASE_GET_USER_PURCHASES_IDS: &str = "/purchase/getUserPurchasesIds";
     pub const DYNAMIC_SUGGEST: &str = "/dynamic/suggest";

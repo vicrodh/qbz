@@ -7,6 +7,9 @@ pub mod paths {
     // User
     pub const USER_LOGIN: &str = "/user/login";
 
+    // OAuth
+    pub const OAUTH_CALLBACK: &str = "/oauth/callback";
+
     // Track
     pub const TRACK_GET: &str = "/track/get";
     pub const TRACK_GET_LIST: &str = "/track/getList";

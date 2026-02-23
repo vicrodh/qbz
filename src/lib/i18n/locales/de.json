@@ -1029,7 +1029,10 @@
     "rememberMe": "Angemeldet bleiben",
     "ineligibleSubscription": "Keine aktive Abonnement. QBZ wird nur im Offline-Modus ausgeführt.",
     "v2AuthFailed": "Authentifizierung mit Qobuz fehlgeschlagen. Bitte versuchen Sie es erneut.",
-    "v2NotInitialized": "Verbindung zu Qobuz konnte nicht hergestellt werden. Bitte starten Sie die App neu."
+    "v2NotInitialized": "Verbindung zu Qobuz konnte nicht hergestellt werden. Bitte starten Sie die App neu.",
+    "connectionFailed": "Verbindung zu Qobuz™ fehlgeschlagen. Netzwerk prüfen und erneut versuchen.",
+    "oauthButton": "Im Browser anmelden",
+    "oauthLoading": "Browser wird geöffnet..."
   },
   "legal": {
     "brandingLineSuffix": "",
@@ -1619,7 +1622,7 @@
     "title": "DailyQ",
     "subtitle": "Basierend auf deinem letzten Hoerverlauf.",
     "cardDesc": "Bereichere deinen Tag mit einer personalisierten Musikauswahl.",
-    "algorithmInfo": "Basierend auf dem Qobuz\u2122-Vorschlagsalgorithmus, kuratiert aus deinem lokalen Hoerverlauf."
+    "algorithmInfo": "Basierend auf dem Qobuz™-Vorschlagsalgorithmus, kuratiert aus deinem lokalen Hoerverlauf."
   },
   "weeklyMixes": {
     "title": "WeeklyQ",

@@ -16,9 +16,11 @@ const BUNDLE_BASE_URL: &str = "https://play.qobuz.com";
 pub struct BundleTokens {
     pub app_id: String,
     pub secrets: Vec<String>,
+    /// OAuth private key for the /oauth/callback exchange (newer bundles).
+    pub private_key: Option<String>,
 }
 
-/// Extract app_id and secrets from Qobuz bundle
+/// Extract app_id, secrets, and OAuth private_key from Qobuz bundle
 pub async fn extract_bundle_tokens(client: &Client) -> Result<BundleTokens> {
     // Step 1: Get login page to find bundle URL
     let login_page = client.get(LOGIN_PAGE_URL).send().await?.text().await?;
@@ -41,7 +43,10 @@ pub async fn extract_bundle_tokens(client: &Client) -> Result<BundleTokens> {
         ));
     }
 
-    Ok(BundleTokens { app_id, secrets })
+    // Step 5: Extract OAuth private_key (optional)
+    let private_key = extract_private_key(&bundle_content);
+
+    Ok(BundleTokens { app_id, secrets, private_key })
 }
 
 fn extract_bundle_url(html: &str) -> Result<String> {
@@ -178,6 +183,14 @@ fn extract_secrets(bundle: &str) -> Result<Vec<String>> {
 
     log::info!("Extracted {} secrets", secrets.len());
     Ok(secrets)
+}
+
+fn extract_private_key(bundle: &str) -> Option<String> {
+    let re = Regex::new(r#"privateKey:\s*"(?P<key>[A-Za-z0-9]{6,30})""#)
+        .expect("Invalid regex");
+    re.captures(bundle)
+        .and_then(|caps| caps.name("key"))
+        .map(|m| m.as_str().to_string())
 }
 
 #[cfg(test)]
