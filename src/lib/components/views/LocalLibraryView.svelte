@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { setCustomImage } from '$lib/stores/customArtistImageStore';
   import { getThumbnailUrl, getCachedThumbnailUrl } from '$lib/services/thumbnailService';
   import { open, ask } from '@tauri-apps/plugin-dialog';
   import { onMount, onDestroy, tick } from 'svelte';
@@ -2976,16 +2977,17 @@
 
       const imagePath = Array.isArray(selected) ? selected[0] : selected;
       
-      // Save to database
-      await invoke('v2_library_set_custom_artist_image', {
+      // Save to database (returns resized paths)
+      const result = await invoke<{ image_path: string; thumbnail_path: string }>('v2_library_set_custom_artist_image', {
         artistName,
         customImagePath: imagePath
       });
 
-      // Update local state
-      const imageUrl = convertFileSrc(imagePath);
+      // Update local state with resized thumbnail
+      const imageUrl = convertFileSrc(result.thumbnail_path);
       artistImages.set(artistName, imageUrl);
       artistImages = new Map(artistImages);
+      setCustomImage(artistName, convertFileSrc(result.image_path));
     } catch (err) {
       console.error('Failed to upload custom artist image:', err);
     }
