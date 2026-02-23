@@ -241,7 +241,13 @@
     "noBiography": "Keine Biografie verfügbar",
     "tributes": "Tributes & Coverversionen",
     "others": "Andere",
-    "playlists": "Playlists"
+    "playlists": "Playlists",
+    "addImage": "Eigenes Künstlerbild hinzufügen",
+    "changeImage": "Eigenes Künstlerbild ändern",
+    "removeImage": "Eigenes Künstlerbild entfernen",
+    "customImageSet": "Künstlerbild aktualisiert",
+    "customImageRemoved": "Eigenes Künstlerbild entfernt",
+    "customImageError": "Fehler beim Aktualisieren des Künstlerbilds"
   },
   "sort": {
     "nameAZ": "Name (A-Z)",
