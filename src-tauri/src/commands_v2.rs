@@ -1147,6 +1147,12 @@ pub async fn v2_start_oauth_login(
     let notify_nav = Arc::clone(&notify);
     let app_for_nav = app.clone();
 
+    // Clones for the on_new_window handler (Google/Apple/Facebook OAuth popups)
+    let code_holder_popup = Arc::clone(&code_holder);
+    let notify_popup = Arc::clone(&notify);
+    let app_for_popup = app.clone();
+    let popup_counter = Arc::new(std::sync::atomic::AtomicU32::new(0));
+
     // Build and open the OAuth WebView window
     let parsed_url: tauri::Url = oauth_url
         .parse()
@@ -1185,6 +1191,60 @@ pub async fn v2_start_oauth_login(
         }
         true // Always allow navigation — never block (blocking is unreliable on WebKitGTK)
     })
+    .on_new_window(move |url, features| {
+        // Handle window.open() calls from Google/Apple/Facebook OAuth flows.
+        // On Linux, .window_features(features) sets the required related_view automatically.
+        let popup_id = popup_counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let label = format!("qobuz-oauth-popup-{}", popup_id);
+        log::info!("[OAuth] New popup window requested: {} (label={})", url, label);
+
+        let code_holder_p = Arc::clone(&code_holder_popup);
+        let notify_p = Arc::clone(&notify_popup);
+        let app_p = app_for_popup.clone();
+        let label_p = label.clone();
+
+        let builder = tauri::WebviewWindowBuilder::new(
+            &app_for_popup,
+            &label,
+            tauri::WebviewUrl::External(url),
+        )
+        .window_features(features) // sets related_view on Linux, webview config on macOS
+        .title("Qobuz Login")
+        .inner_size(520.0, 720.0)
+        .resizable(true)
+        .on_navigation(move |popup_url| {
+            log::info!("[OAuth] popup({}) on_navigation: {}", label_p, popup_url);
+            if popup_url.host_str() == Some("play.qobuz.com") {
+                for (key, value) in popup_url.query_pairs() {
+                    if key == "code_autorisation" || key == "code" {
+                        let mut holder = code_holder_p.lock().unwrap();
+                        if holder.is_none() {
+                            log::info!("[OAuth] Code captured from popup navigation");
+                            *holder = Some(value.to_string());
+                            drop(holder);
+                            notify_p.notify_one();
+                            // Close main OAuth window and this popup
+                            for win_label in ["qobuz-oauth", label_p.as_str()] {
+                                if let Some(win) = app_p.get_webview_window(win_label) {
+                                    let _ = win.close();
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            true
+        });
+
+        match builder.build() {
+            Ok(window) => tauri::webview::NewWindowResponse::Create { window },
+            Err(e) => {
+                log::error!("[OAuth] Failed to create popup window: {}", e);
+                tauri::webview::NewWindowResponse::Deny
+            }
+        }
+    })
     .build()
     .map_err(|e| format!("Failed to open OAuth window: {}", e))?;
 
@@ -1196,9 +1256,12 @@ pub async fn v2_start_oauth_login(
     .await
     .is_err();
 
-    // Best-effort close in case callback didn't fire (timeout, window manually closed, etc.)
-    if let Some(win) = app.get_webview_window("qobuz-oauth") {
-        let _ = win.close();
+    // Best-effort close of main window and any open popups
+    for win in app.webview_windows().values() {
+        let label = win.label().to_string();
+        if label == "qobuz-oauth" || label.starts_with("qobuz-oauth-popup-") {
+            let _ = win.close();
+        }
     }
 
     if timed_out {
