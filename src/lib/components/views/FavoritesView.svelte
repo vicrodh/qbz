@@ -1239,6 +1239,17 @@
         </div>
       {/if}
     </div>
+    <span class="results-count">
+      {#if activeTab === 'tracks'}
+        {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} tracks
+      {:else if activeTab === 'albums'}
+        {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} albums
+      {:else if activeTab === 'artists'}
+        {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} artists
+      {:else}
+        {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} playlists
+      {/if}
+    </span>
   </div>
 
   <!-- Navigation Bar (Artist-style) -->
@@ -1421,17 +1432,6 @@
           </div>
         {/if}
       {/if}
-      <span class="results-count">
-        {#if activeTab === 'tracks'}
-          {filteredTracks.length}{trackSearch ? ` / ${favoriteTracks.length}` : ''} tracks
-        {:else if activeTab === 'albums'}
-          {filteredAlbums.length}{albumSearch ? ` / ${favoriteAlbums.length}` : ''} albums
-        {:else if activeTab === 'artists'}
-          {filteredArtists.length}{artistSearch ? ` / ${favoriteArtists.length}` : ''} artists
-        {:else}
-          {filteredPlaylists.length}{playlistSearch ? ` / ${favoritePlaylists.length}` : ''} playlists
-        {/if}
-      </span>
     </div>
   </div>
 
@@ -2283,9 +2283,12 @@
   }
 
   .results-count {
-    margin-left: auto;
     font-size: 13px;
     color: var(--text-muted);
+    min-width: 100px;
+    text-align: right;
+    white-space: nowrap;
+    flex-shrink: 0;
   }
 
   .context-menu-wrapper {
