@@ -4338,6 +4338,15 @@ pub async fn v2_library_get_artist_image(
 }
 
 #[tauri::command]
+pub async fn v2_library_get_all_custom_artist_images(
+    state: State<'_, LibraryState>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.get_all_custom_artist_images().map_err(|e| e.to_string())
+}
+
+#[tauri::command]
 pub async fn v2_create_artist_radio(
     artist_id: u64,
     artist_name: String,

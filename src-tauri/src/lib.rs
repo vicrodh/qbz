@@ -904,6 +904,7 @@ pub fn run() {
             commands_v2::v2_library_set_custom_artist_image,
             commands_v2::v2_library_remove_custom_artist_image,
             commands_v2::v2_library_get_artist_image,
+            commands_v2::v2_library_get_all_custom_artist_images,
             commands_v2::v2_show_track_notification,
             commands_v2::v2_subscribe_playlist,
             commands_v2::v2_cache_track_for_offline,
