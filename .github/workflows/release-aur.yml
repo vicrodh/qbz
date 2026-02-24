@@ -17,6 +17,10 @@ on:
         default: "1"
         type: string
 
+concurrency:
+  group: aur-publish
+  cancel-in-progress: false
+
 jobs:
   update-aur:
     runs-on: ubuntu-latest
@@ -110,6 +114,9 @@ jobs:
       - name: Clone AUR repo
         run: |
           git clone ssh://aur@aur.archlinux.org/qbz-bin.git /tmp/aur-qbz-bin
+          cd /tmp/aur-qbz-bin
+          # Ensure we are on master (recover from detached HEAD if remote branch was corrupted)
+          git checkout master 2>/dev/null || git checkout -b master
 
       - name: Determine pkgrel
         id: pkgrel
