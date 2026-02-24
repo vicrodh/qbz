@@ -814,25 +814,120 @@ pub async fn reco_get_home_resolved(
         .filter_map(|id| track_map.get(id).map(|tr| (*tr).clone()))
         .collect();
 
-    // Step 5: Favorite albums = direct favorite album IDs + albums from favorite tracks
-    let mut favorite_album_ids: Vec<String> = seeds.favorite_album_ids.clone();
-    for track_id in &seeds.favorite_track_ids {
-        if let Some(track) = track_map.get(track_id) {
-            if let Some(ref album_id) = track.album_id {
-                if !album_id.is_empty() {
-                    favorite_album_ids.push(album_id.clone());
+    // Step 5: "More From Favorites" = discover albums by favorite artists,
+    // excluding albums the user already has in favorites / recently played.
+
+    // 5a: Resolve favorite albums to get their artist IDs
+    let resolved_favorites = resolve_albums(
+        &seeds.favorite_album_ids,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    )
+    .await?;
+
+    // 5b: Collect unique artist IDs from favorite albums + favorite tracks
+    let favorite_artist_ids: Vec<u64> = {
+        let mut ids = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for album in &resolved_favorites {
+            if let Some(aid) = album.artist_id {
+                if seen.insert(aid) {
+                    ids.push(aid);
                 }
             }
         }
-    }
-    // Deduplicate preserving order
-    {
-        let mut seen = std::collections::HashSet::new();
-        favorite_album_ids.retain(|id| seen.insert(id.clone()));
-    }
+        for track_id in &seeds.favorite_track_ids {
+            if let Some(track) = track_map.get(track_id) {
+                if let Some(aid) = track.artist_id {
+                    if seen.insert(aid) {
+                        ids.push(aid);
+                    }
+                }
+            }
+        }
+        ids
+    };
 
-    let favorite_albums =
-        resolve_albums(&favorite_album_ids, &reco_state, &app_state, &cache_state).await?;
+    // 5c: Build exclusion set (already-favorited + recently played albums)
+    let exclusion_set: std::sync::Arc<std::collections::HashSet<String>> = {
+        let mut set: std::collections::HashSet<String> =
+            seeds.favorite_album_ids.iter().cloned().collect();
+        for track_id in &seeds.favorite_track_ids {
+            if let Some(track) = track_map.get(track_id) {
+                if let Some(ref album_id) = track.album_id {
+                    if !album_id.is_empty() {
+                        set.insert(album_id.clone());
+                    }
+                }
+            }
+        }
+        for album_id in &seeds.recently_played_album_ids {
+            set.insert(album_id.clone());
+        }
+        std::sync::Arc::new(set)
+    };
+
+    // 5d: Fetch albums from favorite artists (parallel, max 8 artists)
+    let favorite_albums = if favorite_artist_ids.is_empty() {
+        Vec::new()
+    } else {
+        let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
+        let client = app_state.client.clone();
+        let reco_arc = reco_state.db.clone();
+
+        let mut handles = Vec::new();
+        for artist_id in favorite_artist_ids.iter().take(8) {
+            let sem = sem.clone();
+            let client = client.clone();
+            let reco_arc = reco_arc.clone();
+            let exclusion = exclusion_set.clone();
+            let artist_id = *artist_id;
+
+            handles.push(tokio::spawn(async move {
+                let _permit = sem.acquire().await.ok()?;
+                let artist = {
+                    let c = client.read().await;
+                    c.get_artist_with_pagination_and_locale(
+                        artist_id, true, Some(25), None, None,
+                    )
+                    .await
+                    .ok()?
+                };
+                let albums = artist.albums?;
+                let mut results: Vec<AlbumCardMeta> = Vec::new();
+                for album in &albums.items {
+                    if !exclusion.contains(&album.id) {
+                        let meta = album_to_card_meta(album);
+                        // Cache in reco meta for future instant lookups
+                        {
+                            let guard__ = reco_arc.lock().await;
+                            if let Some(db) = guard__.as_ref() {
+                                let _ = db.set_album_meta(&meta);
+                            }
+                        }
+                        results.push(meta);
+                    }
+                }
+                Some(results)
+            }));
+        }
+
+        let mut all_albums: Vec<AlbumCardMeta> = Vec::new();
+        for handle in handles {
+            if let Ok(Some(albums)) = handle.await {
+                all_albums.extend(albums);
+            }
+        }
+
+        // Deduplicate and limit
+        {
+            let mut seen = std::collections::HashSet::new();
+            all_albums.retain(|a| seen.insert(a.id.clone()));
+        }
+        all_albums.truncate(limit_favorites as usize);
+        all_albums
+    };
 
     // Step 6: Resolve artists
     let top_artists = resolve_artists(
