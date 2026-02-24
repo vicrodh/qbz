@@ -168,12 +168,14 @@
       return;
     }
 
-    // Trigger-button mode: check if click is outside both the trigger container and the menu (which is in portal)
-    const isOutsideTrigger = menuRef && !menuRef.contains(target);
-    const isOutsideMenu = menuEl && !menuEl.contains(target);
-    const isOutsideSubmenu = submenuEl && !submenuEl.contains(target);
-    const isOutsideDownloadSubmenu = downloadSubmenuEl && !downloadSubmenuEl.contains(target);
-    if (isOutsideTrigger && isOutsideMenu && isOutsideSubmenu && isOutsideDownloadSubmenu) {
+    // Trigger-button mode: check if click is outside both the trigger container and the menu (which is in portal).
+    // Use `!el || !el.contains(target)` so that a null ref (submenu not rendered) counts as "outside".
+    const isOutsideTrigger = !menuRef || !menuRef.contains(target);
+    const isOutsideMenu = !menuEl || !menuEl.contains(target);
+    const isOutsideSubmenu = !submenuEl || !submenuEl.contains(target);
+    const isOutsideDownloadSubmenu = !downloadSubmenuEl || !downloadSubmenuEl.contains(target);
+    const isOutsideRadioSubmenu = !radioSubmenuEl || !radioSubmenuEl.contains(target);
+    if (isOutsideTrigger && isOutsideMenu && isOutsideSubmenu && isOutsideDownloadSubmenu && isOutsideRadioSubmenu) {
       closeMenu();
     }
   }
