@@ -219,7 +219,15 @@
     "addToPlaylist": "Ajouter à la playlist",
     "makeAvailableOffline": "Rendre disponible hors ligne",
     "makeAllAvailableOffline": "Rendre tout disponible hors ligne",
-    "disc": "Disque"
+    "disc": "Disque",
+    "addCover": "Ajouter une pochette personnalisée",
+    "changeCover": "Changer la pochette personnalisée",
+    "removeCover": "Supprimer la pochette personnalisée",
+    "openInBrowser": "Ouvrir dans le navigateur",
+    "saveAs": "Enregistrer sous...",
+    "customCoverSet": "Pochette de l'album mise à jour",
+    "customCoverRemoved": "Pochette personnalisée supprimée",
+    "customCoverError": "Erreur lors de la mise à jour de la pochette"
   },
   "artist": {
     "albums": "Albums",

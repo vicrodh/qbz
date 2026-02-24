@@ -219,7 +219,15 @@
     "addToPlaylist": "Zur Playlist hinzufügen",
     "makeAvailableOffline": "Für offline verfügbar machen",
     "makeAllAvailableOffline": "Alles für offline verfügbar machen",
-    "disc": "Disc"
+    "disc": "Disc",
+    "addCover": "Benutzerdefiniertes Albumcover hinzufügen",
+    "changeCover": "Benutzerdefiniertes Albumcover ändern",
+    "removeCover": "Benutzerdefiniertes Albumcover entfernen",
+    "openInBrowser": "Im Browser öffnen",
+    "saveAs": "Speichern unter...",
+    "customCoverSet": "Albumcover aktualisiert",
+    "customCoverRemoved": "Benutzerdefiniertes Albumcover entfernt",
+    "customCoverError": "Fehler beim Aktualisieren des Albumcovers"
   },
   "artist": {
     "albums": "Alben",

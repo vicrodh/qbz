@@ -231,7 +231,15 @@
     "makeAvailableOffline": "Disponible offline",
     "makeAllAvailableOffline": "Todo disponible offline",
     "disc": "Disco",
-    "loadError": "No se pudieron cargar las pistas del album. Intenta de nuevo."
+    "loadError": "No se pudieron cargar las pistas del album. Intenta de nuevo.",
+    "addCover": "Agregar portada personalizada",
+    "changeCover": "Cambiar portada personalizada",
+    "removeCover": "Eliminar portada personalizada",
+    "openInBrowser": "Abrir en navegador",
+    "saveAs": "Guardar como...",
+    "customCoverSet": "Portada del album actualizada",
+    "customCoverRemoved": "Portada personalizada eliminada",
+    "customCoverError": "Error al actualizar la portada"
   },
   "artist": {
     "albums": "Álbumes",

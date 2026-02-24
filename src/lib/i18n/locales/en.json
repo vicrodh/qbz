@@ -231,7 +231,15 @@
     "makeAvailableOffline": "Make available offline",
     "makeAllAvailableOffline": "Make all available offline",
     "disc": "Disc",
-    "loadError": "Could not load album tracks. Please try again."
+    "loadError": "Could not load album tracks. Please try again.",
+    "addCover": "Add custom album cover",
+    "changeCover": "Change custom album cover",
+    "removeCover": "Remove custom album cover",
+    "openInBrowser": "Open in browser",
+    "saveAs": "Save as...",
+    "customCoverSet": "Album cover updated",
+    "customCoverRemoved": "Custom album cover removed",
+    "customCoverError": "Failed to update album cover"
   },
   "artist": {
     "albums": "Albums",
