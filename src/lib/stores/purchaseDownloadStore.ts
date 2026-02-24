@@ -8,6 +8,7 @@ interface AlbumDownloadState {
   isDownloadingAll: boolean;
   allComplete: boolean;
   destination?: string;
+  formatId?: number;
 }
 
 // Persistent store: albumId -> download state (survives component unmount)
@@ -38,6 +39,11 @@ function updateAlbumState(
   });
 }
 
+/** Get the format ID that was used for the most recent download of this album. */
+export function getAlbumDownloadFormatId(albumId: string): number | undefined {
+  return get(purchaseDownloads)[albumId]?.formatId;
+}
+
 export function startAlbumDownload(
   albumId: string,
   trackIds: number[],
@@ -50,6 +56,7 @@ export function startAlbumDownload(
     isDownloadingAll: true,
     allComplete: false,
     destination,
+    formatId,
   }));
   executeAlbumDownload(albumId, trackIds, formatId, destination, qualityDir);
 }
@@ -73,7 +80,7 @@ async function executeAlbumDownload(
         ...state,
         trackStatuses: { ...state.trackStatuses, [trackId]: 'complete' },
       }));
-      await markTrackDownloaded(trackId, albumId, filePath).catch(() => {});
+      await markTrackDownloaded(trackId, albumId, filePath, formatId).catch(() => {});
     } catch {
       updateAlbumState(albumId, (state) => ({
         ...state,
@@ -106,6 +113,7 @@ export function startTrackDownload(
   updateAlbumState(albumId, (state) => ({
     ...state,
     trackStatuses: { ...state.trackStatuses, [trackId]: 'downloading' },
+    formatId,
   }));
   executeSingleTrackDownload(albumId, trackId, formatId, destination, qualityDir);
 }
@@ -123,7 +131,7 @@ async function executeSingleTrackDownload(
       ...state,
       trackStatuses: { ...state.trackStatuses, [trackId]: 'complete' },
     }));
-    await markTrackDownloaded(trackId, albumId, filePath).catch(() => {});
+    await markTrackDownloaded(trackId, albumId, filePath, formatId).catch(() => {});
   } catch {
     updateAlbumState(albumId, (state) => ({
       ...state,

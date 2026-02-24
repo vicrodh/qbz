@@ -51,6 +51,7 @@ export interface PurchasedTrack {
   maximum_sampling_rate?: number;
   streamable: boolean;
   downloaded?: boolean;
+  downloaded_format_ids?: number[];
   purchased_at?: number;
 }
 

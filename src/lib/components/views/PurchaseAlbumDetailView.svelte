@@ -8,7 +8,7 @@
   import Dropdown from '../Dropdown.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { getAlbumDetail, getFormats } from '$lib/services/purchases';
-  import { purchaseDownloads, startAlbumDownload, startTrackDownload } from '$lib/stores/purchaseDownloadStore';
+  import { purchaseDownloads, startAlbumDownload, startTrackDownload, getAlbumDownloadFormatId } from '$lib/stores/purchaseDownloadStore';
   import type { TrackDownloadStatus } from '$lib/stores/purchaseDownloadStore';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import { showToast } from '$lib/stores/toastStore';
@@ -45,7 +45,11 @@
   const albumDlState = $derived($purchaseDownloads[albumId] ?? null);
   const downloadStatuses = $derived(albumDlState?.trackStatuses ?? {});
   const isDownloadingAll = $derived(albumDlState?.isDownloadingAll ?? false);
-  const allComplete = $derived(albumDlState?.allComplete ?? false);
+  // Only show "all complete" if the download was for the currently selected format
+  const allComplete = $derived(
+    (albumDlState?.allComplete ?? false) &&
+    (albumDlState?.formatId === undefined || albumDlState?.formatId === selectedFormatId)
+  );
   const downloadDestination = $derived(albumDlState?.destination ?? null);
 
   let addingToLibrary = $state(false);
@@ -92,7 +96,14 @@
   }
 
   function getTrackStatus(trackId: number): TrackDownloadStatus | null {
-    return downloadStatuses[trackId] || null;
+    const status = downloadStatuses[trackId] || null;
+    if (!status) return null;
+    // Only show 'complete' if the in-memory download was for the currently selected format
+    if (status === 'complete') {
+      const dlFormatId = getAlbumDownloadFormatId(albumId);
+      if (dlFormatId !== undefined && dlFormatId !== selectedFormatId) return null;
+    }
+    return status;
   }
 
   function groupByDisc(trackList: PurchasedTrack[]): Map<number, PurchasedTrack[]> {
@@ -358,7 +369,8 @@
           {#each discTracks as track (track.id)}
             {@const status = getTrackStatus(track.id)}
             {@const isActive = activeTrackId === track.id}
-            {@const isDownloaded = track.downloaded || status === 'complete'}
+            {@const isDownloadedForFormat = selectedFormatId !== null && (track.downloaded_format_ids ?? []).includes(selectedFormatId)}
+            {@const isDownloaded = isDownloadedForFormat || status === 'complete'}
             <div
               class="track-row"
               class:downloading={status === 'downloading'}

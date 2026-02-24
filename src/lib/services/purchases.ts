@@ -139,12 +139,14 @@ export async function getDownloadedTrackIds(): Promise<Set<number>> {
 export async function markTrackDownloaded(
   trackId: number,
   albumId: string | undefined,
-  filePath: string
+  filePath: string,
+  formatId: number = 0
 ): Promise<void> {
   return invoke<void>('v2_purchases_mark_downloaded', {
     trackId,
     albumId: albumId ?? null,
-    filePath
+    filePath,
+    formatId
   });
 }
 
