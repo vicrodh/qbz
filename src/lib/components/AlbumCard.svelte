@@ -9,6 +9,7 @@
     loadAlbumFavorites,
     toggleAlbumFavorite
   } from '$lib/stores/albumFavoritesStore';
+  import { resolveAlbumCover } from '$lib/stores/customAlbumCoverStore';
 
   interface Props {
     albumId?: string;
@@ -219,7 +220,7 @@
 
     <!-- Image overlays placeholder when loaded -->
     {#if !imageError && artwork}
-      <img class="artwork-image" src={artwork} alt={title} loading="lazy" decoding="async" onerror={handleImageError} />
+      <img class="artwork-image" src={albumId ? resolveAlbumCover(albumId, artwork) : artwork} alt={title} loading="lazy" decoding="async" onerror={handleImageError} />
     {/if}
 
     <!-- Action Overlay -->

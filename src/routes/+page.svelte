@@ -51,7 +51,7 @@
   } from '$lib/stores/playbackPreferencesStore';
   import { initBlacklistStore, isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { initCustomArtistImageStore, clearCustomArtistImages } from '$lib/stores/customArtistImageStore';
-  import { initCustomAlbumCoverStore, clearCustomAlbumCovers } from '$lib/stores/customAlbumCoverStore';
+  import { initCustomAlbumCoverStore, clearCustomAlbumCovers, resolveAlbumCover } from '$lib/stores/customAlbumCoverStore';
 
   // UI state management
   import {
@@ -4218,7 +4218,7 @@
     <!-- Now Playing Bar -->
     {#if currentTrack}
       <NowPlayingBar
-        artwork={currentTrack.artwork}
+        artwork={currentTrack.albumId ? resolveAlbumCover(currentTrack.albumId, currentTrack.artwork) : currentTrack.artwork}
         trackTitle={currentTrack.title}
         artist={currentTrack.artist}
         album={currentTrack.album}
@@ -4298,7 +4298,7 @@
           if (isFullScreenOpen) closeFullScreen();
           if (isFocusModeOpen) closeFocusMode();
         }}
-        artwork={currentTrack.artwork}
+        artwork={currentTrack.albumId ? resolveAlbumCover(currentTrack.albumId, currentTrack.artwork) : currentTrack.artwork}
         trackTitle={currentTrack.title}
         artist={currentTrack.artist}
         album={currentTrack.album}
