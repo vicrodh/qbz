@@ -116,6 +116,14 @@ export function isVerboseCaptureEnabled(): boolean {
   return verboseCapture;
 }
 
+/**
+ * Re-read verbose capture preference from localStorage after setStorageUserId().
+ * At module load time the userId is null, so getUserItem reads the wrong key.
+ */
+export function rehydrateVerboseCapture(): void {
+  verboseCapture = getUserItem(VERBOSE_CAPTURE_KEY) === 'true';
+}
+
 export function getConsoleLogs(): ConsoleEntry[] {
   return [...entries];
 }

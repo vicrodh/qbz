@@ -6,7 +6,7 @@
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
   // Console log capture (must be early, before other imports log)
-  import { initConsoleCapture } from '$lib/stores/consoleLogStore';
+  import { initConsoleCapture, rehydrateVerboseCapture } from '$lib/stores/consoleLogStore';
   initConsoleCapture();
 
   // Offline cache state management
@@ -357,7 +357,7 @@
   import LinkResolverModal from '$lib/components/LinkResolverModal.svelte';
   import type { ReleaseInfo } from '$lib/stores/updatesStore';
   import { refreshUpdatePreferences, resetUpdatesStore } from '$lib/stores/updatesStore';
-  import { getShowPurchases, setShowPurchases } from '$lib/stores/purchasesStore';
+  import { getShowPurchases, setShowPurchases, rehydratePurchasesStore } from '$lib/stores/purchasesStore';
   import {
     decideLaunchModals,
     disableUpdateChecks,
@@ -2564,6 +2564,12 @@
     // Set up per-user localStorage scoping and migrate old keys
     setStorageUserId(info.userId);
     migrateLocalStorage(info.userId);
+
+    // Re-read stores that were initialised at module-load (before userId was set)
+    rehydratePurchasesStore();
+    rehydrateVerboseCapture();
+    showPurchases = getShowPurchases();
+
     loadSystemNotificationsPreference();
 
     // Re-sync volume from the now-correct user-scoped localStorage key

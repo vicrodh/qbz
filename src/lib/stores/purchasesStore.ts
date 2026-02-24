@@ -4,6 +4,17 @@ import { getUserItem, setUserItem } from '$lib/utils/userStorage';
 const KEY_SHOW = 'qbz-show-purchases';
 let showPurchases = getUserItem(KEY_SHOW) === 'true';
 
+/**
+ * Re-read all values from localStorage after setStorageUserId() has been called.
+ * At module load time the userId is null, so getUserItem reads the wrong (unscoped) key.
+ * This must be called after login to pick up the correct user-scoped values.
+ */
+export function rehydratePurchasesStore(): void {
+  showPurchases = getUserItem(KEY_SHOW) === 'true';
+  hideUnavailable = getUserItem(KEY_HIDE_UNAVAILABLE) === 'true';
+  hideDownloaded = getUserItem(KEY_HIDE_DOWNLOADED) === 'true';
+}
+
 export function getShowPurchases(): boolean {
   return showPurchases;
 }
