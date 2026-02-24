@@ -288,13 +288,16 @@
   async function loadPurchasesMetadata() {
     if (metadataLoaded) return;
 
-    const [dlIds, idsResponse] = await Promise.all([
+    // Fetch totals per type separately — a single unfiltered call with limit=1
+    // only returns the first type's total, leaving the other at 0.
+    const [dlIds, albumIds, trackIds] = await Promise.all([
       getDownloadedTrackIds().catch(() => new Set<number>()),
-      getPurchaseIds(1, 0).catch(() => null),
+      getPurchaseIds(1, 0, 'albums').catch(() => null),
+      getPurchaseIds(1, 0, 'tracks').catch(() => null),
     ]);
     downloadedTrackIds = dlIds;
-    totalAlbumPurchases = idsResponse?.albums?.total ?? 0;
-    totalTrackPurchases = idsResponse?.tracks?.total ?? 0;
+    totalAlbumPurchases = albumIds?.albums?.total ?? 0;
+    totalTrackPurchases = trackIds?.tracks?.total ?? 0;
     metadataLoaded = true;
   }
 
