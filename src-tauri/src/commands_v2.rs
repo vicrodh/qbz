@@ -10227,6 +10227,7 @@ fn v2_purchase_target_path(
     destination: &str,
     artist_name: &str,
     album_title: &str,
+    quality_dir: &str,
     track_number: u32,
     track_title: &str,
     ext: &str,
@@ -10241,10 +10242,13 @@ fn v2_purchase_target_path(
         format!("{}.{}", title_clean, ext)
     };
 
-    PathBuf::from(destination)
+    let mut path = PathBuf::from(destination)
         .join(artist_dir)
-        .join(album_dir)
-        .join(file_name)
+        .join(album_dir);
+    if !quality_dir.is_empty() {
+        path = path.join(crate::offline_cache::metadata::sanitize_filename(quality_dir));
+    }
+    path.join(file_name)
 }
 
 fn v2_apply_purchase_download_flags(
@@ -10305,6 +10309,7 @@ async fn v2_download_purchase_track_impl(
     track_id: u64,
     format_id: u32,
     destination: &str,
+    quality_dir: &str,
     app_state: &AppState,
 ) -> Result<String, String> {
     let client = app_state.client.read().await;
@@ -10335,6 +10340,7 @@ async fn v2_download_purchase_track_impl(
         destination,
         &artist_name,
         &album_title,
+        quality_dir,
         track.track_number,
         &track.title,
         extension,
@@ -10632,11 +10638,12 @@ pub async fn v2_purchases_download_track(
     trackId: u64,
     formatId: u32,
     destination: String,
+    qualityDir: String,
     app_state: State<'_, AppState>,
     library_state: State<'_, LibraryState>,
 ) -> Result<String, String> {
     let file_path =
-        v2_download_purchase_track_impl(trackId, formatId, &destination, &app_state).await?;
+        v2_download_purchase_track_impl(trackId, formatId, &destination, &qualityDir, &app_state).await?;
 
     let guard = library_state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
@@ -10652,6 +10659,7 @@ pub async fn v2_purchases_download_album(
     albumId: String,
     formatId: u32,
     destination: String,
+    qualityDir: String,
     app_state: State<'_, AppState>,
     library_state: State<'_, LibraryState>,
 ) -> Result<(), String> {
@@ -10670,7 +10678,7 @@ pub async fn v2_purchases_download_album(
 
     let mut failures: Vec<String> = Vec::new();
     for track in tracks {
-        match v2_download_purchase_track_impl(track.id, formatId, &destination, &app_state).await {
+        match v2_download_purchase_track_impl(track.id, formatId, &destination, &qualityDir, &app_state).await {
             Ok(file_path) => {
                 let guard = library_state.db.lock().await;
                 let db = guard.as_ref().ok_or("No active session - please log in")?;

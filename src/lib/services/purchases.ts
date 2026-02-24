@@ -91,7 +91,8 @@ export async function getFormats(
 export async function downloadAlbum(
   albumId: string,
   formatId: number,
-  destination: string
+  destination: string,
+  qualityDir: string = ''
 ): Promise<void> {
   if (USE_MOCK) {
     // In mock mode we just fire and forget the SSE stream
@@ -103,14 +104,16 @@ export async function downloadAlbum(
   return invoke<void>('v2_purchases_download_album', {
     albumId,
     formatId,
-    destination
+    destination,
+    qualityDir
   });
 }
 
 export async function downloadTrack(
   trackId: number,
   formatId: number,
-  destination: string
+  destination: string,
+  qualityDir: string = ''
 ): Promise<string> {
   if (USE_MOCK) {
     await fetch(`${MOCK_URL}/purchases/download/track/${trackId}`, {
@@ -121,7 +124,8 @@ export async function downloadTrack(
   return invoke<string>('v2_purchases_download_track', {
     trackId,
     formatId,
-    destination
+    destination,
+    qualityDir
   });
 }
 

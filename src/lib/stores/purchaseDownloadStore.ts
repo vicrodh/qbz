@@ -42,7 +42,8 @@ export function startAlbumDownload(
   albumId: string,
   trackIds: number[],
   formatId: number,
-  destination: string
+  destination: string,
+  qualityDir: string = ''
 ) {
   updateAlbumState(albumId, () => ({
     trackStatuses: {},
@@ -50,14 +51,15 @@ export function startAlbumDownload(
     allComplete: false,
     destination,
   }));
-  executeAlbumDownload(albumId, trackIds, formatId, destination);
+  executeAlbumDownload(albumId, trackIds, formatId, destination, qualityDir);
 }
 
 async function executeAlbumDownload(
   albumId: string,
   trackIds: number[],
   formatId: number,
-  destination: string
+  destination: string,
+  qualityDir: string
 ) {
   for (const trackId of trackIds) {
     updateAlbumState(albumId, (state) => ({
@@ -66,7 +68,7 @@ async function executeAlbumDownload(
     }));
 
     try {
-      const filePath = await downloadTrack(trackId, formatId, destination);
+      const filePath = await downloadTrack(trackId, formatId, destination, qualityDir);
       updateAlbumState(albumId, (state) => ({
         ...state,
         trackStatuses: { ...state.trackStatuses, [trackId]: 'complete' },
@@ -98,23 +100,25 @@ export function startTrackDownload(
   albumId: string,
   trackId: number,
   formatId: number,
-  destination: string
+  destination: string,
+  qualityDir: string = ''
 ) {
   updateAlbumState(albumId, (state) => ({
     ...state,
     trackStatuses: { ...state.trackStatuses, [trackId]: 'downloading' },
   }));
-  executeSingleTrackDownload(albumId, trackId, formatId, destination);
+  executeSingleTrackDownload(albumId, trackId, formatId, destination, qualityDir);
 }
 
 async function executeSingleTrackDownload(
   albumId: string,
   trackId: number,
   formatId: number,
-  destination: string
+  destination: string,
+  qualityDir: string
 ) {
   try {
-    const filePath = await downloadTrack(trackId, formatId, destination);
+    const filePath = await downloadTrack(trackId, formatId, destination, qualityDir);
     updateAlbumState(albumId, (state) => ({
       ...state,
       trackStatuses: { ...state.trackStatuses, [trackId]: 'complete' },

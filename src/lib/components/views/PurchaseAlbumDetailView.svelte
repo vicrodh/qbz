@@ -150,12 +150,11 @@
       });
       if (dest && typeof dest === 'string') {
         const qualityDir = qualityFolderName(selectedFormatId);
-        const finalDest = qualityDir ? `${dest}/${qualityDir}` : dest;
         if (action === 'all') {
           const trackIds = (album.tracks?.items || []).map((track) => track.id);
-          startAlbumDownload(albumId, trackIds, selectedFormatId, finalDest);
+          startAlbumDownload(albumId, trackIds, selectedFormatId, dest, qualityDir);
         } else {
-          startTrackDownload(albumId, action, selectedFormatId, finalDest);
+          startTrackDownload(albumId, action, selectedFormatId, dest, qualityDir);
         }
       }
     } catch (err) {
