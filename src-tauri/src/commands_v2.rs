@@ -4733,6 +4733,103 @@ pub async fn v2_library_get_all_custom_artist_images(
     db.get_all_custom_artist_images().map_err(|e| e.to_string())
 }
 
+// === Custom Album Covers ===
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CustomAlbumCoverResult {
+    pub image_path: String,
+    pub thumbnail_path: String,
+}
+
+#[tauri::command]
+pub async fn v2_library_set_custom_album_cover(
+    album_id: String,
+    custom_image_path: String,
+    state: State<'_, LibraryState>,
+) -> Result<CustomAlbumCoverResult, String> {
+    let artwork_dir = get_artwork_cache_dir();
+    let source = std::path::Path::new(&custom_image_path);
+    if !source.exists() {
+        return Err(format!(
+            "Source image does not exist: {}",
+            custom_image_path
+        ));
+    }
+
+    let extension = source
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_lowercase())
+        .unwrap_or_default();
+    if !["png", "jpg", "jpeg", "webp"].contains(&extension.as_str()) {
+        return Err(format!(
+            "Unsupported image format: {}. Use png, jpg, jpeg, or webp.",
+            extension
+        ));
+    }
+
+    let mut hasher = Md5::new();
+    hasher.update(album_id.as_bytes());
+    let album_hash = format!("{:x}", hasher.finalize());
+    let timestamp = chrono::Utc::now().timestamp();
+    let filename = format!("album_custom_{}_{}.jpg", album_hash, timestamp);
+    let dest_path = artwork_dir.join(&filename);
+
+    let img = image::ImageReader::open(source)
+        .map_err(|e| format!("Failed to open image: {}", e))?
+        .decode()
+        .map_err(|e| format!("Failed to decode image: {}", e))?;
+    let resized = img.resize(1000, 1000, image::imageops::FilterType::Lanczos3);
+    resized
+        .save(&dest_path)
+        .map_err(|e| format!("Failed to save resized image: {}", e))?;
+
+    let thumbnail_path = thumbnails::generate_thumbnail(&dest_path)
+        .map_err(|e| format!("Failed to generate thumbnail: {}", e))?;
+
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.set_custom_album_cover(&album_id, &dest_path.to_string_lossy())
+        .map_err(|e| e.to_string())?;
+
+    Ok(CustomAlbumCoverResult {
+        image_path: dest_path.to_string_lossy().into_owned(),
+        thumbnail_path: thumbnail_path.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+pub async fn v2_library_remove_custom_album_cover(
+    album_id: String,
+    state: State<'_, LibraryState>,
+) -> Result<(), String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+
+    let existing = db.get_custom_album_cover(&album_id).map_err(|e| e.to_string())?;
+    if let Some(path) = existing {
+        let p = std::path::Path::new(&path);
+        if p.exists() {
+            if let Ok(thumb) = thumbnails::get_thumbnail_path(p) {
+                let _ = std::fs::remove_file(thumb);
+            }
+            let _ = std::fs::remove_file(p);
+        }
+    }
+
+    db.remove_custom_album_cover(&album_id).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn v2_library_get_all_custom_album_covers(
+    state: State<'_, LibraryState>,
+) -> Result<std::collections::HashMap<String, String>, String> {
+    let guard = state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session - please log in")?;
+    db.get_all_custom_album_covers().map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 pub async fn v2_create_artist_radio(
     artist_id: u64,
