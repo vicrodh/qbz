@@ -201,10 +201,12 @@ impl LibraryDatabase {
 
             -- Downloaded purchases registry (permanent — user owns these files)
             CREATE TABLE IF NOT EXISTS downloaded_purchases (
-                track_id INTEGER PRIMARY KEY,
+                track_id INTEGER NOT NULL,
+                format_id INTEGER NOT NULL DEFAULT 0,
                 album_id TEXT,
                 file_path TEXT NOT NULL,
-                downloaded_at TEXT NOT NULL DEFAULT (datetime('now'))
+                downloaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (track_id, format_id)
             );
 
             CREATE INDEX IF NOT EXISTS idx_downloaded_purchases_album
@@ -688,6 +690,52 @@ impl LibraryDatabase {
                     ON playlist_track_custom_order(qobuz_playlist_id, custom_position);",
                 )
                 .map_err(|e| LibraryError::Database(format!("Migration failed: {}", e)))?;
+        }
+
+        // Migration: Add format_id to downloaded_purchases (compound PK: track_id + format_id)
+        let has_format_id: bool = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('downloaded_purchases') WHERE name = 'format_id'",
+                [],
+                |row| row.get::<_, i32>(0),
+            )
+            .map(|count| count > 0)
+            .unwrap_or(false);
+
+        if !has_format_id {
+            log::info!("Running migration: adding format_id to downloaded_purchases (compound PK)");
+            self.conn
+                .execute_batch(
+                    r#"
+                DROP TABLE IF EXISTS downloaded_purchases_new;
+
+                CREATE TABLE downloaded_purchases_new (
+                    track_id INTEGER NOT NULL,
+                    format_id INTEGER NOT NULL DEFAULT 0,
+                    album_id TEXT,
+                    file_path TEXT NOT NULL,
+                    downloaded_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    PRIMARY KEY (track_id, format_id)
+                );
+
+                INSERT INTO downloaded_purchases_new (track_id, format_id, album_id, file_path, downloaded_at)
+                    SELECT track_id, 0, album_id, file_path, downloaded_at
+                    FROM downloaded_purchases;
+
+                DROP TABLE downloaded_purchases;
+                ALTER TABLE downloaded_purchases_new RENAME TO downloaded_purchases;
+
+                CREATE INDEX IF NOT EXISTS idx_downloaded_purchases_album
+                    ON downloaded_purchases(album_id);
+                "#,
+                )
+                .map_err(|e| {
+                    LibraryError::Database(format!(
+                        "downloaded_purchases format_id migration failed: {}",
+                        e
+                    ))
+                })?;
         }
 
         Ok(())
@@ -3864,18 +3912,19 @@ impl LibraryDatabase {
 
     // ── Downloaded Purchases Registry ──
 
-    /// Record a track as downloaded on this computer.
+    /// Record a track as downloaded on this computer with its format.
     pub fn mark_purchase_downloaded(
         &self,
         track_id: i64,
         album_id: Option<&str>,
         file_path: &str,
+        format_id: i64,
     ) -> Result<(), LibraryError> {
         self.conn
             .execute(
-                "INSERT OR REPLACE INTO downloaded_purchases (track_id, album_id, file_path, downloaded_at)
-                 VALUES (?1, ?2, ?3, datetime('now'))",
-                rusqlite::params![track_id, album_id, file_path],
+                "INSERT OR REPLACE INTO downloaded_purchases (track_id, format_id, album_id, file_path, downloaded_at)
+                 VALUES (?1, ?2, ?3, ?4, datetime('now'))",
+                rusqlite::params![track_id, format_id, album_id, file_path],
             )
             .map_err(|e| {
                 LibraryError::Database(format!("Failed to mark purchase downloaded: {}", e))
@@ -3896,11 +3945,11 @@ impl LibraryDatabase {
         Ok(())
     }
 
-    /// Get all downloaded track IDs for fast lookup.
+    /// Get all downloaded track IDs for fast lookup (any format).
     pub fn get_downloaded_purchase_track_ids(&self) -> Result<Vec<i64>, LibraryError> {
         let mut stmt = self
             .conn
-            .prepare("SELECT track_id FROM downloaded_purchases")
+            .prepare("SELECT DISTINCT track_id FROM downloaded_purchases")
             .map_err(|e| {
                 LibraryError::Database(format!("Failed to prepare statement: {}", e))
             })?;
@@ -3913,5 +3962,24 @@ impl LibraryDatabase {
 
         ids.collect::<Result<Vec<_>, _>>()
             .map_err(|e| LibraryError::Database(format!("Failed to collect ids: {}", e)))
+    }
+
+    /// Get all downloaded (track_id, format_id) pairs for building per-format lookup.
+    pub fn get_downloaded_purchase_formats(&self) -> Result<Vec<(i64, i64)>, LibraryError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT track_id, format_id FROM downloaded_purchases")
+            .map_err(|e| {
+                LibraryError::Database(format!("Failed to prepare statement: {}", e))
+            })?;
+
+        let rows = stmt
+            .query_map([], |row| Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?)))
+            .map_err(|e| {
+                LibraryError::Database(format!("Failed to query downloaded purchases: {}", e))
+            })?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| LibraryError::Database(format!("Failed to collect formats: {}", e)))
     }
 }

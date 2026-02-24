@@ -10530,6 +10530,7 @@ pub async fn v2_purchases_get_album(
                     maximum_bit_depth: track.maximum_bit_depth,
                     streamable: track.streamable,
                     downloaded: false,
+                    downloaded_format_ids: Vec::new(),
                     purchased_at: purchase_meta.and_then(|item| item.purchased_at),
                 })
                 .collect()
@@ -10562,15 +10563,22 @@ pub async fn v2_purchases_get_album(
 
     let guard = library_state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
-    let downloaded_ids: HashSet<i64> = db
-        .get_downloaded_purchase_track_ids()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .collect();
+    let downloaded_formats = db
+        .get_downloaded_purchase_formats()
+        .map_err(|e| e.to_string())?;
+
+    // Build per-track format lookup: track_id -> Vec<format_id>
+    let mut format_map: std::collections::HashMap<i64, Vec<u32>> = std::collections::HashMap::new();
+    for (track_id, format_id) in &downloaded_formats {
+        format_map.entry(*track_id).or_default().push(*format_id as u32);
+    }
+    let downloaded_ids: HashSet<i64> = downloaded_formats.iter().map(|(tid, _)| *tid).collect();
 
     if let Some(tracks) = &mut result.tracks {
         for track in &mut tracks.items {
-            track.downloaded = downloaded_ids.contains(&(track.id as i64));
+            let tid = track.id as i64;
+            track.downloaded = downloaded_ids.contains(&tid);
+            track.downloaded_format_ids = format_map.get(&tid).cloned().unwrap_or_default();
         }
         result.downloaded = !tracks.items.is_empty()
             && tracks
@@ -10647,7 +10655,7 @@ pub async fn v2_purchases_download_track(
 
     let guard = library_state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
-    db.mark_purchase_downloaded(trackId as i64, None, &file_path)
+    db.mark_purchase_downloaded(trackId as i64, None, &file_path, formatId as i64)
         .map_err(|e| e.to_string())?;
 
     Ok(file_path)
@@ -10683,7 +10691,7 @@ pub async fn v2_purchases_download_album(
                 let guard = library_state.db.lock().await;
                 let db = guard.as_ref().ok_or("No active session - please log in")?;
                 if let Err(err) =
-                    db.mark_purchase_downloaded(track.id as i64, Some(albumId.as_str()), &file_path)
+                    db.mark_purchase_downloaded(track.id as i64, Some(albumId.as_str()), &file_path, formatId as i64)
                 {
                     failures.push(format!("track {} registry error: {}", track.id, err));
                 }
@@ -10710,11 +10718,12 @@ pub async fn v2_purchases_mark_downloaded(
     trackId: i64,
     albumId: Option<String>,
     filePath: String,
+    formatId: i64,
     library_state: State<'_, LibraryState>,
 ) -> Result<(), String> {
     let guard = library_state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
-    db.mark_purchase_downloaded(trackId, albumId.as_deref(), &filePath)
+    db.mark_purchase_downloaded(trackId, albumId.as_deref(), &filePath, formatId)
         .map_err(|e| e.to_string())
 }
 

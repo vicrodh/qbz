@@ -625,6 +625,8 @@ pub struct PurchaseTrack {
     pub streamable: bool,
     #[serde(default)]
     pub downloaded: bool,
+    #[serde(default)]
+    pub downloaded_format_ids: Vec<u32>,
     #[serde(default, deserialize_with = "lenient_option")]
     pub purchased_at: Option<i64>,
 }
