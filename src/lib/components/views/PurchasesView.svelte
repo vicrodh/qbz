@@ -958,7 +958,14 @@
                   {formatPurchaseDate(track.purchased_at)}
                 </div>
                 {#if dlStatus === 'complete' || isDownloaded}
-                  <span class="download-done"><Check size={14} /></span>
+                  <button
+                    class="download-btn redownload"
+                    onclick={(e) => handleTrackDownload(e, track)}
+                    title={$t('purchases.downloadTrack')}
+                  >
+                    <span class="redownload-check"><Check size={14} /></span>
+                    <span class="redownload-icon"><Download size={14} /></span>
+                  </button>
                 {:else if dlStatus === 'downloading'}
                   <span class="download-active"><Loader2 size={14} class="spin" /></span>
                 {:else if dlStatus === 'failed'}
@@ -1814,14 +1821,32 @@
     color: var(--error, #f44336);
   }
 
-  .download-done {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
+  .download-btn.redownload {
+    border-color: transparent;
+    background: transparent;
     color: var(--success, #4caf50);
+  }
+
+  .download-btn.redownload .redownload-check {
+    display: flex;
+  }
+
+  .download-btn.redownload .redownload-icon {
+    display: none;
+  }
+
+  .download-btn.redownload:hover {
+    background: var(--bg-tertiary);
+    border-color: var(--border-subtle);
+    color: var(--text-secondary);
+  }
+
+  .download-btn.redownload:hover .redownload-check {
+    display: none;
+  }
+
+  .download-btn.redownload:hover .redownload-icon {
+    display: flex;
   }
 
   .download-active {

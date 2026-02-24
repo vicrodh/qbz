@@ -398,7 +398,14 @@
               </div>
               <div class="col-download">
                 {#if status === 'complete'}
-                  <span class="download-done"><Check size={14} /></span>
+                  <button
+                    class="download-track-btn redownload"
+                    onclick={(e) => { e.stopPropagation(); promptForFolder(track.id); }}
+                    title={$t('purchases.downloadTrack')}
+                  >
+                    <span class="redownload-check"><Check size={14} /></span>
+                    <span class="redownload-icon"><Download size={14} /></span>
+                  </button>
                 {:else if status === 'downloading'}
                   <span class="download-active"><Loader2 size={14} class="spin" /></span>
                 {:else if status === 'failed'}
@@ -877,6 +884,31 @@
   .download-track-btn.failed {
     color: var(--error, #f44336);
     opacity: 1;
+  }
+
+  .download-track-btn.redownload {
+    opacity: 1;
+    color: var(--success, #4caf50);
+  }
+
+  .download-track-btn.redownload .redownload-check {
+    display: flex;
+  }
+
+  .download-track-btn.redownload .redownload-icon {
+    display: none;
+  }
+
+  .download-track-btn.redownload:hover {
+    color: var(--text-muted);
+  }
+
+  .download-track-btn.redownload:hover .redownload-check {
+    display: none;
+  }
+
+  .download-track-btn.redownload:hover .redownload-icon {
+    display: flex;
   }
 
   .track-row.clickable {
