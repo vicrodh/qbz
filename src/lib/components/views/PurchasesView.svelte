@@ -16,7 +16,7 @@
     getHideDownloaded, setHideDownloaded,
   } from '$lib/stores/purchasesStore';
   import { getUserItem, setUserItem } from '$lib/utils/userStorage';
-  import type { PurchasedAlbum, PurchasedTrack } from '$lib/types/purchases';
+  import type { PurchasedAlbum, PurchasedTrack, PurchaseFormatOption } from '$lib/types/purchases';
   import type { DisplayTrack } from '$lib/types';
 
   type PurchasesTab = 'albums' | 'tracks';
@@ -96,6 +96,12 @@
   let trackGroupMode = $state<TrackGroupMode>('artist');
   let showTrackGroupMenu = $state(false);
 
+  // Track format picker popup
+  let formatPickerTrack = $state<PurchasedTrack | null>(null);
+  let formatPickerFormats = $state<PurchaseFormatOption[]>([]);
+  let formatPickerLoading = $state(false);
+  let formatPickerAnchor = $state<{ top: number; right: number } | null>(null);
+
   // Persist filter changes
   $effect(() => { setHideUnavailable(filterHideUnavailable); });
   $effect(() => { setUserItem('qbz-purchases-quality-filter', filterQuality); });
@@ -107,6 +113,7 @@
     showAlbumSortMenu = false;
     showFilterPanel = false;
     showTrackGroupMenu = false;
+    closeFormatPicker();
   }
 
   const albumSortOptions = [
@@ -394,6 +401,13 @@
     return $allTrackStatuses[trackId] || null;
   }
 
+  function closeFormatPicker() {
+    formatPickerTrack = null;
+    formatPickerFormats = [];
+    formatPickerLoading = false;
+    formatPickerAnchor = null;
+  }
+
   async function handleTrackDownload(event: MouseEvent, track: PurchasedTrack) {
     event.stopPropagation();
 
@@ -409,6 +423,28 @@
         return;
       }
 
+      // Single format: proceed directly
+      if (formats.length === 1) {
+        await executeTrackDownload(track, formats[0]);
+        return;
+      }
+
+      // Multiple formats: show picker popup
+      const btn = event.currentTarget as HTMLElement;
+      const rect = btn.getBoundingClientRect();
+      formatPickerTrack = track;
+      formatPickerFormats = formats;
+      formatPickerAnchor = { top: rect.bottom + 4, right: window.innerWidth - rect.right };
+    } catch (err) {
+      console.error('Track download error:', err);
+    }
+  }
+
+  async function executeTrackDownload(track: PurchasedTrack, format: PurchaseFormatOption) {
+    closeFormatPicker();
+    if (!track.album?.id) return;
+
+    try {
       const { open } = await import('@tauri-apps/plugin-dialog');
       const { audioDir } = await import('@tauri-apps/api/path');
       const defaultPath = await audioDir();
@@ -421,8 +457,8 @@
 
       if (!dest || typeof dest !== 'string') return;
 
-      const qualityDir = formats[0].label.replace(/\//g, '-').trim();
-      startTrackDownload(track.album.id, track.id, formats[0].id, dest, qualityDir);
+      const qualityDir = format.label.replace(/\//g, '-').trim();
+      startTrackDownload(track.album.id, track.id, format.id, dest, qualityDir);
     } catch (err) {
       console.error('Track download error:', err);
     }
@@ -941,6 +977,28 @@
       {/if}
     {/if}
   </div>
+
+  <!-- Format picker popup for track downloads -->
+  {#if formatPickerTrack && formatPickerAnchor}
+    <div class="format-picker-backdrop" onclick={closeFormatPicker} role="presentation"></div>
+    <div
+      class="format-picker"
+      style="top: {formatPickerAnchor.top}px; right: {formatPickerAnchor.right}px;"
+    >
+      <div class="format-picker-header">{$t('purchases.selectFormat')}</div>
+      {#each formatPickerFormats as fmt (fmt.id)}
+        <button
+          class="format-picker-item"
+          onclick={() => formatPickerTrack && executeTrackDownload(formatPickerTrack, fmt)}
+        >
+          <span class="format-label">{fmt.label}</span>
+          {#if fmt.bit_depth && fmt.sampling_rate}
+            <span class="format-detail">{fmt.bit_depth}/{fmt.sampling_rate}</span>
+          {/if}
+        </button>
+      {/each}
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -1782,5 +1840,58 @@
 
   .track-row.downloaded {
     opacity: 0.6;
+  }
+
+  /* Format picker popup */
+  .format-picker-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+  }
+
+  .format-picker {
+    position: fixed;
+    z-index: 3001;
+    min-width: 180px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    padding: 4px;
+    overflow: hidden;
+  }
+
+  .format-picker-header {
+    font-size: 11px;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    padding: 8px 12px 4px;
+    letter-spacing: 0.5px;
+  }
+
+  .format-picker-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    padding: 8px 12px;
+    border: none;
+    background: none;
+    color: var(--text-primary);
+    cursor: pointer;
+    border-radius: 6px;
+    font-size: 13px;
+    text-align: left;
+    transition: background 100ms ease;
+  }
+
+  .format-picker-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .format-detail {
+    font-size: 11px;
+    color: var(--text-muted);
   }
 </style>
