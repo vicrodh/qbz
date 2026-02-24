@@ -121,7 +121,7 @@ export const ACTIONS: KeybindingAction[] = [
     id: 'ui.queue',
     label: 'Queue',
     category: 'ui',
-    defaultShortcut: 'Shift+Q',
+    defaultShortcut: 'q',
     description: 'Toggle queue panel',
   },
   {
