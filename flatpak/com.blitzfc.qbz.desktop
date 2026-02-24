@@ -7,5 +7,6 @@ Icon=com.blitzfc.qbz
 Categories=AudioVideo;Audio;Music;Player;
 Terminal=false
 StartupWMClass=com.blitzfc.qbz
-Keywords=music;audio;qobuz;hifi;streaming;audiophile;
+StartupNotify=true
+Keywords=music;audio;qobuz;hifi;streaming;audiophile;flac;
 MimeType=x-scheme-handler/qbz;x-scheme-handler/qobuzapp;

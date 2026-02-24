@@ -135,7 +135,7 @@ jobs:
           Terminal=false
           Type=Application
           Categories=AudioVideo;Audio;Music;Player;
-          Keywords=music;audio;qobuz;hifi;streaming;audiophile;
+          Keywords=music;audio;qobuz;hifi;streaming;audiophile;flac;
           StartupWMClass=com.blitzfc.qbz
           StartupNotify=true
           MimeType=x-scheme-handler/qbz;x-scheme-handler/qobuzapp;

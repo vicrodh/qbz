@@ -41,7 +41,7 @@
       "icons/icon.ico"
     ],
     "category": "Music",
-    "shortDescription": "Native high-fidelity client for Qobuz\u2122 subscribers on Linux",
+    "shortDescription": "Native Qobuz client with hi-res audio support",
     "longDescription": "QBZ is a native high-fidelity client for Qobuz\u2122 subscribers on Linux, designed for audiophiles who need bit-perfect playback without browser sample rate limitations. This application uses the Qobuz API but is not certified by Qobuz.",
     "linux": {
       "deb": {
