@@ -1,7 +1,15 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { invoke } from '@tauri-apps/api/core';
+  import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { open, save } from '@tauri-apps/plugin-dialog';
+  import { openUrl } from '@tauri-apps/plugin-opener';
   import { t } from 'svelte-i18n';
+  import { showToast } from '$lib/stores/toastStore';
+  import {
+    hasCustomAlbumCover,
+    setCustomAlbumCover,
+    removeCustomAlbumCover as removeCustomCoverFromStore
+  } from '$lib/stores/customAlbumCoverStore';
   import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, Loader2, CheckSquare } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
@@ -157,6 +165,12 @@
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
   let lightboxOpen = $state(false);
+
+  // Cover context menu
+  let showCoverMenu = $state(false);
+  let coverMenuPos = $state({ x: 0, y: 0 });
+  let hasCustomCover = $state(false);
+  let coverOverride = $state<string | null>(null);
   let scrollContainer: HTMLDivElement | null = $state(null);
 
   // Multi-select
@@ -309,12 +323,85 @@
   }
 
   // Check if album is in favorites on mount
+  // --- Custom album cover handlers ---
+
+  function loadCustomCoverStatus() {
+    hasCustomCover = hasCustomAlbumCover(album.id);
+  }
+
+  async function handleAddCustomCover() {
+    showCoverMenu = false;
+    const selected = await open({
+      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
+      multiple: false
+    });
+    if (!selected) return;
+
+    try {
+      const result = await invoke<{ image_path: string; thumbnail_path: string }>(
+        'v2_library_set_custom_album_cover',
+        { albumId: album.id, customImagePath: selected }
+      );
+      coverOverride = convertFileSrc(result.image_path);
+      hasCustomCover = true;
+      setCustomAlbumCover(album.id, convertFileSrc(result.image_path));
+      showToast($t('album.customCoverSet'), 'success');
+    } catch (err) {
+      showToast(`${$t('album.customCoverError')}: ${err}`, 'error');
+    }
+  }
+
+  async function handleRemoveCustomCover() {
+    showCoverMenu = false;
+    try {
+      await invoke('v2_library_remove_custom_album_cover', { albumId: album.id });
+      coverOverride = null;
+      hasCustomCover = false;
+      removeCustomCoverFromStore(album.id);
+      showToast($t('album.customCoverRemoved'), 'success');
+    } catch (err) {
+      showToast(`${$t('album.customCoverError')}: ${err}`, 'error');
+    }
+  }
+
+  async function handleOpenCoverInBrowser() {
+    showCoverMenu = false;
+    const url = coverOverride ?? album.artwork;
+    if (url && !url.startsWith('asset://')) {
+      await openUrl(url).catch(err => console.error('Failed to open URL:', err));
+    }
+  }
+
+  async function handleSaveCoverAs() {
+    showCoverMenu = false;
+    const artworkUrl = coverOverride ?? album.artwork;
+    if (!artworkUrl) return;
+
+    const dest = await save({
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png'] }],
+      defaultPath: `${album.title} - Cover.jpg`
+    });
+    if (!dest) return;
+
+    try {
+      if (artworkUrl.startsWith('asset://') || artworkUrl.startsWith('http://asset.localhost')) {
+        showToast($t('album.customCoverError'), 'error');
+        return;
+      }
+      await invoke('v2_save_image_url_to_file', { url: artworkUrl, destPath: dest });
+      showToast($t('album.customCoverSet'), 'success');
+    } catch (err) {
+      showToast(`${$t('album.customCoverError')}: ${err}`, 'error');
+    }
+  }
+
   onMount(() => {
     let unsubscribe: (() => void) | null = null;
     (async () => {
       try {
         await loadAlbumFavorites();
         isFavorite = isAlbumFavorite(album.id);
+        loadCustomCoverStatus();
         unsubscribe = subscribeAlbumFavorites(() => {
           isFavorite = isAlbumFavorite(album.id);
         });
@@ -389,10 +476,11 @@
       class="artwork"
       onclick={() => lightboxOpen = true}
       onkeydown={(e) => { if (e.key === 'Enter') lightboxOpen = true; }}
+      oncontextmenu={(e) => { e.preventDefault(); coverMenuPos = { x: e.clientX, y: e.clientY }; showCoverMenu = true; }}
       role="button"
       tabindex="0"
     >
-      <img src={album.artwork} alt={album.title} />
+      <img src={coverOverride ?? album.artwork} alt={album.title} />
     </div>
 
     <!-- Album Metadata -->
@@ -658,9 +746,43 @@
 <ImageLightbox
   isOpen={lightboxOpen}
   onClose={() => lightboxOpen = false}
-  src={album.artwork}
+  src={coverOverride ?? album.artwork}
   alt={album.title}
 />
+
+{#if showCoverMenu}
+  <div
+    class="cover-context-backdrop"
+    onclick={() => showCoverMenu = false}
+    onkeydown={(e) => { if (e.key === 'Escape') showCoverMenu = false; }}
+    role="button"
+    tabindex="-1"
+  ></div>
+  <div
+    class="cover-context-menu"
+    style="left: {coverMenuPos.x}px; top: {coverMenuPos.y}px;"
+  >
+    {#if hasCustomCover}
+      <button class="cover-context-item" onclick={handleAddCustomCover}>
+        {$t('album.changeCover')}
+      </button>
+      <button class="cover-context-item danger" onclick={handleRemoveCustomCover}>
+        {$t('album.removeCover')}
+      </button>
+    {:else}
+      <button class="cover-context-item" onclick={handleAddCustomCover}>
+        {$t('album.addCover')}
+      </button>
+    {/if}
+    <div class="cover-context-divider"></div>
+    <button class="cover-context-item" onclick={handleOpenCoverInBrowser}>
+      {$t('album.openInBrowser')}
+    </button>
+    <button class="cover-context-item" onclick={handleSaveCoverAs}>
+      {$t('album.saveAs')}
+    </button>
+  </div>
+{/if}
 
 <style>
   .album-detail {
@@ -1033,5 +1155,61 @@
 
   @keyframes spin {
     to { transform: rotate(360deg); }
+  }
+
+  /* Cover context menu */
+  .cover-context-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2999;
+  }
+
+  .cover-context-menu {
+    position: fixed;
+    z-index: 3000;
+    background: var(--bg-secondary);
+    border: 1px solid var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 4px;
+    min-width: 200px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    animation: coverMenuIn 100ms ease;
+  }
+
+  @keyframes coverMenuIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+  }
+
+  .cover-context-item {
+    display: block;
+    width: 100%;
+    padding: 8px 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    background: none;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    transition: background 100ms ease;
+  }
+
+  .cover-context-item:hover {
+    background: var(--bg-hover);
+  }
+
+  .cover-context-item.danger {
+    color: var(--color-error, #ef4444);
+  }
+
+  .cover-context-item.danger:hover {
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  .cover-context-divider {
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 4px 8px;
   }
 </style>

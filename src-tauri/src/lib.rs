@@ -1205,6 +1205,7 @@ pub fn run() {
             commands_v2::v2_library_set_custom_album_cover,
             commands_v2::v2_library_remove_custom_album_cover,
             commands_v2::v2_library_get_all_custom_album_covers,
+            commands_v2::v2_save_image_url_to_file,
             commands_v2::v2_show_track_notification,
             commands_v2::v2_subscribe_playlist,
             commands_v2::v2_cache_track_for_offline,

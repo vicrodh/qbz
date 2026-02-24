@@ -4831,6 +4831,23 @@ pub async fn v2_library_get_all_custom_album_covers(
 }
 
 #[tauri::command]
+pub async fn v2_save_image_url_to_file(
+    url: String,
+    dest_path: String,
+) -> Result<(), String> {
+    let response = reqwest::get(&url)
+        .await
+        .map_err(|e| format!("Failed to download image: {}", e))?;
+    let bytes = response
+        .bytes()
+        .await
+        .map_err(|e| format!("Failed to read image data: {}", e))?;
+    std::fs::write(&dest_path, &bytes)
+        .map_err(|e| format!("Failed to save image: {}", e))?;
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn v2_create_artist_radio(
     artist_id: u64,
     artist_name: String,
