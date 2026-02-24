@@ -51,6 +51,7 @@
   } from '$lib/stores/playbackPreferencesStore';
   import { initBlacklistStore, isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { initCustomArtistImageStore, clearCustomArtistImages } from '$lib/stores/customArtistImageStore';
+  import { initCustomAlbumCoverStore, clearCustomAlbumCovers } from '$lib/stores/customAlbumCoverStore';
 
   // UI state management
   import {
@@ -2585,6 +2586,7 @@
     }).catch(err => console.debug('[PlaybackPrefs] Init deferred:', err));
     initBlacklistStore().catch(err => console.debug('[Blacklist] Init deferred:', err));
     initCustomArtistImageStore().catch(err => console.debug('[CustomArtistImages] Init deferred:', err));
+    initCustomAlbumCoverStore().catch(err => console.debug('[CustomAlbumCovers] Init deferred:', err));
     refreshUpdatePreferences().catch(err => console.debug('[Updates] Prefs refresh deferred:', err));
 
     // Load audio settings (normalization state) now that session is active
@@ -2704,6 +2706,7 @@
       // Clear session state
       await clearSession();
       clearCustomArtistImages();
+      clearCustomAlbumCovers();
       setLoggedOut();
       sessionReady = false;
       updatesLaunchTriggered = false;
