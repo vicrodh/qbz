@@ -358,10 +358,11 @@
           {#each discTracks as track (track.id)}
             {@const status = getTrackStatus(track.id)}
             {@const isActive = activeTrackId === track.id}
+            {@const isDownloaded = track.downloaded || status === 'complete'}
             <div
               class="track-row"
               class:downloading={status === 'downloading'}
-              class:complete={status === 'complete'}
+              class:complete={isDownloaded}
               class:failed={status === 'failed'}
               class:active={isActive}
               class:clickable={track.streamable && !!onTrackPlay}
@@ -376,8 +377,6 @@
                   </div>
                 {:else if status === 'downloading'}
                   <Loader2 size={14} class="spin" />
-                {:else if status === 'complete'}
-                  <Check size={14} class="status-complete" />
                 {:else}
                   <span>{track.track_number}</span>
                 {/if}
@@ -397,7 +396,7 @@
                 {/if}
               </div>
               <div class="col-download">
-                {#if status === 'complete'}
+                {#if isDownloaded}
                   <button
                     class="download-track-btn redownload"
                     onclick={(e) => { e.stopPropagation(); promptForFolder(track.id); }}
