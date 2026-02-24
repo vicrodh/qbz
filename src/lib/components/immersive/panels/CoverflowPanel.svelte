@@ -78,16 +78,22 @@
   // Track previous index for animation direction
   let previousIndex = $state(queueCurrentIndex);
   let animationDirection = $state<'left' | 'right' | null>(null);
+  let animationTimeout: ReturnType<typeof setTimeout> | null = null;
 
   $effect(() => {
     if (queueCurrentIndex !== previousIndex) {
       animationDirection = queueCurrentIndex > previousIndex ? 'left' : 'right';
       previousIndex = queueCurrentIndex;
 
-      // Reset animation direction after animation completes
-      setTimeout(() => {
+      if (animationTimeout) clearTimeout(animationTimeout);
+      animationTimeout = setTimeout(() => {
         animationDirection = null;
+        animationTimeout = null;
       }, 500);
+
+      return () => {
+        if (animationTimeout) { clearTimeout(animationTimeout); animationTimeout = null; }
+      };
     }
   });
 
