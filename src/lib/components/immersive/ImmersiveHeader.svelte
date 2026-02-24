@@ -155,11 +155,11 @@
     <button
       class="mode-toggle"
       onclick={() => onViewModeChange(isFocusMode ? 'split' : 'focus')}
-      title={isFocusMode ? 'Switch to Split View (V)' : 'Switch to Focus View (V)'}
+      title={isFocusMode ? 'Switch to Split View (V)' : 'Switch to Immersive View (V)'}
     >
       <img
         src={isFocusMode ? '/split-view.svg' : '/lotus.svg'}
-        alt={isFocusMode ? 'Split Mode' : 'Focus Mode'}
+        alt={isFocusMode ? 'Split Mode' : 'Immersive Mode'}
         class="mode-icon"
       />
     </button>

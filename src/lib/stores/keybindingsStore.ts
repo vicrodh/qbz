@@ -52,7 +52,7 @@ export const CATEGORIES: CategoryInfo[] = [
   { id: 'playback', label: 'Playback', description: 'Playback controls' },
   { id: 'navigation', label: 'Navigation', description: 'App navigation' },
   { id: 'ui', label: 'Interface', description: 'UI elements' },
-  { id: 'focus', label: 'Focus Mode', description: 'Focus mode controls' },
+  { id: 'focus', label: 'Immersive', description: 'Immersive mode controls' },
 ];
 
 export const ACTIONS: KeybindingAction[] = [
@@ -104,17 +104,24 @@ export const ACTIONS: KeybindingAction[] = [
 
   // UI
   {
-    id: 'ui.focusMode',
-    label: 'Focus Mode',
+    id: 'ui.sidebar',
+    label: 'Toggle Sidebar',
     category: 'ui',
-    defaultShortcut: 'f',
-    description: 'Toggle focus mode',
+    defaultShortcut: 'Shift+S',
+    description: 'Expand or collapse the sidebar',
+  },
+  {
+    id: 'ui.focusMode',
+    label: 'Immersive Mode',
+    category: 'ui',
+    defaultShortcut: 'Shift+I',
+    description: 'Toggle immersive mode',
   },
   {
     id: 'ui.queue',
     label: 'Queue',
     category: 'ui',
-    defaultShortcut: 'q',
+    defaultShortcut: 'Shift+Q',
     description: 'Toggle queue panel',
   },
   {

@@ -343,7 +343,7 @@
           <button class="action-btn" onclick={onOpenQueue} title="Queue">
             <List size={22} />
           </button>
-          <button class="action-btn" onclick={onOpenFocusMode} title="Focus Mode">
+          <button class="action-btn" onclick={onOpenFocusMode} title="Immersive Mode">
             <Maximize2 size={22} />
           </button>
           <button

@@ -1360,7 +1360,7 @@
       "playback": "Playback",
       "navigation": "Navigation",
       "ui": "Interface",
-      "focus": "Focus Mode"
+      "focus": "Immersive"
     },
     "actions": {
       "playbackToggle": "Play / Pause",
@@ -1369,7 +1369,8 @@
       "navBack": "Go Back",
       "navForward": "Go Forward",
       "navSearch": "Search",
-      "uiFocusMode": "Focus Mode",
+      "uiSidebar": "Toggle Sidebar",
+      "uiFocusMode": "Immersive Mode",
       "uiQueue": "Queue",
       "uiEscape": "Close / Dismiss",
       "uiShowShortcuts": "Show Shortcuts",
@@ -1386,7 +1387,8 @@
       "navBack": "Navigate to previous page",
       "navForward": "Navigate to next page",
       "navSearch": "Focus search field",
-      "uiFocusMode": "Toggle focus mode",
+      "uiSidebar": "Expand or collapse the sidebar",
+      "uiFocusMode": "Toggle immersive mode",
       "uiQueue": "Toggle queue panel",
       "uiEscape": "Close active panel or modal",
       "uiShowShortcuts": "Show keyboard shortcuts modal",

@@ -1360,7 +1360,7 @@
       "playback": "Reproducción",
       "navigation": "Navegación",
       "ui": "Interfaz",
-      "focus": "Modo Focus"
+      "focus": "Inmersivo"
     },
     "actions": {
       "playbackToggle": "Reproducir / Pausar",
@@ -1369,7 +1369,8 @@
       "navBack": "Ir Atrás",
       "navForward": "Ir Adelante",
       "navSearch": "Buscar",
-      "uiFocusMode": "Modo Focus",
+      "uiSidebar": "Alternar Barra Lateral",
+      "uiFocusMode": "Modo Inmersivo",
       "uiQueue": "Cola",
       "uiEscape": "Cerrar / Descartar",
       "uiShowShortcuts": "Mostrar Atajos",
@@ -1386,7 +1387,8 @@
       "navBack": "Navegar a la página anterior",
       "navForward": "Navegar a la siguiente página",
       "navSearch": "Enfocar campo de búsqueda",
-      "uiFocusMode": "Alternar modo focus",
+      "uiSidebar": "Expandir o colapsar la barra lateral",
+      "uiFocusMode": "Alternar modo inmersivo",
       "uiQueue": "Alternar panel de cola",
       "uiEscape": "Cerrar panel activo o modal",
       "uiShowShortcuts": "Mostrar modal de atajos de teclado",

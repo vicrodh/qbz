@@ -1318,7 +1318,7 @@
       "playback": "Wiedergabe",
       "navigation": "Navigation",
       "ui": "Oberfläche",
-      "focus": "Fokusmodus"
+      "focus": "Immersiv"
     },
     "actions": {
       "playbackToggle": "Wiedergabe / Pause",
@@ -1327,7 +1327,8 @@
       "navBack": "Zurück",
       "navForward": "Vorwärts",
       "navSearch": "Suchen",
-      "uiFocusMode": "Fokusmodus",
+      "uiSidebar": "Seitenleiste umschalten",
+      "uiFocusMode": "Immersiver Modus",
       "uiQueue": "Warteschlange",
       "uiEscape": "Schließen / Verwerfen",
       "uiShowShortcuts": "Tastenkürzel anzeigen",
@@ -1344,7 +1345,8 @@
       "navBack": "Zur vorherigen Seite navigieren",
       "navForward": "Zur nächsten Seite navigieren",
       "navSearch": "Suchfeld fokussieren",
-      "uiFocusMode": "Fokusmodus umschalten",
+      "uiSidebar": "Seitenleiste ein- oder ausblenden",
+      "uiFocusMode": "Immersiven Modus umschalten",
       "uiQueue": "Warteschlangen-Panel umschalten",
       "uiEscape": "Aktives Panel oder Modal schließen",
       "uiShowShortcuts": "Tastenkürzel-Modal anzeigen",

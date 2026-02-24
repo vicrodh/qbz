@@ -2937,6 +2937,7 @@
     registerAction('nav.back', navGoBack);
     registerAction('nav.forward', navGoForward);
     registerAction('nav.search', () => sidebarRef?.focusSearch());
+    registerAction('ui.sidebar', toggleSidebar);
     registerAction('ui.focusMode', toggleFocusMode);
     registerAction('ui.queue', toggleQueue);
     registerAction('ui.escape', handleUIEscape);

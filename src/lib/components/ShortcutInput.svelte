@@ -150,15 +150,15 @@
 
 <style>
   .shortcut-input-wrapper {
-    margin-bottom: 16px;
+    margin-bottom: 10px;
   }
 
   .action-info {
-    margin-bottom: 6px;
+    margin-bottom: 4px;
   }
 
   .action-label {
-    font-size: 14px;
+    font-size: 12px;
     font-weight: 500;
     color: var(--text-primary);
   }
@@ -174,16 +174,16 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 10px 14px;
+    padding: 6px 10px;
     background: var(--bg-tertiary);
     border: 2px solid transparent;
-    border-radius: 8px;
+    border-radius: 6px;
     font-family: var(--font-mono, monospace);
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-primary);
     cursor: pointer;
     transition: all 150ms ease;
-    min-height: 42px;
+    min-height: 32px;
   }
 
   .shortcut-input:hover {
@@ -227,8 +227,8 @@
   }
 
   .reset-btn {
-    width: 36px;
-    height: 36px;
+    width: 30px;
+    height: 30px;
     display: flex;
     align-items: center;
     justify-content: center;

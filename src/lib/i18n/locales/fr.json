@@ -1318,7 +1318,7 @@
       "playback": "Lecture",
       "navigation": "Navigation",
       "ui": "Interface",
-      "focus": "Mode focus"
+      "focus": "Immersif"
     },
     "actions": {
       "playbackToggle": "Lecture / Pause",
@@ -1327,7 +1327,8 @@
       "navBack": "Retour",
       "navForward": "Avancer",
       "navSearch": "Rechercher",
-      "uiFocusMode": "Mode focus",
+      "uiSidebar": "Afficher/masquer la barre latérale",
+      "uiFocusMode": "Mode immersif",
       "uiQueue": "File d'attente",
       "uiEscape": "Fermer / Annuler",
       "uiShowShortcuts": "Afficher les raccourcis",
@@ -1344,7 +1345,8 @@
       "navBack": "Naviguer vers la page précédente",
       "navForward": "Naviguer vers la page suivante",
       "navSearch": "Mettre le focus sur la recherche",
-      "uiFocusMode": "Basculer le mode focus",
+      "uiSidebar": "Afficher ou masquer la barre latérale",
+      "uiFocusMode": "Basculer le mode immersif",
       "uiQueue": "Basculer le panneau de file d'attente",
       "uiEscape": "Fermer le panneau actif ou la modale",
       "uiShowShortcuts": "Afficher la modale des raccourcis clavier",
