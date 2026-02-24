@@ -1373,7 +1373,7 @@
 
   // Playback Functions - QobuzTrack from search results
   async function handleTrackPlay(track: QobuzTrack) {
-    console.log('Playing track:', track);
+    console.log('Playing track:', track.id, track.title);
 
     const artwork = track.album?.image?.large || track.album?.image?.thumbnail || track.album?.image?.small || '';
     const quality = track.hires_streamable && track.maximum_bit_depth && track.maximum_sampling_rate
@@ -1399,7 +1399,7 @@
 
   // Handle track play from album detail view
   async function handleAlbumTrackPlay(track: Track) {
-    console.log('Playing album track:', track);
+    console.log('Playing album track:', track.id, track.title);
 
     // ALWAYS create context when playing from an album
     // The setting only affects menu options visibility, not implicit behavior
@@ -2352,7 +2352,7 @@
    * This is fire-and-forget to match view callback signatures
    */
   function handleDisplayTrackPlay(track: DisplayTrack): void {
-    console.log('Playing display track:', track);
+    console.log('Playing display track:', track.id, track.title);
 
     // Determine quality string:
     // - If we have exact bitDepth/samplingRate, show them
@@ -2408,7 +2408,7 @@
   }
 
   async function handleLocalTrackPlay(track: LocalLibraryTrack) {
-    console.log('Playing local track:', track);
+    console.log('Playing local track:', track.id, track.title);
     // DO NOT clear context - LocalLibraryView already sets it correctly
     // await clearPlaybackContext();
 

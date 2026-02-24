@@ -106,7 +106,7 @@
       // NO legacy is_logged_in/get_user_info checks - that causes state divergence.
       initStatus = 'Initializing...';
       const status = await invoke<RuntimeStatus>('runtime_bootstrap');
-      console.log('[LoginView] runtime_bootstrap result:', status);
+      console.log('[LoginView] runtime_bootstrap: session_activated =', status.session_activated);
 
       // Check if session is fully active (authenticated + session activated)
       if (status.session_activated && status.user_id && status.user_id > 0) {
@@ -217,7 +217,7 @@
         error_code?: string;
       }>('v2_manual_login', { email, password });
 
-      console.log('[LoginView] v2_manual_login response:', response);
+      console.log('[LoginView] v2_manual_login: success =', response.success);
 
       if (response.success) {
         // Validate that we have a valid user_id - NEVER allow 0
@@ -307,7 +307,7 @@
         error_code?: string;
       }>('v2_start_oauth_login');
 
-      console.log('[LoginView] v2_start_oauth_login response:', response);
+      console.log('[LoginView] v2_start_oauth_login: success =', response.success);
 
       if (response.success) {
         if (!response.user_id || response.user_id === 0) {
