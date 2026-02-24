@@ -8,7 +8,7 @@
   import Dropdown from '../Dropdown.svelte';
   import ViewTransition from '../ViewTransition.svelte';
   import { getAlbumDetail, getFormats } from '$lib/services/purchases';
-  import { purchaseDownloads, startAlbumDownload, startTrackDownload, getAlbumDownloadFormatId } from '$lib/stores/purchaseDownloadStore';
+  import { purchaseDownloads, startAlbumDownload, startTrackDownload, getAlbumDownloadFormatId, clearAlbumDownloadState } from '$lib/stores/purchaseDownloadStore';
   import type { TrackDownloadStatus } from '$lib/stores/purchaseDownloadStore';
   import { formatDuration, getQobuzImage } from '$lib/adapters/qobuzAdapters';
   import { showToast } from '$lib/stores/toastStore';
@@ -58,8 +58,11 @@
     if (!downloadDestination || addingToLibrary) return;
     addingToLibrary = true;
     try {
-      await invoke('v2_library_add_folder', { path: downloadDestination });
+      const folder = await invoke<{ id: number }>('v2_library_add_folder', { path: downloadDestination });
+      clearAlbumDownloadState(albumId);
       showToast(get(t)('purchases.addToLibrarySuccess'), 'success');
+      // Trigger a background scan so the library indexes the new files
+      invoke('v2_library_scan_folder', { folderId: folder.id }).catch(() => {});
     } catch (err) {
       console.error('Failed to add folder to library:', err);
       showToast(get(t)('purchases.addToLibraryError'), 'error');

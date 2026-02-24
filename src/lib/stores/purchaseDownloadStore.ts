@@ -44,6 +44,14 @@ export function getAlbumDownloadFormatId(albumId: string): number | undefined {
   return get(purchaseDownloads)[albumId]?.formatId;
 }
 
+/** Clear in-memory download state for an album (e.g. after adding to library). */
+export function clearAlbumDownloadState(albumId: string) {
+  purchaseDownloads.update((all) => {
+    const { [albumId]: _, ...rest } = all;
+    return rest;
+  });
+}
+
 export function startAlbumDownload(
   albumId: string,
   trackIds: number[],
