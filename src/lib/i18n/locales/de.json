@@ -710,6 +710,8 @@
       "useSystemTitleBarDesc": "QBZ-eigene Titelleiste durch die native Fensterdekoration des Systems ersetzen. Änderung startet die App neu.",
       "hideTitleBar": "Titelleiste ausblenden",
       "hideTitleBarDesc": "Titelleiste komplett ausblenden (für Tiling-Window-Manager-Nutzer)",
+      "searchInTitleBar": "Suche in Titelleiste",
+      "searchInTitleBarDesc": "Suchfeld in der Titelleiste statt in der Seitenleiste anzeigen",
       "showPurchases": "Einkäufe anzeigen",
       "showPurchasesDesc": "Einkäufe-Bereich in der Seitenleiste zum Durchsuchen und Herunterladen gekaufter Musik anzeigen",
       "immersiveDefaultView": "Standard-Ansicht im Immersiv-Modus",

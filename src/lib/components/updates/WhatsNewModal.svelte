@@ -17,7 +17,7 @@
   let { isOpen, release, showTitleBar, onClose }: Props = $props();
 
   const PLAYER_HEIGHT = 104;
-  const TITLEBAR_HEIGHT = $derived(showTitleBar ? 32 : 0);
+  const TITLEBAR_HEIGHT = $derived(showTitleBar ? 36 : 0);
   const INNER_MARGIN = 20;
   const EXTRA_PAD_TOP = 40;
   const EXTRA_PAD_BOTTOM = 130;

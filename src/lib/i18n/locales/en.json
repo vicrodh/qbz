@@ -727,6 +727,8 @@
       "useSystemTitleBarDesc": "Replace QBZ custom title bar with your system's native window decorations. Changing this will restart the app.",
       "hideTitleBar": "Hide title bar",
       "hideTitleBarDesc": "Hide the title bar completely (for tiling window manager users)",
+      "searchInTitleBar": "Search in title bar",
+      "searchInTitleBarDesc": "Show the search field in the title bar instead of the sidebar",
       "showPurchases": "Show Purchases",
       "showPurchasesDesc": "Show the Purchases section in the sidebar for browsing and downloading your purchased music",
       "immersiveDefaultView": "Immersive default view",

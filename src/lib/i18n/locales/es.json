@@ -727,6 +727,8 @@
       "useSystemTitleBarDesc": "Reemplazar la barra de título personalizada de QBZ con las decoraciones nativas de tu sistema. Cambiar esto reiniciará la app.",
       "hideTitleBar": "Ocultar barra de título",
       "hideTitleBarDesc": "Ocultar completamente la barra de título (para usuarios de gestores de ventanas en mosaico)",
+      "searchInTitleBar": "Buscar en barra de título",
+      "searchInTitleBarDesc": "Mostrar el campo de búsqueda en la barra de título en lugar de la barra lateral",
       "showPurchases": "Mostrar Compras",
       "showPurchasesDesc": "Mostrar la sección de Compras en la barra lateral para explorar y descargar tu música comprada",
       "immersiveDefaultView": "Vista predeterminada del modo inmersivo",

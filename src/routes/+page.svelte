@@ -33,7 +33,14 @@
   } from '$lib/stores/toastStore';
 
   // Search state for performer search
-  import { setSearchState, triggerSearchFocus } from '$lib/stores/searchState';
+  import {
+    setSearchState,
+    triggerSearchFocus,
+    getSearchQuery,
+    setSearchQuery,
+    subscribeSearchQuery,
+    clearSearchState
+  } from '$lib/stores/searchState';
 
   // Playback context and preferences
   import {
@@ -91,6 +98,13 @@
     initTitleBarStore,
     shouldShowTitleBar
   } from '$lib/stores/titleBarStore';
+
+  // Search bar location store
+  import {
+    subscribe as subscribeSearchBarLocation,
+    initSearchBarLocation,
+    getSearchBarLocation
+  } from '$lib/stores/searchBarLocationStore';
 
   // Keybindings system
   import {
@@ -395,6 +409,10 @@
   // Title Bar State (from titleBarStore subscription)
   let showTitleBar = $state(shouldShowTitleBar());
 
+  // Search Bar Location State
+  let searchBarLocationPref = $state(getSearchBarLocation());
+  let titlebarSearchQuery = $state(getSearchQuery());
+
   // View State (from navigationStore subscription)
   let activeView = $state<ViewType>('home');
   let selectedPlaylistId = $state<number | null>(null);
@@ -606,6 +624,9 @@
     focusSearch: () => void;
   } | undefined>(undefined);
 
+  // TitleBar reference for focusing search
+  let titlebarRef = $state<{ focusSearch: () => void } | undefined>(undefined);
+
   // Playback State (from playerStore subscription)
   let currentTrack = $state<PlayingTrack | null>(null);
   let isPlaying = $state(false);
@@ -664,6 +685,28 @@
       return;
     }
     navTo(view as ViewType);
+  }
+
+  // Effective search-in-titlebar: only when custom titlebar is shown AND user preference is 'titlebar'
+  function isSearchInTitlebar(): boolean {
+    return showTitleBar && searchBarLocationPref === 'titlebar';
+  }
+
+  // Titlebar search handlers (mirrors Sidebar search logic)
+  const TITLEBAR_SEARCH_NAV_THRESHOLD = 3;
+
+  function handleTitlebarSearchInput(query: string) {
+    titlebarSearchQuery = query;
+    setSearchQuery(query);
+    if (query.trim().length >= TITLEBAR_SEARCH_NAV_THRESHOLD && activeView !== 'search') {
+      navigateTo('search');
+    }
+  }
+
+  function handleTitlebarSearchClear() {
+    titlebarSearchQuery = '';
+    clearSearchState();
+    titlebarRef?.focusSearch();
   }
 
   async function handleAlbumClick(albumId: string) {
@@ -2947,10 +2990,14 @@
     registerAction('nav.back', navGoBack);
     registerAction('nav.forward', navGoForward);
     registerAction('nav.search', () => {
-      if (!getIsExpanded()) {
-        expandSidebar();
+      if (isSearchInTitlebar()) {
+        titlebarRef?.focusSearch();
+      } else {
+        if (!getIsExpanded()) {
+          expandSidebar();
+        }
+        sidebarRef?.focusSearch();
       }
-      sidebarRef?.focusSearch();
     });
     registerAction('ui.sidebar', toggleSidebar);
     registerAction('ui.focusMode', toggleFocusMode);
@@ -3072,6 +3119,17 @@
     initTitleBarStore();
     const unsubscribeTitleBar = subscribeTitleBar(() => {
       showTitleBar = shouldShowTitleBar();
+    });
+
+    // Initialize and subscribe to search bar location
+    initSearchBarLocation();
+    const unsubscribeSearchBarLocation = subscribeSearchBarLocation(() => {
+      searchBarLocationPref = getSearchBarLocation();
+    });
+
+    // Sync titlebar search query with search state store
+    const unsubscribeTitlebarSearch = subscribeSearchQuery((query) => {
+      titlebarSearchQuery = query;
     });
 
     // Subscribe to offline state changes
@@ -3451,6 +3509,8 @@
       unsubscribeAuth();
       unsubscribeSidebar();
       unsubscribeTitleBar();
+      unsubscribeSearchBarLocation();
+      unsubscribeTitlebarSearch();
       unsubscribeOffline();
       unsubscribeNav();
       unsubscribePlayer();
@@ -3550,7 +3610,13 @@
   <div class="app" class:no-titlebar={!showTitleBar}>
     <!-- Custom Title Bar (CSD) -->
     {#if showTitleBar}
-      <TitleBar />
+      <TitleBar
+        bind:this={titlebarRef}
+        searchInTitlebar={isSearchInTitlebar()}
+        searchQuery={titlebarSearchQuery}
+        onSearchInput={handleTitlebarSearchInput}
+        onSearchClear={handleTitlebarSearchClear}
+      />
     {/if}
 
     <div class="app-body">
@@ -3574,6 +3640,7 @@
       onToggle={toggleSidebar}
       showTitleBar={showTitleBar}
       {showPurchases}
+      searchInTitlebar={isSearchInTitlebar()}
     />
 
     <!-- Content Area (main + lyrics sidebar) -->
@@ -4534,7 +4601,7 @@
     display: flex;
     flex: 1;
     min-width: 0;
-    height: calc(100vh - 136px); /* 104px NowPlayingBar + 32px TitleBar */
+    height: calc(100vh - 140px); /* 104px NowPlayingBar + 36px TitleBar */
     overflow: hidden;
     position: relative;
   }
@@ -4542,7 +4609,7 @@
   .main-content {
     flex: 1;
     min-width: 0;
-    height: calc(100vh - 136px); /* 104px NowPlayingBar + 32px TitleBar */
+    height: calc(100vh - 140px); /* 104px NowPlayingBar + 36px TitleBar */
     overflow: hidden; /* Views handle their own scrolling */
     padding-right: 8px; /* Gap between scrollbar and window edge */
     background-color: var(--bg-primary, #0f0f0f);

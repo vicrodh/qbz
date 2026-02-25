@@ -84,6 +84,7 @@
     onToggle?: () => void;
     showTitleBar?: boolean;
     showPurchases?: boolean;
+    searchInTitlebar?: boolean;
   }
 
   let {
@@ -103,7 +104,8 @@
     isExpanded = true,
     onToggle,
     showTitleBar = true,
-    showPurchases = false
+    showPurchases = false,
+    searchInTitlebar = false
   }: Props = $props();
 
   let userPlaylists = $state<Playlist[]>([]);
@@ -1257,44 +1259,46 @@
 <aside class="sidebar" class:collapsed={!isExpanded} class:no-titlebar={!showTitleBar}>
   <!-- Scrollable Content Area -->
   <div class="content">
-    <!-- Search Bar -->
-    <div
-      class="search-container"
-      class:collapsed={!isExpanded}
-      class:has-text={sidebarSearchQuery.trim().length > 0}
-    >
-      <Search class="search-icon" size={16} />
-      {#if isExpanded}
-        <input
-          type="text"
-          class="search-input"
-          placeholder={$t('nav.search')}
-          bind:value={sidebarSearchQuery}
-          bind:this={sidebarSearchInput}
-          oninput={handleSidebarSearchInput}
-          onclick={handleSidebarSearchClick}
-          onfocus={handleSidebarSearchFocus}
-          onkeydown={handleSidebarSearchKeydown}
-        />
-        {#if sidebarSearchQuery.trim()}
+    <!-- Search Bar (hidden when search is in titlebar) -->
+    {#if !searchInTitlebar}
+      <div
+        class="search-container"
+        class:collapsed={!isExpanded}
+        class:has-text={sidebarSearchQuery.trim().length > 0}
+      >
+        <Search class="search-icon" size={16} />
+        {#if isExpanded}
+          <input
+            type="text"
+            class="search-input"
+            placeholder={$t('nav.search')}
+            bind:value={sidebarSearchQuery}
+            bind:this={sidebarSearchInput}
+            oninput={handleSidebarSearchInput}
+            onclick={handleSidebarSearchClick}
+            onfocus={handleSidebarSearchFocus}
+            onkeydown={handleSidebarSearchKeydown}
+          />
+          {#if sidebarSearchQuery.trim()}
+            <button
+              type="button"
+              class="search-clear"
+              onclick={handleSidebarSearchClear}
+              title={$t('actions.clear')}
+            >
+              <X size={14} />
+            </button>
+          {/if}
+        {:else}
           <button
             type="button"
-            class="search-clear"
-            onclick={handleSidebarSearchClear}
-            title={$t('actions.clear')}
-          >
-            <X size={14} />
-          </button>
+            class="search-collapsed-btn"
+            onclick={() => handleViewChange('search')}
+            title={$t('nav.search')}
+          ></button>
         {/if}
-      {:else}
-        <button
-          type="button"
-          class="search-collapsed-btn"
-          onclick={() => handleViewChange('search')}
-          title={$t('nav.search')}
-        ></button>
-      {/if}
-    </div>
+      </div>
+    {/if}
 
     <!-- Navigation Section -->
     <nav class="nav-section">
@@ -1837,7 +1841,7 @@
     z-index: 2000;
     display: flex;
     flex-direction: column;
-    height: calc(100vh - 136px); /* 104px NowPlayingBar + 32px TitleBar */
+    height: calc(100vh - 140px); /* 104px NowPlayingBar + 36px TitleBar */
     transition: width 200ms ease, min-width 200ms ease;
   }
 

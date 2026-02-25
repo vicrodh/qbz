@@ -78,6 +78,12 @@
     setUseSystemTitleBar
   } from '$lib/stores/titleBarStore';
   import {
+    subscribe as subscribeSearchBarLocation,
+    getSearchBarLocation,
+    setSearchBarLocation,
+    type SearchBarLocation
+  } from '$lib/stores/searchBarLocationStore';
+  import {
     getPlaybackPreferences,
     setAutoplayMode,
     setShowContextIcon,
@@ -906,6 +912,9 @@
   let hideTitleBar = $state(getHideTitleBar());
   let useSystemTitleBar = $state(getUseSystemTitleBar());
 
+  // Search bar location
+  let searchInTitlebar = $state(getSearchBarLocation() === 'titlebar');
+
   // Immersive default view
   const IMMERSIVE_VIEW_KEYS = [
     'remember', 'coverflow', 'static', 'vinyl', 'visualizer',
@@ -1232,6 +1241,11 @@
       useSystemTitleBar = getUseSystemTitleBar();
     });
 
+    // Subscribe to search bar location changes
+    const unsubscribeSearchBarLoc = subscribeSearchBarLocation(() => {
+      searchInTitlebar = getSearchBarLocation() === 'titlebar';
+    });
+
     // Subscribe to blacklist state changes
     const unsubscribeBlacklist = subscribeBlacklist(() => {
       blacklistCount = getBlacklistCount();
@@ -1269,6 +1283,7 @@
       unsubscribeOffline();
       unsubscribeZoom();
       unsubscribeTitleBar();
+      unsubscribeSearchBarLoc();
       unsubscribeUpdates();
       unsubscribeBlacklist();
       settingsViewEl?.removeEventListener('scroll', handleScroll);
@@ -3957,6 +3972,17 @@
         <span class="setting-desc">{$t('settings.appearance.hideTitleBarDesc')}</span>
       </div>
       <Toggle enabled={hideTitleBar} onchange={(v) => setHideTitleBar(v)} disabled={useSystemTitleBar} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.searchInTitleBar')}</span>
+        <span class="setting-desc">{$t('settings.appearance.searchInTitleBarDesc')}</span>
+      </div>
+      <Toggle
+        enabled={searchInTitlebar}
+        onchange={(v) => setSearchBarLocation(v ? 'titlebar' : 'sidebar')}
+        disabled={hideTitleBar || useSystemTitleBar}
+      />
     </div>
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.immersiveDefaultView')}</span>
