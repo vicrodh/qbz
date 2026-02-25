@@ -152,7 +152,7 @@ export async function updateLocalCopiesSet(): Promise<void> {
   }
 
   try {
-    const trackIds = queue.map(t => parseInt(t.id)).filter(id => !isNaN(id));
+    const trackIds = queue.map(track => parseInt(track.id)).filter(id => !isNaN(id));
     if (trackIds.length === 0) {
       tracksWithLocalCopies = new Set();
       return;
@@ -164,10 +164,10 @@ export async function updateLocalCopiesSet(): Promise<void> {
     tracksWithLocalCopies = new Set(localIds);
 
     // Update queue availability
-    queue = queue.map(t => {
-      const numId = parseInt(t.id);
+    queue = queue.map(track => {
+      const numId = parseInt(track.id);
       return {
-        ...t,
+        ...track,
         available: isNaN(numId) || localTrackIds.has(numId) || tracksWithLocalCopies.has(numId)
       };
     });
@@ -188,7 +188,7 @@ export async function syncQueueState(): Promise<void> {
     const queueState = await invoke<BackendQueueState>('v2_get_queue_state');
 
     // Get track IDs for local copy check
-    const trackIds = queueState.upcoming.map(t => t.id);
+    const trackIds = queueState.upcoming.map(track => track.id);
 
     // Check local copies if in offline mode
     let localCopies = new Set<number>();
@@ -205,13 +205,13 @@ export async function syncQueueState(): Promise<void> {
     }
 
     // Convert backend queue tracks to frontend format
-    queue = queueState.upcoming.map(t => ({
-      id: String(t.id),
-      artwork: t.artwork_url || '',
-      title: t.title,
-      artist: t.artist,
-      duration: formatDuration(t.duration_secs),
-      available: !isOfflineMode || localTrackIds.has(t.id) || localCopies.has(t.id)
+    queue = queueState.upcoming.map(track => ({
+      id: String(track.id),
+      artwork: track.artwork_url || '',
+      title: track.title,
+      artist: track.artist,
+      duration: formatDuration(track.duration_secs),
+      available: !isOfflineMode || localTrackIds.has(track.id) || localCopies.has(track.id)
     }));
 
     queueTotalTracks = queueState.total_tracks;

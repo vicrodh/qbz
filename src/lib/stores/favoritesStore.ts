@@ -123,7 +123,7 @@ export async function syncFromApi(): Promise<void> {
       const items = response?.tracks?.items ?? [];
       if (items.length === 0) break;
 
-      allTrackIds.push(...items.map(t => t.id));
+      allTrackIds.push(...items.map(item => item.id));
       offset += items.length;
 
       // Check if we've fetched all
