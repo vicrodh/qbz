@@ -547,7 +547,7 @@
         artistResults = results;
         console.log('Artist results:', artistResults);
       } else if (activeTab === 'playlists') {
-        const results = await invoke<SearchResults<Playlist>>('search_playlists', {
+        const results = await invoke<SearchResults<Playlist>>('v2_search_playlists', {
           query: searchQuery,
           limit: PAGE_SIZE,
           offset: 0
@@ -619,7 +619,7 @@
         };
       } else if (activeTab === 'playlists' && playlistResults && hasMorePlaylists) {
         const newOffset = playlistResults.offset + playlistResults.items.length;
-        const moreResults = await invoke<SearchResults<Playlist>>('search_playlists', {
+        const moreResults = await invoke<SearchResults<Playlist>>('v2_search_playlists', {
           query: query.trim(),
           limit: PAGE_SIZE,
           offset: newOffset
