@@ -269,6 +269,7 @@
     onPlaylistShareQobuz?: (playlistId: number) => void;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
+    searchInTitlebar?: boolean;
   }
 
   let {
@@ -306,7 +307,8 @@
     onPlaylistCopyToLibrary,
     onPlaylistShareQobuz,
     activeTrackId = null,
-    isPlaybackActive = false
+    isPlaybackActive = false,
+    searchInTitlebar = false
   }: Props = $props();
 
   interface Album {
@@ -1099,22 +1101,24 @@
 
   <!-- Sticky Header Container -->
   <div class="sticky-header" class:scrolled={isScrolled}>
-    <div class="search-input-container" class:compact={isScrolled}>
-      <Search size={isScrolled ? 18 : 20} class="search-icon" />
-      <input
-        type="text"
-        placeholder={$t('search.placeholder')}
-        bind:value={query}
-        oninput={debounceSearch}
-        class="search-input"
-        bind:this={searchInput}
-      />
-      {#if query.trim()}
-        <button class="search-clear" onclick={clearSearch} aria-label={$t('actions.clear')}>
-          <X size={18} />
-        </button>
-      {/if}
-    </div>
+    {#if !searchInTitlebar}
+      <div class="search-input-container" class:compact={isScrolled}>
+        <Search size={isScrolled ? 18 : 20} class="search-icon" />
+        <input
+          type="text"
+          placeholder={$t('search.placeholder')}
+          bind:value={query}
+          oninput={debounceSearch}
+          class="search-input"
+          bind:this={searchInput}
+        />
+        {#if query.trim()}
+          <button class="search-clear" onclick={clearSearch} aria-label={$t('actions.clear')}>
+            <X size={18} />
+          </button>
+        {/if}
+      </div>
+    {/if}
 
     <!-- Tabs and Filters Row -->
     <div class="tabs-row">

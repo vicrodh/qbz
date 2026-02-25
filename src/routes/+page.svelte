@@ -3747,6 +3747,7 @@
             onPlaylistShareQobuz={sharePlaylistQobuzLinkById}
             activeTrackId={currentTrack?.id ?? null}
             isPlaybackActive={isPlaying}
+            searchInTitlebar={isSearchInTitlebar()}
           />
         {/if}
       {:else if activeView === 'settings'}
