@@ -81,6 +81,7 @@
     subscribe as subscribeSidebar,
     initSidebarStore,
     getIsExpanded,
+    expandSidebar,
     toggleSidebar
   } from '$lib/stores/sidebarStore';
 
@@ -2945,7 +2946,12 @@
     registerAction('playback.prev', handleSkipBack);
     registerAction('nav.back', navGoBack);
     registerAction('nav.forward', navGoForward);
-    registerAction('nav.search', () => sidebarRef?.focusSearch());
+    registerAction('nav.search', () => {
+      if (!getIsExpanded()) {
+        expandSidebar();
+      }
+      sidebarRef?.focusSearch();
+    });
     registerAction('ui.sidebar', toggleSidebar);
     registerAction('ui.focusMode', toggleFocusMode);
     registerAction('ui.queue', toggleQueue);

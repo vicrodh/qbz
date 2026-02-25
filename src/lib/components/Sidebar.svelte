@@ -470,13 +470,12 @@
   }
 
   // Focus and clear the search input (for keybinding)
-  export function focusSearch() {
+  export async function focusSearch() {
     sidebarSearchQuery = '';
     clearSearchState();
-    // Wait for next tick to ensure input is ready, then focus
-    setTimeout(() => {
-      sidebarSearchInput?.focus();
-    }, 0);
+    // Wait for Svelte to flush DOM updates (e.g. sidebar expanding)
+    await tick();
+    sidebarSearchInput?.focus();
   }
 
   // Update counts for a specific playlist (single source of truth from detail view)
