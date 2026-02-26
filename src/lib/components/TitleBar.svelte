@@ -372,7 +372,7 @@
     gap: 12px;
   }
   .window-controls.shape-circular.size-large {
-    gap: 18px;
+    gap: 15px;
   }
 
   /* Square shape: center buttons vertically with gap */
