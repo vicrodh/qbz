@@ -10,7 +10,7 @@
     setCustomAlbumCover,
     removeCustomAlbumCover as removeCustomCoverFromStore
   } from '$lib/stores/customAlbumCoverStore';
-  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, Loader2, CheckSquare } from 'lucide-svelte';
+  import { ArrowLeft, Play, Shuffle, Heart, Radio, CloudDownload, ChevronLeft, ChevronRight, Loader2, CheckSquare, BookOpen } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import AlbumMenu from '../AlbumMenu.svelte';
@@ -27,6 +27,8 @@
   } from '$lib/stores/albumFavoritesStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import ImageLightbox from '../ImageLightbox.svelte';
+  import BookletViewer from '../BookletViewer.svelte';
+  import type { QobuzGoody } from '$lib/types';
 
   interface Track {
     id: number;
@@ -68,6 +70,7 @@
       trackCount: number;
       duration: string;
       tracks: Track[];
+      goodies?: QobuzGoody[];
     };
     onBack: () => void;
     onArtistClick?: () => void;
@@ -165,6 +168,12 @@
   let isFavorite = $state(false);
   let isFavoriteLoading = $state(false);
   let lightboxOpen = $state(false);
+  let bookletOpen = $state(false);
+
+  // Booklet: find first PDF goody
+  const bookletGoody = $derived(
+    album.goodies?.find((goody: QobuzGoody) => goody.url && goody.url.endsWith('.pdf')) ?? null
+  );
 
   // Cover context menu
   let showCoverMenu = $state(false);
@@ -562,6 +571,15 @@
             </svg>
           </button>
         {/if}
+        {#if bookletGoody}
+          <button
+            class="action-btn-circle"
+            onclick={() => bookletOpen = true}
+            title={$t('album.viewBooklet')}
+          >
+            <BookOpen size={18} />
+          </button>
+        {/if}
         <AlbumMenu
           onPlayNext={onPlayAllNext}
           onPlayLater={onPlayAllLater}
@@ -749,6 +767,15 @@
   src={coverOverride ?? album.artwork}
   alt={album.title}
 />
+
+{#if bookletGoody}
+  <BookletViewer
+    isOpen={bookletOpen}
+    onClose={() => bookletOpen = false}
+    url={bookletGoody.original_url || bookletGoody.url}
+    title={bookletGoody.name || $t('album.booklet')}
+  />
+{/if}
 
 {#if showCoverMenu}
   <div
