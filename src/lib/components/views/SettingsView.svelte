@@ -84,6 +84,22 @@
     type SearchBarLocation
   } from '$lib/stores/searchBarLocationStore';
   import {
+    subscribe as subscribeWindowControls,
+    getWindowControls,
+    setButtonPosition,
+    setButtonShape,
+    setButtonSize,
+    applyPreset,
+    setPresetCustom,
+    setButtonColor,
+    PRESETS,
+    type ButtonPosition,
+    type ButtonShape,
+    type ButtonSize,
+    type ButtonColorSet,
+    type WindowControlsConfig
+  } from '$lib/stores/windowControlsStore';
+  import {
     getPlaybackPreferences,
     setAutoplayMode,
     setShowContextIcon,
@@ -279,25 +295,9 @@
   let blacklistCount = $state(getBlacklistCount());
   let blacklistEnabled = $state(isBlacklistEnabled());
 
-  // Section navigation
-  let settingsViewEl: HTMLDivElement;
-  let audioSection: HTMLElement;
-  let playbackSection: HTMLElement;
-  let offlineModeSection: HTMLElement;
-  let appearanceSection: HTMLElement;
-  let downloadsSection: HTMLElement;
-  let contentFilteringSection: HTMLElement;
-  let integrationsSection: HTMLElement;
-  let remoteControlSection: HTMLElement;
-  let updatesSection: HTMLElement;
-  let storageSection: HTMLElement;
-  let flatpakSection = $state<HTMLElement | null>(null);
+  // Section navigation (tab-based: one section visible at a time)
   let activeSection = $state('audio');
 
-  // Collapsible sections state (closed by default)
-  let offlineLibraryCollapsed = $state(true);
-  let storageCollapsed = $state(true);
-  let developerCollapsed = $state(true);
   let forceDmabuf = $state(false);
   let hardwareAcceleration = $state(true);
   let verboseLogCapture = $state(false);
@@ -354,14 +354,13 @@
   const navSectionIds = [
     { id: 'audio', labelKey: 'settings.audio.title' },
     { id: 'playback', labelKey: 'settings.playback.title' },
-    { id: 'offline', labelKey: 'offline.title' },
     { id: 'appearance', labelKey: 'settings.appearance.title' },
     { id: 'downloads', labelKey: 'settings.offlineLibrary.title' },
     { id: 'content-filtering', labelKey: 'settings.contentFiltering.title' },
     { id: 'integrations', labelKey: 'settings.integrations.title' },
     { id: 'updates', labelKey: 'nav.updates' },
-    { id: 'remote-control', labelKey: 'settings.integrations.remoteControl' },
     { id: 'storage', labelKey: 'settings.storage.title' },
+    { id: 'developer', labelKey: 'settings.developer.title' },
   ];
 
   // Navigation section definitions (dynamic: includes Flatpak only when running in Flatpak)
@@ -372,30 +371,6 @@
       : navSectionIds
   );
 
-  // Get section element by id (resolved at call time, not definition time)
-  function getSectionEl(id: string): HTMLElement | null {
-    switch (id) {
-      case 'audio': return audioSection;
-      case 'playback': return playbackSection;
-      case 'offline': return offlineModeSection;
-      case 'appearance': return appearanceSection;
-      case 'downloads': return downloadsSection;
-      case 'content-filtering': return contentFilteringSection;
-      case 'integrations': return integrationsSection;
-      case 'remote-control': return remoteControlSection;
-      case 'updates': return updatesSection;
-      case 'storage': return storageSection;
-      case 'flatpak': return flatpakSection;
-      default: return null;
-    }
-  }
-
-  function scrollToSection(id: string) {
-    const el = getSectionEl(id);
-    if (!el) return;
-    activeSection = id;
-    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
 
   async function handleUpdateCheckOnLaunchToggle(enabled: boolean): Promise<void> {
     await setCheckOnLaunch(enabled);
@@ -915,6 +890,128 @@
   // Search bar location
   let searchInTitlebar = $state(getSearchBarLocation() === 'titlebar');
 
+  // Window controls customization
+  let wcConfig = $state<WindowControlsConfig>(getWindowControls());
+
+  const POSITION_ENTRIES: Array<{ key: ButtonPosition; i18nSuffix: string }> = [
+    { key: 'right', i18nSuffix: 'Right' },
+    { key: 'left', i18nSuffix: 'Left' },
+  ];
+  const SHAPE_ENTRIES: Array<{ key: ButtonShape; i18nSuffix: string }> = [
+    { key: 'rectangular', i18nSuffix: 'Rectangular' },
+    { key: 'circular', i18nSuffix: 'Circular' },
+    { key: 'square', i18nSuffix: 'Square' },
+  ];
+  const PRESET_ENTRIES: Array<{ key: string; i18nSuffix: string }> = [
+    { key: 'default', i18nSuffix: 'Default' },
+    { key: 'macos', i18nSuffix: 'MacOS' },
+    { key: 'adwaita', i18nSuffix: 'Adwaita' },
+    { key: 'monochrome', i18nSuffix: 'Monochrome' },
+    { key: 'custom', i18nSuffix: 'Custom' },
+  ];
+
+  function getWcPositionOptions(): string[] {
+    return POSITION_ENTRIES.map(entry => $t(`settings.appearance.windowControlsPosition${entry.i18nSuffix}`));
+  }
+
+  function getWcPositionDisplay(): string {
+    const entry = POSITION_ENTRIES.find(entry => entry.key === wcConfig.position) ?? POSITION_ENTRIES[0];
+    return $t(`settings.appearance.windowControlsPosition${entry.i18nSuffix}`);
+  }
+
+  function handleWcPositionChange(displayValue: string): void {
+    const options = getWcPositionOptions();
+    const index = options.indexOf(displayValue);
+    if (index >= 0) {
+      setButtonPosition(POSITION_ENTRIES[index].key);
+    }
+  }
+
+  function getWcShapeOptions(): string[] {
+    return SHAPE_ENTRIES.map(entry => $t(`settings.appearance.windowControlsStyle${entry.i18nSuffix}`));
+  }
+
+  function getWcShapeDisplay(): string {
+    const entry = SHAPE_ENTRIES.find(entry => entry.key === wcConfig.shape) ?? SHAPE_ENTRIES[0];
+    return $t(`settings.appearance.windowControlsStyle${entry.i18nSuffix}`);
+  }
+
+  function handleWcShapeChange(displayValue: string): void {
+    const options = getWcShapeOptions();
+    const index = options.indexOf(displayValue);
+    if (index >= 0) {
+      setButtonShape(SHAPE_ENTRIES[index].key);
+    }
+  }
+
+  function getWcPresetOptions(): string[] {
+    return PRESET_ENTRIES.map(entry => $t(`settings.appearance.windowControlsColorPreset${entry.i18nSuffix}`));
+  }
+
+  function getWcPresetDisplay(): string {
+    const entry = PRESET_ENTRIES.find(entry => entry.key === wcConfig.preset) ?? PRESET_ENTRIES[0];
+    return $t(`settings.appearance.windowControlsColorPreset${entry.i18nSuffix}`);
+  }
+
+  function handleWcPresetChange(displayValue: string): void {
+    const options = getWcPresetOptions();
+    const index = options.indexOf(displayValue);
+    if (index >= 0) {
+      const presetKey = PRESET_ENTRIES[index].key;
+      if (presetKey === 'custom') {
+        setPresetCustom();
+      } else {
+        applyPreset(presetKey);
+      }
+    }
+  }
+
+  const SIZE_ENTRIES: Array<{ key: ButtonSize; i18nSuffix: string }> = [
+    { key: 'small', i18nSuffix: 'Small' },
+    { key: 'normal', i18nSuffix: 'Normal' },
+    { key: 'large', i18nSuffix: 'Large' },
+  ];
+
+  function getWcSizeOptions(): string[] {
+    return SIZE_ENTRIES.map(entry => $t(`settings.appearance.windowControlsSize${entry.i18nSuffix}`));
+  }
+
+  function getWcSizeDisplay(): string {
+    const entry = SIZE_ENTRIES.find(entry => entry.key === wcConfig.size) ?? SIZE_ENTRIES[1];
+    return $t(`settings.appearance.windowControlsSize${entry.i18nSuffix}`);
+  }
+
+  function handleWcSizeChange(displayValue: string): void {
+    const options = getWcSizeOptions();
+    const index = options.indexOf(displayValue);
+    if (index >= 0) {
+      setButtonSize(SIZE_ENTRIES[index].key);
+    }
+  }
+
+  const WC_BUTTONS = ['close', 'maximize', 'minimize'] as const;
+  const WC_COLOR_FIELDS = ['bg', 'bgHover', 'bgActive', 'fg', 'fgHover', 'fgActive'] as const;
+
+  function getWcColor(button: 'close' | 'maximize' | 'minimize', field: keyof ButtonColorSet): string {
+    const colorSet = wcConfig[`${button}Colors` as keyof WindowControlsConfig] as ButtonColorSet;
+    const val = colorSet?.[field];
+    if (!val) return '#888888';
+    // Convert named/rgba colors to hex for color input (best effort)
+    if (val === 'transparent') return '#000000';
+    if (val.startsWith('#')) return val.length === 7 ? val : val;
+    if (val.startsWith('rgba')) {
+      // Parse rgba to hex (ignore alpha)
+      const match = val.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+      if (match) {
+        const r = parseInt(match[1]).toString(16).padStart(2, '0');
+        const g = parseInt(match[2]).toString(16).padStart(2, '0');
+        const b = parseInt(match[3]).toString(16).padStart(2, '0');
+        return `#${r}${g}${b}`;
+      }
+    }
+    return '#888888';
+  }
+
   // Immersive default view
   const IMMERSIVE_VIEW_KEYS = [
     'remember', 'coverflow', 'static', 'vinyl', 'visualizer',
@@ -1010,7 +1107,6 @@
   let remoteControlQrData = $state('');
   let remoteControlUrl = $state('');
   let showRemoteControlGuide = $state(false);
-  let remoteControlCollapsed = $state(true);
 
   // Plex LAN POC state
   let plexEnabled = $state(getUserItem('qbz-plex-enabled') === 'true');
@@ -1246,35 +1342,16 @@
       searchInTitlebar = getSearchBarLocation() === 'titlebar';
     });
 
+    // Subscribe to window controls customization changes
+    const unsubscribeWindowControls = subscribeWindowControls(() => {
+      wcConfig = getWindowControls();
+    });
+
     // Subscribe to blacklist state changes
     const unsubscribeBlacklist = subscribeBlacklist(() => {
       blacklistCount = getBlacklistCount();
       blacklistEnabled = isBlacklistEnabled();
     });
-
-    // Scroll tracking for navigation
-    const handleScroll = () => {
-      if (!settingsViewEl) return;
-      const offset = 60; // Account for sticky nav height
-
-      // Find which section is currently in view
-      for (const def of navSectionDefs) {
-        const el = getSectionEl(def.id);
-        if (!el) continue;
-        const rect = el.getBoundingClientRect();
-        const containerRect = settingsViewEl.getBoundingClientRect();
-        const relativeTop = rect.top - containerRect.top;
-
-        if (relativeTop <= offset + 50 && relativeTop + rect.height > offset) {
-          if (activeSection !== def.id) {
-            activeSection = def.id;
-          }
-          break;
-        }
-      }
-    };
-
-    settingsViewEl?.addEventListener('scroll', handleScroll);
 
     return () => {
       if (plexAuthPollTimer) {
@@ -1284,9 +1361,9 @@
       unsubscribeZoom();
       unsubscribeTitleBar();
       unsubscribeSearchBarLoc();
+      unsubscribeWindowControls();
       unsubscribeUpdates();
       unsubscribeBlacklist();
-      settingsViewEl?.removeEventListener('scroll', handleScroll);
     };
   });
 
@@ -3357,7 +3434,7 @@
 </script>
 
 <ViewTransition duration={200} distance={12} direction="up">
-<div class="settings-view" bind:this={settingsViewEl}>
+<div class="settings-view">
   <!-- Loading Overlay for Device Enumeration -->
   {#if isLoadingDevices}
     <div class="loading-overlay">
@@ -3399,7 +3476,7 @@
       <button
         class="nav-link"
         class:active={activeSection === section.id}
-        onclick={() => scrollToSection(section.id)}
+        onclick={() => activeSection = section.id}
       >
         {$t(section.labelKey)}
       </button>
@@ -3407,7 +3484,8 @@
   </nav>
 
   <!-- Audio Section -->
-  <section class="section" bind:this={audioSection}>
+  {#if activeSection === 'audio'}
+  <section class="section">
     <h3 class="section-title">{$t('settings.audio.title')}</h3>
     <div class="setting-row">
       <div class="setting-info">
@@ -3649,9 +3727,11 @@
       </button>
     </div>
   </section>
+  {/if}
 
   <!-- Playback Section -->
-  <section class="section" bind:this={playbackSection}>
+  {#if activeSection === 'playback'}
+  <section class="section">
     <h3 class="section-title">{$t('settings.playback.title')}</h3>
     <div class="setting-row">
       <div class="setting-info">
@@ -3724,82 +3804,11 @@
       <Toggle enabled={normalizeVolume} onchange={(v) => (normalizeVolume = v)} />
     </div> -->
   </section>
-
-  <!-- Offline Mode Section -->
-  <section class="section" bind:this={offlineModeSection}>
-    <h3 class="section-title">{$t('offline.title')}</h3>
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('offline.status')}</span>
-        <span class="setting-desc status-indicator" class:offline={offlineStatus.isOffline}>
-          {#if offlineStatus.isOffline}
-            {#if offlineStatus.reason === 'no_network'}
-              {$t('offline.noNetwork')}
-            {:else if offlineStatus.reason === 'not_logged_in'}
-              {$t('offline.notLoggedIn')}
-            {:else if offlineStatus.reason === 'manual_override'}
-              {$t('offline.manualMode')}
-            {:else}
-              {$t('offline.offlineReason')}
-            {/if}
-          {:else}
-            {$t('offline.online')}
-          {/if}
-        </span>
-      </div>
-    </div>
-    <div class="setting-row" class:last={!offlineSettings.manualOfflineMode}>
-      <div class="setting-info">
-        <span class="setting-label">{$t('offline.enableManual')}</span>
-        <span class="setting-desc">{$t('offline.enableManualDesc')}</span>
-      </div>
-      <Toggle enabled={offlineSettings.manualOfflineMode} onchange={handleManualOfflineChange} />
-    </div>
-    <!-- Temporarily disabled: Show Partial Playlists -->
-    <!-- <div class="setting-row" class:last={!offlineSettings.manualOfflineMode}>
-      <div class="setting-info">
-        <span class="setting-label">{$t('offline.showPartialPlaylists')}</span>
-        <span class="setting-desc">{$t('offline.showPartialPlaylistsDesc')}</span>
-      </div>
-      <Toggle enabled={offlineSettings.showPartialPlaylists} onchange={handleShowPartialPlaylistsChange} />
-    </div> -->
-
-    <!-- Manual offline mode specific settings -->
-    {#if offlineSettings.manualOfflineMode}
-      <div class="setting-row">
-        <div class="setting-info">
-          <span class="setting-label">{$t('offline.allowCast')}</span>
-          <span class="setting-desc">{$t('offline.allowCastDesc')}</span>
-        </div>
-        <Toggle enabled={offlineSettings.allowCastWhileOffline} onchange={handleAllowCastChange} />
-      </div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <span class="setting-label">{$t('offline.allowImmediateScrobbling')}</span>
-          <span class="setting-desc">{$t('offline.allowImmediateScrobblingDesc')}</span>
-        </div>
-        <Toggle enabled={offlineSettings.allowImmediateScrobbling} onchange={handleAllowImmediateScrobblingChange} />
-      </div>
-      <div class="setting-row">
-        <div class="setting-info">
-          <span class="setting-label">{$t('offline.allowAccumulatedScrobbling')}</span>
-          <span class="setting-desc">{$t('offline.allowAccumulatedScrobblingDesc')}</span>
-          <small class="setting-note">{$t('offline.scrobbleTimeLimit')}</small>
-        </div>
-        <Toggle enabled={offlineSettings.allowAccumulatedScrobbling} onchange={handleAllowAccumulatedScrobblingChange} />
-      </div>
-      <div class="setting-row last">
-        <div class="setting-info">
-          <span class="setting-label">{$t('offline.showNetworkFolders')}</span>
-          <span class="setting-desc">{$t('offline.showNetworkFoldersDesc')}</span>
-        </div>
-        <Toggle enabled={offlineSettings.showNetworkFoldersInManualOffline} onchange={handleShowNetworkFoldersChange} />
-      </div>
-    {/if}
-  </section>
+  {/if}
 
   <!-- Appearance Section -->
-  <section class="section" bind:this={appearanceSection}>
+  {#if activeSection === 'appearance'}
+  <section class="section">
     <h3 class="section-title">{$t('settings.appearance.title')}</h3>
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.theme')}</span>
@@ -3984,6 +3993,79 @@
         disabled={hideTitleBar || useSystemTitleBar}
       />
     </div>
+    <div class="setting-row" class:disabled-section={hideTitleBar || useSystemTitleBar}>
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.windowControlsPosition')}</span>
+        <span class="setting-desc">{$t('settings.appearance.windowControlsPositionDesc')}</span>
+      </div>
+      <Dropdown
+        value={getWcPositionDisplay()}
+        options={getWcPositionOptions()}
+        onchange={handleWcPositionChange}
+      />
+    </div>
+    <div class="setting-row" class:disabled-section={hideTitleBar || useSystemTitleBar}>
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.windowControlsStyle')}</span>
+        <span class="setting-desc">{$t('settings.appearance.windowControlsStyleDesc')}</span>
+      </div>
+      <Dropdown
+        value={getWcShapeDisplay()}
+        options={getWcShapeOptions()}
+        onchange={handleWcShapeChange}
+      />
+    </div>
+    <div class="setting-row" class:disabled-section={hideTitleBar || useSystemTitleBar}>
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.windowControlsSize')}</span>
+        <span class="setting-desc">{$t('settings.appearance.windowControlsSizeDesc')}</span>
+      </div>
+      <Dropdown
+        value={getWcSizeDisplay()}
+        options={getWcSizeOptions()}
+        onchange={handleWcSizeChange}
+      />
+    </div>
+    <div class="setting-row" class:disabled-section={hideTitleBar || useSystemTitleBar}>
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.windowControlsColorPreset')}</span>
+        <span class="setting-desc">{$t('settings.appearance.windowControlsColorPresetDesc')}</span>
+      </div>
+      <Dropdown
+        value={getWcPresetDisplay()}
+        options={getWcPresetOptions()}
+        onchange={handleWcPresetChange}
+      />
+    </div>
+    {#if wcConfig.preset === 'custom'}
+      <div class="wc-custom-panel" class:disabled-section={hideTitleBar || useSystemTitleBar}>
+        <span class="wc-custom-panel-title">{$t('settings.appearance.windowControlsCustomColors')}</span>
+        {#each WC_BUTTONS as btn}
+          <div class="wc-color-group">
+            <span class="wc-color-group-label">{$t(`settings.appearance.windowControls${btn.charAt(0).toUpperCase() + btn.slice(1)}`)}</span>
+            <div class="wc-color-swatches">
+              {#each WC_COLOR_FIELDS as field}
+                <label class="palette-swatch-wrapper" title={$t(`settings.appearance.windowControls${field.charAt(0).toUpperCase() + field.slice(1)}`)}>
+                  <div
+                    class="palette-swatch"
+                    style="background-color: {getWcColor(btn, field)}"
+                  ></div>
+                  <span class="palette-swatch-label">{$t(`settings.appearance.windowControls${field.charAt(0).toUpperCase() + field.slice(1)}`)}</span>
+                  <input
+                    type="color"
+                    class="palette-swatch-input"
+                    value={getWcColor(btn, field)}
+                    oninput={(ev) => {
+                      setButtonColor(btn, field, ev.currentTarget.value);
+                    }}
+                  />
+                </label>
+              {/each}
+            </div>
+          </div>
+        {/each}
+      </div>
+    {/if}
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.immersiveDefaultView')}</span>
       <Dropdown
@@ -4174,88 +4256,145 @@
       <Toggle enabled={closeToTray} onchange={(v) => handleCloseToTrayChange(v)} disabled={!enableTray} />
     </div>
   </section>
+  {/if}
 
+  <!-- Offline Library & Offline Mode Section (merged) -->
+  {#if activeSection === 'downloads'}
+  <section class="section">
+    <h3 class="section-title">{$t('settings.offlineLibrary.title')}</h3>
 
-  <!-- Offline Library Section -->
-  <section class="section collapsible-section" bind:this={downloadsSection}>
-    <button class="section-title-btn" onclick={() => offlineLibraryCollapsed = !offlineLibraryCollapsed}>
-      <h3 class="section-title">{$t('settings.offlineLibrary.title')}</h3>
-      <span class="section-summary">{$t('settings.offlineLibrary.sectionSummary')}</span>
-      {#if offlineLibraryCollapsed}
-        <ChevronDown size={16} />
-      {:else}
-        <ChevronUp size={16} />
-      {/if}
-    </button>
-    {#if !offlineLibraryCollapsed}
-      <p class="section-note">{$t('settings.offlineLibrary.disclaimer')}</p>
-      <div class="setting-row">
-        <span class="setting-label">{$t('settings.offlineLibrary.cachedTracks')}</span>
-        <span class="setting-value">
-          {#if downloadStats}
-            {downloadStats.readyTracks} tracks ({formatBytes(downloadStats.totalSizeBytes)})
+    <!-- Offline Mode settings -->
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('offline.status')}</span>
+        <span class="setting-desc status-indicator" class:offline={offlineStatus.isOffline}>
+          {#if offlineStatus.isOffline}
+            {#if offlineStatus.reason === 'no_network'}
+              {$t('offline.noNetwork')}
+            {:else if offlineStatus.reason === 'not_logged_in'}
+              {$t('offline.notLoggedIn')}
+            {:else if offlineStatus.reason === 'manual_override'}
+              {$t('offline.manualMode')}
+            {:else}
+              {$t('offline.offlineReason')}
+            {/if}
           {:else}
-            Loading...
+            {$t('offline.online')}
           {/if}
         </span>
       </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('offline.enableManual')}</span>
+        <span class="setting-desc">{$t('offline.enableManualDesc')}</span>
+      </div>
+      <Toggle enabled={offlineSettings.manualOfflineMode} onchange={handleManualOfflineChange} />
+    </div>
+
+    <!-- Manual offline mode specific settings -->
+    {#if offlineSettings.manualOfflineMode}
       <div class="setting-row">
-        <div class="setting-with-description">
-          <span class="setting-label">{$t('settings.offlineLibrary.showInLibrary')}</span>
-          <span class="setting-description">{$t('settings.offlineLibrary.showInLibraryDesc')}</span>
+        <div class="setting-info">
+          <span class="setting-label">{$t('offline.allowCast')}</span>
+          <span class="setting-desc">{$t('offline.allowCastDesc')}</span>
         </div>
-        <Toggle enabled={showQobuzDownloadsInLibrary} onchange={handleShowDownloadsChange} />
+        <Toggle enabled={offlineSettings.allowCastWhileOffline} onchange={handleAllowCastChange} />
       </div>
       <div class="setting-row">
-        <div class="setting-with-description">
-          <span class="setting-label">{$t('settings.offlineLibrary.repair')}</span>
-          <span class="setting-description">{$t('settings.offlineLibrary.repairDesc')}</span>
+        <div class="setting-info">
+          <span class="setting-label">{$t('offline.allowImmediateScrobbling')}</span>
+          <span class="setting-desc">{$t('offline.allowImmediateScrobblingDesc')}</span>
         </div>
-        <button
-          class="clear-btn"
-          onclick={handleRepairDownloads}
-          disabled={isRepairingDownloads || !downloadStats || downloadStats.readyTracks === 0}
-        >
-          {isRepairingDownloads ? $t('settings.offlineLibrary.repairing') : $t('actions.repair')}
-        </button>
+        <Toggle enabled={offlineSettings.allowImmediateScrobbling} onchange={handleAllowImmediateScrobblingChange} />
       </div>
       <div class="setting-row">
-        <span class="setting-label">{$t('settings.offlineLibrary.clearCache')}</span>
-        <button
-          class="clear-btn"
-          onclick={handleClearDownloads}
-          disabled={isClearingDownloads || !downloadStats || downloadStats.readyTracks === 0}
-        >
-          {isClearingDownloads ? $t('settings.storage.clearing') : $t('settings.offlineLibrary.clearCache')}
-        </button>
+        <div class="setting-info">
+          <span class="setting-label">{$t('offline.allowAccumulatedScrobbling')}</span>
+          <span class="setting-desc">{$t('offline.allowAccumulatedScrobblingDesc')}</span>
+          <small class="setting-note">{$t('offline.scrobbleTimeLimit')}</small>
+        </div>
+        <Toggle enabled={offlineSettings.allowAccumulatedScrobbling} onchange={handleAllowAccumulatedScrobblingChange} />
       </div>
       <div class="setting-row">
-        <div class="setting-with-description">
-          <span class="setting-label">{$t('settings.offlineLibrary.manageCache')}</span>
-          <span class="setting-description">{$t('settings.offlineLibrary.manageCacheDesc')}</span>
+        <div class="setting-info">
+          <span class="setting-label">{$t('offline.showNetworkFolders')}</span>
+          <span class="setting-desc">{$t('offline.showNetworkFoldersDesc')}</span>
         </div>
-        <button
-          class="clear-btn"
-          onclick={handleOpenCacheFolder}
-        >
-          {$t('settings.offlineLibrary.openFolder')}
-        </button>
-      </div>
-      <div class="setting-row last">
-        <div class="setting-with-description">
-          <span class="setting-label">{$t('settings.library.fetchArtistImages')}</span>
-          <span class="setting-description">{$t('settings.library.fetchArtistImagesDesc')}</span>
-        </div>
-        <Toggle enabled={fetchQobuzArtistImages} onchange={(v) => {
-          fetchQobuzArtistImages = v;
-          setUserItem('qbz-fetch-artist-images', String(v));
-        }} />
+        <Toggle enabled={offlineSettings.showNetworkFoldersInManualOffline} onchange={handleShowNetworkFoldersChange} />
       </div>
     {/if}
+
+    <!-- Offline Library / Cache management -->
+    <p class="section-note">{$t('settings.offlineLibrary.disclaimer')}</p>
+    <div class="setting-row">
+      <span class="setting-label">{$t('settings.offlineLibrary.cachedTracks')}</span>
+      <span class="setting-value">
+        {#if downloadStats}
+          {downloadStats.readyTracks} tracks ({formatBytes(downloadStats.totalSizeBytes)})
+        {:else}
+          Loading...
+        {/if}
+      </span>
+    </div>
+    <div class="setting-row">
+      <div class="setting-with-description">
+        <span class="setting-label">{$t('settings.offlineLibrary.showInLibrary')}</span>
+        <span class="setting-description">{$t('settings.offlineLibrary.showInLibraryDesc')}</span>
+      </div>
+      <Toggle enabled={showQobuzDownloadsInLibrary} onchange={handleShowDownloadsChange} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-with-description">
+        <span class="setting-label">{$t('settings.offlineLibrary.repair')}</span>
+        <span class="setting-description">{$t('settings.offlineLibrary.repairDesc')}</span>
+      </div>
+      <button
+        class="clear-btn"
+        onclick={handleRepairDownloads}
+        disabled={isRepairingDownloads || !downloadStats || downloadStats.readyTracks === 0}
+      >
+        {isRepairingDownloads ? $t('settings.offlineLibrary.repairing') : $t('actions.repair')}
+      </button>
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">{$t('settings.offlineLibrary.clearCache')}</span>
+      <button
+        class="clear-btn"
+        onclick={handleClearDownloads}
+        disabled={isClearingDownloads || !downloadStats || downloadStats.readyTracks === 0}
+      >
+        {isClearingDownloads ? $t('settings.storage.clearing') : $t('settings.offlineLibrary.clearCache')}
+      </button>
+    </div>
+    <div class="setting-row">
+      <div class="setting-with-description">
+        <span class="setting-label">{$t('settings.offlineLibrary.manageCache')}</span>
+        <span class="setting-description">{$t('settings.offlineLibrary.manageCacheDesc')}</span>
+      </div>
+      <button
+        class="clear-btn"
+        onclick={handleOpenCacheFolder}
+      >
+        {$t('settings.offlineLibrary.openFolder')}
+      </button>
+    </div>
+    <div class="setting-row last">
+      <div class="setting-with-description">
+        <span class="setting-label">{$t('settings.library.fetchArtistImages')}</span>
+        <span class="setting-description">{$t('settings.library.fetchArtistImagesDesc')}</span>
+      </div>
+      <Toggle enabled={fetchQobuzArtistImages} onchange={(v) => {
+        fetchQobuzArtistImages = v;
+        setUserItem('qbz-fetch-artist-images', String(v));
+      }} />
+    </div>
   </section>
+  {/if}
 
   <!-- Content Filtering Section -->
-  <section class="section" bind:this={contentFilteringSection}>
+  {#if activeSection === 'content-filtering'}
+  <section class="section">
     <h3 class="section-title">{$t('settings.contentFiltering.title')}</h3>
     <div class="setting-row last">
       <div class="setting-info">
@@ -4278,9 +4417,11 @@
       </button>
     </div>
   </section>
+  {/if}
 
   <!-- Integrations Section -->
-  <section class="section" bind:this={integrationsSection}>
+  {#if activeSection === 'integrations'}
+  <section class="section">
     <h3 class="section-title">{$t('settings.integrations.title')}</h3>
 
     <!-- Qobuz Link Handler -->
@@ -4650,9 +4791,11 @@
       </div>
     {/if}
   </section>
+  {/if}
 
   <!-- Updates Section -->
-  <section class="section" bind:this={updatesSection}>
+  {#if activeSection === 'updates'}
+  <section class="section">
     <h3 class="section-title">{$t('settings.updates.title')}</h3>
 
     <div class="setting-row">
@@ -4711,171 +4854,7 @@
       </button>
     </div>
   </section>
-
-  <!-- Remote Control Section (collapsible) -->
-  <section class="section collapsible-section" id="remote-control" bind:this={remoteControlSection}>
-    <button class="section-title-btn" onclick={() => remoteControlCollapsed = !remoteControlCollapsed}>
-      <h3 class="section-title">{$t('settings.integrations.remoteControl')}</h3>
-      <span class="experimental-badge">{$t('settings.integrations.remoteControlExperimental')}</span>
-      {#if remoteControlCollapsed}
-        <ChevronDown size={16} />
-      {:else}
-        <ChevronUp size={16} />
-      {/if}
-    </button>
-    {#if !remoteControlCollapsed}
-    <!-- TODO: Re-enable when setup guide content is complete
-    <div class="section-header-actions">
-      <button class="setup-guide-btn" onclick={() => showRemoteControlGuide = true}>
-        {$t('settings.integrations.remoteControlSetupGuide')}
-      </button>
-    </div>
-    -->
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.integrations.remoteControlEnable')}</span>
-        <small class="setting-note">
-          {$t('settings.integrations.remoteControlDesc')}
-        </small>
-      </div>
-      <Toggle
-        enabled={remoteControlEnabled}
-        onchange={handleRemoteControlToggle}
-        disabled={remoteControlLoading}
-      />
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.integrations.remoteControlPort')}</span>
-        <small class="setting-note">
-          {$t('settings.integrations.remoteControlPortDesc')}
-        </small>
-      </div>
-      <input
-        class="remote-control-input"
-        type="number"
-        min="1024"
-        max="65535"
-        bind:value={remoteControlPort}
-        disabled={!remoteControlEnabled || remoteControlLoading}
-        onchange={(e) => handleRemoteControlPortChange(Number((e.target as HTMLInputElement).value))}
-      />
-    </div>
-
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.integrations.remoteControlSecure')}</span>
-        <small class="setting-note">
-          {$t('settings.integrations.remoteControlSecureDesc')}
-        </small>
-      </div>
-      <Toggle
-        enabled={remoteControlSecure}
-        onchange={handleRemoteControlSecureChange}
-        disabled={!remoteControlEnabled || remoteControlLoading}
-      />
-    </div>
-
-    {#if remoteControlEnabled}
-      <div class="setting-row">
-        <div class="setting-info">
-          <span class="setting-label">{$t('settings.integrations.remoteControlToken')}</span>
-          <small class="setting-note">
-            {$t('settings.integrations.remoteControlTokenDesc')}
-          </small>
-        </div>
-        <div class="remote-control-actions">
-          <input
-            class="remote-control-input"
-            type="text"
-            readonly
-            value={remoteControlToken}
-            disabled={!remoteControlEnabled || remoteControlLoading}
-          />
-          <button
-            class="connect-btn connected"
-            onclick={handleRemoteControlCopyToken}
-            disabled={!remoteControlEnabled || remoteControlLoading || !remoteControlToken}
-          >
-            {$t('actions.copy')}
-          </button>
-        </div>
-      </div>
-    {/if}
-
-    {#if remoteControlEnabled && remoteControlSecure}
-      <div class="setting-row">
-        <div class="setting-info">
-          <span class="setting-label">{$t('settings.integrations.remoteControlCert')}</span>
-          <small class="setting-note">
-            {$t('settings.integrations.remoteControlCertDesc')}
-          </small>
-        </div>
-        <div class="remote-control-actions">
-          <input
-            class="remote-control-input"
-            type="text"
-            readonly
-            value={remoteControlCertUrl}
-            disabled={!remoteControlEnabled || remoteControlLoading}
-          />
-          <button
-            class="connect-btn connected"
-            onclick={handleRemoteControlCopyCert}
-            disabled={!remoteControlEnabled || remoteControlLoading || !remoteControlCertUrl}
-          >
-            {$t('actions.copy')}
-          </button>
-        </div>
-      </div>
-    {/if}
-
-    <div class="setting-row" class:last={!remoteControlQrOpen}>
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.integrations.remoteControlStatus')}</span>
-        <small class="setting-note">
-          {#if remoteControlStatus?.running}
-            {$t('settings.integrations.remoteControlStatusRunning')}
-          {:else}
-            {$t('settings.integrations.remoteControlStatusStopped')}
-          {/if}
-          {#if remoteControlUrl}
-            <span class="remote-control-url">{$t('settings.integrations.remoteControlUrlLabel')}: {remoteControlUrl}</span>
-          {/if}
-        </small>
-      </div>
-      <div class="remote-control-actions">
-        <button
-          class="connect-btn connected"
-          onclick={handleRemoteControlRegenerateToken}
-          disabled={!remoteControlEnabled || remoteControlLoading}
-        >
-          {$t('settings.integrations.remoteControlRegenerate')}
-        </button>
-        <button
-          class="connect-btn"
-          onclick={() => handleRemoteControlQrToggle()}
-          disabled={!remoteControlEnabled || remoteControlLoading}
-        >
-          {remoteControlQrOpen
-            ? $t('settings.integrations.remoteControlHideQr')
-            : $t('settings.integrations.remoteControlShowQr')}
-        </button>
-      </div>
-    </div>
-
-    {#if remoteControlQrOpen}
-      <div class="remote-control-qr">
-        <img src={remoteControlQrData} alt={$t('settings.integrations.remoteControlQrAlt')} />
-        <div class="remote-control-qr-meta">
-          <p class="remote-control-qr-help">{$t('settings.integrations.remoteControlQrHelp')}</p>
-        </div>
-      </div>
-    {/if}
-    {/if}
-  </section>
+  {/if}
 
   {#if isUpdateResultOpen}
     <UpdateCheckResultModal
@@ -4897,17 +4876,9 @@
   {/if}
 
   <!-- Storage Section (Memory Cache) -->
-  <section class="section collapsible-section" bind:this={storageSection}>
-    <button class="section-title-btn" onclick={() => storageCollapsed = !storageCollapsed}>
-      <h3 class="section-title">{$t('settings.storage.title')}</h3>
-      <span class="section-summary">{$t('settings.storage.sectionSummary')}</span>
-      {#if storageCollapsed}
-        <ChevronDown size={16} />
-      {:else}
-        <ChevronUp size={16} />
-      {/if}
-    </button>
-    {#if !storageCollapsed}
+  {#if activeSection === 'storage'}
+  <section class="section">
+    <h3 class="section-title">{$t('settings.storage.title')}</h3>
     <p class="section-note">{$t('settings.storage.queueCacheNote')}</p>
     <div class="setting-row">
       <div class="setting-info">
@@ -5059,21 +5030,13 @@
         </div>
       </div>
     </div>
-    {/if}
   </section>
+  {/if}
 
-  <!-- Developer Mode Section (not in jump-nav, collapsed by default) -->
-  <section class="section collapsible-section">
-    <button class="section-title-btn" onclick={() => developerCollapsed = !developerCollapsed}>
-      <h3 class="section-title">{$t('settings.developer.title')}</h3>
-      <span class="section-summary">{$t('settings.developer.summary')}</span>
-      {#if developerCollapsed}
-        <ChevronDown size={16} />
-      {:else}
-        <ChevronUp size={16} />
-      {/if}
-    </button>
-    {#if !developerCollapsed}
+  <!-- Developer Mode Section -->
+  {#if activeSection === 'developer'}
+  <section class="section">
+    <h3 class="section-title">{$t('settings.developer.title')}</h3>
     <div class="setting-row">
       <div class="setting-info">
         <span class="setting-label">{$t('settings.developer.verboseLogCapture')}</span>
@@ -5090,15 +5053,161 @@
         {$t('settings.developer.viewLogs')}
       </button>
     </div>
+
+    <!-- Remote Control (subsection within Developer) -->
+    <h4 class="subsection-title">{$t('settings.integrations.remoteControl')} <span class="experimental-badge">{$t('settings.integrations.remoteControlExperimental')}</span></h4>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.remoteControlEnable')}</span>
+        <small class="setting-note">
+          {$t('settings.integrations.remoteControlDesc')}
+        </small>
+      </div>
+      <Toggle
+        enabled={remoteControlEnabled}
+        onchange={handleRemoteControlToggle}
+        disabled={remoteControlLoading}
+      />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.remoteControlPort')}</span>
+        <small class="setting-note">
+          {$t('settings.integrations.remoteControlPortDesc')}
+        </small>
+      </div>
+      <input
+        class="remote-control-input"
+        type="number"
+        min="1024"
+        max="65535"
+        bind:value={remoteControlPort}
+        disabled={!remoteControlEnabled || remoteControlLoading}
+        onchange={(e) => handleRemoteControlPortChange(Number((e.target as HTMLInputElement).value))}
+      />
+    </div>
+
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.remoteControlSecure')}</span>
+        <small class="setting-note">
+          {$t('settings.integrations.remoteControlSecureDesc')}
+        </small>
+      </div>
+      <Toggle
+        enabled={remoteControlSecure}
+        onchange={handleRemoteControlSecureChange}
+        disabled={!remoteControlEnabled || remoteControlLoading}
+      />
+    </div>
+
+    {#if remoteControlEnabled}
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.integrations.remoteControlToken')}</span>
+          <small class="setting-note">
+            {$t('settings.integrations.remoteControlTokenDesc')}
+          </small>
+        </div>
+        <div class="remote-control-actions">
+          <input
+            class="remote-control-input"
+            type="text"
+            readonly
+            value={remoteControlToken}
+            disabled={!remoteControlEnabled || remoteControlLoading}
+          />
+          <button
+            class="connect-btn connected"
+            onclick={handleRemoteControlCopyToken}
+            disabled={!remoteControlEnabled || remoteControlLoading || !remoteControlToken}
+          >
+            {$t('actions.copy')}
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    {#if remoteControlEnabled && remoteControlSecure}
+      <div class="setting-row">
+        <div class="setting-info">
+          <span class="setting-label">{$t('settings.integrations.remoteControlCert')}</span>
+          <small class="setting-note">
+            {$t('settings.integrations.remoteControlCertDesc')}
+          </small>
+        </div>
+        <div class="remote-control-actions">
+          <input
+            class="remote-control-input"
+            type="text"
+            readonly
+            value={remoteControlCertUrl}
+            disabled={!remoteControlEnabled || remoteControlLoading}
+          />
+          <button
+            class="connect-btn connected"
+            onclick={handleRemoteControlCopyCert}
+            disabled={!remoteControlEnabled || remoteControlLoading || !remoteControlCertUrl}
+          >
+            {$t('actions.copy')}
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    <div class="setting-row" class:last={!remoteControlQrOpen}>
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.integrations.remoteControlStatus')}</span>
+        <small class="setting-note">
+          {#if remoteControlStatus?.running}
+            {$t('settings.integrations.remoteControlStatusRunning')}
+          {:else}
+            {$t('settings.integrations.remoteControlStatusStopped')}
+          {/if}
+          {#if remoteControlUrl}
+            <span class="remote-control-url">{$t('settings.integrations.remoteControlUrlLabel')}: {remoteControlUrl}</span>
+          {/if}
+        </small>
+      </div>
+      <div class="remote-control-actions">
+        <button
+          class="connect-btn connected"
+          onclick={handleRemoteControlRegenerateToken}
+          disabled={!remoteControlEnabled || remoteControlLoading}
+        >
+          {$t('settings.integrations.remoteControlRegenerate')}
+        </button>
+        <button
+          class="connect-btn"
+          onclick={() => handleRemoteControlQrToggle()}
+          disabled={!remoteControlEnabled || remoteControlLoading}
+        >
+          {remoteControlQrOpen
+            ? $t('settings.integrations.remoteControlHideQr')
+            : $t('settings.integrations.remoteControlShowQr')}
+        </button>
+      </div>
+    </div>
+
+    {#if remoteControlQrOpen}
+      <div class="remote-control-qr">
+        <img src={remoteControlQrData} alt={$t('settings.integrations.remoteControlQrAlt')} />
+        <div class="remote-control-qr-meta">
+          <p class="remote-control-qr-help">{$t('settings.integrations.remoteControlQrHelp')}</p>
+        </div>
+      </div>
     {/if}
   </section>
+  {/if}
 
   <LogsModal isOpen={showLogsModal} onClose={() => showLogsModal = false} />
 
   <!-- Flatpak Section (only shown when running in Flatpak) -->
   <!-- NOTE: Keep this section LAST. If adding new settings sections, add them BEFORE this one. -->
-  {#if isFlatpak}
-    <section class="section flatpak-section" id="flatpak" bind:this={flatpakSection}>
+  {#if activeSection === 'flatpak' && isFlatpak}
+    <section class="section flatpak-section" id="flatpak">
       <h3 class="section-title">Flatpak Sandbox</h3>
       <div class="flatpak-info">
         <p class="flatpak-intro">
@@ -6457,6 +6566,48 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     height: 36px;
     opacity: 0;
     cursor: pointer;
+  }
+
+  /* Disabled section overlay */
+  .disabled-section {
+    opacity: 0.5;
+    pointer-events: none;
+  }
+
+  /* Window Controls Custom Colors Panel */
+  .wc-custom-panel {
+    margin: 0 0 8px 0;
+    padding: 12px 16px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    border: 1px solid var(--border-subtle);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .wc-custom-panel-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-secondary);
+  }
+
+  .wc-color-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .wc-color-group-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .wc-color-swatches {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
   }
 
   .btn-secondary {
