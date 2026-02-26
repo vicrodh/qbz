@@ -43,7 +43,7 @@
   const energyData = new Float32Array(NUM_BANDS);
 
   let lastRenderTime = 0;
-  const FRAME_INTERVAL = 1000 / 30;
+  const FRAME_INTERVAL = 1000 / 60;
 
   let bandColors = $state([
     { r: 255, g: 60, b: 60 },
