@@ -2,13 +2,13 @@
  * Immersive FPS Configuration
  *
  * Reads per-panel frame rate settings from userStorage.
- * Default is 60fps for all panels.
+ * Default is 15fps for all panels (low power consumption).
  */
 
 import { getUserItem } from '$lib/utils/userStorage';
 
 const FPS_KEY_PREFIX = 'qbz-immersive-fps-';
-const DEFAULT_FPS = 60;
+const DEFAULT_FPS = 15;
 
 export type ImmersivePanelId =
   | 'ambient'

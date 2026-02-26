@@ -1050,7 +1050,7 @@
 
   let immersiveFpsCollapsed = $state(true);
   let panelFpsValues: Record<string, string> = $state(
-    Object.fromEntries(FPS_PANEL_IDS.map(id => [id, getUserItem(`${FPS_KEY_PREFIX}${id}`) || '60']))
+    Object.fromEntries(FPS_PANEL_IDS.map(id => [id, getUserItem(`${FPS_KEY_PREFIX}${id}`) || '15']))
   );
 
   function getFpsOptions(): string[] {
@@ -1060,7 +1060,7 @@
   }
 
   function getFpsDisplayValue(panelId: string): string {
-    const val = panelFpsValues[panelId] || '60';
+    const val = panelFpsValues[panelId] || '15';
     const key = val === '0' ? 'disabled' : val;
     return $t(`settings.appearance.fpsOptions.${key}`);
   }
