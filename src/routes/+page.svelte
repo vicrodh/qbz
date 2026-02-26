@@ -2,6 +2,7 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { ChevronUp } from 'lucide-svelte';
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
+  import { getCurrentWindow } from '@tauri-apps/api/window';
   import { listen, emitTo, type UnlistenFn } from '@tauri-apps/api/event';
   import { writeText } from '@tauri-apps/plugin-clipboard-manager';
 
@@ -423,6 +424,9 @@
 
   // Window Controls State
   let windowControlsConfig = $state<WindowControlsConfig>(getWindowControls());
+
+  // Window floating state (not maximized/tiled — for rounded corners + shadow)
+  let isWindowFloating = $state(false);
 
   // View State (from navigationStore subscription)
   let activeView = $state<ViewType>('home');
@@ -3144,6 +3148,16 @@
       windowControlsConfig = getWindowControls();
     });
 
+    // Detect floating window state (not maximized) for rounded corners + shadow
+    let unlistenResize: (() => void) | undefined;
+    (async () => {
+      const appWindow = getCurrentWindow();
+      isWindowFloating = !(await appWindow.isMaximized());
+      unlistenResize = await appWindow.onResized(async () => {
+        isWindowFloating = !(await appWindow.isMaximized());
+      });
+    })();
+
     // Sync titlebar search query with search state store
     const unsubscribeTitlebarSearch = subscribeSearchQuery((query) => {
       titlebarSearchQuery = query;
@@ -3528,6 +3542,7 @@
       unsubscribeTitleBar();
       unsubscribeSearchBarLocation();
       unsubscribeWindowControls();
+      unlistenResize?.();
       unsubscribeTitlebarSearch();
       unsubscribeOffline();
       unsubscribeNav();
@@ -3625,7 +3640,7 @@
 {#if !isLoggedIn}
   <LoginView onLoginSuccess={handleLoginSuccess} onStartOffline={handleStartOffline} />
 {:else}
-  <div class="app" class:no-titlebar={!showTitleBar}>
+  <div class="app" class:no-titlebar={!showTitleBar} class:floating={isWindowFloating}>
     <!-- Custom Title Bar (CSD) -->
     {#if showTitleBar}
       <TitleBar
@@ -4615,6 +4630,12 @@
     height: 100vh;
     overflow: hidden;
     background-color: var(--bg-primary);
+  }
+
+  .app.floating {
+    border-radius: 8px;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4), 0 0 1px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
   }
 
   .app-body {
