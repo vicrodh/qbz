@@ -257,7 +257,7 @@
   .titlebar {
     height: 36px;
     min-height: 36px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.03) 0%, transparent 100%);
+    background-color: var(--bg-secondary);
     display: flex;
     align-items: center;
     justify-content: space-between;
