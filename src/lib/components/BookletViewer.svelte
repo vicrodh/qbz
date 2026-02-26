@@ -38,7 +38,7 @@
   let containerEl: HTMLDivElement | null = $state(null);
 
   const MIN_ZOOM = 0.5;
-  const MAX_ZOOM = 3;
+  const MAX_ZOOM = 5;
   const ZOOM_STEP = 0.25;
 
   async function loadPdf() {
@@ -68,6 +68,13 @@
       // Set loading false FIRST so canvas mounts in the DOM
       isLoading = false;
       await tick(); // Wait for Svelte to update DOM
+
+      // Auto-fit: calculate zoom so page fills container width
+      const firstPage = await pdfDoc.getPage(1);
+      const baseVp = firstPage.getViewport({ scale: 1, rotation });
+      const availableWidth = (containerEl?.clientWidth ?? window.innerWidth) - 48;
+      zoom = Math.min(availableWidth / baseVp.width, MAX_ZOOM);
+
       await renderPage();
     } catch (err: any) {
       console.error('[BookletViewer] Failed to load PDF:', err);
@@ -145,8 +152,12 @@
     }
   }
 
-  function fitToWidth() {
-    zoom = 1;
+  async function fitToWidth() {
+    if (!pdfDoc) return;
+    const page = await pdfDoc.getPage(currentPage);
+    const baseVp = page.getViewport({ scale: 1, rotation });
+    const availableWidth = (containerEl?.clientWidth ?? window.innerWidth) - 48;
+    zoom = Math.min(availableWidth / baseVp.width, MAX_ZOOM);
     renderPage();
   }
 
