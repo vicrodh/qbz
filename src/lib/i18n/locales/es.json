@@ -483,7 +483,17 @@
     "dragWindow": "Mover ventana",
     "normalizationOff": "Normalización de volumen: Desactivada",
     "normalizationOn": "Normalización de volumen: Activada",
-    "normalizationApplied": "Normalización de volumen: Activa"
+    "normalizationApplied": "Normalización de volumen: Activa",
+    "miniSurfaceCompact": "Compacto",
+    "miniSurfaceArtwork": "Portada",
+    "miniSurfaceQueue": "Cola",
+    "miniSurfaceLyrics": "Letras",
+    "miniExpand": "Expandir a la app completa",
+    "miniClose": "Cerrar mini reproductor",
+    "miniWindowControls": "Controles de mini reproductor",
+    "miniAlwaysOnTopEnable": "Siempre encima",
+    "miniAlwaysOnTopDisable": "Desactivar siempre encima",
+    "miniAlwaysOnTopLimited": "Siempre encima está limitado por tu gestor de ventanas"
   },
   "audioBadges": {
     "castingTo": "Transmitiendo a",

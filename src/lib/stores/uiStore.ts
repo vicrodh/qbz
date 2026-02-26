@@ -13,6 +13,38 @@ let isFullScreenOpen = false;
 let isFocusModeOpen = false;
 let isCastPickerOpen = false;
 
+export type MiniPlayerSurface = 'compact' | 'artwork' | 'queue' | 'lyrics';
+
+export interface MiniPlayerGeometry {
+  width: number;
+  height: number;
+  x?: number;
+  y?: number;
+}
+
+export interface MiniPlayerState {
+  open: boolean;
+  surface: MiniPlayerSurface;
+  alwaysOnTop: boolean;
+  geometry: MiniPlayerGeometry;
+}
+
+const MINI_PLAYER_STORAGE_KEY = 'qbz-mini-player-state';
+const DEFAULT_MINI_PLAYER_STATE: MiniPlayerState = {
+  open: false,
+  surface: 'artwork',
+  alwaysOnTop: false,
+  geometry: {
+    width: 380,
+    height: 540
+  }
+};
+
+let miniPlayer: MiniPlayerState = {
+  ...DEFAULT_MINI_PLAYER_STATE,
+  geometry: { ...DEFAULT_MINI_PLAYER_STATE.geometry }
+};
+
 // Playlist modal states
 let isPlaylistModalOpen = false;
 let playlistModalMode: 'create' | 'edit' | 'addTrack' = 'create';
@@ -29,6 +61,40 @@ function notifyListeners(): void {
   }
 }
 
+function persistMiniPlayerState(): void {
+  try {
+    localStorage.setItem(MINI_PLAYER_STORAGE_KEY, JSON.stringify(miniPlayer));
+  } catch {
+    // ignore localStorage errors
+  }
+}
+
+function loadMiniPlayerState(): void {
+  try {
+    const raw = localStorage.getItem(MINI_PLAYER_STORAGE_KEY);
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Partial<MiniPlayerState>;
+    const width = parsed.geometry?.width;
+    const height = parsed.geometry?.height;
+    miniPlayer = {
+      open: false,
+      surface: parsed.surface ?? DEFAULT_MINI_PLAYER_STATE.surface,
+      alwaysOnTop: parsed.alwaysOnTop ?? DEFAULT_MINI_PLAYER_STATE.alwaysOnTop,
+      geometry: {
+        width: typeof width === 'number' && width >= 320 ? width : DEFAULT_MINI_PLAYER_STATE.geometry.width,
+        height: typeof height === 'number' && height >= 200 ? height : DEFAULT_MINI_PLAYER_STATE.geometry.height,
+        x: typeof parsed.geometry?.x === 'number' ? parsed.geometry.x : undefined,
+        y: typeof parsed.geometry?.y === 'number' ? parsed.geometry.y : undefined
+      }
+    };
+  } catch {
+    miniPlayer = {
+      ...DEFAULT_MINI_PLAYER_STATE,
+      geometry: { ...DEFAULT_MINI_PLAYER_STATE.geometry }
+    };
+  }
+}
+
 /**
  * Subscribe to UI state changes
  */
@@ -36,6 +102,10 @@ export function subscribe(listener: () => void): () => void {
   listeners.add(listener);
   listener(); // Immediately notify with current state
   return () => listeners.delete(listener);
+}
+
+export function initMiniPlayerState(): void {
+  loadMiniPlayerState();
 }
 
 // ============ Queue Panel ============
@@ -123,6 +193,45 @@ export function closeCastPicker(): void {
 
 export function toggleCastPicker(): void {
   isCastPickerOpen = !isCastPickerOpen;
+  notifyListeners();
+}
+
+// ============ Mini Player ============
+
+export function getMiniPlayerState(): MiniPlayerState {
+  return {
+    ...miniPlayer,
+    geometry: { ...miniPlayer.geometry }
+  };
+}
+
+export function setMiniPlayerOpen(open: boolean): void {
+  miniPlayer = { ...miniPlayer, open };
+  persistMiniPlayerState();
+  notifyListeners();
+}
+
+export function setMiniPlayerSurface(surface: MiniPlayerSurface): void {
+  miniPlayer = { ...miniPlayer, surface };
+  persistMiniPlayerState();
+  notifyListeners();
+}
+
+export function setMiniPlayerAlwaysOnTop(alwaysOnTop: boolean): void {
+  miniPlayer = { ...miniPlayer, alwaysOnTop };
+  persistMiniPlayerState();
+  notifyListeners();
+}
+
+export function setMiniPlayerGeometry(geometry: Partial<MiniPlayerGeometry>): void {
+  miniPlayer = {
+    ...miniPlayer,
+    geometry: {
+      ...miniPlayer.geometry,
+      ...geometry
+    }
+  };
+  persistMiniPlayerState();
   notifyListeners();
 }
 
@@ -221,6 +330,7 @@ export interface UIState {
   playlistModalTrackIds: number[];
   playlistModalTracksAreLocal: boolean;
   isPlaylistImportOpen: boolean;
+  miniPlayer: MiniPlayerState;
 }
 
 export function getUIState(): UIState {
@@ -233,6 +343,7 @@ export function getUIState(): UIState {
     playlistModalMode,
     playlistModalTrackIds,
     playlistModalTracksAreLocal,
-    isPlaylistImportOpen
+    isPlaylistImportOpen,
+    miniPlayer: getMiniPlayerState()
   };
 }
