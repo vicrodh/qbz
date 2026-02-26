@@ -204,9 +204,9 @@ pub async fn v2_booklet_render_page(
             m
         };
 
-        // Render page to pixmap (RGB with alpha)
+        // Render page to pixmap (RGB, no alpha — ensures white background)
         let pixmap = pdf_page
-            .to_pixmap(&matrix, &Colorspace::device_rgb(), true, true)
+            .to_pixmap(&matrix, &Colorspace::device_rgb(), false, true)
             .map_err(|e| format!("Failed to render page: {:?}", e))?;
 
         let actual_width = pixmap.width() as u32;
