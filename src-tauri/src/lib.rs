@@ -1434,6 +1434,35 @@ pub fn run() {
             pdf_viewer::v2_booklet_save,
             pdf_viewer::v2_booklet_close,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = event {
+                // Graceful shutdown: stop audio and visualizer BEFORE process
+                // teardown to prevent heap corruption (free(): corrupted unsorted
+                // chunks) caused by C libraries (ALSA/CPAL) being freed while
+                // their threads are still active.
+                log::info!("RunEvent::Exit — stopping audio and visualizer");
+
+                if let Some(state) = app_handle.try_state::<AppState>() {
+                    state.visualizer.set_enabled(false);
+                    let _ = state.player.stop();
+                }
+
+                // Also stop the V2 player (qbz-player crate)
+                if let Some(bridge_state) = app_handle.try_state::<core_bridge::CoreBridgeState>() {
+                    if let Ok(guard) = bridge_state.0.try_read() {
+                        if let Some(bridge) = guard.as_ref() {
+                            let _ = bridge.player().stop();
+                        }
+                    }
+                }
+
+                // Destroy miniplayer window if it exists
+                if let Some(mini) = app_handle.webview_windows().get("miniplayer") {
+                    log::info!("Exit: destroying miniplayer window");
+                    let _ = mini.destroy();
+                }
+            }
+        });
 }
