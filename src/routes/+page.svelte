@@ -106,6 +106,14 @@
     getSearchBarLocation
   } from '$lib/stores/searchBarLocationStore';
 
+  // Window controls customization store
+  import {
+    subscribe as subscribeWindowControls,
+    initWindowControlsStore,
+    getWindowControls,
+    type WindowControlsConfig
+  } from '$lib/stores/windowControlsStore';
+
   // Keybindings system
   import {
     registerAction,
@@ -412,6 +420,9 @@
   // Search Bar Location State
   let searchBarLocationPref = $state(getSearchBarLocation());
   let titlebarSearchQuery = $state(getSearchQuery());
+
+  // Window Controls State
+  let windowControlsConfig = $state<WindowControlsConfig>(getWindowControls());
 
   // View State (from navigationStore subscription)
   let activeView = $state<ViewType>('home');
@@ -3127,6 +3138,12 @@
       searchBarLocationPref = getSearchBarLocation();
     });
 
+    // Initialize and subscribe to window controls customization
+    initWindowControlsStore();
+    const unsubscribeWindowControls = subscribeWindowControls(() => {
+      windowControlsConfig = getWindowControls();
+    });
+
     // Sync titlebar search query with search state store
     const unsubscribeTitlebarSearch = subscribeSearchQuery((query) => {
       titlebarSearchQuery = query;
@@ -3510,6 +3527,7 @@
       unsubscribeSidebar();
       unsubscribeTitleBar();
       unsubscribeSearchBarLocation();
+      unsubscribeWindowControls();
       unsubscribeTitlebarSearch();
       unsubscribeOffline();
       unsubscribeNav();
@@ -3616,6 +3634,14 @@
         searchQuery={titlebarSearchQuery}
         onSearchInput={handleTitlebarSearchInput}
         onSearchClear={handleTitlebarSearchClear}
+        controlsPosition={windowControlsConfig.position}
+        controlsShape={windowControlsConfig.shape}
+        controlsSize={windowControlsConfig.size}
+        controlsColors={{
+          minimize: windowControlsConfig.minimizeColors,
+          maximize: windowControlsConfig.maximizeColors,
+          close: windowControlsConfig.closeColors,
+        }}
       />
     {/if}
 
