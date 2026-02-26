@@ -49,6 +49,7 @@ pub mod tray;
 pub mod updates;
 pub mod user_data;
 pub mod visualizer;
+pub mod pdf_viewer;
 
 use std::sync::Arc;
 use tauri::{Emitter, Manager};
@@ -972,6 +973,7 @@ pub fn run() {
         .manage(developer_settings_state)
         .manage(graphics_settings_state)
         .manage(window_settings_state)
+        .manage(pdf_viewer::BookletState::new())
         // V2 integration states (qbz-integrations crate)
         .manage(listenbrainz_v2_state)
         .manage(musicbrainz_v2_state)
@@ -1426,6 +1428,10 @@ pub fn run() {
             commands_v2::v2_get_system_color_scheme,
             commands_v2::v2_extract_palette,
             commands_v2::v2_fetch_url_bytes,
+            // PDF booklet viewer (MuPDF backend)
+            pdf_viewer::v2_booklet_open,
+            pdf_viewer::v2_booklet_render_page,
+            pdf_viewer::v2_booklet_close,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
