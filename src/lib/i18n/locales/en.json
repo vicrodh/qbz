@@ -239,7 +239,12 @@
     "saveAs": "Save as...",
     "customCoverSet": "Album cover updated",
     "customCoverRemoved": "Custom album cover removed",
-    "customCoverError": "Failed to update album cover"
+    "customCoverError": "Failed to update album cover",
+    "booklet": "Booklet",
+    "viewBooklet": "View Booklet",
+    "bookletLoading": "Loading booklet...",
+    "bookletError": "Could not load booklet",
+    "bookletFitWidth": "Fit to width"
   },
   "artist": {
     "albums": "Albums",

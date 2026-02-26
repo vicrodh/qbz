@@ -239,7 +239,12 @@
     "saveAs": "Guardar como...",
     "customCoverSet": "Portada del album actualizada",
     "customCoverRemoved": "Portada personalizada eliminada",
-    "customCoverError": "Error al actualizar la portada"
+    "customCoverError": "Error al actualizar la portada",
+    "booklet": "Libreto",
+    "viewBooklet": "Ver libreto",
+    "bookletLoading": "Cargando libreto...",
+    "bookletError": "No se pudo cargar el libreto",
+    "bookletFitWidth": "Ajustar al ancho"
   },
   "artist": {
     "albums": "Álbumes",

@@ -227,7 +227,12 @@
     "saveAs": "Enregistrer sous...",
     "customCoverSet": "Pochette de l'album mise à jour",
     "customCoverRemoved": "Pochette personnalisée supprimée",
-    "customCoverError": "Erreur lors de la mise à jour de la pochette"
+    "customCoverError": "Erreur lors de la mise à jour de la pochette",
+    "booklet": "Livret",
+    "viewBooklet": "Voir le livret",
+    "bookletLoading": "Chargement du livret...",
+    "bookletError": "Impossible de charger le livret",
+    "bookletFitWidth": "Ajuster à la largeur"
   },
   "artist": {
     "albums": "Albums",

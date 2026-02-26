@@ -227,7 +227,12 @@
     "saveAs": "Speichern unter...",
     "customCoverSet": "Albumcover aktualisiert",
     "customCoverRemoved": "Benutzerdefiniertes Albumcover entfernt",
-    "customCoverError": "Fehler beim Aktualisieren des Albumcovers"
+    "customCoverError": "Fehler beim Aktualisieren des Albumcovers",
+    "booklet": "Booklet",
+    "viewBooklet": "Booklet anzeigen",
+    "bookletLoading": "Booklet wird geladen...",
+    "bookletError": "Booklet konnte nicht geladen werden",
+    "bookletFitWidth": "An Breite anpassen"
   },
   "artist": {
     "albums": "Alben",
