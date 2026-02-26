@@ -333,10 +333,9 @@
       {/if}
     </div>
 
-    {#if canRenderInlineWindowControls}
+    {#if canRenderInlineWindowControls && !micro}
       <div class="window-controls-anchor" class:visible={showWindowControls}>
         <MiniPlayerWindowControls
-          micro={micro}
           activeSurface={activeSurface!}
           isPinned={isPinned}
           onSurfaceChange={onSurfaceChange!}
@@ -348,6 +347,20 @@
       </div>
     {/if}
   </div>
+
+  {#if canRenderInlineWindowControls && micro}
+    <div class="window-controls-float" class:visible={showWindowControls}>
+      <MiniPlayerWindowControls
+        activeSurface={activeSurface!}
+        isPinned={isPinned}
+        onSurfaceChange={onSurfaceChange!}
+        onTogglePin={onTogglePin!}
+        onExpand={onExpand!}
+        onClose={onClose!}
+        onStartDrag={onStartDrag!}
+      />
+    </div>
+  {/if}
 
   {#if micro}
     <div
@@ -545,6 +558,26 @@
   }
 
   .window-controls-anchor.visible {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .window-controls-float {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    transition: opacity 120ms ease;
+    z-index: 14;
+  }
+
+  .window-controls-float.visible {
     opacity: 1;
     pointer-events: auto;
   }
