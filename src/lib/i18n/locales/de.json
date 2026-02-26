@@ -760,6 +760,15 @@
         "split-suggestions": "Geteilt: Vorschläge",
         "split-queue": "Geteilt: Warteschlange"
       },
+      "ambientFps": "Immersive Hintergrundanimation",
+      "ambientFpsDesc": "Bildrate für den Hintergrundeffekt im Immersiv-Modus. Niedrigere Werte sparen CPU. Erfordert erneutes Aufrufen des Immersiv-Modus.",
+      "ambientFpsOptions": {
+        "disabled": "Deaktiviert",
+        "15": "15 FPS (Niedrig)",
+        "30": "30 FPS (Mittel)",
+        "60": "60 FPS (Flüssig)",
+        "120": "120 FPS (Ultra)"
+      },
       "startupPage": "Startseite",
       "startupPageDesc": "Wähle welche Seite beim App-Start angezeigt wird",
       "startupPages": {

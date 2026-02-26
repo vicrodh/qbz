@@ -760,6 +760,15 @@
         "split-suggestions": "Divisé : Suggestions",
         "split-queue": "Divisé : File d'attente"
       },
+      "ambientFps": "Animation de fond immersif",
+      "ambientFpsDesc": "Fréquence d'images de l'effet de fond en mode immersif. Des valeurs basses économisent le CPU. Nécessite de ré-entrer en mode immersif.",
+      "ambientFpsOptions": {
+        "disabled": "Désactivé",
+        "15": "15 FPS (Bas)",
+        "30": "30 FPS (Moyen)",
+        "60": "60 FPS (Fluide)",
+        "120": "120 FPS (Ultra)"
+      },
       "startupPage": "Page de démarrage",
       "startupPageDesc": "Choisissez quelle page afficher au lancement de l'application",
       "startupPages": {

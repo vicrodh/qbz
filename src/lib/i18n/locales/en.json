@@ -788,6 +788,15 @@
         "split-suggestions": "Split: Suggestions",
         "split-queue": "Split: Queue"
       },
+      "ambientFps": "Immersive background animation",
+      "ambientFpsDesc": "Frame rate for the ambient background effect in immersive mode. Lower values save CPU. Requires re-entering immersive mode.",
+      "ambientFpsOptions": {
+        "disabled": "Disabled",
+        "15": "15 FPS (Low)",
+        "30": "30 FPS (Medium)",
+        "60": "60 FPS (Smooth)",
+        "120": "120 FPS (Ultra)"
+      },
       "miniplayerDefaultView": "Mini player default view",
       "miniplayerViews": {
         "remember": "Remember last used",

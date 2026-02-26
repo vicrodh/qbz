@@ -40,7 +40,7 @@
   let isInitialized = false;
 
   let lastRenderTime = 0;
-  const FRAME_INTERVAL = 1000 / 60;
+  const FRAME_INTERVAL = 1000 / 30;
 
   // Ring particles - expanding circles triggered by transients
   interface Ring {

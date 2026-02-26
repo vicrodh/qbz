@@ -54,7 +54,7 @@
   let trailIndex = 0;
 
   let lastRenderTime = 0;
-  const FRAME_INTERVAL = 1000 / 60;
+  const FRAME_INTERVAL = 1000 / 30;
 
   // Primary color extracted from artwork
   let plotColor = $state({ r: 0, g: 220, b: 200 });

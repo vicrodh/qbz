@@ -1040,6 +1040,31 @@
     }
   }
 
+  // Immersive ambient background FPS
+  const AMBIENT_FPS_KEY = 'qbz-immersive-ambient-fps';
+  const AMBIENT_FPS_OPTIONS = ['0', '15', '30', '60', '120'] as const;
+  let ambientFps = $state(getUserItem(AMBIENT_FPS_KEY) || '15');
+
+  function getAmbientFpsOptions(): string[] {
+    return AMBIENT_FPS_OPTIONS.map(val =>
+      $t(`settings.appearance.ambientFpsOptions.${val === '0' ? 'disabled' : val}`)
+    );
+  }
+
+  function getAmbientFpsDisplayValue(): string {
+    const key = ambientFps === '0' ? 'disabled' : ambientFps;
+    return $t(`settings.appearance.ambientFpsOptions.${key}`);
+  }
+
+  function handleAmbientFpsChange(displayValue: string) {
+    const options = getAmbientFpsOptions();
+    const index = options.indexOf(displayValue);
+    if (index >= 0) {
+      ambientFps = AMBIENT_FPS_OPTIONS[index];
+      setUserItem(AMBIENT_FPS_KEY, ambientFps);
+    }
+  }
+
   // Mini player default view
   const MINIPLAYER_VIEW_KEYS = ['remember', 'micro', 'compact', 'artwork', 'queue', 'lyrics'] as const;
   let miniPlayerDefaultView = $state(
@@ -4097,6 +4122,17 @@
         value={getImmersiveViewDisplayValue()}
         options={getImmersiveViewOptions()}
         onchange={handleImmersiveViewChange}
+      />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.ambientFps')}</span>
+        <span class="setting-desc">{$t('settings.appearance.ambientFpsDesc')}</span>
+      </div>
+      <Dropdown
+        value={getAmbientFpsDisplayValue()}
+        options={getAmbientFpsOptions()}
+        onchange={handleAmbientFpsChange}
       />
     </div>
     <div class="setting-row">

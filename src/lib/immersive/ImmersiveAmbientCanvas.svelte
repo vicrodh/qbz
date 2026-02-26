@@ -34,6 +34,7 @@
     handleContextRestored,
     getConfig,
   } from './ImmersiveRenderer';
+  import { getUserItem } from '$lib/utils/userStorage';
 
   // Props
   interface Props {
@@ -80,9 +81,10 @@
   let lastFrameTime = 0;
   let isVisible = true;
 
-  // Frame throttling
-  const TARGET_FPS = 60;
-  const FRAME_INTERVAL = 1000 / TARGET_FPS;
+  // Frame throttling — read user preference (0 = disabled, default 15)
+  const AMBIENT_FPS_KEY = 'qbz-immersive-ambient-fps';
+  const ambientFps = parseInt(getUserItem(AMBIENT_FPS_KEY) || '15', 10);
+  const FRAME_INTERVAL = ambientFps > 0 ? 1000 / ambientFps : 0;
 
   /**
    * Initialize WebGL resources.
@@ -250,11 +252,19 @@
    */
   function startAnimation(): void {
     if (isAnimating || !isInitialized) return;
+
+    // Animation disabled — render a single static frame
+    if (ambientFps === 0) {
+      render();
+      console.log('[ImmersiveCanvas] Animation disabled, rendered static frame');
+      return;
+    }
+
     isAnimating = true;
     lastFrameTime = performance.now();
     startTime = performance.now(); // Reset time for animation
     animationFrameId = requestAnimationFrame(animationLoop);
-    console.log('[ImmersiveCanvas] Animation started, intensity:', intensity ?? getConfig().ambientIntensity);
+    console.log('[ImmersiveCanvas] Animation started at', ambientFps, 'fps, intensity:', intensity ?? getConfig().ambientIntensity);
   }
 
   /**
