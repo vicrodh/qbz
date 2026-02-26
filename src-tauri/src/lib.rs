@@ -1425,6 +1425,7 @@ pub fn run() {
             commands_v2::v2_generate_theme_from_system_colors,
             commands_v2::v2_get_system_color_scheme,
             commands_v2::v2_extract_palette,
+            commands_v2::v2_fetch_url_bytes,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

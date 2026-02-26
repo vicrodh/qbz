@@ -244,7 +244,8 @@
     "viewBooklet": "View Booklet",
     "bookletLoading": "Loading booklet...",
     "bookletError": "Could not load booklet",
-    "bookletFitWidth": "Fit to width"
+    "bookletFitWidth": "Fit to width",
+    "bookletRotate": "Rotate"
   },
   "artist": {
     "albums": "Albums",
