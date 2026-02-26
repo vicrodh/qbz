@@ -3,6 +3,8 @@
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use rand::seq::SliceRandom;
+
 use tauri::State;
 
 use crate::api::models::{Album, Artist, ImageSet, Track};
@@ -868,16 +870,25 @@ pub async fn reco_get_home_resolved(
         std::sync::Arc::new(set)
     };
 
-    // 5d: Fetch albums from favorite artists (parallel, max 8 artists)
+    // 5d: Fetch albums from favorite artists (parallel)
+    // Shuffle artists so every favorite gets a fair chance, cap 2 albums per artist
+    const MAX_ALBUMS_PER_ARTIST: usize = 2;
     let favorite_albums = if favorite_artist_ids.is_empty() {
         Vec::new()
     } else {
+        // Shuffle artists so every favorite gets a fair chance
+        let shuffled_artists = {
+            let mut ids = favorite_artist_ids.clone();
+            ids.shuffle(&mut rand::thread_rng());
+            ids
+        };
+
         let sem = std::sync::Arc::new(tokio::sync::Semaphore::new(5));
         let client = app_state.client.clone();
         let reco_arc = reco_state.db.clone();
 
         let mut handles = Vec::new();
-        for artist_id in favorite_artist_ids.iter().take(8) {
+        for artist_id in shuffled_artists.iter().take(14) {
             let sem = sem.clone();
             let client = client.clone();
             let reco_arc = reco_arc.clone();
@@ -897,9 +908,11 @@ pub async fn reco_get_home_resolved(
                 let albums = artist.albums?;
                 let mut results: Vec<AlbumCardMeta> = Vec::new();
                 for album in &albums.items {
+                    if results.len() >= MAX_ALBUMS_PER_ARTIST {
+                        break;
+                    }
                     if !exclusion.contains(&album.id) {
                         let meta = album_to_card_meta(album);
-                        // Cache in reco meta for future instant lookups
                         {
                             let guard__ = reco_arc.lock().await;
                             if let Some(db) = guard__.as_ref() {
@@ -920,11 +933,12 @@ pub async fn reco_get_home_resolved(
             }
         }
 
-        // Deduplicate and limit
+        // Deduplicate, shuffle, and limit
         {
             let mut seen = std::collections::HashSet::new();
             all_albums.retain(|a| seen.insert(a.id.clone()));
         }
+        all_albums.shuffle(&mut rand::thread_rng());
         all_albums.truncate(limit_favorites as usize);
         all_albums
     };
