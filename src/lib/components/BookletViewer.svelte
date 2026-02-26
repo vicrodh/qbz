@@ -5,9 +5,12 @@
   import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, RotateCw } from 'lucide-svelte';
   import * as pdfjsLib from 'pdfjs-dist';
 
-  // No web worker — run pdfjs on main thread so WASM files
-  // at /pdfjs/ are resolvable (workers use blob: URLs where
-  // relative paths break). Fine for a simple booklet viewer.
+  // We disable the worker at document level (disableWorker: true)
+  // but pdfjs v5 still requires workerSrc to be set at init time.
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+  ).toString();
 
   interface Props {
     isOpen: boolean;
