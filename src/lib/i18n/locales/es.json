@@ -483,7 +483,18 @@
     "dragWindow": "Mover ventana",
     "normalizationOff": "Normalización de volumen: Desactivada",
     "normalizationOn": "Normalización de volumen: Activada",
-    "normalizationApplied": "Normalización de volumen: Activa"
+    "normalizationApplied": "Normalización de volumen: Activa",
+    "miniSurfaceMicro": "Micro",
+    "miniSurfaceCompact": "Compacto",
+    "miniSurfaceArtwork": "Portada",
+    "miniSurfaceQueue": "Cola",
+    "miniSurfaceLyrics": "Letras",
+    "miniExpand": "Expandir a la app completa",
+    "miniClose": "Cerrar mini reproductor",
+    "miniWindowControls": "Controles de mini reproductor",
+    "miniAlwaysOnTopEnable": "Siempre encima",
+    "miniAlwaysOnTopDisable": "Desactivar siempre encima",
+    "miniAlwaysOnTopLimited": "Siempre encima está limitado por tu gestor de ventanas"
   },
   "audioBadges": {
     "castingTo": "Transmitiendo a",
@@ -776,6 +787,15 @@
         "split-trackInfo": "Dividido: Info de pista",
         "split-suggestions": "Dividido: Sugerencias",
         "split-queue": "Dividido: Cola"
+      },
+      "miniplayerDefaultView": "Vista predeterminada del mini reproductor",
+      "miniplayerViews": {
+        "remember": "Recordar la última usada",
+        "micro": "Micro",
+        "compact": "Compacta",
+        "artwork": "Carátula",
+        "queue": "Cola",
+        "lyrics": "Letras"
       },
       "startupPage": "Página de inicio",
       "startupPageDesc": "Elige qué página mostrar al iniciar la app",

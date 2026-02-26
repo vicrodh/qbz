@@ -303,8 +303,7 @@
     type PersistedSession
   } from '$lib/services/sessionService';
 
-  // MiniPlayer - DISABLED: incomplete feature, re-enable when ready
-  // import { enterMiniplayerMode } from '$lib/services/miniplayerService';
+  import { enterMiniplayerMode } from '$lib/services/miniplayerService';
 
   // Sidebar mutual exclusion
   import { closeContentSidebar, subscribeContentSidebar, type ContentSidebarType } from '$lib/stores/sidebarStore';
@@ -4366,6 +4365,9 @@
         onToggleFavorite={toggleFavorite}
         onAddToPlaylist={openAddToPlaylistModal}
         onOpenQueue={toggleQueue}
+        onOpenMiniPlayer={() => {
+          void enterMiniplayerMode();
+        }}
         onOpenFullScreen={openFullScreen}
         onCast={openCastPicker}
         {isCastConnected}
@@ -4401,6 +4403,9 @@
       <NowPlayingBar
         onTogglePlay={togglePlay}
         onOpenQueue={toggleQueue}
+        onOpenMiniPlayer={() => {
+          void enterMiniplayerMode();
+        }}
         onOpenFullScreen={openFullScreen}
         onCast={openCastPicker}
         {isCastConnected}

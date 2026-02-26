@@ -483,7 +483,18 @@
     "dragWindow": "Move Window",
     "normalizationOff": "Volume Normalization: Off",
     "normalizationOn": "Volume Normalization: On",
-    "normalizationApplied": "Volume Normalization: Active"
+    "normalizationApplied": "Volume Normalization: Active",
+    "miniSurfaceMicro": "Micro",
+    "miniSurfaceCompact": "Compact",
+    "miniSurfaceArtwork": "Artwork",
+    "miniSurfaceQueue": "Queue",
+    "miniSurfaceLyrics": "Lyrics",
+    "miniExpand": "Expand to Full App",
+    "miniClose": "Close Mini Player",
+    "miniWindowControls": "Mini Player Controls",
+    "miniAlwaysOnTopEnable": "Always on Top",
+    "miniAlwaysOnTopDisable": "Disable Always on Top",
+    "miniAlwaysOnTopLimited": "Always-on-top is limited by your window manager"
   },
   "audioBadges": {
     "castingTo": "Casting to",
@@ -776,6 +787,15 @@
         "split-trackInfo": "Split: Track Info",
         "split-suggestions": "Split: Suggestions",
         "split-queue": "Split: Queue"
+      },
+      "miniplayerDefaultView": "Mini player default view",
+      "miniplayerViews": {
+        "remember": "Remember last used",
+        "micro": "Micro",
+        "compact": "Compact",
+        "artwork": "Artwork",
+        "queue": "Queue",
+        "lyrics": "Lyrics"
       },
       "startupPage": "Startup page",
       "startupPageDesc": "Choose which page to show when the app starts",

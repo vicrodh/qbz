@@ -608,7 +608,23 @@ impl QueueManager {
         state.shuffle = enabled;
 
         if enabled {
+            if let Some(curr_idx) = state.current_index {
+                if curr_idx < state.tracks.len() {
+                    let mut remaining: Vec<usize> = ((curr_idx + 1)..state.tracks.len()).collect();
+                    Self::shuffle_indices_internal(&mut remaining);
+
+                    state.shuffle_order.clear();
+                    state.shuffle_order.push(curr_idx);
+                    state.shuffle_order.extend(remaining);
+                    state.shuffle_position = 0;
+                    return;
+                }
+            }
+
             Self::regenerate_shuffle_order_internal(&mut state);
+        } else {
+            state.shuffle_order.clear();
+            state.shuffle_position = 0;
         }
     }
 
@@ -682,7 +698,29 @@ impl QueueManager {
     fn regenerate_shuffle_order_internal(state: &mut InternalState) {
         let mut order: Vec<usize> = (0..state.tracks.len()).collect();
 
-        // Fisher-Yates shuffle with proper PRNG
+        Self::shuffle_indices_internal(&mut order);
+
+        state.shuffle_order = order;
+
+        // If there's a current track, find its position in the new shuffle order
+        // (don't move it to front, just update our position in the shuffled list)
+        if let Some(curr_idx) = state.current_index {
+            if let Some(pos) = state.shuffle_order.iter().position(|&x| x == curr_idx) {
+                state.shuffle_position = pos;
+            } else {
+                state.shuffle_position = 0;
+            }
+        } else {
+            state.shuffle_position = 0;
+        }
+    }
+
+    /// Shuffle a slice of queue indices using Fisher-Yates and a time-based seed.
+    fn shuffle_indices_internal(order: &mut [usize]) {
+        if order.len() <= 1 {
+            return;
+        }
+
         use rand::{Rng, SeedableRng};
         use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -697,20 +735,6 @@ impl QueueManager {
         for i in (1..order.len()).rev() {
             let j = rng.gen_range(0..=i);
             order.swap(i, j);
-        }
-
-        state.shuffle_order = order;
-
-        // If there's a current track, find its position in the new shuffle order
-        // (don't move it to front, just update our position in the shuffled list)
-        if let Some(curr_idx) = state.current_index {
-            if let Some(pos) = state.shuffle_order.iter().position(|&x| x == curr_idx) {
-                state.shuffle_position = pos;
-            } else {
-                state.shuffle_position = 0;
-            }
-        } else {
-            state.shuffle_position = 0;
         }
     }
 }
@@ -906,5 +930,32 @@ mod tests {
                 .collect::<Vec<u64>>(),
             vec![2, 3, 4, 5]
         );
+    }
+
+    #[test]
+    fn test_shuffle_reorders_only_remaining_tracks_when_current_exists() {
+        let queue = QueueManager::new();
+        for i in 1..=6 {
+            queue.add_track(create_test_track(i));
+        }
+
+        queue.play_index(2); // Current track = 3
+        queue.set_shuffle(true);
+
+        let state = queue.get_state();
+        assert_eq!(state.current_track.as_ref().map(|track| track.id), Some(3));
+
+        let mut upcoming_sorted = state.upcoming.iter().map(|track| track.id).collect::<Vec<u64>>();
+        upcoming_sorted.sort_unstable();
+        assert_eq!(upcoming_sorted, vec![4, 5, 6]);
+
+        let mut advanced = Vec::new();
+        for _ in 0..3 {
+            let track = queue.next().expect("expected next track while remanent queue exists");
+            advanced.push(track.id);
+        }
+        advanced.sort_unstable();
+        assert_eq!(advanced, vec![4, 5, 6]);
+        assert!(queue.next().is_none());
     }
 }

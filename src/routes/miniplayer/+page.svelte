@@ -1,24 +1,18 @@
 <script lang="ts">
-  import { onMount, onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { getCurrentWindow } from '@tauri-apps/api/window';
-  import {
-    Shuffle,
-    SkipBack,
-    SkipForward,
-    Play,
-    Pause,
-    Repeat,
-    Repeat1,
-    Maximize2,
-    ListMusic
-  } from 'lucide-svelte';
-  import StackIcon from '$lib/components/StackIcon.svelte';
+  import { LogicalSize } from '@tauri-apps/api/dpi';
+  import { t } from '$lib/i18n';
+  import MiniPlayerShell from '$lib/components/miniplayer/MiniPlayerShell.svelte';
+  import type { MiniPlayerQueueTrack, MiniPlayerSurface } from '$lib/components/miniplayer/types';
   import {
     subscribe as subscribePlayer,
     getPlayerState,
     togglePlay,
     seek as playerSeek,
     setVolume as playerSetVolume,
+    setIsSkipping,
+    stop as stopPlayback,
     startPolling,
     stopPolling,
     type PlayerState
@@ -30,606 +24,458 @@
     toggleRepeat,
     nextTrack,
     previousTrack,
-    type RepeatMode
+    playQueueIndex,
+    getBackendQueueState,
+    syncQueueState,
+    startQueueEventListener,
+    stopQueueEventListener,
+    type BackendQueueTrack,
+    type QueueState
   } from '$lib/stores/queueStore';
-  import { exitMiniplayerMode } from '$lib/services/miniplayerService';
+  import {
+    subscribe as subscribeLyrics,
+    getLyricsState,
+    startWatching,
+    stopWatching,
+    startActiveLineUpdates,
+    stopActiveLineUpdates,
+    type LyricsState
+  } from '$lib/stores/lyricsStore';
+  import {
+    getMiniPlayerState,
+    initMiniPlayerState,
+    setMiniPlayerGeometry,
+    setMiniPlayerOpen,
+    setMiniPlayerSurface
+  } from '$lib/stores/uiStore';
+  import { exitMiniplayerMode, setMiniplayerAlwaysOnTop } from '$lib/services/miniplayerService';
+  import { playTrack } from '$lib/services/playbackService';
 
-  // Player state
   let playerState = $state<PlayerState>(getPlayerState());
-  let isShuffle = $state(false);
-  let repeatMode = $state<RepeatMode>('off');
-  let isDragging = $state(false);
-  let isDraggingProgress = $state(false);
-  let isDraggingVolume = $state(false);
-  let queueCount = $state(0);
+  let queueState = $state<QueueState>(getQueueState());
+  let lyricsState = $state<LyricsState>(getLyricsState());
+  let miniState = $state(getMiniPlayerState());
+  let showAlwaysOnTopWarning = $state(false);
 
-  // Refs
-  let progressRef: HTMLDivElement;
-  let volumeRef: HTMLDivElement | null = null;
+  let unlistenMoved: (() => void) | null = null;
+  let unlistenResized: (() => void) | null = null;
+  let unlistenCloseRequested: (() => void) | null = null;
 
-  // Derived state
-  const progress = $derived(playerState.duration > 0 ? (playerState.currentTime / playerState.duration) * 100 : 0);
-
-  function formatTime(seconds: number): string {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  }
-
-  // Store subscriptions
   let unsubscribePlayer: (() => void) | null = null;
   let unsubscribeQueue: (() => void) | null = null;
+  let unsubscribeLyrics: (() => void) | null = null;
+  let lastExpandedGeometry = $state({ width: 380, height: 540 });
+
+  const COMPACT_GEOMETRY = {
+    width: 380,
+    height: 178
+  };
+
+  const MICRO_GEOMETRY = {
+    width: 380,
+    height: 57
+  };
+
+  const MICRO_MIN_HEIGHT = 57;
+  const COMPACT_MIN_HEIGHT = 170;
+  const EXPANDED_MIN_HEIGHT = 420;
+
+  const EXPANDED_DEFAULT_GEOMETRY = {
+    width: 380,
+    height: 540
+  };
+
+  function isCondensedSurface(surface: MiniPlayerSurface): boolean {
+    return surface === 'micro' || surface === 'compact';
+  }
+
+  function formatDurationLabel(totalSeconds: number): string | undefined {
+    if (!isFinite(totalSeconds) || totalSeconds <= 0) return undefined;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+  }
+
+  const activeSurface = $derived(miniState.surface);
+  const currentTrackId = $derived(playerState.currentTrack ? String(playerState.currentTrack.id) : undefined);
+
+  const queueTracks = $derived.by(() => {
+    const rows: MiniPlayerQueueTrack[] = [];
+
+    if (playerState.currentTrack) {
+      rows.push({
+        id: String(playerState.currentTrack.id),
+        title: playerState.currentTrack.title,
+        artist: playerState.currentTrack.artist,
+        artwork: playerState.currentTrack.artwork,
+        quality: formatDurationLabel(playerState.duration || playerState.currentTrack.duration)
+      });
+    }
+
+    for (const queueTrack of queueState.queue) {
+      if (rows.some(row => row.id === queueTrack.id)) {
+        continue;
+      }
+      rows.push({
+        id: queueTrack.id,
+        title: queueTrack.title,
+        artist: queueTrack.artist,
+        artwork: queueTrack.artwork,
+        quality: queueTrack.duration
+      });
+    }
+
+    return rows;
+  });
+
+  function rememberExpandedGeometry(width: number, height: number): void {
+    if (height < 320) return;
+    lastExpandedGeometry = {
+      width: Math.max(340, width),
+      height: Math.max(420, height)
+    };
+  }
+
+  async function applySurfaceGeometry(surface: MiniPlayerSurface): Promise<void> {
+    const appWindow = getCurrentWindow();
+
+    if (isCondensedSurface(surface)) {
+      const condensedGeometry = surface === 'micro' ? MICRO_GEOMETRY : COMPACT_GEOMETRY;
+      const condensedMinHeight = surface === 'micro' ? MICRO_MIN_HEIGHT : COMPACT_MIN_HEIGHT;
+
+      await appWindow.setMinSize(new LogicalSize(340, condensedMinHeight));
+
+      if (!isCondensedSurface(miniState.surface)) {
+        const currentSize = await appWindow.innerSize();
+        rememberExpandedGeometry(currentSize.width, currentSize.height);
+      }
+
+      await appWindow.setSize(new LogicalSize(condensedGeometry.width, condensedGeometry.height));
+      setMiniPlayerGeometry({ width: condensedGeometry.width, height: condensedGeometry.height });
+      miniState = getMiniPlayerState();
+      return;
+    }
+
+    await appWindow.setMinSize(new LogicalSize(340, EXPANDED_MIN_HEIGHT));
+
+    const target = {
+      width: lastExpandedGeometry.width || EXPANDED_DEFAULT_GEOMETRY.width,
+      height: lastExpandedGeometry.height || EXPANDED_DEFAULT_GEOMETRY.height
+    };
+
+    await appWindow.setSize(new LogicalSize(target.width, target.height));
+    setMiniPlayerGeometry({ width: target.width, height: target.height });
+    miniState = getMiniPlayerState();
+  }
+
+  $effect(() => {
+    if (lyricsState.isSynced && lyricsState.lines.length > 0 && playerState.isPlaying) {
+      startActiveLineUpdates();
+    } else {
+      stopActiveLineUpdates();
+    }
+  });
 
   onMount(async () => {
-    console.log('[MiniPlayer] Mounting, starting polling...');
+    initMiniPlayerState();
+    miniState = getMiniPlayerState();
+    setMiniPlayerOpen(true);
+
+    if (isCondensedSurface(miniState.surface)) {
+      await applySurfaceGeometry(miniState.surface);
+    } else {
+      rememberExpandedGeometry(miniState.geometry.width, miniState.geometry.height);
+    }
+
     await startPolling();
+    await syncQueueState();
+    await startQueueEventListener();
+    startWatching();
 
     unsubscribePlayer = subscribePlayer(() => {
       playerState = getPlayerState();
     });
 
     unsubscribeQueue = subscribeQueue(() => {
-      const qState = getQueueState();
-      if (qState) {
-        isShuffle = qState.isShuffle ?? false;
-        repeatMode = qState.repeatMode ?? 'off';
-        queueCount = qState.queue?.length ?? 0;
+      queueState = getQueueState();
+    });
+
+    unsubscribeLyrics = subscribeLyrics(() => {
+      lyricsState = getLyricsState();
+    });
+
+    const appWindow = getCurrentWindow();
+
+    unlistenMoved = await appWindow.onMoved(({ payload }) => {
+      setMiniPlayerGeometry({ x: payload.x, y: payload.y });
+    });
+
+    unlistenResized = await appWindow.onResized(({ payload }) => {
+      setMiniPlayerGeometry({ width: payload.width, height: payload.height });
+      if (!isCondensedSurface(miniState.surface)) {
+        rememberExpandedGeometry(payload.width, payload.height);
       }
     });
 
-    const qState = getQueueState();
-    if (qState) {
-      isShuffle = qState.isShuffle ?? false;
-      repeatMode = qState.repeatMode ?? 'off';
-      queueCount = qState.queue?.length ?? 0;
-    }
+    unlistenCloseRequested = await appWindow.onCloseRequested((event) => {
+      event.preventDefault();
+      void exitMiniplayerMode();
+    });
+
+    console.info('[MiniPlayer] Window ready');
   });
 
   onDestroy(() => {
-    console.log('[MiniPlayer] Unmounting, stopping polling...');
     unsubscribePlayer?.();
     unsubscribeQueue?.();
+    unsubscribeLyrics?.();
+
+    unlistenMoved?.();
+    unlistenResized?.();
+    unlistenCloseRequested?.();
+
+    stopActiveLineUpdates();
+    stopWatching();
+    stopQueueEventListener();
     stopPolling();
   });
 
-  // Playback controls
-  async function handlePlayPause(e: MouseEvent): Promise<void> {
-    e.stopPropagation();
+  async function handleSurfaceChange(surface: MiniPlayerSurface): Promise<void> {
+    if (surface === miniState.surface) return;
+
+    const targetCondensed = isCondensedSurface(surface);
+    const currentCondensed = isCondensedSurface(miniState.surface);
+    if (targetCondensed || currentCondensed) {
+      await applySurfaceGeometry(surface);
+    }
+
+    setMiniPlayerSurface(surface);
+    miniState = getMiniPlayerState();
+    console.info('[MiniPlayer] Surface changed:', surface);
+  }
+
+  async function handleToggleAlwaysOnTop(): Promise<void> {
+    const targetValue = !miniState.alwaysOnTop;
+    const result = await setMiniplayerAlwaysOnTop(targetValue);
+    miniState = getMiniPlayerState();
+
+    showAlwaysOnTopWarning = !result.applied && targetValue;
+    if (!result.applied) {
+      console.warn('[MiniPlayer] Always-on-top could not be fully applied:', result.reason);
+    }
+  }
+
+  async function handleStartDrag(event: MouseEvent): Promise<void> {
+    event.stopPropagation();
+
+    try {
+      await getCurrentWindow().startDragging();
+    } catch (err) {
+      console.error('[MiniPlayer] Drag start failed:', err);
+    }
+  }
+
+  async function handleTogglePlay(): Promise<void> {
     try {
       await togglePlay();
     } catch (err) {
-      console.error('[MiniPlayer] Failed to toggle playback:', err);
+      console.error('[MiniPlayer] togglePlay failed:', err);
     }
   }
 
-  async function handleNext(e: MouseEvent): Promise<void> {
-    e.stopPropagation();
+  async function playQueueTrack(track: BackendQueueTrack): Promise<void> {
+    const source = track.source ?? (track.is_local ? 'local' : 'qobuz');
+    const isLocal = source !== 'qobuz';
+    const quality = isLocal
+      ? 'Local'
+      : track.bit_depth && track.sample_rate
+        ? `${track.bit_depth}bit/${track.sample_rate}kHz`
+        : track.hires
+          ? 'Hi-Res'
+          : '-';
+
+    await playTrack({
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      artwork: track.artwork_url || '',
+      duration: track.duration_secs,
+      quality,
+      bitDepth: track.bit_depth ?? undefined,
+      // Local/Plex backends report Hz while Qobuz queue state is already in kHz.
+      samplingRate: isLocal && track.sample_rate ? track.sample_rate / 1000 : track.sample_rate ?? undefined,
+      isLocal,
+      source,
+      albumId: track.album_id ?? undefined,
+      artistId: track.artist_id ?? undefined
+    }, {
+      isLocal,
+      source: source as 'qobuz' | 'local' | 'plex',
+      showLoadingToast: false,
+      showSuccessToast: false
+    });
+  }
+
+  async function handleQueueTrackPlay(trackId: string): Promise<void> {
     try {
-      await nextTrack();
+      const queueSnapshot = await getBackendQueueState();
+      if (!queueSnapshot) return;
+
+      const allTracks = [queueSnapshot.current_track, ...queueSnapshot.upcoming].filter(
+        Boolean
+      ) as BackendQueueTrack[];
+      const queueTrackIndex = allTracks.findIndex(trackEntry => String(trackEntry.id) === trackId);
+
+      if (queueTrackIndex < 0) return;
+
+      if (queueTrackIndex === 0 && queueSnapshot.current_index !== null) {
+        if (!getPlayerState().isPlaying) {
+          await togglePlay();
+        }
+        return;
+      }
+
+      const queueIndex = queueSnapshot.current_index !== null
+        ? queueSnapshot.current_index + queueTrackIndex
+        : queueTrackIndex;
+
+      const queueTrack = await playQueueIndex(queueIndex);
+      if (queueTrack) {
+        await playQueueTrack(queueTrack);
+      }
     } catch (err) {
-      console.error('[MiniPlayer] Failed to skip to next:', err);
+      console.error('[MiniPlayer] queue track play failed:', err);
     }
   }
 
-  async function handlePrevious(e: MouseEvent): Promise<void> {
-    e.stopPropagation();
+  async function handleSkipBack(): Promise<void> {
+    const state = getPlayerState();
+    if (!state.currentTrack || state.isSkipping) return;
+    if (state.currentTime > 3) {
+      playerSeek(0);
+      return;
+    }
+
+    setIsSkipping(true);
     try {
-      await previousTrack();
+      const previous = await previousTrack();
+      if (previous) {
+        await playQueueTrack(previous);
+      } else {
+        playerSeek(0);
+      }
     } catch (err) {
-      console.error('[MiniPlayer] Failed to skip to previous:', err);
+      console.error('[MiniPlayer] previousTrack failed:', err);
+    } finally {
+      setIsSkipping(false);
     }
   }
 
-  async function handleToggleShuffle(e: MouseEvent): Promise<void> {
-    e.stopPropagation();
+  async function handleSkipForward(): Promise<void> {
+    const state = getPlayerState();
+    if (!state.currentTrack || state.isSkipping) return;
+
+    setIsSkipping(true);
+    try {
+      const next = await nextTrack();
+      if (next) {
+        await playQueueTrack(next);
+      } else {
+        await stopPlayback();
+      }
+    } catch (err) {
+      console.error('[MiniPlayer] nextTrack failed:', err);
+    } finally {
+      setIsSkipping(false);
+    }
+  }
+
+  async function handleToggleShuffle(): Promise<void> {
     try {
       await toggleShuffle();
     } catch (err) {
-      console.error('[MiniPlayer] Failed to toggle shuffle:', err);
+      console.error('[MiniPlayer] toggleShuffle failed:', err);
     }
   }
 
-  async function handleToggleRepeat(e: MouseEvent): Promise<void> {
-    e.stopPropagation();
+  async function handleToggleRepeat(): Promise<void> {
     try {
       await toggleRepeat();
     } catch (err) {
-      console.error('[MiniPlayer] Failed to toggle repeat:', err);
+      console.error('[MiniPlayer] toggleRepeat failed:', err);
     }
-  }
-
-  // Progress bar
-  function handleProgressMouseDown(e: MouseEvent): void {
-    e.stopPropagation();
-    isDraggingProgress = true;
-    updateProgress(e);
-    document.addEventListener('mousemove', handleProgressMouseMove);
-    document.addEventListener('mouseup', handleProgressMouseUp);
-  }
-
-  function handleProgressMouseMove(e: MouseEvent): void {
-    if (isDraggingProgress) updateProgress(e);
-  }
-
-  function handleProgressMouseUp(): void {
-    isDraggingProgress = false;
-    document.removeEventListener('mousemove', handleProgressMouseMove);
-    document.removeEventListener('mouseup', handleProgressMouseUp);
-  }
-
-  function updateProgress(e: MouseEvent): void {
-    if (progressRef && playerState.duration > 0) {
-      const rect = progressRef.getBoundingClientRect();
-      const percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-      const newTime = Math.round((percentage / 100) * playerState.duration);
-      playerSeek(newTime);
-    }
-  }
-
-  function handleVolumeMouseDown(e: MouseEvent): void {
-    e.stopPropagation();
-    isDraggingVolume = true;
-    updateVolume(e);
-    document.addEventListener('mousemove', handleVolumeMouseMove);
-    document.addEventListener('mouseup', handleVolumeMouseUp);
-  }
-
-  function handleVolumeMouseMove(e: MouseEvent): void {
-    if (isDraggingVolume) updateVolume(e);
-  }
-
-  function handleVolumeMouseUp(): void {
-    isDraggingVolume = false;
-    document.removeEventListener('mousemove', handleVolumeMouseMove);
-    document.removeEventListener('mouseup', handleVolumeMouseUp);
-  }
-
-  function updateVolume(e: MouseEvent): void {
-    if (!volumeRef) return;
-    const rect = volumeRef.getBoundingClientRect();
-    const percentage = Math.max(0, Math.min(100, ((e.clientX - rect.left) / rect.width) * 100));
-    playerSetVolume(Math.round(percentage));
-  }
-
-  // Window controls - stop propagation to prevent drag from capturing
-  async function handleRestore(e: MouseEvent): Promise<void> {
-    e.stopPropagation();
-    e.preventDefault();
-    console.log('[MiniPlayer] Restore button clicked');
-    await exitMiniplayerMode();
-  }
-
-  function handleRestoreMouseDown(e: MouseEvent): void {
-    e.stopPropagation();
-  }
-
-  async function startDrag(): Promise<void> {
-    try {
-      isDragging = true;
-      const window = getCurrentWindow();
-      await window.startDragging();
-    } catch (err) {
-      console.error('[MiniPlayer] Failed to start dragging:', err);
-    } finally {
-      isDragging = false;
-    }
-  }
-
-  function handleTopMouseDown(e: MouseEvent): void {
-    const target = e.target as HTMLElement | null;
-    if (target?.closest('button')) {
-      return;
-    }
-    void startDrag();
-  }
-
-  function handleOpenQueue(e: MouseEvent): void {
-    e.stopPropagation();
-    console.log('[MiniPlayer] Queue button clicked, tracks:', queueCount);
-  }
-
-  function handleArtworkClick(e: MouseEvent): void {
-    e.stopPropagation();
-    // TODO: Cycle through view modes
-    console.log('[MiniPlayer] Artwork clicked');
   }
 </script>
 
-<div
-  class="miniplayer"
-  class:dragging={isDragging}
-  role="application"
-  aria-label="MiniPlayer"
->
-  <!-- Top Section: Artwork + Info + Restore -->
-  <div class="top-section" onmousedown={handleTopMouseDown}>
-    <!-- Album Art (clickable for view modes) -->
-    <button class="artwork-section" onclick={handleArtworkClick}>
-      {#if playerState.currentTrack?.artwork}
-        <img src={playerState.currentTrack.artwork} alt="Album art" class="artwork" />
-      {:else}
-        <div class="artwork-placeholder"></div>
-      {/if}
-    </button>
+<div class="miniplayer-page">
+  <MiniPlayerShell
+    activeSurface={activeSurface}
+    isPinned={miniState.alwaysOnTop}
+    artwork={playerState.currentTrack?.artwork}
+    title={playerState.currentTrack?.title}
+    artist={playerState.currentTrack?.artist}
+    album={playerState.currentTrack?.album}
+    queueTracks={queueTracks}
+    {currentTrackId}
+    lyricsLines={lyricsState.lines}
+    lyricsActiveIndex={lyricsState.activeIndex}
+    lyricsActiveProgress={lyricsState.activeProgress}
+    lyricsIsSynced={lyricsState.isSynced}
+    isPlaying={playerState.isPlaying}
+    currentTime={playerState.currentTime}
+    duration={playerState.duration}
+    volume={playerState.volume}
+    isShuffle={queueState.isShuffle}
+    repeatMode={queueState.repeatMode}
+    onSurfaceChange={(surface) => {
+      void handleSurfaceChange(surface);
+    }}
+    onTogglePin={handleToggleAlwaysOnTop}
+    onExpand={exitMiniplayerMode}
+    onClose={exitMiniplayerMode}
+    onStartDrag={handleStartDrag}
+    onTogglePlay={handleTogglePlay}
+    onSkipBack={handleSkipBack}
+    onSkipForward={handleSkipForward}
+    onSeek={playerSeek}
+    onVolumeChange={playerSetVolume}
+    onToggleShuffle={handleToggleShuffle}
+    onToggleRepeat={handleToggleRepeat}
+    onQueueTrackPlay={(trackId) => {
+      void handleQueueTrackPlay(trackId);
+    }}
+  />
 
-    <!-- Track Info + Restore Button -->
-    <div class="info-section">
-      <button class="restore-btn" onclick={handleRestore} onmousedown={handleRestoreMouseDown} title="Restore">
-        <Maximize2 size={14} />
-      </button>
-      <div class="track-info">
-        <div class="title">{playerState.currentTrack?.title ?? 'No track'}</div>
-        <div class="artist-album">
-          <StackIcon size={12} class="stack-icon" />
-          {playerState.currentTrack?.artist ?? '—'}
-          {#if playerState.currentTrack?.album}
-            <span class="separator">—</span>
-            <span class="album">{playerState.currentTrack.album}</span>
-          {/if}
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Seek Bar (full width) -->
-  <div class="seek-section">
-    <div
-      class="progress-bar"
-      bind:this={progressRef}
-      onmousedown={handleProgressMouseDown}
-      role="slider"
-      tabindex="0"
-      aria-valuenow={playerState.currentTime}
-      aria-valuemin={0}
-      aria-valuemax={playerState.duration}
-    >
-      <div class="progress-track">
-        <div class="progress-fill" style="width: {progress}%"></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Bottom: Media Controls + Window Controls -->
-  <div class="bottom-section">
-    <div class="media-controls">
-      <button
-        class="ctrl-btn"
-        class:active={isShuffle}
-        onclick={handleToggleShuffle}
-        title="Shuffle"
-      >
-        <Shuffle size={14} />
-      </button>
-
-      <button class="ctrl-btn" onclick={handlePrevious} title="Previous">
-        <SkipBack size={16} />
-      </button>
-
-      <button class="ctrl-btn play" onclick={handlePlayPause} title={playerState.isPlaying ? 'Pause' : 'Play'}>
-        {#if playerState.isPlaying}
-          <Pause size={18} />
-        {:else}
-          <Play size={18} />
-        {/if}
-      </button>
-
-      <button class="ctrl-btn" onclick={handleNext} title="Next">
-        <SkipForward size={16} />
-      </button>
-
-      <button
-        class="ctrl-btn"
-        class:active={repeatMode !== 'off'}
-        onclick={handleToggleRepeat}
-        title="Repeat"
-      >
-        {#if repeatMode === 'one'}
-          <Repeat1 size={14} />
-        {:else}
-          <Repeat size={14} />
-        {/if}
-      </button>
-    </div>
-
-    <div class="volume-control">
-      <div class="volume-value" class:visible={isDraggingVolume}>{Math.round(playerState.volume)}</div>
-      <div
-        class="volume-bar"
-        bind:this={volumeRef}
-        onmousedown={handleVolumeMouseDown}
-        role="slider"
-        tabindex="0"
-        aria-valuenow={playerState.volume}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        title="Volume"
-      >
-        <div class="volume-fill" style="width: {playerState.volume}%"></div>
-        <div class="volume-thumb" style="left: {playerState.volume}%"></div>
-      </div>
-    </div>
-
-    <div class="window-controls">
-      <button class="ctrl-btn" onclick={handleOpenQueue} title="Queue ({queueCount})">
-        <ListMusic size={14} />
-      </button>
-    </div>
-  </div>
+  {#if showAlwaysOnTopWarning}
+    <div class="aot-warning">{$t('player.miniAlwaysOnTopLimited')}</div>
+  {/if}
 </div>
 
 <style>
-  .miniplayer {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    height: 100%;
-    background: transparent;
-    color: var(--text-primary);
-    user-select: none;
+  .miniplayer-page {
+    width: 100vw;
+    height: 100vh;
     overflow: hidden;
-    padding: 8px;
+    background: transparent;
+    padding: 6px;
     box-sizing: border-box;
-    gap: 6px;
-  }
-
-  .miniplayer.dragging {
-    cursor: grabbing;
-  }
-
-  .miniplayer.dragging * {
-    cursor: grabbing;
-  }
-
-  /* Top Section: Artwork + Info */
-  .top-section {
-    display: flex;
-    flex: 1;
-    gap: 10px;
-    min-height: 0;
-    cursor: grab;
-  }
-
-  /* Album Art */
-  .artwork-section {
-    aspect-ratio: 1;
-    height: 100%;
-    flex-shrink: 0;
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 0;
-  }
-
-  .artwork {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: 6px;
-  }
-
-  .artwork-placeholder {
-    width: 100%;
-    height: 100%;
-    background: var(--alpha-6);
-    border-radius: 6px;
-  }
-
-  /* Info Section */
-  .info-section {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
     position: relative;
   }
 
-  .restore-btn {
+  .aot-warning {
     position: absolute;
-    top: 0;
-    right: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 24px;
-    height: 24px;
-    background: var(--alpha-6);
-    border: none;
-    color: var(--alpha-50);
-    cursor: pointer;
-    border-radius: 4px;
-    transition: all 0.15s ease;
-  }
-
-  .restore-btn:hover {
-    background: var(--accent-bg);
-    color: var(--accent-primary);
-  }
-
-  .track-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    min-width: 0;
-    overflow: hidden;
-    padding-right: 30px;
-  }
-
-  .title {
-    font-weight: 600;
-    font-size: 14px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: color-mix(in srgb, #d97706 20%, var(--bg-secondary));
+    border: 1px solid color-mix(in srgb, #d97706 35%, transparent);
     color: var(--text-primary);
-    line-height: 1.4;
-  }
-
-  .artist-album {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 12px;
-    color: var(--alpha-50);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-top: 2px;
-  }
-
-  .artist-album :global(.stack-icon) {
-    flex-shrink: 0;
-  }
-
-  .separator {
-    margin: 0 4px;
-    opacity: 0.5;
-  }
-
-  .album {
-    color: var(--alpha-40);
-  }
-
-  /* Seek Bar */
-  .seek-section {
-    flex-shrink: 0;
-  }
-
-  .progress-bar {
-    width: 100%;
-    height: 14px;
-    display: flex;
-    align-items: center;
-    cursor: pointer;
-  }
-
-  .progress-track {
-    width: 100%;
-    height: 4px;
-    background: var(--alpha-10);
-    border-radius: 2px;
-    overflow: hidden;
-  }
-
-  .progress-fill {
-    height: 100%;
-    background: var(--accent-primary);
-    border-radius: 2px;
-    transition: width 100ms linear;
-  }
-
-  /* Bottom Section */
-  .bottom-section {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    flex-shrink: 0;
-    gap: 12px;
-  }
-
-  .media-controls {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .window-controls {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-  }
-
-  .volume-control {
-    position: relative;
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-  }
-
-  .volume-bar {
-    width: 90px;
-    height: 4px;
-    background: var(--alpha-18);
     border-radius: 999px;
-    cursor: pointer;
-    position: relative;
-  }
-
-  .volume-fill {
-    height: 100%;
-    border-radius: 999px;
-    background: var(--alpha-80);
-  }
-
-  .volume-thumb {
-    position: absolute;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--text-primary);
-    opacity: 0;
-    transition: opacity 150ms ease;
-  }
-
-  .volume-bar:hover .volume-thumb {
-    opacity: 1;
-  }
-
-  .volume-value {
-    position: absolute;
-    right: 0;
-    top: -22px;
-    padding: 2px 6px;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.6);
-    color: var(--text-primary);
+    padding: 4px 10px;
     font-size: 11px;
-    opacity: 0;
-    transform: translateY(4px);
-    transition: opacity 150ms ease, transform 150ms ease;
-  }
-
-  .volume-value.visible {
-    opacity: 1;
-    transform: translateY(0);
-  }
-
-  .ctrl-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 28px;
-    height: 28px;
-    background: transparent;
-    border: none;
-    color: var(--alpha-70);
-    cursor: pointer;
-    border-radius: 50%;
-    transition: all 0.15s ease;
-  }
-
-  .ctrl-btn:hover {
-    background: var(--alpha-8);
-    color: var(--text-primary);
-  }
-
-  .ctrl-btn:active {
-    transform: scale(0.95);
-  }
-
-  .ctrl-btn.active {
-    color: var(--accent-primary);
-  }
-
-  .ctrl-btn.play {
-    width: 32px;
-    height: 32px;
-    background: var(--alpha-10);
-  }
-
-  .ctrl-btn.play:hover {
-    background: var(--alpha-18);
+    z-index: 90;
+    white-space: nowrap;
+    pointer-events: none;
   }
 </style>
