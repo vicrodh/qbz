@@ -3,11 +3,22 @@
   import { t } from 'svelte-i18n';
   import { invoke } from '@tauri-apps/api/core';
   import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, RotateCw } from 'lucide-svelte';
-  import * as pdfjsLib from 'pdfjs-dist';
 
-  // Serve worker from static/ (real HTTP URL, not Vite blob) so it
-  // can resolve sibling WASM files (openjpeg.wasm, jbig2.wasm, etc.)
-  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
+  interface PageSize {
+    width: number;
+    height: number;
+  }
+
+  interface BookletInfo {
+    num_pages: number;
+    page_sizes: PageSize[];
+  }
+
+  interface RenderedPage {
+    data: string;
+    width: number;
+    height: number;
+  }
 
   interface Props {
     isOpen: boolean;
@@ -23,98 +34,105 @@
     title = ''
   }: Props = $props();
 
-  let canvas: HTMLCanvasElement | null = $state(null);
-  let pdfDoc: any = null;
   let currentPage = $state(1);
   let totalPages = $state(0);
   let zoom = $state(1);
   let rotation = $state(0);
   let isLoading = $state(true);
+  let isRendering = $state(false);
   let error = $state('');
-  let currentRenderTask: any = null;
   let containerEl: HTMLDivElement | null = $state(null);
+  let pageImageSrc = $state('');
+  let displayWidth = $state(0);
+  let displayHeight = $state(0);
 
+  let pageSizes: PageSize[] = [];
+  let bookletLoaded = false;
+
+  // Zoom is relative: 1.0 = fit to container width
   const MIN_ZOOM = 0.5;
   const MAX_ZOOM = 5;
   const ZOOM_STEP = 0.25;
+  const BASE_DPI = 150;
 
-  async function loadPdf() {
+  async function loadBooklet() {
     if (!url) return;
 
     isLoading = true;
     error = '';
+    bookletLoaded = false;
 
     try {
-      // Fetch PDF bytes through Tauri backend to bypass CORS
-      const bytes = await invoke<number[]>('v2_fetch_url_bytes', { url });
-      const data = new Uint8Array(bytes);
-
-      const loadingTask = pdfjsLib.getDocument({
-        data,
-        disableRange: true,
-        disableAutoFetch: true,
-        wasmUrl: '/pdfjs/',
-      } as any);
-
-      pdfDoc = await loadingTask.promise;
-      totalPages = pdfDoc.numPages;
+      const info = await invoke<BookletInfo>('v2_booklet_open', { url });
+      totalPages = info.num_pages;
+      pageSizes = info.page_sizes;
       currentPage = 1;
-      // Set loading false FIRST so canvas mounts in the DOM
-      isLoading = false;
-      await tick(); // Wait for Svelte to update DOM
+      zoom = 1;
+      rotation = 0;
+      bookletLoaded = true;
 
-      // Auto-fit: calculate zoom so page fills container width
-      const firstPage = await pdfDoc.getPage(1);
-      const baseVp = firstPage.getViewport({ scale: 1, rotation });
-      const availableWidth = (containerEl?.clientWidth ?? window.innerWidth) - 48;
-      zoom = Math.min(availableWidth / baseVp.width, MAX_ZOOM);
+      isLoading = false;
+      await tick();
 
       await renderPage();
     } catch (err: any) {
-      console.error('[BookletViewer] Failed to load PDF:', err);
+      console.error('[BookletViewer] Failed to load booklet:', err);
       error = err?.message || String(err) || 'Failed to load booklet';
       isLoading = false;
     }
   }
 
-  async function renderPage() {
-    if (!pdfDoc || !canvas) return;
+  function calculateDpi(): number {
+    const dpr = window.devicePixelRatio || 1;
+    // Render at enough DPI for crisp display at current zoom
+    // zoom=1 means fit-to-width, so DPI should produce an image
+    // that fills container width at native screen resolution
+    return Math.round(BASE_DPI * zoom * dpr);
+  }
 
-    if (currentRenderTask) {
-      currentRenderTask.cancel();
-      currentRenderTask = null;
+  function calculateDisplaySize(): { width: number; height: number } {
+    if (pageSizes.length === 0) return { width: 0, height: 0 };
+
+    const pageSize = pageSizes[currentPage - 1] || pageSizes[0];
+    const containerWidth = (containerEl?.clientWidth ?? window.innerWidth) - 48;
+
+    // At zoom=1, page width fills container
+    const fitScale = containerWidth / pageSize.width;
+
+    if (rotation === 90 || rotation === 270) {
+      return {
+        width: pageSize.height * fitScale * zoom,
+        height: pageSize.width * fitScale * zoom,
+      };
     }
+    return {
+      width: pageSize.width * fitScale * zoom,
+      height: pageSize.height * fitScale * zoom,
+    };
+  }
+
+  async function renderPage() {
+    if (!bookletLoaded) return;
+
+    isRendering = true;
 
     try {
-      const page = await pdfDoc.getPage(currentPage);
-      const dpr = window.devicePixelRatio || 1;
-      // Render at 3x for near-print quality (216 DPI at 1x screens)
-      const qualityScale = 3;
-      const scale = zoom * dpr * qualityScale;
-      const viewport = page.getViewport({ scale, rotation });
-
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-      // CSS size = canvas pixels / (dpr * qualityScale)
-      canvas.style.width = `${viewport.width / (dpr * qualityScale)}px`;
-      canvas.style.height = `${viewport.height / (dpr * qualityScale)}px`;
-
-      const context = canvas.getContext('2d');
-      if (!context) return;
-
-      context.fillStyle = 'white';
-      context.fillRect(0, 0, canvas.width, canvas.height);
-
-      currentRenderTask = page.render({
-        canvasContext: context,
-        viewport,
+      const dpi = calculateDpi();
+      const result = await invoke<RenderedPage>('v2_booklet_render_page', {
+        page: currentPage,
+        dpi,
+        rotation,
       });
-      await currentRenderTask.promise;
-      currentRenderTask = null;
+
+      pageImageSrc = `data:image/png;base64,${result.data}`;
+      const size = calculateDisplaySize();
+      displayWidth = size.width;
+      displayHeight = size.height;
     } catch (err: any) {
-      if (err?.name !== 'RenderingCancelledException') {
-        console.error('[BookletViewer] Render error:', err);
-      }
+      console.error('[BookletViewer] Render error:', err);
+      error = err?.message || String(err) || 'Failed to render page';
+    } finally {
+      isRendering = false;
     }
   }
 
@@ -146,12 +164,8 @@
     }
   }
 
-  async function fitToWidth() {
-    if (!pdfDoc) return;
-    const page = await pdfDoc.getPage(currentPage);
-    const baseVp = page.getViewport({ scale: 1, rotation });
-    const availableWidth = (containerEl?.clientWidth ?? window.innerWidth) - 48;
-    zoom = Math.min(availableWidth / baseVp.width, MAX_ZOOM);
+  function fitToWidth() {
+    zoom = 1;
     renderPage();
   }
 
@@ -196,10 +210,8 @@
     document.body.appendChild(node);
     return {
       destroy() {
-        if (pdfDoc) {
-          pdfDoc.destroy();
-          pdfDoc = null;
-        }
+        // Clean up the temp file when the portal is destroyed
+        invoke('v2_booklet_close').catch(() => {});
         node.remove();
       }
     };
@@ -207,14 +219,15 @@
 
   $effect(() => {
     if (isOpen && url) {
-      loadPdf();
+      loadBooklet();
     }
   });
 
   $effect(() => {
-    if (!isOpen && pdfDoc) {
-      pdfDoc.destroy();
-      pdfDoc = null;
+    if (!isOpen && bookletLoaded) {
+      invoke('v2_booklet_close').catch(() => {});
+      bookletLoaded = false;
+      pageImageSrc = '';
       currentPage = 1;
       totalPages = 0;
       zoom = 1;
@@ -277,9 +290,17 @@
           <span>{$t('album.bookletError')}</span>
           <span class="error-detail">{error}</span>
         </div>
-      {:else}
-        <div class="canvas-wrapper">
-          <canvas bind:this={canvas}></canvas>
+      {:else if pageImageSrc}
+        <div class="page-wrapper">
+          <img
+            src={pageImageSrc}
+            alt="Page {currentPage}"
+            class="page-image"
+            class:rendering={isRendering}
+            style:width="{displayWidth}px"
+            style:height="{displayHeight}px"
+            draggable="false"
+          />
         </div>
       {/if}
     </div>
@@ -395,16 +416,21 @@
     padding: 24px;
   }
 
-  .canvas-wrapper {
+  .page-wrapper {
     display: flex;
     align-items: center;
     justify-content: center;
     min-height: 100%;
   }
 
-  .canvas-wrapper canvas {
+  .page-image {
     border-radius: 4px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+    transition: opacity 100ms ease;
+  }
+
+  .page-image.rendering {
+    opacity: 0.6;
   }
 
   .booklet-loading,
