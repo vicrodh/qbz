@@ -1541,9 +1541,10 @@
       listenbrainzUsername = userInfo.user_name;
       listenbrainzToken = '';
       showListenBrainzConfig = false;
-    } catch (err) {
-      console.error('Failed to connect to ListenBrainz:', err);
-      alert(`ListenBrainz error: ${err}`);
+    } catch (err: any) {
+      const details = err?.details || err?.message || String(err);
+      console.error('Failed to connect to ListenBrainz:', details);
+      showToast(`ListenBrainz: ${details}`, 'error');
     } finally {
       listenbrainzConnecting = false;
     }

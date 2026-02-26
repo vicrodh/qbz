@@ -108,16 +108,6 @@ pub struct SubmitListensPayload {
     pub payload: Vec<Listen>,
 }
 
-/// Response from ListenBrainz API
-#[derive(Debug, Deserialize)]
-pub struct ListenBrainzResponse {
-    pub status: String,
-    #[serde(default)]
-    pub code: Option<i32>,
-    #[serde(default)]
-    pub error: Option<String>,
-}
-
 /// User info response
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct UserInfo {

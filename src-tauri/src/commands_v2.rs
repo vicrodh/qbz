@@ -7945,6 +7945,7 @@ pub async fn v2_listenbrainz_set_enabled(
 pub async fn v2_listenbrainz_connect(
     token: String,
     state: State<'_, ListenBrainzV2State>,
+    legacy: State<'_, crate::listenbrainz::ListenBrainzSharedState>,
 ) -> Result<qbz_integrations::listenbrainz::UserInfo, RuntimeError> {
     log::info!("[V2] listenbrainz_connect");
     let client = state.client.lock().await;
@@ -7953,11 +7954,24 @@ pub async fn v2_listenbrainz_connect(
         .await
         .map_err(|e| RuntimeError::Internal(e.to_string()))?;
 
-    // Save credentials for persistence
+    // Save credentials for persistence (in-memory V2 state)
     drop(client);
     state
-        .save_credentials(token, user_info.user_name.clone())
+        .save_credentials(token.clone(), user_info.user_name.clone())
         .await;
+
+    // Persist to legacy SQLite cache so credentials survive restarts
+    {
+        let cache_guard = legacy.cache.lock().await;
+        if let Some(cache) = cache_guard.as_ref() {
+            if let Err(err) = cache.set_credentials(Some(&token), Some(&user_info.user_name)) {
+                log::warn!("Failed to persist ListenBrainz credentials: {}", err);
+            }
+        }
+        // Also update legacy in-memory client
+        let legacy_client = legacy.client.lock().await;
+        legacy_client.restore_token(token, user_info.user_name.clone()).await;
+    }
 
     Ok(user_info)
 }
@@ -7966,12 +7980,25 @@ pub async fn v2_listenbrainz_connect(
 #[tauri::command]
 pub async fn v2_listenbrainz_disconnect(
     state: State<'_, ListenBrainzV2State>,
+    legacy: State<'_, crate::listenbrainz::ListenBrainzSharedState>,
 ) -> Result<(), RuntimeError> {
     log::info!("[V2] listenbrainz_disconnect");
     let client = state.client.lock().await;
     client.disconnect().await;
     drop(client);
     state.clear_credentials().await;
+
+    // Clear from legacy SQLite cache
+    {
+        let cache_guard = legacy.cache.lock().await;
+        if let Some(cache) = cache_guard.as_ref() {
+            if let Err(err) = cache.clear_credentials() {
+                log::warn!("Failed to clear ListenBrainz credentials: {}", err);
+            }
+        }
+        legacy.client.lock().await.disconnect().await;
+    }
+
     Ok(())
 }
 
