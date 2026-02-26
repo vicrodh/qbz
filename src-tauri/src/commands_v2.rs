@@ -10923,3 +10923,31 @@ pub async fn v2_extract_palette(
     .await
     .map_err(|e| format!("Palette extraction task failed: {}", e))?
 }
+
+// ==================== Utility Commands ====================
+
+/// Fetch a remote URL as bytes (bypasses WebView CORS restrictions).
+/// Used for loading PDF booklets from Qobuz CDN.
+#[tauri::command]
+pub async fn v2_fetch_url_bytes(url: String) -> Result<Vec<u8>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| format!("HTTP client error: {}", e))?;
+
+    let response = client
+        .get(&url)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch URL: {}", e))?;
+
+    if !response.status().is_success() {
+        return Err(format!("HTTP {}: {}", response.status(), url));
+    }
+
+    response
+        .bytes()
+        .await
+        .map(|b| b.to_vec())
+        .map_err(|e| format!("Failed to read response: {}", e))
+}

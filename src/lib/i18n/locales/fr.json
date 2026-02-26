@@ -232,7 +232,8 @@
     "viewBooklet": "Voir le livret",
     "bookletLoading": "Chargement du livret...",
     "bookletError": "Impossible de charger le livret",
-    "bookletFitWidth": "Ajuster à la largeur"
+    "bookletFitWidth": "Ajuster à la largeur",
+    "bookletRotate": "Pivoter"
   },
   "artist": {
     "albums": "Albums",

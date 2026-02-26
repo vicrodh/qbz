@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
-  import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize } from 'lucide-svelte';
+  import { invoke } from '@tauri-apps/api/core';
+  import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, RotateCw } from 'lucide-svelte';
   import * as pdfjsLib from 'pdfjs-dist';
 
   // Configure worker
@@ -29,6 +29,7 @@
   let currentPage = $state(1);
   let totalPages = $state(0);
   let zoom = $state(1);
+  let rotation = $state(0);
   let isLoading = $state(true);
   let error = $state('');
   let currentRenderTask: any = null;
@@ -45,9 +46,14 @@
     error = '';
 
     try {
+      // Fetch PDF bytes through Tauri backend to bypass CORS
+      const bytes = await invoke<number[]>('v2_fetch_url_bytes', { url });
+      const data = new Uint8Array(bytes);
+
       const loadingTask = pdfjsLib.getDocument({
-        url,
-        disableRange: false,
+        data,
+        disableRange: true,
+        disableAutoFetch: true,
       });
 
       pdfDoc = await loadingTask.promise;
@@ -56,7 +62,7 @@
       await renderPage();
     } catch (err: any) {
       console.error('[BookletViewer] Failed to load PDF:', err);
-      error = err?.message || 'Failed to load booklet';
+      error = err?.message || String(err) || 'Failed to load booklet';
     } finally {
       isLoading = false;
     }
@@ -73,7 +79,8 @@
     try {
       const page = await pdfDoc.getPage(currentPage);
       const dpr = window.devicePixelRatio || 1;
-      const viewport = page.getViewport({ scale: zoom * dpr * 1.5 });
+      const scale = zoom * dpr * 1.5;
+      const viewport = page.getViewport({ scale, rotation });
 
       canvas.width = viewport.width;
       canvas.height = viewport.height;
@@ -132,6 +139,11 @@
     renderPage();
   }
 
+  function rotate() {
+    rotation = (rotation + 90) % 360;
+    renderPage();
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (!isOpen) return;
 
@@ -151,6 +163,9 @@
         break;
       case '-':
         zoomOut();
+        break;
+      case 'r':
+        rotate();
         break;
     }
   }
@@ -187,6 +202,7 @@
       currentPage = 1;
       totalPages = 0;
       zoom = 1;
+      rotation = 0;
     }
   });
 </script>
@@ -220,6 +236,10 @@
         </button>
         <button class="toolbar-btn" onclick={fitToWidth} title={$t('album.bookletFitWidth')}>
           <Maximize size={16} />
+        </button>
+        <div class="toolbar-divider"></div>
+        <button class="toolbar-btn" onclick={rotate} title={$t('album.bookletRotate')}>
+          <RotateCw size={16} />
         </button>
       </div>
       <div class="toolbar-right">
