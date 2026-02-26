@@ -1993,8 +1993,6 @@ async fn resolve_via_odesli_and_search(
     bridge: &State<'_, CoreBridgeState>,
     runtime: &State<'_, RuntimeManagerState>,
 ) -> Result<MusicLinkResult, RuntimeError> {
-    use crate::playlist_import::providers::MusicProvider;
-
     let provider_name = provider.map(|p| format!("{:?}", p));
 
     // 1. Get title + artist: try direct platform API first (fast), fall back to Odesli

@@ -196,7 +196,7 @@ impl QobuzClient {
                 "OAuth private key not available — bundle may be outdated".to_string(),
             )
         })?;
-        drop(tokens);
+        let _ = tokens;
 
         // Step 1: Exchange code for token via /oauth/callback
         let callback_url = endpoints::build_url(paths::OAUTH_CALLBACK);
@@ -294,7 +294,7 @@ impl QobuzClient {
             .ok_or_else(|| ApiError::BundleExtractionError("Client not initialized".to_string()))?
             .app_id
             .clone();
-        drop(tokens);
+        let _ = tokens;
 
         let user_login_url = endpoints::build_url(paths::USER_LOGIN);
         let mut headers = HeaderMap::new();

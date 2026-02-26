@@ -116,6 +116,7 @@ pub struct UserInfo {
 
 /// Token validation response
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 pub struct TokenValidationResponse {
     pub code: i32,
     pub message: String,
