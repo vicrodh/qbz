@@ -80,9 +80,8 @@
   let lastFrameTime = 0;
   let isVisible = true;
 
-  // Frame throttling for power efficiency
-  // 15fps is enough for slow ambient motion, saves significant CPU
-  const TARGET_FPS = 15;
+  // Frame throttling
+  const TARGET_FPS = 60;
   const FRAME_INTERVAL = 1000 / TARGET_FPS;
 
   /**
