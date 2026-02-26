@@ -11,6 +11,8 @@
     togglePlay,
     seek as playerSeek,
     setVolume as playerSetVolume,
+    setIsSkipping,
+    stop as stopPlayback,
     startPolling,
     stopPolling,
     type PlayerState
@@ -25,6 +27,7 @@
     syncQueueState,
     startQueueEventListener,
     stopQueueEventListener,
+    type BackendQueueTrack,
     type QueueState
   } from '$lib/stores/queueStore';
   import {
@@ -44,6 +47,7 @@
     setMiniPlayerSurface
   } from '$lib/stores/uiStore';
   import { exitMiniplayerMode, setMiniplayerAlwaysOnTop } from '$lib/services/miniplayerService';
+  import { playTrack } from '$lib/services/playbackService';
 
   let playerState = $state<PlayerState>(getPlayerState());
   let queueState = $state<QueueState>(getQueueState());
@@ -278,19 +282,79 @@
     }
   }
 
+  async function playQueueTrack(track: BackendQueueTrack): Promise<void> {
+    const source = track.source ?? (track.is_local ? 'local' : 'qobuz');
+    const isLocal = source !== 'qobuz';
+    const quality = isLocal
+      ? 'Local'
+      : track.bit_depth && track.sample_rate
+        ? `${track.bit_depth}bit/${track.sample_rate}kHz`
+        : track.hires
+          ? 'Hi-Res'
+          : '-';
+
+    await playTrack({
+      id: track.id,
+      title: track.title,
+      artist: track.artist,
+      album: track.album,
+      artwork: track.artwork_url || '',
+      duration: track.duration_secs,
+      quality,
+      bitDepth: track.bit_depth ?? undefined,
+      // Local/Plex backends report Hz while Qobuz queue state is already in kHz.
+      samplingRate: isLocal && track.sample_rate ? track.sample_rate / 1000 : track.sample_rate ?? undefined,
+      isLocal,
+      source,
+      albumId: track.album_id ?? undefined,
+      artistId: track.artist_id ?? undefined
+    }, {
+      isLocal,
+      source: source as 'qobuz' | 'local' | 'plex',
+      showLoadingToast: false,
+      showSuccessToast: false
+    });
+  }
+
   async function handleSkipBack(): Promise<void> {
+    const state = getPlayerState();
+    if (!state.currentTrack || state.isSkipping) return;
+    if (state.currentTime > 3) {
+      playerSeek(0);
+      return;
+    }
+
+    setIsSkipping(true);
     try {
-      await previousTrack();
+      const previous = await previousTrack();
+      if (previous) {
+        await playQueueTrack(previous);
+      } else {
+        playerSeek(0);
+      }
     } catch (err) {
       console.error('[MiniPlayer] previousTrack failed:', err);
+    } finally {
+      setIsSkipping(false);
     }
   }
 
   async function handleSkipForward(): Promise<void> {
+    const state = getPlayerState();
+    if (!state.currentTrack || state.isSkipping) return;
+
+    setIsSkipping(true);
     try {
-      await nextTrack();
+      const next = await nextTrack();
+      if (next) {
+        await playQueueTrack(next);
+      } else {
+        await stopPlayback();
+      }
     } catch (err) {
       console.error('[MiniPlayer] nextTrack failed:', err);
+    } finally {
+      setIsSkipping(false);
     }
   }
 
