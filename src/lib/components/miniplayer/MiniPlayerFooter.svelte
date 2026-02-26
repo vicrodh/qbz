@@ -269,7 +269,7 @@
       </button>
 
       <button
-        class="ctrl-btn play"
+        class="ctrl-btn"
         onclick={onTogglePlay}
         title={isPlaying ? $t('player.pause') : $t('player.play')}
         aria-label={isPlaying ? $t('player.pause') : $t('player.play')}
@@ -534,19 +534,6 @@
     color: var(--accent-primary);
   }
 
-  .ctrl-btn.play {
-    width: 40px;
-    height: 40px;
-    background: var(--accent-primary);
-    color: var(--btn-primary-text, #ffffff);
-    box-shadow: 0 4px 14px color-mix(in srgb, var(--accent-primary) 38%, transparent);
-  }
-
-  .ctrl-btn.play:hover {
-    background: color-mix(in srgb, var(--accent-primary) 88%, white);
-    transform: scale(1.04);
-  }
-
   .ctrl-btn :global(.play-icon) {
     margin-left: 2px;
   }
@@ -658,11 +645,6 @@
     height: 26px;
   }
 
-  .footer.compact .ctrl-btn.play {
-    width: 34px;
-    height: 34px;
-  }
-
   .footer.compact .volume-trigger {
     width: 26px;
     height: 26px;
@@ -680,20 +662,6 @@
   .footer.micro .ctrl-btn {
     width: 16px;
     height: 16px;
-  }
-
-  .footer.micro .ctrl-btn.play {
-    width: 16px;
-    height: 16px;
-    background: transparent;
-    color: var(--alpha-70);
-    box-shadow: none;
-  }
-
-  .footer.micro .ctrl-btn.play:hover {
-    background: var(--alpha-8);
-    color: var(--text-primary);
-    transform: none;
   }
 
   .footer.micro .ctrl-btn :global(.play-icon) {

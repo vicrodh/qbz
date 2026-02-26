@@ -62,7 +62,7 @@
 
   const COMPACT_GEOMETRY = {
     width: 380,
-    height: 194
+    height: 178
   };
 
   const MICRO_GEOMETRY = {

@@ -28,7 +28,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 7px 12px 6px;
+    padding: 12px;
     min-height: 0;
     flex: 1 1 auto;
     overflow: hidden;
