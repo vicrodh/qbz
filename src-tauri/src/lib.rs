@@ -920,6 +920,13 @@ pub fn run() {
                     let _ = window.hide();
                     api.prevent_close();
                 } else {
+                    // Close MiniPlayer window first so WebKit can clean up
+                    // its GPU/EGL resources gracefully before the process exits.
+                    if let Some(mini) = window.app_handle().webview_windows().get("miniplayer") {
+                        log::info!("App closing: destroying miniplayer window");
+                        let _ = mini.destroy();
+                    }
+
                     // Cleanup cast devices on actual close
                     log::info!("App closing: cleaning up cast devices");
 
