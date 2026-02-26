@@ -1431,6 +1431,7 @@ pub fn run() {
             // PDF booklet viewer (MuPDF backend)
             pdf_viewer::v2_booklet_open,
             pdf_viewer::v2_booklet_render_page,
+            pdf_viewer::v2_booklet_save,
             pdf_viewer::v2_booklet_close,
         ])
         .run(tauri::generate_context!())

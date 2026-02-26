@@ -245,7 +245,8 @@
     "bookletLoading": "Cargando libreto...",
     "bookletError": "No se pudo cargar el libreto",
     "bookletFitWidth": "Ajustar al ancho",
-    "bookletRotate": "Rotar"
+    "bookletRotate": "Rotar",
+    "bookletDownload": "Guardar booklet"
   },
   "artist": {
     "albums": "Álbumes",
