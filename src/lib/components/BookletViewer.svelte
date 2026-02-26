@@ -5,12 +5,9 @@
   import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, RotateCw } from 'lucide-svelte';
   import * as pdfjsLib from 'pdfjs-dist';
 
-  // We disable the worker at document level (disableWorker: true)
-  // but pdfjs v5 still requires workerSrc to be set at init time.
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url
-  ).toString();
+  // Serve worker from static/ (real HTTP URL, not Vite blob) so it
+  // can resolve sibling WASM files (openjpeg.wasm, jbig2.wasm, etc.)
+  pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdfjs/pdf.worker.min.mjs';
 
   interface Props {
     isOpen: boolean;
@@ -52,14 +49,11 @@
       const bytes = await invoke<number[]>('v2_fetch_url_bytes', { url });
       const data = new Uint8Array(bytes);
 
-      // disableWorker: run all decoding on main thread so WASM resolves
       const loadingTask = pdfjsLib.getDocument({
         data,
         disableRange: true,
         disableAutoFetch: true,
-        disableWorker: true,
-        useWorkerFetch: false,
-        wasmUrl: `${window.location.origin}/pdfjs/`,
+        wasmUrl: '/pdfjs/',
       } as any);
 
       pdfDoc = await loadingTask.promise;
