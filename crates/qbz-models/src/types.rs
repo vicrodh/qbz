@@ -207,6 +207,28 @@ pub struct Album {
     pub upc: Option<String>,
     /// Editorial description/review of the album
     pub description: Option<String>,
+    /// Album goodies (booklets, liner notes PDFs)
+    #[serde(default)]
+    pub goodies: Option<Vec<Goody>>,
+}
+
+/// A downloadable extra bundled with an album (e.g. PDF booklet)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Goody {
+    #[serde(default)]
+    pub id: u64,
+    #[serde(default)]
+    pub name: String,
+    #[serde(default)]
+    pub url: String,
+    /// Original (full-size) URL
+    #[serde(default)]
+    pub original_url: String,
+    /// File format id (e.g. 21 for PDF)
+    #[serde(default)]
+    pub file_format_id: Option<u32>,
+    #[serde(default)]
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
