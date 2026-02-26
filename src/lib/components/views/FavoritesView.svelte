@@ -19,7 +19,7 @@
   import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import { consumeContextTrackFocus, setPlaybackContext } from '$lib/stores/playbackContextStore';
   import { normalizeFavoritesTabOrder } from '$lib/utils/favorites';
-  import { syncCache as syncTrackCache } from '$lib/stores/favoritesStore';
+  import { syncCache as syncTrackCache, subscribe as subscribeFavorites, isTrackFavorite } from '$lib/stores/favoritesStore';
   import { syncCache as syncAlbumCache } from '$lib/stores/albumFavoritesStore';
   import { syncCache as syncArtistCache } from '$lib/stores/artistFavoritesStore';
   import { categorizeAlbum, getQobuzImage, formatQuality } from '$lib/adapters/qobuzAdapters';
@@ -622,6 +622,30 @@
         }
       });
     });
+
+    // Listen for favorite changes — animate out unfavorited tracks
+    const unsubFavorites = subscribeFavorites(() => {
+      if (activeTab !== 'tracks' || favoriteTracks.length === 0) return;
+      const unfavorited = favoriteTracks.filter(track => !isTrackFavorite(track.id));
+      if (unfavorited.length === 0) return;
+
+      // Add exit animation class via DOM (virtualized list doesn't support per-item props)
+      for (const track of unfavorited) {
+        const el = scrollContainer?.querySelector<HTMLElement>(`[data-track-id="${track.id}"]`);
+        if (el) {
+          el.classList.add('track-removing');
+        }
+      }
+
+      // After animation completes, remove from data array
+      setTimeout(() => {
+        favoriteTracks = favoriteTracks.filter(track => isTrackFavorite(track.id));
+      }, 300);
+    });
+
+    return () => {
+      unsubFavorites();
+    };
   });
 
   function handleFavoritesScroll(e: Event) {
@@ -1638,7 +1662,6 @@
               isLocal={false}
               hideDownload={false}
               hideFavorite={false}
-              isFavoriteOverride={true}
               getOfflineCacheStatus={getTrackOfflineCacheStatus}
               onDownload={onTrackDownload ? (trk) => onTrackDownload(buildDisplayTrackFromFavorite(trk)) : undefined}
               onRemoveDownload={onTrackRemoveDownload}
@@ -2041,6 +2064,35 @@
 />
 
 <style>
+  /* Exit animation for unfavorited tracks */
+  :global(.track-removing) {
+    animation: track-fade-out 300ms ease forwards;
+    pointer-events: none;
+  }
+
+  @keyframes track-fade-out {
+    0% {
+      opacity: 1;
+      transform: translateX(0);
+      max-height: 60px;
+    }
+    60% {
+      opacity: 0;
+      transform: translateX(-30px);
+      max-height: 60px;
+    }
+    100% {
+      opacity: 0;
+      transform: translateX(-30px);
+      max-height: 0;
+      padding-top: 0;
+      padding-bottom: 0;
+      margin-top: 0;
+      margin-bottom: 0;
+      overflow: hidden;
+    }
+  }
+
   .favorites-view {
     padding: 24px;
     padding-left: 18px;
