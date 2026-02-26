@@ -2820,6 +2820,7 @@ pub fn v2_plex_cache_clear() -> Result<(), String> {
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub fn v2_plex_cache_get_tracks(
     sectionKey: Option<String>,
     limit: Option<u32>,
@@ -2841,6 +2842,7 @@ pub fn v2_plex_cache_search_tracks(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub fn v2_plex_cache_get_album_tracks(
     albumKey: String,
 ) -> Result<Vec<crate::plex::PlexCachedTrack>, String> {
@@ -4122,6 +4124,7 @@ pub async fn v2_reco_train_scores(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_reco_get_home(
     limitRecentAlbums: Option<u32>,
     limitContinueTracks: Option<u32>,
@@ -4140,6 +4143,7 @@ pub async fn v2_reco_get_home(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_reco_get_home_ml(
     limitRecentAlbums: Option<u32>,
     limitContinueTracks: Option<u32>,
@@ -4158,6 +4162,7 @@ pub async fn v2_reco_get_home_ml(
 }
 
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_reco_get_home_resolved(
     limitRecentAlbums: Option<u32>,
     limitContinueTracks: Option<u32>,
@@ -8724,6 +8729,7 @@ pub async fn v2_has_playback_context(app_state: State<'_, AppState>) -> Result<b
 
 /// Save session position (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_save_session_position(
     positionSecs: u64,
     session_state: State<'_, crate::session_store::SessionStoreState>,
@@ -8760,6 +8766,7 @@ pub async fn v2_save_session_volume(
 
 /// Save session playback mode (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_save_session_playback_mode(
     shuffle: bool,
     repeatMode: String,
@@ -8779,6 +8786,7 @@ pub async fn v2_save_session_playback_mode(
 
 /// Save session state - full state (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_save_session_state(
     queueTracks: Vec<crate::session_store::PersistedQueueTrack>,
     currentIndex: Option<usize>,
@@ -8879,6 +8887,7 @@ pub async fn v2_get_cached_favorite_tracks(
 
 /// Sync cached favorite tracks (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_sync_cached_favorite_tracks(
     trackIds: Vec<i64>,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
@@ -8897,6 +8906,7 @@ pub async fn v2_sync_cached_favorite_tracks(
 
 /// Cache a favorite track (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_cache_favorite_track(
     trackId: i64,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
@@ -8915,6 +8925,7 @@ pub async fn v2_cache_favorite_track(
 
 /// Uncache a favorite track (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_uncache_favorite_track(
     trackId: i64,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
@@ -9002,6 +9013,7 @@ pub async fn v2_get_cached_favorite_albums(
 
 /// Sync cached favorite albums (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_sync_cached_favorite_albums(
     albumIds: Vec<String>,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
@@ -9020,6 +9032,7 @@ pub async fn v2_sync_cached_favorite_albums(
 
 /// Cache a favorite album (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_cache_favorite_album(
     albumId: String,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
@@ -9038,6 +9051,7 @@ pub async fn v2_cache_favorite_album(
 
 /// Uncache a favorite album (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_uncache_favorite_album(
     albumId: String,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
@@ -9073,6 +9087,7 @@ pub async fn v2_get_cached_favorite_artists(
 
 /// Sync cached favorite artists (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_sync_cached_favorite_artists(
     artistIds: Vec<i64>,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
@@ -9091,6 +9106,7 @@ pub async fn v2_sync_cached_favorite_artists(
 
 /// Cache a favorite artist (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_cache_favorite_artist(
     artistId: i64,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
@@ -9109,6 +9125,7 @@ pub async fn v2_cache_favorite_artist(
 
 /// Uncache a favorite artist (V2)
 #[tauri::command]
+#[allow(non_snake_case)]
 pub async fn v2_uncache_favorite_artist(
     artistId: i64,
     cache_state: State<'_, crate::config::favorites_cache::FavoritesCacheState>,
@@ -10235,6 +10252,7 @@ pub struct V2PurchaseFormatOption {
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
+#[allow(non_snake_case)]
 pub struct V2DynamicTrackToAnalyseInput {
     pub trackId: u64,
     pub artistId: u64,
