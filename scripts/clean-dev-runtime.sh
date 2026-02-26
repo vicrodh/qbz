@@ -26,3 +26,6 @@ done
 rm -rf .svelte-kit .vite node_modules/.vite build dist .cache
 
 echo "[qbz] Dev runtime cleaned (processes + ports 1420/1421 + cache directories)."
+
+# Run guardrail check so runtime clean does not hide code-level ghost triggers.
+bash ./scripts/check-no-t-shadow.sh
