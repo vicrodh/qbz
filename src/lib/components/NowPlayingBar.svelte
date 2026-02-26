@@ -781,9 +781,9 @@
     padding: 2px;
     background: var(--bg-tertiary);
     border-radius: 8px;
-    min-width: 436px;
+    min-width: 354px;
     flex: 1;
-    max-width: 800px;
+    max-width: 718px;
   }
 
   .artwork-container {
