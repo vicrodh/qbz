@@ -4,6 +4,7 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
+  import type { ButtonColorSet } from '$lib/stores/windowControlsStore';
 
   interface TraySettings {
     enable_tray: boolean;
@@ -16,13 +17,25 @@
     searchQuery?: string;
     onSearchInput?: (query: string) => void;
     onSearchClear?: () => void;
+    controlsPosition?: 'right' | 'left';
+    controlsShape?: 'rectangular' | 'circular' | 'square';
+    controlsSize?: 'small' | 'normal' | 'large';
+    controlsColors?: {
+      minimize: ButtonColorSet;
+      maximize: ButtonColorSet;
+      close: ButtonColorSet;
+    };
   }
 
   let {
     searchInTitlebar = false,
     searchQuery = '',
     onSearchInput,
-    onSearchClear
+    onSearchClear,
+    controlsPosition = 'right',
+    controlsShape = 'rectangular',
+    controlsSize = 'normal',
+    controlsColors
   }: Props = $props();
 
   let isMaximized = $state(false);
@@ -98,13 +111,67 @@
     }
   }
 
+  function btnStyle(colors: ButtonColorSet | undefined): string {
+    if (!colors) return '';
+    return `--wc-bg:${colors.bg};--wc-bg-hover:${colors.bgHover};--wc-bg-active:${colors.bgActive};--wc-fg:${colors.fg};--wc-fg-hover:${colors.fgHover};--wc-fg-active:${colors.fgActive}`;
+  }
+
   export function focusSearch() {
     searchInputEl?.focus();
   }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<header class="titlebar" class:has-search={searchInTitlebar} ondblclick={handleDoubleClick}>
+<header
+  class="titlebar"
+  class:has-search={searchInTitlebar}
+  class:controls-left={controlsPosition === 'left'}
+  ondblclick={handleDoubleClick}
+>
+  {#if controlsPosition === 'left'}
+    <!-- Window Controls (left position - macOS order: close, maximize, minimize) -->
+    <div
+      class="window-controls shape-{controlsShape} size-{controlsSize}"
+      class:has-custom-colors={!!controlsColors}
+      data-tauri-drag-region="false"
+    >
+      <button
+        class="control-btn close"
+        onclick={handleClose}
+        title="Close"
+        aria-label="Close window"
+        style={btnStyle(controlsColors?.close)}
+        data-tauri-drag-region="false"
+      >
+        <X size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
+      </button>
+      <button
+        class="control-btn maximize"
+        onclick={handleMaximize}
+        title={isMaximized ? "Restore" : "Maximize"}
+        aria-label={isMaximized ? "Restore window" : "Maximize window"}
+        style={btnStyle(controlsColors?.maximize)}
+        data-tauri-drag-region="false"
+      >
+        {#if isMaximized}
+          <Minimize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
+        {:else}
+          <Maximize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
+        {/if}
+      </button>
+      <button
+        class="control-btn minimize"
+        onclick={handleMinimize}
+        title="Minimize"
+        aria-label="Minimize window"
+        style={btnStyle(controlsColors?.minimize)}
+        data-tauri-drag-region="false"
+      >
+        <Minus size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
+      </button>
+    </div>
+  {/if}
+
   <!-- Left drag region -->
   <div class="drag-region" data-tauri-drag-region></div>
 
@@ -141,40 +208,49 @@
     <div class="drag-region" data-tauri-drag-region></div>
   {/if}
 
-  <!-- Window Controls -->
-  <div class="window-controls" data-tauri-drag-region="false">
-    <button
-      class="control-btn minimize"
-      onclick={handleMinimize}
-      title="Minimize"
-      aria-label="Minimize window"
+  {#if controlsPosition === 'right'}
+    <!-- Window Controls (right position - standard order: minimize, maximize, close) -->
+    <div
+      class="window-controls shape-{controlsShape} size-{controlsSize}"
+      class:has-custom-colors={!!controlsColors}
       data-tauri-drag-region="false"
     >
-      <Minus size={16} strokeWidth={1.5} />
-    </button>
-    <button
-      class="control-btn maximize"
-      onclick={handleMaximize}
-      title={isMaximized ? "Restore" : "Maximize"}
-      aria-label={isMaximized ? "Restore window" : "Maximize window"}
-      data-tauri-drag-region="false"
-    >
-      {#if isMaximized}
-        <Minimize2 size={14} strokeWidth={1.5} />
-      {:else}
-        <Maximize2 size={14} strokeWidth={1.5} />
-      {/if}
-    </button>
-    <button
-      class="control-btn close"
-      onclick={handleClose}
-      title="Close"
-      aria-label="Close window"
-      data-tauri-drag-region="false"
-    >
-      <X size={16} strokeWidth={1.5} />
-    </button>
-  </div>
+      <button
+        class="control-btn minimize"
+        onclick={handleMinimize}
+        title="Minimize"
+        aria-label="Minimize window"
+        style={btnStyle(controlsColors?.minimize)}
+        data-tauri-drag-region="false"
+      >
+        <Minus size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
+      </button>
+      <button
+        class="control-btn maximize"
+        onclick={handleMaximize}
+        title={isMaximized ? "Restore" : "Maximize"}
+        aria-label={isMaximized ? "Restore window" : "Maximize window"}
+        style={btnStyle(controlsColors?.maximize)}
+        data-tauri-drag-region="false"
+      >
+        {#if isMaximized}
+          <Minimize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
+        {:else}
+          <Maximize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
+        {/if}
+      </button>
+      <button
+        class="control-btn close"
+        onclick={handleClose}
+        title="Close"
+        aria-label="Close window"
+        style={btnStyle(controlsColors?.close)}
+        data-tauri-drag-region="false"
+      >
+        <X size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
+      </button>
+    </div>
+  {/if}
 </header>
 
 <style>
@@ -270,6 +346,8 @@
     color: var(--text-primary);
   }
 
+  /* === Window Controls Container === */
+
   .window-controls {
     display: flex;
     align-items: stretch;
@@ -278,9 +356,42 @@
     app-region: no-drag;
   }
 
+  /* Left position: add padding */
+  .controls-left .window-controls {
+    padding-left: 4px;
+  }
+
+  /* Circular shape: center buttons vertically with gap */
+  .window-controls.shape-circular {
+    align-items: center;
+    height: auto;
+    gap: 6px;
+    padding: 0 8px;
+  }
+  .window-controls.shape-circular.size-normal {
+    gap: 12px;
+  }
+  .window-controls.shape-circular.size-large {
+    gap: 18px;
+  }
+
+  /* Square shape: center buttons vertically with gap */
+  .window-controls.shape-square {
+    align-items: center;
+    height: auto;
+    gap: 4px;
+    padding: 0 6px;
+  }
+  .window-controls.shape-square.size-normal {
+    gap: 8px;
+  }
+  .window-controls.shape-square.size-large {
+    gap: 12px;
+  }
+
+  /* === Control Buttons === */
+
   .control-btn {
-    width: 46px;
-    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -293,25 +404,94 @@
     app-region: no-drag;
   }
 
-  .control-btn:hover {
+  /* --- Rectangular --- */
+  .shape-rectangular .control-btn {
+    width: 46px;
+    height: 100%;
+  }
+  .shape-rectangular.size-small .control-btn {
+    width: 36px;
+  }
+  .shape-rectangular.size-large .control-btn {
+    width: 56px;
+  }
+
+  /* --- Circular --- */
+  .shape-circular .control-btn {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+  }
+  .shape-circular.size-small .control-btn {
+    width: 10px;
+    height: 10px;
+  }
+  .shape-circular.size-large .control-btn {
+    width: 18px;
+    height: 18px;
+  }
+
+  /* --- Square --- */
+  .shape-square .control-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+  }
+  .shape-square.size-small .control-btn {
+    width: 18px;
+    height: 18px;
+  }
+  .shape-square.size-large .control-btn {
+    width: 30px;
+    height: 30px;
+  }
+
+  /* === Default Colors (no custom colors) === */
+
+  .window-controls:not(.has-custom-colors) .control-btn:hover {
     color: var(--text-primary);
   }
 
-  .control-btn.minimize:hover,
-  .control-btn.maximize:hover {
+  .window-controls:not(.has-custom-colors) .control-btn.minimize:hover,
+  .window-controls:not(.has-custom-colors) .control-btn.maximize:hover {
     background-color: var(--alpha-10);
   }
 
-  .control-btn.close:hover {
+  .window-controls:not(.has-custom-colors) .control-btn.close:hover {
     background-color: #e81123;
     color: white;
   }
 
-  .control-btn:active {
-    opacity: 0.8;
+  /* Default active/clicked states */
+  .window-controls:not(.has-custom-colors) .control-btn.minimize:active,
+  .window-controls:not(.has-custom-colors) .control-btn.maximize:active {
+    background-color: rgba(255,255,255,0.06);
+    color: var(--text-muted);
+  }
+
+  .window-controls:not(.has-custom-colors) .control-btn.close:active {
+    background-color: #b20f1c;
+    color: white;
   }
 
   .control-btn :global(svg) {
     pointer-events: none;
+  }
+
+  /* === Custom Colors (CSS variable driven) === */
+
+  .has-custom-colors .control-btn {
+    background: var(--wc-bg, transparent);
+    color: var(--wc-fg, var(--text-muted));
+  }
+
+  .has-custom-colors .control-btn:hover {
+    background: var(--wc-bg-hover, var(--alpha-10));
+    color: var(--wc-fg-hover, var(--text-primary));
+  }
+
+  .has-custom-colors .control-btn:active {
+    background: var(--wc-bg-active, rgba(255,255,255,0.06));
+    color: var(--wc-fg-active, var(--text-muted));
   }
 </style>
