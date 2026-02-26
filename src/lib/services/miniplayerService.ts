@@ -66,7 +66,7 @@ async function getOrCreateMiniPlayerWindow(): Promise<Window> {
     x: geometry.x,
     y: geometry.y,
     minWidth: 340,
-    minHeight: 200,
+    minHeight: 57,
     resizable: true,
     decorations: getUseSystemTitleBar(),
     alwaysOnTop: miniState.alwaysOnTop,

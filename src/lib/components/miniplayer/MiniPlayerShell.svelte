@@ -75,45 +75,56 @@
   }: Props = $props();
 
   const compactSurface = $derived(activeSurface === 'compact');
+  const microSurface = $derived(activeSurface === 'micro');
 </script>
 
 <div
   class="mini-player-window"
   class:compact={compactSurface}
+  class:micro={microSurface}
 >
-  <div class="titlebar-row">
-    <div class="controls-slot">
-      <MiniPlayerWindowControls
-        {activeSurface}
-        isPinned={isPinned}
-        onSurfaceChange={onSurfaceChange}
-        onTogglePin={onTogglePin}
-        onExpand={onExpand}
-        onClose={onClose}
-        onStartDrag={onStartDrag}
-      />
+  {#if !microSurface}
+    <div class="titlebar-row">
+      <div class="controls-slot">
+        <MiniPlayerWindowControls
+          {activeSurface}
+          isPinned={isPinned}
+          onSurfaceChange={onSurfaceChange}
+          onTogglePin={onTogglePin}
+          onExpand={onExpand}
+          onClose={onClose}
+          onStartDrag={onStartDrag}
+        />
+      </div>
     </div>
-  </div>
+  {/if}
 
-  <div class="surface-area">
-    {#if activeSurface === 'compact'}
-      <MiniPlayerCompactSurface {artwork} {title} {artist} />
-    {:else if activeSurface === 'artwork'}
-      <MiniPlayerArtworkSurface {artwork} {title} {artist} {album} />
-    {:else if activeSurface === 'queue'}
-      <MiniPlayerQueueSurface tracks={queueTracks} {currentTrackId} />
-    {:else}
-      <MiniPlayerLyricsSurface
-        lines={lyricsLines}
-        activeIndex={lyricsActiveIndex}
-        activeProgress={lyricsActiveProgress}
-        isSynced={lyricsIsSynced}
-      />
-    {/if}
-  </div>
+  {#if !microSurface}
+    <div class="surface-area">
+      {#if activeSurface === 'compact'}
+        <MiniPlayerCompactSurface {artwork} {title} {artist} />
+      {:else if activeSurface === 'artwork'}
+        <MiniPlayerArtworkSurface {artwork} {title} {artist} {album} />
+      {:else if activeSurface === 'queue'}
+        <MiniPlayerQueueSurface tracks={queueTracks} {currentTrackId} />
+      {:else}
+        <MiniPlayerLyricsSurface
+          lines={lyricsLines}
+          activeIndex={lyricsActiveIndex}
+          activeProgress={lyricsActiveProgress}
+          isSynced={lyricsIsSynced}
+        />
+      {/if}
+    </div>
+  {/if}
 
   <MiniPlayerFooter
     compact={compactSurface}
+    micro={microSurface}
+    trackTitle={title}
+    trackArtist={artist}
+    activeSurface={activeSurface}
+    isPinned={isPinned}
     {isPlaying}
     {currentTime}
     {duration}
@@ -127,6 +138,11 @@
     onVolumeChange={onVolumeChange}
     onToggleShuffle={onToggleShuffle}
     onToggleRepeat={onToggleRepeat}
+    onSurfaceChange={onSurfaceChange}
+    onTogglePin={onTogglePin}
+    onExpand={onExpand}
+    onClose={onClose}
+    onStartDrag={onStartDrag}
   />
 </div>
 
@@ -146,6 +162,10 @@
   }
 
   .mini-player-window.compact {
+    border-radius: 9px;
+  }
+
+  .mini-player-window.micro {
     border-radius: 9px;
   }
 

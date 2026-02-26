@@ -1,6 +1,8 @@
 <script lang="ts">
   import { Shuffle, SkipBack, Play, Pause, SkipForward, Repeat, Repeat1, Volume2, VolumeX, Volume1 } from 'lucide-svelte';
   import { t } from '$lib/i18n';
+  import MiniPlayerWindowControls from './MiniPlayerWindowControls.svelte';
+  import type { MiniPlayerSurface } from './types';
 
   interface Props {
     isPlaying: boolean;
@@ -10,6 +12,11 @@
     isShuffle: boolean;
     repeatMode: 'off' | 'all' | 'one';
     compact?: boolean;
+    micro?: boolean;
+    trackTitle?: string;
+    trackArtist?: string;
+    activeSurface?: MiniPlayerSurface;
+    isPinned?: boolean;
     onTogglePlay: () => void;
     onSkipBack: () => void;
     onSkipForward: () => void;
@@ -17,6 +24,11 @@
     onVolumeChange: (volume: number) => void;
     onToggleShuffle: () => void;
     onToggleRepeat: () => void;
+    onSurfaceChange?: (surface: MiniPlayerSurface) => void;
+    onTogglePin?: () => void;
+    onExpand?: () => void;
+    onClose?: () => void;
+    onStartDrag?: (event: MouseEvent) => void;
   }
 
   let {
@@ -27,26 +39,52 @@
     isShuffle,
     repeatMode,
     compact = false,
+    micro = false,
+    trackTitle,
+    trackArtist,
+    activeSurface,
+    isPinned = false,
     onTogglePlay,
     onSkipBack,
     onSkipForward,
     onSeek,
     onVolumeChange,
     onToggleShuffle,
-    onToggleRepeat
+    onToggleRepeat,
+    onSurfaceChange,
+    onTogglePin,
+    onExpand,
+    onClose,
+    onStartDrag
   }: Props = $props();
 
   let seekRef: HTMLDivElement | null = $state(null);
+  let seekBottomRef: HTMLDivElement | null = $state(null);
   let volumeRef: HTMLDivElement | null = $state(null);
   let volumeButtonRef: HTMLButtonElement | null = $state(null);
+  let microTrackRef: HTMLDivElement | null = $state(null);
+  let microTrackTextRef: HTMLSpanElement | null = $state(null);
   let isDraggingSeek = $state(false);
   let isDraggingVolume = $state(false);
   let volumePopoverOpen = $state(false);
   let isMuted = $state(false);
   let previousVolume = $state(75);
+  let microTrackOverflow = $state(0);
 
   const progress = $derived(duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0);
   const displayVolume = $derived(isMuted ? 0 : volume);
+  const tickerSpeed = 40;
+  const microTrackOffset = $derived(microTrackOverflow > 0 ? `-${microTrackOverflow + 16}px` : '0px');
+  const microTrackDuration = $derived(microTrackOverflow > 0 ? `${(microTrackOverflow + 16) / tickerSpeed}s` : '0s');
+  const canRenderInlineWindowControls = $derived(
+    micro && !!activeSurface && !!onSurfaceChange && !!onTogglePin && !!onExpand && !!onClose && !!onStartDrag
+  );
+
+  function getMicroTrackLine(): string {
+    if (!trackTitle) return $t('player.noTrackPlaying');
+    const artistName = trackArtist?.trim();
+    return artistName ? `${trackTitle} - ${artistName}` : trackTitle;
+  }
 
   function formatTime(seconds: number): string {
     if (!seconds || !isFinite(seconds)) return '0:00';
@@ -55,9 +93,19 @@
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
   }
 
-  function updateSeek(event: MouseEvent): void {
-    if (!seekRef || duration <= 0) return;
-    const rect = seekRef.getBoundingClientRect();
+  function updateMicroTrackOverflow(): void {
+    if (!microTrackRef || !microTrackTextRef) {
+      microTrackOverflow = 0;
+      return;
+    }
+
+    const overflow = microTrackTextRef.scrollWidth - microTrackRef.clientWidth;
+    microTrackOverflow = overflow > 0 ? overflow : 0;
+  }
+
+  function updateSeek(event: MouseEvent, targetRef: HTMLDivElement | null): void {
+    if (!targetRef || duration <= 0) return;
+    const rect = targetRef.getBoundingClientRect();
     const percentage = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100));
     onSeek(Math.round((percentage / 100) * duration));
   }
@@ -65,7 +113,7 @@
   function updateVolume(event: MouseEvent): void {
     if (!volumeRef) return;
     const rect = volumeRef.getBoundingClientRect();
-    const percentage = Math.max(0, Math.min(100, ((rect.bottom - event.clientY) / rect.height) * 100));
+    const percentage = Math.max(0, Math.min(100, ((event.clientX - rect.left) / rect.width) * 100));
     const nextVolume = Math.round(percentage);
     onVolumeChange(nextVolume);
     if (nextVolume > 0) {
@@ -97,7 +145,7 @@
 
   function handleMouseMove(event: MouseEvent): void {
     if (isDraggingSeek) {
-      updateSeek(event);
+      updateSeek(event, micro ? seekBottomRef : seekRef);
     }
     if (isDraggingVolume) {
       updateVolume(event);
@@ -129,42 +177,95 @@
       document.removeEventListener('mousedown', handleDocumentMouseDown);
     };
   });
+
+  $effect(() => {
+    if (!micro) return;
+    trackTitle;
+    trackArtist;
+
+    requestAnimationFrame(() => {
+      updateMicroTrackOverflow();
+    });
+  });
+
+  $effect(() => {
+    if (!micro || !microTrackRef || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(() => {
+      updateMicroTrackOverflow();
+    });
+    observer.observe(microTrackRef);
+
+    return () => {
+      observer.disconnect();
+    };
+  });
 </script>
 
-<div class="footer" class:compact>
-  <div
-    class="seek-wrapper"
-    bind:this={seekRef}
-    onmousedown={(event) => {
-      isDraggingSeek = true;
-      updateSeek(event);
-    }}
-    role="slider"
-    tabindex="0"
-    aria-valuenow={Math.round(currentTime)}
-    aria-valuemin={0}
-    aria-valuemax={Math.round(duration)}
-    aria-label={$t('player.nowPlaying')}
-  >
-    <div class="seek-track">
-      <div class="seek-fill" style="width: {progress}%"></div>
+<div class="footer" class:compact class:micro>
+{#if micro}
+    <div class="micro-header" data-tauri-drag-region>
+      <div
+        class="micro-track"
+        class:scrollable={microTrackOverflow > 0}
+        style="--ticker-offset: {microTrackOffset}; --ticker-duration: {microTrackDuration};"
+        bind:this={microTrackRef}
+        title={getMicroTrackLine()}
+      >
+        <span class="micro-track-text" bind:this={microTrackTextRef}>{getMicroTrackLine()}</span>
+      </div>
+      {#if canRenderInlineWindowControls}
+        <div class="micro-window-controls">
+          <MiniPlayerWindowControls
+            micro
+            activeSurface={activeSurface!}
+            isPinned={isPinned}
+            onSurfaceChange={onSurfaceChange!}
+            onTogglePin={onTogglePin!}
+            onExpand={onExpand!}
+            onClose={onClose!}
+            onStartDrag={onStartDrag!}
+          />
+        </div>
+      {/if}
     </div>
-    <div class="seek-thumb" style="left: {progress}%" class:visible={isDraggingSeek}></div>
-  </div>
+  {/if}
 
-  <div class="times">
-    <span>{formatTime(currentTime)}</span>
-    <span>{formatTime(duration)}</span>
-  </div>
+  {#if !micro}
+    <div
+      class="seek-wrapper"
+      bind:this={seekRef}
+      onmousedown={(event) => {
+        isDraggingSeek = true;
+        updateSeek(event, seekRef);
+      }}
+      role="slider"
+      tabindex="0"
+      aria-valuenow={Math.round(currentTime)}
+      aria-valuemin={0}
+      aria-valuemax={Math.round(duration)}
+      aria-label={$t('player.nowPlaying')}
+    >
+      <div class="seek-track">
+        <div class="seek-fill" style="width: {progress}%"></div>
+      </div>
+      <div class="seek-thumb" style="left: {progress}%" class:visible={isDraggingSeek}></div>
+    </div>
 
-  <div class="controls-row">
+    <div class="times">
+      <span>{formatTime(currentTime)}</span>
+      <span>{formatTime(duration)}</span>
+    </div>
+  {/if}
+
+  <div class="controls-row" class:micro-controls={micro}>
     <div class="transport">
       <button class="ctrl-btn" class:active={isShuffle} onclick={onToggleShuffle} title={$t('player.shuffle')}>
-        <Shuffle size={compact ? 13 : 16} />
+        <Shuffle size={micro ? 8 : compact ? 13 : 16} />
       </button>
 
       <button class="ctrl-btn" onclick={onSkipBack} title={$t('player.previous')}>
-        <SkipBack size={compact ? 15 : 18} fill="currentColor" />
+        <SkipBack size={micro ? 9 : compact ? 15 : 18} fill="currentColor" />
       </button>
 
       <button
@@ -174,14 +275,14 @@
         aria-label={isPlaying ? $t('player.pause') : $t('player.play')}
       >
         {#if isPlaying}
-          <Pause size={compact ? 16 : 20} fill="currentColor" />
+          <Pause size={micro ? 9 : compact ? 16 : 20} fill="currentColor" />
         {:else}
-          <Play size={compact ? 16 : 20} fill="currentColor" class="play-icon" />
+          <Play size={micro ? 9 : compact ? 16 : 20} fill="currentColor" class="play-icon" />
         {/if}
       </button>
 
       <button class="ctrl-btn" onclick={onSkipForward} title={$t('player.next')}>
-        <SkipForward size={compact ? 15 : 18} fill="currentColor" />
+        <SkipForward size={micro ? 9 : compact ? 15 : 18} fill="currentColor" />
       </button>
 
       <button
@@ -191,9 +292,9 @@
         title={repeatMode === 'off' ? $t('player.repeat') : repeatMode === 'all' ? $t('player.repeatAll') : $t('player.repeatOne')}
       >
         {#if repeatMode === 'one'}
-          <Repeat1 size={compact ? 13 : 16} />
+          <Repeat1 size={micro ? 8 : compact ? 13 : 16} />
         {:else}
-          <Repeat size={compact ? 13 : 16} />
+          <Repeat size={micro ? 8 : compact ? 13 : 16} />
         {/if}
       </button>
     </div>
@@ -208,17 +309,19 @@
         aria-label={$t('player.volume')}
       >
         {#if displayVolume === 0}
-          <VolumeX size={compact ? 13 : 14} />
+          <VolumeX size={micro ? 10 : compact ? 15 : 18} strokeWidth={2.25} />
         {:else if displayVolume < 50}
-          <Volume1 size={compact ? 13 : 14} />
+          <Volume1 size={micro ? 10 : compact ? 15 : 18} strokeWidth={2.25} />
         {:else}
-          <Volume2 size={compact ? 13 : 14} />
+          <Volume2 size={micro ? 10 : compact ? 15 : 18} strokeWidth={2.25} />
         {/if}
       </button>
 
       {#if volumePopoverOpen}
-        <div class="volume-popover" role="group" aria-label={$t('player.volume')}>
-          <span class="volume-value">{displayVolume}</span>
+        <div class="volume-popover" role="group" aria-label={$t('player.volume')} onmousedown={(event) => event.stopPropagation()}>
+          <button class="ctrl-btn mute-btn" onclick={toggleMute} title={isMuted ? $t('player.unmute') : $t('player.mute')}>
+            <VolumeX size={micro ? 10 : 14} strokeWidth={2.25} />
+          </button>
 
           <div
             class="volume-rail"
@@ -233,17 +336,37 @@
             aria-valuemin={0}
             aria-valuemax={100}
           >
-            <div class="volume-level" style="height: {displayVolume}%"></div>
-            <div class="volume-thumb" style="bottom: {displayVolume}%" class:visible={isDraggingVolume}></div>
+            <div class="volume-level" style="width: {displayVolume}%"></div>
+            <div class="volume-thumb" style="left: {displayVolume}%" class:visible={isDraggingVolume}></div>
           </div>
 
-          <button class="ctrl-btn mute-btn" onclick={toggleMute} title={isMuted ? $t('player.unmute') : $t('player.mute')}>
-            <VolumeX size={13} />
-          </button>
+          <span class="volume-value">{displayVolume}</span>
         </div>
       {/if}
     </div>
   </div>
+
+  {#if micro}
+    <div
+      class="seek-wrapper micro-seek"
+      bind:this={seekBottomRef}
+      onmousedown={(event) => {
+        isDraggingSeek = true;
+        updateSeek(event, seekBottomRef);
+      }}
+      role="slider"
+      tabindex="0"
+      aria-valuenow={Math.round(currentTime)}
+      aria-valuemin={0}
+      aria-valuemax={Math.round(duration)}
+      aria-label={$t('player.nowPlaying')}
+    >
+      <div class="seek-track">
+        <div class="seek-fill" style="width: {progress}%"></div>
+      </div>
+      <div class="seek-thumb" style="left: {progress}%" class:visible={isDraggingSeek}></div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -258,6 +381,84 @@
 
   .footer.compact {
     padding: 0 10px 6px;
+  }
+
+  .footer.micro {
+    border-top: none;
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 1px 8px 0;
+  }
+
+  .micro-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 17px;
+    margin-bottom: 0;
+  }
+
+  .micro-track {
+    width: calc(100% - 52px);
+    max-width: calc(100% - 52px);
+    min-width: 0;
+    padding: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: center;
+    color: var(--alpha-70);
+    font-size: 11px;
+    line-height: 1.15;
+    letter-spacing: 0.01em;
+  }
+
+  .micro-track.scrollable {
+    text-overflow: clip;
+  }
+
+  .micro-track-text {
+    display: inline-block;
+    white-space: nowrap;
+  }
+
+  .micro-header:hover .micro-track.scrollable .micro-track-text {
+    animation: micro-track-ticker var(--ticker-duration) linear infinite;
+    will-change: transform;
+  }
+
+  @keyframes micro-track-ticker {
+    0%, 20% {
+      transform: translateX(0);
+    }
+    70%, 80% {
+      transform: translateX(var(--ticker-offset));
+    }
+    90%, 100% {
+      transform: translateX(0);
+    }
+  }
+
+  .micro-window-controls {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    opacity: 0;
+    pointer-events: none;
+    contain: paint;
+    transition: opacity 120ms ease;
+  }
+
+  .micro-header:hover .micro-window-controls,
+  .micro-window-controls:hover {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .seek-wrapper {
@@ -281,21 +482,7 @@
   }
 
   .seek-thumb {
-    position: absolute;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    background: var(--accent-primary);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 120ms ease;
-  }
-
-  .seek-wrapper:hover .seek-thumb,
-  .seek-thumb.visible {
-    opacity: 1;
+    display: none;
   }
 
   .times {
@@ -309,14 +496,16 @@
 
   .controls-row {
     position: relative;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    width: 100%;
     margin-top: 3px;
     min-height: 40px;
   }
 
   .transport {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     display: flex;
     align-items: center;
     gap: 18px;
@@ -364,42 +553,46 @@
 
   .volume-anchor {
     position: absolute;
-    right: 0;
+    left: 0;
     top: 50%;
     transform: translateY(-50%);
   }
 
   .volume-trigger {
-    width: 28px;
-    height: 28px;
+    width: 30px;
+    height: 30px;
   }
 
   .volume-popover {
     position: absolute;
-    right: 0;
-    bottom: calc(100% + 8px);
+    left: calc(100% + 8px);
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
-    flex-direction: column;
+    flex-direction: row;
     align-items: center;
-    gap: 8px;
-    padding: 10px 8px;
+    gap: 7px;
+    padding: 7px 8px;
     background: var(--bg-secondary);
     border: 1px solid var(--alpha-12);
-    border-radius: 10px;
+    border-radius: 999px;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
-    z-index: 50;
+    z-index: 120;
+    pointer-events: auto;
   }
 
   .volume-value {
     color: var(--text-muted);
     font-size: 10px;
     font-variant-numeric: tabular-nums;
+    min-width: 22px;
+    text-align: center;
   }
 
   .volume-rail {
     position: relative;
-    width: 6px;
-    height: 78px;
+    width: 96px;
+    height: 5px;
     background: var(--alpha-12);
     border-radius: 999px;
     cursor: pointer;
@@ -407,20 +600,20 @@
 
   .volume-level {
     position: absolute;
-    bottom: 0;
+    top: 0;
     left: 0;
-    width: 100%;
+    height: 100%;
     background: var(--accent-primary);
     border-radius: 999px;
-    transition: height 100ms linear;
+    transition: width 100ms linear;
   }
 
   .volume-thumb {
     position: absolute;
-    left: 50%;
-    transform: translate(-50%, 50%);
-    width: 11px;
-    height: 11px;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 9px;
+    height: 9px;
     border-radius: 50%;
     background: var(--accent-primary);
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.28);
@@ -435,8 +628,8 @@
   }
 
   .mute-btn {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
   }
 
   .footer.compact .seek-wrapper {
@@ -471,7 +664,78 @@
   }
 
   .footer.compact .volume-trigger {
-    width: 24px;
-    height: 24px;
+    width: 26px;
+    height: 26px;
+  }
+
+  .footer.micro .controls-row {
+    margin-top: 1px;
+    min-height: 16px;
+  }
+
+  .footer.micro .transport {
+    gap: 9px;
+  }
+
+  .footer.micro .ctrl-btn {
+    width: 16px;
+    height: 16px;
+  }
+
+  .footer.micro .ctrl-btn.play {
+    width: 16px;
+    height: 16px;
+    background: transparent;
+    color: var(--alpha-70);
+    box-shadow: none;
+  }
+
+  .footer.micro .ctrl-btn.play:hover {
+    background: var(--alpha-8);
+    color: var(--text-primary);
+    transform: none;
+  }
+
+  .footer.micro .ctrl-btn :global(.play-icon) {
+    margin-left: 0;
+  }
+
+  .footer.micro .volume-trigger {
+    width: 16px;
+    height: 16px;
+  }
+
+  .footer.micro .volume-anchor {
+    left: 0;
+  }
+
+  .footer.micro .volume-popover {
+    left: calc(100% + 5px);
+    right: auto;
+    top: 50%;
+    transform: translateY(-50%);
+    gap: 5px;
+    padding: 6px 7px;
+  }
+
+  .footer.micro .volume-rail {
+    width: 74px;
+    height: 4px;
+  }
+
+  .footer.micro .seek-wrapper.micro-seek {
+    padding: 0;
+    margin: auto -8px 0;
+  }
+
+  .footer.micro .seek-wrapper.micro-seek .seek-track,
+  .footer.micro .seek-wrapper.micro-seek .seek-fill {
+    height: 1px;
+    border-radius: 0;
+  }
+
+  .footer.micro .seek-wrapper.micro-seek .seek-thumb {
+    width: 7px;
+    height: 7px;
   }
 </style>

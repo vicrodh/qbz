@@ -484,6 +484,7 @@
     "normalizationOff": "Volume Normalization: Off",
     "normalizationOn": "Volume Normalization: On",
     "normalizationApplied": "Volume Normalization: Active",
+    "miniSurfaceMicro": "Micro",
     "miniSurfaceCompact": "Compact",
     "miniSurfaceArtwork": "Artwork",
     "miniSurfaceQueue": "Queue",

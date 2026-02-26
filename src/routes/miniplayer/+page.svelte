@@ -65,10 +65,23 @@
     height: 194
   };
 
+  const MICRO_GEOMETRY = {
+    width: 380,
+    height: 57
+  };
+
+  const MICRO_MIN_HEIGHT = 57;
+  const COMPACT_MIN_HEIGHT = 170;
+  const EXPANDED_MIN_HEIGHT = 420;
+
   const EXPANDED_DEFAULT_GEOMETRY = {
     width: 380,
     height: 540
   };
+
+  function isCondensedSurface(surface: MiniPlayerSurface): boolean {
+    return surface === 'micro' || surface === 'compact';
+  }
 
   function formatQualityLabel(track: PlayerState['currentTrack']): string | undefined {
     if (!track) return undefined;
@@ -121,14 +134,24 @@
   async function applySurfaceGeometry(surface: MiniPlayerSurface): Promise<void> {
     const appWindow = getCurrentWindow();
 
-    if (surface === 'compact') {
-      const currentSize = await appWindow.innerSize();
-      rememberExpandedGeometry(currentSize.width, currentSize.height);
-      await appWindow.setSize(new LogicalSize(COMPACT_GEOMETRY.width, COMPACT_GEOMETRY.height));
-      setMiniPlayerGeometry({ width: COMPACT_GEOMETRY.width, height: COMPACT_GEOMETRY.height });
+    if (isCondensedSurface(surface)) {
+      const condensedGeometry = surface === 'micro' ? MICRO_GEOMETRY : COMPACT_GEOMETRY;
+      const condensedMinHeight = surface === 'micro' ? MICRO_MIN_HEIGHT : COMPACT_MIN_HEIGHT;
+
+      await appWindow.setMinSize(new LogicalSize(340, condensedMinHeight));
+
+      if (!isCondensedSurface(miniState.surface)) {
+        const currentSize = await appWindow.innerSize();
+        rememberExpandedGeometry(currentSize.width, currentSize.height);
+      }
+
+      await appWindow.setSize(new LogicalSize(condensedGeometry.width, condensedGeometry.height));
+      setMiniPlayerGeometry({ width: condensedGeometry.width, height: condensedGeometry.height });
       miniState = getMiniPlayerState();
       return;
     }
+
+    await appWindow.setMinSize(new LogicalSize(340, EXPANDED_MIN_HEIGHT));
 
     const target = {
       width: lastExpandedGeometry.width || EXPANDED_DEFAULT_GEOMETRY.width,
@@ -153,8 +176,8 @@
     miniState = getMiniPlayerState();
     setMiniPlayerOpen(true);
 
-    if (miniState.surface === 'compact') {
-      await applySurfaceGeometry('compact');
+    if (isCondensedSurface(miniState.surface)) {
+      await applySurfaceGeometry(miniState.surface);
     } else {
       rememberExpandedGeometry(miniState.geometry.width, miniState.geometry.height);
     }
@@ -184,7 +207,7 @@
 
     unlistenResized = await appWindow.onResized(({ payload }) => {
       setMiniPlayerGeometry({ width: payload.width, height: payload.height });
-      if (miniState.surface !== 'compact') {
+      if (!isCondensedSurface(miniState.surface)) {
         rememberExpandedGeometry(payload.width, payload.height);
       }
     });
@@ -215,9 +238,9 @@
   async function handleSurfaceChange(surface: MiniPlayerSurface): Promise<void> {
     if (surface === miniState.surface) return;
 
-    if (surface === 'compact') {
-      await applySurfaceGeometry('compact');
-    } else if (miniState.surface === 'compact') {
+    const targetCondensed = isCondensedSurface(surface);
+    const currentCondensed = isCondensedSurface(miniState.surface);
+    if (targetCondensed || currentCondensed) {
       await applySurfaceGeometry(surface);
     }
 

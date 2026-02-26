@@ -13,7 +13,7 @@ let isFullScreenOpen = false;
 let isFocusModeOpen = false;
 let isCastPickerOpen = false;
 
-export type MiniPlayerSurface = 'compact' | 'artwork' | 'queue' | 'lyrics';
+export type MiniPlayerSurface = 'micro' | 'compact' | 'artwork' | 'queue' | 'lyrics';
 
 export interface MiniPlayerGeometry {
   width: number;
@@ -30,6 +30,7 @@ export interface MiniPlayerState {
 }
 
 const MINI_PLAYER_STORAGE_KEY = 'qbz-mini-player-state';
+const MINI_PLAYER_SURFACES: MiniPlayerSurface[] = ['micro', 'compact', 'artwork', 'queue', 'lyrics'];
 const DEFAULT_MINI_PLAYER_STATE: MiniPlayerState = {
   open: false,
   surface: 'artwork',
@@ -78,11 +79,13 @@ function loadMiniPlayerState(): void {
     const height = parsed.geometry?.height;
     miniPlayer = {
       open: false,
-      surface: parsed.surface ?? DEFAULT_MINI_PLAYER_STATE.surface,
+      surface: MINI_PLAYER_SURFACES.includes(parsed.surface as MiniPlayerSurface)
+        ? (parsed.surface as MiniPlayerSurface)
+        : DEFAULT_MINI_PLAYER_STATE.surface,
       alwaysOnTop: parsed.alwaysOnTop ?? DEFAULT_MINI_PLAYER_STATE.alwaysOnTop,
       geometry: {
         width: typeof width === 'number' && width >= 320 ? width : DEFAULT_MINI_PLAYER_STATE.geometry.width,
-        height: typeof height === 'number' && height >= 200 ? height : DEFAULT_MINI_PLAYER_STATE.geometry.height,
+        height: typeof height === 'number' && height >= 57 ? height : DEFAULT_MINI_PLAYER_STATE.geometry.height,
         x: typeof parsed.geometry?.x === 'number' ? parsed.geometry.x : undefined,
         y: typeof parsed.geometry?.y === 'number' ? parsed.geometry.y : undefined
       }

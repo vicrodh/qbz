@@ -484,6 +484,7 @@
     "normalizationOff": "Normalización de volumen: Desactivada",
     "normalizationOn": "Normalización de volumen: Activada",
     "normalizationApplied": "Normalización de volumen: Activa",
+    "miniSurfaceMicro": "Micro",
     "miniSurfaceCompact": "Compacto",
     "miniSurfaceArtwork": "Portada",
     "miniSurfaceQueue": "Cola",

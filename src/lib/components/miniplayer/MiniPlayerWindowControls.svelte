@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Disc3, Image, ListMusic, AlignLeft, Maximize2, Pin, Move, X, Square } from 'lucide-svelte';
+  import { Minus, Disc3, Image, ListMusic, AlignLeft, Maximize2, Pin, Move, X, Square } from 'lucide-svelte';
   import { t } from '$lib/i18n';
   import type { MiniPlayerSurface } from './types';
 
@@ -11,14 +11,20 @@
     onExpand: () => void;
     onClose: () => void;
     onStartDrag: (event: MouseEvent) => void;
+    micro?: boolean;
   }
 
-  let { activeSurface, isPinned, onSurfaceChange, onTogglePin, onExpand, onClose, onStartDrag }: Props = $props();
+  let { activeSurface, isPinned, onSurfaceChange, onTogglePin, onExpand, onClose, onStartDrag, micro = false }: Props = $props();
 
   let isExpanded = $state(false);
   let collapseTimer: ReturnType<typeof setTimeout> | null = null;
 
+  const iconSize = $derived(micro ? 10 : 13);
+  const dragIconSize = $derived(micro ? 9 : 12);
+  const triggerIconSize = $derived(micro ? 9 : 12);
+
   const surfaceTabs: { id: MiniPlayerSurface; icon: typeof Disc3; labelKey: string }[] = [
+    { id: 'micro', icon: Minus, labelKey: 'player.miniSurfaceMicro' },
     { id: 'compact', icon: Disc3, labelKey: 'player.miniSurfaceCompact' },
     { id: 'artwork', icon: Image, labelKey: 'player.miniSurfaceArtwork' },
     { id: 'queue', icon: ListMusic, labelKey: 'player.miniSurfaceQueue' },
@@ -43,6 +49,7 @@
 
 <div
   class="window-controls"
+  class:micro
   class:expanded={isExpanded}
   onmouseenter={handleMouseEnter}
   onmouseleave={handleMouseLeave}
@@ -59,7 +66,7 @@
           title={$t(surfaceTab.labelKey)}
           aria-label={$t(surfaceTab.labelKey)}
         >
-          <surfaceTab.icon size={13} />
+          <surfaceTab.icon size={iconSize} />
         </button>
       {/each}
     </div>
@@ -73,7 +80,7 @@
         title={$t('player.miniExpand')}
         aria-label={$t('player.miniExpand')}
       >
-        <Maximize2 size={13} />
+        <Maximize2 size={iconSize} />
       </button>
 
       <button
@@ -83,7 +90,7 @@
         title={isPinned ? $t('player.miniAlwaysOnTopDisable') : $t('player.miniAlwaysOnTopEnable')}
         aria-label={isPinned ? $t('player.miniAlwaysOnTopDisable') : $t('player.miniAlwaysOnTopEnable')}
       >
-        <Pin size={13} />
+        <Pin size={iconSize} />
       </button>
 
       <button
@@ -95,7 +102,7 @@
         title={$t('player.dragWindow')}
         aria-label={$t('player.dragWindow')}
       >
-        <Move size={12} />
+        <Move size={dragIconSize} />
       </button>
 
       <button
@@ -104,13 +111,13 @@
         title={$t('player.miniClose')}
         aria-label={$t('player.miniClose')}
       >
-        <X size={13} />
+        <X size={iconSize} />
       </button>
     </div>
   </div>
 
   <button class="window-trigger" title={$t('player.miniWindowControls')} aria-label={$t('player.miniWindowControls')}>
-    <Square size={12} />
+    <Square size={triggerIconSize} />
   </button>
 </div>
 
@@ -146,6 +153,13 @@
     cursor: pointer;
     transition: background 120ms ease, color 120ms ease;
     flex-shrink: 0;
+    padding: 0;
+    line-height: 0;
+  }
+
+  .window-trigger :global(svg) {
+    display: block;
+    margin: 0 auto;
   }
 
   .window-trigger:hover {
@@ -164,9 +178,34 @@
   }
 
   .window-controls.expanded .expanded-buttons {
-    max-width: 280px;
+    max-width: 328px;
     opacity: 1;
     margin-right: 3px;
+  }
+
+  .window-controls.micro {
+    padding: 1px;
+  }
+
+  .window-controls.micro .window-trigger {
+    width: 18px;
+    height: 18px;
+  }
+
+  .window-controls.micro .surface-tab,
+  .window-controls.micro .window-btn {
+    width: 18px;
+    height: 17px;
+    border-radius: 5px;
+  }
+
+  .window-controls.micro .separator {
+    height: 10px;
+  }
+
+  .window-controls.micro.expanded .expanded-buttons {
+    max-width: 260px;
+    margin-right: 2px;
   }
 
   .surface-tabs,
