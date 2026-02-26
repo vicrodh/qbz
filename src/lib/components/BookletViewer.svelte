@@ -54,6 +54,8 @@
         data,
         disableRange: true,
         disableAutoFetch: true,
+        useWorkerFetch: false,
+        wasmUrl: '/pdfjs/',
       });
 
       pdfDoc = await loadingTask.promise;
