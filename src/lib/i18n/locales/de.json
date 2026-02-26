@@ -255,7 +255,8 @@
     "removeImage": "Eigenes Künstlerbild entfernen",
     "customImageSet": "Künstlerbild aktualisiert",
     "customImageRemoved": "Eigenes Künstlerbild entfernt",
-    "customImageError": "Fehler beim Aktualisieren des Künstlerbilds"
+    "customImageError": "Fehler beim Aktualisieren des Künstlerbilds",
+    "imageSaved": "Künstlerbild gespeichert"
   },
   "sort": {
     "nameAZ": "Name (A-Z)",

@@ -267,7 +267,8 @@
     "removeImage": "Remove custom artist image",
     "customImageSet": "Artist image updated",
     "customImageRemoved": "Custom artist image removed",
-    "customImageError": "Failed to update artist image"
+    "customImageError": "Failed to update artist image",
+    "imageSaved": "Artist image saved"
   },
   "sort": {
     "nameAZ": "Name (A-Z)",

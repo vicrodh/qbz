@@ -1,6 +1,7 @@
 <script lang="ts">
   import { invoke, convertFileSrc } from '@tauri-apps/api/core';
-  import { open } from '@tauri-apps/plugin-dialog';
+  import { open, save } from '@tauri-apps/plugin-dialog';
+  import { openUrl } from '@tauri-apps/plugin-opener';
   import { setCustomImage, removeCustomImage as removeCustomImageFromStore } from '$lib/stores/customArtistImageStore';
   import { t } from 'svelte-i18n';
   import { ArrowLeft, User, ChevronDown, ChevronUp, Play, Music, Heart, Search, X, ChevronLeft, ChevronRight, Radio, MoreHorizontal, Info, Disc, Settings, CheckSquare } from 'lucide-svelte';
@@ -1121,6 +1122,37 @@
       hasCustomImage = false;
       removeCustomImageFromStore(artist.name);
       showToast($t('artist.customImageRemoved'), 'success');
+    } catch (err) {
+      showToast(`${$t('artist.customImageError')}: ${err}`, 'error');
+    }
+  }
+
+  async function handleOpenImageInBrowser() {
+    showImageMenu = false;
+    const url = imageOverride ?? artist.image;
+    if (url && !url.startsWith('asset://')) {
+      await openUrl(url).catch(err => console.error('Failed to open URL:', err));
+    }
+  }
+
+  async function handleSaveImageAs() {
+    showImageMenu = false;
+    const imageUrl = imageOverride ?? artist.image;
+    if (!imageUrl) return;
+
+    const dest = await save({
+      filters: [{ name: 'Images', extensions: ['jpg', 'jpeg', 'png'] }],
+      defaultPath: `${artist.name}.jpg`
+    });
+    if (!dest) return;
+
+    try {
+      if (imageUrl.startsWith('asset://') || imageUrl.startsWith('http://asset.localhost')) {
+        showToast($t('artist.customImageError'), 'error');
+        return;
+      }
+      await invoke('v2_save_image_url_to_file', { url: imageUrl, destPath: dest });
+      showToast($t('artist.imageSaved'), 'success');
     } catch (err) {
       showToast(`${$t('artist.customImageError')}: ${err}`, 'error');
     }
@@ -2625,6 +2657,13 @@
         {$t('artist.addImage')}
       </button>
     {/if}
+    <div class="image-context-divider"></div>
+    <button class="image-context-item" onclick={handleOpenImageInBrowser}>
+      {$t('album.openInBrowser')}
+    </button>
+    <button class="image-context-item" onclick={handleSaveImageAs}>
+      {$t('album.saveAs')}
+    </button>
   </div>
 {/if}
 
@@ -4205,5 +4244,11 @@
 
   .image-context-item.danger:hover {
     background: rgba(239, 68, 68, 0.1);
+  }
+
+  .image-context-divider {
+    height: 1px;
+    background: var(--border-subtle);
+    margin: 4px 8px;
   }
 </style>
