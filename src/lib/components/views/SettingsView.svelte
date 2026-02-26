@@ -1040,28 +1040,37 @@
     }
   }
 
-  // Immersive ambient background FPS
-  const AMBIENT_FPS_KEY = 'qbz-immersive-ambient-fps';
-  const AMBIENT_FPS_OPTIONS = ['0', '15', '30', '60', '120'] as const;
-  let ambientFps = $state(getUserItem(AMBIENT_FPS_KEY) || '15');
+  // Immersive FPS settings (per-panel)
+  const FPS_KEY_PREFIX = 'qbz-immersive-fps-';
+  const FPS_OPTIONS = ['0', '15', '30', '60', '120'] as const;
+  const FPS_PANEL_IDS = [
+    'ambient', 'visualizer', 'lissajous', 'oscilloscope',
+    'energy-bands', 'transient-pulse', 'album-reactive', 'spectral-ribbon'
+  ] as const;
 
-  function getAmbientFpsOptions(): string[] {
-    return AMBIENT_FPS_OPTIONS.map(val =>
-      $t(`settings.appearance.ambientFpsOptions.${val === '0' ? 'disabled' : val}`)
+  let immersiveFpsCollapsed = $state(true);
+  let panelFpsValues: Record<string, string> = $state(
+    Object.fromEntries(FPS_PANEL_IDS.map(id => [id, getUserItem(`${FPS_KEY_PREFIX}${id}`) || '60']))
+  );
+
+  function getFpsOptions(): string[] {
+    return FPS_OPTIONS.map(val =>
+      $t(`settings.appearance.fpsOptions.${val === '0' ? 'disabled' : val}`)
     );
   }
 
-  function getAmbientFpsDisplayValue(): string {
-    const key = ambientFps === '0' ? 'disabled' : ambientFps;
-    return $t(`settings.appearance.ambientFpsOptions.${key}`);
+  function getFpsDisplayValue(panelId: string): string {
+    const val = panelFpsValues[panelId] || '60';
+    const key = val === '0' ? 'disabled' : val;
+    return $t(`settings.appearance.fpsOptions.${key}`);
   }
 
-  function handleAmbientFpsChange(displayValue: string) {
-    const options = getAmbientFpsOptions();
+  function handleFpsChange(panelId: string, displayValue: string) {
+    const options = getFpsOptions();
     const index = options.indexOf(displayValue);
     if (index >= 0) {
-      ambientFps = AMBIENT_FPS_OPTIONS[index];
-      setUserItem(AMBIENT_FPS_KEY, ambientFps);
+      panelFpsValues[panelId] = FPS_OPTIONS[index];
+      setUserItem(`${FPS_KEY_PREFIX}${panelId}`, FPS_OPTIONS[index]);
     }
   }
 
@@ -4124,16 +4133,27 @@
         onchange={handleImmersiveViewChange}
       />
     </div>
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.appearance.ambientFps')}</span>
-        <span class="setting-desc">{$t('settings.appearance.ambientFpsDesc')}</span>
-      </div>
-      <Dropdown
-        value={getAmbientFpsDisplayValue()}
-        options={getAmbientFpsOptions()}
-        onchange={handleAmbientFpsChange}
-      />
+    <div class="collapsible-section">
+      <button
+        class="section-title-btn"
+        onclick={() => immersiveFpsCollapsed = !immersiveFpsCollapsed}
+      >
+        <h4 class="subsection-title">{$t('settings.appearance.immersiveFps.title')}</h4>
+        <span class="collapse-icon" class:collapsed={immersiveFpsCollapsed}>▼</span>
+      </button>
+      {#if !immersiveFpsCollapsed}
+        <p class="setting-desc" style="margin-bottom: 12px;">{$t('settings.appearance.immersiveFps.desc')}</p>
+        {#each FPS_PANEL_IDS as panelId}
+          <div class="setting-row">
+            <span class="setting-label">{$t(`settings.appearance.immersiveFps.panels.${panelId}`)}</span>
+            <Dropdown
+              value={getFpsDisplayValue(panelId)}
+              options={getFpsOptions()}
+              onchange={(val) => handleFpsChange(panelId, val)}
+            />
+          </div>
+        {/each}
+      {/if}
     </div>
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.miniplayerDefaultView')}</span>

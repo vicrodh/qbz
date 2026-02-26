@@ -3,6 +3,7 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import { getPanelFrameInterval } from '$lib/immersive/fpsConfig';
 
   interface Props {
     enabled?: boolean;
@@ -43,7 +44,7 @@
   const energyData = new Float32Array(NUM_BANDS);
 
   let lastRenderTime = 0;
-  const FRAME_INTERVAL = 1000 / 30;
+  const FRAME_INTERVAL = getPanelFrameInterval('energy-bands');
 
   let bandColors = $state([
     { r: 255, g: 60, b: 60 },
