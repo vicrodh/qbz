@@ -352,7 +352,8 @@ export function convertQobuzAlbum(album: QobuzAlbum): AlbumDetail {
       isrc: track.isrc,
       streamable: track.streamable ?? true
     })) || [],
-    upc: album.upc
+    upc: album.upc,
+    goodies: album.goodies
   };
 }
 

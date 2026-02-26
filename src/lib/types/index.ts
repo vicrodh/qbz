@@ -103,6 +103,16 @@ export interface QobuzAlbum {
   maximum_sampling_rate?: number;
   tracks?: { items: QobuzTrack[] };
   upc?: string;
+  goodies?: QobuzGoody[];
+}
+
+export interface QobuzGoody {
+  id: number;
+  name: string;
+  url: string;
+  original_url: string;
+  file_format_id?: number;
+  description?: string;
 }
 
 export interface QobuzPlaylist {
@@ -183,6 +193,7 @@ export interface AlbumDetail {
   duration: string;
   tracks: Track[];
   upc?: string; // Universal Product Code for album.link sharing
+  goodies?: QobuzGoody[];
 }
 
 export interface ArtistDetail {
