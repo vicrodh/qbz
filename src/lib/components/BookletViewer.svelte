@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import { t } from 'svelte-i18n';
   import { invoke } from '@tauri-apps/api/core';
   import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, RotateCw } from 'lucide-svelte';
@@ -61,11 +62,13 @@
       pdfDoc = await loadingTask.promise;
       totalPages = pdfDoc.numPages;
       currentPage = 1;
+      // Set loading false FIRST so canvas mounts in the DOM
+      isLoading = false;
+      await tick(); // Wait for Svelte to update DOM
       await renderPage();
     } catch (err: any) {
       console.error('[BookletViewer] Failed to load PDF:', err);
       error = err?.message || String(err) || 'Failed to load booklet';
-    } finally {
       isLoading = false;
     }
   }
@@ -81,13 +84,16 @@
     try {
       const page = await pdfDoc.getPage(currentPage);
       const dpr = window.devicePixelRatio || 1;
-      const scale = zoom * dpr * 1.5;
+      // Render at 2x DPR for sharp output (PDF points → pixels)
+      const qualityScale = 2;
+      const scale = zoom * dpr * qualityScale;
       const viewport = page.getViewport({ scale, rotation });
 
       canvas.width = viewport.width;
       canvas.height = viewport.height;
-      canvas.style.width = `${viewport.width / (dpr * 1.5)}px`;
-      canvas.style.height = `${viewport.height / (dpr * 1.5)}px`;
+      // CSS size = canvas pixels / (dpr * qualityScale)
+      canvas.style.width = `${viewport.width / (dpr * qualityScale)}px`;
+      canvas.style.height = `${viewport.height / (dpr * qualityScale)}px`;
 
       const context = canvas.getContext('2d');
       if (!context) return;
