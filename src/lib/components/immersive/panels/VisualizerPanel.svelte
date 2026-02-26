@@ -50,9 +50,9 @@
   // Smoothing for visual continuity
   const SMOOTHING = 0.6;
 
-  // Throttle rendering to 30fps max
+  // Throttle rendering to 60fps
   let lastRenderTime = 0;
-  const FRAME_INTERVAL = 1000 / 30; // ~33ms
+  const FRAME_INTERVAL = 1000 / 60;
 
   // Colors extracted from artwork (Material You style)
   let colorPrimary = $state({ r: 0, g: 220, b: 200 });   // Default cyan
@@ -155,7 +155,7 @@
   function render(timestamp: number = 0) {
     if (!ctx || !canvasRef) return;
 
-    // Throttle to 30fps
+    // Throttle to 60fps
     const delta = timestamp - lastRenderTime;
     if (delta < FRAME_INTERVAL) {
       animationFrame = requestAnimationFrame(render);

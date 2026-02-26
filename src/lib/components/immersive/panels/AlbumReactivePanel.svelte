@@ -45,7 +45,7 @@
 
   let animationFrame: number | null = null;
   let lastRenderTime = 0;
-  const FRAME_INTERVAL = 1000 / 30;
+  const FRAME_INTERVAL = 1000 / 60;
 
   // Artwork-derived glow color
   let glowColor = $state('rgba(100, 100, 255, 0.3)');
