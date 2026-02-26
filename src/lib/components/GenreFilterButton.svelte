@@ -2,7 +2,6 @@
   import { onMount } from 'svelte';
   import { SlidersHorizontal, ChevronDown } from 'lucide-svelte';
   import { t } from '$lib/i18n';
-  import { get } from 'svelte/store';
   import GenreFilterPopup from './GenreFilterPopup.svelte';
   import {
     hasActiveFilter,
@@ -60,8 +59,7 @@
     if (selectedNames.length === 1) {
       selectedGenreName = selectedNames[0];
     } else if (selectedNames.length > 1) {
-      const translate = get(t);
-      selectedGenreName = translate('genreFilter.genresCount', { values: { count: selectedNames.length } });
+      selectedGenreName = $t('genreFilter.genresCount', { values: { count: selectedNames.length } });
     } else {
       selectedGenreName = null;
     }

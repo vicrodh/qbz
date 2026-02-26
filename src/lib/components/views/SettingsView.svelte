@@ -1154,7 +1154,7 @@
       qobuzLinkHandlerEnabled = enabled;
     } catch (err) {
       console.error('Failed to toggle qobuzapp handler:', err);
-      showToast(get(t)('settings.integrations.qobuzLinkHandlerError'), 'error');
+      showToast($t('settings.integrations.qobuzLinkHandlerError'), 'error');
     } finally {
       qobuzLinkHandlerBusy = false;
     }
@@ -1767,10 +1767,10 @@
     if (!plexAuthCode) return;
     try {
       await copyToClipboard(plexAuthCode);
-      showToast(get(t)('settings.integrations.plexCodeCopied'), 'success');
+      showToast($t('settings.integrations.plexCodeCopied'), 'success');
     } catch (error) {
       console.error('Failed copying Plex code:', error);
-      showToast(get(t)('settings.integrations.plexCodeCopyFailed'), 'error');
+      showToast($t('settings.integrations.plexCodeCopyFailed'), 'error');
     }
   }
 
@@ -1789,11 +1789,11 @@
   }
 
   async function handlePlexDisconnect() {
-    const confirmed = await ask(get(t)('settings.integrations.plexDisconnectConfirmDesc'), {
-      title: get(t)('settings.integrations.plexDisconnectConfirmTitle'),
+    const confirmed = await ask($t('settings.integrations.plexDisconnectConfirmDesc'), {
+      title: $t('settings.integrations.plexDisconnectConfirmTitle'),
       kind: 'warning',
-      okLabel: get(t)('settings.integrations.plexDisconnectConfirmOk'),
-      cancelLabel: get(t)('actions.cancel')
+      okLabel: $t('settings.integrations.plexDisconnectConfirmOk'),
+      cancelLabel: $t('actions.cancel')
     });
     if (!confirmed) return;
 
@@ -1827,11 +1827,11 @@
   }
 
   async function handlePlexClearCache() {
-    const confirmed = await ask(get(t)('settings.integrations.plexClearCacheConfirmDesc'), {
-      title: get(t)('settings.integrations.plexClearCacheConfirmTitle'),
+    const confirmed = await ask($t('settings.integrations.plexClearCacheConfirmDesc'), {
+      title: $t('settings.integrations.plexClearCacheConfirmTitle'),
       kind: 'warning',
-      okLabel: get(t)('settings.integrations.plexClearCacheConfirmOk'),
-      cancelLabel: get(t)('actions.cancel')
+      okLabel: $t('settings.integrations.plexClearCacheConfirmOk'),
+      cancelLabel: $t('actions.cancel')
     });
     if (!confirmed) return;
 
@@ -2095,12 +2095,12 @@
 
   async function handleRemoteControlRegenerateToken() {
     const confirmed = await ask(
-      get(t)('settings.integrations.remoteControlRegenerateDesc'),
+      $t('settings.integrations.remoteControlRegenerateDesc'),
       {
-        title: get(t)('settings.integrations.remoteControlRegenerateTitle'),
+        title: $t('settings.integrations.remoteControlRegenerateTitle'),
         kind: 'warning',
-        okLabel: get(t)('settings.integrations.remoteControlRegenerateConfirm'),
-        cancelLabel: get(t)('actions.cancel')
+        okLabel: $t('settings.integrations.remoteControlRegenerateConfirm'),
+        cancelLabel: $t('actions.cancel')
       }
     );
 
@@ -2130,7 +2130,7 @@
     if (!remoteControlToken) return;
     try {
       await copyToClipboard(remoteControlToken);
-      showToast(get(t)('toast.copied'), 'success');
+      showToast($t('toast.copied'), 'success');
     } catch (err) {
       console.error('Failed to copy token:', err);
     }
@@ -2140,7 +2140,7 @@
     if (!remoteControlCertUrl) return;
     try {
       await copyToClipboard(remoteControlCertUrl);
-      showToast(get(t)('toast.copied'), 'success');
+      showToast($t('toast.copied'), 'success');
     } catch (err) {
       console.error('Failed to copy certificate URL:', err);
     }

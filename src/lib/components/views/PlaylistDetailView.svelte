@@ -24,7 +24,6 @@
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { showToast } from '$lib/stores/toastStore';
   import { sanitizeHtml } from '$lib/utils/sanitize';
-  import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
   import { onMount, tick } from 'svelte';
 
@@ -1989,7 +1988,6 @@
   }
 
   async function handleMakePlaylistOffline() {
-    const translate = get(t);
     // Filter to Qobuz-only tracks (not local)
     const qobuzTracks = displayTracks.filter(track => !track.isLocal);
 
@@ -2000,16 +1998,16 @@
     });
 
     if (tracksToCache.length === 0) {
-      showToast(translate('toast.allTracksOffline'), 'info');
+      showToast($t('toast.allTracksOffline'), 'info');
       return;
     }
 
     // Warn for large playlists
     if (tracksToCache.length > 300) {
       const confirmed = await ask(
-        translate('playlist.makeOfflineConfirmDesc', { values: { count: tracksToCache.length } }),
+        $t('playlist.makeOfflineConfirmDesc', { values: { count: tracksToCache.length } }),
         {
-          title: translate('playlist.makeOfflineConfirmTitle'),
+          title: $t('playlist.makeOfflineConfirmTitle'),
           kind: 'warning'
         }
       );
@@ -2017,7 +2015,7 @@
     }
 
     const playlistName = playlist?.name || '';
-    showToast(translate('playlist.preparingPlaylistOffline', { values: { count: tracksToCache.length, name: playlistName } }), 'info');
+    showToast($t('playlist.preparingPlaylistOffline', { values: { count: tracksToCache.length, name: playlistName } }), 'info');
 
     try {
       await cacheTracksForOfflineBatch(tracksToCache.map(track => ({

@@ -2,7 +2,6 @@
   import { invoke } from '@tauri-apps/api/core';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { onMount, tick } from 'svelte';
-  import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
   import { Play, Disc3, Mic2, Music, Search, X, LayoutGrid, List, ChevronDown, ListMusic, Edit3, CloudDownload, Shuffle, MoreHorizontal, PanelLeftClose, Loader2, ArrowLeft, CheckSquare } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
@@ -415,13 +414,12 @@
   const sortedLiveAlbums = $derived(sortQobuzAlbums(groupedArtistAlbumsByCategory.liveAlbums, liveAlbumsSortMode));
 
   function getSortLabel(mode: AlbumSortMode): string {
-    const translate = get(t);
     switch (mode) {
-      case 'default': return translate('sort.default');
-      case 'newest': return translate('sort.newest');
-      case 'oldest': return translate('sort.oldest');
-      case 'title-asc': return translate('sort.titleAsc');
-      case 'title-desc': return translate('sort.titleDesc');
+      case 'default': return $t('sort.default');
+      case 'newest': return $t('sort.newest');
+      case 'oldest': return $t('sort.oldest');
+      case 'title-asc': return $t('sort.titleAsc');
+      case 'title-desc': return $t('sort.titleDesc');
     }
   }
 
@@ -592,7 +590,7 @@
   }
 
   function getTabLabel(tab: TabType): string {
-    return get(t)(getTabTranslationKey(tab));
+    return $t(getTabTranslationKey(tab));
   }
 
   onMount(() => {

@@ -1,6 +1,5 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
   import { invoke } from '@tauri-apps/api/core';
   import { ArrowLeft, Download, Check, Loader2, AlertTriangle, Library, Play } from 'lucide-svelte';
@@ -60,12 +59,12 @@
     try {
       const folder = await invoke<{ id: number }>('v2_library_add_folder', { path: downloadDestination });
       clearAlbumDownloadState(albumId);
-      showToast(get(t)('purchases.addToLibrarySuccess'), 'success');
+      showToast($t('purchases.addToLibrarySuccess'), 'success');
       // Trigger a background scan so the library indexes the new files
       invoke('v2_library_scan_folder', { folderId: folder.id }).catch(() => {});
     } catch (err) {
       console.error('Failed to add folder to library:', err);
-      showToast(get(t)('purchases.addToLibraryError'), 'error');
+      showToast($t('purchases.addToLibraryError'), 'error');
     } finally {
       addingToLibrary = false;
     }
@@ -160,7 +159,7 @@
         directory: true,
         multiple: false,
         defaultPath,
-        title: get(t)('purchases.chooseFolder'),
+        title: $t('purchases.chooseFolder'),
       });
       if (dest && typeof dest === 'string') {
         const qualityDir = qualityFolderName(selectedFormatId);

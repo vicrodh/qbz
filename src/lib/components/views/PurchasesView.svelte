@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { get } from 'svelte/store';
   import { t } from '$lib/i18n';
   import {
     Search, X, Download, Check, Loader2, Music, Disc3, ShoppingBag,
@@ -412,14 +411,14 @@
     event.stopPropagation();
 
     if (!track.album?.id) {
-      showToast(get(t)('purchases.errors.noAlbum'), 'error');
+      showToast($t('purchases.errors.noAlbum'), 'error');
       return;
     }
 
     try {
       const formats = await getFormats(track.album.id);
       if (formats.length === 0) {
-        showToast(get(t)('purchases.errors.noFormats'), 'error');
+        showToast($t('purchases.errors.noFormats'), 'error');
         return;
       }
 
@@ -452,7 +451,7 @@
         directory: true,
         multiple: false,
         defaultPath,
-        title: get(t)('purchases.chooseFolder'),
+        title: $t('purchases.chooseFolder'),
       });
 
       if (!dest || typeof dest !== 'string') return;
