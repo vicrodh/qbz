@@ -30,6 +30,7 @@
     "@tauri-apps/plugin-dialog": "^2.5.0",
     "@tauri-apps/plugin-opener": "^2",
     "lucide-svelte": "^0.562.0",
+    "pdfjs-dist": "^5.4.624",
     "svelte-i18n": "^4.0.0"
   },
   "devDependencies": {
