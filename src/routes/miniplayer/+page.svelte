@@ -89,12 +89,11 @@
     return surface === 'micro' || surface === 'compact';
   }
 
-  function formatQualityLabel(track: PlayerState['currentTrack']): string | undefined {
-    if (!track) return undefined;
-    if (track.bitDepth && track.samplingRate) {
-      return `${track.bitDepth}/${Math.round(track.samplingRate / 1000)}`;
-    }
-    return track.quality || undefined;
+  function formatDurationLabel(totalSeconds: number): string | undefined {
+    if (!isFinite(totalSeconds) || totalSeconds <= 0) return undefined;
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = Math.floor(totalSeconds % 60);
+    return `${minutes}:${seconds.toString().padStart(2, '0')}`;
   }
 
   const activeSurface = $derived(miniState.surface);
@@ -109,7 +108,7 @@
         title: playerState.currentTrack.title,
         artist: playerState.currentTrack.artist,
         artwork: playerState.currentTrack.artwork,
-        quality: formatQualityLabel(playerState.currentTrack)
+        quality: formatDurationLabel(playerState.duration || playerState.currentTrack.duration)
       });
     }
 

@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { LyricsLine } from '$lib/stores/lyricsStore';
   import type { MiniPlayerSurface, MiniPlayerQueueTrack } from './types';
-  import MiniPlayerWindowControls from './MiniPlayerWindowControls.svelte';
   import MiniPlayerCompactSurface from './MiniPlayerCompactSurface.svelte';
   import MiniPlayerArtworkSurface from './MiniPlayerArtworkSurface.svelte';
   import MiniPlayerQueueSurface from './MiniPlayerQueueSurface.svelte';
@@ -78,29 +77,20 @@
 
   const compactSurface = $derived(activeSurface === 'compact');
   const microSurface = $derived(activeSurface === 'micro');
+  let windowHovered = $state(false);
 </script>
 
 <div
   class="mini-player-window"
   class:compact={compactSurface}
   class:micro={microSurface}
+  onmouseenter={() => {
+    windowHovered = true;
+  }}
+  onmouseleave={() => {
+    windowHovered = false;
+  }}
 >
-  {#if !microSurface}
-    <div class="titlebar-row">
-      <div class="controls-slot">
-        <MiniPlayerWindowControls
-          {activeSurface}
-          isPinned={isPinned}
-          onSurfaceChange={onSurfaceChange}
-          onTogglePin={onTogglePin}
-          onExpand={onExpand}
-          onClose={onClose}
-          onStartDrag={onStartDrag}
-        />
-      </div>
-    </div>
-  {/if}
-
   {#if !microSurface}
     <div class="surface-area">
       {#if activeSurface === 'compact'}
@@ -150,6 +140,7 @@
     onExpand={onExpand}
     onClose={onClose}
     onStartDrag={onStartDrag}
+    showWindowControls={windowHovered}
   />
 </div>
 
@@ -174,35 +165,6 @@
 
   .mini-player-window.micro {
     border-radius: 9px;
-  }
-
-  .titlebar-row {
-    position: absolute;
-    top: 6px;
-    right: 8px;
-    z-index: 40;
-    display: flex;
-    align-items: center;
-  }
-
-  .mini-player-window.compact .titlebar-row {
-    top: 4px;
-    right: 8px;
-  }
-
-  .controls-slot {
-    display: flex;
-    align-items: center;
-    opacity: 0;
-    pointer-events: none;
-    transform: translateY(-3px);
-    transition: opacity 140ms ease, transform 140ms ease;
-  }
-
-  .mini-player-window:hover .controls-slot {
-    opacity: 1;
-    pointer-events: auto;
-    transform: translateY(0);
   }
 
   .surface-area {

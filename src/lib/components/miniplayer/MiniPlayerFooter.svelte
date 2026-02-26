@@ -29,6 +29,7 @@
     onExpand?: () => void;
     onClose?: () => void;
     onStartDrag?: (event: MouseEvent) => void;
+    showWindowControls?: boolean;
   }
 
   let {
@@ -55,7 +56,8 @@
     onTogglePin,
     onExpand,
     onClose,
-    onStartDrag
+    onStartDrag,
+    showWindowControls = false
   }: Props = $props();
 
   let seekRef: HTMLDivElement | null = $state(null);
@@ -77,7 +79,7 @@
   const microTrackOffset = $derived(microTrackOverflow > 0 ? `-${microTrackOverflow + 16}px` : '0px');
   const microTrackDuration = $derived(microTrackOverflow > 0 ? `${(microTrackOverflow + 16) / tickerSpeed}s` : '0s');
   const canRenderInlineWindowControls = $derived(
-    micro && !!activeSurface && !!onSurfaceChange && !!onTogglePin && !!onExpand && !!onClose && !!onStartDrag
+    !!activeSurface && !!onSurfaceChange && !!onTogglePin && !!onExpand && !!onClose && !!onStartDrag
   );
 
   function getMicroTrackLine(): string {
@@ -214,20 +216,6 @@
       >
         <span class="micro-track-text" bind:this={microTrackTextRef}>{getMicroTrackLine()}</span>
       </div>
-      {#if canRenderInlineWindowControls}
-        <div class="micro-window-controls">
-          <MiniPlayerWindowControls
-            micro
-            activeSurface={activeSurface!}
-            isPinned={isPinned}
-            onSurfaceChange={onSurfaceChange!}
-            onTogglePin={onTogglePin!}
-            onExpand={onExpand!}
-            onClose={onClose!}
-            onStartDrag={onStartDrag!}
-          />
-        </div>
-      {/if}
     </div>
   {/if}
 
@@ -344,6 +332,21 @@
         </div>
       {/if}
     </div>
+
+    {#if canRenderInlineWindowControls}
+      <div class="window-controls-anchor" class:visible={showWindowControls}>
+        <MiniPlayerWindowControls
+          micro={micro}
+          activeSurface={activeSurface!}
+          isPinned={isPinned}
+          onSurfaceChange={onSurfaceChange!}
+          onTogglePin={onTogglePin!}
+          onExpand={onExpand!}
+          onClose={onClose!}
+          onStartDrag={onStartDrag!}
+        />
+      </div>
+    {/if}
   </div>
 
   {#if micro}
@@ -402,8 +405,8 @@
   }
 
   .micro-track {
-    width: calc(100% - 52px);
-    max-width: calc(100% - 52px);
+    width: 100%;
+    max-width: 100%;
     min-width: 0;
     padding: 0;
     white-space: nowrap;
@@ -440,25 +443,6 @@
     90%, 100% {
       transform: translateX(0);
     }
-  }
-
-  .micro-window-controls {
-    position: absolute;
-    right: 0;
-    top: 50%;
-    transform: translateY(-50%);
-    -webkit-app-region: no-drag;
-    app-region: no-drag;
-    opacity: 0;
-    pointer-events: none;
-    contain: paint;
-    transition: opacity 120ms ease;
-  }
-
-  .micro-header:hover .micro-window-controls,
-  .micro-window-controls:hover {
-    opacity: 1;
-    pointer-events: auto;
   }
 
   .seek-wrapper {
@@ -543,6 +527,26 @@
     left: 0;
     top: 50%;
     transform: translateY(-50%);
+  }
+
+  .window-controls-anchor {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    align-items: center;
+    opacity: 0;
+    pointer-events: none;
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+    transition: opacity 120ms ease;
+    z-index: 12;
+  }
+
+  .window-controls-anchor.visible {
+    opacity: 1;
+    pointer-events: auto;
   }
 
   .volume-trigger {

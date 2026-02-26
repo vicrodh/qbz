@@ -25,37 +25,23 @@
             <div class="active-bar" aria-hidden="true"></div>
           {/if}
 
-          <div class="row-leading" aria-hidden="true">
-            {#if activeTrack}
-              {#if isPlaying}
-                <div class="playing-indicator">
-                  <div class="bar"></div>
-                  <div class="bar"></div>
-                  <div class="bar"></div>
-                </div>
-              {:else}
-                <Play size={12} />
-              {/if}
+          <div class="row-artwork-wrap">
+            {#if queueTrack.artwork}
+              <img src={queueTrack.artwork} alt={queueTrack.title} class="row-artwork" />
+            {:else}
+              <div class="row-artwork placeholder" aria-hidden="true"></div>
             {/if}
-          </div>
 
-          {#if queueTrack.artwork}
-            <img src={queueTrack.artwork} alt={queueTrack.title} class="row-artwork" />
-          {:else}
-            <div class="row-artwork placeholder" aria-hidden="true"></div>
-          {/if}
-
-          <div class="row-meta">
-            <div class="row-title">{queueTrack.title}</div>
-            <div class="row-artist">{queueTrack.artist}</div>
-          </div>
-
-          <div class="row-actions">
-            {#if queueTrack.quality}
-              <span class="quality">{queueTrack.quality}</span>
+            {#if activeTrack && isPlaying}
+              <div class="artwork-playing-indicator" aria-hidden="true">
+                <div class="bar"></div>
+                <div class="bar"></div>
+                <div class="bar"></div>
+              </div>
             {/if}
+
             <button
-              class="row-play-btn"
+              class="artwork-play-btn"
               type="button"
               title={$t('player.play')}
               aria-label={$t('player.play')}
@@ -67,6 +53,15 @@
               <Play size={14} />
             </button>
           </div>
+
+          <div class="row-meta">
+            <div class="row-title">{queueTrack.title}</div>
+            <div class="row-artist">{queueTrack.artist}</div>
+          </div>
+
+          {#if queueTrack.quality}
+            <span class="quality">{queueTrack.quality}</span>
+          {/if}
         </div>
       {/each}
     </div>
@@ -126,14 +121,13 @@
     background: var(--accent-primary);
   }
 
-  .row-leading {
-    width: 12px;
-    height: 18px;
+  .row-artwork-wrap {
+    position: relative;
+    width: 36px;
+    height: 36px;
+    border-radius: 5px;
+    overflow: hidden;
     flex-shrink: 0;
-    color: var(--accent-primary);
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
   }
 
   .row-artwork {
@@ -179,51 +173,57 @@
   }
 
   .quality {
+    margin-left: auto;
     flex-shrink: 0;
     font-size: 11px;
     color: var(--text-muted);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
   }
 
-  .row-actions {
-    margin-left: auto;
-    flex-shrink: 0;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .row-play-btn {
-    width: 24px;
-    height: 24px;
+  .artwork-play-btn {
+    position: absolute;
+    inset: 0;
     border: none;
-    border-radius: 999px;
+    border-radius: 5px;
     padding: 0;
     cursor: pointer;
-    background: transparent;
-    color: var(--text-muted);
+    background: color-mix(in srgb, black 52%, transparent);
+    color: var(--text-primary);
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: background 120ms ease, color 120ms ease;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 120ms ease;
   }
 
-  .row-play-btn:hover {
-    background: var(--alpha-10);
-    color: var(--text-primary);
+  .row-artwork-wrap:hover .artwork-play-btn,
+  .row-artwork-wrap:focus-within .artwork-play-btn {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
   }
 
-  .queue-row.active .row-play-btn {
-    color: var(--accent-primary);
-  }
-
-  .playing-indicator {
+  .artwork-playing-indicator {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
     display: flex;
     align-items: center;
     gap: 2px;
+    padding: 3px 4px;
+    border-radius: 999px;
+    background: color-mix(in srgb, black 48%, transparent);
+    transition: opacity 120ms ease;
   }
 
-  .playing-indicator .bar {
+  .row-artwork-wrap:hover .artwork-playing-indicator {
+    opacity: 0;
+  }
+
+  .artwork-playing-indicator .bar {
     width: 2px;
     background-color: var(--accent-primary);
     border-radius: 9999px;
@@ -231,16 +231,16 @@
     animation: equalize 1s ease-in-out infinite;
   }
 
-  .playing-indicator .bar:nth-child(1) {
+  .artwork-playing-indicator .bar:nth-child(1) {
     height: 10px;
   }
 
-  .playing-indicator .bar:nth-child(2) {
+  .artwork-playing-indicator .bar:nth-child(2) {
     height: 13px;
     animation-delay: 0.15s;
   }
 
-  .playing-indicator .bar:nth-child(3) {
+  .artwork-playing-indicator .bar:nth-child(3) {
     height: 8px;
     animation-delay: 0.3s;
   }
