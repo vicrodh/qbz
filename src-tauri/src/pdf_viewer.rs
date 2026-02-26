@@ -232,6 +232,26 @@ pub async fn v2_booklet_render_page(
     .map_err(|e| format!("Render task failed: {}", e))?
 }
 
+/// Copy the current booklet PDF to a user-chosen destination.
+#[tauri::command]
+pub async fn v2_booklet_save(
+    dest: String,
+    state: tauri::State<'_, BookletState>,
+) -> Result<(), String> {
+    let src = {
+        let path_lock = state.current_path.lock().map_err(|e| e.to_string())?;
+        path_lock
+            .as_ref()
+            .ok_or_else(|| "No booklet is open".to_string())?
+            .clone()
+    };
+
+    std::fs::copy(&src, &dest)
+        .map_err(|e| format!("Failed to save booklet: {}", e))?;
+
+    Ok(())
+}
+
 /// Clean up the current booklet temp file.
 #[tauri::command]
 pub async fn v2_booklet_close(

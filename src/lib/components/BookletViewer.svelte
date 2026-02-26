@@ -2,7 +2,8 @@
   import { tick } from 'svelte';
   import { t } from 'svelte-i18n';
   import { invoke } from '@tauri-apps/api/core';
-  import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, RotateCw } from 'lucide-svelte';
+  import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, RotateCw, Download } from 'lucide-svelte';
+  import { save } from '@tauri-apps/plugin-dialog';
 
   interface PageSize {
     width: number;
@@ -174,6 +175,26 @@
     renderPage();
   }
 
+  async function downloadBooklet() {
+    if (!bookletLoaded) return;
+
+    const defaultName = title
+      ? `${title}.pdf`
+      : 'Booklet.pdf';
+
+    const dest = await save({
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      defaultPath: defaultName,
+    });
+    if (!dest) return;
+
+    try {
+      await invoke('v2_booklet_save', { dest });
+    } catch (err: any) {
+      console.error('[BookletViewer] Save error:', err);
+    }
+  }
+
   function handleKeydown(e: KeyboardEvent) {
     if (!isOpen) return;
 
@@ -269,6 +290,10 @@
         <div class="toolbar-divider"></div>
         <button class="toolbar-btn" onclick={rotate} title={$t('album.bookletRotate')}>
           <RotateCw size={16} />
+        </button>
+        <div class="toolbar-divider"></div>
+        <button class="toolbar-btn" onclick={downloadBooklet} title={$t('album.bookletDownload')} disabled={!bookletLoaded}>
+          <Download size={16} />
         </button>
       </div>
       <div class="toolbar-right">

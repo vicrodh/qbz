@@ -233,7 +233,8 @@
     "bookletLoading": "Booklet wird geladen...",
     "bookletError": "Booklet konnte nicht geladen werden",
     "bookletFitWidth": "An Breite anpassen",
-    "bookletRotate": "Drehen"
+    "bookletRotate": "Drehen",
+    "bookletDownload": "Booklet speichern"
   },
   "artist": {
     "albums": "Alben",
