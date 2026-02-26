@@ -3,7 +3,7 @@
 
 name: qbz-player
 title: "QBZ — Native Qobuz Client for Linux"
-version: '1.1.17'
+version: '1.1.18'
 summary: Native Qobuz player for Linux with bit-perfect audio and DAC control
 description: |
   QBZ is a native Linux desktop client for Qobuz™, designed for high-fidelity playback.
@@ -87,7 +87,7 @@ parts:
   qbz:
     plugin: rust
     source: https://github.com/vicrodh/qbz.git
-    source-tag: v1.1.17
+    source-tag: v1.1.18
     build-packages:
       - libwebkit2gtk-4.1-dev
       - libgtk-3-dev
