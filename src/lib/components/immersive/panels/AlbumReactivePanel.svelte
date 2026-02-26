@@ -3,6 +3,7 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import { getPanelFrameInterval } from '$lib/immersive/fpsConfig';
 
   interface Props {
     enabled?: boolean;
@@ -45,7 +46,7 @@
 
   let animationFrame: number | null = null;
   let lastRenderTime = 0;
-  const FRAME_INTERVAL = 1000 / 30;
+  const FRAME_INTERVAL = getPanelFrameInterval('album-reactive');
 
   // Artwork-derived glow color
   let glowColor = $state('rgba(100, 100, 255, 0.3)');

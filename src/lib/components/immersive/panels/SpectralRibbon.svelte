@@ -3,6 +3,7 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import { getPanelFrameInterval } from '$lib/immersive/fpsConfig';
 
   interface Props {
     enabled?: boolean;
@@ -40,8 +41,7 @@
 
   const NUM_BANDS = 190;
   const HISTORY_BINS = 4096;
-  const TARGET_FPS = 60;
-  const FRAME_INTERVAL_MS = 1000 / TARGET_FPS;
+  const FRAME_INTERVAL_MS = getPanelFrameInterval('spectral-ribbon');
 
   let canvasRef: HTMLCanvasElement | null = $state(null);
   let canvasCtx: CanvasRenderingContext2D | null = null;

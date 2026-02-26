@@ -34,7 +34,7 @@
     handleContextRestored,
     getConfig,
   } from './ImmersiveRenderer';
-  import { getUserItem } from '$lib/utils/userStorage';
+  import { getPanelFps, getPanelFrameInterval } from './fpsConfig';
 
   // Props
   interface Props {
@@ -81,10 +81,9 @@
   let lastFrameTime = 0;
   let isVisible = true;
 
-  // Frame throttling — read user preference (0 = disabled, default 15)
-  const AMBIENT_FPS_KEY = 'qbz-immersive-ambient-fps';
-  const ambientFps = parseInt(getUserItem(AMBIENT_FPS_KEY) || '15', 10);
-  const FRAME_INTERVAL = ambientFps > 0 ? 1000 / ambientFps : 0;
+  // Frame throttling — read user preference (0 = disabled, default 60)
+  const ambientFps = getPanelFps('ambient');
+  const FRAME_INTERVAL = getPanelFrameInterval('ambient');
 
   /**
    * Initialize WebGL resources.

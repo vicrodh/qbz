@@ -760,9 +760,21 @@
         "split-suggestions": "Geteilt: Vorschläge",
         "split-queue": "Geteilt: Warteschlange"
       },
-      "ambientFps": "Immersive Hintergrundanimation",
-      "ambientFpsDesc": "Bildrate für den Hintergrundeffekt im Immersiv-Modus. Niedrigere Werte sparen CPU. Erfordert erneutes Aufrufen des Immersiv-Modus.",
-      "ambientFpsOptions": {
+      "immersiveFps": {
+        "title": "Bildrate der Immersiv-Animationen",
+        "desc": "Bildrate pro Animation konfigurieren. Niedrigere Werte sparen CPU. Erfordert erneutes Aufrufen des Immersiv-Modus.",
+        "panels": {
+          "ambient": "Hintergrund-Unschärfe",
+          "visualizer": "Spektrum-Visualizer",
+          "lissajous": "X/Y (Lissajous)",
+          "oscilloscope": "Oszilloskop",
+          "energy-bands": "Energiebänder",
+          "transient-pulse": "Transientenpuls",
+          "album-reactive": "Album-Reaktiv",
+          "spectral-ribbon": "Spektralband"
+        }
+      },
+      "fpsOptions": {
         "disabled": "Deaktiviert",
         "15": "15 FPS (Niedrig)",
         "30": "30 FPS (Mittel)",

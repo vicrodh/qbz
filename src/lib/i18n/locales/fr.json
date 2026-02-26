@@ -760,9 +760,21 @@
         "split-suggestions": "Divisé : Suggestions",
         "split-queue": "Divisé : File d'attente"
       },
-      "ambientFps": "Animation de fond immersif",
-      "ambientFpsDesc": "Fréquence d'images de l'effet de fond en mode immersif. Des valeurs basses économisent le CPU. Nécessite de ré-entrer en mode immersif.",
-      "ambientFpsOptions": {
+      "immersiveFps": {
+        "title": "Fréquence d'Images des Animations Immersives",
+        "desc": "Configurez la fréquence d'images par animation. Des valeurs basses économisent le CPU. Nécessite de ré-entrer en mode immersif.",
+        "panels": {
+          "ambient": "Flou d'Arrière-plan",
+          "visualizer": "Visualiseur de Spectre",
+          "lissajous": "X/Y (Lissajous)",
+          "oscilloscope": "Oscilloscope",
+          "energy-bands": "Bandes d'Énergie",
+          "transient-pulse": "Impulsion Transitoire",
+          "album-reactive": "Album Réactif",
+          "spectral-ribbon": "Ruban Spectral"
+        }
+      },
+      "fpsOptions": {
         "disabled": "Désactivé",
         "15": "15 FPS (Bas)",
         "30": "30 FPS (Moyen)",

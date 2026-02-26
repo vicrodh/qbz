@@ -3,6 +3,7 @@
   import { listen, type UnlistenFn } from '@tauri-apps/api/event';
   import { invoke } from '@tauri-apps/api/core';
   import QualityBadge from '$lib/components/QualityBadge.svelte';
+  import { getPanelFrameInterval } from '$lib/immersive/fpsConfig';
 
   interface Props {
     enabled?: boolean;
@@ -54,7 +55,7 @@
   let trailIndex = 0;
 
   let lastRenderTime = 0;
-  const FRAME_INTERVAL = 1000 / 30;
+  const FRAME_INTERVAL = getPanelFrameInterval('lissajous');
 
   // Primary color extracted from artwork
   let plotColor = $state({ r: 0, g: 220, b: 200 });

@@ -788,9 +788,21 @@
         "split-suggestions": "Split: Suggestions",
         "split-queue": "Split: Queue"
       },
-      "ambientFps": "Immersive background animation",
-      "ambientFpsDesc": "Frame rate for the ambient background effect in immersive mode. Lower values save CPU. Requires re-entering immersive mode.",
-      "ambientFpsOptions": {
+      "immersiveFps": {
+        "title": "Immersive Animation Frame Rate",
+        "desc": "Configure frame rate per animation. Lower values save CPU. Requires re-entering immersive mode to apply.",
+        "panels": {
+          "ambient": "Background Blur",
+          "visualizer": "Spectrum Visualizer",
+          "lissajous": "X/Y (Lissajous)",
+          "oscilloscope": "Oscilloscope",
+          "energy-bands": "Energy Bands",
+          "transient-pulse": "Transient Pulse",
+          "album-reactive": "Album Reactive",
+          "spectral-ribbon": "Spectral Ribbon"
+        }
+      },
+      "fpsOptions": {
         "disabled": "Disabled",
         "15": "15 FPS (Low)",
         "30": "30 FPS (Medium)",

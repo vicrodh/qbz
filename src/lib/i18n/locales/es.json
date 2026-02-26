@@ -788,9 +788,21 @@
         "split-suggestions": "Dividido: Sugerencias",
         "split-queue": "Dividido: Cola"
       },
-      "ambientFps": "Animación de fondo inmersivo",
-      "ambientFpsDesc": "Tasa de cuadros del efecto de fondo en el modo inmersivo. Valores bajos ahorran CPU. Requiere volver a entrar al modo inmersivo.",
-      "ambientFpsOptions": {
+      "immersiveFps": {
+        "title": "Tasa de Cuadros de Animaciones Inmersivas",
+        "desc": "Configura la tasa de cuadros por animación. Valores bajos ahorran CPU. Requiere volver a entrar al modo inmersivo.",
+        "panels": {
+          "ambient": "Fondo Difuminado",
+          "visualizer": "Espectro",
+          "lissajous": "X/Y (Lissajous)",
+          "oscilloscope": "Osciloscopio",
+          "energy-bands": "Bandas de Energía",
+          "transient-pulse": "Pulso Transitorio",
+          "album-reactive": "Álbum Reactivo",
+          "spectral-ribbon": "Cinta Espectral"
+        }
+      },
+      "fpsOptions": {
         "disabled": "Desactivado",
         "15": "15 FPS (Bajo)",
         "30": "30 FPS (Medio)",
