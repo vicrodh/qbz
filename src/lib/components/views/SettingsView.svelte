@@ -1040,6 +1040,30 @@
     }
   }
 
+  // Mini player default view
+  const MINIPLAYER_VIEW_KEYS = ['remember', 'micro', 'compact', 'artwork', 'queue', 'lyrics'] as const;
+  let miniPlayerDefaultView = $state(
+    getUserItem('qbz-miniplayer-default-view') || 'remember'
+  );
+
+  function getMiniPlayerViewOptions(): string[] {
+    return MINIPLAYER_VIEW_KEYS.map(key => $t(`settings.appearance.miniplayerViews.${key}`));
+  }
+
+  function getMiniPlayerViewDisplayValue(): string {
+    return $t(`settings.appearance.miniplayerViews.${miniPlayerDefaultView}`);
+  }
+
+  function handleMiniPlayerViewChange(displayValue: string) {
+    const options = getMiniPlayerViewOptions();
+    const index = options.indexOf(displayValue);
+    if (index >= 0) {
+      const key = MINIPLAYER_VIEW_KEYS[index];
+      miniPlayerDefaultView = key;
+      setUserItem('qbz-miniplayer-default-view', key);
+    }
+  }
+
   // Startup page setting
   const STARTUP_PAGE_KEYS = ['home', 'last-view'] as const;
   let startupPage = $state(
@@ -4073,6 +4097,14 @@
         value={getImmersiveViewDisplayValue()}
         options={getImmersiveViewOptions()}
         onchange={handleImmersiveViewChange}
+      />
+    </div>
+    <div class="setting-row">
+      <span class="setting-label">{$t('settings.appearance.miniplayerDefaultView')}</span>
+      <Dropdown
+        value={getMiniPlayerViewDisplayValue()}
+        options={getMiniPlayerViewOptions()}
+        onchange={handleMiniPlayerViewChange}
       />
     </div>
     <div class="setting-row">

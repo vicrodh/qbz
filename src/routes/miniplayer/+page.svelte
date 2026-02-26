@@ -24,6 +24,8 @@
     toggleRepeat,
     nextTrack,
     previousTrack,
+    playQueueIndex,
+    getBackendQueueState,
     syncQueueState,
     startQueueEventListener,
     stopQueueEventListener,
@@ -316,6 +318,38 @@
     });
   }
 
+  async function handleQueueTrackPlay(trackId: string): Promise<void> {
+    try {
+      const queueSnapshot = await getBackendQueueState();
+      if (!queueSnapshot) return;
+
+      const allTracks = [queueSnapshot.current_track, ...queueSnapshot.upcoming].filter(
+        Boolean
+      ) as BackendQueueTrack[];
+      const queueTrackIndex = allTracks.findIndex(trackEntry => String(trackEntry.id) === trackId);
+
+      if (queueTrackIndex < 0) return;
+
+      if (queueTrackIndex === 0 && queueSnapshot.current_index !== null) {
+        if (!getPlayerState().isPlaying) {
+          await togglePlay();
+        }
+        return;
+      }
+
+      const queueIndex = queueSnapshot.current_index !== null
+        ? queueSnapshot.current_index + queueTrackIndex
+        : queueTrackIndex;
+
+      const queueTrack = await playQueueIndex(queueIndex);
+      if (queueTrack) {
+        await playQueueTrack(queueTrack);
+      }
+    } catch (err) {
+      console.error('[MiniPlayer] queue track play failed:', err);
+    }
+  }
+
   async function handleSkipBack(): Promise<void> {
     const state = getPlayerState();
     if (!state.currentTrack || state.isSkipping) return;
@@ -409,6 +443,9 @@
     onVolumeChange={playerSetVolume}
     onToggleShuffle={handleToggleShuffle}
     onToggleRepeat={handleToggleRepeat}
+    onQueueTrackPlay={(trackId) => {
+      void handleQueueTrackPlay(trackId);
+    }}
   />
 
   {#if showAlwaysOnTopWarning}

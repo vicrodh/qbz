@@ -1,13 +1,16 @@
 <script lang="ts">
   import { t } from '$lib/i18n';
+  import { Play } from 'lucide-svelte';
   import type { MiniPlayerQueueTrack } from './types';
 
   interface Props {
     tracks: MiniPlayerQueueTrack[];
     currentTrackId?: string;
+    isPlaying?: boolean;
+    onTrackPlay?: (trackId: string) => void;
   }
 
-  let { tracks, currentTrackId }: Props = $props();
+  let { tracks, currentTrackId, isPlaying = false, onTrackPlay }: Props = $props();
 </script>
 
 <div class="queue-surface">
@@ -16,10 +19,25 @@
   {:else}
     <div class="queue-list mini-scrollbar">
       {#each tracks as queueTrack (queueTrack.id)}
-        <div class="queue-row" class:active={queueTrack.id === currentTrackId}>
-          {#if queueTrack.id === currentTrackId}
+        {@const activeTrack = queueTrack.id === currentTrackId}
+        <div class="queue-row" class:active={activeTrack}>
+          {#if activeTrack}
             <div class="active-bar" aria-hidden="true"></div>
           {/if}
+
+          <div class="row-leading" aria-hidden="true">
+            {#if activeTrack}
+              {#if isPlaying}
+                <div class="playing-indicator">
+                  <div class="bar"></div>
+                  <div class="bar"></div>
+                  <div class="bar"></div>
+                </div>
+              {:else}
+                <Play size={12} />
+              {/if}
+            {/if}
+          </div>
 
           {#if queueTrack.artwork}
             <img src={queueTrack.artwork} alt={queueTrack.title} class="row-artwork" />
@@ -32,9 +50,23 @@
             <div class="row-artist">{queueTrack.artist}</div>
           </div>
 
-          {#if queueTrack.quality}
-            <span class="quality">{queueTrack.quality}</span>
-          {/if}
+          <div class="row-actions">
+            {#if queueTrack.quality}
+              <span class="quality">{queueTrack.quality}</span>
+            {/if}
+            <button
+              class="row-play-btn"
+              type="button"
+              title={$t('player.play')}
+              aria-label={$t('player.play')}
+              onclick={(event) => {
+                event.stopPropagation();
+                onTrackPlay?.(queueTrack.id);
+              }}
+            >
+              <Play size={14} />
+            </button>
+          </div>
         </div>
       {/each}
     </div>
@@ -94,6 +126,16 @@
     background: var(--accent-primary);
   }
 
+  .row-leading {
+    width: 12px;
+    height: 18px;
+    flex-shrink: 0;
+    color: var(--accent-primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .row-artwork {
     width: 36px;
     height: 36px;
@@ -141,6 +183,77 @@
     font-size: 11px;
     color: var(--text-muted);
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  }
+
+  .row-actions {
+    margin-left: auto;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .row-play-btn {
+    width: 24px;
+    height: 24px;
+    border: none;
+    border-radius: 999px;
+    padding: 0;
+    cursor: pointer;
+    background: transparent;
+    color: var(--text-muted);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 120ms ease, color 120ms ease;
+  }
+
+  .row-play-btn:hover {
+    background: var(--alpha-10);
+    color: var(--text-primary);
+  }
+
+  .queue-row.active .row-play-btn {
+    color: var(--accent-primary);
+  }
+
+  .playing-indicator {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .playing-indicator .bar {
+    width: 2px;
+    background-color: var(--accent-primary);
+    border-radius: 9999px;
+    transform-origin: bottom;
+    animation: equalize 1s ease-in-out infinite;
+  }
+
+  .playing-indicator .bar:nth-child(1) {
+    height: 10px;
+  }
+
+  .playing-indicator .bar:nth-child(2) {
+    height: 13px;
+    animation-delay: 0.15s;
+  }
+
+  .playing-indicator .bar:nth-child(3) {
+    height: 8px;
+    animation-delay: 0.3s;
+  }
+
+  @keyframes equalize {
+    0%, 100% {
+      transform: scaleY(0.5);
+      opacity: 0.7;
+    }
+    50% {
+      transform: scaleY(1);
+      opacity: 1;
+    }
   }
 
   .mini-scrollbar {

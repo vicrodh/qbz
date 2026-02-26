@@ -788,6 +788,15 @@
         "split-suggestions": "Dividido: Sugerencias",
         "split-queue": "Dividido: Cola"
       },
+      "miniplayerDefaultView": "Vista predeterminada del mini reproductor",
+      "miniplayerViews": {
+        "remember": "Recordar la última usada",
+        "micro": "Micro",
+        "compact": "Compacta",
+        "artwork": "Carátula",
+        "queue": "Cola",
+        "lyrics": "Letras"
+      },
       "startupPage": "Página de inicio",
       "startupPageDesc": "Elige qué página mostrar al iniciar la app",
       "startupPages": {

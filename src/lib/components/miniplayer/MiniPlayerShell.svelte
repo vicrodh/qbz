@@ -39,6 +39,7 @@
     onVolumeChange: (volume: number) => void;
     onToggleShuffle: () => void;
     onToggleRepeat: () => void;
+    onQueueTrackPlay?: (trackId: string) => void;
   }
 
   let {
@@ -71,7 +72,8 @@
     onSeek,
     onVolumeChange,
     onToggleShuffle,
-    onToggleRepeat
+    onToggleRepeat,
+    onQueueTrackPlay
   }: Props = $props();
 
   const compactSurface = $derived(activeSurface === 'compact');
@@ -106,7 +108,12 @@
       {:else if activeSurface === 'artwork'}
         <MiniPlayerArtworkSurface {artwork} {title} {artist} {album} />
       {:else if activeSurface === 'queue'}
-        <MiniPlayerQueueSurface tracks={queueTracks} {currentTrackId} />
+        <MiniPlayerQueueSurface
+          tracks={queueTracks}
+          {currentTrackId}
+          isPlaying={isPlaying}
+          onTrackPlay={onQueueTrackPlay}
+        />
       {:else}
         <MiniPlayerLyricsSurface
           lines={lyricsLines}

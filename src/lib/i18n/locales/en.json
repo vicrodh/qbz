@@ -788,6 +788,15 @@
         "split-suggestions": "Split: Suggestions",
         "split-queue": "Split: Queue"
       },
+      "miniplayerDefaultView": "Mini player default view",
+      "miniplayerViews": {
+        "remember": "Remember last used",
+        "micro": "Micro",
+        "compact": "Compact",
+        "artwork": "Artwork",
+        "queue": "Queue",
+        "lyrics": "Lyrics"
+      },
       "startupPage": "Startup page",
       "startupPageDesc": "Choose which page to show when the app starts",
       "startupPages": {

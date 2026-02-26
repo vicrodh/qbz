@@ -18,9 +18,33 @@ import {
   type MiniPlayerSurface
 } from '$lib/stores/uiStore';
 import { getUseSystemTitleBar } from '$lib/stores/titleBarStore';
+import { getUserItem } from '$lib/utils/userStorage';
 
 const MINI_PLAYER_LABEL = 'miniplayer';
 const MAIN_WINDOW_LABEL = 'main';
+const MINI_PLAYER_DEFAULT_VIEW_KEY = 'qbz-miniplayer-default-view';
+const MINI_PLAYER_SURFACE_OPTIONS: MiniPlayerSurface[] = ['micro', 'compact', 'artwork', 'queue', 'lyrics'];
+
+function isMiniPlayerSurface(value: string): value is MiniPlayerSurface {
+  return MINI_PLAYER_SURFACE_OPTIONS.includes(value as MiniPlayerSurface);
+}
+
+function resolveInitialSurface(requestedSurface?: MiniPlayerSurface): MiniPlayerSurface | null {
+  if (requestedSurface) {
+    return requestedSurface;
+  }
+
+  const configuredDefault = getUserItem(MINI_PLAYER_DEFAULT_VIEW_KEY);
+  if (!configuredDefault || configuredDefault === 'remember') {
+    return null;
+  }
+
+  if (isMiniPlayerSurface(configuredDefault)) {
+    return configuredDefault;
+  }
+
+  return null;
+}
 
 export interface AlwaysOnTopResult {
   applied: boolean;
@@ -93,8 +117,9 @@ async function focusMainWindow(): Promise<void> {
 export async function enterMiniplayerMode(surface?: MiniPlayerSurface): Promise<void> {
   initMiniPlayerState();
 
-  if (surface) {
-    setMiniPlayerSurface(surface);
+  const initialSurface = resolveInitialSurface(surface);
+  if (initialSurface) {
+    setMiniPlayerSurface(initialSurface);
   }
 
   try {
