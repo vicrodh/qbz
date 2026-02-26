@@ -788,6 +788,15 @@
         "split-suggestions": "Dividido: Sugerencias",
         "split-queue": "Dividido: Cola"
       },
+      "ambientFps": "Animación de fondo inmersivo",
+      "ambientFpsDesc": "Tasa de cuadros del efecto de fondo en el modo inmersivo. Valores bajos ahorran CPU. Requiere volver a entrar al modo inmersivo.",
+      "ambientFpsOptions": {
+        "disabled": "Desactivado",
+        "15": "15 FPS (Bajo)",
+        "30": "30 FPS (Medio)",
+        "60": "60 FPS (Fluido)",
+        "120": "120 FPS (Ultra)"
+      },
       "miniplayerDefaultView": "Vista predeterminada del mini reproductor",
       "miniplayerViews": {
         "remember": "Recordar la última usada",
