@@ -5,11 +5,9 @@
   import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Maximize, RotateCw } from 'lucide-svelte';
   import * as pdfjsLib from 'pdfjs-dist';
 
-  // Configure worker
-  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-    'pdfjs-dist/build/pdf.worker.min.mjs',
-    import.meta.url
-  ).toString();
+  // No web worker — run pdfjs on main thread so WASM files
+  // at /pdfjs/ are resolvable (workers use blob: URLs where
+  // relative paths break). Fine for a simple booklet viewer.
 
   interface Props {
     isOpen: boolean;
@@ -51,13 +49,15 @@
       const bytes = await invoke<number[]>('v2_fetch_url_bytes', { url });
       const data = new Uint8Array(bytes);
 
+      // disableWorker: run all decoding on main thread so WASM resolves
       const loadingTask = pdfjsLib.getDocument({
         data,
         disableRange: true,
         disableAutoFetch: true,
+        disableWorker: true,
         useWorkerFetch: false,
-        wasmUrl: '/pdfjs/',
-      });
+        wasmUrl: `${window.location.origin}/pdfjs/`,
+      } as any);
 
       pdfDoc = await loadingTask.promise;
       totalPages = pdfDoc.numPages;
@@ -84,8 +84,8 @@
     try {
       const page = await pdfDoc.getPage(currentPage);
       const dpr = window.devicePixelRatio || 1;
-      // Render at 2x DPR for sharp output (PDF points → pixels)
-      const qualityScale = 2;
+      // Render at 3x for near-print quality (216 DPI at 1x screens)
+      const qualityScale = 3;
       const scale = zoom * dpr * qualityScale;
       const viewport = page.getViewport({ scale, rotation });
 
