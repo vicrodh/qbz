@@ -5,7 +5,7 @@
 
 use super::backend::{AudioBackend, AudioBackendType, AudioDevice, BackendConfig, BackendResult};
 use super::pipewire_backend::PipeWireBackend;
-use rodio::{OutputStream, OutputStreamHandle};
+use rodio::MixerDeviceSink;
 
 pub struct PulseBackend {
     // Reuse PipeWire backend implementation (they're compatible)
@@ -33,7 +33,7 @@ impl AudioBackend for PulseBackend {
     fn create_output_stream(
         &self,
         config: &BackendConfig,
-    ) -> BackendResult<(OutputStream, OutputStreamHandle)> {
+    ) -> BackendResult<MixerDeviceSink> {
         // Delegate to PipeWire backend (same mechanism)
         self.inner.create_output_stream(config)
     }

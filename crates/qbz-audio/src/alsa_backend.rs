@@ -14,7 +14,7 @@ use rodio::{
         traits::{DeviceTrait, HostTrait},
         BufferSize, SampleFormat, SampleRate, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
     },
-    OutputStream, OutputStreamHandle,
+    DeviceSinkBuilder, MixerDeviceSink,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -45,7 +45,7 @@ fn get_supported_sample_rates(device: &rodio::cpal::Device) -> Option<Vec<u32>> 
     let mut supported = Vec::new();
 
     for rate in COMMON_SAMPLE_RATES {
-        let sample_rate = rodio::cpal::SampleRate(*rate);
+        let sample_rate = *rate;
         // Check if any config supports this rate
         let is_supported = configs_vec.iter().any(|config| {
             sample_rate >= config.min_sample_rate() && sample_rate <= config.max_sample_rate()
@@ -587,7 +587,7 @@ impl AudioBackend for AlsaBackend {
     fn create_output_stream(
         &self,
         config: &BackendConfig,
-    ) -> BackendResult<(OutputStream, OutputStreamHandle)> {
+    ) -> BackendResult<MixerDeviceSink> {
         log::info!(
             "[ALSA Backend] Creating stream: {}Hz, {} channels, exclusive: {}, plugin: {:?}",
             config.sample_rate,
@@ -622,7 +622,7 @@ impl AudioBackend for AlsaBackend {
         // Create StreamConfig with requested sample rate
         let stream_config = StreamConfig {
             channels: config.channels,
-            sample_rate: SampleRate(config.sample_rate),
+            sample_rate: config.sample_rate,
             buffer_size: if config.exclusive_mode {
                 // Smaller buffer for exclusive mode = lower latency
                 BufferSize::Fixed(512)
@@ -639,15 +639,15 @@ impl AudioBackend for AlsaBackend {
         let mut found_matching = false;
         for range in supported_configs {
             if range.channels() == config.channels
-                && config.sample_rate >= range.min_sample_rate().0
-                && config.sample_rate <= range.max_sample_rate().0
+                && config.sample_rate >= range.min_sample_rate()
+                && config.sample_rate <= range.max_sample_rate()
             {
                 found_matching = true;
                 log::info!(
                     "[ALSA Backend] Device supports {}Hz (range: {}-{}Hz)",
                     config.sample_rate,
-                    range.min_sample_rate().0,
-                    range.max_sample_rate().0
+                    range.min_sample_rate(),
+                    range.max_sample_rate()
                 );
                 break;
             }
@@ -668,8 +668,20 @@ impl AudioBackend for AlsaBackend {
             SampleFormat::F32,
         );
 
-        // Create OutputStream with custom config
-        let stream = OutputStream::try_from_device_config(&device, supported_config)
+        // Create MixerDeviceSink with custom config
+        let mixer_sink = DeviceSinkBuilder::from_device(device)
+            .map_err(|e| {
+                if config.exclusive_mode {
+                    format!(
+                        "Failed to create exclusive ALSA stream at {}Hz: {}. Device may be in use by another application.",
+                        config.sample_rate, e
+                    )
+                } else {
+                    format!("Failed to create ALSA device sink builder at {}Hz: {}", config.sample_rate, e)
+                }
+            })?
+            .with_supported_config(&supported_config)
+            .open_stream()
             .map_err(|e| {
                 if config.exclusive_mode {
                     format!(
@@ -687,7 +699,7 @@ impl AudioBackend for AlsaBackend {
             config.exclusive_mode
         );
 
-        Ok(stream)
+        Ok(mixer_sink)
     }
 
     fn is_available(&self) -> bool {

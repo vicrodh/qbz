@@ -12,7 +12,7 @@ use rodio::{
         traits::{DeviceTrait, HostTrait},
         BufferSize, SampleFormat, SampleRate, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
     },
-    OutputStream, OutputStreamHandle,
+    DeviceSinkBuilder, MixerDeviceSink,
 };
 use std::process::Command;
 
@@ -168,7 +168,7 @@ impl AudioBackend for PipeWireBackend {
     fn create_output_stream(
         &self,
         config: &BackendConfig,
-    ) -> BackendResult<(OutputStream, OutputStreamHandle)> {
+    ) -> BackendResult<MixerDeviceSink> {
         let target_sink = config.device_id.clone();
 
         // Temporarily set default sink to target (if specified)
@@ -274,7 +274,7 @@ impl AudioBackend for PipeWireBackend {
         // Create StreamConfig with desired sample rate
         let stream_config = StreamConfig {
             channels: config.channels,
-            sample_rate: SampleRate(config.sample_rate),
+            sample_rate: config.sample_rate,
             buffer_size: if config.exclusive_mode {
                 BufferSize::Fixed(512)  // Lower latency for exclusive mode
             } else {
@@ -290,15 +290,15 @@ impl AudioBackend for PipeWireBackend {
         let mut found_matching = false;
         for range in supported_configs {
             if range.channels() == config.channels
-                && config.sample_rate >= range.min_sample_rate().0
-                && config.sample_rate <= range.max_sample_rate().0
+                && config.sample_rate >= range.min_sample_rate()
+                && config.sample_rate <= range.max_sample_rate()
             {
                 found_matching = true;
                 log::info!(
                     "[PipeWire Backend] Device supports {}Hz (range: {}-{}Hz)",
                     config.sample_rate,
-                    range.min_sample_rate().0,
-                    range.max_sample_rate().0
+                    range.min_sample_rate(),
+                    range.max_sample_rate()
                 );
                 break;
             }
@@ -319,13 +319,16 @@ impl AudioBackend for PipeWireBackend {
             SampleFormat::F32,
         );
 
-        // Create OutputStream with custom config
-        let stream = OutputStream::try_from_device_config(&device, supported_config)
+        // Create MixerDeviceSink with custom config
+        let mixer_sink = DeviceSinkBuilder::from_device(device)
+            .map_err(|e| format!("Failed to create device sink builder: {}", e))?
+            .with_supported_config(&supported_config)
+            .open_stream()
             .map_err(|e| format!("Failed to create output stream at {}Hz: {}", config.sample_rate, e))?;
 
         log::info!("[PipeWire Backend] Output stream created successfully at {}Hz", config.sample_rate);
 
-        Ok(stream)
+        Ok(mixer_sink)
     }
 
     fn is_available(&self) -> bool {

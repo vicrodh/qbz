@@ -658,17 +658,17 @@ impl IncrementalStreamingSource {
 }
 
 impl Source for IncrementalStreamingSource {
-    fn current_frame_len(&self) -> Option<usize> {
+    fn current_span_len(&self) -> Option<usize> {
         // We don't know frame boundaries in the queue
         None
     }
 
-    fn channels(&self) -> u16 {
-        self.channels
+    fn channels(&self) -> std::num::NonZero<u16> {
+        std::num::NonZero::new(self.channels).unwrap()
     }
 
-    fn sample_rate(&self) -> u32 {
-        self.sample_rate
+    fn sample_rate(&self) -> std::num::NonZero<u32> {
+        std::num::NonZero::new(self.sample_rate).unwrap()
     }
 
     fn total_duration(&self) -> Option<Duration> {

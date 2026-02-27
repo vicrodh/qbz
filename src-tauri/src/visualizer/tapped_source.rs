@@ -68,17 +68,17 @@ where
     S: Source<Item = f32>,
 {
     #[inline]
-    fn current_frame_len(&self) -> Option<usize> {
-        self.inner.current_frame_len()
+    fn current_span_len(&self) -> Option<usize> {
+        self.inner.current_span_len()
     }
 
     #[inline]
-    fn channels(&self) -> u16 {
+    fn channels(&self) -> std::num::NonZero<u16> {
         self.inner.channels()
     }
 
     #[inline]
-    fn sample_rate(&self) -> u32 {
+    fn sample_rate(&self) -> std::num::NonZero<u32> {
         self.inner.sample_rate()
     }
 
@@ -97,7 +97,11 @@ mod tests {
     #[test]
     fn test_tapped_source_passes_through() {
         let samples: Vec<f32> = vec![0.5, 0.75, -0.5, -0.25, 0.0];
-        let source = SamplesBuffer::new(1, 44100, samples.clone());
+        let source = SamplesBuffer::new(
+            std::num::NonZero::new(1u16).unwrap(),
+            std::num::NonZero::new(44100u32).unwrap(),
+            samples.clone(),
+        );
 
         let ring_buffer = Arc::new(RingBuffer::new(16));
         let enabled = Arc::new(AtomicBool::new(true));
@@ -112,7 +116,11 @@ mod tests {
     #[test]
     fn test_tapped_source_fills_ring_buffer() {
         let samples: Vec<f32> = vec![1.0, 0.0, -1.0];
-        let source = SamplesBuffer::new(1, 44100, samples);
+        let source = SamplesBuffer::new(
+            std::num::NonZero::new(1u16).unwrap(),
+            std::num::NonZero::new(44100u32).unwrap(),
+            samples,
+        );
 
         let ring_buffer = Arc::new(RingBuffer::new(16));
         let enabled = Arc::new(AtomicBool::new(true));
