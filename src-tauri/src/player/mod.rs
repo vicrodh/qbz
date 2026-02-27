@@ -379,16 +379,12 @@ fn create_output_stream_with_config(
     );
 
     // Create StreamConfig with desired sample rate
+    // Note: buffer_size here is unused — with_supported_config() resets it.
+    // The actual buffer size is set via with_buffer_size() below.
     let config = StreamConfig {
         channels,
         sample_rate,
-        buffer_size: if exclusive_mode {
-            BufferSize::Fixed(512) // Lower latency for exclusive mode
-        } else {
-            // PipeWire manages its own buffer scheduling;
-            // forcing a fixed size causes underruns at high sample rates
-            BufferSize::Default
-        },
+        buffer_size: BufferSize::Default,
     };
 
     // Check if device supports this configuration
@@ -428,10 +424,25 @@ fn create_output_stream_with_config(
         SampleFormat::F32,
     );
 
+    // Compute buffer size — must be applied AFTER with_supported_config()
+    // because that method resets buffer_size to Default via ..Default::default().
+    // MixerDeviceSink has zero internal buffering, so CPAL's buffer is the
+    // ONLY buffer between the mixer and audio hardware.
+    let cpal_buffer_size = if exclusive_mode {
+        BufferSize::Fixed(512)  // Low latency for exclusive mode
+    } else {
+        // ~100ms buffer, matching old vendored cpal period size.
+        // Prevents underruns at high sample rates (192kHz = 19200 frames).
+        BufferSize::Fixed(sample_rate / 10)
+    };
+    log::info!("Buffer size: {:?}", cpal_buffer_size);
+
     // Create MixerDeviceSink with custom config
     match DeviceSinkBuilder::from_device(device) {
         Ok(builder) => {
-            match builder.with_supported_config(&supported_config).open_stream() {
+            match builder.with_supported_config(&supported_config)
+                .with_buffer_size(cpal_buffer_size)
+                .open_stream() {
                 Ok(mixer_sink) => {
                     log::info!("MixerDeviceSink created successfully at {}Hz", sample_rate);
                     Ok(mixer_sink)
