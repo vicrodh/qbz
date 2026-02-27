@@ -1823,12 +1823,28 @@ pub fn v2_get_devices_for_backend(
 }
 
 #[tauri::command]
-pub fn v2_get_hardware_audio_status(
+pub async fn v2_get_hardware_audio_status(
     state: State<'_, AppState>,
+    core_bridge: State<'_, CoreBridgeState>,
 ) -> Result<HardwareAudioStatus, String> {
-    let sample_rate = state.player.state.get_sample_rate();
-    let bit_depth = state.player.state.get_bit_depth();
-    let active = state.player.state.is_playing() && sample_rate > 0;
+    // Try V2 player first (CoreBridge), fall back to legacy player
+    let (sample_rate, bit_depth, is_playing) =
+        if let Some(bridge) = core_bridge.try_get().await {
+            let player = bridge.player();
+            (
+                player.state.get_sample_rate(),
+                player.state.get_bit_depth(),
+                player.state.is_playing(),
+            )
+        } else {
+            (
+                state.player.state.get_sample_rate(),
+                state.player.state.get_bit_depth(),
+                state.player.state.is_playing(),
+            )
+        };
+
+    let active = is_playing && sample_rate > 0;
 
     let hardware_sample_rate = if sample_rate > 0 {
         Some(sample_rate)
