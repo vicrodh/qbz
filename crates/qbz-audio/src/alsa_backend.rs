@@ -462,8 +462,43 @@ impl AlsaBackend {
                     let error = super::backend::AlsaDirectError::from_alsa_error(&e);
                     log::warn!("[ALSA Backend] hw attempt failed: {}", error);
 
+                    if matches!(error, super::backend::AlsaDirectError::DeviceBusy(_)) {
+                        // PipeWire may be holding the ALSA device open.
+                        // Suspend PipeWire sinks to release the device, then retry.
+                        log::info!("[ALSA Backend] Device busy — suspending PipeWire sinks to release ALSA device");
+                        if let Ok(output) = std::process::Command::new("pactl")
+                            .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
+                            .output()
+                        {
+                            if output.status.success() {
+                                log::info!("[ALSA Backend] PipeWire sink suspended, waiting for device release...");
+                                std::thread::sleep(std::time::Duration::from_millis(200));
+
+                                match super::AlsaDirectStream::new(&hw_device, config.sample_rate, config.channels) {
+                                    Ok(stream) => {
+                                        log::info!("[ALSA Backend] ✓ Direct hw stream created after PipeWire suspend");
+                                        return Some(Ok((stream, super::backend::BitPerfectMode::DirectHardware)));
+                                    }
+                                    Err(e2) => {
+                                        log::warn!("[ALSA Backend] Retry after suspend also failed: {}", e2);
+                                    }
+                                }
+                            } else {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                log::warn!("[ALSA Backend] Failed to suspend PipeWire sink: {}", stderr);
+                            }
+                        }
+
+                        // If retry failed or suspend failed, fall through to error
+                        log::error!("[ALSA Backend] Cannot acquire device even after PipeWire suspend");
+                        return Some(Err(format!(
+                            "ALSA Direct failed: {}. Device may be in use or inaccessible.",
+                            error
+                        )));
+                    }
+
                     if !error.allows_plughw_fallback() {
-                        // Non-recoverable error (busy, permissions, etc.)
+                        // Non-recoverable error (permissions, etc.)
                         log::error!("[ALSA Backend] Cannot fallback - error type: {:?}", error);
                         return Some(Err(format!(
                             "ALSA Direct failed: {}. Device may be in use or inaccessible.",
@@ -490,6 +525,31 @@ impl AlsaBackend {
                 Some(Ok((stream, super::backend::BitPerfectMode::PluginFallback)))
             }
             Err(e) => {
+                let error = super::backend::AlsaDirectError::from_alsa_error(&e);
+
+                if matches!(error, super::backend::AlsaDirectError::DeviceBusy(_)) {
+                    log::info!("[ALSA Backend] plughw device busy — suspending PipeWire sinks to release ALSA device");
+                    if let Ok(output) = std::process::Command::new("pactl")
+                        .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
+                        .output()
+                    {
+                        if output.status.success() {
+                            log::info!("[ALSA Backend] PipeWire sink suspended, retrying plughw...");
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+
+                            match super::AlsaDirectStream::new(&plughw_device, config.sample_rate, config.channels) {
+                                Ok(stream) => {
+                                    log::info!("[ALSA Backend] ✓ plughw stream created after PipeWire suspend");
+                                    return Some(Ok((stream, super::backend::BitPerfectMode::PluginFallback)));
+                                }
+                                Err(e2) => {
+                                    log::error!("[ALSA Backend] plughw retry after suspend also failed: {}", e2);
+                                }
+                            }
+                        }
+                    }
+                }
+
                 log::error!("[ALSA Backend] plughw fallback also failed: {}", e);
                 Some(Err(format!(
                     "Bit-perfect playback could not be established. hw failed, plughw failed: {}",
