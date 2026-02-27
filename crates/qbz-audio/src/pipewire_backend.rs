@@ -252,8 +252,10 @@ impl AudioBackend for PipeWireBackend {
             buffer_size: if config.exclusive_mode {
                 BufferSize::Fixed(512)  // Lower latency for exclusive mode
             } else {
-                // ~100ms period for fewer CPU wakeups (matches previous vendored cpal tuning)
-                BufferSize::Fixed(config.sample_rate / 10)
+                // PipeWire manages its own buffer scheduling via quantum;
+                // forcing a fixed buffer size here conflicts and causes underruns
+                // at high sample rates (192kHz)
+                BufferSize::Default
             },
         };
 

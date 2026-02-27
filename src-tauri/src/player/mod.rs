@@ -385,8 +385,9 @@ fn create_output_stream_with_config(
         buffer_size: if exclusive_mode {
             BufferSize::Fixed(512) // Lower latency for exclusive mode
         } else {
-            // ~100ms period for fewer CPU wakeups (matches previous vendored cpal tuning)
-            BufferSize::Fixed(sample_rate / 10)
+            // PipeWire manages its own buffer scheduling;
+            // forcing a fixed size causes underruns at high sample rates
+            BufferSize::Default
         },
     };
 
