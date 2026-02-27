@@ -22,10 +22,8 @@ serde_json = { workspace = true }
 # Error handling
 thiserror = { workspace = true }
 
-# Audio - Vendored rodio for bit-perfect playback
-# This is the same vendored version used by qbz-nix
-# CRITICAL: Must use symphonia-all feature for f32 pipeline
-rodio = { path = "../../src-tauri/vendor/rodio", features = ["symphonia-all"] }
+# Audio playback (f32 pipeline is now upstream in rodio 0.22)
+rodio = { version = "0.22", features = ["symphonia-all"] }
 
 # Audio analysis
 symphonia = { workspace = true }
