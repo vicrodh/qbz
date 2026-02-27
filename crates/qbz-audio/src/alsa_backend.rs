@@ -627,7 +627,8 @@ impl AudioBackend for AlsaBackend {
                 // Smaller buffer for exclusive mode = lower latency
                 BufferSize::Fixed(512)
             } else {
-                BufferSize::Default
+                // ~100ms period for fewer CPU wakeups (matches previous vendored cpal tuning)
+                BufferSize::Fixed(config.sample_rate / 10)
             },
         };
 
