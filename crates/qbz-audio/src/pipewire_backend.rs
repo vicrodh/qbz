@@ -41,6 +41,113 @@ impl PipeWireBackend {
             .output();
     }
 
+    /// Get the ALSA card number for a PipeWire/PulseAudio sink name.
+    /// Parses `pactl list sinks` to find the `alsa.card` property.
+    fn get_alsa_card_for_sink(sink_name: &str) -> Option<String> {
+        let output = Command::new("pactl")
+            .args(["list", "sinks"])
+            .output()
+            .ok()?;
+
+        if !output.status.success() {
+            return None;
+        }
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let mut in_target_sink = false;
+
+        for line in stdout.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with("Sink #") {
+                if in_target_sink {
+                    return None; // Passed target sink without finding alsa.card
+                }
+            } else if trimmed.starts_with("Name:") {
+                let name = trimmed.trim_start_matches("Name:").trim();
+                in_target_sink = name == sink_name;
+            } else if in_target_sink && trimmed.starts_with("alsa.card = ") {
+                let card = trimmed
+                    .trim_start_matches("alsa.card = ")
+                    .trim_matches('"')
+                    .to_string();
+                return Some(card);
+            }
+        }
+
+        None
+    }
+
+    /// Query the DAC's supported sample rates from /proc/asound/cardN/stream0.
+    /// Returns None if rates can't be determined (non-USB device, continuous range, etc.)
+    fn get_sink_supported_rates(sink_name: &str) -> Option<Vec<u32>> {
+        let alsa_card = Self::get_alsa_card_for_sink(sink_name)?;
+
+        let stream_path = format!("/proc/asound/card{}/stream0", alsa_card);
+        let content = std::fs::read_to_string(&stream_path).ok()?;
+
+        // Collect all rates from Playback Rates: lines (handles multiple alt settings)
+        let mut in_playback = false;
+        let mut all_rates = Vec::new();
+
+        for line in content.lines() {
+            let trimmed = line.trim();
+            if trimmed == "Playback:" {
+                in_playback = true;
+            } else if trimmed == "Capture:" {
+                in_playback = false;
+            }
+            if in_playback && trimmed.starts_with("Rates:") {
+                let rates_str = trimmed.trim_start_matches("Rates:").trim();
+                if rates_str.contains("continuous") {
+                    return None; // Any rate in range is supported
+                }
+                for rate_str in rates_str.split(',') {
+                    if let Ok(rate) = rate_str.trim().parse::<u32>() {
+                        if !all_rates.contains(&rate) {
+                            all_rates.push(rate);
+                        }
+                    }
+                }
+            }
+        }
+
+        if all_rates.is_empty() {
+            None
+        } else {
+            all_rates.sort();
+            Some(all_rates)
+        }
+    }
+
+    /// Find the best fallback sample rate in the same family.
+    /// 44.1kHz family: 44100, 88200, 176400, 352800
+    /// 48kHz family: 48000, 96000, 192000, 384000
+    fn find_best_fallback_rate(requested: u32, supported: &[u32]) -> u32 {
+        let is_441_family = requested % 44100 == 0;
+
+        // Find highest supported rate in the same family that's <= requested
+        let mut candidates: Vec<u32> = supported
+            .iter()
+            .filter(|&&r| {
+                if is_441_family {
+                    r % 44100 == 0
+                } else {
+                    r % 48000 == 0
+                }
+            })
+            .filter(|&&r| r <= requested)
+            .copied()
+            .collect();
+        candidates.sort();
+
+        if let Some(&best) = candidates.last() {
+            return best;
+        }
+
+        // No rate in the same family — use highest supported rate overall
+        supported.iter().copied().max().unwrap_or(48000)
+    }
+
     /// Parse pactl output to get device list with pretty names
     fn enumerate_pipewire_sinks(&self) -> BackendResult<Vec<AudioDevice>> {
         // Get default sink
@@ -188,15 +295,63 @@ impl AudioBackend for PipeWireBackend {
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
 
-        // Force PipeWire to use the requested sample rate (for bit-perfect playback)
-        log::info!("[PipeWire Backend] Forcing sample rate to {}Hz via pw-metadata", config.sample_rate);
+        // Check if the DAC supports the requested sample rate.
+        // Query via /proc/asound/ (USB DACs list discrete supported rates).
+        // If unsupported, fall back to the nearest rate in the same family
+        // (e.g., 176.4kHz → 88.2kHz). Rodio resamples from track rate to
+        // stream rate automatically.
+        let effective_sink = target_sink.clone().or_else(|| {
+            Command::new("pactl")
+                .args(["get-default-sink"])
+                .output()
+                .ok()
+                .and_then(|o| {
+                    if o.status.success() {
+                        String::from_utf8(o.stdout).ok().map(|s| s.trim().to_string())
+                    } else {
+                        None
+                    }
+                })
+        });
+
+        let effective_rate = if let Some(ref sink_name) = effective_sink {
+            match Self::get_sink_supported_rates(sink_name) {
+                Some(rates) if rates.contains(&config.sample_rate) => {
+                    log::info!(
+                        "[PipeWire Backend] DAC supports {}Hz (available: {:?})",
+                        config.sample_rate, rates
+                    );
+                    config.sample_rate
+                }
+                Some(rates) => {
+                    let fallback = Self::find_best_fallback_rate(config.sample_rate, &rates);
+                    log::warn!(
+                        "[PipeWire Backend] DAC doesn't support {}Hz. Supported: {:?}. Falling back to {}Hz (resampled by rodio)",
+                        config.sample_rate, rates, fallback
+                    );
+                    fallback
+                }
+                None => {
+                    log::info!(
+                        "[PipeWire Backend] Could not determine DAC supported rates, using {}Hz",
+                        config.sample_rate
+                    );
+                    config.sample_rate
+                }
+            }
+        } else {
+            config.sample_rate
+        };
+
+        // Force PipeWire to use the effective sample rate (for bit-perfect playback)
+        log::info!("[PipeWire Backend] Forcing sample rate to {}Hz via pw-metadata", effective_rate);
         let metadata_result = Command::new("pw-metadata")
-            .args(["-n", "settings", "0", "clock.force-rate", &config.sample_rate.to_string()])
+            .args(["-n", "settings", "0", "clock.force-rate", &effective_rate.to_string()])
             .output();
 
         match metadata_result {
             Ok(output) if output.status.success() => {
-                log::info!("[PipeWire Backend] Sample rate forced to {}Hz", config.sample_rate);
+                log::info!("[PipeWire Backend] Sample rate forced to {}Hz", effective_rate);
             }
             Ok(output) => {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -239,22 +394,23 @@ impl AudioBackend for PipeWireBackend {
 
         // Create output stream with custom sample rate configuration
         log::info!(
-            "[PipeWire Backend] Creating stream: {}Hz, {} channels, exclusive: {}",
+            "[PipeWire Backend] Creating stream: {}Hz (track: {}Hz), {} channels, exclusive: {}",
+            effective_rate,
             config.sample_rate,
             config.channels,
             config.exclusive_mode
         );
 
-        // Create StreamConfig with desired sample rate
+        // Create StreamConfig with effective sample rate
         // Note: buffer_size here is unused — with_supported_config() resets it.
         // The actual buffer size is set via with_buffer_size() below.
         let stream_config = StreamConfig {
             channels: config.channels,
-            sample_rate: config.sample_rate,
+            sample_rate: effective_rate,
             buffer_size: BufferSize::Default,
         };
 
-        // Check if device supports this configuration
+        // Check if CPAL device supports this configuration
         let supported_configs = device
             .supported_output_configs()
             .map_err(|e| format!("Failed to get supported configs: {}", e))?;
@@ -262,13 +418,13 @@ impl AudioBackend for PipeWireBackend {
         let mut found_matching = false;
         for range in supported_configs {
             if range.channels() == config.channels
-                && config.sample_rate >= range.min_sample_rate()
-                && config.sample_rate <= range.max_sample_rate()
+                && effective_rate >= range.min_sample_rate()
+                && effective_rate <= range.max_sample_rate()
             {
                 found_matching = true;
                 log::info!(
-                    "[PipeWire Backend] Device supports {}Hz (range: {}-{}Hz)",
-                    config.sample_rate,
+                    "[PipeWire Backend] CPAL device supports {}Hz (range: {}-{}Hz)",
+                    effective_rate,
                     range.min_sample_rate(),
                     range.max_sample_rate()
                 );
@@ -278,8 +434,8 @@ impl AudioBackend for PipeWireBackend {
 
         if !found_matching {
             log::warn!(
-                "[PipeWire Backend] Device may not support {}Hz, attempting anyway",
-                config.sample_rate
+                "[PipeWire Backend] CPAL device may not support {}Hz, attempting anyway",
+                effective_rate
             );
         }
 
@@ -300,7 +456,7 @@ impl AudioBackend for PipeWireBackend {
         } else {
             // ~100ms buffer, matching old vendored cpal period size.
             // Prevents underruns at high sample rates (192kHz = 19200 frames).
-            BufferSize::Fixed(config.sample_rate / 10)
+            BufferSize::Fixed(effective_rate / 10)
         };
         log::info!("[PipeWire Backend] Buffer size: {:?}", cpal_buffer_size);
 
@@ -310,9 +466,9 @@ impl AudioBackend for PipeWireBackend {
             .with_supported_config(&supported_config)
             .with_buffer_size(cpal_buffer_size)
             .open_stream()
-            .map_err(|e| format!("Failed to create output stream at {}Hz: {}", config.sample_rate, e))?;
+            .map_err(|e| format!("Failed to create output stream at {}Hz: {}", effective_rate, e))?;
 
-        log::info!("[PipeWire Backend] Output stream created successfully at {}Hz", config.sample_rate);
+        log::info!("[PipeWire Backend] Output stream created successfully at {}Hz", effective_rate);
 
         Ok(mixer_sink)
     }
