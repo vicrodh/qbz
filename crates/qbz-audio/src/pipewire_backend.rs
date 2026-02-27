@@ -21,17 +21,6 @@ pub struct PipeWireBackend {
     host: rodio::cpal::Host,
 }
 
-/// Calculate the optimal PipeWire quantum for a given sample rate.
-/// Returns a power-of-2 value matching common audio interface expectations.
-fn quantum_for_sample_rate(sample_rate: u32) -> u32 {
-    match sample_rate {
-        r if r <= 48000 => 1024,
-        r if r <= 96000 => 2048,
-        r if r <= 192000 => 4096,
-        _ => 8192,
-    }
-}
-
 impl PipeWireBackend {
     pub fn new() -> BackendResult<Self> {
         Ok(Self {
@@ -41,6 +30,7 @@ impl PipeWireBackend {
 
     /// Reset PipeWire clock.force-rate and clock.force-quantum to 0.
     /// Call this when playback stops so other apps aren't stuck at a forced rate.
+    /// Quantum reset is kept for safety even though we no longer force it.
     pub fn reset_pipewire_clock() {
         log::info!("[PipeWire Backend] Resetting clock.force-rate and clock.force-quantum to 0");
         let _ = Command::new("pw-metadata")
@@ -217,27 +207,11 @@ impl AudioBackend for PipeWireBackend {
             }
         }
 
-        // Force quantum if bit-perfect mode is enabled
-        if config.pw_force_bitperfect {
-            let quantum = quantum_for_sample_rate(config.sample_rate);
-            log::info!("[PipeWire Backend] Forcing quantum to {} via pw-metadata (bit-perfect)", quantum);
-            let quantum_result = Command::new("pw-metadata")
-                .args(["-n", "settings", "0", "clock.force-quantum", &quantum.to_string()])
-                .output();
-
-            match quantum_result {
-                Ok(output) if output.status.success() => {
-                    log::info!("[PipeWire Backend] Quantum forced to {}", quantum);
-                }
-                Ok(output) => {
-                    let stderr = String::from_utf8_lossy(&output.stderr);
-                    log::warn!("[PipeWire Backend] Failed to force quantum: {}", stderr);
-                }
-                Err(e) => {
-                    log::warn!("[PipeWire Backend] Error executing pw-metadata for quantum: {}", e);
-                }
-            }
-        }
+        // Note: clock.force-quantum is intentionally NOT set.
+        // rodio 0.22's MixerDeviceSink has its own internal mixer thread that
+        // cannot synchronize with PipeWire's forced quantum, causing massive
+        // buffer underruns at sample rates >= 88.2kHz. clock.force-rate alone
+        // is sufficient for bit-perfect sample rate switching.
 
         // Wait for PipeWire to apply the sample rate change
         std::thread::sleep(std::time::Duration::from_millis(300));
