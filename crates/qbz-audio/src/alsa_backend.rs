@@ -247,7 +247,8 @@ impl AlsaBackend {
         let available_hosts = rodio::cpal::available_hosts();
 
         // Check if ALSA is available
-        if !available_hosts.iter().any(|h| h.name() == "ALSA") {
+        // cpal 0.17 changed HostId::name() from "ALSA" to "Alsa" (uses stringify!)
+        if !available_hosts.iter().any(|h| h.name().eq_ignore_ascii_case("alsa")) {
             return Err("ALSA host not available on this system".to_string());
         }
 
@@ -255,7 +256,7 @@ impl AlsaBackend {
         let host = rodio::cpal::host_from_id(
             available_hosts
                 .into_iter()
-                .find(|h| h.name() == "ALSA")
+                .find(|h| h.name().eq_ignore_ascii_case("alsa"))
                 .ok_or("ALSA host not found".to_string())?
         ).map_err(|e| format!("Failed to create ALSA host: {}", e))?;
 
