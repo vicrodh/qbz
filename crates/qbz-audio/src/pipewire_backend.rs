@@ -10,7 +10,7 @@ use super::backend::{AudioBackend, AudioBackendType, AudioDevice, BackendConfig,
 use rodio::{
     cpal::{
         traits::{DeviceTrait, HostTrait},
-        BufferSize, SampleFormat, SampleRate, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
+        BufferSize, SampleFormat, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
     },
     DeviceSinkBuilder, MixerDeviceSink,
 };

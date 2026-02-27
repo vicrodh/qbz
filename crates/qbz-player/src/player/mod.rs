@@ -25,7 +25,7 @@ use std::time::{Duration, Instant};
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Source};
 use rodio::buffer::SamplesBuffer;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
-use rodio::cpal::{StreamConfig, SampleRate, BufferSize, SupportedStreamConfig, SupportedBufferSize, SampleFormat};
+use rodio::cpal::{StreamConfig, BufferSize, SupportedStreamConfig, SupportedBufferSize, SampleFormat};
 use symphonia::core::audio::SampleBuffer;
 use symphonia::core::codecs::DecoderOptions;
 use symphonia::core::errors::Error as SymphoniaError;

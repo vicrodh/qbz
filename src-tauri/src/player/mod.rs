@@ -39,7 +39,7 @@ pub use streaming_source::{
 use rodio::buffer::SamplesBuffer;
 use rodio::cpal::traits::{DeviceTrait, HostTrait};
 use rodio::cpal::{
-    BufferSize, SampleFormat, SampleRate, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
+    BufferSize, SampleFormat, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
 };
 use rodio::{Decoder, DeviceSinkBuilder, MixerDeviceSink, Source};
 use std::io::{BufReader, Cursor, Read, Seek, SeekFrom};

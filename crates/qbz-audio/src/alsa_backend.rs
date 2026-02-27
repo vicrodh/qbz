@@ -12,7 +12,7 @@ use super::backend::{AlsaPlugin, AudioBackend, AudioBackendType, AudioDevice, Ba
 use rodio::{
     cpal::{
         traits::{DeviceTrait, HostTrait},
-        BufferSize, SampleFormat, SampleRate, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
+        BufferSize, SampleFormat, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
     },
     DeviceSinkBuilder, MixerDeviceSink,
 };
