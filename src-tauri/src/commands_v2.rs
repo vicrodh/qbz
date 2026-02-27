@@ -671,6 +671,31 @@ pub async fn runtime_bootstrap(
                     );
                     return Err(RuntimeError::RuntimeDegraded(reason));
                 }
+
+                // Sync audio settings after OAuth session activation.
+                // Same logic as email/password path — without this, backend_type
+                // stays None and the player falls back to legacy CPAL path.
+                let should_sync = audio_settings
+                    .store
+                    .lock()
+                    .ok()
+                    .and_then(|g| g.as_ref().and_then(|s| s.get_settings().ok()))
+                    .map(|s| s.sync_audio_on_startup)
+                    .unwrap_or(false);
+
+                if should_sync {
+                    if let Some(bridge) = core_bridge.try_get().await {
+                        let player = bridge.player();
+                        if let Ok(guard) = audio_settings.store.lock() {
+                            if let Some(store) = guard.as_ref() {
+                                if let Ok(fresh) = store.get_settings() {
+                                    log::info!("[Runtime] Syncing audio settings to player after OAuth login (sync_audio_on_startup=true)");
+                                    let _ = player.reload_settings(convert_to_qbz_audio_settings(&fresh));
+                                }
+                            }
+                        }
+                    }
+                }
             }
             Err(e) => {
                 // Token expired — clear it and let user re-login via OAuth
