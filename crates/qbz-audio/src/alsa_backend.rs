@@ -497,6 +497,17 @@ impl AlsaBackend {
                         )));
                     }
 
+                    if matches!(error, super::backend::AlsaDirectError::InvalidParams(_)) {
+                        // Hardware doesn't support this rate/format natively.
+                        // Return None to let the player fall back to CPAL/rodio
+                        // which can resample (e.g. 176.4kHz → 88.2kHz).
+                        log::info!(
+                            "[ALSA Backend] Hardware doesn't support {}Hz natively, falling back to CPAL (will resample)",
+                            config.sample_rate
+                        );
+                        return None;
+                    }
+
                     if !error.allows_plughw_fallback() {
                         // Non-recoverable error (permissions, etc.)
                         log::error!("[ALSA Backend] Cannot fallback - error type: {:?}", error);
@@ -548,6 +559,17 @@ impl AlsaBackend {
                             }
                         }
                     }
+                }
+
+                if matches!(error, super::backend::AlsaDirectError::InvalidParams(_)) {
+                    // Hardware doesn't support this rate even via plughw.
+                    // Return None to let the player fall back to CPAL/rodio
+                    // which can resample (e.g. 176.4kHz → 88.2kHz).
+                    log::info!(
+                        "[ALSA Backend] Hardware doesn't support {}Hz even via plughw, falling back to CPAL (will resample)",
+                        config.sample_rate
+                    );
+                    return None;
                 }
 
                 log::error!("[ALSA Backend] plughw fallback also failed: {}", e);
