@@ -530,10 +530,13 @@ impl AlsaBackend {
                         // Hardware doesn't support this rate/format natively.
                         // Return None to let the player fall back to CPAL/rodio
                         // which can resample (e.g. 176.4kHz → 88.2kHz).
+                        // Brief delay: ALSA Direct opened the PCM (then failed to configure it).
+                        // The kernel needs a moment to fully release the device before CPAL can open it.
                         log::info!(
-                            "[ALSA Backend] Hardware doesn't support {}Hz natively, falling back to CPAL (will resample)",
+                            "[ALSA Backend] Hardware doesn't support {}Hz natively, releasing device for CPAL fallback",
                             config.sample_rate
                         );
+                        std::thread::sleep(std::time::Duration::from_millis(100));
                         return None;
                     }
 
@@ -595,9 +598,10 @@ impl AlsaBackend {
                     // Return None to let the player fall back to CPAL/rodio
                     // which can resample (e.g. 176.4kHz → 88.2kHz).
                     log::info!(
-                        "[ALSA Backend] Hardware doesn't support {}Hz even via plughw, falling back to CPAL (will resample)",
+                        "[ALSA Backend] Hardware doesn't support {}Hz even via plughw, releasing device for CPAL fallback",
                         config.sample_rate
                     );
+                    std::thread::sleep(std::time::Duration::from_millis(100));
                     return None;
                 }
 
@@ -798,10 +802,10 @@ impl AudioBackend for AlsaBackend {
                 if config.exclusive_mode {
                     format!(
                         "Failed to create exclusive ALSA stream at {}Hz: {}. Device may be in use by another application.",
-                        config.sample_rate, e
+                        effective_rate, e
                     )
                 } else {
-                    format!("Failed to create ALSA device sink builder at {}Hz: {}", config.sample_rate, e)
+                    format!("Failed to create ALSA device sink builder at {}Hz: {}", effective_rate, e)
                 }
             })?
             .with_supported_config(&supported_config)
@@ -810,10 +814,10 @@ impl AudioBackend for AlsaBackend {
                 if config.exclusive_mode {
                     format!(
                         "Failed to create exclusive ALSA stream at {}Hz: {}. Device may be in use by another application.",
-                        config.sample_rate, e
+                        effective_rate, e
                     )
                 } else {
-                    format!("Failed to create ALSA stream at {}Hz: {}", config.sample_rate, e)
+                    format!("Failed to create ALSA stream at {}Hz: {}", effective_rate, e)
                 }
             })?;
 
