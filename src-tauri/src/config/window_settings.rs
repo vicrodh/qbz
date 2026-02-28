@@ -118,6 +118,17 @@ impl WindowSettingsStore {
 
     /// Save the non-maximized window dimensions (called on resize while not maximized).
     pub fn set_window_size(&self, width: f64, height: f64) -> Result<(), String> {
+        // Validate bounds to prevent invalid values from being persisted
+        const MIN_SIZE: f64 = 100.0;
+        const MAX_SIZE: f64 = 32768.0; //max X11 window size
+
+        if width < MIN_SIZE || width > MAX_SIZE || height < MIN_SIZE || height > MAX_SIZE {
+            return Err(format!(
+                "Invalid window size: {}x{} (must be {}-{} px)",
+                width, height, MIN_SIZE, MAX_SIZE
+            ));
+        }
+
         self.conn
             .execute(
                 "UPDATE window_settings SET window_width = ?1, window_height = ?2 WHERE id = 1",
