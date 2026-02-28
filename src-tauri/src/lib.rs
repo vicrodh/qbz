@@ -922,8 +922,21 @@ pub fn run() {
                 if close_to_tray {
                     log::info!("Close to tray: hiding window instead of closing");
                     let _ = window.hide();
+                    // Also hide the miniplayer if open
+                    if let Some(mini) = window.app_handle().webview_windows().get("miniplayer") {
+                        let _ = mini.hide();
+                    }
                     api.prevent_close();
                 } else {
+                    // Close secondary windows before the main window closes.
+                    // Use close() (not destroy()) so WebKit can clean up gracefully.
+                    for (label, win) in window.app_handle().webview_windows() {
+                        if label != "main" {
+                            log::info!("App closing: closing secondary window '{}'", label);
+                            let _ = win.close();
+                        }
+                    }
+
                     // Cleanup cast devices on actual close
                     log::info!("App closing: cleaning up cast devices");
 
