@@ -6720,7 +6720,7 @@ pub async fn v2_play_track(
         track_id
     );
 
-    let stream_url = bridge_guard
+    let mut stream_url = bridge_guard
         .get_stream_url(track_id, final_quality)
         .await
         .map_err(RuntimeError::Internal)?;
@@ -6729,6 +6729,65 @@ pub async fn v2_play_track(
         track_id,
         stream_url.format_id
     );
+
+    // Smart quality downgrade for ALSA Direct: if the hardware doesn't support
+    // the track's sample rate, re-request at a lower quality that IS supported.
+    // This avoids resampling and keeps bit-perfect playback.
+    #[cfg(target_os = "linux")]
+    {
+        let needs_downgrade = {
+            let guard = audio_settings
+                .store
+                .lock()
+                .map_err(|e| RuntimeError::Internal(format!("Lock error: {}", e)))?;
+            if let Some(store) = guard.as_ref() {
+                if let Ok(settings) = store.get_settings() {
+                    let is_alsa = matches!(
+                        settings.backend_type,
+                        Some(qbz_audio::AudioBackendType::Alsa)
+                    );
+                    if is_alsa {
+                        if let Some(ref device_id) = settings.output_device {
+                            let track_rate = (stream_url.sampling_rate * 1000.0) as u32;
+                            match qbz_audio::device_supports_sample_rate(device_id, track_rate) {
+                                Some(false) => {
+                                    log::info!(
+                                        "[V2/Quality] Hardware doesn't support {}Hz natively, will request lower quality",
+                                        track_rate
+                                    );
+                                    true
+                                }
+                                _ => false,
+                            }
+                        } else {
+                            false
+                        }
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        };
+
+        if needs_downgrade && final_quality == Quality::UltraHiRes {
+            log::info!(
+                "[V2/Quality] Downgrading from Hi-Res+ to Hi-Res for hardware compatibility"
+            );
+            stream_url = bridge_guard
+                .get_stream_url(track_id, Quality::HiRes)
+                .await
+                .map_err(RuntimeError::Internal)?;
+            log::info!(
+                "[V2/Quality] Got fallback stream URL (format_id={}, rate={}Hz)",
+                stream_url.format_id,
+                stream_url.sampling_rate
+            );
+        }
+    }
 
     // Download the audio
     let audio_data = download_audio(&stream_url.url)

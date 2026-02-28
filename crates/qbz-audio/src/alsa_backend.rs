@@ -771,6 +771,22 @@ pub fn resolve_stable_to_current_hw(device_id: &str) -> Option<String> {
     None
 }
 
+/// Check if a hardware device supports a given sample rate.
+/// Returns `Some(true)` if supported, `Some(false)` if not, `None` if unknown.
+/// Uses /proc/asound/cardN/stream0 for accurate hardware capabilities.
+pub fn device_supports_sample_rate(device_id: &str, sample_rate: u32) -> Option<bool> {
+    let card_name = extract_card_name_from_device(device_id)?;
+    let hw_rates = get_hw_supported_rates(&card_name)?;
+    Some(hw_rates.contains(&sample_rate))
+}
+
+/// Get the hardware-supported sample rates for a device.
+/// Returns None if rates cannot be determined.
+pub fn get_device_supported_rates(device_id: &str) -> Option<Vec<u32>> {
+    let card_name = extract_card_name_from_device(device_id)?;
+    get_hw_supported_rates(&card_name)
+}
+
 impl AudioBackend for AlsaBackend {
     fn backend_type(&self) -> AudioBackendType {
         AudioBackendType::Alsa
