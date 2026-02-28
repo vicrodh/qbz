@@ -31,6 +31,35 @@ const COMMON_SAMPLE_RATES: &[u32] = &[
     384000, // Ultra high-res
 ];
 
+/// Find the best fallback sample rate in the same family.
+/// 44.1kHz family: 44100, 88200, 176400, 352800
+/// 48kHz family: 48000, 96000, 192000, 384000
+fn find_best_fallback_rate(requested: u32, supported: &[u32]) -> u32 {
+    let is_441_family = requested % 44100 == 0;
+
+    // Find highest supported rate in the same family that's <= requested
+    let mut candidates: Vec<u32> = supported
+        .iter()
+        .filter(|&&r| {
+            if is_441_family {
+                r % 44100 == 0
+            } else {
+                r % 48000 == 0
+            }
+        })
+        .filter(|&&r| r <= requested)
+        .copied()
+        .collect();
+    candidates.sort();
+
+    if let Some(&best) = candidates.last() {
+        return best;
+    }
+
+    // No rate in the same family — use highest supported rate overall
+    supported.iter().copied().max().unwrap_or(48000)
+}
+
 /// Extract supported sample rates from a CPAL device
 fn get_supported_sample_rates(device: &rodio::cpal::Device) -> Option<Vec<u32>> {
     use rodio::cpal::traits::DeviceTrait;
@@ -702,19 +731,6 @@ impl AudioBackend for AlsaBackend {
         let device_name = device.name().unwrap_or_else(|_| "unknown".to_string());
         log::info!("[ALSA Backend] Using device: {}", device_name);
 
-        // Create StreamConfig with requested sample rate
-        let stream_config = StreamConfig {
-            channels: config.channels,
-            sample_rate: config.sample_rate,
-            buffer_size: if config.exclusive_mode {
-                // Smaller buffer for exclusive mode = lower latency
-                BufferSize::Fixed(512)
-            } else {
-                // ~100ms period for fewer CPU wakeups (matches previous vendored cpal tuning)
-                BufferSize::Fixed(config.sample_rate / 10)
-            },
-        };
-
         // Check if device supports this configuration
         let supported_configs = device
             .supported_output_configs()
@@ -737,12 +753,36 @@ impl AudioBackend for AlsaBackend {
             }
         }
 
-        if !found_matching {
-            log::warn!(
-                "[ALSA Backend] Device may not support {}Hz, attempting anyway",
+        // If device doesn't support the requested rate, find best fallback
+        let effective_rate = if !found_matching {
+            if let Some(rates) = get_supported_sample_rates(&device) {
+                let fallback = find_best_fallback_rate(config.sample_rate, &rates);
+                log::warn!(
+                    "[ALSA Backend] Device doesn't support {}Hz. Supported: {:?}. Falling back to {}Hz (rodio will resample)",
+                    config.sample_rate, rates, fallback
+                );
+                fallback
+            } else {
+                log::warn!(
+                    "[ALSA Backend] Could not determine supported rates, attempting {}Hz anyway",
+                    config.sample_rate
+                );
                 config.sample_rate
-            );
-        }
+            }
+        } else {
+            config.sample_rate
+        };
+
+        // Rebuild StreamConfig with effective rate
+        let stream_config = StreamConfig {
+            channels: config.channels,
+            sample_rate: effective_rate,
+            buffer_size: if config.exclusive_mode {
+                BufferSize::Fixed(512)
+            } else {
+                BufferSize::Fixed(effective_rate / 10)
+            },
+        };
 
         // Create SupportedStreamConfig
         let supported_config = SupportedStreamConfig::new(
@@ -777,11 +817,17 @@ impl AudioBackend for AlsaBackend {
                 }
             })?;
 
-        log::info!(
-            "[ALSA Backend] Output stream created successfully at {}Hz (exclusive: {})",
-            config.sample_rate,
-            config.exclusive_mode
-        );
+        if effective_rate != config.sample_rate {
+            log::info!(
+                "[ALSA Backend] Output stream created at {}Hz (resampled from {}Hz, exclusive: {})",
+                effective_rate, config.sample_rate, config.exclusive_mode
+            );
+        } else {
+            log::info!(
+                "[ALSA Backend] Output stream created successfully at {}Hz (exclusive: {})",
+                config.sample_rate, config.exclusive_mode
+            );
+        }
 
         Ok(mixer_sink)
     }
