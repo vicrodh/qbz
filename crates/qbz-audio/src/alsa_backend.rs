@@ -876,6 +876,24 @@ impl AudioBackend for AlsaBackend {
             SampleFormat::F32,
         );
 
+        // In exclusive mode, PipeWire may have re-acquired the device after the
+        // previous ALSA Direct stream released it. Suspend PipeWire before opening.
+        if config.exclusive_mode {
+            log::info!("[ALSA Backend] Exclusive mode: suspending PipeWire sinks before CPAL stream");
+            if let Ok(output) = std::process::Command::new("pactl")
+                .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
+                .output()
+            {
+                if output.status.success() {
+                    log::info!("[ALSA Backend] PipeWire sink suspended");
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::warn!("[ALSA Backend] Failed to suspend PipeWire sink: {}", stderr);
+                }
+            }
+        }
+
         // Create MixerDeviceSink with custom config
         let mixer_sink = DeviceSinkBuilder::from_device(device)
             .map_err(|e| {
