@@ -907,9 +907,12 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(move |window, event| {
-            // Handle close to tray — read dynamically from state so per-user
-            // settings take effect after login without needing a restart.
+            // Only handle close-to-tray for the main window.
+            // Secondary windows (miniplayer, oauth) are managed elsewhere.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() != "main" {
+                    return;
+                }
                 let close_to_tray = window
                     .app_handle()
                     .try_state::<config::tray_settings::TraySettingsState>()
@@ -921,13 +924,6 @@ pub fn run() {
                     let _ = window.hide();
                     api.prevent_close();
                 } else {
-                    // Close MiniPlayer window first so WebKit can clean up
-                    // its GPU/EGL resources gracefully before the process exits.
-                    if let Some(mini) = window.app_handle().webview_windows().get("miniplayer") {
-                        log::info!("App closing: destroying miniplayer window");
-                        let _ = mini.destroy();
-                    }
-
                     // Cleanup cast devices on actual close
                     log::info!("App closing: cleaning up cast devices");
 
@@ -937,9 +933,6 @@ pub fn run() {
                         let _ = cast_state.chromecast.disconnect();
                     }
 
-                    // Note: DLNA connection will be dropped when the app exits,
-                    // which will naturally close the connection. The tokio Mutex
-                    // prevents us from synchronously stopping playback here.
                     log::info!("DLNA connection will be cleaned up on drop");
                 }
             }
@@ -1458,10 +1451,21 @@ pub fn run() {
                     }
                 }
 
-                // Destroy miniplayer window if it exists
-                if let Some(mini) = app_handle.webview_windows().get("miniplayer") {
-                    log::info!("Exit: destroying miniplayer window");
-                    let _ = mini.destroy();
+                // Close secondary windows (miniplayer, oauth) and give WebKit
+                // time to clean up GPU/EGL resources before process teardown.
+                // Using close() instead of destroy() allows graceful shutdown.
+                let mut closed_any = false;
+                for (label, win) in app_handle.webview_windows() {
+                    if label != "main" {
+                        log::info!("Exit: closing secondary window '{}'", label);
+                        let _ = win.close();
+                        closed_any = true;
+                    }
+                }
+                if closed_any {
+                    // Brief pause so WebKit can tear down EGL/TLS resources
+                    // before the process exits and libc runs atexit handlers.
+                    std::thread::sleep(std::time::Duration::from_millis(100));
                 }
             }
         });
