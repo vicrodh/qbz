@@ -95,10 +95,20 @@ impl WindowSettingsStore {
                     let window_width: f64 = row.get(1)?;
                     let window_height: f64 = row.get(2)?;
                     let is_maximized: i32 = row.get(3)?;
+                    let defaults = WindowSettings::default();
+                    let (w, h) = if is_valid_window_size(window_width, window_height) {
+                        (window_width, window_height)
+                    } else {
+                        log::warn!(
+                            "[WindowSettings] Corrupt size in DB: {}x{}, using defaults",
+                            window_width, window_height
+                        );
+                        (defaults.window_width, defaults.window_height)
+                    };
                     Ok(WindowSettings {
                         use_system_titlebar: use_system_titlebar != 0,
-                        window_width,
-                        window_height,
+                        window_width: w,
+                        window_height: h,
                         is_maximized: is_maximized != 0,
                     })
                 },
@@ -118,17 +128,13 @@ impl WindowSettingsStore {
 
     /// Save the non-maximized window dimensions (called on resize while not maximized).
     pub fn set_window_size(&self, width: f64, height: f64) -> Result<(), String> {
-        // Validate bounds to prevent invalid values from being persisted
-        const MIN_SIZE: f64 = 100.0;
-        const MAX_SIZE: f64 = 32768.0; //max X11 window size
-
-        if width < MIN_SIZE || width > MAX_SIZE || height < MIN_SIZE || height > MAX_SIZE {
-            return Err(format!(
-                "Invalid window size: {}x{} (must be {}-{} px)",
-                width, height, MIN_SIZE, MAX_SIZE
-            ));
+        if !is_valid_window_size(width, height) {
+            log::warn!(
+                "[WindowSettings] Ignoring invalid window size: {}x{}",
+                width, height
+            );
+            return Ok(());
         }
-
         self.conn
             .execute(
                 "UPDATE window_settings SET window_width = ?1, window_height = ?2 WHERE id = 1",
@@ -212,6 +218,16 @@ impl WindowSettingsState {
             .ok_or("Window settings store not initialized")?;
         store.set_is_maximized(value)
     }
+}
+
+/// Check that window dimensions are within a sane range.
+/// Prevents GDK/Cairo crashes from corrupt values (e.g. 9084748x62267212).
+fn is_valid_window_size(width: f64, height: f64) -> bool {
+    const MIN: f64 = 200.0;
+    const MAX: f64 = 32767.0;
+    width.is_finite() && height.is_finite()
+        && width >= MIN && width <= MAX
+        && height >= MIN && height <= MAX
 }
 
 // Tauri commands
