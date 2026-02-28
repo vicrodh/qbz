@@ -262,6 +262,66 @@ fn find_card_number_by_name(short_name: &str) -> Option<String> {
         .map(|c| c.number.clone())
 }
 
+/// Extract card name from an ALSA device ID.
+/// `front:CARD=C20,DEV=0` -> `"C20"`, `hw:0,0` -> card 0 short name, etc.
+fn extract_card_name_from_device(device_id: &str) -> Option<String> {
+    if device_id.starts_with("front:CARD=") || device_id.starts_with("sysdefault:CARD=") {
+        // front:CARD=C20,DEV=0 -> C20
+        let after_card = device_id.split("CARD=").nth(1)?;
+        Some(after_card.split(',').next()?.to_string())
+    } else if device_id.starts_with("hw:") || device_id.starts_with("plughw:") {
+        // hw:0,0 -> card number 0 -> look up short name
+        let prefix = if device_id.starts_with("hw:") { "hw:" } else { "plughw:" };
+        let card_num = device_id.strip_prefix(prefix)?.split(',').next()?;
+        let cards = read_proc_asound_cards();
+        cards.iter()
+            .find(|c| c.number == card_num)
+            .map(|c| c.short_name.clone())
+    } else {
+        None
+    }
+}
+
+/// Read hardware-supported sample rates from /proc/asound/cardN/stream0.
+/// Returns None if rates cannot be determined (treat as "try anyway").
+fn get_hw_supported_rates(card_name: &str) -> Option<Vec<u32>> {
+    let card_num = find_card_number_by_name(card_name)?;
+    let stream_path = format!("/proc/asound/card{}/stream0", card_num);
+    let content = fs::read_to_string(&stream_path).ok()?;
+
+    let mut in_playback = false;
+    let mut all_rates = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "Playback:" {
+            in_playback = true;
+        } else if trimmed == "Capture:" {
+            in_playback = false;
+        }
+        if in_playback && trimmed.starts_with("Rates:") {
+            let rates_str = trimmed.trim_start_matches("Rates:").trim();
+            if rates_str.contains("continuous") {
+                return None; // Any rate supported — don't restrict
+            }
+            for rate_str in rates_str.split(',') {
+                if let Ok(rate) = rate_str.trim().parse::<u32>() {
+                    if !all_rates.contains(&rate) {
+                        all_rates.push(rate);
+                    }
+                }
+            }
+        }
+    }
+
+    if all_rates.is_empty() {
+        None
+    } else {
+        all_rates.sort();
+        Some(all_rates)
+    }
+}
+
 // ============================================================================
 // ALSA Backend Implementation
 // ============================================================================
@@ -462,6 +522,26 @@ impl AlsaBackend {
         } else {
             (device_id.to_string(), format!("plug:{}", device_id))
         };
+
+        // Pre-check: read /proc/asound/cardN/stream0 to verify rate support
+        // before opening the PCM device. This avoids the "device busy" issue
+        // where ALSA Direct opens the device, fails to configure the rate, and
+        // leaves the device in a state CPAL can't open afterwards.
+        if let Some(card_name) = extract_card_name_from_device(device_id) {
+            if let Some(hw_rates) = get_hw_supported_rates(&card_name) {
+                if !hw_rates.contains(&config.sample_rate) {
+                    log::info!(
+                        "[ALSA Backend] Hardware rates for '{}': {:?}. {}Hz not supported, skipping ALSA Direct",
+                        card_name, hw_rates, config.sample_rate
+                    );
+                    return None;
+                }
+                log::info!(
+                    "[ALSA Backend] Hardware confirms support for {}Hz (card '{}', rates: {:?})",
+                    config.sample_rate, card_name, hw_rates
+                );
+            }
+        }
 
         // Respect ALSA plugin selection from settings
         let try_hw_first = match config.alsa_plugin {
