@@ -254,9 +254,8 @@
     flex: 1;
     overflow-y: auto;
     padding: 20px;
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    gap: 0 20px;
+    columns: 3;
+    column-gap: 20px;
   }
 
   .category-section {
@@ -378,7 +377,7 @@
   /* Responsive */
   @media (max-width: 800px) {
     .modal-content {
-      grid-template-columns: 1fr 1fr;
+      columns: 2;
     }
   }
 
@@ -394,7 +393,7 @@
 
     .modal-content {
       padding: 16px;
-      grid-template-columns: 1fr;
+      columns: 1;
     }
   }
 </style>
