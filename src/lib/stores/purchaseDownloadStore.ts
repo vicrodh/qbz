@@ -79,6 +79,29 @@ export function startAlbumDownload(
   executeAlbumDownload(albumId, trackIds, formatId, destination, qualityDir);
 }
 
+/**
+ * Extract the album-level folder from a downloaded file path.
+ * Download structure: destination/artist/album/[qualityDir/]track.ext
+ * We want: destination/artist/album/
+ */
+function albumFolderFromFilePath(filePath: string, hasQualityDir: boolean): string {
+  // Remove filename
+  let lastSep = filePath.lastIndexOf('/');
+  if (lastSep < 0) lastSep = filePath.lastIndexOf('\\');
+  let dir = lastSep >= 0 ? filePath.substring(0, lastSep) : filePath;
+
+  // If there's a quality subdirectory, go up one more level
+  if (hasQualityDir) {
+    let prevSep = dir.lastIndexOf('/');
+    if (prevSep < 0) prevSep = dir.lastIndexOf('\\');
+    if (prevSep >= 0) {
+      dir = dir.substring(0, prevSep);
+    }
+  }
+
+  return dir;
+}
+
 async function executeAlbumDownload(
   albumId: string,
   trackIds: number[],
@@ -86,6 +109,8 @@ async function executeAlbumDownload(
   destination: string,
   qualityDir: string
 ) {
+  let albumFolderResolved = false;
+
   for (const trackId of trackIds) {
     // Check cancellation before starting each track
     if (abortFlags.get(albumId)) {
@@ -114,6 +139,18 @@ async function executeAlbumDownload(
 
     try {
       const filePath = await downloadTrack(trackId, formatId, destination, qualityDir);
+
+      // After the first successful download, resolve the album-level folder
+      // so "Add to Library" adds only this album, not the entire root.
+      if (!albumFolderResolved) {
+        albumFolderResolved = true;
+        const albumFolder = albumFolderFromFilePath(filePath, qualityDir.length > 0);
+        updateAlbumState(albumId, (state) => ({
+          ...state,
+          destination: albumFolder,
+        }));
+      }
+
       updateAlbumState(albumId, (state) => ({
         ...state,
         trackStatuses: { ...state.trackStatuses, [trackId]: 'complete' },
