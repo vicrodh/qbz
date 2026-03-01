@@ -348,12 +348,6 @@ impl QobuzClient {
         })
     }
 
-    /// Get current user ID
-    pub async fn get_user_id(&self) -> Option<u64> {
-        let session = self.session.read().await;
-        session.as_ref().map(|entry| entry.user_id)
-    }
-
     /// Get user auth token header value (public for catalog search)
     pub async fn auth_token(&self) -> Result<String> {
         self.session
