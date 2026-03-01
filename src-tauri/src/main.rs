@@ -206,9 +206,10 @@ fn main() {
             }
         };
 
-        // Hardware acceleration override (env var only — not a DB setting anymore).
-        // Default: ON (v1.1.9 behavior). QBZ_HARDWARE_ACCEL=0 is the nuclear
-        // opt-out that disables all GPU compositing and DMA-BUF everywhere.
+        // Hardware acceleration: DB value is the default, env var overrides.
+        // QBZ_HARDWARE_ACCEL=0 is the nuclear opt-out that disables all GPU
+        // compositing and DMA-BUF everywhere.
+        let hw_accel_db = graphics_db.as_ref().map(|s| s.hardware_acceleration).unwrap_or(true);
         let hardware_accel = match std::env::var("QBZ_HARDWARE_ACCEL").as_deref() {
             Ok("0") => {
                 qbz_nix_lib::logging::log_startup(
@@ -216,14 +217,20 @@ fn main() {
                 );
                 false
             }
-            // "1" is the default behavior, log only if explicitly set
             Ok("1") => {
                 qbz_nix_lib::logging::log_startup(
                     "[QBZ] Env override: QBZ_HARDWARE_ACCEL=1 (full GPU, all safety bypassed)",
                 );
                 true
             }
-            _ => true, // Default: hardware acceleration ON (v1.1.9 behavior)
+            _ => {
+                if !hw_accel_db {
+                    qbz_nix_lib::logging::log_startup(
+                        "[QBZ] Hardware acceleration disabled via settings (DB)",
+                    );
+                }
+                hw_accel_db
+            }
         };
 
         // Developer settings: force_dmabuf override (from Settings > Developer Mode)

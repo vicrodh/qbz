@@ -3,14 +3,11 @@
 //! Stores GPU/rendering preferences that take effect before WebView initialization.
 //! These settings are device-level (not per-user) and persist across sessions.
 //!
+//! - hardware_acceleration: GPU rendering toggle (default: on). Read at startup
+//!   as the default value; env var QBZ_HARDWARE_ACCEL=0|1 overrides.
 //! - force_x11: force X11/XWayland backend on Wayland sessions (default: off)
 //!   Env var QBZ_FORCE_X11=1|0 always overrides the stored value.
 //! - gdk_scale / gdk_dpi_scale: display scaling overrides for XWayland
-//!
-//! Note: hardware_acceleration is kept in the DB for legacy compatibility but
-//! is no longer read at startup. GPU rendering defaults are now determined by
-//! auto-detection (Wayland/NVIDIA). Use QBZ_HARDWARE_ACCEL=0 env var to
-//! explicitly disable all GPU rendering.
 
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -49,7 +46,7 @@ pub fn is_using_graphics_fallback() -> bool {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GraphicsSettings {
-    /// Legacy field (kept for DB compat, not used at startup anymore)
+    /// GPU rendering toggle. Read at startup as default; env var QBZ_HARDWARE_ACCEL overrides.
     pub hardware_acceleration: bool,
     /// Force X11 (XWayland) backend on Wayland sessions (requires restart)
     pub force_x11: bool,
