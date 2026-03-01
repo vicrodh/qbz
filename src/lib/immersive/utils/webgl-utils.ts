@@ -167,9 +167,11 @@ export function createTextureFromImage(
 
   gl.bindTexture(gl.TEXTURE_2D, texture);
 
-  // Set texture parameters for smooth scaling
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  // Mirrored repeat: when ambient shader UVs exceed [0,1] range,
+  // the texture mirrors back smoothly instead of stretching edge pixels
+  // (CLAMP_TO_EDGE caused visible dark rectangles on simple/dark artwork)
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.MIRRORED_REPEAT);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.MIRRORED_REPEAT);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
 

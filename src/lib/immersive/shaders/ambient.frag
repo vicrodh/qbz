@@ -42,8 +42,8 @@ vec3 sampleLayer(vec2 uv, vec2 offset, float scale, float rotation) {
     vec2 scaledUV = center + (rotatedUV - center) * scale;
     // Apply offset
     scaledUV += offset;
-    // Clamp to valid range
-    scaledUV = clamp(scaledUV, 0.0, 1.0);
+    // Let GL_MIRRORED_REPEAT handle out-of-range UVs seamlessly
+    // (no hard clamp — avoids visible edge rectangles on dark artwork)
     return texture(u_texture, scaledUV).rgb;
 }
 
