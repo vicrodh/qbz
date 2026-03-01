@@ -4198,48 +4198,6 @@
       </div>
     {/if}
     <div class="setting-row">
-      <span class="setting-label">{$t('settings.appearance.immersiveDefaultView')}</span>
-      <Dropdown
-        value={getImmersiveViewDisplayValue()}
-        options={getImmersiveViewOptions()}
-        onchange={handleImmersiveViewChange}
-      />
-    </div>
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.appearance.immersive.disableBlurBackground')}</span>
-        <span class="setting-desc">{$t('settings.appearance.immersive.disableBlurBackgroundDesc')}</span>
-      </div>
-      <Toggle enabled={disableBlurBackground} onchange={(v) => handleDisableBlurBackgroundChange(v)} />
-    </div>
-    <div class="collapsible-section composition-subsection">
-      <button class="section-title-btn" onclick={() => immersiveFpsCollapsed = !immersiveFpsCollapsed}>
-        <div class="section-title-row">
-          <span class="section-title composition-title">{$t('settings.appearance.immersiveFps.title')}</span>
-          {#if immersiveFpsCollapsed}
-            <ChevronDown size={16} />
-          {:else}
-            <ChevronUp size={16} />
-          {/if}
-        </div>
-        <span class="section-summary">{$t('settings.appearance.immersiveFps.summary')}</span>
-      </button>
-      {#if !immersiveFpsCollapsed}
-        <p class="section-note">{$t('settings.appearance.immersiveFps.desc')}</p>
-        {#each FPS_PANEL_IDS as panelId}
-          <div class="setting-row">
-            <span class="setting-label">{$t(`settings.appearance.immersiveFps.panels.${panelId}`)}</span>
-            <Dropdown
-              value={getFpsDisplayValue(panelId)}
-              options={getFpsOptions()}
-              onchange={(val) => handleFpsChange(panelId, val)}
-            />
-          </div>
-        {/each}
-      {/if}
-    </div>
-    <div class="settings-divider"></div>
-    <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.miniplayerDefaultView')}</span>
       <Dropdown
         value={getMiniPlayerViewDisplayValue()}
@@ -4265,6 +4223,41 @@
         <span class="setting-desc">{$t('settings.appearance.showPurchasesDesc')}</span>
       </div>
       <Toggle enabled={purchasesEnabled} onchange={handlePurchasesToggle} />
+    </div>
+
+    <!-- System Tray subsection -->
+    <h4 class="subsection-title">{$t('settings.appearance.tray.title')}</h4>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.tray.enableTray')}</span>
+        <span class="setting-desc">{$t('settings.appearance.tray.enableTrayDesc')}</span>
+      </div>
+      <Toggle enabled={enableTray} onchange={(v) => handleEnableTrayChange(v)} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.tray.minimizeToTray')}</span>
+        <span class="setting-desc">{$t('settings.appearance.tray.minimizeToTrayDesc')}</span>
+      </div>
+      <Toggle enabled={minimizeToTray} onchange={(v) => handleMinimizeToTrayChange(v)} disabled={!enableTray} />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.tray.closeToTray')}</span>
+        <span class="setting-desc">{$t('settings.appearance.tray.closeToTrayDesc')}</span>
+      </div>
+      <Toggle enabled={closeToTray} onchange={(v) => handleCloseToTrayChange(v)} disabled={!enableTray} />
+    </div>
+
+    <!-- Immersive subsection -->
+    <h4 class="subsection-title">{$t('settings.appearance.immersive.title')}</h4>
+    <div class="setting-row">
+      <span class="setting-label">{$t('settings.appearance.immersiveDefaultView')}</span>
+      <Dropdown
+        value={getImmersiveViewDisplayValue()}
+        options={getImmersiveViewOptions()}
+        onchange={handleImmersiveViewChange}
+      />
     </div>
 
     <!-- Composition subsection (collapsible) -->
@@ -4419,28 +4412,39 @@
       {/if}
     </div>
 
-    <!-- System Tray subsection -->
-    <h4 class="subsection-title">{$t('settings.appearance.tray.title')}</h4>
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">{$t('settings.appearance.tray.enableTray')}</span>
-        <span class="setting-desc">{$t('settings.appearance.tray.enableTrayDesc')}</span>
+        <span class="setting-label">{$t('settings.appearance.immersive.disableBlurBackground')}</span>
+        <span class="setting-desc">{$t('settings.appearance.immersive.disableBlurBackgroundDesc')}</span>
       </div>
-      <Toggle enabled={enableTray} onchange={(v) => handleEnableTrayChange(v)} />
+      <Toggle enabled={disableBlurBackground} onchange={(v) => handleDisableBlurBackgroundChange(v)} />
     </div>
-    <div class="setting-row">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.appearance.tray.minimizeToTray')}</span>
-        <span class="setting-desc">{$t('settings.appearance.tray.minimizeToTrayDesc')}</span>
-      </div>
-      <Toggle enabled={minimizeToTray} onchange={(v) => handleMinimizeToTrayChange(v)} disabled={!enableTray} />
-    </div>
-    <div class="setting-row last">
-      <div class="setting-info">
-        <span class="setting-label">{$t('settings.appearance.tray.closeToTray')}</span>
-        <span class="setting-desc">{$t('settings.appearance.tray.closeToTrayDesc')}</span>
-      </div>
-      <Toggle enabled={closeToTray} onchange={(v) => handleCloseToTrayChange(v)} disabled={!enableTray} />
+
+    <div class="collapsible-section composition-subsection">
+      <button class="section-title-btn" onclick={() => immersiveFpsCollapsed = !immersiveFpsCollapsed}>
+        <div class="section-title-row">
+          <span class="section-title composition-title">{$t('settings.appearance.immersiveFps.title')}</span>
+          {#if immersiveFpsCollapsed}
+            <ChevronDown size={16} />
+          {:else}
+            <ChevronUp size={16} />
+          {/if}
+        </div>
+        <span class="section-summary">{$t('settings.appearance.immersiveFps.summary')}</span>
+      </button>
+      {#if !immersiveFpsCollapsed}
+        <p class="section-note">{$t('settings.appearance.immersiveFps.desc')}</p>
+        {#each FPS_PANEL_IDS as panelId}
+          <div class="setting-row">
+            <span class="setting-label">{$t(`settings.appearance.immersiveFps.panels.${panelId}`)}</span>
+            <Dropdown
+              value={getFpsDisplayValue(panelId)}
+              options={getFpsOptions()}
+              onchange={(val) => handleFpsChange(panelId, val)}
+            />
+          </div>
+        {/each}
+      {/if}
     </div>
   </section>
   {/if}
@@ -5861,7 +5865,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .collapsible-section .section-title-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    justify-content: space-between;
     width: 100%;
   }
 
@@ -5889,11 +5893,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .collapsible-section .section-title-btn .experimental-badge {
     flex-shrink: 0;
     margin-left: -4px;
-  }
-
-  .settings-divider {
-    border-top: 1px solid var(--border-color);
-    margin: 8px 0;
   }
 
   /* Composition subsection (inside Appearance) */

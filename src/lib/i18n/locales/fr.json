@@ -769,6 +769,7 @@
         "split-queue": "Divisé : File d'attente"
       },
       "immersive": {
+        "title": "Immersif",
         "disableBlurBackground": "Desactiver le fond flou",
         "disableBlurBackgroundDesc": "Remplace le fond flou de l'album par une couleur sombre unie. Reduit considerablement la charge GPU et corrige les saccades sur certains systemes.",
         "blurChangeNote": "Quitter et rouvrir le mode immersif pour appliquer."

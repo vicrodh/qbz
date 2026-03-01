@@ -797,6 +797,7 @@
         "split-queue": "Dividido: Cola"
       },
       "immersive": {
+        "title": "Inmersivo",
         "disableBlurBackground": "Desactivar fondo difuminado",
         "disableBlurBackgroundDesc": "Reemplaza el fondo difuminado del album con un color oscuro solido. Reduce significativamente la carga de GPU y corrige el tartamudeo en algunos sistemas.",
         "blurChangeNote": "Volver a entrar en modo inmersivo para aplicar."

@@ -769,6 +769,7 @@
         "split-queue": "Geteilt: Warteschlange"
       },
       "immersive": {
+        "title": "Immersiv",
         "disableBlurBackground": "Unscharfen Hintergrund deaktivieren",
         "disableBlurBackgroundDesc": "Ersetzt den unscharfen Album-Hintergrund durch eine dunkle Volltonfarbe. Reduziert die GPU-Last erheblich und behebt Ruckeln auf einigen Systemen.",
         "blurChangeNote": "Immersiv-Modus erneut oeffnen, um anzuwenden."

@@ -797,6 +797,7 @@
         "split-queue": "Split: Queue"
       },
       "immersive": {
+        "title": "Immersive",
         "disableBlurBackground": "Disable blur background",
         "disableBlurBackgroundDesc": "Replace the blurred album artwork background with a solid dark color. Significantly reduces GPU load and fixes stutter on some systems.",
         "blurChangeNote": "Re-enter immersive mode to apply."
