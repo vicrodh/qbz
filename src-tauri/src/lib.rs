@@ -2,14 +2,6 @@
 //!
 //! This application uses the Qobuz API but is not certified by Qobuz.
 
-use std::sync::atomic::AtomicBool;
-
-/// Flag to prevent double-closing secondary windows.
-/// Set in CloseRequested, checked in RunEvent::Exit.
-/// Without this, calling close() on windows that WebKit is already tearing
-/// down causes "free(): corrupted unsorted chunks" heap corruption.
-static WINDOWS_CLOSED_BY_USER: AtomicBool = AtomicBool::new(false);
-
 // New multi-crate architecture
 pub mod commands_v2;
 pub mod core_bridge;
@@ -1022,16 +1014,12 @@ pub fn run() {
                     }
                     api.prevent_close();
                 } else {
-                    // Close secondary windows before the main window closes.
-                    // Use close() (not destroy()) so WebKit can clean up gracefully.
-                    // Set flag so RunEvent::Exit won't double-close them.
-                    WINDOWS_CLOSED_BY_USER.store(true, std::sync::atomic::Ordering::SeqCst);
-                    for (label, win) in window.app_handle().webview_windows() {
-                        if label != "main" {
-                            log::info!("App closing: closing secondary window '{}'", label);
-                            let _ = win.close();
-                        }
-                    }
+                    let open_windows: Vec<String> =
+                        window.app_handle().webview_windows().keys().cloned().collect();
+                    log::info!(
+                        "App closing requested by user; open windows before exit: {:?}",
+                        open_windows
+                    );
 
                     // Cleanup cast devices on actual close
                     log::info!("App closing: cleaning up cast devices");
@@ -1043,6 +1031,12 @@ pub fn run() {
                     }
 
                     log::info!("DLNA connection will be cleaned up on drop");
+
+                    // Do not manually close secondary webview windows during teardown.
+                    // Trigger a single process-level exit and let Tauri/WebKit own
+                    // window destruction order to avoid WebKit EGL/TLS shutdown races.
+                    api.prevent_close();
+                    window.app_handle().exit(0);
                 }
             }
         })
@@ -1540,6 +1534,9 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
+                let open_windows: Vec<String> = app_handle.webview_windows().keys().cloned().collect();
+                log::info!("RunEvent::Exit — windows visible to app: {:?}", open_windows);
+
                 // Graceful shutdown: stop audio and visualizer BEFORE process
                 // teardown. The stop() calls are fire-and-forget via channel,
                 // so we must wait for the audio threads to actually drop their
@@ -1560,24 +1557,8 @@ pub fn run() {
                 }
 
                 // Wait for audio threads to process stop and drop CPAL streams.
-                // Without this, exit() frees heap while CPAL threads run.
+                // Without this, exit() can free heap while CPAL threads still run.
                 std::thread::sleep(std::time::Duration::from_millis(200));
-
-                // Only close secondary windows if CloseRequested didn't already
-                // do it. Double-closing causes WebKit heap corruption because
-                // close() on a window already mid-teardown triggers double-free
-                // in EGL/TLS cleanup → "free(): corrupted unsorted chunks".
-                if !WINDOWS_CLOSED_BY_USER.load(std::sync::atomic::Ordering::SeqCst) {
-                    // SIGTERM or other non-user-initiated exit — windows weren't
-                    // closed in CloseRequested, so we must close them here.
-                    for (label, win) in app_handle.webview_windows() {
-                        if label != "main" {
-                            log::info!("Exit: closing secondary window '{}'", label);
-                            let _ = win.close();
-                        }
-                    }
-                    std::thread::sleep(std::time::Duration::from_millis(150));
-                }
                 log::info!("RunEvent::Exit — shutdown complete");
             }
         });
