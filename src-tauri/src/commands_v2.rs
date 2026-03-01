@@ -8926,6 +8926,8 @@ pub async fn v2_set_playback_context(
         "home_list" => ContextType::HomeList,
         "daily_q" => ContextType::DailyQ,
         "weekly_q" => ContextType::WeeklyQ,
+        "fav_q" => ContextType::FavQ,
+        "top_q" => ContextType::TopQ,
         "favorites" => ContextType::Favorites,
         "local_library" => ContextType::LocalLibrary,
         "radio" => ContextType::Radio,
