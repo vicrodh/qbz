@@ -796,6 +796,11 @@
         "split-suggestions": "Dividido: Sugerencias",
         "split-queue": "Dividido: Cola"
       },
+      "immersive": {
+        "disableBlurBackground": "Desactivar fondo difuminado",
+        "disableBlurBackgroundDesc": "Reemplaza el fondo difuminado del album con un color oscuro solido. Reduce significativamente la carga de GPU y corrige el tartamudeo en algunos sistemas.",
+        "blurChangeNote": "Volver a entrar en modo inmersivo para aplicar."
+      },
       "immersiveFps": {
         "title": "Tasa de Cuadros de Animaciones Inmersivas",
         "desc": "Configura la tasa de cuadros por animación. Valores bajos ahorran CPU. Requiere volver a entrar al modo inmersivo.",

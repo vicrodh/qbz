@@ -52,6 +52,8 @@ export interface ImmersiveConfig {
   pauseWhenHidden: boolean;
   /** Enable debug overlay with metrics */
   debugOverlay: boolean;
+  /** Disable blur background to reduce GPU load (renders solid dark color instead) */
+  disableBlurBackground: boolean;
 }
 
 /** Default configuration */
@@ -60,4 +62,5 @@ export const DEFAULT_IMMERSIVE_CONFIG: ImmersiveConfig = {
   ambientIntensity: 1.0, // Full intensity for maximum ambient motion
   pauseWhenHidden: true,
   debugOverlay: false,
+  disableBlurBackground: false,
 };

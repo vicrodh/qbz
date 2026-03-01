@@ -11,6 +11,7 @@
     BUILD_IMMERSIVE_ENABLED,
     isWebGL2Available,
     isRuntimeEnabled,
+    getConfig,
   } from '$lib/immersive';
 
   interface Props {
@@ -26,6 +27,8 @@
   // Determine which renderer to use
   let useWebGL = $state(false);
   let useFallback = $state(false);
+  let useSolidColor = $state(false);
+  let solidColor = $state('#0a0a0b');
   let WebGLCanvas: typeof import('$lib/immersive/ImmersiveAmbientCanvas.svelte').default | null = $state(null);
 
   // Fallback state (CSS-based blur)
@@ -39,6 +42,18 @@
 
   // Check capabilities and load WebGL component if available
   onMount(async () => {
+    const config = getConfig();
+
+    // If blur is disabled, extract a dominant color and use solid background
+    if (config.disableBlurBackground) {
+      useSolidColor = true;
+      console.log('[ImmersiveBackground] Blur disabled, using solid color');
+      if (artwork) {
+        extractDominantColor(artwork);
+      }
+      return;
+    }
+
     if (BUILD_IMMERSIVE_ENABLED && isRuntimeEnabled() && isWebGL2Available()) {
       try {
         // Dynamic import - only loads if WebGL2 is available
@@ -63,6 +78,39 @@
     console.warn('[ImmersiveBackground] WebGL failed, switching to CSS fallback');
     useWebGL = false;
     useFallback = true;
+  }
+
+  // =====================================================
+  // Solid Color Mode (blur disabled)
+  // Extracts dominant color from artwork at tiny resolution
+  // =====================================================
+
+  function extractDominantColor(imageUrl: string): void {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 4;
+      canvas.height = 4;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      ctx.drawImage(img, 0, 0, 4, 4);
+      const data = ctx.getImageData(0, 0, 4, 4).data;
+      let rSum = 0, gSum = 0, bSum = 0;
+      const pixels = 16;
+      for (let i = 0; i < data.length; i += 4) {
+        rSum += data[i];
+        gSum += data[i + 1];
+        bSum += data[i + 2];
+      }
+      // Darken to 30% brightness for comfortable background
+      const darken = 0.3;
+      const r = Math.round((rSum / pixels) * darken);
+      const g = Math.round((gSum / pixels) * darken);
+      const b = Math.round((bSum / pixels) * darken);
+      solidColor = `rgb(${r}, ${g}, ${b})`;
+    };
+    img.src = imageUrl;
   }
 
   // =====================================================
@@ -211,6 +259,11 @@
       setTimeout(() => {
         previousArtwork = artwork;
 
+        // For solid color mode, re-extract dominant color
+        if (useSolidColor) {
+          extractDominantColor(artwork);
+        }
+
         // For fallback renderer, regenerate background
         if (useFallback) {
           currentArtwork = artwork;
@@ -229,7 +282,10 @@
 
 <div class="immersive-background">
   <div class="background-layer" class:transitioning={isTransitioning}>
-    {#if useWebGL && WebGLCanvas}
+    {#if useSolidColor}
+      <!-- Solid color mode (blur disabled for performance) -->
+      <div class="solid-background" style="background-color: {solidColor}"></div>
+    {:else if useWebGL && WebGLCanvas}
       <!-- WebGL2 Renderer with ambient motion -->
       <WebGLCanvas
         artworkUrl={artwork}
@@ -297,6 +353,12 @@
 
   .loading .background-canvas {
     opacity: 0;
+  }
+
+  .solid-background {
+    position: absolute;
+    inset: 0;
+    transition: background-color 500ms ease-out;
   }
 
   .loading-placeholder {

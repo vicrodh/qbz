@@ -38,6 +38,7 @@
   import MigrationModal from '../MigrationModal.svelte';
   import { getDevicePrettyName } from '$lib/utils/audioDeviceNames';
   import { getUserItem, setUserItem, removeUserItem } from '$lib/utils/userStorage';
+  import { getConfig as getImmersiveConfig, setConfig as setImmersiveConfig } from '$lib/immersive';
   import { ZOOM_OPTIONS, findZoomOption, getZoomLevelFromOption } from '$lib/utils/zoom';
   import { getZoom, setZoom, subscribeZoom } from '$lib/stores/zoomStore';
   import {
@@ -1039,6 +1040,15 @@
       immersiveDefaultView = key;
       setUserItem('qbz-immersive-default-view', key);
     }
+  }
+
+  // Immersive blur background toggle
+  let disableBlurBackground = $state(getImmersiveConfig().disableBlurBackground);
+
+  function handleDisableBlurBackgroundChange(enabled: boolean) {
+    disableBlurBackground = enabled;
+    setImmersiveConfig({ disableBlurBackground: enabled });
+    showToast($t('settings.appearance.immersive.blurChangeNote'), 'info');
   }
 
   // Immersive FPS settings (per-panel)
@@ -4145,6 +4155,20 @@
         options={getImmersiveViewOptions()}
         onchange={handleImmersiveViewChange}
       />
+    </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.immersive.disableBlurBackground')}</span>
+        <span class="setting-desc">{$t('settings.appearance.immersive.disableBlurBackgroundDesc')}</span>
+      </div>
+      <label class="toggle-switch">
+        <input
+          type="checkbox"
+          checked={disableBlurBackground}
+          onchange={() => handleDisableBlurBackgroundChange(!disableBlurBackground)}
+        />
+        <span class="slider"></span>
+      </label>
     </div>
     <div class="collapsible-section">
       <button

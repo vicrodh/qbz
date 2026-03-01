@@ -30,6 +30,8 @@ export {
   getWebGL2Info,
   isRuntimeEnabled,
   setRuntimeEnabled,
+  getConfig,
+  setConfig,
   shouldImmersiveBeAvailable,
 } from './config';
 
@@ -47,7 +49,6 @@ export {
   init,
   destroy,
   getState,
-  getConfig,
   // Internal (for canvas component)
   updateMetrics,
   updateTextureCount,

@@ -768,6 +768,11 @@
         "split-suggestions": "Divisé : Suggestions",
         "split-queue": "Divisé : File d'attente"
       },
+      "immersive": {
+        "disableBlurBackground": "Desactiver le fond flou",
+        "disableBlurBackgroundDesc": "Remplace le fond flou de l'album par une couleur sombre unie. Reduit considerablement la charge GPU et corrige les saccades sur certains systemes.",
+        "blurChangeNote": "Quitter et rouvrir le mode immersif pour appliquer."
+      },
       "immersiveFps": {
         "title": "Fréquence d'Images des Animations Immersives",
         "desc": "Configurez la fréquence d'images par animation. Des valeurs basses économisent le CPU. Nécessite de ré-entrer en mode immersif.",

@@ -768,6 +768,11 @@
         "split-suggestions": "Geteilt: Vorschläge",
         "split-queue": "Geteilt: Warteschlange"
       },
+      "immersive": {
+        "disableBlurBackground": "Unscharfen Hintergrund deaktivieren",
+        "disableBlurBackgroundDesc": "Ersetzt den unscharfen Album-Hintergrund durch eine dunkle Volltonfarbe. Reduziert die GPU-Last erheblich und behebt Ruckeln auf einigen Systemen.",
+        "blurChangeNote": "Immersiv-Modus erneut oeffnen, um anzuwenden."
+      },
       "immersiveFps": {
         "title": "Bildrate der Immersiv-Animationen",
         "desc": "Bildrate pro Animation konfigurieren. Niedrigere Werte sparen CPU. Erfordert erneutes Aufrufen des Immersiv-Modus.",

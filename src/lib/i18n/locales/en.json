@@ -796,6 +796,11 @@
         "split-suggestions": "Split: Suggestions",
         "split-queue": "Split: Queue"
       },
+      "immersive": {
+        "disableBlurBackground": "Disable blur background",
+        "disableBlurBackgroundDesc": "Replace the blurred album artwork background with a solid dark color. Significantly reduces GPU load and fixes stutter on some systems.",
+        "blurChangeNote": "Re-enter immersive mode to apply."
+      },
       "immersiveFps": {
         "title": "Immersive Animation Frame Rate",
         "desc": "Configure frame rate per animation. Lower values save CPU. Requires re-entering immersive mode to apply.",
