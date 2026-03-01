@@ -4203,11 +4203,15 @@
         class="section-title-btn"
         onclick={() => immersiveFpsCollapsed = !immersiveFpsCollapsed}
       >
-        <h4 class="subsection-title">{$t('settings.appearance.immersiveFps.title')}</h4>
-        <span class="collapse-icon" class:collapsed={immersiveFpsCollapsed}>▼</span>
+        <span class="section-title">{$t('settings.appearance.immersiveFps.title')}</span>
+        <span class="section-summary">{$t('settings.appearance.immersiveFps.desc')}</span>
+        {#if immersiveFpsCollapsed}
+          <ChevronDown size={16} />
+        {:else}
+          <ChevronUp size={16} />
+        {/if}
       </button>
       {#if !immersiveFpsCollapsed}
-        <p class="setting-desc" style="margin-bottom: 12px;">{$t('settings.appearance.immersiveFps.desc')}</p>
         {#each FPS_PANEL_IDS as panelId}
           <div class="setting-row">
             <span class="setting-label">{$t(`settings.appearance.immersiveFps.panels.${panelId}`)}</span>
