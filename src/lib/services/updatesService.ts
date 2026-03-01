@@ -27,6 +27,7 @@ const DEV_FAKE_BODY_KEY = 'qbz-updates-dev-fake-body';
 
 let sessionId = '';
 let launchFlowStarted = false;
+let sessionIdSequence = 0;
 
 /** Reset launch flow state on logout so re-login can re-evaluate. */
 export function resetLaunchFlow(): void {
@@ -40,7 +41,19 @@ function ensureSessionId(): string {
     sessionId = 'server';
     return sessionId;
   }
-  sessionId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  let entropyPart = `${Date.now()}-${sessionIdSequence++}`;
+  if (typeof crypto !== 'undefined') {
+    if (typeof crypto.randomUUID === 'function') {
+      entropyPart = crypto.randomUUID();
+    } else if (typeof crypto.getRandomValues === 'function') {
+      const buffer = new Uint8Array(12);
+      crypto.getRandomValues(buffer);
+      entropyPart = Array.from(buffer, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    }
+  }
+
+  sessionId = `${Date.now()}-${entropyPart}`;
   try {
     localStorage.setItem(SESSION_ID_KEY, sessionId);
   } catch {
