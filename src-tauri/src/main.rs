@@ -81,6 +81,12 @@ fn is_intel_gpu() -> bool {
 }
 
 fn main() {
+    // CLI flag: --autoconfig-graphics — detect environment and apply optimal settings
+    if std::env::args().any(|a| a == "--autoconfig-graphics") {
+        qbz_nix_lib::autoconfig_graphics::run();
+        return;
+    }
+
     // CLI flag: --reset-graphics — resets ALL graphics/composition settings to defaults
     if std::env::args().any(|a| a == "--reset-graphics") {
         eprintln!("[QBZ] Resetting all graphics settings to defaults...");

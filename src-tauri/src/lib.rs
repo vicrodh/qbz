@@ -11,6 +11,7 @@ pub mod session_lifecycle;
 pub mod tauri_adapter;
 
 pub mod auto_theme;
+pub mod autoconfig_graphics;
 
 pub mod api;
 pub mod api_cache;
