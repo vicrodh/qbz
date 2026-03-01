@@ -12,6 +12,7 @@ use aes_gcm::{
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use keyring::Entry;
+use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::fs;
@@ -22,9 +23,7 @@ const QOBUZ_CREDENTIALS_KEY: &str = "qobuz-credentials";
 const FALLBACK_FILE_NAME: &str = ".qbz-auth";
 const LEGACY_FALLBACK_FILE_NAME: &str = ".qbz-auth.legacy";
 const OAUTH_TOKEN_FILE_NAME: &str = ".qbz-oauth-token";
-
-// Salt for key derivation (app-specific, not secret but adds uniqueness)
-const KEY_DERIVATION_SALT: &[u8] = b"QbzNixCredentialEncryption2024";
+const INSTALLATION_SALT_FILE_NAME: &str = ".qbz-cred-salt";
 
 // Legacy XOR key for migration (only used for reading old format)
 const LEGACY_OBFUSCATION_KEY: &[u8] = b"QbzNixAudiophile2024";
@@ -56,6 +55,40 @@ fn get_legacy_fallback_path() -> Option<PathBuf> {
     dirs::config_dir().map(|p| p.join("qbz").join(LEGACY_FALLBACK_FILE_NAME))
 }
 
+/// Get the per-installation salt file path used for key derivation.
+fn get_installation_salt_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|p| p.join("qbz").join(INSTALLATION_SALT_FILE_NAME))
+}
+
+/// Load a persistent installation salt, or create one on first use.
+fn load_or_create_installation_salt() -> Result<Vec<u8>, String> {
+    let path =
+        get_installation_salt_path().ok_or("Could not determine config directory for salt")?;
+
+    if path.exists() {
+        let encoded =
+            fs::read_to_string(&path).map_err(|e| format!("Failed to read salt file: {}", e))?;
+        let decoded = BASE64
+            .decode(encoded.trim())
+            .map_err(|e| format!("Failed to decode salt file: {}", e))?;
+        if decoded.len() != 32 {
+            return Err("Invalid installation salt length".to_string());
+        }
+        return Ok(decoded);
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| format!("Failed to create salt directory: {}", e))?;
+    }
+
+    let mut salt = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut salt);
+    fs::write(&path, BASE64.encode(salt))
+        .map_err(|e| format!("Failed to write installation salt: {}", e))?;
+
+    Ok(salt.to_vec())
+}
+
 /// Get machine-specific identifier for key derivation
 fn get_machine_id() -> Vec<u8> {
     // Try /etc/machine-id first (Linux)
@@ -78,23 +111,24 @@ fn get_machine_id() -> Vec<u8> {
 }
 
 /// Derive encryption key from machine ID
-fn derive_key() -> [u8; 32] {
+fn derive_key() -> Result<[u8; 32], String> {
     let machine_id = get_machine_id();
+    let installation_salt = load_or_create_installation_salt()?;
 
     let mut hasher = Sha256::new();
-    hasher.update(KEY_DERIVATION_SALT);
+    hasher.update(&installation_salt);
     hasher.update(&machine_id);
-    hasher.update(KEY_DERIVATION_SALT); // Double salt for extra mixing
+    hasher.update(&installation_salt);
 
     let result = hasher.finalize();
     let mut key = [0u8; 32];
     key.copy_from_slice(&result);
-    key
+    Ok(key)
 }
 
 /// Encrypt credentials using AES-256-GCM
 fn encrypt_credentials(credentials: &QobuzCredentials) -> Result<String, String> {
-    let key = derive_key();
+    let key = derive_key()?;
     let cipher =
         Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
 
@@ -132,7 +166,7 @@ fn decrypt_credentials(encrypted_json: &str) -> Result<QobuzCredentials, String>
         ));
     }
 
-    let key = derive_key();
+    let key = derive_key()?;
     let cipher =
         Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
 
@@ -519,10 +553,10 @@ mod tests {
         }
 
         let email = "test@example.com";
-        let password = "testpass123";
+        let password = format!("test-secret-{}", std::process::id());
 
         // Save
-        save_qobuz_credentials(email, password).expect("Failed to save");
+        save_qobuz_credentials(email, &password).expect("Failed to save");
 
         // Load
         let loaded = load_qobuz_credentials()
