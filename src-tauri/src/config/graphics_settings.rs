@@ -18,6 +18,8 @@ use std::sync::{Arc, Mutex};
 static GRAPHICS_USING_FALLBACK: AtomicBool = AtomicBool::new(false);
 static GRAPHICS_IS_WAYLAND: AtomicBool = AtomicBool::new(false);
 static GRAPHICS_HAS_NVIDIA: AtomicBool = AtomicBool::new(false);
+static GRAPHICS_HAS_AMD: AtomicBool = AtomicBool::new(false);
+static GRAPHICS_HAS_INTEL: AtomicBool = AtomicBool::new(false);
 static GRAPHICS_IS_VM: AtomicBool = AtomicBool::new(false);
 static GRAPHICS_HW_ACCEL: AtomicBool = AtomicBool::new(true);
 static GRAPHICS_FORCE_X11: AtomicBool = AtomicBool::new(false);
@@ -27,6 +29,8 @@ pub fn set_startup_graphics_state(
     using_fallback: bool,
     is_wayland: bool,
     has_nvidia: bool,
+    has_amd: bool,
+    has_intel: bool,
     is_vm: bool,
     hw_accel: bool,
     force_x11: bool,
@@ -34,6 +38,8 @@ pub fn set_startup_graphics_state(
     GRAPHICS_USING_FALLBACK.store(using_fallback, Ordering::SeqCst);
     GRAPHICS_IS_WAYLAND.store(is_wayland, Ordering::SeqCst);
     GRAPHICS_HAS_NVIDIA.store(has_nvidia, Ordering::SeqCst);
+    GRAPHICS_HAS_AMD.store(has_amd, Ordering::SeqCst);
+    GRAPHICS_HAS_INTEL.store(has_intel, Ordering::SeqCst);
     GRAPHICS_IS_VM.store(is_vm, Ordering::SeqCst);
     GRAPHICS_HW_ACCEL.store(hw_accel, Ordering::SeqCst);
     GRAPHICS_FORCE_X11.store(force_x11, Ordering::SeqCst);
@@ -287,6 +293,10 @@ pub struct GraphicsStartupStatus {
     pub is_wayland: bool,
     /// True if NVIDIA GPU was detected
     pub has_nvidia: bool,
+    /// True if AMD GPU was detected
+    pub has_amd: bool,
+    /// True if Intel GPU was detected
+    pub has_intel: bool,
     /// True if running in a virtual machine
     pub is_vm: bool,
     /// True if hardware acceleration is enabled
@@ -302,6 +312,8 @@ pub fn get_graphics_startup_status() -> GraphicsStartupStatus {
         using_fallback: GRAPHICS_USING_FALLBACK.load(Ordering::SeqCst),
         is_wayland: GRAPHICS_IS_WAYLAND.load(Ordering::SeqCst),
         has_nvidia: GRAPHICS_HAS_NVIDIA.load(Ordering::SeqCst),
+        has_amd: GRAPHICS_HAS_AMD.load(Ordering::SeqCst),
+        has_intel: GRAPHICS_HAS_INTEL.load(Ordering::SeqCst),
         is_vm: GRAPHICS_IS_VM.load(Ordering::SeqCst),
         hardware_accel_enabled: GRAPHICS_HW_ACCEL.load(Ordering::SeqCst),
         force_x11_active: GRAPHICS_FORCE_X11.load(Ordering::SeqCst),

@@ -51,9 +51,32 @@ fn is_nvidia_gpu() -> bool {
         }
     }
 
-    // Method 3: Check for NVIDIA devices in lspci output (requires external command)
-    // Skip this for now to avoid external dependencies
+    false
+}
 
+#[cfg(target_os = "linux")]
+fn is_amd_gpu() -> bool {
+    if std::path::Path::new("/sys/module/amdgpu").exists() {
+        return true;
+    }
+    if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
+        if modules.lines().any(|line| line.starts_with("amdgpu")) {
+            return true;
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "linux")]
+fn is_intel_gpu() -> bool {
+    if std::path::Path::new("/sys/module/i915").exists() {
+        return true;
+    }
+    if let Ok(modules) = std::fs::read_to_string("/proc/modules") {
+        if modules.lines().any(|line| line.starts_with("i915")) {
+            return true;
+        }
+    }
     false
 }
 
@@ -170,6 +193,8 @@ fn main() {
         let is_wayland = std::env::var_os("WAYLAND_DISPLAY").is_some()
             || std::env::var("XDG_SESSION_TYPE").as_deref() == Ok("wayland");
         let has_nvidia = is_nvidia_gpu();
+        let has_amd = is_amd_gpu();
+        let has_intel = is_intel_gpu();
         let is_vm = is_virtual_machine();
         let force_software = std::env::var("QBZ_SOFTWARE_RENDER").as_deref() == Ok("1");
 
@@ -284,6 +309,12 @@ fn main() {
         if has_nvidia {
             qbz_nix_lib::logging::log_startup("[QBZ] NVIDIA GPU detected");
         }
+        if has_amd {
+            qbz_nix_lib::logging::log_startup("[QBZ] AMD GPU detected");
+        }
+        if has_intel {
+            qbz_nix_lib::logging::log_startup("[QBZ] Intel GPU detected");
+        }
         if is_vm {
             qbz_nix_lib::logging::log_startup("[QBZ] Virtual machine detected");
         }
@@ -296,8 +327,8 @@ fn main() {
             );
         }
         qbz_nix_lib::logging::log_startup(&format!(
-            "[QBZ] Graphics config: wayland={}, nvidia={}, force_x11={}, hw_accel={}, fallback={}",
-            is_wayland, has_nvidia, force_x11, hardware_accel, graphics_using_fallback
+            "[QBZ] Graphics config: wayland={}, nvidia={}, amd={}, intel={}, force_x11={}, hw_accel={}, fallback={}",
+            is_wayland, has_nvidia, has_amd, has_intel, force_x11, hardware_accel, graphics_using_fallback
         ));
 
         // Store startup state for frontend queries
@@ -305,6 +336,8 @@ fn main() {
             graphics_using_fallback,
             is_wayland,
             has_nvidia,
+            has_amd,
+            has_intel,
             is_vm,
             hardware_accel,
             force_x11,
