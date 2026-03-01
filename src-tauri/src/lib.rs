@@ -2,6 +2,14 @@
 //!
 //! This application uses the Qobuz API but is not certified by Qobuz.
 
+use std::sync::atomic::AtomicBool;
+
+/// Flag to prevent double-closing secondary windows.
+/// Set in CloseRequested, checked in RunEvent::Exit.
+/// Without this, calling close() on windows that WebKit is already tearing
+/// down causes "free(): corrupted unsorted chunks" heap corruption.
+static WINDOWS_CLOSED_BY_USER: AtomicBool = AtomicBool::new(false);
+
 // New multi-crate architecture
 pub mod commands_v2;
 pub mod core_bridge;
@@ -1016,6 +1024,8 @@ pub fn run() {
                 } else {
                     // Close secondary windows before the main window closes.
                     // Use close() (not destroy()) so WebKit can clean up gracefully.
+                    // Set flag so RunEvent::Exit won't double-close them.
+                    WINDOWS_CLOSED_BY_USER.store(true, std::sync::atomic::Ordering::SeqCst);
                     for (label, win) in window.app_handle().webview_windows() {
                         if label != "main" {
                             log::info!("App closing: closing secondary window '{}'", label);
@@ -1531,9 +1541,9 @@ pub fn run() {
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
                 // Graceful shutdown: stop audio and visualizer BEFORE process
-                // teardown to prevent heap corruption (free(): corrupted unsorted
-                // chunks) caused by C libraries (ALSA/CPAL) being freed while
-                // their threads are still active.
+                // teardown. The stop() calls are fire-and-forget via channel,
+                // so we must wait for the audio threads to actually drop their
+                // CPAL streams.
                 log::info!("RunEvent::Exit — stopping audio and visualizer");
 
                 if let Some(state) = app_handle.try_state::<AppState>() {
@@ -1541,7 +1551,6 @@ pub fn run() {
                     let _ = state.player.stop();
                 }
 
-                // Also stop the V2 player (qbz-player crate)
                 if let Some(bridge_state) = app_handle.try_state::<core_bridge::CoreBridgeState>() {
                     if let Ok(guard) = bridge_state.0.try_read() {
                         if let Some(bridge) = guard.as_ref() {
@@ -1550,22 +1559,26 @@ pub fn run() {
                     }
                 }
 
-                // Close secondary windows (miniplayer, oauth) and give WebKit
-                // time to clean up GPU/EGL resources before process teardown.
-                // Using close() instead of destroy() allows graceful shutdown.
-                let mut closed_any = false;
-                for (label, win) in app_handle.webview_windows() {
-                    if label != "main" {
-                        log::info!("Exit: closing secondary window '{}'", label);
-                        let _ = win.close();
-                        closed_any = true;
+                // Wait for audio threads to process stop and drop CPAL streams.
+                // Without this, exit() frees heap while CPAL threads run.
+                std::thread::sleep(std::time::Duration::from_millis(200));
+
+                // Only close secondary windows if CloseRequested didn't already
+                // do it. Double-closing causes WebKit heap corruption because
+                // close() on a window already mid-teardown triggers double-free
+                // in EGL/TLS cleanup → "free(): corrupted unsorted chunks".
+                if !WINDOWS_CLOSED_BY_USER.load(std::sync::atomic::Ordering::SeqCst) {
+                    // SIGTERM or other non-user-initiated exit — windows weren't
+                    // closed in CloseRequested, so we must close them here.
+                    for (label, win) in app_handle.webview_windows() {
+                        if label != "main" {
+                            log::info!("Exit: closing secondary window '{}'", label);
+                            let _ = win.close();
+                        }
                     }
+                    std::thread::sleep(std::time::Duration::from_millis(150));
                 }
-                if closed_any {
-                    // Brief pause so WebKit can tear down EGL/TLS resources
-                    // before the process exits and libc runs atexit handlers.
-                    std::thread::sleep(std::time::Duration::from_millis(100));
-                }
+                log::info!("RunEvent::Exit — shutdown complete");
             }
         });
 }
