@@ -98,6 +98,12 @@ fn main() {
                 if let Err(e) = store.set_gdk_dpi_scale(None) {
                     errors.push(format!("gdk_dpi_scale: {}", e));
                 }
+                if let Err(e) = store.set_gsk_renderer(None) {
+                    errors.push(format!("gsk_renderer: {}", e));
+                }
+                if let Err(e) = store.set_hardware_acceleration(true) {
+                    errors.push(format!("hardware_acceleration: {}", e));
+                }
             }
             Err(e) => errors.push(format!("graphics settings store: {}", e)),
         }
@@ -114,11 +120,14 @@ fn main() {
 
         if errors.is_empty() {
             eprintln!("[QBZ] All graphics settings have been reset:");
+            eprintln!("[QBZ]   - hardware_acceleration: true");
             eprintln!("[QBZ]   - force_x11: false");
             eprintln!("[QBZ]   - gdk_scale: auto");
             eprintln!("[QBZ]   - gdk_dpi_scale: auto");
+            eprintln!("[QBZ]   - gsk_renderer: auto");
             eprintln!("[QBZ]   - force_dmabuf: false");
             eprintln!("[QBZ] You can now start QBZ normally.");
+            eprintln!("[QBZ] Tip: Run 'qbz --autoconfig-graphics' to auto-detect optimal settings.");
         } else {
             eprintln!("[QBZ] Some settings could not be reset:");
             for e in &errors {
@@ -377,6 +386,20 @@ fn main() {
         if let Some(ref gdk_dpi) = graphics_db.as_ref().and_then(|s| s.gdk_dpi_scale.clone()) {
             std::env::set_var("GDK_DPI_SCALE", gdk_dpi);
             qbz_nix_lib::logging::log_startup(&format!("[QBZ] GDK_DPI_SCALE={}", gdk_dpi));
+        }
+
+        // GSK_RENDERER: controls GTK4's rendering backend (gl, ngl, vulkan, cairo)
+        // DB value is default; env var GSK_RENDERER overrides if already set.
+        if std::env::var_os("GSK_RENDERER").is_none() {
+            if let Some(ref renderer) = graphics_db.as_ref().and_then(|s| s.gsk_renderer.clone()) {
+                std::env::set_var("GSK_RENDERER", renderer);
+                qbz_nix_lib::logging::log_startup(&format!("[QBZ] GSK_RENDERER={}", renderer));
+            }
+        } else {
+            qbz_nix_lib::logging::log_startup(&format!(
+                "[QBZ] GSK_RENDERER={} (env var override)",
+                std::env::var("GSK_RENDERER").unwrap_or_default()
+            ));
         }
 
         // Log effective display server AFTER GDK backend selection

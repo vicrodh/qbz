@@ -60,6 +60,8 @@ pub struct GraphicsSettings {
     pub gdk_scale: Option<String>,
     /// GDK_DPI_SCALE override for XWayland (None = auto). Float values: "0.5", "1", "1.5"
     pub gdk_dpi_scale: Option<String>,
+    /// GSK_RENDERER override (None = auto). Values: "gl", "ngl", "vulkan", "cairo"
+    pub gsk_renderer: Option<String>,
 }
 
 impl Default for GraphicsSettings {
@@ -69,6 +71,7 @@ impl Default for GraphicsSettings {
             force_x11: false,
             gdk_scale: None,
             gdk_dpi_scale: None,
+            gsk_renderer: None,
         }
     }
 }
@@ -108,6 +111,7 @@ impl GraphicsSettingsStore {
         );
         let _ = conn.execute_batch("ALTER TABLE graphics_settings ADD COLUMN gdk_scale TEXT;");
         let _ = conn.execute_batch("ALTER TABLE graphics_settings ADD COLUMN gdk_dpi_scale TEXT;");
+        let _ = conn.execute_batch("ALTER TABLE graphics_settings ADD COLUMN gsk_renderer TEXT;");
 
         Ok(Self { conn })
     }
@@ -115,7 +119,7 @@ impl GraphicsSettingsStore {
     pub fn get_settings(&self) -> Result<GraphicsSettings, String> {
         self.conn
             .query_row(
-                "SELECT hardware_acceleration, force_x11, gdk_scale, gdk_dpi_scale FROM graphics_settings WHERE id = 1",
+                "SELECT hardware_acceleration, force_x11, gdk_scale, gdk_dpi_scale, gsk_renderer FROM graphics_settings WHERE id = 1",
                 [],
                 |row| {
                     Ok(GraphicsSettings {
@@ -123,6 +127,7 @@ impl GraphicsSettingsStore {
                         force_x11: row.get::<_, i64>(1)? != 0,
                         gdk_scale: row.get::<_, Option<String>>(2)?,
                         gdk_dpi_scale: row.get::<_, Option<String>>(3)?,
+                        gsk_renderer: row.get::<_, Option<String>>(4)?,
                     })
                 },
             )
@@ -166,6 +171,16 @@ impl GraphicsSettingsStore {
                 params![value],
             )
             .map_err(|e| format!("Failed to set gdk_dpi_scale: {}", e))?;
+        Ok(())
+    }
+
+    pub fn set_gsk_renderer(&self, value: Option<String>) -> Result<(), String> {
+        self.conn
+            .execute(
+                "UPDATE graphics_settings SET gsk_renderer = ?1 WHERE id = 1",
+                params![value],
+            )
+            .map_err(|e| format!("Failed to set gsk_renderer: {}", e))?;
         Ok(())
     }
 }

@@ -2701,6 +2701,21 @@ pub fn v2_set_gdk_dpi_scale(
 }
 
 #[tauri::command]
+pub fn v2_set_gsk_renderer(
+    value: Option<String>,
+    state: State<'_, GraphicsSettingsState>,
+) -> Result<(), String> {
+    let guard = state
+        .store
+        .lock()
+        .map_err(|e| format!("Lock error: {}", e))?;
+    let store = guard
+        .as_ref()
+        .ok_or("Graphics settings store not initialized")?;
+    store.set_gsk_renderer(value)
+}
+
+#[tauri::command]
 pub fn v2_clear_cache(state: State<'_, AppState>) -> Result<(), String> {
     state.audio_cache.clear();
     Ok(())

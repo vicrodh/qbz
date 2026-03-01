@@ -304,6 +304,7 @@
   let forceX11 = $state(false);
   let gdkScale = $state('');
   let gdkDpiScale = $state('');
+  let gskRenderer = $state('');
   let compositionCollapsed = $state(true);
   // Graphics startup status (for showing degraded mode warning)
   let graphicsUsingFallback = $state(false);
@@ -1372,6 +1373,7 @@
       forceX11 = settings.force_x11;
       gdkScale = settings.gdk_scale || '';
       gdkDpiScale = settings.gdk_dpi_scale || '';
+      gskRenderer = settings.gsk_renderer || '';
       hardwareAcceleration = settings.hardware_acceleration;
     }).catch(() => {});
 
@@ -3410,6 +3412,17 @@
     }
   }
 
+  async function handleGskRendererChange() {
+    const value = gskRenderer || null;
+    try {
+      await invoke('v2_set_gsk_renderer', { value });
+      showToast($t('settings.developer.restartRequired'), 'info');
+    } catch (err) {
+      console.error('Failed to set gsk_renderer:', err);
+      showToast(String(err), 'error');
+    }
+  }
+
   function handleVerboseLogCaptureChange(enabled: boolean) {
     if (enabled) {
       enableVerboseCapture();
@@ -4286,6 +4299,24 @@
             bind:value={gdkDpiScale}
             onblur={handleGdkDpiScaleChange}
           />
+        </div>
+
+        <div class="setting-row">
+          <div class="setting-info">
+            <span class="setting-label">{$t('settings.appearance.composition.gskRenderer')}</span>
+            <span class="setting-desc">{$t('settings.appearance.composition.gskRendererDesc')}</span>
+          </div>
+          <select
+            class="composition-input composition-select"
+            bind:value={gskRenderer}
+            onchange={handleGskRendererChange}
+          >
+            <option value="">{$t('settings.appearance.composition.gskRendererAuto')}</option>
+            <option value="gl">GL</option>
+            <option value="ngl">NGL</option>
+            <option value="vulkan">Vulkan</option>
+            <option value="cairo">{$t('settings.appearance.composition.gskRendererCairo')}</option>
+          </select>
         </div>
 
         <div class="composition-env-section">
@@ -5915,6 +5946,13 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     color: var(--text-primary);
     font-size: 12px;
     text-align: center;
+  }
+
+  .composition-select {
+    width: 120px;
+    text-align: left;
+    cursor: pointer;
+    appearance: auto;
   }
 
   .composition-env-section {
