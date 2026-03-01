@@ -300,18 +300,28 @@ async function generateAtmosphere(
 
       try {
         // === TRANSFORMATION PIPELINE ===
+        // Strategy: draw artwork at TINY resolution (8x8) to physically
+        // destroy ALL structure. No CSS filter:blur() dependency —
+        // the downscale itself is the blur. Then scale up with smoothing.
 
-        // Step 1: Extract random NON-CENTERED crop
-        // Use small initial size - we're destroying detail anyway
-        const INITIAL_SIZE = 64;
-        const croppedCanvas = extractRandomCrop(img, INITIAL_SIZE, imageUrl);
+        // Step 1: Capture color palette at 8x8 (64 pixels total)
+        // At this resolution, no artwork structure can survive
+        const TINY_SIZE = 8;
+        const tinyCanvas = document.createElement('canvas');
+        tinyCanvas.width = TINY_SIZE;
+        tinyCanvas.height = TINY_SIZE;
+        const tinyCtx = tinyCanvas.getContext('2d');
+        if (!tinyCtx) {
+          reject(new Error('Could not get canvas context'));
+          return;
+        }
+        tinyCtx.imageSmoothingEnabled = true;
+        tinyCtx.imageSmoothingQuality = 'high';
+        tinyCtx.drawImage(img, 0, 0, TINY_SIZE, TINY_SIZE);
 
-        // Step 2: First blur pass at small size (very efficient)
-        // High blur radius relative to size destroys all structure
-        const smallBlurred = applyExtremeBlur(croppedCanvas, 3, 12);
-
-        // Step 3: Scale up to final size
-        const FINAL_SIZE = 256;
+        // Step 2: Scale up to final size with high-quality smoothing
+        // Bilinear interpolation creates smooth gradients from the 8x8 grid
+        const FINAL_SIZE = 128;
         const scaledCanvas = document.createElement('canvas');
         scaledCanvas.width = FINAL_SIZE;
         scaledCanvas.height = FINAL_SIZE;
@@ -320,20 +330,18 @@ async function generateAtmosphere(
           reject(new Error('Could not get canvas context'));
           return;
         }
-
-        // Bilinear interpolation during scale-up adds more blur
         scaledCtx.imageSmoothingEnabled = true;
         scaledCtx.imageSmoothingQuality = 'high';
-        scaledCtx.drawImage(smallBlurred, 0, 0, FINAL_SIZE, FINAL_SIZE);
+        scaledCtx.drawImage(tinyCanvas, 0, 0, FINAL_SIZE, FINAL_SIZE);
 
-        // Step 4: Additional blur at final size for smoothness
-        const finalBlurred = applyExtremeBlur(scaledCanvas, 2, 20);
+        // Step 3: One blur pass for extra smoothness (optional polish)
+        const finalBlurred = applyExtremeBlur(scaledCanvas, 1, 16);
 
-        // Step 5: Apply color adjustments
+        // Step 4: Apply color adjustments
         const colorAdjusted = applyColorAdjustments(finalBlurred);
 
-        // Step 6: Apply subtle vignette
-        const final = applyVignette(colorAdjusted, 0.25);
+        // Step 5: Apply subtle vignette
+        const final = applyVignette(colorAdjusted, 0.20);
 
         // Convert to data URL
         const dataUrl = final.toDataURL('image/jpeg', 0.9);
