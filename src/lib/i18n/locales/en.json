@@ -802,7 +802,8 @@
         "blurChangeNote": "Re-enter immersive mode to apply."
       },
       "immersiveFps": {
-        "title": "Immersive Animation Frame Rate",
+        "title": "Animation Frame Rate",
+        "summary": "Per-animation FPS control for immersive mode",
         "desc": "Configure frame rate per animation. Lower values save CPU. Requires re-entering immersive mode to apply.",
         "panels": {
           "ambient": "Background Blur",

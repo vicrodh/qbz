@@ -774,7 +774,8 @@
         "blurChangeNote": "Immersiv-Modus erneut oeffnen, um anzuwenden."
       },
       "immersiveFps": {
-        "title": "Bildrate der Immersiv-Animationen",
+        "title": "Animationsbildrate",
+        "summary": "FPS-Steuerung pro Animation im Immersiv-Modus",
         "desc": "Bildrate pro Animation konfigurieren. Niedrigere Werte sparen CPU. Erfordert erneutes Aufrufen des Immersiv-Modus.",
         "panels": {
           "ambient": "Hintergrund-Unschärfe",

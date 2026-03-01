@@ -4189,22 +4189,12 @@
         <span class="setting-label">{$t('settings.appearance.immersive.disableBlurBackground')}</span>
         <span class="setting-desc">{$t('settings.appearance.immersive.disableBlurBackgroundDesc')}</span>
       </div>
-      <label class="toggle-switch">
-        <input
-          type="checkbox"
-          checked={disableBlurBackground}
-          onchange={() => handleDisableBlurBackgroundChange(!disableBlurBackground)}
-        />
-        <span class="slider"></span>
-      </label>
+      <Toggle enabled={disableBlurBackground} onchange={(v) => handleDisableBlurBackgroundChange(v)} />
     </div>
-    <div class="collapsible-section">
-      <button
-        class="section-title-btn"
-        onclick={() => immersiveFpsCollapsed = !immersiveFpsCollapsed}
-      >
-        <span class="section-title">{$t('settings.appearance.immersiveFps.title')}</span>
-        <span class="section-summary">{$t('settings.appearance.immersiveFps.desc')}</span>
+    <div class="collapsible-section composition-subsection">
+      <button class="section-title-btn" onclick={() => immersiveFpsCollapsed = !immersiveFpsCollapsed}>
+        <span class="section-title composition-title">{$t('settings.appearance.immersiveFps.title')}</span>
+        <span class="section-summary">{$t('settings.appearance.immersiveFps.summary')}</span>
         {#if immersiveFpsCollapsed}
           <ChevronDown size={16} />
         {:else}
@@ -4212,6 +4202,7 @@
         {/if}
       </button>
       {#if !immersiveFpsCollapsed}
+        <p class="section-note">{$t('settings.appearance.immersiveFps.desc')}</p>
         {#each FPS_PANEL_IDS as panelId}
           <div class="setting-row">
             <span class="setting-label">{$t(`settings.appearance.immersiveFps.panels.${panelId}`)}</span>

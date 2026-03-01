@@ -802,8 +802,9 @@
         "blurChangeNote": "Volver a entrar en modo inmersivo para aplicar."
       },
       "immersiveFps": {
-        "title": "Tasa de Cuadros de Animaciones Inmersivas",
-        "desc": "Configura la tasa de cuadros por animación. Valores bajos ahorran CPU. Requiere volver a entrar al modo inmersivo.",
+        "title": "Tasa de cuadros",
+        "summary": "Control de FPS por animacion en modo inmersivo",
+        "desc": "Configura la tasa de cuadros por animacion. Valores bajos ahorran CPU. Requiere volver a entrar al modo inmersivo.",
         "panels": {
           "ambient": "Fondo Difuminado",
           "visualizer": "Espectro",

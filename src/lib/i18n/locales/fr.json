@@ -774,8 +774,9 @@
         "blurChangeNote": "Quitter et rouvrir le mode immersif pour appliquer."
       },
       "immersiveFps": {
-        "title": "Fréquence d'Images des Animations Immersives",
-        "desc": "Configurez la fréquence d'images par animation. Des valeurs basses économisent le CPU. Nécessite de ré-entrer en mode immersif.",
+        "title": "Frequence d'images",
+        "summary": "Controle FPS par animation en mode immersif",
+        "desc": "Configurez la frequence d'images par animation. Des valeurs basses economisent le CPU. Necessite de re-entrer en mode immersif.",
         "panels": {
           "ambient": "Flou d'Arrière-plan",
           "visualizer": "Visualiseur de Spectre",
