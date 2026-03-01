@@ -851,7 +851,9 @@
           "x11BalancedLabel": "Xwayland équilibré",
           "x11BalancedDesc": "Force Xwayland avec GDK_SCALE=1 et GDK_DPI_SCALE=1.1 pour un compromis taille/netteté.",
           "x11PerformanceLabel": "Xwayland performance",
-          "x11PerformanceDesc": "Force Xwayland avec un scaling neutre (1.0/1.0). Meilleures performances et moins de flou sur les écrans externes.",
+          "x11PerformanceDesc": "Force Xwayland avec un scaling neutre (1.0/1.0). Fond flou desactive pour une charge GPU reduite.",
+          "maxPerformanceLabel": "Performance maximale",
+          "maxPerformanceDesc": "Rendu logiciel (Cairo) avec flou desactive. Compatibilite maximale, utilisation GPU minimale. A utiliser en cas de saccades ou de plantages.",
           "applied": "Profil appliqué : {profile}. Redémarrez QBZ pour appliquer le changement."
         }
       }

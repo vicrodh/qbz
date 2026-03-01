@@ -314,13 +314,15 @@
   let graphicsHwAccelEnabled = $state(true);
   let showLogsModal = $state(false);
 
-  type CompositionProfileId = 'nativeWayland' | 'x11Balanced' | 'x11Performance';
+  type CompositionProfileId = 'nativeWayland' | 'x11Balanced' | 'x11Performance' | 'maxPerformance';
 
   type CompositionProfile = {
     id: CompositionProfileId;
     forceX11: boolean;
     gdkScale: string;
     gdkDpiScale: string;
+    gskRenderer: string;
+    disableBlurBackground: boolean;
     labelKey: string;
     descKey: string;
   };
@@ -331,6 +333,8 @@
       forceX11: false,
       gdkScale: '',
       gdkDpiScale: '',
+      gskRenderer: '',
+      disableBlurBackground: false,
       labelKey: 'settings.appearance.composition.profiles.nativeWaylandLabel',
       descKey: 'settings.appearance.composition.profiles.nativeWaylandDesc',
     },
@@ -339,6 +343,8 @@
       forceX11: true,
       gdkScale: '1',
       gdkDpiScale: '1.1',
+      gskRenderer: '',
+      disableBlurBackground: false,
       labelKey: 'settings.appearance.composition.profiles.x11BalancedLabel',
       descKey: 'settings.appearance.composition.profiles.x11BalancedDesc',
     },
@@ -347,8 +353,20 @@
       forceX11: true,
       gdkScale: '1',
       gdkDpiScale: '1',
+      gskRenderer: '',
+      disableBlurBackground: true,
       labelKey: 'settings.appearance.composition.profiles.x11PerformanceLabel',
       descKey: 'settings.appearance.composition.profiles.x11PerformanceDesc',
+    },
+    {
+      id: 'maxPerformance',
+      forceX11: false,
+      gdkScale: '',
+      gdkDpiScale: '',
+      gskRenderer: 'cairo',
+      disableBlurBackground: true,
+      labelKey: 'settings.appearance.composition.profiles.maxPerformanceLabel',
+      descKey: 'settings.appearance.composition.profiles.maxPerformanceDesc',
     },
   ];
 
@@ -3369,6 +3387,8 @@
         profile.forceX11 === forceX11
         && normalizeScaleValue(profile.gdkScale) === currentScale
         && normalizeScaleValue(profile.gdkDpiScale) === currentDpiScale
+        && profile.gskRenderer === gskRenderer
+        && profile.disableBlurBackground === disableBlurBackground
       ) {
         return profile.id;
       }
@@ -3385,16 +3405,22 @@
     const previousForceX11 = forceX11;
     const previousGdkScale = gdkScale;
     const previousGdkDpiScale = gdkDpiScale;
+    const previousGskRenderer = gskRenderer;
+    const previousDisableBlur = disableBlurBackground;
 
     // Optimistic UI update so toggles/inputs reflect the selected profile immediately
     forceX11 = profile.forceX11;
     gdkScale = profile.gdkScale;
     gdkDpiScale = profile.gdkDpiScale;
+    gskRenderer = profile.gskRenderer;
+    disableBlurBackground = profile.disableBlurBackground;
 
     try {
       await invoke('v2_set_force_x11', { enabled: profile.forceX11 });
       await invoke('v2_set_gdk_scale', { value: profile.gdkScale || null });
       await invoke('v2_set_gdk_dpi_scale', { value: profile.gdkDpiScale || null });
+      await invoke('v2_set_gsk_renderer', { value: profile.gskRenderer || null });
+      setImmersiveConfig({ disableBlurBackground: profile.disableBlurBackground });
 
       showToast(
         $t('settings.appearance.composition.profiles.applied', { values: { profile: $t(profile.labelKey) } }),
@@ -3406,6 +3432,8 @@
       forceX11 = previousForceX11;
       gdkScale = previousGdkScale;
       gdkDpiScale = previousGdkDpiScale;
+      gskRenderer = previousGskRenderer;
+      disableBlurBackground = previousDisableBlur;
       console.error('Failed to apply composition profile:', err);
       showToast(String(err), 'error');
     }

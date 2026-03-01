@@ -888,7 +888,9 @@
           "x11BalancedLabel": "Xwayland balanceado",
           "x11BalancedDesc": "Fuerza Xwayland con GDK_SCALE=1 y GDK_DPI_SCALE=1.1 para balancear tamaño y nitidez.",
           "x11PerformanceLabel": "Xwayland rendimiento",
-          "x11PerformanceDesc": "Fuerza Xwayland con escala neutra (1.0/1.0). Mejor rendimiento y menos blur en monitores externos.",
+          "x11PerformanceDesc": "Fuerza Xwayland con escala neutra (1.0/1.0). Fondo difuminado desactivado para menor carga de GPU.",
+          "maxPerformanceLabel": "Rendimiento maximo",
+          "maxPerformanceDesc": "Renderizado por software (Cairo) con blur desactivado. Maxima compatibilidad, menor uso de GPU. Usar si hay tartamudeo o crashes.",
           "applied": "Perfil aplicado: {profile}. Reinicia QBZ para que surta efecto."
         }
       }

@@ -851,7 +851,9 @@
           "x11BalancedLabel": "Xwayland ausgewogen",
           "x11BalancedDesc": "Erzwingt Xwayland mit GDK_SCALE=1 und GDK_DPI_SCALE=1.1 für einen guten Kompromiss aus Größe und Schärfe.",
           "x11PerformanceLabel": "Xwayland Leistung",
-          "x11PerformanceDesc": "Erzwingt Xwayland mit neutraler Skalierung (1.0/1.0). Beste Leistung und weniger Unschärfe auf externen Monitoren.",
+          "x11PerformanceDesc": "Erzwingt Xwayland mit neutraler Skalierung (1.0/1.0). Unscharfer Hintergrund deaktiviert fuer geringere GPU-Last.",
+          "maxPerformanceLabel": "Maximale Leistung",
+          "maxPerformanceDesc": "Software-Rendering (Cairo) mit deaktiviertem Blur. Maximale Kompatibilitaet, niedrigste GPU-Nutzung. Verwenden bei Ruckeln oder Abstuerzen.",
           "applied": "Profil angewendet: {profile}. QBZ neu starten, damit es wirksam wird."
         }
       }
