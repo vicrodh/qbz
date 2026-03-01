@@ -184,7 +184,7 @@ fn extract_secrets(bundle: &str) -> Result<Vec<String>> {
         }
     }
 
-    log::info!("Extracted {} secrets", secrets.len());
+    log::info!("Extracted app secrets from bundle");
     Ok(secrets)
 }
 

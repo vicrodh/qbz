@@ -114,7 +114,7 @@ impl ListenBrainzClient {
             config.user_name = Some(user_name.clone());
         }
 
-        log::info!("ListenBrainz connected as: {}", user_name);
+        log::info!("ListenBrainz connected");
 
         Ok(UserInfo { user_name })
     }

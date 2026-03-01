@@ -448,7 +448,7 @@ pub fn run() {
                     .ok()
             });
         if let Some(settings) = user_settings {
-            log::info!("Loaded tray settings from last active user {}", last_uid);
+            log::info!("Loaded tray settings from last active user profile");
             settings
         } else {
             config::tray_settings::TraySettingsStore::new()

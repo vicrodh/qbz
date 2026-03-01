@@ -28,7 +28,7 @@ impl UserDataPaths {
             .user_id
             .write()
             .expect("UserDataPaths write lock poisoned") = Some(user_id);
-        log::info!("UserDataPaths: active user set to {}", user_id);
+        log::info!("UserDataPaths: active user set");
     }
 
     /// Clear the current user on logout
@@ -106,7 +106,7 @@ impl UserDataPaths {
         }
         std::fs::write(&path, user_id.to_string())
             .map_err(|e| format!("Failed to save last user id: {}", e))?;
-        log::info!("Saved last_user_id={} to {:?}", user_id, path);
+        log::info!("Saved last_user_id marker");
         Ok(())
     }
 

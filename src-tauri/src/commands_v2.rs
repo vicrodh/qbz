@@ -537,23 +537,17 @@ pub async fn runtime_bootstrap(
     let last_user_id_hint = crate::user_data::UserDataPaths::load_last_user_id();
 
     if let Ok(Some(creds)) = creds {
-        if let Some(uid) = last_user_id_hint {
-            log::info!(
-                "[Runtime] Found saved credentials, attempting auto-login (user hint: {})",
-                uid
-            );
+        if last_user_id_hint.is_some() {
+            log::info!("[Runtime] Found saved credentials, attempting auto-login");
         } else {
-            log::info!("[Runtime] Found saved credentials, attempting auto-login (no user hint)");
+            log::info!("[Runtime] Found saved credentials, attempting auto-login (no hint)");
         }
 
         // Login to legacy client
         let client = app_state.client.read().await;
         match client.login(&creds.email, &creds.password).await {
             Ok(session) => {
-                log::info!(
-                    "[Runtime] Legacy auth successful for user {}",
-                    session.user_id
-                );
+                log::info!("[Runtime] Legacy auth successful");
                 manager.set_legacy_auth(true, Some(session.user_id)).await;
                 let _ = app.emit(
                     "runtime:event",
@@ -665,10 +659,7 @@ pub async fn runtime_bootstrap(
         let client = app_state.client.read().await;
         match client.login_with_token(&oauth_token).await {
             Ok(session) => {
-                log::info!(
-                    "[Runtime] OAuth token re-auth successful for user {}",
-                    session.user_id
-                );
+                log::info!("[Runtime] OAuth token re-auth successful");
                 manager.set_legacy_auth(true, Some(session.user_id)).await;
                 let _ = app.emit(
                     "runtime:event",
@@ -928,7 +919,7 @@ pub async fn v2_auto_login(
     };
     drop(client);
 
-    log::info!("[V2] Legacy auth successful for user {}", session.user_id);
+    log::info!("[V2] Legacy auth successful");
     manager.set_legacy_auth(true, Some(session.user_id)).await;
     let _ = app.emit(
         "runtime:event",
@@ -1067,7 +1058,7 @@ pub async fn v2_manual_login(
     };
     drop(client);
 
-    log::info!("[V2] Legacy auth successful for user {}", session.user_id);
+    log::info!("[V2] Legacy auth successful");
     manager.set_legacy_auth(true, Some(session.user_id)).await;
     let _ = app.emit(
         "runtime:event",
@@ -1368,7 +1359,7 @@ pub async fn v2_start_oauth_login(
         }
     };
 
-    log::info!("[V2] OAuth session established for user {}", session.user_id);
+    log::info!("[V2] OAuth session established");
     manager.set_legacy_auth(true, Some(session.user_id)).await;
     let _ = app.emit(
         "runtime:event",
@@ -1688,10 +1679,7 @@ pub async fn v2_login(
             .map_err(|e| RuntimeError::Internal(e.to_string()))?
     };
     manager.set_legacy_auth(true, Some(session.user_id)).await;
-    log::info!(
-        "[v2_login] Legacy auth successful for user {}",
-        session.user_id
-    );
+    log::info!("[v2_login] Legacy auth successful");
 
     // Step 2: CoreBridge auth
     let bridge_guard = bridge.get().await;
@@ -1709,7 +1697,7 @@ pub async fn v2_login(
         rollback_auth_state(&manager, &app).await;
         return Err(RuntimeError::Internal(e));
     }
-    log::info!("[v2_login] Session activated for user {}", session.user_id);
+    log::info!("[v2_login] Session activated");
 
     // Persist ToS acceptance now that login succeeded.
     accept_tos_best_effort(&legal_state);

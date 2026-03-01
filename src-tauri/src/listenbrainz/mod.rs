@@ -73,7 +73,7 @@ impl ListenBrainzSharedState {
         let client = ListenBrainzClient::with_config(config);
 
         if token.is_some() && user_name.is_some() {
-            log::info!("ListenBrainz: restored session for user {:?}", user_name);
+            log::info!("ListenBrainz: restored session from persisted credentials");
         }
 
         Ok(Self {
@@ -115,7 +115,7 @@ impl ListenBrainzSharedState {
             let client = self.client.lock().await;
             client.set_enabled(enabled).await;
             if let (Some(tok), Some(uname)) = (token, user_name) {
-                log::info!("ListenBrainz: restoring session for user {:?}", uname);
+                log::info!("ListenBrainz: restoring persisted session");
                 client.restore_token(tok, uname).await;
             }
         }

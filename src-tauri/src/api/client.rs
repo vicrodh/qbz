@@ -267,7 +267,7 @@ impl QobuzClient {
                 let login_json: Value = login_resp.json().await?;
                 let session = parse_login_response(&login_json)?;
                 *self.session.write().await = Some(session.clone());
-                log::info!("[OAuth] Session established for user {}", session.user_id);
+                log::info!("[OAuth] Session established");
                 Ok(session)
             }
             StatusCode::UNAUTHORIZED => Err(ApiError::AuthenticationError(
@@ -324,7 +324,7 @@ impl QobuzClient {
                 let json: Value = resp.json().await?;
                 let session = parse_login_response(&json)?;
                 *self.session.write().await = Some(session.clone());
-                log::info!("[OAuth] Session restored for user {}", session.user_id);
+                log::info!("[OAuth] Session restored");
                 Ok(session)
             }
             StatusCode::UNAUTHORIZED => Err(ApiError::AuthenticationError(
@@ -350,7 +350,8 @@ impl QobuzClient {
 
     /// Get current user ID
     pub async fn get_user_id(&self) -> Option<u64> {
-        self.session.read().await.as_ref().map(|s| s.user_id)
+        let session = self.session.read().await;
+        session.as_ref().map(|entry| entry.user_id)
     }
 
     /// Get user auth token header value (public for catalog search)
@@ -1902,11 +1903,8 @@ impl QobuzClient {
             match self.get_stream_url(track_id, *quality).await {
                 Ok(url) if !url.has_restrictions() => {
                     log::info!(
-                        "Got stream URL - requested format_id={}, got format_id={}, sample_rate={}Hz, bit_depth={:?}",
-                        quality.id(),
-                        url.format_id,
-                        url.sampling_rate,
-                        url.bit_depth
+                        "Got stream URL for requested quality format_id={}",
+                        quality.id()
                     );
                     return Ok(url);
                 }
