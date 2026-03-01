@@ -380,16 +380,22 @@ impl AudioBackend for PipeWireBackend {
             .output_devices()
             .map_err(|e| format!("Failed to enumerate CPAL devices: {}", e))?
             .find(|d| {
-                d.name()
+                d.description()
                     .ok()
-                    .map(|n| n == "pulse" || n == "pipewire")
+                    .map(|desc| {
+                        let device_name = desc.name();
+                        device_name == "pulse" || device_name == "pipewire"
+                    })
                     .unwrap_or(false)
             })
             .ok_or_else(|| {
                 "Could not find 'pulse' or 'pipewire' CPAL device. Is PulseAudio/PipeWire running?".to_string()
             })?;
 
-        let device_name = device.name().unwrap_or_else(|_| "unknown".to_string());
+        let device_name = device
+            .description()
+            .map(|desc| desc.name().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
         log::info!("[PipeWire Backend] Using CPAL device: {}", device_name);
 
         // Create output stream with custom sample rate configuration

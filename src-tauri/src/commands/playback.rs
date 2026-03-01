@@ -1234,16 +1234,27 @@ fn get_pipewire_device_descriptions() -> std::collections::HashMap<String, Strin
     std::collections::HashMap::new()
 }
 
+fn cpal_device_name(device: &rodio::cpal::Device) -> Option<String> {
+    use rodio::cpal::traits::DeviceTrait;
+
+    device
+        .description()
+        .ok()
+        .map(|description| description.name().to_string())
+}
+
 /// Get available audio output devices
 #[tauri::command]
 pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
     log::info!("Command: get_audio_devices");
 
-    use rodio::cpal::traits::{DeviceTrait, HostTrait};
+    use rodio::cpal::traits::HostTrait;
 
     let host = rodio::cpal::default_host();
 
-    let default_device_name = host.default_output_device().and_then(|d| d.name().ok());
+    let default_device_name = host
+        .default_output_device()
+        .and_then(|d| cpal_device_name(&d));
 
     // Get friendly names from PipeWire/PulseAudio
     let friendly_names = get_pipewire_device_descriptions();
@@ -1252,7 +1263,7 @@ pub fn get_audio_devices() -> Result<Vec<AudioDevice>, String> {
         .output_devices()
         .map_err(|e| format!("Failed to enumerate devices: {}", e))?
         .filter_map(|device| {
-            device.name().ok().map(|name| {
+            cpal_device_name(&device).map(|name| {
                 let is_default = default_device_name
                     .as_ref()
                     .map(|d| d == &name)
@@ -1376,7 +1387,9 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
     let host = rodio::cpal::default_host();
 
     // Get default device name from CPAL
-    let default_device_name = host.default_output_device().and_then(|d| d.name().ok());
+    let default_device_name = host
+        .default_output_device()
+        .and_then(|d| cpal_device_name(&d));
 
     log::info!("CPAL default device: {:?}", default_device_name);
 
@@ -1386,48 +1399,48 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
         .map_err(|e| format!("Failed to enumerate devices: {}", e))?
         .enumerate()
         .filter_map(|(idx, device)| {
-            match device.name() {
-                Ok(name) => {
-                    let is_default = default_device_name
-                        .as_ref()
-                        .map(|d| d == &name)
-                        .unwrap_or(false);
-
-                    // Get detailed device info for logging
-                    let configs_info = device
-                        .supported_output_configs()
-                        .ok()
-                        .map(|configs| {
-                            let config_strs: Vec<String> = configs
-                                .take(3) // Just first 3 configs for brevity
-                                .map(|c| format!("{}ch/{}Hz", c.channels(), c.max_sample_rate()))
-                                .collect();
-                            config_strs.join(", ")
-                        })
-                        .unwrap_or_else(|| "no configs".to_string());
-
-                    log::info!(
-                        "  [{}] Device: '{}' (default: {}) - Configs: {}",
-                        idx,
-                        name,
-                        is_default,
-                        configs_info
-                    );
-
-                    // CRITICAL: Use CPAL device name as both name and description
-                    // This ensures the name we save is the exact name CPAL can find later
-                    Some(PipewireSink {
-                        name: name.clone(),
-                        description: name, // CPAL names are already user-friendly in PipeWire
-                        volume: None,      // Volume not available via CPAL
-                        is_default,
-                    })
+            let name = match cpal_device_name(&device) {
+                Some(name) => name,
+                None => {
+                    log::warn!("  [{}] Failed to get device description", idx);
+                    return None;
                 }
-                Err(e) => {
-                    log::warn!("  [{}] Failed to get device name: {}", idx, e);
-                    None
-                }
-            }
+            };
+
+            let is_default = default_device_name
+                .as_ref()
+                .map(|d| d == &name)
+                .unwrap_or(false);
+
+            // Get detailed device info for logging
+            let configs_info = device
+                .supported_output_configs()
+                .ok()
+                .map(|configs| {
+                    let config_strs: Vec<String> = configs
+                        .take(3) // Just first 3 configs for brevity
+                        .map(|c| format!("{}ch/{}Hz", c.channels(), c.max_sample_rate()))
+                        .collect();
+                    config_strs.join(", ")
+                })
+                .unwrap_or_else(|| "no configs".to_string());
+
+            log::info!(
+                "  [{}] Device: '{}' (default: {}) - Configs: {}",
+                idx,
+                name,
+                is_default,
+                configs_info
+            );
+
+            // CRITICAL: Use CPAL device name as both name and description
+            // This ensures the name we save is the exact name CPAL can find later
+            Some(PipewireSink {
+                name: name.clone(),
+                description: name, // CPAL names are already user-friendly in PipeWire
+                volume: None,      // Volume not available via CPAL
+                is_default,
+            })
         })
         .collect();
 
@@ -1443,17 +1456,19 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
 pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
     log::info!("Command: get_pipewire_sinks (non-Linux, using cpal)");
 
-    use rodio::cpal::traits::{DeviceTrait, HostTrait};
+    use rodio::cpal::traits::HostTrait;
 
     let host = rodio::cpal::default_host();
 
-    let default_device_name = host.default_output_device().and_then(|d| d.name().ok());
+    let default_device_name = host
+        .default_output_device()
+        .and_then(|d| cpal_device_name(&d));
 
     let sinks: Vec<PipewireSink> = host
         .output_devices()
         .map_err(|e| format!("Failed to enumerate devices: {}", e))?
         .filter_map(|device| {
-            device.name().ok().map(|name| {
+            cpal_device_name(&device).map(|name| {
                 let is_default = default_device_name
                     .as_ref()
                     .map(|d| d == &name)
@@ -1506,7 +1521,7 @@ pub fn set_pipewire_default_sink(_sink_name: String) -> Result<(), String> {
 /// DEBUG: Get CPAL device names for comparison with PipeWire sinks
 #[tauri::command]
 pub fn debug_get_cpal_devices() -> Result<Vec<String>, String> {
-    use rodio::cpal::traits::{DeviceTrait, HostTrait};
+    use rodio::cpal::traits::HostTrait;
 
     log::info!("Command: debug_get_cpal_devices");
 
@@ -1515,7 +1530,7 @@ pub fn debug_get_cpal_devices() -> Result<Vec<String>, String> {
     let devices: Vec<String> = host
         .output_devices()
         .map_err(|e| format!("Failed to enumerate devices: {}", e))?
-        .filter_map(|device| device.name().ok())
+        .filter_map(|device| cpal_device_name(&device))
         .collect();
 
     log::info!("CPAL devices: {:?}", devices);

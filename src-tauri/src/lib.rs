@@ -37,6 +37,7 @@ pub mod network;
 pub mod offline;
 pub mod offline_cache;
 pub mod playback_context;
+#[allow(deprecated)]
 pub mod player;
 pub mod playlist_import;
 pub mod plex;

@@ -135,6 +135,13 @@ struct AudioSpecs {
     channels: u16,
 }
 
+fn cpal_device_name(device: &rodio::cpal::Device) -> Option<String> {
+    device
+        .description()
+        .ok()
+        .map(|description| description.name().to_string())
+}
+
 fn decode_with_symphonia(data: &[u8]) -> Result<AudioSpecs, String> {
     let source = Box::new(CursorMediaSource::new(data.to_vec())) as Box<dyn MediaSource>;
     let mss = MediaSourceStream::new(source, Default::default());
@@ -867,7 +874,7 @@ impl Player {
                     let found = host.output_devices()
                         .ok()
                         .and_then(|mut devices| {
-                            devices.find(|d| d.name().ok().as_ref() == Some(name))
+                            devices.find(|d| cpal_device_name(d).as_deref() == Some(name.as_str()))
                         });
 
                     match found {
@@ -891,7 +898,7 @@ impl Player {
 
                 let device = match device {
                     Some(d) => {
-                        if let Ok(name) = d.name() {
+                        if let Some(name) = cpal_device_name(&d) {
                             log::info!("Using audio device: {}", name);
                             state.set_current_device(Some(name));
                         }
@@ -1061,7 +1068,7 @@ impl Player {
                                             let found = host.output_devices()
                                                 .ok()
                                                 .and_then(|mut devices| {
-                                                    devices.find(|d| d.name().ok().as_ref() == Some(name))
+                                                    devices.find(|d| cpal_device_name(d).as_deref() == Some(name.as_str()))
                                                 });
 
                                             match found {
@@ -1091,7 +1098,7 @@ impl Player {
                                         };
 
                                         // Set current device name
-                                        if let Ok(name) = device.name() {
+                                        if let Some(name) = cpal_device_name(&device) {
                                             log::info!("Using audio device: {}", name);
                                             thread_state.set_current_device(Some(name));
                                         }
@@ -1111,7 +1118,7 @@ impl Player {
                                     host.output_devices()
                                         .ok()
                                         .and_then(|mut devices| {
-                                            devices.find(|d| d.name().ok().as_ref() == Some(name))
+                                            devices.find(|d| cpal_device_name(d).as_deref() == Some(name.as_str()))
                                         })
                                         .or_else(|| {
                                             log::warn!("Device '{}' not found, using default", name);
@@ -1128,7 +1135,7 @@ impl Player {
                                     return;
                                 };
 
-                                if let Ok(name) = device.name() {
+                                if let Some(name) = cpal_device_name(&device) {
                                     thread_state.set_current_device(Some(name));
                                 }
 
@@ -1405,7 +1412,7 @@ impl Player {
                                             host.output_devices()
                                                 .ok()
                                                 .and_then(|mut devices| {
-                                                    devices.find(|d| d.name().ok().as_ref() == Some(name))
+                                                    devices.find(|d| cpal_device_name(d).as_deref() == Some(name.as_str()))
                                                 })
                                                 .or_else(|| host.default_output_device())
                                         } else {
@@ -1418,7 +1425,7 @@ impl Player {
                                             return;
                                         };
 
-                                        if let Ok(name) = device.name() {
+                                        if let Some(name) = cpal_device_name(&device) {
                                             thread_state.set_current_device(Some(name));
                                         }
 

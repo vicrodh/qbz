@@ -480,8 +480,8 @@ impl AlsaBackend {
 
         if let Ok(output_devices) = self.host.output_devices() {
             for device in output_devices {
-                if let Ok(name) = device.name() {
-                    map.insert(name, device);
+                if let Ok(description) = device.description() {
+                    map.insert(description.name().to_string(), device);
                 }
             }
         }
@@ -815,9 +815,9 @@ impl AudioBackend for AlsaBackend {
                 .output_devices()
                 .map_err(|e| format!("Failed to enumerate devices: {}", e))?
                 .find(|d| {
-                    d.name()
+                    d.description()
                         .ok()
-                        .map(|n| n == *device_id)
+                        .map(|desc| desc.name() == device_id.as_str())
                         .unwrap_or(false)
                 })
                 .ok_or_else(|| format!("Device '{}' not found", device_id))?
@@ -828,7 +828,10 @@ impl AudioBackend for AlsaBackend {
                 .ok_or("No default ALSA device available")?
         };
 
-        let device_name = device.name().unwrap_or_else(|_| "unknown".to_string());
+        let device_name = device
+            .description()
+            .map(|desc| desc.name().to_string())
+            .unwrap_or_else(|_| "unknown".to_string());
         log::info!("[ALSA Backend] Using device: {}", device_name);
 
         // Check if device supports this configuration
