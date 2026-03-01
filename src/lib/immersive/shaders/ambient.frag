@@ -66,32 +66,32 @@ void main() {
     // All parameters are decorrelated for organic feel
 
     // FAR LAYER: Background, slowest movement
-    float farScaleBase = 0.7;
-    float farScaleBreath = farScaleBase + sin(time * 0.1) * 0.05 * intensity;
-    float farRotation = sin(time * 0.05) * 0.03 * intensity; // ~1.7° max
+    float farScaleBase = 0.8;
+    float farScaleBreath = farScaleBase + sin(time * 0.1) * 0.03 * intensity;
+    float farRotation = sin(time * 0.05) * 0.02 * intensity;
     vec2 farOffset = vec2(
-        sin(time * 0.08) * 0.20,
-        cos(time * 0.06) * 0.15
+        sin(time * 0.08) * 0.08,
+        cos(time * 0.06) * 0.06
     ) * intensity;
     vec3 farLayer = sampleLayer(uv, farOffset, farScaleBreath, farRotation);
 
     // MID LAYER: Middle ground, medium movement
     float midScaleBase = 0.9;
-    float midScaleBreath = midScaleBase + sin(time * 0.15 + 1.0) * 0.04 * intensity;
-    float midRotation = sin(time * 0.08 + 2.0) * 0.025 * intensity; // ~1.4° max
+    float midScaleBreath = midScaleBase + sin(time * 0.15 + 1.0) * 0.03 * intensity;
+    float midRotation = sin(time * 0.08 + 2.0) * 0.015 * intensity;
     vec2 midOffset = vec2(
-        cos(time * 0.12 + 2.0) * 0.14,
-        sin(time * 0.10 + 1.0) * 0.12
+        cos(time * 0.12 + 2.0) * 0.06,
+        sin(time * 0.10 + 1.0) * 0.05
     ) * intensity;
     vec3 midLayer = sampleLayer(uv, midOffset, midScaleBreath, midRotation);
 
     // NEAR LAYER: Foreground, fastest movement
-    float nearScaleBase = 1.3;
-    float nearScaleBreath = nearScaleBase + sin(time * 0.2 + 2.5) * 0.06 * intensity;
-    float nearRotation = sin(time * 0.12 + 4.0) * 0.02 * intensity; // ~1.1° max
+    float nearScaleBase = 1.15;
+    float nearScaleBreath = nearScaleBase + sin(time * 0.2 + 2.5) * 0.04 * intensity;
+    float nearRotation = sin(time * 0.12 + 4.0) * 0.015 * intensity;
     vec2 nearOffset = vec2(
-        sin(time * 0.18 + 3.5) * 0.08,
-        cos(time * 0.15 + 2.5) * 0.07
+        sin(time * 0.18 + 3.5) * 0.04,
+        cos(time * 0.15 + 2.5) * 0.03
     ) * intensity;
     vec3 nearLayer = sampleLayer(uv, nearOffset, nearScaleBreath, nearRotation);
 

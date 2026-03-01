@@ -162,18 +162,20 @@ function applyColorAdjustments(
   const ctx = canvas.getContext('2d');
   if (!ctx) return sourceCanvas;
 
-  // First pass: strong saturation boost, moderate brightness
-  ctx.filter = 'saturate(2.5) brightness(0.85) contrast(1.1)';
+  // First pass: saturation boost, moderate brightness
+  ctx.filter = 'saturate(2.0) brightness(0.85) contrast(1.1)';
   ctx.drawImage(sourceCanvas, 0, 0);
 
-  // Second pass: normalize color range and lift shadows
+  // Second pass: brightness-aware normalization
+  // Dark artwork stays dark (preserves mood), colorful artwork gets full expansion
   const imageData = ctx.getImageData(0, 0, size, size);
   const data = imageData.data;
 
-  // Find actual min/max for each channel to normalize
+  // Measure source: per-channel range + average brightness
   let minR = 255, maxR = 0;
   let minG = 255, maxG = 0;
   let minB = 255, maxB = 0;
+  let totalBrightness = 0;
 
   for (let i = 0; i < data.length; i += 4) {
     minR = Math.min(minR, data[i]);
@@ -182,26 +184,46 @@ function applyColorAdjustments(
     maxG = Math.max(maxG, data[i + 1]);
     minB = Math.min(minB, data[i + 2]);
     maxB = Math.max(maxB, data[i + 2]);
+    totalBrightness += (data[i] + data[i + 1] + data[i + 2]) / 3;
   }
 
-  // Target range: 30-240 (preserve some headroom, lift shadows)
+  const pixelCount = size * size;
+  const avgBrightness = totalBrightness / pixelCount;
+
+  // Normalization strength scales with source brightness:
+  // Very dark (avg < 20): ~0.15 strength (mostly gentle lift, preserve darkness)
+  // Medium (avg ~80): ~1.0 strength (full normalization)
+  // Already bright: 1.0 (full normalization)
+  const normStrength = Math.min(1.0, avgBrightness / 80);
+
   const targetMin = 30;
   const targetMax = 240;
   const targetRange = targetMax - targetMin;
-
-  // Calculate normalization factors per channel
   const rangeR = maxR - minR || 1;
   const rangeG = maxG - minG || 1;
   const rangeB = maxB - minB || 1;
 
+  // Gentle lift factor for dark artwork (1.5x brightness)
+  const liftFactor = 1.5;
+
   for (let i = 0; i < data.length; i += 4) {
-    // Normalize each channel to target range
-    data[i] = targetMin + ((data[i] - minR) / rangeR) * targetRange;
-    data[i + 1] = targetMin + ((data[i + 1] - minG) / rangeG) * targetRange;
-    data[i + 2] = targetMin + ((data[i + 2] - minB) / rangeB) * targetRange;
+    // Full normalization target
+    const normR = targetMin + ((data[i] - minR) / rangeR) * targetRange;
+    const normG = targetMin + ((data[i + 1] - minG) / rangeG) * targetRange;
+    const normB = targetMin + ((data[i + 2] - minB) / rangeB) * targetRange;
+
+    // Gentle lift target (preserves relative color, just brighter)
+    const liftR = Math.min(255, data[i] * liftFactor);
+    const liftG = Math.min(255, data[i + 1] * liftFactor);
+    const liftB = Math.min(255, data[i + 2] * liftFactor);
+
+    // Blend: dark artwork → mostly lift, bright artwork → full normalization
+    data[i] = liftR + (normR - liftR) * normStrength;
+    data[i + 1] = liftG + (normG - liftG) * normStrength;
+    data[i + 2] = liftB + (normB - liftB) * normStrength;
 
     // Boost reds slightly for warmth
-    data[i] = Math.min(255, data[i] * 1.12);
+    data[i] = Math.min(255, data[i] * 1.08);
   }
 
   ctx.putImageData(imageData, 0, 0);
