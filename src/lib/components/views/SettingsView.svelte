@@ -3450,8 +3450,29 @@
     }
   }
 
-  async function handleGskRendererChange() {
-    const value = gskRenderer || null;
+  const GSK_RENDERER_KEYS = ['', 'gl', 'ngl', 'vulkan', 'cairo'] as const;
+
+  function getGskRendererOptions(): string[] {
+    return GSK_RENDERER_KEYS.map(key => {
+      if (key === '') return $t('settings.appearance.composition.gskRendererAuto');
+      if (key === 'cairo') return $t('settings.appearance.composition.gskRendererCairo');
+      return key.toUpperCase();
+    });
+  }
+
+  function getGskRendererDisplayValue(): string {
+    if (!gskRenderer) return $t('settings.appearance.composition.gskRendererAuto');
+    if (gskRenderer === 'cairo') return $t('settings.appearance.composition.gskRendererCairo');
+    return gskRenderer.toUpperCase();
+  }
+
+  async function handleGskRendererChange(displayValue: string) {
+    const options = getGskRendererOptions();
+    const index = options.indexOf(displayValue);
+    if (index < 0) return;
+    const key = GSK_RENDERER_KEYS[index];
+    gskRenderer = key;
+    const value = key || null;
     try {
       await invoke('v2_set_gsk_renderer', { value });
       showToast($t('settings.developer.restartRequired'), 'info');
@@ -4193,13 +4214,15 @@
     </div>
     <div class="collapsible-section composition-subsection">
       <button class="section-title-btn" onclick={() => immersiveFpsCollapsed = !immersiveFpsCollapsed}>
-        <span class="section-title composition-title">{$t('settings.appearance.immersiveFps.title')}</span>
+        <div class="section-title-row">
+          <span class="section-title composition-title">{$t('settings.appearance.immersiveFps.title')}</span>
+          {#if immersiveFpsCollapsed}
+            <ChevronDown size={16} />
+          {:else}
+            <ChevronUp size={16} />
+          {/if}
+        </div>
         <span class="section-summary">{$t('settings.appearance.immersiveFps.summary')}</span>
-        {#if immersiveFpsCollapsed}
-          <ChevronDown size={16} />
-        {:else}
-          <ChevronUp size={16} />
-        {/if}
       </button>
       {#if !immersiveFpsCollapsed}
         <p class="section-note">{$t('settings.appearance.immersiveFps.desc')}</p>
@@ -4215,6 +4238,7 @@
         {/each}
       {/if}
     </div>
+    <div class="settings-divider"></div>
     <div class="setting-row">
       <span class="setting-label">{$t('settings.appearance.miniplayerDefaultView')}</span>
       <Dropdown
@@ -4246,13 +4270,15 @@
     <!-- Composition subsection (collapsible) -->
     <div class="collapsible-section composition-subsection">
       <button class="section-title-btn" onclick={() => compositionCollapsed = !compositionCollapsed}>
-        <span class="section-title composition-title">{$t('settings.appearance.composition.title')}</span>
+        <div class="section-title-row">
+          <span class="section-title composition-title">{$t('settings.appearance.composition.title')}</span>
+          {#if compositionCollapsed}
+            <ChevronDown size={16} />
+          {:else}
+            <ChevronUp size={16} />
+          {/if}
+        </div>
         <span class="section-summary">{$t('settings.appearance.composition.summary')}</span>
-        {#if compositionCollapsed}
-          <ChevronDown size={16} />
-        {:else}
-          <ChevronUp size={16} />
-        {/if}
       </button>
       {#if !compositionCollapsed}
         <p class="section-note">{$t('settings.appearance.composition.helpText')}</p>
@@ -4353,17 +4379,11 @@
             <span class="setting-label">{$t('settings.appearance.composition.gskRenderer')}</span>
             <span class="setting-desc">{$t('settings.appearance.composition.gskRendererDesc')}</span>
           </div>
-          <select
-            class="composition-input composition-select"
-            bind:value={gskRenderer}
+          <Dropdown
+            value={getGskRendererDisplayValue()}
+            options={getGskRendererOptions()}
             onchange={handleGskRendererChange}
-          >
-            <option value="">{$t('settings.appearance.composition.gskRendererAuto')}</option>
-            <option value="gl">GL</option>
-            <option value="ngl">NGL</option>
-            <option value="vulkan">Vulkan</option>
-            <option value="cairo">{$t('settings.appearance.composition.gskRendererCairo')}</option>
-          </select>
+          />
         </div>
 
         <div class="composition-env-section">
@@ -5826,8 +5846,9 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   /* Collapsible sections */
   .collapsible-section .section-title-btn {
     display: flex;
-    align-items: baseline;
-    gap: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
     width: 100%;
     padding: 0;
     margin-bottom: 8px;
@@ -5837,19 +5858,22 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     color: var(--text-muted);
   }
 
+  .collapsible-section .section-title-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+  }
+
   .collapsible-section .section-title-btn .section-title {
     margin-bottom: 0;
     flex-shrink: 0;
   }
 
   .section-summary {
-    flex: 1;
     font-size: 12px;
     color: var(--text-muted);
     text-align: left;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
   }
 
   .collapsible-section .section-title-btn :global(svg) {
@@ -5865,6 +5889,11 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   .collapsible-section .section-title-btn .experimental-badge {
     flex-shrink: 0;
     margin-left: -4px;
+  }
+
+  .settings-divider {
+    border-top: 1px solid var(--border-color);
+    margin: 8px 0;
   }
 
   /* Composition subsection (inside Appearance) */
@@ -5993,13 +6022,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     color: var(--text-primary);
     font-size: 12px;
     text-align: center;
-  }
-
-  .composition-select {
-    width: 120px;
-    text-align: left;
-    cursor: pointer;
-    appearance: auto;
   }
 
   .composition-env-section {
