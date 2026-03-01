@@ -24,6 +24,7 @@ const FALLBACK_FILE_NAME: &str = ".qbz-auth";
 const LEGACY_FALLBACK_FILE_NAME: &str = ".qbz-auth.legacy";
 const OAUTH_TOKEN_FILE_NAME: &str = ".qbz-oauth-token";
 const INSTALLATION_SALT_FILE_NAME: &str = ".qbz-cred-salt";
+const MACHINE_ID_FALLBACK_FILE_NAME: &str = ".qbz-machine-id";
 
 // Legacy XOR key for migration (only used for reading old format)
 const LEGACY_OBFUSCATION_KEY: &[u8] = b"QbzNixAudiophile2024";
@@ -60,6 +61,11 @@ fn get_installation_salt_path() -> Option<PathBuf> {
     dirs::config_dir().map(|p| p.join("qbz").join(INSTALLATION_SALT_FILE_NAME))
 }
 
+/// Get path for persistent fallback machine identifier.
+fn get_machine_id_fallback_path() -> Option<PathBuf> {
+    dirs::config_dir().map(|p| p.join("qbz").join(MACHINE_ID_FALLBACK_FILE_NAME))
+}
+
 /// Load a persistent installation salt, or create one on first use.
 fn load_or_create_installation_salt() -> Result<Vec<u8>, String> {
     let path =
@@ -78,7 +84,8 @@ fn load_or_create_installation_salt() -> Result<Vec<u8>, String> {
     }
 
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("Failed to create salt directory: {}", e))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create salt directory: {}", e))?;
     }
 
     let mut salt = [0u8; 32];
@@ -89,30 +96,67 @@ fn load_or_create_installation_salt() -> Result<Vec<u8>, String> {
     Ok(salt.to_vec())
 }
 
+/// Load a persistent machine identifier fallback, or create one on first use.
+fn load_or_create_machine_id_fallback() -> Result<Vec<u8>, String> {
+    let path = get_machine_id_fallback_path()
+        .ok_or("Could not determine config directory for machine fallback id")?;
+
+    if path.exists() {
+        let encoded = fs::read_to_string(&path)
+            .map_err(|e| format!("Failed to read machine fallback id: {}", e))?;
+        let decoded = BASE64
+            .decode(encoded.trim())
+            .map_err(|e| format!("Failed to decode machine fallback id: {}", e))?;
+        if decoded.len() != 32 {
+            return Err("Invalid machine fallback id length".to_string());
+        }
+        return Ok(decoded);
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create machine fallback directory: {}", e))?;
+    }
+
+    let mut machine_fallback = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut machine_fallback);
+    fs::write(&path, BASE64.encode(machine_fallback))
+        .map_err(|e| format!("Failed to write machine fallback id: {}", e))?;
+
+    Ok(machine_fallback.to_vec())
+}
+
 /// Get machine-specific identifier for key derivation
-fn get_machine_id() -> Vec<u8> {
+fn get_machine_id() -> Result<Vec<u8>, String> {
     // Try /etc/machine-id first (Linux)
     if let Ok(id) = fs::read_to_string("/etc/machine-id") {
-        return id.trim().as_bytes().to_vec();
+        let trimmed = id.trim();
+        if !trimmed.is_empty() {
+            return Ok(trimmed.as_bytes().to_vec());
+        }
     }
 
     // Fallback to hostname
     if let Ok(hostname) = std::env::var("HOSTNAME") {
-        return hostname.as_bytes().to_vec();
+        if !hostname.trim().is_empty() {
+            return Ok(hostname.as_bytes().to_vec());
+        }
     }
 
     // Last resort: use username
     if let Ok(user) = std::env::var("USER") {
-        return user.as_bytes().to_vec();
+        if !user.trim().is_empty() {
+            return Ok(user.as_bytes().to_vec());
+        }
     }
 
-    // Ultimate fallback (not great but better than nothing)
-    b"qbz-default-machine".to_vec()
+    // Persisted random fallback for environments without stable machine/user IDs.
+    load_or_create_machine_id_fallback()
 }
 
 /// Derive encryption key from machine ID
 fn derive_key() -> Result<[u8; 32], String> {
-    let machine_id = get_machine_id();
+    let machine_id = get_machine_id()?;
     let installation_salt = load_or_create_installation_salt()?;
 
     let mut hasher = Sha256::new();
@@ -133,8 +177,9 @@ fn encrypt_credentials(credentials: &QobuzCredentials) -> Result<String, String>
         Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
 
     // Generate random nonce
-    let nonce_bytes: [u8; 12] =
-        aes_gcm::aead::generic_array::GenericArray::from(rand::random::<[u8; 12]>()).into();
+    let mut nonce_raw = [0u8; 12];
+    rand::rngs::OsRng.fill_bytes(&mut nonce_raw);
+    let nonce_bytes: [u8; 12] = aes_gcm::aead::generic_array::GenericArray::from(nonce_raw).into();
     let nonce = Nonce::from_slice(&nonce_bytes);
 
     let json = serde_json::to_string(credentials)
@@ -481,8 +526,7 @@ pub fn save_oauth_token(token: &str) -> Result<(), String> {
         password: String::new(),
     };
     let encrypted = encrypt_credentials(&placeholder)?;
-    fs::write(&path, encrypted)
-        .map_err(|e| format!("Failed to write OAuth token file: {}", e))?;
+    fs::write(&path, encrypted).map_err(|e| format!("Failed to write OAuth token file: {}", e))?;
 
     log::info!("[Credentials] OAuth token saved");
     Ok(())
@@ -499,8 +543,8 @@ pub fn load_oauth_token() -> Result<Option<String>, String> {
         return Ok(None);
     }
 
-    let content = fs::read_to_string(&path)
-        .map_err(|e| format!("Failed to read OAuth token file: {}", e))?;
+    let content =
+        fs::read_to_string(&path).map_err(|e| format!("Failed to read OAuth token file: {}", e))?;
 
     match decrypt_credentials(&content) {
         Ok(placeholder) => {
@@ -534,7 +578,7 @@ mod tests {
     fn test_encryption_roundtrip() {
         let credentials = QobuzCredentials {
             email: "test@example.com".to_string(),
-            password: "testpass123".to_string(),
+            password: format!("test-pass-{}", std::process::id()),
         };
 
         let encrypted = encrypt_credentials(&credentials).expect("Encryption failed");
