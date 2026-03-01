@@ -36,8 +36,8 @@ where
     S: Source<Item = f32>,
 {
     pub fn new(source: S, gain_atomic: Arc<AtomicU32>, initial_gain: f32) -> Self {
-        let sample_rate = source.sample_rate();
-        let channels = source.channels() as u32;
+        let sample_rate = source.sample_rate().get();
+        let channels = source.channels().get() as u32;
         // 50ms ramp in total samples (all channels)
         let ramp_samples = (sample_rate * channels * 50) / 1000;
 
@@ -116,17 +116,17 @@ where
     S: Source<Item = f32>,
 {
     #[inline]
-    fn current_frame_len(&self) -> Option<usize> {
-        self.inner.current_frame_len()
+    fn current_span_len(&self) -> Option<usize> {
+        self.inner.current_span_len()
     }
 
     #[inline]
-    fn channels(&self) -> u16 {
+    fn channels(&self) -> std::num::NonZero<u16> {
         self.inner.channels()
     }
 
     #[inline]
-    fn sample_rate(&self) -> u32 {
+    fn sample_rate(&self) -> std::num::NonZero<u32> {
         self.inner.sample_rate()
     }
 

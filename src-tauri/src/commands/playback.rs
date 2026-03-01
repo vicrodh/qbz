@@ -771,7 +771,7 @@ fn extract_audio_format_from_header(data: &[u8]) -> Result<(u32, u16, u32), Stri
         Ok(decoder) => {
             use rodio::Source;
             // Assume 16-bit for rodio-decoded formats (MP3, etc.)
-            Ok((decoder.sample_rate(), decoder.channels(), 16))
+            Ok((decoder.sample_rate().get(), decoder.channels().get(), 16))
         }
         Err(_) => {
             // Default fallback
@@ -1400,7 +1400,7 @@ pub fn get_pipewire_sinks() -> Result<Vec<PipewireSink>, String> {
                         .map(|configs| {
                             let config_strs: Vec<String> = configs
                                 .take(3) // Just first 3 configs for brevity
-                                .map(|c| format!("{}ch/{}Hz", c.channels(), c.max_sample_rate().0))
+                                .map(|c| format!("{}ch/{}Hz", c.channels(), c.max_sample_rate()))
                                 .collect();
                             config_strs.join(", ")
                         })

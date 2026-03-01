@@ -331,6 +331,66 @@ fn remove_kwin_window_rule() {
     }
 }
 
+/// Get the primary screen resolution in logical pixels.
+/// Tries multiple methods: Wayland (wlr-randr, wayland-info), X11 (xdpyinfo).
+/// Returns (width, height) or None if detection fails.
+#[cfg(target_os = "linux")]
+fn get_screen_resolution() -> Option<(f64, f64)> {
+    use std::process::Command;
+
+    // Method 1: Try xdpyinfo (works on X11 and XWayland)
+    if let Ok(output) = Command::new("xdpyinfo").output() {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Look for "dimensions:    WIDTHxHEIGHT pixels"
+            for line in stdout.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("dimensions:") {
+                    // Parse "dimensions:    3840x2160 pixels (...)"
+                    if let Some(dims) = trimmed.split_whitespace().nth(1) {
+                        let parts: Vec<&str> = dims.split('x').collect();
+                        if parts.len() == 2 {
+                            if let (Ok(w), Ok(h)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
+                                log::info!("Screen resolution detected via xdpyinfo: {}x{}", w as u32, h as u32);
+                                return Some((w, h));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Method 2: Try xrandr (widely available)
+    if let Ok(output) = Command::new("xrandr").arg("--current").output() {
+        if output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            // Look for line with " connected " and a resolution like "2560x1440+0+0"
+            for line in stdout.lines() {
+                if line.contains(" connected ") {
+                    // Parse "DP-1 connected primary 2560x1440+0+0 ..."
+                    for token in line.split_whitespace() {
+                        if token.contains('x') && token.contains('+') {
+                            // "2560x1440+0+0"
+                            let res_part = token.split('+').next().unwrap_or("");
+                            let parts: Vec<&str> = res_part.split('x').collect();
+                            if parts.len() == 2 {
+                                if let (Ok(w), Ok(h)) = (parts[0].parse::<f64>(), parts[1].parse::<f64>()) {
+                                    log::info!("Screen resolution detected via xrandr: {}x{}", w as u32, h as u32);
+                                    return Some((w, h));
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    log::warn!("Could not detect screen resolution");
+    None
+}
+
 pub fn run() {
     // Load .env file if present (for development)
     // Silently ignore if not found (production builds use compile-time env vars)
@@ -388,7 +448,7 @@ pub fn run() {
                     .ok()
             });
         if let Some(settings) = user_settings {
-            log::info!("Loaded tray settings from last active user {}", last_uid);
+            log::info!("Loaded tray settings from last active user profile");
             settings
         } else {
             config::tray_settings::TraySettingsStore::new()
@@ -419,9 +479,33 @@ pub fn run() {
         window_settings.is_maximized,
     );
     let use_system_titlebar = window_settings.use_system_titlebar;
-    let saved_win_width = window_settings.window_width;
-    let saved_win_height = window_settings.window_height;
+    let mut saved_win_width = window_settings.window_width;
+    let mut saved_win_height = window_settings.window_height;
     let saved_win_maximized = window_settings.is_maximized;
+
+    // Safety: clamp window size to screen resolution.
+    // Prevents the window from opening larger than the display (issue #139).
+    // This also handles corrupt DB values that pass the 200..32767 validation
+    // but exceed the actual monitor dimensions.
+    #[cfg(target_os = "linux")]
+    {
+        // Read current screen resolution from xdpyinfo or Wayland
+        if let Some((screen_w, screen_h)) = get_screen_resolution() {
+            // Leave room for taskbar/panels (90% of screen)
+            let max_w = screen_w * 0.95;
+            let max_h = screen_h * 0.95;
+            if saved_win_width > max_w || saved_win_height > max_h {
+                log::warn!(
+                    "Window size {}x{} exceeds screen {}x{}, clamping to {}x{}",
+                    saved_win_width as u32, saved_win_height as u32,
+                    screen_w as u32, screen_h as u32,
+                    max_w as u32, max_h as u32
+                );
+                saved_win_width = saved_win_width.min(max_w);
+                saved_win_height = saved_win_height.min(max_h);
+            }
+        }
+    }
 
     // One-time cleanup: remove the KWin SSD window rule written by QBZ 1.1.14.
     // That version wrote a kwinrulesrc entry forcing server-side decorations; it
@@ -646,12 +730,14 @@ pub fn run() {
                             if size.width > 0 && size.height > 0 {
                                 let maximized = win_for_events.is_maximized().unwrap_or(false);
                                 if !maximized {
+                                    // Convert physical pixels to logical pixels
+                                    // inner_size() expects logical, Resized gives physical
+                                    let scale = win_for_events.scale_factor().unwrap_or(1.0);
+                                    let logical_w = size.width as f64 / scale;
+                                    let logical_h = size.height as f64 / scale;
                                     if let Ok(guard) = store.lock() {
                                         if let Some(s) = guard.as_ref() {
-                                            let _ = s.set_window_size(
-                                                size.width as f64,
-                                                size.height as f64,
-                                            );
+                                            let _ = s.set_window_size(logical_w, logical_h);
                                         }
                                     }
                                 }
@@ -907,9 +993,12 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(move |window, event| {
-            // Handle close to tray — read dynamically from state so per-user
-            // settings take effect after login without needing a restart.
+            // Only handle close-to-tray for the main window.
+            // Secondary windows (miniplayer, oauth) are managed elsewhere.
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                if window.label() != "main" {
+                    return;
+                }
                 let close_to_tray = window
                     .app_handle()
                     .try_state::<config::tray_settings::TraySettingsState>()
@@ -919,14 +1008,18 @@ pub fn run() {
                 if close_to_tray {
                     log::info!("Close to tray: hiding window instead of closing");
                     let _ = window.hide();
+                    // Also hide the miniplayer if open
+                    if let Some(mini) = window.app_handle().webview_windows().get("miniplayer") {
+                        let _ = mini.hide();
+                    }
                     api.prevent_close();
                 } else {
-                    // Close MiniPlayer window first so WebKit can clean up
-                    // its GPU/EGL resources gracefully before the process exits.
-                    if let Some(mini) = window.app_handle().webview_windows().get("miniplayer") {
-                        log::info!("App closing: destroying miniplayer window");
-                        let _ = mini.destroy();
-                    }
+                    let open_windows: Vec<String> =
+                        window.app_handle().webview_windows().keys().cloned().collect();
+                    log::info!(
+                        "App closing requested by user; open windows before exit: {:?}",
+                        open_windows
+                    );
 
                     // Cleanup cast devices on actual close
                     log::info!("App closing: cleaning up cast devices");
@@ -937,10 +1030,13 @@ pub fn run() {
                         let _ = cast_state.chromecast.disconnect();
                     }
 
-                    // Note: DLNA connection will be dropped when the app exits,
-                    // which will naturally close the connection. The tokio Mutex
-                    // prevents us from synchronously stopping playback here.
                     log::info!("DLNA connection will be cleaned up on drop");
+
+                    // Do not manually close secondary webview windows during teardown.
+                    // Trigger a single process-level exit and let Tauri/WebKit own
+                    // window destruction order to avoid WebKit EGL/TLS shutdown races.
+                    api.prevent_close();
+                    window.app_handle().exit(0);
                 }
             }
         })
@@ -1438,10 +1534,13 @@ pub fn run() {
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             if let tauri::RunEvent::Exit = event {
+                let open_windows: Vec<String> = app_handle.webview_windows().keys().cloned().collect();
+                log::info!("RunEvent::Exit — windows visible to app: {:?}", open_windows);
+
                 // Graceful shutdown: stop audio and visualizer BEFORE process
-                // teardown to prevent heap corruption (free(): corrupted unsorted
-                // chunks) caused by C libraries (ALSA/CPAL) being freed while
-                // their threads are still active.
+                // teardown. The stop() calls are fire-and-forget via channel,
+                // so we must wait for the audio threads to actually drop their
+                // CPAL streams.
                 log::info!("RunEvent::Exit — stopping audio and visualizer");
 
                 if let Some(state) = app_handle.try_state::<AppState>() {
@@ -1449,7 +1548,6 @@ pub fn run() {
                     let _ = state.player.stop();
                 }
 
-                // Also stop the V2 player (qbz-player crate)
                 if let Some(bridge_state) = app_handle.try_state::<core_bridge::CoreBridgeState>() {
                     if let Ok(guard) = bridge_state.0.try_read() {
                         if let Some(bridge) = guard.as_ref() {
@@ -1458,11 +1556,10 @@ pub fn run() {
                     }
                 }
 
-                // Destroy miniplayer window if it exists
-                if let Some(mini) = app_handle.webview_windows().get("miniplayer") {
-                    log::info!("Exit: destroying miniplayer window");
-                    let _ = mini.destroy();
-                }
+                // Wait for audio threads to process stop and drop CPAL streams.
+                // Without this, exit() can free heap while CPAL threads still run.
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                log::info!("RunEvent::Exit — shutdown complete");
             }
         });
 }

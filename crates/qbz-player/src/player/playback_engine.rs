@@ -7,7 +7,7 @@
 //! This abstraction allows the player to work with both approaches transparently.
 
 use qbz_audio::AlsaDirectStream;
-use rodio::{OutputStreamHandle, Sink, Source};
+use rodio::{mixer::Mixer, Player as RodioPlayer, Source};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -17,7 +17,7 @@ use std::time::Duration;
 pub enum PlaybackEngine {
     /// Rodio-based (PipeWire, Pulse, ALSA via CPAL)
     Rodio {
-        sink: Sink,
+        sink: RodioPlayer,
     },
     /// Direct ALSA (hw: devices, bit-perfect)
     AlsaDirect {
@@ -33,9 +33,8 @@ pub enum PlaybackEngine {
 
 impl PlaybackEngine {
     /// Create Rodio engine
-    pub fn new_rodio(stream_handle: &OutputStreamHandle) -> Result<Self, String> {
-        let sink = Sink::try_new(stream_handle)
-            .map_err(|e| format!("Failed to create Sink: {}", e))?;
+    pub fn new_rodio(mixer: &Mixer) -> Result<Self, String> {
+        let sink = RodioPlayer::connect_new(mixer);
 
         Ok(Self::Rodio { sink })
     }

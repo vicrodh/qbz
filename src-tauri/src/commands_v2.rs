@@ -248,6 +248,69 @@ fn limit_quality_for_device(quality: Quality, max_sample_rate: Option<u32>) -> Q
     }
 }
 
+/// Probe sample rate from FLAC audio data by reading the STREAMINFO header.
+/// Returns None for non-FLAC data or data too short to parse.
+fn probe_flac_sample_rate(data: &[u8]) -> Option<u32> {
+    // FLAC format: "fLaC" magic + metadata blocks
+    // First block is always STREAMINFO (34 bytes)
+    // Bytes 18-20 of STREAMINFO contain: sample_rate (20 bits) | channels (3 bits) | bps (5 bits) | ...
+    if data.len() < 22 || &data[0..4] != b"fLaC" {
+        return None;
+    }
+    let sr = ((data[18] as u32) << 12) | ((data[19] as u32) << 4) | ((data[20] as u32) >> 4);
+    if sr > 0 { Some(sr) } else { None }
+}
+
+/// Check if cached audio data has a sample rate that the current ALSA hardware
+/// doesn't support. Returns true if the audio should NOT be played from cache
+/// (needs re-fetch at lower quality).
+#[cfg(target_os = "linux")]
+fn cached_audio_incompatible_with_hw(
+    audio_data: &[u8],
+    audio_settings: &AudioSettingsState,
+) -> bool {
+    let sample_rate = match probe_flac_sample_rate(audio_data) {
+        Some(rate) => rate,
+        None => return false, // Can't determine format, assume compatible
+    };
+
+    let guard = match audio_settings.store.lock() {
+        Ok(g) => g,
+        Err(_) => return false,
+    };
+    let store = match guard.as_ref() {
+        Some(s) => s,
+        None => return false,
+    };
+    let settings = match store.get_settings() {
+        Ok(s) => s,
+        Err(_) => return false,
+    };
+
+    let is_alsa = matches!(
+        settings.backend_type,
+        Some(qbz_audio::AudioBackendType::Alsa)
+    );
+    if !is_alsa {
+        return false;
+    }
+
+    if let Some(ref device_id) = settings.output_device {
+        match qbz_audio::device_supports_sample_rate(device_id, sample_rate) {
+            Some(false) => {
+                log::info!(
+                    "[V2/Quality] Cached audio at {}Hz incompatible with hardware, will re-fetch at lower quality",
+                    sample_rate
+                );
+                true
+            }
+            _ => false,
+        }
+    } else {
+        false
+    }
+}
+
 /// Download audio from URL
 async fn download_audio(url: &str) -> Result<Vec<u8>, String> {
     use std::time::Duration;
@@ -474,23 +537,17 @@ pub async fn runtime_bootstrap(
     let last_user_id_hint = crate::user_data::UserDataPaths::load_last_user_id();
 
     if let Ok(Some(creds)) = creds {
-        if let Some(uid) = last_user_id_hint {
-            log::info!(
-                "[Runtime] Found saved credentials, attempting auto-login (user hint: {})",
-                uid
-            );
+        if last_user_id_hint.is_some() {
+            log::info!("[Runtime] Found saved credentials, attempting auto-login");
         } else {
-            log::info!("[Runtime] Found saved credentials, attempting auto-login (no user hint)");
+            log::info!("[Runtime] Found saved credentials, attempting auto-login (no hint)");
         }
 
         // Login to legacy client
         let client = app_state.client.read().await;
         match client.login(&creds.email, &creds.password).await {
             Ok(session) => {
-                log::info!(
-                    "[Runtime] Legacy auth successful for user {}",
-                    session.user_id
-                );
+                log::info!("[Runtime] Legacy auth successful");
                 manager.set_legacy_auth(true, Some(session.user_id)).await;
                 let _ = app.emit(
                     "runtime:event",
@@ -602,10 +659,7 @@ pub async fn runtime_bootstrap(
         let client = app_state.client.read().await;
         match client.login_with_token(&oauth_token).await {
             Ok(session) => {
-                log::info!(
-                    "[Runtime] OAuth token re-auth successful for user {}",
-                    session.user_id
-                );
+                log::info!("[Runtime] OAuth token re-auth successful");
                 manager.set_legacy_auth(true, Some(session.user_id)).await;
                 let _ = app.emit(
                     "runtime:event",
@@ -670,6 +724,31 @@ pub async fn runtime_bootstrap(
                         },
                     );
                     return Err(RuntimeError::RuntimeDegraded(reason));
+                }
+
+                // Sync audio settings after OAuth session activation.
+                // Same logic as email/password path — without this, backend_type
+                // stays None and the player falls back to legacy CPAL path.
+                let should_sync = audio_settings
+                    .store
+                    .lock()
+                    .ok()
+                    .and_then(|g| g.as_ref().and_then(|s| s.get_settings().ok()))
+                    .map(|s| s.sync_audio_on_startup)
+                    .unwrap_or(false);
+
+                if should_sync {
+                    if let Some(bridge) = core_bridge.try_get().await {
+                        let player = bridge.player();
+                        if let Ok(guard) = audio_settings.store.lock() {
+                            if let Some(store) = guard.as_ref() {
+                                if let Ok(fresh) = store.get_settings() {
+                                    log::info!("[Runtime] Syncing audio settings to player after OAuth login (sync_audio_on_startup=true)");
+                                    let _ = player.reload_settings(convert_to_qbz_audio_settings(&fresh));
+                                }
+                            }
+                        }
+                    }
                 }
             }
             Err(e) => {
@@ -840,7 +919,7 @@ pub async fn v2_auto_login(
     };
     drop(client);
 
-    log::info!("[V2] Legacy auth successful for user {}", session.user_id);
+    log::info!("[V2] Legacy auth successful");
     manager.set_legacy_auth(true, Some(session.user_id)).await;
     let _ = app.emit(
         "runtime:event",
@@ -979,7 +1058,7 @@ pub async fn v2_manual_login(
     };
     drop(client);
 
-    log::info!("[V2] Legacy auth successful for user {}", session.user_id);
+    log::info!("[V2] Legacy auth successful");
     manager.set_legacy_auth(true, Some(session.user_id)).await;
     let _ = app.emit(
         "runtime:event",
@@ -1280,7 +1359,7 @@ pub async fn v2_start_oauth_login(
         }
     };
 
-    log::info!("[V2] OAuth session established for user {}", session.user_id);
+    log::info!("[V2] OAuth session established");
     manager.set_legacy_auth(true, Some(session.user_id)).await;
     let _ = app.emit(
         "runtime:event",
@@ -1420,6 +1499,20 @@ fn spawn_v2_prefetch(
     quality: Quality,
     streaming_only: bool,
 ) {
+    spawn_v2_prefetch_with_hw_check(bridge, cache, upcoming_tracks, quality, streaming_only, None);
+}
+
+/// Prefetch with optional hardware rate checking.
+/// If `hw_device_id` is Some, checks each track's sample rate against hardware
+/// and downgrades quality if needed.
+fn spawn_v2_prefetch_with_hw_check(
+    bridge: Arc<RwLock<Option<crate::core_bridge::CoreBridge>>>,
+    cache: Arc<AudioCache>,
+    upcoming_tracks: Vec<CoreQueueTrack>,
+    quality: Quality,
+    streaming_only: bool,
+    hw_device_id: Option<String>,
+) {
     // Skip prefetch entirely in streaming_only mode
     if streaming_only {
         log::debug!("[V2/PREFETCH] Skipped - streaming_only mode active");
@@ -1474,6 +1567,7 @@ fn spawn_v2_prefetch(
 
         let bridge_clone = bridge.clone();
         let cache_clone = cache.clone();
+        let hw_device_clone = hw_device_id.clone();
 
         log::info!(
             "[V2/PREFETCH] Prefetching track: {} - {}",
@@ -1499,7 +1593,30 @@ fn spawn_v2_prefetch(
             let result = async {
                 let bridge_guard = bridge_clone.read().await;
                 let bridge = bridge_guard.as_ref().ok_or("CoreBridge not initialized")?;
-                let stream_url = bridge.get_stream_url(track_id, quality).await?;
+                let mut effective_quality = quality;
+
+                // Smart quality downgrade: check if hardware supports the track's sample rate
+                #[cfg(target_os = "linux")]
+                if let Some(ref device_id) = hw_device_clone {
+                    if quality == Quality::UltraHiRes {
+                        let stream_url = bridge.get_stream_url(track_id, quality).await?;
+                        let track_rate = (stream_url.sampling_rate * 1000.0) as u32;
+                        if qbz_audio::device_supports_sample_rate(device_id, track_rate) == Some(false) {
+                            log::info!(
+                                "[V2/PREFETCH] Track {} at {}Hz incompatible with hardware, prefetching at Hi-Res",
+                                track_id, track_rate
+                            );
+                            effective_quality = Quality::HiRes;
+                        } else {
+                            // Rate is supported, use the URL we already got
+                            drop(bridge_guard);
+                            let data = download_audio(&stream_url.url).await?;
+                            return Ok::<Vec<u8>, String>(data);
+                        }
+                    }
+                }
+
+                let stream_url = bridge.get_stream_url(track_id, effective_quality).await?;
                 drop(bridge_guard);
 
                 let data = download_audio(&stream_url.url).await?;
@@ -1562,10 +1679,7 @@ pub async fn v2_login(
             .map_err(|e| RuntimeError::Internal(e.to_string()))?
     };
     manager.set_legacy_auth(true, Some(session.user_id)).await;
-    log::info!(
-        "[v2_login] Legacy auth successful for user {}",
-        session.user_id
-    );
+    log::info!("[v2_login] Legacy auth successful");
 
     // Step 2: CoreBridge auth
     let bridge_guard = bridge.get().await;
@@ -1583,7 +1697,7 @@ pub async fn v2_login(
         rollback_auth_state(&manager, &app).await;
         return Err(RuntimeError::Internal(e));
     }
-    log::info!("[v2_login] Session activated for user {}", session.user_id);
+    log::info!("[v2_login] Session activated");
 
     // Persist ToS acceptance now that login succeeded.
     accept_tos_best_effort(&legal_state);
@@ -1798,12 +1912,28 @@ pub fn v2_get_devices_for_backend(
 }
 
 #[tauri::command]
-pub fn v2_get_hardware_audio_status(
+pub async fn v2_get_hardware_audio_status(
     state: State<'_, AppState>,
+    core_bridge: State<'_, CoreBridgeState>,
 ) -> Result<HardwareAudioStatus, String> {
-    let sample_rate = state.player.state.get_sample_rate();
-    let bit_depth = state.player.state.get_bit_depth();
-    let active = state.player.state.is_playing() && sample_rate > 0;
+    // Try V2 player first (CoreBridge), fall back to legacy player
+    let (sample_rate, bit_depth, is_playing) =
+        if let Some(bridge) = core_bridge.try_get().await {
+            let player = bridge.player();
+            (
+                player.state.get_sample_rate(),
+                player.state.get_bit_depth(),
+                player.state.is_playing(),
+            )
+        } else {
+            (
+                state.player.state.get_sample_rate(),
+                state.player.state.get_bit_depth(),
+                state.player.state.is_playing(),
+            )
+        };
+
+    let active = is_playing && sample_rate > 0;
 
     let hardware_sample_rate = if sample_rate > 0 {
         Some(sample_rate)
@@ -6563,6 +6693,29 @@ pub async fn v2_play_track(
             .unwrap_or(false)
     };
 
+    // Determine hardware device ID for sample rate compatibility checks (ALSA only)
+    #[cfg(target_os = "linux")]
+    let hw_device_id: Option<String> = {
+        let guard = audio_settings.store.lock().ok();
+        guard
+            .as_ref()
+            .and_then(|g| g.as_ref())
+            .and_then(|store| store.get_settings().ok())
+            .and_then(|settings| {
+                let is_alsa = matches!(
+                    settings.backend_type,
+                    Some(qbz_audio::AudioBackendType::Alsa)
+                );
+                if is_alsa {
+                    settings.output_device.clone()
+                } else {
+                    None
+                }
+            })
+    };
+    #[cfg(not(target_os = "linux"))]
+    let hw_device_id: Option<String> = None;
+
     log::info!(
         "[V2] play_track {} (quality_str={:?}, parsed={:?}, final={:?}, format_id={})",
         track_id,
@@ -6601,21 +6754,50 @@ pub async fn v2_play_track(
                 let audio_data = std::fs::read(path).map_err(|e| {
                     RuntimeError::Internal(format!("Failed to read cached file: {}", e))
                 })?;
-                player
-                    .play_data(audio_data, track_id)
-                    .map_err(RuntimeError::Internal)?;
 
-                // Prefetch next tracks in background (using CoreBridge queue)
-                let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
-                drop(bridge_guard);
-                spawn_v2_prefetch(
-                    bridge.0.clone(),
-                    app_state.audio_cache.clone(),
-                    upcoming_tracks,
-                    final_quality,
-                    streaming_only,
-                );
-                return Ok(V2PlayTrackResult { format_id: None });
+                // Check if cached audio is compatible with hardware
+                #[cfg(target_os = "linux")]
+                if cached_audio_incompatible_with_hw(&audio_data, &audio_settings) {
+                    log::info!(
+                        "[V2/Quality] Skipping OFFLINE cache for track {} - incompatible sample rate",
+                        track_id
+                    );
+                    // Fall through to network path which will request compatible quality
+                } else {
+                    player
+                        .play_data(audio_data, track_id)
+                        .map_err(RuntimeError::Internal)?;
+
+                    // Prefetch next tracks in background (using CoreBridge queue)
+                    let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
+                    drop(bridge_guard);
+                    spawn_v2_prefetch(
+                        bridge.0.clone(),
+                        app_state.audio_cache.clone(),
+                        upcoming_tracks,
+                        final_quality,
+                        streaming_only,
+                    );
+                    return Ok(V2PlayTrackResult { format_id: None });
+                }
+
+                #[cfg(not(target_os = "linux"))]
+                {
+                    player
+                        .play_data(audio_data, track_id)
+                        .map_err(RuntimeError::Internal)?;
+
+                    let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
+                    drop(bridge_guard);
+                    spawn_v2_prefetch(
+                        bridge.0.clone(),
+                        app_state.audio_cache.clone(),
+                        upcoming_tracks,
+                        final_quality,
+                        streaming_only,
+                    );
+                    return Ok(V2PlayTrackResult { format_id: None });
+                }
             }
         }
     }
@@ -6629,34 +6811,22 @@ pub async fn v2_play_track(
             track_id,
             cached.size_bytes
         );
-        player
-            .play_data(cached.data, track_id)
-            .map_err(RuntimeError::Internal)?;
 
-        // Prefetch next tracks in background (using CoreBridge queue)
-        let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
-        drop(bridge_guard);
-        spawn_v2_prefetch(
-            bridge.0.clone(),
-            cache.clone(),
-            upcoming_tracks,
-            final_quality,
-            streaming_only,
-        );
-        return Ok(V2PlayTrackResult { format_id: None });
-    }
+        // Check if cached audio is compatible with hardware
+        #[cfg(target_os = "linux")]
+        let skip_cache = cached_audio_incompatible_with_hw(&cached.data, &audio_settings);
+        #[cfg(not(target_os = "linux"))]
+        let skip_cache = false;
 
-    // Check playback cache (L2 - disk)
-    if let Some(playback_cache) = cache.get_playback_cache() {
-        if let Some(audio_data) = playback_cache.get(track_id) {
+        if skip_cache {
             log::info!(
-                "[V2/CACHE HIT] Track {} from DISK cache ({} bytes)",
-                track_id,
-                audio_data.len()
+                "[V2/Quality] Skipping MEMORY cache for track {} - incompatible sample rate",
+                track_id
             );
-            cache.insert(track_id, audio_data.clone());
+            // Fall through to network path which will request compatible quality
+        } else {
             player
-                .play_data(audio_data, track_id)
+                .play_data(cached.data, track_id)
                 .map_err(RuntimeError::Internal)?;
 
             // Prefetch next tracks in background (using CoreBridge queue)
@@ -6673,13 +6843,55 @@ pub async fn v2_play_track(
         }
     }
 
+    // Check playback cache (L2 - disk)
+    if let Some(playback_cache) = cache.get_playback_cache() {
+        if let Some(audio_data) = playback_cache.get(track_id) {
+            log::info!(
+                "[V2/CACHE HIT] Track {} from DISK cache ({} bytes)",
+                track_id,
+                audio_data.len()
+            );
+
+            // Check if cached audio is compatible with hardware
+            #[cfg(target_os = "linux")]
+            let skip_cache = cached_audio_incompatible_with_hw(&audio_data, &audio_settings);
+            #[cfg(not(target_os = "linux"))]
+            let skip_cache = false;
+
+            if skip_cache {
+                log::info!(
+                    "[V2/Quality] Skipping DISK cache for track {} - incompatible sample rate",
+                    track_id
+                );
+                // Fall through to network path which will request compatible quality
+            } else {
+                cache.insert(track_id, audio_data.clone());
+                player
+                    .play_data(audio_data, track_id)
+                    .map_err(RuntimeError::Internal)?;
+
+                // Prefetch next tracks in background (using CoreBridge queue)
+                let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
+                drop(bridge_guard);
+                spawn_v2_prefetch(
+                    bridge.0.clone(),
+                    cache.clone(),
+                    upcoming_tracks,
+                    final_quality,
+                    streaming_only,
+                );
+                return Ok(V2PlayTrackResult { format_id: None });
+            }
+        }
+    }
+
     // Not in any cache - get stream URL from Qobuz via CoreBridge
     log::info!(
         "[V2] Track {} not in cache, fetching from network...",
         track_id
     );
 
-    let stream_url = bridge_guard
+    let mut stream_url = bridge_guard
         .get_stream_url(track_id, final_quality)
         .await
         .map_err(RuntimeError::Internal)?;
@@ -6688,6 +6900,30 @@ pub async fn v2_play_track(
         track_id,
         stream_url.format_id
     );
+
+    // Smart quality downgrade for ALSA Direct: if the hardware doesn't support
+    // the track's sample rate, re-request at a lower quality that IS supported.
+    // This avoids resampling and keeps bit-perfect playback.
+    if let Some(ref device_id) = hw_device_id {
+        if final_quality == Quality::UltraHiRes {
+            let track_rate = (stream_url.sampling_rate * 1000.0) as u32;
+            if qbz_audio::device_supports_sample_rate(device_id, track_rate) == Some(false) {
+                log::info!(
+                    "[V2/Quality] Hardware doesn't support {}Hz, downgrading to Hi-Res",
+                    track_rate
+                );
+                stream_url = bridge_guard
+                    .get_stream_url(track_id, Quality::HiRes)
+                    .await
+                    .map_err(RuntimeError::Internal)?;
+                log::info!(
+                    "[V2/Quality] Got fallback stream URL (format_id={}, rate={}kHz)",
+                    stream_url.format_id,
+                    stream_url.sampling_rate
+                );
+            }
+        }
+    }
 
     // Download the audio
     let audio_data = download_audio(&stream_url.url)
@@ -6715,12 +6951,13 @@ pub async fn v2_play_track(
     // Prefetch next tracks in background (using CoreBridge queue)
     let upcoming_tracks = bridge_guard.peek_upcoming(V2_PREFETCH_LOOKAHEAD).await;
     drop(bridge_guard);
-    spawn_v2_prefetch(
+    spawn_v2_prefetch_with_hw_check(
         bridge.0.clone(),
         cache,
         upcoming_tracks,
         final_quality,
         streaming_only,
+        hw_device_id,
     );
 
     Ok(V2PlayTrackResult {
@@ -8677,6 +8914,8 @@ pub async fn v2_set_playback_context(
         "home_list" => ContextType::HomeList,
         "daily_q" => ContextType::DailyQ,
         "weekly_q" => ContextType::WeeklyQ,
+        "fav_q" => ContextType::FavQ,
+        "top_q" => ContextType::TopQ,
         "favorites" => ContextType::Favorites,
         "local_library" => ContextType::LocalLibrary,
         "radio" => ContextType::Radio,

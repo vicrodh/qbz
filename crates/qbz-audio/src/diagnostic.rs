@@ -179,17 +179,17 @@ where
     S: Source<Item = f32>,
 {
     #[inline]
-    fn current_frame_len(&self) -> Option<usize> {
-        self.inner.current_frame_len()
+    fn current_span_len(&self) -> Option<usize> {
+        self.inner.current_span_len()
     }
 
     #[inline]
-    fn channels(&self) -> u16 {
+    fn channels(&self) -> std::num::NonZero<u16> {
         self.inner.channels()
     }
 
     #[inline]
-    fn sample_rate(&self) -> u32 {
+    fn sample_rate(&self) -> std::num::NonZero<u32> {
         self.inner.sample_rate()
     }
 

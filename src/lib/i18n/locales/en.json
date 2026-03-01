@@ -534,6 +534,7 @@
       "source": "Source",
       "output": "Output",
       "resampled": "Resampled by system",
+      "qualityAdjusted": "Quality adjusted for device compatibility — bit-perfect, no resampling",
       "fix": "Enable DAC Passthrough or Exclusive Mode in Settings"
     }
   },

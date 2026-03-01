@@ -69,6 +69,21 @@
     return false;
   });
 
+  // Quality adjustment detection: QBZ fetched lower quality for hardware compatibility.
+  // Decoded rate < original metadata rate, but hardware plays it natively (no resampling).
+  const isQualityAdjusted = $derived.by(() => {
+    if (!originalSamplingRate || !samplingRate) return false;
+    // The decoded rate is significantly lower than the original album rate
+    const wasAdjusted = samplingRate < originalSamplingRate * 0.9;
+    if (!wasAdjusted) return false;
+    // Hardware plays the decoded rate natively (no system resampling)
+    if (hardwareSampleRate) {
+      const decodedHz = samplingRate * 1000;
+      return hardwareSampleRate >= decodedHz * 0.9;
+    }
+    return false;
+  });
+
   // Effective output rate for tooltip display (in kHz)
   const effectiveOutputRateKHz = $derived.by(() => {
     if (hardwareSampleRate) {
@@ -181,7 +196,8 @@
   <div
     class="quality-badge"
     class:downgraded={isDowngraded}
-    title={isDowngraded ? undefined : `${tierLabel}: ${displayText}`}
+    class:adjusted={isQualityAdjusted}
+    title={isDowngraded || isQualityAdjusted ? undefined : `${tierLabel}: ${displayText}`}
     onmouseenter={() => { isHovering = true; }}
     onmouseleave={() => { isHovering = false; }}
   >
@@ -199,13 +215,27 @@
     <div class="badge-text">
       <span class="tier-label">
         {tierLabel}
-        <span class="downgrade-indicator" class:visible={isDowngraded}>↓</span>
+        <span class="downgrade-indicator" class:visible={isDowngraded || isQualityAdjusted} class:adjusted={isQualityAdjusted}>↓</span>
       </span>
       <span class="quality-info">{displayText}</span>
     </div>
 
-    <!-- Custom tooltip for degraded state -->
-    {#if isDowngraded && isHovering}
+    <!-- Custom tooltip for quality-adjusted state (QBZ chose lower quality for hw compat) -->
+    {#if isQualityAdjusted && isHovering}
+      <div class="quality-tooltip">
+        <div class="tooltip-section">
+          <div class="tooltip-label">{$t('quality.tooltip.source')}</div>
+          <div class="tooltip-value">{originalSamplingRate ? `${originalSamplingRate} kHz` : displayText}</div>
+        </div>
+        <div class="tooltip-section">
+          <div class="tooltip-label">{$t('quality.tooltip.output')}</div>
+          <div class="tooltip-value">{effectiveOutputRateKHz ? `${effectiveOutputRateKHz} kHz` : displayText}</div>
+        </div>
+        <div class="tooltip-divider"></div>
+        <div class="tooltip-info">{$t('quality.tooltip.qualityAdjusted')}</div>
+      </div>
+    <!-- Custom tooltip for system resampling -->
+    {:else if isDowngraded && isHovering}
       <div class="quality-tooltip">
         <div class="tooltip-section">
           <div class="tooltip-label">{$t('quality.tooltip.source')}</div>
@@ -312,6 +342,10 @@
     visibility: visible;
   }
 
+  .downgrade-indicator.adjusted {
+    color: #60a5fa;
+  }
+
   /* Custom tooltip for degraded quality */
   .quality-tooltip {
     position: absolute;
@@ -368,6 +402,13 @@
   .tooltip-warning {
     font-size: 11px;
     color: #eab308;
+    font-weight: 500;
+    margin-bottom: 2px;
+  }
+
+  .tooltip-info {
+    font-size: 11px;
+    color: #60a5fa;
     font-weight: 500;
     margin-bottom: 2px;
   }

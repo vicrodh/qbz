@@ -534,6 +534,7 @@
       "source": "Fuente",
       "output": "Salida",
       "resampled": "Remuestreado por el sistema",
+      "qualityAdjusted": "Calidad ajustada por compatibilidad — bit-perfect, sin remuestreo",
       "fix": "Activa DAC Passthrough o Modo Exclusivo en Ajustes"
     }
   },

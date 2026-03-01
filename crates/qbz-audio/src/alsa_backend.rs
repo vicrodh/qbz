@@ -12,9 +12,9 @@ use super::backend::{AlsaPlugin, AudioBackend, AudioBackendType, AudioDevice, Ba
 use rodio::{
     cpal::{
         traits::{DeviceTrait, HostTrait},
-        BufferSize, SampleFormat, SampleRate, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
+        BufferSize, SampleFormat, StreamConfig, SupportedBufferSize, SupportedStreamConfig,
     },
-    OutputStream, OutputStreamHandle,
+    DeviceSinkBuilder, MixerDeviceSink,
 };
 use std::collections::HashMap;
 use std::fs;
@@ -31,6 +31,35 @@ const COMMON_SAMPLE_RATES: &[u32] = &[
     384000, // Ultra high-res
 ];
 
+/// Find the best fallback sample rate in the same family.
+/// 44.1kHz family: 44100, 88200, 176400, 352800
+/// 48kHz family: 48000, 96000, 192000, 384000
+fn find_best_fallback_rate(requested: u32, supported: &[u32]) -> u32 {
+    let is_441_family = requested % 44100 == 0;
+
+    // Find highest supported rate in the same family that's <= requested
+    let mut candidates: Vec<u32> = supported
+        .iter()
+        .filter(|&&r| {
+            if is_441_family {
+                r % 44100 == 0
+            } else {
+                r % 48000 == 0
+            }
+        })
+        .filter(|&&r| r <= requested)
+        .copied()
+        .collect();
+    candidates.sort();
+
+    if let Some(&best) = candidates.last() {
+        return best;
+    }
+
+    // No rate in the same family — use highest supported rate overall
+    supported.iter().copied().max().unwrap_or(48000)
+}
+
 /// Extract supported sample rates from a CPAL device
 fn get_supported_sample_rates(device: &rodio::cpal::Device) -> Option<Vec<u32>> {
     use rodio::cpal::traits::DeviceTrait;
@@ -45,7 +74,7 @@ fn get_supported_sample_rates(device: &rodio::cpal::Device) -> Option<Vec<u32>> 
     let mut supported = Vec::new();
 
     for rate in COMMON_SAMPLE_RATES {
-        let sample_rate = rodio::cpal::SampleRate(*rate);
+        let sample_rate = *rate;
         // Check if any config supports this rate
         let is_supported = configs_vec.iter().any(|config| {
             sample_rate >= config.min_sample_rate() && sample_rate <= config.max_sample_rate()
@@ -233,6 +262,66 @@ fn find_card_number_by_name(short_name: &str) -> Option<String> {
         .map(|c| c.number.clone())
 }
 
+/// Extract card name from an ALSA device ID.
+/// `front:CARD=C20,DEV=0` -> `"C20"`, `hw:0,0` -> card 0 short name, etc.
+fn extract_card_name_from_device(device_id: &str) -> Option<String> {
+    if device_id.starts_with("front:CARD=") || device_id.starts_with("sysdefault:CARD=") {
+        // front:CARD=C20,DEV=0 -> C20
+        let after_card = device_id.split("CARD=").nth(1)?;
+        Some(after_card.split(',').next()?.to_string())
+    } else if device_id.starts_with("hw:") || device_id.starts_with("plughw:") {
+        // hw:0,0 -> card number 0 -> look up short name
+        let prefix = if device_id.starts_with("hw:") { "hw:" } else { "plughw:" };
+        let card_num = device_id.strip_prefix(prefix)?.split(',').next()?;
+        let cards = read_proc_asound_cards();
+        cards.iter()
+            .find(|c| c.number == card_num)
+            .map(|c| c.short_name.clone())
+    } else {
+        None
+    }
+}
+
+/// Read hardware-supported sample rates from /proc/asound/cardN/stream0.
+/// Returns None if rates cannot be determined (treat as "try anyway").
+fn get_hw_supported_rates(card_name: &str) -> Option<Vec<u32>> {
+    let card_num = find_card_number_by_name(card_name)?;
+    let stream_path = format!("/proc/asound/card{}/stream0", card_num);
+    let content = fs::read_to_string(&stream_path).ok()?;
+
+    let mut in_playback = false;
+    let mut all_rates = Vec::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed == "Playback:" {
+            in_playback = true;
+        } else if trimmed == "Capture:" {
+            in_playback = false;
+        }
+        if in_playback && trimmed.starts_with("Rates:") {
+            let rates_str = trimmed.trim_start_matches("Rates:").trim();
+            if rates_str.contains("continuous") {
+                return None; // Any rate supported — don't restrict
+            }
+            for rate_str in rates_str.split(',') {
+                if let Ok(rate) = rate_str.trim().parse::<u32>() {
+                    if !all_rates.contains(&rate) {
+                        all_rates.push(rate);
+                    }
+                }
+            }
+        }
+    }
+
+    if all_rates.is_empty() {
+        None
+    } else {
+        all_rates.sort();
+        Some(all_rates)
+    }
+}
+
 // ============================================================================
 // ALSA Backend Implementation
 // ============================================================================
@@ -247,7 +336,8 @@ impl AlsaBackend {
         let available_hosts = rodio::cpal::available_hosts();
 
         // Check if ALSA is available
-        if !available_hosts.iter().any(|h| h.name() == "ALSA") {
+        // cpal 0.17 changed HostId::name() from "ALSA" to "Alsa" (uses stringify!)
+        if !available_hosts.iter().any(|h| h.name().eq_ignore_ascii_case("alsa")) {
             return Err("ALSA host not available on this system".to_string());
         }
 
@@ -255,7 +345,7 @@ impl AlsaBackend {
         let host = rodio::cpal::host_from_id(
             available_hosts
                 .into_iter()
-                .find(|h| h.name() == "ALSA")
+                .find(|h| h.name().eq_ignore_ascii_case("alsa"))
                 .ok_or("ALSA host not found".to_string())?
         ).map_err(|e| format!("Failed to create ALSA host: {}", e))?;
 
@@ -433,6 +523,26 @@ impl AlsaBackend {
             (device_id.to_string(), format!("plug:{}", device_id))
         };
 
+        // Pre-check: read /proc/asound/cardN/stream0 to verify rate support
+        // before opening the PCM device. This avoids the "device busy" issue
+        // where ALSA Direct opens the device, fails to configure the rate, and
+        // leaves the device in a state CPAL can't open afterwards.
+        if let Some(card_name) = extract_card_name_from_device(device_id) {
+            if let Some(hw_rates) = get_hw_supported_rates(&card_name) {
+                if !hw_rates.contains(&config.sample_rate) {
+                    log::info!(
+                        "[ALSA Backend] Hardware rates for '{}': {:?}. {}Hz not supported, skipping ALSA Direct",
+                        card_name, hw_rates, config.sample_rate
+                    );
+                    return None;
+                }
+                log::info!(
+                    "[ALSA Backend] Hardware confirms support for {}Hz (card '{}', rates: {:?})",
+                    config.sample_rate, card_name, hw_rates
+                );
+            }
+        }
+
         // Respect ALSA plugin selection from settings
         let try_hw_first = match config.alsa_plugin {
             Some(AlsaPlugin::Hw) => true,
@@ -461,8 +571,57 @@ impl AlsaBackend {
                     let error = super::backend::AlsaDirectError::from_alsa_error(&e);
                     log::warn!("[ALSA Backend] hw attempt failed: {}", error);
 
+                    if matches!(error, super::backend::AlsaDirectError::DeviceBusy(_)) {
+                        // PipeWire may be holding the ALSA device open.
+                        // Suspend PipeWire sinks to release the device, then retry.
+                        log::info!("[ALSA Backend] Device busy — suspending PipeWire sinks to release ALSA device");
+                        if let Ok(output) = std::process::Command::new("pactl")
+                            .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
+                            .output()
+                        {
+                            if output.status.success() {
+                                log::info!("[ALSA Backend] PipeWire sink suspended, waiting for device release...");
+                                std::thread::sleep(std::time::Duration::from_millis(200));
+
+                                match super::AlsaDirectStream::new(&hw_device, config.sample_rate, config.channels) {
+                                    Ok(stream) => {
+                                        log::info!("[ALSA Backend] ✓ Direct hw stream created after PipeWire suspend");
+                                        return Some(Ok((stream, super::backend::BitPerfectMode::DirectHardware)));
+                                    }
+                                    Err(e2) => {
+                                        log::warn!("[ALSA Backend] Retry after suspend also failed: {}", e2);
+                                    }
+                                }
+                            } else {
+                                let stderr = String::from_utf8_lossy(&output.stderr);
+                                log::warn!("[ALSA Backend] Failed to suspend PipeWire sink: {}", stderr);
+                            }
+                        }
+
+                        // If retry failed or suspend failed, fall through to error
+                        log::error!("[ALSA Backend] Cannot acquire device even after PipeWire suspend");
+                        return Some(Err(format!(
+                            "ALSA Direct failed: {}. Device may be in use or inaccessible.",
+                            error
+                        )));
+                    }
+
+                    if matches!(error, super::backend::AlsaDirectError::InvalidParams(_)) {
+                        // Hardware doesn't support this rate/format natively.
+                        // Return None to let the player fall back to CPAL/rodio
+                        // which can resample (e.g. 176.4kHz → 88.2kHz).
+                        // Brief delay: ALSA Direct opened the PCM (then failed to configure it).
+                        // The kernel needs a moment to fully release the device before CPAL can open it.
+                        log::info!(
+                            "[ALSA Backend] Hardware doesn't support {}Hz natively, releasing device for CPAL fallback",
+                            config.sample_rate
+                        );
+                        std::thread::sleep(std::time::Duration::from_millis(100));
+                        return None;
+                    }
+
                     if !error.allows_plughw_fallback() {
-                        // Non-recoverable error (busy, permissions, etc.)
+                        // Non-recoverable error (permissions, etc.)
                         log::error!("[ALSA Backend] Cannot fallback - error type: {:?}", error);
                         return Some(Err(format!(
                             "ALSA Direct failed: {}. Device may be in use or inaccessible.",
@@ -489,6 +648,43 @@ impl AlsaBackend {
                 Some(Ok((stream, super::backend::BitPerfectMode::PluginFallback)))
             }
             Err(e) => {
+                let error = super::backend::AlsaDirectError::from_alsa_error(&e);
+
+                if matches!(error, super::backend::AlsaDirectError::DeviceBusy(_)) {
+                    log::info!("[ALSA Backend] plughw device busy — suspending PipeWire sinks to release ALSA device");
+                    if let Ok(output) = std::process::Command::new("pactl")
+                        .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
+                        .output()
+                    {
+                        if output.status.success() {
+                            log::info!("[ALSA Backend] PipeWire sink suspended, retrying plughw...");
+                            std::thread::sleep(std::time::Duration::from_millis(200));
+
+                            match super::AlsaDirectStream::new(&plughw_device, config.sample_rate, config.channels) {
+                                Ok(stream) => {
+                                    log::info!("[ALSA Backend] ✓ plughw stream created after PipeWire suspend");
+                                    return Some(Ok((stream, super::backend::BitPerfectMode::PluginFallback)));
+                                }
+                                Err(e2) => {
+                                    log::error!("[ALSA Backend] plughw retry after suspend also failed: {}", e2);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if matches!(error, super::backend::AlsaDirectError::InvalidParams(_)) {
+                    // Hardware doesn't support this rate even via plughw.
+                    // Return None to let the player fall back to CPAL/rodio
+                    // which can resample (e.g. 176.4kHz → 88.2kHz).
+                    log::info!(
+                        "[ALSA Backend] Hardware doesn't support {}Hz even via plughw, releasing device for CPAL fallback",
+                        config.sample_rate
+                    );
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    return None;
+                }
+
                 log::error!("[ALSA Backend] plughw fallback also failed: {}", e);
                 Some(Err(format!(
                     "Bit-perfect playback could not be established. hw failed, plughw failed: {}",
@@ -575,6 +771,22 @@ pub fn resolve_stable_to_current_hw(device_id: &str) -> Option<String> {
     None
 }
 
+/// Check if a hardware device supports a given sample rate.
+/// Returns `Some(true)` if supported, `Some(false)` if not, `None` if unknown.
+/// Uses /proc/asound/cardN/stream0 for accurate hardware capabilities.
+pub fn device_supports_sample_rate(device_id: &str, sample_rate: u32) -> Option<bool> {
+    let card_name = extract_card_name_from_device(device_id)?;
+    let hw_rates = get_hw_supported_rates(&card_name)?;
+    Some(hw_rates.contains(&sample_rate))
+}
+
+/// Get the hardware-supported sample rates for a device.
+/// Returns None if rates cannot be determined.
+pub fn get_device_supported_rates(device_id: &str) -> Option<Vec<u32>> {
+    let card_name = extract_card_name_from_device(device_id)?;
+    get_hw_supported_rates(&card_name)
+}
+
 impl AudioBackend for AlsaBackend {
     fn backend_type(&self) -> AudioBackendType {
         AudioBackendType::Alsa
@@ -587,7 +799,7 @@ impl AudioBackend for AlsaBackend {
     fn create_output_stream(
         &self,
         config: &BackendConfig,
-    ) -> BackendResult<(OutputStream, OutputStreamHandle)> {
+    ) -> BackendResult<MixerDeviceSink> {
         log::info!(
             "[ALSA Backend] Creating stream: {}Hz, {} channels, exclusive: {}, plugin: {:?}",
             config.sample_rate,
@@ -619,18 +831,6 @@ impl AudioBackend for AlsaBackend {
         let device_name = device.name().unwrap_or_else(|_| "unknown".to_string());
         log::info!("[ALSA Backend] Using device: {}", device_name);
 
-        // Create StreamConfig with requested sample rate
-        let stream_config = StreamConfig {
-            channels: config.channels,
-            sample_rate: SampleRate(config.sample_rate),
-            buffer_size: if config.exclusive_mode {
-                // Smaller buffer for exclusive mode = lower latency
-                BufferSize::Fixed(512)
-            } else {
-                BufferSize::Default
-            },
-        };
-
         // Check if device supports this configuration
         let supported_configs = device
             .supported_output_configs()
@@ -639,26 +839,50 @@ impl AudioBackend for AlsaBackend {
         let mut found_matching = false;
         for range in supported_configs {
             if range.channels() == config.channels
-                && config.sample_rate >= range.min_sample_rate().0
-                && config.sample_rate <= range.max_sample_rate().0
+                && config.sample_rate >= range.min_sample_rate()
+                && config.sample_rate <= range.max_sample_rate()
             {
                 found_matching = true;
                 log::info!(
                     "[ALSA Backend] Device supports {}Hz (range: {}-{}Hz)",
                     config.sample_rate,
-                    range.min_sample_rate().0,
-                    range.max_sample_rate().0
+                    range.min_sample_rate(),
+                    range.max_sample_rate()
                 );
                 break;
             }
         }
 
-        if !found_matching {
-            log::warn!(
-                "[ALSA Backend] Device may not support {}Hz, attempting anyway",
+        // If device doesn't support the requested rate, find best fallback
+        let effective_rate = if !found_matching {
+            if let Some(rates) = get_supported_sample_rates(&device) {
+                let fallback = find_best_fallback_rate(config.sample_rate, &rates);
+                log::warn!(
+                    "[ALSA Backend] Device doesn't support {}Hz. Supported: {:?}. Falling back to {}Hz (rodio will resample)",
+                    config.sample_rate, rates, fallback
+                );
+                fallback
+            } else {
+                log::warn!(
+                    "[ALSA Backend] Could not determine supported rates, attempting {}Hz anyway",
+                    config.sample_rate
+                );
                 config.sample_rate
-            );
-        }
+            }
+        } else {
+            config.sample_rate
+        };
+
+        // Rebuild StreamConfig with effective rate
+        let stream_config = StreamConfig {
+            channels: config.channels,
+            sample_rate: effective_rate,
+            buffer_size: if config.exclusive_mode {
+                BufferSize::Fixed(512)
+            } else {
+                BufferSize::Fixed(effective_rate / 10)
+            },
+        };
 
         // Create SupportedStreamConfig
         let supported_config = SupportedStreamConfig::new(
@@ -668,26 +892,62 @@ impl AudioBackend for AlsaBackend {
             SampleFormat::F32,
         );
 
-        // Create OutputStream with custom config
-        let stream = OutputStream::try_from_device_config(&device, supported_config)
+        // In exclusive mode, PipeWire may have re-acquired the device after the
+        // previous ALSA Direct stream released it. Suspend PipeWire before opening.
+        if config.exclusive_mode {
+            log::info!("[ALSA Backend] Exclusive mode: suspending PipeWire sinks before CPAL stream");
+            if let Ok(output) = std::process::Command::new("pactl")
+                .args(["suspend-sink", "@DEFAULT_SINK@", "1"])
+                .output()
+            {
+                if output.status.success() {
+                    log::info!("[ALSA Backend] PipeWire sink suspended");
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                } else {
+                    let stderr = String::from_utf8_lossy(&output.stderr);
+                    log::warn!("[ALSA Backend] Failed to suspend PipeWire sink: {}", stderr);
+                }
+            }
+        }
+
+        // Create MixerDeviceSink with custom config
+        let mixer_sink = DeviceSinkBuilder::from_device(device)
             .map_err(|e| {
                 if config.exclusive_mode {
                     format!(
                         "Failed to create exclusive ALSA stream at {}Hz: {}. Device may be in use by another application.",
-                        config.sample_rate, e
+                        effective_rate, e
                     )
                 } else {
-                    format!("Failed to create ALSA stream at {}Hz: {}", config.sample_rate, e)
+                    format!("Failed to create ALSA device sink builder at {}Hz: {}", effective_rate, e)
+                }
+            })?
+            .with_supported_config(&supported_config)
+            .open_stream()
+            .map_err(|e| {
+                if config.exclusive_mode {
+                    format!(
+                        "Failed to create exclusive ALSA stream at {}Hz: {}. Device may be in use by another application.",
+                        effective_rate, e
+                    )
+                } else {
+                    format!("Failed to create ALSA stream at {}Hz: {}", effective_rate, e)
                 }
             })?;
 
-        log::info!(
-            "[ALSA Backend] Output stream created successfully at {}Hz (exclusive: {})",
-            config.sample_rate,
-            config.exclusive_mode
-        );
+        if effective_rate != config.sample_rate {
+            log::info!(
+                "[ALSA Backend] Output stream created at {}Hz (resampled from {}Hz, exclusive: {})",
+                effective_rate, config.sample_rate, config.exclusive_mode
+            );
+        } else {
+            log::info!(
+                "[ALSA Backend] Output stream created successfully at {}Hz (exclusive: {})",
+                config.sample_rate, config.exclusive_mode
+            );
+        }
 
-        Ok(stream)
+        Ok(mixer_sink)
     }
 
     fn is_available(&self) -> bool {

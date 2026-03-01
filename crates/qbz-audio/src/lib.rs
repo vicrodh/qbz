@@ -54,7 +54,7 @@ pub use backend::{
     BitPerfectMode,
 };
 pub use alsa_direct::AlsaDirectStream;
-pub use alsa_backend::{normalize_device_id_to_stable, resolve_stable_to_current_hw};
+pub use alsa_backend::{normalize_device_id_to_stable, resolve_stable_to_current_hw, device_supports_sample_rate, get_device_supported_rates};
 pub use diagnostic::{AudioDiagnostic, DiagnosticSource, BitDepthResult};
 pub use loudness::{ReplayGainData, extract_replaygain, calculate_gain_factor, db_to_linear};
 pub use dynamic_amplify::DynamicAmplify;

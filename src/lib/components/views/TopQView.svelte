@@ -403,14 +403,18 @@
 
     if (queueIndex < 0) return;
 
-    await setPlaybackContext(
-      'top_q',
-      'topq',
-      'TopQ',
-      'qobuz',
-      queueTrackIds,
-      queueIndex
-    );
+    try {
+      await setPlaybackContext(
+        'top_q',
+        'topq',
+        'TopQ',
+        'qobuz',
+        queueTrackIds,
+        queueIndex
+      );
+    } catch (err) {
+      console.error('Failed to set playback context:', err);
+    }
 
     try {
       await invoke('v2_set_queue', { tracks: queueTracks, startIndex: queueIndex });

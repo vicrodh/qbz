@@ -137,15 +137,6 @@ impl LastFmV2State {
         *self.pending_token.lock().await = None;
     }
 
-    /// Get session key for persistence
-    pub async fn get_session_key(&self) -> Option<String> {
-        self.client
-            .lock()
-            .await
-            .session_key()
-            .map(|s| s.to_string())
-    }
-
     /// Store pending token during auth flow
     pub async fn set_pending_token(&self, token: String) {
         *self.pending_token.lock().await = Some(token);

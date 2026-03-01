@@ -24,10 +24,7 @@ use crate::user_data::UserDataPaths;
 /// Note: This is the core logic extracted from `activate_user_session` command.
 /// It can be called from runtime_bootstrap, v2_login, or the command itself.
 pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<(), String> {
-    log::info!(
-        "[SessionLifecycle] Activating session for user_id={}",
-        user_id
-    );
+    log::info!("[SessionLifecycle] Activating session");
 
     // Get all required states from AppHandle
     let user_paths = app.state::<UserDataPaths>();
@@ -217,10 +214,7 @@ pub async fn activate_session(app: &tauri::AppHandle, user_id: u64) -> Result<()
         RuntimeEvent::UserSessionActivated { user_id },
     );
 
-    log::info!(
-        "[SessionLifecycle] Session activated for user_id={}",
-        user_id
-    );
+    log::info!("[SessionLifecycle] Session activated");
     Ok(())
 }
 

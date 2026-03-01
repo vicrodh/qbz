@@ -3,7 +3,7 @@
 //! Provides a unified interface for different audio backends (PipeWire, ALSA, PulseAudio)
 //! allowing users to choose their preferred audio stack.
 
-use rodio::{OutputStream, OutputStreamHandle};
+use rodio::MixerDeviceSink;
 use serde::{Deserialize, Serialize};
 
 /// Supported audio backends
@@ -220,7 +220,7 @@ pub trait AudioBackend: Send + Sync {
     fn create_output_stream(
         &self,
         config: &BackendConfig,
-    ) -> BackendResult<(OutputStream, OutputStreamHandle)>;
+    ) -> BackendResult<MixerDeviceSink>;
 
     /// Check if this backend is available on the current system
     fn is_available(&self) -> bool;

@@ -31,8 +31,8 @@ rand = "0.8"
 # Audio decoding
 symphonia = { workspace = true }
 
-# Vendored audio libraries (same as qbz-audio)
-rodio = { path = "../../src-tauri/vendor/rodio", features = ["symphonia-all"] }
+# Audio playback
+rodio = { version = "0.22", features = ["symphonia-all"] }
 
 # HTTP client for streaming
 reqwest = { workspace = true }

@@ -60,7 +60,7 @@ pub fn migrate_flat_to_user(user_id: u64) -> Result<(), String> {
         return Ok(());
     }
 
-    log::info!("Starting flat-to-user migration for user {}", user_id);
+    log::info!("Starting flat-to-user migration");
 
     let user_data_dir = global_data_dir.join("users").join(user_id.to_string());
     let user_cache_dir = global_cache_dir.join("users").join(user_id.to_string());
@@ -109,7 +109,7 @@ pub fn migrate_flat_to_user(user_id: u64) -> Result<(), String> {
     std::fs::write(&marker_path, format!("migrated_to_user={}\n", user_id))
         .map_err(|e| format!("Failed to write migration marker: {}", e))?;
 
-    log::info!("Migration completed for user {}", user_id);
+    log::info!("Migration completed");
     Ok(())
 }
 
@@ -144,12 +144,12 @@ fn move_directory(src: &Path, dst: &Path) {
 
     // Don't overwrite if destination already exists
     if dst.exists() {
-        log::debug!("Destination {} already exists, skipping", dst.display());
+        log::debug!("Migration destination already exists, skipping directory move");
         return;
     }
 
     match std::fs::rename(src, dst) {
-        Ok(()) => log::debug!("Moved dir {} -> {}", src.display(), dst.display()),
+        Ok(()) => log::debug!("Moved migration directory"),
         Err(e) => {
             log::warn!(
                 "Rename dir failed for {}, trying recursive copy: {}",
