@@ -10551,9 +10551,12 @@ fn v2_purchase_target_path(
 fn v2_apply_purchase_download_flags(
     response: &mut PurchaseResponse,
     downloaded_ids: &HashSet<i64>,
+    format_map: &std::collections::HashMap<i64, Vec<u32>>,
 ) {
     for track in &mut response.tracks.items {
-        track.downloaded = downloaded_ids.contains(&(track.id as i64));
+        let tid = track.id as i64;
+        track.downloaded = downloaded_ids.contains(&tid);
+        track.downloaded_format_ids = format_map.get(&tid).cloned().unwrap_or_default();
     }
 
     for album in &mut response.albums.items {
@@ -10679,13 +10682,16 @@ pub async fn v2_purchases_get_all(
 
     let guard = library_state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
-    let downloaded_ids: HashSet<i64> = db
-        .get_downloaded_purchase_track_ids()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .collect();
+    let downloaded_formats = db
+        .get_downloaded_purchase_formats()
+        .map_err(|e| e.to_string())?;
+    let downloaded_ids: HashSet<i64> = downloaded_formats.iter().map(|(tid, _)| *tid).collect();
+    let mut format_map: std::collections::HashMap<i64, Vec<u32>> = std::collections::HashMap::new();
+    for (track_id, format_id) in &downloaded_formats {
+        format_map.entry(*track_id).or_default().push(*format_id as u32);
+    }
 
-    v2_apply_purchase_download_flags(&mut response, &downloaded_ids);
+    v2_apply_purchase_download_flags(&mut response, &downloaded_ids, &format_map);
     Ok(response)
 }
 
@@ -10734,15 +10740,20 @@ pub async fn v2_purchases_get_by_type(
 
     let guard = library_state.db.lock().await;
     let db = guard.as_ref().ok_or("No active session - please log in")?;
-    let downloaded_ids: HashSet<i64> = db
-        .get_downloaded_purchase_track_ids()
-        .map_err(|e| e.to_string())?
-        .into_iter()
-        .collect();
+    let downloaded_formats = db
+        .get_downloaded_purchase_formats()
+        .map_err(|e| e.to_string())?;
+    let downloaded_ids: HashSet<i64> = downloaded_formats.iter().map(|(tid, _)| *tid).collect();
+    let mut format_map: std::collections::HashMap<i64, Vec<u32>> = std::collections::HashMap::new();
+    for (track_id, format_id) in &downloaded_formats {
+        format_map.entry(*track_id).or_default().push(*format_id as u32);
+    }
 
     if purchaseType == "tracks" {
         for track in &mut response.tracks.items {
-            track.downloaded = downloaded_ids.contains(&(track.id as i64));
+            let tid = track.id as i64;
+            track.downloaded = downloaded_ids.contains(&tid);
+            track.downloaded_format_ids = format_map.get(&tid).cloned().unwrap_or_default();
         }
     } else {
         for album in &mut response.albums.items {
