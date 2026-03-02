@@ -24,6 +24,12 @@
     y: number;
   }
 
+  interface RgbColor {
+    r: number;
+    g: number;
+    b: number;
+  }
+
   let {
     enabled = true,
     artwork = '',
@@ -49,8 +55,14 @@
   const FRAME_INTERVAL = getPanelFrameInterval('tunnel-flow');
   const BASE_RENDER_SCALE = FRAME_INTERVAL <= 20 ? 0.58 : FRAME_INTERVAL <= 34 ? 0.64 : 0.7;
 
-  const RING_COUNT = 14;
+  const RING_COUNT = 18;
   const STREAK_COUNT = 0;
+  const DEFAULT_LINE_PALETTE: RgbColor[] = [
+    { r: 255, g: 106, b: 106 },
+    { r: 255, g: 205, b: 92 },
+    { r: 104, g: 220, b: 170 },
+    { r: 110, g: 176, b: 255 },
+  ];
 
   const smoothedData = new Float32Array(NUM_BARS);
 
@@ -59,6 +71,8 @@
   let kickPulse = 0;
   let previousBass = 0;
   let previousHigh = 0;
+  let paletteRequestId = 0;
+  let linePalette: RgbColor[] = $state(DEFAULT_LINE_PALETTE);
 
   function clamp01(value: number): number {
     return Math.max(0, Math.min(1, value));
@@ -67,6 +81,116 @@
   function wrapHue(value: number): number {
     const hue = value % 360;
     return hue < 0 ? hue + 360 : hue;
+  }
+
+  function getLineColor(index: number): RgbColor {
+    if (!linePalette.length) return DEFAULT_LINE_PALETTE[0];
+    return linePalette[Math.abs(index) % linePalette.length];
+  }
+
+  function colorSaturation(red: number, green: number, blue: number): number {
+    const max = Math.max(red, green, blue);
+    const min = Math.min(red, green, blue);
+    if (max <= 0) return 0;
+    return (max - min) / max;
+  }
+
+  function colorDistance(colorA: RgbColor, colorB: RgbColor): number {
+    const redDiff = colorA.r - colorB.r;
+    const greenDiff = colorA.g - colorB.g;
+    const blueDiff = colorA.b - colorB.b;
+    return Math.hypot(redDiff, greenDiff, blueDiff);
+  }
+
+  async function extractLinePaletteFromArtwork(source: string): Promise<RgbColor[]> {
+    if (typeof window === 'undefined' || !source) return DEFAULT_LINE_PALETTE;
+
+    const image = new Image();
+    image.decoding = 'async';
+    image.crossOrigin = 'anonymous';
+
+    const loadPromise = new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Artwork palette load failed'));
+    });
+
+    image.src = source;
+    await loadPromise;
+
+    const sampleSize = 36;
+    const sampleCanvas = document.createElement('canvas');
+    sampleCanvas.width = sampleSize;
+    sampleCanvas.height = sampleSize;
+    const sampleCtx = sampleCanvas.getContext('2d', { willReadFrequently: true });
+    if (!sampleCtx) return DEFAULT_LINE_PALETTE;
+
+    sampleCtx.drawImage(image, 0, 0, sampleSize, sampleSize);
+
+    let pixelData: Uint8ClampedArray;
+    try {
+      pixelData = sampleCtx.getImageData(0, 0, sampleSize, sampleSize).data;
+    } catch {
+      return DEFAULT_LINE_PALETTE;
+    }
+
+    type ColorBucket = { count: number; red: number; green: number; blue: number; satSum: number };
+    const buckets = new Map<string, ColorBucket>();
+
+    for (let pixelOffset = 0; pixelOffset < pixelData.length; pixelOffset += 4) {
+      const alpha = pixelData[pixelOffset + 3];
+      if (alpha < 120) continue;
+
+      const red = pixelData[pixelOffset];
+      const green = pixelData[pixelOffset + 1];
+      const blue = pixelData[pixelOffset + 2];
+      const luminance = (red * 0.2126 + green * 0.7152 + blue * 0.0722) / 255;
+      if (luminance < 0.05 || luminance > 0.97) continue;
+
+      const saturation = colorSaturation(red, green, blue);
+      const quantizedRed = Math.floor(red / 32) * 32;
+      const quantizedGreen = Math.floor(green / 32) * 32;
+      const quantizedBlue = Math.floor(blue / 32) * 32;
+      const bucketKey = `${quantizedRed}-${quantizedGreen}-${quantizedBlue}`;
+      const existingBucket = buckets.get(bucketKey);
+
+      if (existingBucket) {
+        existingBucket.count += 1;
+        existingBucket.red += red;
+        existingBucket.green += green;
+        existingBucket.blue += blue;
+        existingBucket.satSum += saturation;
+      } else {
+        buckets.set(bucketKey, { count: 1, red, green, blue, satSum: saturation });
+      }
+    }
+
+    if (!buckets.size) return DEFAULT_LINE_PALETTE;
+
+    const rankedBuckets = [...buckets.values()].sort((bucketA, bucketB) => {
+      const avgSatA = bucketA.satSum / bucketA.count;
+      const avgSatB = bucketB.satSum / bucketB.count;
+      const scoreA = bucketA.count * (0.72 + avgSatA * 1.28);
+      const scoreB = bucketB.count * (0.72 + avgSatB * 1.28);
+      return scoreB - scoreA;
+    });
+
+    const palette: RgbColor[] = [];
+    for (const bucket of rankedBuckets) {
+      const candidate: RgbColor = {
+        r: Math.round(bucket.red / bucket.count),
+        g: Math.round(bucket.green / bucket.count),
+        b: Math.round(bucket.blue / bucket.count),
+      };
+      const candidateSat = colorSaturation(candidate.r, candidate.g, candidate.b);
+      if (candidateSat < 0.12 && palette.length > 0) continue;
+      if (palette.some((existingColor) => colorDistance(existingColor, candidate) < 44)) continue;
+      palette.push(candidate);
+      if (palette.length >= 4) break;
+    }
+
+    if (!palette.length) return DEFAULT_LINE_PALETTE;
+    while (palette.length < 4) palette.push(palette[palette.length - 1]);
+    return palette;
   }
 
   function getBassEnergy(): number {
@@ -304,8 +428,16 @@
             blobCenterY,
             blobSize * 1.08
           );
-          blobGradient.addColorStop(0, `rgba(255, 255, 255, ${alpha * (0.48 + mid * 0.16)})`);
-          blobGradient.addColorStop(0.62, `rgba(165, 165, 165, ${alpha * (0.28 + high * 0.1)})`);
+          const particleCoreColor = getLineColor(ringIndex + sideIndex);
+          const particleOuterColor = getLineColor(ringIndex + sideIndex + 1);
+          blobGradient.addColorStop(
+            0,
+            `rgba(${particleCoreColor.r}, ${particleCoreColor.g}, ${particleCoreColor.b}, ${alpha * (0.56 + mid * 0.18)})`
+          );
+          blobGradient.addColorStop(
+            0.62,
+            `rgba(${particleOuterColor.r}, ${particleOuterColor.g}, ${particleOuterColor.b}, ${alpha * (0.3 + high * 0.12)})`
+          );
           blobGradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
 
           ctx.fillStyle = blobGradient;
@@ -316,7 +448,8 @@
       }
 
       const edgeAlpha = fade * (0.34 + bass * 0.12 + kickPulse * 0.08);
-      const edgeStroke = `rgba(255, 255, 255, ${edgeAlpha})`;
+      const edgeColor = getLineColor(ringIndex);
+      const edgeStroke = `rgba(${edgeColor.r}, ${edgeColor.g}, ${edgeColor.b}, ${edgeAlpha})`;
       const edgeWidth = 0.86 + fade * (1.78 + bass * 0.72 + kickPulse * 0.56);
       ctx.strokeStyle = edgeStroke;
       ctx.lineWidth = edgeWidth;
@@ -387,8 +520,9 @@
 
           const lineFade = clamp01((startRing.fade + endRing.fade) * 0.7);
           const strutAlpha = (0.32 + audioDrive * 0.34) * lineFade;
+          const strutColor = getLineColor(sideIndex * 3 + traceIndex + startIndex);
 
-          ctx.strokeStyle = `rgba(255, 255, 255, ${strutAlpha})`;
+          ctx.strokeStyle = `rgba(${strutColor.r}, ${strutColor.g}, ${strutColor.b}, ${strutAlpha})`;
           ctx.lineWidth = 1.5 + audioDrive * 1.4;
           ctx.beginPath();
           ctx.moveTo(startX, startY);
@@ -523,7 +657,7 @@
       const innerB = innerSquare[nextIndex];
       const innerA = innerSquare[sideIndex];
 
-      const sideAlpha = 0.024 + high * 0.01;
+      const sideAlpha = 0.032 + high * 0.015;
 
       const sideGradient = ctx.createLinearGradient(innerA.x, innerA.y, outerA.x, outerA.y);
       sideGradient.addColorStop(0, `rgba(255, 255, 255, ${sideAlpha})`);
@@ -574,8 +708,9 @@
     ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     ctx.globalCompositeOperation = 'source-over';
 
-    const portalEdgeStroke = `rgba(250, 250, 250, ${0.08 + high * 0.03})`;
-    const portalEdgeWidth = 0.8 + bass * 0.2;
+    const portalEdgeColor = getLineColor(0);
+    const portalEdgeStroke = `rgba(${portalEdgeColor.r}, ${portalEdgeColor.g}, ${portalEdgeColor.b}, ${0.18 + high * 0.06})`;
+    const portalEdgeWidth = 0.96 + bass * 0.26;
 
     // Directional front shadow: appears only on the curve-leading side.
     const lateralAbs = Math.abs(lateralCurve);
@@ -628,6 +763,17 @@
     ctx.lineTo(innerSquare[1].x, innerSquare[1].y);
     ctx.lineTo(innerSquare[2].x, innerSquare[2].y);
     ctx.lineTo(innerSquare[3].x, innerSquare[3].y);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Slight rim on the black hole for clearer origin contrast
+    ctx.strokeStyle = `rgba(${portalEdgeColor.r}, ${portalEdgeColor.g}, ${portalEdgeColor.b}, ${0.14 + high * 0.04})`;
+    ctx.lineWidth = Math.max(0.76, portalEdgeWidth * 0.8);
+    ctx.beginPath();
+    ctx.moveTo(holeSquare[0].x, holeSquare[0].y);
+    ctx.lineTo(holeSquare[1].x, holeSquare[1].y);
+    ctx.lineTo(holeSquare[2].x, holeSquare[2].y);
+    ctx.lineTo(holeSquare[3].x, holeSquare[3].y);
     ctx.closePath();
     ctx.stroke();
   }
@@ -802,6 +948,26 @@
 
     isInitialized = false;
   }
+
+  $effect(() => {
+    const artworkSource = artwork?.trim();
+    if (typeof window === 'undefined') return;
+    if (!artworkSource) {
+      linePalette = DEFAULT_LINE_PALETTE;
+      return;
+    }
+
+    const requestId = ++paletteRequestId;
+    void extractLinePaletteFromArtwork(artworkSource)
+      .then((palette) => {
+        if (requestId !== paletteRequestId) return;
+        linePalette = palette;
+      })
+      .catch(() => {
+        if (requestId !== paletteRequestId) return;
+        linePalette = DEFAULT_LINE_PALETTE;
+      });
+  });
 
   onMount(() => {
     if (enabled) init();
