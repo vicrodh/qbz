@@ -1034,7 +1034,7 @@
 
   // Immersive default view
   const IMMERSIVE_VIEW_KEYS = [
-    'remember', 'coverflow', 'static', 'vinyl', 'visualizer',
+    'remember', 'coverflow', 'static', 'vinyl', 'visualizer', 'neon-flow', 'tunnel-flow', 'comet-flow',
     'lyrics-focus', 'queue-focus',
     'split-lyrics', 'split-trackInfo', 'split-suggestions', 'split-queue'
   ] as const;
@@ -1074,7 +1074,7 @@
   const FPS_OPTIONS = ['0', '15', '30', '60', '120'] as const;
   const FPS_PANEL_IDS = [
     'ambient', 'visualizer', 'lissajous', 'oscilloscope',
-    'energy-bands', 'transient-pulse', 'album-reactive', 'spectral-ribbon'
+    'energy-bands', 'transient-pulse', 'album-reactive', 'spectral-ribbon', 'neon-flow', 'tunnel-flow', 'comet-flow'
   ] as const;
 
   let immersiveFpsCollapsed = $state(true);

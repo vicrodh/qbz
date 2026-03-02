@@ -12,6 +12,9 @@
   import CoverflowPanel from './panels/CoverflowPanel.svelte';
   import StaticPanel from './panels/StaticPanel.svelte';
   import VisualizerPanel from './panels/VisualizerPanel.svelte';
+  import NeonFlowPanel from './panels/NeonFlowPanel.svelte';
+  import TunnelFlowPanel from './panels/TunnelFlowPanel.svelte';
+  import CometFlowPanel from './panels/CometFlowPanel.svelte';
   import OscilloscopePanel from './panels/OscilloscopePanel.svelte';
   import SpectralRibbon from './panels/SpectralRibbon.svelte';
   import EnergyBandsPanel from './panels/EnergyBandsPanel.svelte';
@@ -153,7 +156,7 @@
   const AUTO_HIDE_DELAY = 4000;
 
   // Immersive view persistence
-  type ImmersiveViewKey = 'coverflow' | 'static' | 'visualizer' | 'oscilloscope' | 'spectral-ribbon' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
+  type ImmersiveViewKey = 'coverflow' | 'static' | 'visualizer' | 'neon-flow' | 'tunnel-flow' | 'comet-flow' | 'oscilloscope' | 'spectral-ribbon' | 'energy-bands' | 'lissajous' | 'transient-pulse' | 'album-reactive' | 'lyrics-focus' | 'queue-focus' | 'split-lyrics' | 'split-trackInfo' | 'split-suggestions' | 'split-queue';
 
   function applyStoredView(key: ImmersiveViewKey) {
     if (key.startsWith('split-')) {
@@ -330,6 +333,18 @@
       case 'R':
         if (viewMode === 'focus') activeFocusTab = 'spectral-ribbon';
         break;
+      case 'n':
+      case 'N':
+        if (viewMode === 'focus') activeFocusTab = 'neon-flow';
+        break;
+      case 'u':
+      case 'U':
+        if (viewMode === 'focus') activeFocusTab = 'tunnel-flow';
+        break;
+      case 'c':
+      case 'C':
+        if (viewMode === 'focus') activeFocusTab = 'comet-flow';
+        break;
     }
     saveLastUsedView();
     resetHideTimer();
@@ -392,7 +407,7 @@
     ></div>
 
     <!-- Background (skip for canvas-based visualizers that render their own black background) -->
-    {#if activeFocusTab !== 'visualizer' && activeFocusTab !== 'oscilloscope' && activeFocusTab !== 'spectral-ribbon' && activeFocusTab !== 'energy-bands' && activeFocusTab !== 'lissajous' && activeFocusTab !== 'transient-pulse'}
+    {#if activeFocusTab !== 'visualizer' && activeFocusTab !== 'neon-flow' && activeFocusTab !== 'tunnel-flow' && activeFocusTab !== 'comet-flow' && activeFocusTab !== 'oscilloscope' && activeFocusTab !== 'spectral-ribbon' && activeFocusTab !== 'energy-bands' && activeFocusTab !== 'lissajous' && activeFocusTab !== 'transient-pulse'}
       <ImmersiveBackground {artwork} />
     {/if}
 
@@ -488,6 +503,48 @@
           {isPlaying}
           currentTime={currentTime}
           {duration}
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+          {originalBitDepth}
+          {originalSamplingRate}
+          {format}
+        />
+      {:else if activeFocusTab === 'neon-flow'}
+        <NeonFlowPanel
+          enabled={true}
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+          {originalBitDepth}
+          {originalSamplingRate}
+          {format}
+        />
+      {:else if activeFocusTab === 'tunnel-flow'}
+        <TunnelFlowPanel
+          enabled={true}
+          {artwork}
+          {trackTitle}
+          {artist}
+          {album}
+          {quality}
+          {bitDepth}
+          {samplingRate}
+          {originalBitDepth}
+          {originalSamplingRate}
+          {format}
+        />
+      {:else if activeFocusTab === 'comet-flow'}
+        <CometFlowPanel
+          enabled={true}
           {artwork}
           {trackTitle}
           {artist}

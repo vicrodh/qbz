@@ -13,6 +13,9 @@ const DEFAULT_FPS = 15;
 export type ImmersivePanelId =
   | 'ambient'
   | 'visualizer'
+  | 'neon-flow'
+  | 'tunnel-flow'
+  | 'comet-flow'
   | 'lissajous'
   | 'oscilloscope'
   | 'energy-bands'

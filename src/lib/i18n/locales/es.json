@@ -798,6 +798,10 @@
         "static": "Estática",
         "vinyl": "Vinilo",
         "visualizer": "Visualizador",
+        "neon": "Neón",
+        "neon-flow": "Flujo Neón",
+        "tunnel-flow": "Túnel",
+        "comet-flow": "Cometa",
         "lyrics-focus": "Letras",
         "queue-focus": "Cola",
         "split-lyrics": "Dividido: Letras",
@@ -823,7 +827,11 @@
           "energy-bands": "Bandas de Energía",
           "transient-pulse": "Pulso Transitorio",
           "album-reactive": "Álbum Reactivo",
-          "spectral-ribbon": "Cinta Espectral"
+          "spectral-ribbon": "Cinta Espectral",
+          "neon-laser": "Laser",
+          "neon-flow": "Flujo Neón",
+          "tunnel-flow": "Túnel",
+          "comet-flow": "Cometa"
         }
       },
       "fpsOptions": {
