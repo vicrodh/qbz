@@ -48,21 +48,31 @@
   <screenshots>
     <screenshot type="default">
       <caption xml:lang="en">Home and discovery view</caption>
-      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5d47f3b44568af93679e17f07d2b836999/packaging/flatpak/screenshots/home-discover.png</image>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5da726719b983770c7f4c2ff52bb51e14d/packaging/flatpak/screenshots/home-discover.png</image>
     </screenshot>
     <screenshot>
       <caption xml:lang="en">Immersive cover flow mode</caption>
-      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5d47f3b44568af93679e17f07d2b836999/packaging/flatpak/screenshots/immersive-cover-flow.png</image>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5da726719b983770c7f4c2ff52bb51e14d/packaging/flatpak/screenshots/immersive-cover-flow.png</image>
     </screenshot>
     <screenshot>
       <caption xml:lang="en">Local library view</caption>
-      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5d47f3b44568af93679e17f07d2b836999/packaging/flatpak/screenshots/local-library.png</image>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5da726719b983770c7f4c2ff52bb51e14d/packaging/flatpak/screenshots/local-library.png</image>
     </screenshot>
   </screenshots>
   <releases>
+    <release version="1.1.18" date="2026-02-26">
+      <description>
+        <p>Miniplayer window with compact and micro surfaces. OAuth browser login for new Qobuz auth flow. Window size persistence, HiDPI scaling fix, and artist image context menus.</p>
+      </description>
+    </release>
+    <release version="1.1.16" date="2026-02-23">
+      <description>
+        <p>OAuth browser authentication, window size persistence, HiDPI scaling fix for all backends, and login flow improvements.</p>
+      </description>
+    </release>
     <release version="1.1.15" date="2026-02-23">
       <description>
-        <p>Multi-select tracks across all views (Album, Artist, Playlist, Favorites, Label, Daily/Weekly/Fav/Top mixes) with bulk queue and playlist actions. Scroll position now scoped per item and expires after one hour.</p>
+        <p>Multi-select tracks across all views with bulk queue and playlist actions. Scroll position now scoped per item and expires after one hour.</p>
       </description>
     </release>
     <release version="1.1.11" date="2026-02-10">
