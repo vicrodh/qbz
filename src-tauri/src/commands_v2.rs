@@ -63,6 +63,7 @@ use crate::AppState;
 use md5::{Digest, Md5};
 use ashpd::desktop::notification::{Notification as PortalNotification, NotificationProxy};
 use ashpd::desktop::Icon;
+use ashpd::zbus;
 use std::collections::HashSet;
 use std::fs;
 use std::io::Write;
@@ -9395,6 +9396,51 @@ pub async fn v2_uncache_favorite_artist(
         .map_err(|e| RuntimeError::Internal(e))
 }
 
+// ==================== Desktop Notifications ====================
+
+/// Send a notification via org.freedesktop.Notifications D-Bus interface.
+/// Supports image-path hint for album artwork (not available in the XDG portal spec).
+async fn show_native_notification(
+    summary: &str,
+    body: &str,
+    image_path: Option<&std::path::Path>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let connection = zbus::Connection::session().await?;
+    let proxy: zbus::proxy::Proxy<'_> = zbus::proxy::Builder::new(&connection)
+        .destination("org.freedesktop.Notifications")?
+        .path("/org/freedesktop/Notifications")?
+        .interface("org.freedesktop.Notifications")?
+        .build()
+        .await?;
+
+    let mut hints: std::collections::HashMap<&str, zbus::zvariant::Value<'_>> =
+        std::collections::HashMap::new();
+    if let Some(path) = image_path {
+        if let Some(path_str) = path.to_str() {
+            hints.insert("image-path", zbus::zvariant::Value::from(path_str));
+        }
+    }
+
+    // replaces_id=0 means don't replace; the daemon assigns an ID
+    let _: u32 = proxy
+        .call(
+            "Notify",
+            &(
+                "QBZ",                                   // app_name
+                0u32,                                    // replaces_id
+                "",                                      // app_icon (empty = use .desktop)
+                summary,                                 // summary
+                body,                                    // body
+                &[] as &[&str],                          // actions
+                hints,                                   // hints
+                4000i32,                                 // expire_timeout ms
+            ),
+        )
+        .await?;
+
+    Ok(())
+}
+
 // ==================== Remaining Legacy-Equivalent V2 Commands ====================
 
 #[tauri::command]
@@ -9430,25 +9476,34 @@ pub async fn v2_show_track_notification(
     }
 
     let body_text = lines.join("\n");
-    let mut notification = PortalNotification::new(&title)
-        .body(Some(body_text.as_str()));
 
-    if let Some(ref url_str) = artwork_url {
-        if let Ok(path) = v2_cache_notification_artwork(url_str) {
-            if let Ok(bytes) = std::fs::read(&path) {
+    let artwork_path = artwork_url
+        .as_deref()
+        .and_then(|url| v2_cache_notification_artwork(url).ok());
+
+    if ashpd::is_sandboxed() {
+        // Flatpak: use XDG portal (required by Flathub, no image-path support)
+        let mut notification = PortalNotification::new(&title)
+            .body(Some(body_text.as_str()));
+        if let Some(ref path) = artwork_path {
+            if let Ok(bytes) = std::fs::read(path) {
                 notification = notification.icon(Icon::Bytes(bytes));
             }
         }
-    }
-
-    match NotificationProxy::new().await {
-        Ok(proxy) => {
-            if let Err(e) = proxy.add_notification("track-now-playing", notification).await {
-                log::warn!("Could not show notification via XDG portal: {}", e);
+        match NotificationProxy::new().await {
+            Ok(proxy) => {
+                if let Err(e) = proxy.add_notification("track-now-playing", notification).await {
+                    log::warn!("Could not show notification via XDG portal: {}", e);
+                }
+            }
+            Err(e) => {
+                log::warn!("XDG notification portal unavailable: {}", e);
             }
         }
-        Err(e) => {
-            log::warn!("XDG notification portal unavailable: {}", e);
+    } else {
+        // Native: use org.freedesktop.Notifications directly (supports image-path hint)
+        if let Err(e) = show_native_notification(&title, &body_text, artwork_path.as_deref()).await {
+            log::warn!("Could not show notification: {}", e);
         }
     }
 
