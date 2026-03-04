@@ -82,7 +82,13 @@ apps:
       - pulseaudio
       - alsa
       - pipewire
-      - mpris
+    slots:
+      - mpris-player
+
+slots:
+  mpris-player:
+    interface: mpris
+    name: qbz
 
 parts:
   qbz:
