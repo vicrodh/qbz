@@ -2,15 +2,14 @@
 <component type="desktop-application">
   <id>com.blitzfc.qbz</id>
   <name>QBZ</name>
-  <summary>Native Qobuz client with hi-res audio support</summary>
+  <summary>Stream hi-res music from Qobuz with bit-perfect playback</summary>
   <description>
     <p>
-      QBZ is a native Qobuz streaming client for Linux built for audiophiles who want reliable, bit-perfect playback without browser sample-rate limitations.
+      QBZ is a native Qobuz client for Linux focused on reliable hi-res playback and desktop integration.
     </p>
-    <p>Features:</p>
     <ul>
       <li>Bit-perfect playback up to 24-bit/192kHz</li>
-      <li>Native Linux audio backends (ALSA, PulseAudio, PipeWire)</li>
+      <li>PipeWire and PulseAudio audio output</li>
       <li>DAC routing and exclusive mode support</li>
       <li>Offline playlist support</li>
       <li>MPRIS integration for desktop media controls</li>
@@ -20,25 +19,15 @@
   <developer id="com.blitzfc">
     <name>QBZ Contributors</name>
   </developer>
-  <metadata_license>CC0-1.0</metadata_license>
-  <project_license>MIT</project_license>
   <url type="homepage">https://github.com/vicrodh/qbz</url>
   <url type="bugtracker">https://github.com/vicrodh/qbz/issues</url>
   <url type="vcs-browser">https://github.com/vicrodh/qbz</url>
-  <categories>
-    <category>AudioVideo</category>
-    <category>Audio</category>
-    <category>Music</category>
-    <category>Player</category>
-  </categories>
-  <keywords>
-    <keyword>music</keyword>
-    <keyword>audio</keyword>
-    <keyword>qobuz</keyword>
-    <keyword>hifi</keyword>
-    <keyword>streaming</keyword>
-    <keyword>audiophile</keyword>
-  </keywords>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <branding>
+    <color type="primary" scheme_preference="light">#2b6cb0</color>
+    <color type="primary" scheme_preference="dark">#63b3ed</color>
+  </branding>
   <launchable type="desktop-id">com.blitzfc.qbz.desktop</launchable>
   <provides>
     <binary>qbz</binary>
@@ -46,37 +35,47 @@
   <content_rating type="oars-1.1" />
   <screenshots>
     <screenshot type="default">
-      <caption>Home and discovery view</caption>
-      <image>https://raw.githubusercontent.com/vicrodh/qbz/v1.1.13/flatpak/screenshots/home-discover.png</image>
+      <caption xml:lang="en">Home and discovery view</caption>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5da726719b983770c7f4c2ff52bb51e14d/packaging/flatpak/screenshots/home-discover.png</image>
     </screenshot>
     <screenshot>
-      <caption>Immersive cover flow mode</caption>
-      <image>https://raw.githubusercontent.com/vicrodh/qbz/v1.1.13/flatpak/screenshots/immersive-cover-flow.png</image>
+      <caption xml:lang="en">Immersive cover flow mode</caption>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5da726719b983770c7f4c2ff52bb51e14d/packaging/flatpak/screenshots/immersive-cover-flow.png</image>
     </screenshot>
     <screenshot>
-      <caption>Local library view</caption>
-      <image>https://raw.githubusercontent.com/vicrodh/qbz/v1.1.13/flatpak/screenshots/local-library.png</image>
+      <caption xml:lang="en">Local library view</caption>
+      <image>https://raw.githubusercontent.com/vicrodh/qbz/cff32e5da726719b983770c7f4c2ff52bb51e14d/packaging/flatpak/screenshots/local-library.png</image>
     </screenshot>
   </screenshots>
   <releases>
-    <release version="1.1.13" date="2026-02-12">
+    <release version="1.1.18" date="2026-02-26">
       <description>
-        <p>Flathub submission release with upstream metadata files.</p>
+        <p>Miniplayer window with compact and micro surfaces. OAuth browser login for new Qobuz auth flow. Window size persistence, HiDPI scaling fix, and artist image context menus.</p>
       </description>
     </release>
-    <release version="1.1.12" date="2026-02-12">
+    <release version="1.1.16" date="2026-02-23">
       <description>
-        <p>Bug fix release addressing graphics rendering regressions and performance improvements.</p>
+        <p>OAuth browser authentication, window size persistence, HiDPI scaling fix for all backends, and login flow improvements.</p>
       </description>
     </release>
-    <release version="1.1.10" date="2026-02-10">
+    <release version="1.1.15" date="2026-02-23">
+      <description>
+        <p>Multi-select tracks across all views with bulk queue and playlist actions. Scroll position now scoped per item and expires after one hour.</p>
+      </description>
+    </release>
+    <release version="1.1.11" date="2026-02-10">
       <description>
         <p>Discover browse pages for albums and playlists, localized playlist tags, preserved Qobuz artwork on playlist copy, and UI fixes.</p>
       </description>
     </release>
     <release version="1.1.9" date="2026-02-07">
       <description>
-        <p>Maintenance release with Home performance improvements, playback auto-resume after settings changes, and playlist import fixes.</p>
+        <p>Maintenance release: faster Home view, playback auto-resume after settings change, playlist import improvements, and bug fixes.</p>
+      </description>
+    </release>
+    <release version="1.1.8" date="2026-01-25">
+      <description>
+        <p>Major release: genre filtering, playlist suggestions, immersive player, DAC wizard, key bindings, artist blacklist.</p>
       </description>
     </release>
   </releases>
