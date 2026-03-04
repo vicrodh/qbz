@@ -45,7 +45,7 @@ type ReleaseData = {
 }
 
 type DownloadItem = {
-  type: 'appimage' | 'flatpak' | 'deb' | 'rpm' | 'tarball' | 'aur' | 'snap' | 'unknown'
+  type: 'appimage' | 'flatpak' | 'flathub' | 'deb' | 'rpm' | 'tarball' | 'aur' | 'snap' | 'unknown'
   label: string
   fileName: string
   url: string
@@ -62,9 +62,10 @@ const RELEASES_URL = 'https://api.github.com/repos/vicrodh/qbz/releases'
 
 const TYPE_LABELS: Record<DownloadItem['type'], string> = {
   aur: 'AUR (Arch)',
+  flathub: 'Flathub',
   snap: 'Snap Store',
   appimage: 'AppImage',
-  flatpak: 'Flatpak',
+  flatpak: 'Flatpak (GitHub Release)',
   deb: 'Debian/Ubuntu',
   rpm: 'Fedora/RHEL',
   tarball: 'Tarball',
@@ -73,16 +74,18 @@ const TYPE_LABELS: Record<DownloadItem['type'], string> = {
 
 const TYPE_PRIORITY: Record<DownloadItem['type'], number> = {
   aur: 0,
-  snap: 1,
-  appimage: 2,
-  flatpak: 3,
-  deb: 4,
-  rpm: 5,
-  tarball: 6,
-  unknown: 7,
+  flathub: 1,
+  snap: 2,
+  appimage: 3,
+  flatpak: 4,
+  deb: 5,
+  rpm: 6,
+  tarball: 7,
+  unknown: 8,
 }
 
 const AUR_PACKAGE_URL = 'https://aur.archlinux.org/packages/qbz-bin'
+const FLATHUB_URL = 'https://flathub.org/apps/com.blitzfc.qbz'
 const SNAP_STORE_URL = 'https://snapcraft.io/qbz-player'
 
 const getType = (name: string): DownloadItem['type'] => {
@@ -109,6 +112,8 @@ const getInstallCmd = (type: DownloadItem['type'], fileName: string): string | u
   switch (type) {
     case 'aur':
       return 'git clone https://aur.archlinux.org/qbz-bin.git && cd qbz-bin && makepkg -si'
+    case 'flathub':
+      return 'flatpak install flathub com.blitzfc.qbz'
     case 'snap':
       return 'sudo snap install qbz-player'
     case 'appimage':
@@ -173,10 +178,7 @@ const mapAssets = (assets: ReleaseAsset[]): DownloadItem[] =>
         installCmd: getInstallCmd(type, asset.name),
         depsCmd: getDepsCmd(type),
         helperCmds: getHelperCmds(type),
-        helperNote: type === 'flatpak' ? {
-          label: 'Audiophile Setup (Bit-Perfect Audio)',
-          note: 'After install, open QBZ → Settings → Audio and select "ALSA Direct" as Audio Backend. Note: PipeWire bit-perfect is unavailable in Flatpak due to sandbox restrictions.'
-        } : undefined,
+        helperNote: undefined,
         glibcNote: (type === 'deb' || type === 'rpm') ? t(`downloads.glibcNote.${type}`) : undefined,
       }
     })
@@ -211,6 +213,22 @@ const aurItem: DownloadItem = {
   helperCmds: getHelperCmds('aur'),
 }
 
+// Flathub download item
+const flathubItem: DownloadItem = {
+  type: 'flathub',
+  label: TYPE_LABELS.flathub,
+  fileName: 'com.blitzfc.qbz',
+  url: FLATHUB_URL,
+  size: 0,
+  arch: null,
+  installCmd: getInstallCmd('flathub', 'com.blitzfc.qbz'),
+  helperCmds: getHelperCmds('flatpak'),
+  helperNote: {
+    label: 'Audiophile Setup (Bit-Perfect Audio)',
+    note: 'After install, open QBZ → Settings → Audio and select "ALSA Direct" as Audio Backend. Note: PipeWire bit-perfect is unavailable in Flatpak due to sandbox restrictions.'
+  },
+}
+
 // Snap Store download item
 const snapItem: DownloadItem = {
   type: 'snap',
@@ -226,7 +244,6 @@ const snapItem: DownloadItem = {
       'sudo snap connect qbz-player:alsa',
       'sudo snap connect qbz-player:pulseaudio',
       'sudo snap connect qbz-player:pipewire',
-      'sudo snap connect qbz-player:mpris',
     ]
   },
   helperNote: {
@@ -239,7 +256,7 @@ const snapItem: DownloadItem = {
 const getDownloadsWithExtras = (items: DownloadItem[]) => {
   const platform = detectPlatform()
   if (platform.isLinux) {
-    return [aurItem, snapItem, ...items]
+    return [aurItem, flathubItem, snapItem, ...items]
   }
   return items
 }
@@ -320,7 +337,7 @@ export function DownloadSection() {
                         {item.arch && <span className="download-item__arch">{item.arch}</span>}
                       </div>
                       <span className="download-item__file">
-                        {item.type === 'aur' ? 'Arch User Repository' : item.type === 'snap' ? 'Snap Store' : `${item.fileName} · ${formatBytes(item.size)}`}
+                        {item.type === 'aur' ? 'Arch User Repository' : item.type === 'flathub' ? 'Flathub' : item.type === 'snap' ? 'Snap Store' : `${item.fileName} · ${formatBytes(item.size)}`}
                       </span>
                     </div>
                     {item.installCmd && (
@@ -369,8 +386,8 @@ export function DownloadSection() {
                         </p>
                       </details>
                     )}
-                    <a className="btn btn-ghost btn-sm" href={item.url} target={item.type === 'aur' || item.type === 'snap' ? '_blank' : undefined} rel={item.type === 'aur' || item.type === 'snap' ? 'noreferrer' : undefined}>
-                      {item.type === 'aur' ? 'View on AUR' : item.type === 'snap' ? 'View on Snap Store' : 'Download'}
+                    <a className="btn btn-ghost btn-sm" href={item.url} target={item.type === 'aur' || item.type === 'flathub' || item.type === 'snap' ? '_blank' : undefined} rel={item.type === 'aur' || item.type === 'flathub' || item.type === 'snap' ? 'noreferrer' : undefined}>
+                      {item.type === 'aur' ? 'View on AUR' : item.type === 'flathub' ? 'View on Flathub' : item.type === 'snap' ? 'View on Snap Store' : 'Download'}
                     </a>
                   </div>
                 ))}
