@@ -1326,6 +1326,7 @@
       {:else}
         <div class="search-expanded">
           <Search size={16} class="search-icon-inline" />
+          <!-- svelte-ignore a11y_autofocus -->
           <input
             type="text"
             placeholder={$t('placeholders.search')}
@@ -1346,12 +1347,13 @@
   <div class="favorites-nav">
     <div class="nav-left">
       {#each favoritesPreferences.tab_order as tab}
+        {@const Icon = getTabIcon(tab as TabType)}
         <button
           class="nav-link"
           class:active={activeTab === tab}
           onclick={() => handleTabChange(tab as TabType)}
         >
-          <svelte:component this={getTabIcon(tab as TabType)} size={16} />
+          <Icon size={16} />
           <span>{getTabLabel(tab as TabType)}</span>
         </button>
       {/each}

@@ -45,7 +45,9 @@
 </script>
 
 {#if isOpen}
-  <div class="modal-backdrop" onclick={onClose}>
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-backdrop" onclick={onClose} role="presentation">
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
     <div class="modal" onclick={(e) => e.stopPropagation()}>
       <!-- Header -->
       <div class="modal-header">

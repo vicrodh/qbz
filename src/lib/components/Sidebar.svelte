@@ -1618,6 +1618,8 @@
           class="dropdown-menu"
           bind:this={menuEl}
           style={menuStyle}
+          role="menu"
+          tabindex="-1"
           onmouseenter={() => isHoveringDropdown = true}
           onmouseleave={() => isHoveringDropdown = false}
         >
@@ -1629,6 +1631,7 @@
             tabindex="0"
             onmouseenter={openSubmenu}
             onmouseleave={closeSubmenuDelayed}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openSubmenu(); } }}
           >
             <ArrowUpDown size={14} />
             <span class="menu-label">{$t('library.sortBy')}</span>
@@ -1641,6 +1644,8 @@
               class="submenu"
               bind:this={submenuEl}
               style={submenuStyle}
+              role="menu"
+              tabindex="-1"
               onmouseenter={openSubmenu}
               onmouseleave={closeSubmenuDelayed}
             >
@@ -1723,6 +1728,7 @@
                       </span>
                     </button>
                   {:else if item.type === 'folder-playlist'}
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div
                       class="playlist-drag-wrapper"
                       class:dragging={draggedPlaylistId === item.playlist.id}
@@ -1744,6 +1750,7 @@
                       </NavigationItem>
                     </div>
                   {:else if item.type === 'root-playlist'}
+                    <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div
                       class="playlist-drag-wrapper"
                       class:dragging={draggedPlaylistId === item.playlist.id}
@@ -1880,6 +1887,7 @@
   {@const availableFolders = folders.filter(f => f.id !== contextMenu.currentFolderId)}
   {@const showSearch = availableFolders.length >= FOLDER_SEARCH_THRESHOLD}
   {@const contextPlaylistHidden = contextMenu.playlist ? (playlistSettings.get(contextMenu.playlist.id)?.hidden ?? false) : false}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="context-menu"
     class:has-search={showSearch}
@@ -1888,6 +1896,7 @@
     onmouseenter={() => isHoveringContextMenu = true}
     onmouseleave={() => isHoveringContextMenu = false}
     role="menu"
+    tabindex="-1"
   >
     {#if contextMenu.folder}
       {@const contextFolderHidden = contextMenu.folder.is_hidden ?? false}
@@ -1974,6 +1983,7 @@
 
 <!-- Collapsed Folder Popover -->
 {#if folderPopover.visible}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="folder-popover"
     style="left: {folderPopover.x}px; top: {folderPopover.y}px;"
@@ -1981,6 +1991,7 @@
     onmouseenter={() => isHoveringFolderPopover = true}
     onmouseleave={() => isHoveringFolderPopover = false}
     role="menu"
+    tabindex="-1"
   >
     <div class="folder-popover-header">
       <Folder size={14} />
@@ -2011,10 +2022,12 @@
 <!-- Create Folder Modal -->
 {#if showCreateFolderModal}
   <div class="modal-overlay" onclick={cancelCreateFolder} role="presentation">
-    <div class="modal-content create-folder-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal-content create-folder-modal" onclick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" tabindex="-1">
       <h2 class="modal-title">{$t('playlist.newFolder', { default: 'New Folder' })}</h2>
       <div class="form-group">
         <label for="folder-name">{$t('common.name', { default: 'Name' })}</label>
+        <!-- svelte-ignore a11y_autofocus -->
         <input
           id="folder-name"
           type="text"

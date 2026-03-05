@@ -291,9 +291,12 @@
       <!-- List View -->
       <div class="playlist-list">
         {#each getFilteredPlaylists() as playlist (playlist.id)}
-          <button
+          <div
             class="list-row"
+            role="button"
+            tabindex="0"
             onclick={() => onPlaylistClick?.(playlist.id)}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlaylistClick?.(playlist.id); } }}
           >
             <div class="list-artwork">
               {#if playlist.image?.rectangle || playlist.image?.covers?.[0]}
@@ -344,7 +347,7 @@
                 </button>
               {/if}
             </div>
-          </button>
+          </div>
         {/each}
       </div>
     {/if}

@@ -168,8 +168,10 @@
 <svelte:window on:keydown={handleKeydown} />
 
 {#if isOpen}
-  <div class="modal-overlay" onclick={onClose} role="dialog" aria-modal="true">
-    <div class="credits-modal" onclick={(e) => e.stopPropagation()}>
+  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <div class="modal-overlay" onclick={onClose} role="presentation">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="credits-modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()}>
       {#if loading}
         <div class="loading-state">
           <Loader2 size={32} class="spinner" />
@@ -296,13 +298,16 @@
                     >
                       <div class="track-number">
                         {#if isHovered && onTrackPlay}
-                          <button
+                          <div
                             class="play-btn"
+                            role="button"
+                            tabindex="0"
                             onclick={(e) => handleTrackPlay(track, e)}
+                            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTrackPlay(track, e); } }}
                             aria-label="Play track"
                           >
                             <Play size={14} fill="currentColor" />
-                          </button>
+                          </div>
                         {:else}
                           <span>{track.number}</span>
                         {/if}

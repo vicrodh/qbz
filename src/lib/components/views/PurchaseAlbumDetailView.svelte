@@ -389,6 +389,7 @@
             {@const isActive = activeTrackId === track.id}
             {@const isDownloadedForFormat = selectedFormatId !== null && (track.downloaded_format_ids ?? []).includes(selectedFormatId)}
             {@const isDownloaded = isDownloadedForFormat || status === 'complete'}
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_static_element_interactions a11y_click_events_have_key_events -->
             <div
               class="track-row"
               class:downloading={status === 'downloading'}
@@ -399,6 +400,7 @@
               onclick={() => track.streamable && onTrackPlay?.(toDisplayTrack(track))}
               role={track.streamable && onTrackPlay ? 'button' : undefined}
               tabindex={track.streamable && onTrackPlay ? 0 : undefined}
+              onkeydown={track.streamable && onTrackPlay ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTrackPlay?.(toDisplayTrack(track)); } } : undefined}
             >
               <div class="col-number">
                 {#if isActive && isPlaybackActive}
@@ -898,12 +900,6 @@
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  .download-done {
-    color: var(--success, #4caf50);
-    display: flex;
-    align-items: center;
   }
 
   .download-active {

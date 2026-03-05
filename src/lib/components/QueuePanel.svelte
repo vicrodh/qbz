@@ -269,6 +269,7 @@
 </script>
 
 <!-- Queue Panel -->
+<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
 <aside class="queue-panel" onclick={handlePanelClick}>
   <!-- Header with Tabs -->
   <div class="header">
@@ -354,6 +355,7 @@
                   ondragend={handleDragEnd}
                   role="button"
                   tabindex={isUnavailable ? -1 : 0}
+                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleTrackClick(queueTrack); } }}
                 >
                   <span class="track-number">{originalIndex + 1}</span>
                   <div class="track-info">
@@ -415,6 +417,7 @@
                   onmouseleave={() => hoveredHistoryTrack = null}
                   role="button"
                   tabindex="0"
+                  onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleHistoryTrackClick(track); } }}
                 >
                   <img src={track.artwork} alt={track.title} class="history-artwork" />
                   <div class="track-info">

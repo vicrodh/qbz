@@ -880,11 +880,13 @@
               }}
             >
               {#if multiSelectMode}
+                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
                 <label class="track-checkbox-wrap" onclick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"
                     checked={multiSelectedIds.has(track.id)}
                     onchange={() => toggleMultiSelect(track.id)}
+                    aria-label={$t('actions.select')}
                     style="width:15px;height:15px;cursor:pointer;accent-color:var(--accent-primary);"
                   />
                 </label>

@@ -239,10 +239,12 @@
     onclick={() => confirmClearOpen = false}
     onkeydown={(e) => e.key === 'Escape' && (confirmClearOpen = false)}
   >
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
       class="modal-content"
       role="dialog"
       aria-modal="true"
+      tabindex="-1"
       onclick={(e) => e.stopPropagation()}
     >
       <h2 class="modal-title">{$t('settings.blacklist.confirmClearTitle')}</h2>

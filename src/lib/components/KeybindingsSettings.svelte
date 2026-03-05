@@ -80,11 +80,13 @@
 
 {#if isOpen}
   <div class="modal-backdrop" onclick={handleBackdropClick} role="presentation">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div
       class="modal"
       role="dialog"
       aria-modal="true"
       aria-labelledby="keybindings-settings-title"
+      tabindex="-1"
       onclick={(e) => e.stopPropagation()}
     >
       <header class="modal-header">

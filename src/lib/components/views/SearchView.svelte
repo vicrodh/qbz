@@ -14,10 +14,10 @@
   import { saveScrollPosition, getSavedScrollPosition } from '$lib/stores/navigationStore';
   import { t } from '$lib/i18n';
 
-  let searchInput: HTMLInputElement | null = null;
+  let searchInput = $state<HTMLInputElement | null>(null);
   let albumsCarouselContainer = $state<HTMLDivElement | null>(null);
   let artistsCarouselContainer = $state<HTMLDivElement | null>(null);
-  let scrollContainer: HTMLDivElement | null = null;
+  let scrollContainer = $state<HTMLDivElement | null>(null);
   let isScrolled = $state(false);
   let currentAlbumPage = $state(0);
   let currentArtistPage = $state(0);
@@ -1338,11 +1338,14 @@
                           <MoreHorizontal size={16} />
                         </button>
                         {#if mostPopularMenuOpen}
+                          <!-- svelte-ignore a11y_click_events_have_key_events -->
                           <div
                             class="popular-menu"
                             bind:this={popularMenuEl}
                             style={popularMenuStyle}
                             use:portal
+                            role="menu"
+                            tabindex="-1"
                             onclick={(e) => e.stopPropagation()}
                           >
                             <button class="menu-item" onclick={() => { onAlbumPlay?.(album.id); mostPopularMenuOpen = false; }}>
@@ -1395,6 +1398,7 @@
                 </div>
               {:else if allResults.most_popular?.type === 'tracks'}
                 {@const track = allResults.most_popular.content}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div class="popular-card most-popular-card" class:menu-open={mostPopularMenuOpen} onmouseenter={measurePopularOverflow}>
                   <div class="popular-card-artwork">
                     {#if track.album?.image?.large || track.album?.image?.small}
@@ -1436,11 +1440,14 @@
                           <MoreHorizontal size={16} />
                         </button>
                         {#if mostPopularMenuOpen}
+                          <!-- svelte-ignore a11y_click_events_have_key_events -->
                           <div
                             class="popular-menu"
                             bind:this={popularMenuEl}
                             style={popularMenuStyle}
                             use:portal
+                            role="menu"
+                            tabindex="-1"
                             onclick={(e) => e.stopPropagation()}
                           >
                             <button class="menu-item" onclick={() => { handleSearchTrackPlay(track, 0); mostPopularMenuOpen = false; }}>

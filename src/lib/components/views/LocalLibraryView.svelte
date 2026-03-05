@@ -3579,8 +3579,8 @@
             {:else}
               <div class="album-list">
                 {#each hiddenAlbums as album (album.id)}
-                  <div class="album-row" role="button" tabindex="0">
-                    <div class="album-row-art" onclick={() => handleAlbumClick(album)}>
+                  <div class="album-row" role="button" tabindex="0" onclick={() => handleAlbumClick(album)} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleAlbumClick(album); } }}>
+                    <div class="album-row-art">
                       {#if album.artwork_path}
                         <img src={getArtworkUrl(album.artwork_path)} alt={album.title} loading="lazy" decoding="async" />
                       {:else}
@@ -3589,7 +3589,7 @@
                         </div>
                       {/if}
                     </div>
-                    <div class="album-row-info" onclick={() => handleAlbumClick(album)}>
+                    <div class="album-row-info">
                       <div class="album-row-title">{album.title}</div>
                       <div class="album-row-artist">{album.artist}</div>
                       <div class="album-row-meta">
@@ -3677,8 +3677,10 @@
                 {/if}
               </button>
               {#if showFilterPanel}
+                <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
                 <div
                   class="filter-panel"
+                  role="region"
                   onmouseenter={clearFilterPanelTimer}
                   onmouseleave={startFilterPanelTimer}
                   onclick={handleFilterPanelActivity}
@@ -4108,8 +4110,9 @@
 
 <!-- Album Settings Modal -->
 {#if showAlbumEditModal && selectedAlbum}
-  <div class="modal-overlay" onclick={() => showAlbumEditModal = false}>
-    <div class="modal" onclick={(e: MouseEvent) => e.stopPropagation()}>
+  <div class="modal-overlay" onclick={() => showAlbumEditModal = false} role="presentation">
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div class="modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(e: MouseEvent) => e.stopPropagation()}>
       <div class="modal-header">
         <h2>Album Settings</h2>
         <button class="close-btn" onclick={() => showAlbumEditModal = false}>
@@ -4150,7 +4153,7 @@
 
           <div class="form-group">
             <div class="artwork-layout-header" class:discogs-active={discogsFetchSuccessful}>
-              <label>Album Artwork</label>
+              <span class="form-label">Album Artwork</span>
               {#if discogsFetchSuccessful}
                 <div class="discogs-layout-label">Select Artwork from Discogs</div>
               {/if}
@@ -5825,7 +5828,7 @@
     margin-bottom: 20px;
   }
 
-  .form-group label {
+  .form-group .form-label {
     display: block;
     font-size: 13px;
     font-weight: 500;
@@ -5845,7 +5848,7 @@
     grid-template-columns: 1fr 1fr;
   }
 
-  .artwork-layout-header label {
+  .artwork-layout-header .form-label {
     margin-bottom: 0;
   }
 

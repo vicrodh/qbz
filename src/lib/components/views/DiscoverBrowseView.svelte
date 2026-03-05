@@ -92,7 +92,7 @@
     albumOfTheWeek: 'discover-albums-of-the-week',
     pressAward: 'discover-press-accolades',
   };
-  const genreContext = GENRE_CONTEXT_MAP[endpointType];
+  const genreContext = $derived(GENRE_CONTEXT_MAP[endpointType]);
 
   // State
   let albums = $state<FavoriteAlbum[]>([]);

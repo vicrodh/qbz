@@ -673,15 +673,6 @@
     50% { opacity: 0.6; }
   }
 
-  /* Section Separator */
-  .section-separator {
-    width: 1px;
-    height: 20px;
-    background: var(--border-subtle);
-    margin: 0 8px;
-    flex-shrink: 0;
-  }
-
   /* Queue Button & Icon */
   .queue-btn {
     width: 32px;

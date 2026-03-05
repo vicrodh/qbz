@@ -660,6 +660,7 @@
     aria-modal="true"
     tabindex="-1"
   >
+    <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
     <div class="modal" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h2>
@@ -782,7 +783,7 @@
 
           {#if mode === 'edit'}
             <div class="form-group">
-              <label>{$t('playlist.customArtwork')}</label>
+              <span class="form-label">{$t('playlist.customArtwork')}</span>
               <div class="playlist-artwork-editor">
                 <div class="playlist-artwork-preview">
                   {#if customArtworkPath}
@@ -1022,7 +1023,8 @@
     margin-bottom: 16px;
   }
 
-  .form-group label {
+  .form-group label,
+  .form-group .form-label {
     display: block;
     font-size: 13px;
     font-weight: 500;

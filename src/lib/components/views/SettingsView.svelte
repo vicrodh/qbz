@@ -3997,8 +3997,8 @@
     <!-- Auto-Theme failure modal -->
     {#if autoThemeFailedModal}
       <div class="auto-theme-modal-backdrop" role="presentation" onclick={dismissAutoThemeFailedModal}>
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div class="auto-theme-modal" onclick={(e) => e.stopPropagation()}>
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="auto-theme-modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()}>
           <h3>{$t('settings.appearance.autoThemeError')}</h3>
           <p class="auto-theme-modal-message">{autoThemeFailedMessage}</p>
           <p class="auto-theme-modal-hint">{$t('settings.appearance.autoThemeFailedHint')}</p>
@@ -5945,11 +5945,6 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
 
   .collapsible-section .section-title-btn:hover :global(svg) {
     color: var(--text-primary);
-  }
-
-  .collapsible-section .section-title-btn .experimental-badge {
-    flex-shrink: 0;
-    margin-left: -4px;
   }
 
   /* Composition subsection (inside Appearance) */

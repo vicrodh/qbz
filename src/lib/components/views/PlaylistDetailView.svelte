@@ -2268,6 +2268,7 @@
           {@const available = isTrackAvailable(track)}
           {@const removedFromQobuz = isTrackRemovedFromQobuz(track)}
           {@const trackBlacklisted = !track.isLocal && track.artistId ? isArtistBlacklisted(track.artistId) : false}
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
           <div
             class="track-row-wrapper virtual-track-item"
             class:unavailable={!available}
@@ -2288,21 +2289,25 @@
           >
             {#if multiSelectMode && !isCustomOrderMode}
               {@const trackKey = getTrackKey(track)}
-              <label class="track-checkbox" onclick={(e) => e.stopPropagation()}>
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+              <label class="track-checkbox" onclick={(e: MouseEvent) => e.stopPropagation()}>
                 <input
                   type="checkbox"
                   checked={multiSelectedKeys.has(trackKey)}
                   onchange={() => toggleMultiSelect(track)}
+                  aria-label={$t('actions.select')}
                 />
               </label>
             {/if}
             {#if isCustomOrderMode}
               {@const trackKey = getTrackKey(track)}
-              <label class="track-checkbox" onclick={(e) => e.stopPropagation()}>
+              <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+              <label class="track-checkbox" onclick={(e: MouseEvent) => e.stopPropagation()}>
                 <input
                   type="checkbox"
                   checked={selectedTrackKeys.has(trackKey)}
                   onchange={() => toggleTrackSelection(track)}
+                  aria-label={$t('actions.select')}
                 />
               </label>
               <div class="reorder-controls">
@@ -3206,13 +3211,6 @@
   .suggestions-manual-btn:hover {
     background: var(--alpha-12);
     border-color: var(--alpha-20);
-  }
-
-  /* Playlist API image (pre-made collage from Qobuz) */
-  .playlist-api-image {
-    border-radius: 8px;
-    object-fit: cover;
-    display: block;
   }
 
   .track-list-bottom-spacer {

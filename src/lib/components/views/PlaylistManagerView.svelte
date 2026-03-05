@@ -950,6 +950,8 @@
       {#if showFilterMenu}
         <div
           class="dropdown-menu"
+          role="menu"
+          tabindex="-1"
           onmouseenter={() => isHoveringFilterMenu = true}
           onmouseleave={() => isHoveringFilterMenu = false}
         >
@@ -998,6 +1000,8 @@
       {#if showSortMenu}
         <div
           class="dropdown-menu"
+          role="menu"
+          tabindex="-1"
           onmouseenter={() => isHoveringSortMenu = true}
           onmouseleave={() => isHoveringSortMenu = false}
         >
@@ -1104,6 +1108,7 @@
           {#if viewMode === 'grid'}
             <div class="folders-grid">
               {#each folders as folder (folder.id)}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
                   class="folder-card"
                   class:drag-over={dragOverFolderId === folder.id}
@@ -1219,6 +1224,7 @@
         {@const isFavorite = playlistSettings.get(playlist.id)?.is_favorite}
         {@const localStatus = getLocalContentStatus(playlist.id)}
         {@const isUnavailable = offlineStatus.isOffline && !isPlaylistAvailableOffline(playlist.id)}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
           class="grid-item"
           class:hidden={isHidden}
@@ -1267,6 +1273,7 @@
             role="button"
             tabindex="0"
             onclick={() => onPlaylistSelect?.(playlist.id)}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlaylistSelect?.(playlist.id); } }}
             title={isUnavailable ? $t('offline.viewOnly') : undefined}
           >
             <div class="artwork">
@@ -1373,6 +1380,7 @@
                     role="button"
                     tabindex="0"
                     onclick={() => onPlaylistSelect?.(playlist.id)}
+                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlaylistSelect?.(playlist.id); } }}
                   >
                     <div class="tree-item-artwork">
                       <PlaylistCollage artworks={playlist.images ?? []} size={32} />
@@ -1433,6 +1441,7 @@
             role="button"
             tabindex="0"
             onclick={() => onPlaylistSelect?.(playlist.id)}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlaylistSelect?.(playlist.id); } }}
           >
             <div class="tree-item-artwork">
               <PlaylistCollage artworks={playlist.images ?? []} size={32} />
@@ -1501,6 +1510,7 @@
           role="button"
           tabindex="0"
           onclick={() => onPlaylistSelect?.(playlist.id)}
+          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onPlaylistSelect?.(playlist.id); } }}
           title={isUnavailable ? $t('offline.viewOnly') : undefined}
         >
           {#if sort === 'custom' && !isUnavailable}
