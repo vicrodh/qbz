@@ -98,6 +98,23 @@
     "showMore": "Mehr anzeigen",
     "showLess": "Weniger anzeigen"
   },
+  "labelReleases": {
+    "albumCount": "{count} Alben",
+    "searchPlaceholder": "Alben suchen...",
+    "searchAlbums": "Alben suchen",
+    "results": "Ergebnisse",
+    "showingOf": "{shown} von {total} angezeigt",
+    "noAlbums": "Keine Alben fur dieses Label gefunden",
+    "noResults": "Keine passenden Alben",
+    "loadingMore": "Weitere Alben werden geladen...",
+    "filterHiRes": "Nur Hi-Res",
+    "sort": "Sortieren",
+    "sortNewest": "Neueste",
+    "sortOldest": "Alteste",
+    "sortTitleAZ": "Titel A-Z",
+    "sortTitleZA": "Titel Z-A",
+    "sortArtistAZ": "Kunstler A-Z"
+  },
   "library": {
     "title": "Lokale Bibliothek",
     "browse": "Bibliothek durchsuchen",

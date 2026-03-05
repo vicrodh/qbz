@@ -101,6 +101,23 @@
     "showMore": "Ver más",
     "showLess": "Ver menos"
   },
+  "labelReleases": {
+    "albumCount": "{count} albums",
+    "searchPlaceholder": "Buscar albums...",
+    "searchAlbums": "Buscar albums",
+    "results": "resultados",
+    "showingOf": "Mostrando {shown} de {total}",
+    "noAlbums": "No se encontraron albums para este sello",
+    "noResults": "No hay albums que coincidan",
+    "loadingMore": "Cargando mas albums...",
+    "filterHiRes": "Solo Hi-Res",
+    "sort": "Ordenar",
+    "sortNewest": "Mas recientes",
+    "sortOldest": "Mas antiguos",
+    "sortTitleAZ": "Titulo A-Z",
+    "sortTitleZA": "Titulo Z-A",
+    "sortArtistAZ": "Artista A-Z"
+  },
   "library": {
     "title": "Biblioteca Local",
     "browse": "Explorar Biblioteca",

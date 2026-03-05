@@ -101,6 +101,23 @@
     "showMore": "Show more",
     "showLess": "Show less"
   },
+  "labelReleases": {
+    "albumCount": "{count} albums",
+    "searchPlaceholder": "Search albums...",
+    "searchAlbums": "Search albums",
+    "results": "results",
+    "showingOf": "Showing {shown} of {total}",
+    "noAlbums": "No albums found for this label",
+    "noResults": "No matching albums",
+    "loadingMore": "Loading more albums...",
+    "filterHiRes": "Hi-Res only",
+    "sort": "Sort",
+    "sortNewest": "Newest",
+    "sortOldest": "Oldest",
+    "sortTitleAZ": "Title A-Z",
+    "sortTitleZA": "Title Z-A",
+    "sortArtistAZ": "Artist A-Z"
+  },
   "library": {
     "title": "Local Library",
     "browse": "Browse Library",
