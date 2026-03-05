@@ -36,7 +36,8 @@
   let menuStyle = $state('');
 
   // Global floating menu coordination
-  const menuId = `search-playlist-${playlist.id}-${Date.now()}`;
+  const _menuTimestamp = Date.now();
+  const menuId = $derived(`search-playlist-${playlist.id}-${_menuTimestamp}`);
 
   onMount(() => {
     const unsubscribe = subscribeGlobal(() => {

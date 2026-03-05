@@ -907,7 +907,7 @@
             {#each group.items as track (track.id)}
               {@const dlStatus = getTrackDownloadStatus(track.id)}
               {@const isDownloaded = track.downloaded || dlStatus === 'complete'}
-              <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
               <div
                 class="track-row"
                 class:active={activeTrackId === track.id}

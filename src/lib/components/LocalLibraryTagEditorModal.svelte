@@ -384,19 +384,20 @@
       <div class="tag-editor">
         <div class="grid grid-2">
           <div class="field">
-            <label>{$t('metadata.albumName')}</label>
-            <input class="text control-sm" type="text" bind:value={albumTitle} />
+            <label for="tag-album-name">{$t('metadata.albumName')}</label>
+            <input id="tag-album-name" class="text control-sm" type="text" bind:value={albumTitle} />
           </div>
           <div class="field">
-            <label>{$t('metadata.albumArtist')}</label>
-            <input class="text control-sm" type="text" bind:value={albumArtist} />
+            <label for="tag-album-artist">{$t('metadata.albumArtist')}</label>
+            <input id="tag-album-artist" class="text control-sm" type="text" bind:value={albumArtist} />
           </div>
         </div>
 
         <div class="grid grid-3">
           <div class="field">
-            <label>{$t('metadata.year')}</label>
+            <label for="tag-year">{$t('metadata.year')}</label>
             <input
+              id="tag-year"
               class="text control-sm"
               type="number"
               step="1"
@@ -406,12 +407,12 @@
             />
           </div>
           <div class="field">
-            <label>{$t('metadata.genre')}</label>
-            <input class="text control-sm" type="text" bind:value={genre} placeholder={$t('placeholders.genreExample')} />
+            <label for="tag-genre">{$t('metadata.genre')}</label>
+            <input id="tag-genre" class="text control-sm" type="text" bind:value={genre} placeholder={$t('placeholders.genreExample')} />
           </div>
           <div class="field">
-            <label>{$t('metadata.catalogNumber')}</label>
-            <input class="text control-sm" type="text" bind:value={catalogNumber} />
+            <label for="tag-catalog-number">{$t('metadata.catalogNumber')}</label>
+            <input id="tag-catalog-number" class="text control-sm" type="text" bind:value={catalogNumber} />
           </div>
         </div>
 

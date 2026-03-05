@@ -48,7 +48,7 @@
   let displayHeight = $state(0);
 
   let pageSizes: PageSize[] = [];
-  let bookletLoaded = false;
+  let bookletLoaded = $state(false);
 
   // Zoom is relative: 1.0 = fit to container width
   const MIN_ZOOM = 0.5;
@@ -260,7 +260,8 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if isOpen}
-  <div class="booklet-overlay" use:portal onclick={handleBackdropClick}>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="booklet-overlay" use:portal onclick={handleBackdropClick} role="presentation">
     <!-- Toolbar -->
     <div class="booklet-toolbar">
       <div class="toolbar-left">

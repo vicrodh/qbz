@@ -51,7 +51,8 @@
   const cardSize = 180;
 
   // Global floating menu coordination
-  const menuId = `qobuz-playlist-${playlistId}-${Date.now()}`;
+  const _menuTimestamp = Date.now();
+  const menuId = $derived(`qobuz-playlist-${playlistId}-${_menuTimestamp}`);
 
   onMount(() => {
     const unsubscribe = subscribeGlobal(() => {

@@ -1632,7 +1632,7 @@
                 Qobuz Radio
               </button>
             </div>
-            <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
             <div class="radio-dropdown-backdrop" onclick={() => radioDropdownOpen = false}></div>
           {/if}
           {#if isRadioLoading && radioLoadingMessage}
@@ -1692,7 +1692,7 @@
                   </p>
                 </button>
               </div>
-              <!-- svelte-ignore a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+              <!-- svelte-ignore a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
               <div class="hide-dropdown-backdrop" onclick={() => showHideDropdown = false}></div>
             {/if}
           </div>
@@ -1858,7 +1858,7 @@
               }}
             >
               {#if multiSelectMode}
-                <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_noninteractive_element_interactions -->
+                <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
                 <label class="track-checkbox-wrap" onclick={(e) => e.stopPropagation()}>
                   <input
                     type="checkbox"

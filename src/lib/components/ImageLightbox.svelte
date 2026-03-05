@@ -40,7 +40,8 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if isOpen}
-  <div class="lightbox-overlay" use:portal onclick={handleBackdropClick}>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="lightbox-overlay" use:portal onclick={handleBackdropClick} role="presentation">
     <div class="lightbox-image-wrapper">
       <img
         {src}

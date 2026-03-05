@@ -209,7 +209,8 @@
           }}
         >
           {#if activeVizOption}
-            <svelte:component this={activeVizOption.icon} size={16} />
+            {@const VizIcon = activeVizOption.icon}
+            <VizIcon size={16} />
           {:else if activeFocusTab === 'neon-flow'}
             <img src="/laser.svg" alt="" class="viz-img-icon" aria-hidden="true" />
           {:else if activeFocusTab === 'tunnel-flow'}

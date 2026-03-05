@@ -125,7 +125,9 @@
 </script>
 
 {#if isOpen}
-  <div class="modal-overlay" onclick={onClose} onkeydown={handleKeydown} role="dialog" aria-modal="true">
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
+  <div class="modal-overlay" onclick={onClose} onkeydown={handleKeydown} role="dialog" aria-modal="true" tabindex="-1">
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div class="modal-content" onclick={(e) => e.stopPropagation()}>
       <div class="modal-header">
         <h2>{$t('playlist.findReplacement')}</h2>
@@ -199,6 +201,7 @@
                 </div>
                 <div class="track-duration">{formatDuration(track.duration)}</div>
                 {#if onPreview}
+                  <!-- svelte-ignore node_invalid_placement_ssr -->
                   <button
                     class="preview-btn"
                     onclick={(e) => handlePreview(e, track)}

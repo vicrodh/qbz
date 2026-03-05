@@ -3,9 +3,10 @@
     enabled: boolean;
     onchange: (enabled: boolean) => void;
     disabled?: boolean;
+    label?: string;
   }
 
-  let { enabled, onchange, disabled = false }: Props = $props();
+  let { enabled, onchange, disabled = false, label = 'Toggle' }: Props = $props();
 
   function handleClick() {
     if (!disabled) {
@@ -22,6 +23,7 @@
   role="switch"
   aria-checked={enabled}
   aria-disabled={disabled}
+  aria-label={label}
   {disabled}
 >
   <div class="thumb"></div>

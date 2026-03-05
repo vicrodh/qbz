@@ -221,10 +221,13 @@
 </div>
 
 {#if isOpen && fixedPosition}
+  <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
     class="menu"
     class:compact
     class:searchable={showSearch}
+    role="listbox"
+    tabindex="-1"
     bind:this={menuRef}
     onmouseenter={() => isHovering = true}
     onmouseleave={() => isHovering = false}

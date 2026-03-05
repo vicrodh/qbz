@@ -164,13 +164,14 @@
 
       <div class="icon-grid">
         {#each presetIcons as preset}
+          {@const PresetIcon = preset.icon}
           <button
             class="icon-preset-btn"
             class:active={!useCustomImage && customIconPreset === preset.id}
             onclick={() => selectPreset(preset.id)}
             title={preset.label}
           >
-            <svelte:component this={preset.icon} size={17} />
+            <PresetIcon size={17} />
           </button>
         {/each}
       </div>

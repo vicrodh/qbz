@@ -168,7 +168,7 @@
 <svelte:window on:keydown={handleKeydown} />
 
 {#if isOpen}
-  <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="modal-overlay" onclick={onClose} role="presentation">
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <div class="credits-modal" role="dialog" aria-modal="true" tabindex="-1" onclick={(e) => e.stopPropagation()}>

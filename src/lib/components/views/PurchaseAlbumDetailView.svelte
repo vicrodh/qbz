@@ -389,7 +389,7 @@
             {@const isActive = activeTrackId === track.id}
             {@const isDownloadedForFormat = selectedFormatId !== null && (track.downloaded_format_ids ?? []).includes(selectedFormatId)}
             {@const isDownloaded = isDownloadedForFormat || status === 'complete'}
-            <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_static_element_interactions a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_static_element_interactions, a11y_click_events_have_key_events -->
             <div
               class="track-row"
               class:downloading={status === 'downloading'}

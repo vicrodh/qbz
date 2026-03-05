@@ -303,6 +303,7 @@
     class="menu"
     class:searchable={showSearch}
     role="listbox"
+    tabindex="-1"
     bind:this={menuRef}
     onmouseenter={() => isHovering = true}
     onmouseleave={() => isHovering = false}

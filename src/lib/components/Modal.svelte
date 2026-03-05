@@ -47,7 +47,8 @@
 <svelte:window onkeydown={handleKeydown} />
 
 {#if isOpen}
-  <div class="modal-overlay" use:portal onclick={handleBackdropClick} role="dialog" aria-modal="true">
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_interactive_supports_focus -->
+  <div class="modal-overlay" use:portal onclick={handleBackdropClick} role="dialog" aria-modal="true" tabindex="-1">
     <div class="modal" style="max-width: {maxWidth}">
       {#if title || showCloseButton}
         <div class="modal-header">

@@ -304,9 +304,11 @@
 </script>
 
 {#if hasMenu}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions, a11y_no_noninteractive_element_interactions -->
   <div
     class="album-menu"
     bind:this={menuRef}
+    role="presentation"
     onmousedown={(e) => e.stopPropagation()}
     onclick={(e) => e.stopPropagation()}
   >
@@ -328,10 +330,13 @@
 
     {#if isOpen && portalTarget}
       <Portal target={portalTarget}>
+        <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
         <div
           class="menu"
           bind:this={menuEl}
           style={menuStyle}
+          role="menu"
+          tabindex="-1"
           onmousedown={(e) => e.stopPropagation()}
           onmouseenter={() => isHoveringMenu = true}
           onmouseleave={() => isHoveringMenu = false}
@@ -367,9 +372,12 @@
           {/if}
 
           {#if hasShare}
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
             <div
               class="menu-item submenu-trigger"
               bind:this={shareTriggerRef}
+              role="menuitem"
+              tabindex="-1"
               onmouseenter={() => {
                 shareOpen = true;
                 downloadOpen = false;
@@ -409,9 +417,12 @@
 
           {#if hasDownload}
             {#if isAlbumFullyDownloaded}
+              <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
               <div
                 class="menu-item submenu-trigger"
                 bind:this={downloadTriggerRef}
+                role="menuitem"
+                tabindex="-1"
                 onmouseenter={() => {
                   downloadOpen = true;
                   shareOpen = false;

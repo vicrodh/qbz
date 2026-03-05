@@ -24,7 +24,7 @@
   let { isOpen, onClose }: Props = $props();
 
   let settings = $state<HomeSettings>(getSettings());
-  let customGreetingInput = $state(settings.greeting.customText || '');
+  let customGreetingInput = $state(getSettings().greeting.customText || '');
 
   // Subscribe to settings changes (use onMount to avoid reactive tracking)
   onMount(() => {

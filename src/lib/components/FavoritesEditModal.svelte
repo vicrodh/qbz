@@ -14,8 +14,15 @@
 
   let { isOpen, onClose, onSave, initialPreferences }: Props = $props();
 
-  let tabOrder = $state<string[]>([...initialPreferences.tab_order]);
+  let tabOrder = $state<string[]>([]);
   let saving = $state(false);
+
+  // Sync tabOrder when initialPreferences changes
+  $effect(() => {
+    if (initialPreferences?.tab_order) {
+      tabOrder = [...initialPreferences.tab_order];
+    }
+  });
 
   function getTabLabel(tab: string): string {
     const key = `favorites.tabLabels.${tab}`;

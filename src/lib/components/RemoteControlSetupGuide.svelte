@@ -84,11 +84,14 @@
 <svelte:document onkeydown={handleKeydown} />
 
 {#if isOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="wizard-backdrop" onclick={handleBackdropClick} role="presentation">
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div
       class="wizard-modal"
       role="dialog"
       aria-modal="true"
+      tabindex="-1"
       onclick={(e) => e.stopPropagation()}
     >
       <!-- Header -->

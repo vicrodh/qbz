@@ -310,11 +310,14 @@
 <svelte:document onkeydown={handleKeydown} />
 
 {#if isOpen}
+  <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div class="wizard-backdrop" onclick={handleBackdropClick} role="presentation">
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
     <div
       class="wizard-modal"
       role="dialog"
       aria-modal="true"
+      tabindex="-1"
       onclick={(e) => e.stopPropagation()}
     >
       <!-- Header -->
@@ -430,9 +433,10 @@
               />
 
               <div class="input-group">
-                <label class="input-label">{$t('dacWizard.detectDac.inputLabel')}</label>
+                <label class="input-label" for="dac-node-name">{$t('dacWizard.detectDac.inputLabel')}</label>
                 <p class="input-warning">{$t('dacWizard.detectDac.inputWarning')}</p>
                 <input
+                  id="dac-node-name"
                   type="text"
                   class="text-input mono"
                   class:valid={dacValidation === 'valid'}
@@ -571,7 +575,7 @@
               <p class="body-text">{$t('dacWizard.pipewireConfig.explanation')}</p>
 
               <div class="sample-rate-selector">
-                <label class="selector-label">{$t('dacWizard.pipewireConfig.selectRates')}</label>
+                <span class="selector-label">{$t('dacWizard.pipewireConfig.selectRates')}</span>
                 <div class="rate-checkboxes">
                   {#each COMMON_SAMPLE_RATES as rate}
                     <label class="rate-checkbox" class:detected={dacCapabilities?.sample_rates.includes(rate)}>

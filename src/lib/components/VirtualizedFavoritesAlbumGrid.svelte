@@ -337,7 +337,7 @@
           </div>
         {:else if item.type === 'list-row'}
           {@const album = item.album}
-          <div class="album-row" class:has-rank={showRanking} role="button" tabindex="0" onclick={() => handleAlbumClickEvent(album.id)}>
+          <div class="album-row" class:has-rank={showRanking} role="button" tabindex="0" onclick={() => handleAlbumClickEvent(album.id)} onkeydown={(e) => e.key === 'Enter' && handleAlbumClickEvent(album.id)}>
             {#if showRanking}
               <div class="rank-number">#{item.globalIndex + 1}</div>
             {/if}

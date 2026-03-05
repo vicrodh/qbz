@@ -49,8 +49,8 @@
 </script>
 
 {#if count > 0}
-  <!-- svelte-ignore a11y_no_static_element_interactions -->
-  <div class="bulk-bar-backdrop" class:queue-open={queueMenuOpen} onclick={handleClickOutside}>
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="bulk-bar-backdrop" class:queue-open={queueMenuOpen} onclick={handleClickOutside} role="presentation">
   </div>
   <div class="bulk-bar" class:placement-top={placement === 'top'}>
     <span class="count-label">

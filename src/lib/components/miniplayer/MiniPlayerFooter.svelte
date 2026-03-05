@@ -306,6 +306,7 @@
       </button>
 
       {#if volumePopoverOpen}
+        <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
         <div class="volume-popover" role="group" aria-label={$t('player.volume')} onmousedown={(event) => event.stopPropagation()}>
           <button class="ctrl-btn mute-btn" onclick={toggleMute} title={isMuted ? $t('player.unmute') : $t('player.mute')}>
             <VolumeX size={micro ? 10 : 14} strokeWidth={2.25} />
