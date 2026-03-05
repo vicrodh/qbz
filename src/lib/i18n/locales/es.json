@@ -675,8 +675,6 @@
       "title": "Reproducción",
       "gapless": "Reproducción Sin Pausas",
       "gaplessDesc": "Transiciones sin cortes entre pistas en caché con formato compatible",
-      "gaplessDisabledAlsa": "No disponible con el backend ALSA Direct",
-      "gaplessDisabledDac": "No compatible con DAC Passthrough",
       "gaplessDisabledStreaming": "No disponible en modo solo streaming",
       "experimental": "experimental",
       "crossfade": "Crossfade",

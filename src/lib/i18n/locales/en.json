@@ -675,8 +675,6 @@
       "title": "Playback",
       "gapless": "Gapless Playback",
       "gaplessDesc": "Seamless transitions between cached tracks with matching format",
-      "gaplessDisabledAlsa": "Not available with ALSA Direct backend",
-      "gaplessDisabledDac": "Not compatible with DAC Passthrough",
       "gaplessDisabledStreaming": "Not available in streaming-only mode",
       "experimental": "experimental",
       "crossfade": "Crossfade",

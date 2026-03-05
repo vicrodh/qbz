@@ -875,17 +875,11 @@
       ? 'settings.audio.dacPassthroughDisabledDesc'
       : null
   );
-  let gaplessDisabled = $derived(
-    selectedBackend === 'ALSA Direct' || streamingOnly || dacPassthrough
-  );
+  let gaplessDisabled = $derived(streamingOnly);
   let gaplessDisabledReasonKey = $derived(
-    selectedBackend === 'ALSA Direct'
-      ? 'settings.playback.gaplessDisabledAlsa'
-      : dacPassthrough
-        ? 'settings.playback.gaplessDisabledDac'
-        : streamingOnly
-          ? 'settings.playback.gaplessDisabledStreaming'
-          : null
+    streamingOnly
+      ? 'settings.playback.gaplessDisabledStreaming'
+      : null
   );
 
   // Playback settings
@@ -2684,13 +2678,6 @@
   async function handleDacPassthroughChange(enabled: boolean) {
     dacPassthrough = enabled;
 
-    // Gapless not compatible with DAC Passthrough
-    if (enabled && gaplessPlayback) {
-      gaplessPlayback = false;
-      await invoke('v2_set_audio_gapless_enabled', { enabled: false });
-      console.log('[Audio] Disabled gapless playback (not compatible with DAC Passthrough)');
-    }
-
     // Disabling DAC Passthrough also disables PW force bit-perfect
     if (!enabled && pwForceBitperfect) {
       pwForceBitperfect = false;
@@ -3906,7 +3893,7 @@
     </div>
     <div class="setting-row">
       <div class="setting-info">
-        <span class="setting-label">{$t('settings.playback.gapless')} <span class="experimental-inline">{$t('settings.playback.experimental')}</span></span>
+        <span class="setting-label">{$t('settings.playback.gapless')}</span>
         <span class="setting-desc">{gaplessDisabledReasonKey ? $t(gaplessDisabledReasonKey) : $t('settings.playback.gaplessDesc')}</span>
       </div>
       <Toggle enabled={gaplessPlayback} onchange={handleGaplessPlaybackChange} disabled={gaplessDisabled} />
