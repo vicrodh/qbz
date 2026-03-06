@@ -113,7 +113,8 @@
     "sortOldest": "Alteste",
     "sortTitleAZ": "Titel A-Z",
     "sortTitleZA": "Titel Z-A",
-    "sortArtistAZ": "Kunstler A-Z"
+    "sortArtistAZ": "Kunstler A-Z",
+    "groupByArtist": "Nach Kunstler gruppieren"
   },
   "library": {
     "title": "Lokale Bibliothek",

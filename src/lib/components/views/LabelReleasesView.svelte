@@ -2,9 +2,9 @@
   import { invoke } from '@tauri-apps/api/core';
   import { onMount } from 'svelte';
   import { t } from 'svelte-i18n';
-  import { ArrowLeft, Search, X, Disc3, Loader2, ArrowUpDown, Filter, ChevronDown } from 'lucide-svelte';
+  import { ArrowLeft, Search, X, Disc3, Loader2, ArrowUpDown, Filter, ChevronDown, Users } from 'lucide-svelte';
   import AlbumCard from '../AlbumCard.svelte';
-  import type { QobuzAlbum, LabelDetail } from '$lib/types';
+  import type { QobuzAlbum, LabelDetail, LabelPageData } from '$lib/types';
   import type { OfflineCacheStatus } from '$lib/stores/offlineCacheState';
 
   interface Props {
@@ -47,6 +47,7 @@
 
   // State
   let label = $state<LabelDetail | null>(null);
+  let labelPageImage = $state<string>('');
   let albums = $state<QobuzAlbum[]>([]);
   let loading = $state(false);
   let loadingMore = $state(false);
@@ -61,6 +62,7 @@
   let sortBy = $state<SortOption>('newest');
   let filterHiRes = $state(false);
   let showSortMenu = $state(false);
+  let groupByArtist = $state(false);
 
   // API search state
   let apiSearchResults = $state<QobuzAlbum[] | null>(null);
@@ -111,6 +113,24 @@
     return sorted;
   });
 
+  // Grouped by artist
+  let artistGroups = $derived.by(() => {
+    if (!groupByArtist) return [];
+    const groups = new Map<string, QobuzAlbum[]>();
+    for (const album of processedAlbums) {
+      const artistName = album.artist?.name || 'Unknown Artist';
+      if (!groups.has(artistName)) {
+        groups.set(artistName, []);
+      }
+      groups.get(artistName)?.push(album);
+    }
+    const keys = [...groups.keys()].sort((a, b) => a.localeCompare(b));
+    return keys.map(key => ({
+      key,
+      albums: groups.get(key) ?? []
+    }));
+  });
+
   const sortLabels: Record<SortOption, string> = {
     'newest': 'labelReleases.sortNewest',
     'oldest': 'labelReleases.sortOldest',
@@ -124,14 +144,18 @@
     error = null;
 
     try {
-      const result = await invoke<{
-        id: number;
-        name: string;
-        description?: string;
-        image?: { small?: string; thumbnail?: string; large?: string };
-        albums?: { items: QobuzAlbum[]; total: number; offset: number; limit: number };
-        albums_count?: number;
-      }>('v2_get_label', { labelId, limit: 100, offset: 0 });
+      // Fetch both label data (for albums) and label page (for image) in parallel
+      const [result, pageResult] = await Promise.all([
+        invoke<{
+          id: number;
+          name: string;
+          description?: string;
+          image?: { small?: string; thumbnail?: string; large?: string };
+          albums?: { items: QobuzAlbum[]; total: number; offset: number; limit: number };
+          albums_count?: number;
+        }>('v2_get_label', { labelId, limit: 500, offset: 0 }),
+        invoke<LabelPageData>('v2_get_label_page', { labelId }).catch(() => null)
+      ]);
 
       label = {
         id: result.id,
@@ -142,6 +166,16 @@
         totalAlbums: result.albums?.total ?? result.albums_count ?? 0,
         albumsFetched: result.albums?.items?.length ?? 0
       };
+
+      // Extract richer image from label page data
+      if (pageResult?.image) {
+        if (typeof pageResult.image === 'string') {
+          labelPageImage = pageResult.image;
+        } else {
+          const img = pageResult.image as Record<string, string>;
+          labelPageImage = img.mega || img.extralarge || img.large || img.thumbnail || img.small || '';
+        }
+      }
 
       albums = label.albums;
       totalAlbums = label.totalAlbums;
@@ -166,7 +200,7 @@
         id: number;
         name: string;
         albums?: { items: QobuzAlbum[]; total: number; offset: number; limit: number };
-      }>('v2_get_label', { labelId, limit: 100, offset: albumsFetched });
+      }>('v2_get_label', { labelId, limit: 500, offset: albumsFetched });
 
       const newAlbums = result.albums?.items ?? [];
       albums = [...albums, ...newAlbums];
@@ -177,12 +211,6 @@
       console.error('Failed to load more albums:', e);
     } finally {
       loadingMore = false;
-    }
-  }
-
-  async function loadAllAlbums() {
-    while (albumsFetched < totalAlbums && !loadingMore) {
-      await loadMore();
     }
   }
 
@@ -221,6 +249,8 @@
   }
 
   function getLabelImage(): string {
+    // Prefer richer image from label page endpoint
+    if (labelPageImage) return labelPageImage;
     if (!label?.image) return '';
     return label.image.large || label.image.thumbnail || label.image.small || '';
   }
@@ -285,17 +315,14 @@
   function handleSortSelect(option: SortOption) {
     sortBy = option;
     showSortMenu = false;
-    // Load all albums when sorting to ensure complete results
-    if (albumsFetched < totalAlbums) {
-      loadAllAlbums();
-    }
   }
 
   function toggleHiResFilter() {
     filterHiRes = !filterHiRes;
-    if (filterHiRes && albumsFetched < totalAlbums) {
-      loadAllAlbums();
-    }
+  }
+
+  function toggleGroupByArtist() {
+    groupByArtist = !groupByArtist;
   }
 
   onMount(() => {
@@ -305,7 +332,7 @@
 
 <div class="label-view" onscroll={handleScroll}>
   <!-- Header -->
-  <header class="header">
+  <header class="label-header">
     <button class="back-btn" onclick={onBack} title={$t('actions.back')}>
       <ArrowLeft size={20} />
     </button>
@@ -314,18 +341,18 @@
         <img src={getLabelImage()} alt={label?.name || labelName} class="label-image" loading="lazy" decoding="async" />
       {:else}
         <div class="label-image-placeholder">
-          <Disc3 size={36} />
+          <Disc3 size={48} />
         </div>
       {/if}
     </div>
-    <div class="header-content">
-      <div class="header-subtitle">{$t('label.title')}</div>
-      <h1>{label?.name || labelName || 'Label'}</h1>
+    <div class="label-header-info">
+      <div class="label-subtitle">{$t('label.title')}</div>
+      <h1 class="label-name">{label?.name || labelName || 'Label'}</h1>
       <p class="subtitle">
         {#if loading}
           {$t('actions.loading')}
         {:else if totalAlbums > 0}
-          {totalAlbums} {$t('labelReleases.albumCount', { values: { count: totalAlbums } })}
+          {$t('labelReleases.albumCount', { values: { count: totalAlbums } })}
         {/if}
       </p>
     </div>
@@ -354,10 +381,16 @@
         <span class="nav-title">{$t('label.releases')}</span>
         {#if apiSearchResults !== null}
           <span class="nav-count">{processedAlbums.length} {$t('labelReleases.results')}</span>
+        {:else if filterHiRes || groupByArtist || sortBy !== 'newest'}
+          <span class="nav-count">
+            {processedAlbums.length}
+            {#if filterHiRes} Hi-Res{/if}
+            {#if albumsFetched < totalAlbums}
+              — {$t('labelReleases.showingOf', { values: { shown: albumsFetched, total: totalAlbums } })}
+            {/if}
+          </span>
         {:else if albumsFetched > 0 && albumsFetched < totalAlbums}
           <span class="nav-count">{$t('labelReleases.showingOf', { values: { shown: albumsFetched, total: totalAlbums } })}</span>
-        {:else if filterHiRes && albums.length > 0}
-          <span class="nav-count">{processedAlbums.length} Hi-Res</span>
         {/if}
       {/if}
     </div>
@@ -367,6 +400,16 @@
           <Search size={16} />
         </button>
       {/if}
+
+      <button
+        class="toolbar-btn"
+        class:active={groupByArtist}
+        onclick={toggleGroupByArtist}
+        title={$t('labelReleases.groupByArtist')}
+      >
+        <Users size={16} />
+        <span class="toolbar-label">{$t('labelReleases.groupByArtist')}</span>
+      </button>
 
       <button
         class="toolbar-btn"
@@ -430,6 +473,40 @@
         <Search size={48} />
         <p>{$t('labelReleases.noResults')}</p>
       </div>
+    {:else if groupByArtist && artistGroups.length > 0}
+      {#each artistGroups as group (group.key)}
+        <div class="artist-group">
+          <h2 class="artist-group-header">{group.key} <span class="artist-group-count">({group.albums.length})</span></h2>
+          <div class="album-grid">
+            {#each group.albums as album (album.id)}
+              <AlbumCard
+                albumId={album.id}
+                artwork={album.image?.large || album.image?.thumbnail || ''}
+                title={album.title}
+                artist={album.artist?.name || 'Unknown Artist'}
+                artistId={album.artist?.id}
+                onArtistClick={onArtistClick}
+                genre={getGenreLabel(album)}
+                releaseDate={album.release_date_original}
+                quality={getQualityLabel(album)}
+                size="large"
+                onclick={() => onAlbumClick?.(album.id)}
+                onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+                onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+                onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+                onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+                onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+                onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+                onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+                isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+                onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+                onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+                {downloadStateVersion}
+              />
+            {/each}
+          </div>
+        </div>
+      {/each}
     {:else}
       <div class="album-grid">
         {#each processedAlbums as album (album.id)}
@@ -459,13 +536,13 @@
           />
         {/each}
       </div>
+    {/if}
 
-      {#if loadingMore}
-        <div class="loading-more">
-          <Loader2 size={20} class="spinner-icon" />
-          <span>{$t('labelReleases.loadingMore')}</span>
-        </div>
-      {/if}
+    {#if loadingMore}
+      <div class="loading-more">
+        <Loader2 size={20} class="spinner-icon" />
+        <span>{$t('labelReleases.loadingMore')}</span>
+      </div>
     {/if}
   </div>
 </div>
@@ -485,12 +562,12 @@
   .label-view::-webkit-scrollbar-thumb { background: var(--bg-tertiary); border-radius: 3px; }
   .label-view::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
 
-  /* Header */
-  .header {
+  /* Header — matches LabelView layout */
+  .label-header {
     display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 32px;
+    gap: 24px;
+    margin-bottom: 40px;
+    align-items: flex-start;
   }
 
   .back-btn {
@@ -506,6 +583,7 @@
     cursor: pointer;
     transition: all 150ms ease;
     flex-shrink: 0;
+    margin-top: 72px;
   }
 
   .back-btn:hover {
@@ -514,8 +592,8 @@
   }
 
   .label-image-wrapper {
-    width: 72px;
-    height: 72px;
+    width: 180px;
+    height: 180px;
     border-radius: 50%;
     overflow: hidden;
     flex-shrink: 0;
@@ -538,25 +616,29 @@
     color: white;
   }
 
-  .header-content {
+  .label-header-info {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-self: center;
   }
 
-  .header-subtitle {
-    font-size: 11px;
+  .label-subtitle {
+    font-size: 12px;
     font-weight: 600;
     color: var(--text-muted);
     text-transform: uppercase;
     letter-spacing: 0.1em;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
   }
 
-  .header-content h1 {
-    font-size: 22px;
+  .label-name {
+    font-size: 28px;
     font-weight: 700;
     color: var(--text-primary);
-    margin: 0 0 2px 0;
+    margin: 0 0 4px 0;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -814,5 +896,25 @@
 
   :global(.spinner-icon) {
     animation: spin 1s linear infinite;
+  }
+
+  /* Artist groups */
+  .artist-group {
+    margin-bottom: 32px;
+  }
+
+  .artist-group-header {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-subtle);
+  }
+
+  .artist-group-count {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--text-muted);
   }
 </style>

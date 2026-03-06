@@ -116,7 +116,8 @@
     "sortOldest": "Mas antiguos",
     "sortTitleAZ": "Titulo A-Z",
     "sortTitleZA": "Titulo Z-A",
-    "sortArtistAZ": "Artista A-Z"
+    "sortArtistAZ": "Artista A-Z",
+    "groupByArtist": "Agrupar por artista"
   },
   "library": {
     "title": "Biblioteca Local",
