@@ -331,11 +331,16 @@
 </script>
 
 <div class="label-view" onscroll={handleScroll}>
+  <!-- Back button -->
+  <div class="top-bar">
+    <button class="back-btn" onclick={onBack}>
+      <ArrowLeft size={16} />
+      <span>{$t('actions.back')}</span>
+    </button>
+  </div>
+
   <!-- Header -->
   <header class="label-header">
-    <button class="back-btn" onclick={onBack} title={$t('actions.back')}>
-      <ArrowLeft size={20} />
-    </button>
     <div class="label-image-wrapper">
       {#if getLabelImage()}
         <img src={getLabelImage()} alt={label?.name || labelName} class="label-image" loading="lazy" decoding="async" />
@@ -361,6 +366,22 @@
   <!-- Toolbar: Search + Sort + Filter -->
   <nav class="label-nav">
     <div class="nav-left">
+      <span class="nav-title">{$t('label.releases')}</span>
+      {#if apiSearchResults !== null}
+        <span class="nav-count">{processedAlbums.length} {$t('labelReleases.results')}</span>
+      {:else if filterHiRes || groupByArtist || sortBy !== 'newest'}
+        <span class="nav-count">
+          {processedAlbums.length}
+          {#if filterHiRes} Hi-Res{/if}
+          {#if albumsFetched < totalAlbums}
+            — {$t('labelReleases.showingOf', { values: { shown: albumsFetched, total: totalAlbums } })}
+          {/if}
+        </span>
+      {:else if albumsFetched > 0 && albumsFetched < totalAlbums}
+        <span class="nav-count">{$t('labelReleases.showingOf', { values: { shown: albumsFetched, total: totalAlbums } })}</span>
+      {/if}
+    </div>
+    <div class="nav-right">
       {#if searchExpanded}
         <div class="search-bar">
           <Search size={15} class="search-icon-inline" />
@@ -378,24 +399,6 @@
           </button>
         </div>
       {:else}
-        <span class="nav-title">{$t('label.releases')}</span>
-        {#if apiSearchResults !== null}
-          <span class="nav-count">{processedAlbums.length} {$t('labelReleases.results')}</span>
-        {:else if filterHiRes || groupByArtist || sortBy !== 'newest'}
-          <span class="nav-count">
-            {processedAlbums.length}
-            {#if filterHiRes} Hi-Res{/if}
-            {#if albumsFetched < totalAlbums}
-              — {$t('labelReleases.showingOf', { values: { shown: albumsFetched, total: totalAlbums } })}
-            {/if}
-          </span>
-        {:else if albumsFetched > 0 && albumsFetched < totalAlbums}
-          <span class="nav-count">{$t('labelReleases.showingOf', { values: { shown: albumsFetched, total: totalAlbums } })}</span>
-        {/if}
-      {/if}
-    </div>
-    <div class="nav-right">
-      {#if !searchExpanded}
         <button class="toolbar-btn" onclick={() => searchExpanded = true} title={$t('labelReleases.searchAlbums')}>
           <Search size={16} />
         </button>
@@ -570,25 +573,28 @@
     align-items: flex-start;
   }
 
-  .back-btn {
-    width: 36px;
-    height: 36px;
+  .top-bar {
     display: flex;
     align-items: center;
-    justify-content: center;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-subtle);
-    border-radius: 8px;
-    color: var(--text-secondary);
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .back-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--text-muted);
+    background: none;
+    border: none;
     cursor: pointer;
-    transition: all 150ms ease;
-    flex-shrink: 0;
-    margin-top: 72px;
+    padding: 0;
+    transition: color 150ms ease;
   }
 
   .back-btn:hover {
-    background: var(--bg-tertiary);
-    color: var(--text-primary);
+    color: var(--text-secondary);
   }
 
   .label-image-wrapper {
@@ -662,6 +668,8 @@
     padding: 10px 24px;
     margin: 0 -8px 16px -24px;
     width: calc(100% + 32px);
+    height: 50px;
+    box-sizing: border-box;
     background: var(--bg-primary);
     border-bottom: 1px solid var(--alpha-6);
     box-shadow: 0 4px 8px -4px rgba(0, 0, 0, 0.5);
@@ -705,6 +713,7 @@
     border-radius: 8px;
     flex: 1;
     min-width: 0;
+    max-width: 400px;
   }
 
   :global(.search-icon-inline) {
