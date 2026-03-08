@@ -15,6 +15,7 @@ pub mod download_settings;
 pub mod favorites_cache;
 pub mod favorites_preferences;
 pub mod graphics_settings;
+pub mod image_cache_settings;
 pub mod legal_settings;
 pub mod playback_preferences;
 pub mod remote_control_settings;
@@ -79,4 +80,8 @@ pub use graphics_settings::{
 
 pub use window_settings::{
     get_window_settings, set_use_system_titlebar, WindowSettings, WindowSettingsState,
+};
+
+pub use image_cache_settings::{
+    ImageCacheSettings, ImageCacheSettingsState, ImageCacheSettingsStore,
 };

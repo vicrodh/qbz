@@ -26,6 +26,7 @@ pub mod config;
 pub mod credentials;
 pub mod discogs;
 pub mod flatpak;
+pub mod image_cache;
 pub mod snap;
 pub mod lastfm;
 pub mod library;
@@ -666,6 +667,22 @@ pub fn run() {
     let listenbrainz_v2_state = integrations_v2::ListenBrainzV2State::new();
     let musicbrainz_v2_state = integrations_v2::MusicBrainzV2State::new();
     let lastfm_v2_state = integrations_v2::LastFmV2State::new();
+    let image_cache_settings_state = config::ImageCacheSettingsState::new()
+        .unwrap_or_else(|e| {
+            log::warn!(
+                "Failed to initialize image cache settings: {}. Using empty state.",
+                e
+            );
+            config::ImageCacheSettingsState::new_empty()
+        });
+    let image_cache_state = image_cache::ImageCacheState::new()
+        .unwrap_or_else(|e| {
+            log::warn!(
+                "Failed to initialize image cache: {}. Using empty state.",
+                e
+            );
+            image_cache::ImageCacheState::new_empty()
+        });
     let developer_settings_state = config::developer_settings::DeveloperSettingsState::new()
         .unwrap_or_else(|e| {
             log::warn!(
@@ -1141,6 +1158,8 @@ pub fn run() {
         .manage(developer_settings_state)
         .manage(graphics_settings_state)
         .manage(window_settings_state)
+        .manage(image_cache_settings_state)
+        .manage(image_cache_state)
         .manage(pdf_viewer::BookletState::new())
         // V2 integration states (qbz-integrations crate)
         .manage(listenbrainz_v2_state)
@@ -1605,6 +1624,13 @@ pub fn run() {
             pdf_viewer::v2_booklet_render_page,
             pdf_viewer::v2_booklet_save,
             pdf_viewer::v2_booklet_close,
+            // Image cache
+            commands_v2::v2_get_cached_image,
+            commands_v2::v2_get_image_cache_settings,
+            commands_v2::v2_set_image_cache_enabled,
+            commands_v2::v2_set_image_cache_max_size,
+            commands_v2::v2_get_image_cache_stats,
+            commands_v2::v2_clear_image_cache,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
