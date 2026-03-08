@@ -211,7 +211,12 @@ fn main() {
         let has_amd = is_amd_gpu();
         let has_intel = is_intel_gpu();
         let is_vm = is_virtual_machine();
+        let is_flatpak = std::path::Path::new("/.flatpak-info").exists();
         let force_software = std::env::var("QBZ_SOFTWARE_RENDER").as_deref() == Ok("1");
+
+        if is_flatpak {
+            qbz_nix_lib::logging::log_startup("[QBZ] Running inside Flatpak sandbox");
+        }
 
         // Graphics settings from DB (force_x11, scaling)
         // Track if we're using fallback defaults (for UI visibility)
@@ -384,6 +389,17 @@ fn main() {
         } else if is_wayland && std::env::var_os("GDK_BACKEND").is_none() {
             std::env::set_var("GDK_BACKEND", "wayland");
             std::env::set_var("GTK_CSD", "1");
+
+            // In Flatpak on Wayland, unset DISPLAY to prevent WebKitGTK from
+            // internally falling back to XWayland for rendering. XWayland uses
+            // CPU-GPU texture round-trips that degrade CSS blur performance.
+            // See: https://github.com/vicrodh/qbz/issues/127
+            if is_flatpak && std::env::var_os("DISPLAY").is_some() {
+                qbz_nix_lib::logging::log_startup(
+                    "[QBZ] Flatpak+Wayland: unsetting DISPLAY to prevent XWayland fallback",
+                );
+                std::env::remove_var("DISPLAY");
+            }
         }
 
         // GDK_DPI_SCALE is a float multiplier that works on ALL backends
@@ -455,17 +471,21 @@ fn main() {
         } else {
             // Default path: v1.1.9 targeted mitigations
 
-            // Wayland compositing: disable to prevent protocol errors with
-            // transparent windows. This was in v1.1.9 and worked fine.
-            // Only applies to native Wayland (not force_x11/XWayland).
-            if is_wayland && !force_x11 {
+            // --- Compositing mode ---
+            // NVIDIA on Wayland has protocol errors with compositing.
+            // AMD/Intel on native Wayland can handle compositing fine.
+            if is_wayland && !force_x11 && has_nvidia && !has_amd {
                 std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
                 qbz_nix_lib::logging::log_startup(
-                    "[QBZ] Wayland: compositing mode disabled (prevents protocol errors)",
+                    "[QBZ] Wayland+NVIDIA: compositing mode disabled (prevents protocol errors)",
+                );
+            } else if is_wayland && !force_x11 {
+                qbz_nix_lib::logging::log_startup(
+                    "[QBZ] Wayland: compositing mode enabled (AMD/Intel native)",
                 );
             }
 
-            // DMA-BUF renderer control
+            // --- DMA-BUF renderer control ---
             if force_dmabuf {
                 qbz_nix_lib::logging::log_startup(
                     "[QBZ] User override: DMA-BUF renderer forced ON (QBZ_FORCE_DMABUF=1)",
@@ -475,20 +495,18 @@ fn main() {
                     "[QBZ] User override: DMA-BUF renderer forced OFF (QBZ_DISABLE_DMABUF=1)",
                 );
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-            } else if is_wayland && !force_x11 {
-                // Wayland: disable DMA-BUF for ALL GPUs. Prevents:
-                //   - NVIDIA Error 71 (protocol error)
-                //   - Intel Arc EGL crash (Could not create default EGL display)
-                // This is an improvement over v1.1.9 which only covered NVIDIA.
+            } else if is_wayland && !force_x11 && has_nvidia && !has_amd {
+                // NVIDIA on Wayland: disable DMA-BUF (Error 71 protocol error)
                 qbz_nix_lib::logging::log_startup(
-                    "[QBZ] Wayland: DMA-BUF renderer disabled (prevents EGL crashes)",
+                    "[QBZ] Wayland+NVIDIA: DMA-BUF renderer disabled (prevents Error 71)",
                 );
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-            } else if has_nvidia {
+            } else if has_nvidia && !is_wayland {
                 // X11 + NVIDIA: disable DMA-BUF only (keeps full compositing)
                 qbz_nix_lib::logging::log_startup("[QBZ] NVIDIA on X11: DMA-BUF renderer disabled");
                 std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
             } else {
+                // AMD/Intel on Wayland or X11: full GPU acceleration
                 qbz_nix_lib::logging::log_startup(
                     "[QBZ] Using default WebKit renderer (full hardware acceleration)",
                 );
