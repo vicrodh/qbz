@@ -470,11 +470,19 @@
     return () => mainContentEl!.removeEventListener('scroll', handler, true);
   });
 
-  // Reset scroll state on view change
+  // Reset scroll state on view or item change (but not on back/forward — that restores saved position)
   $effect(() => {
     void activeView;
+    void currentNavItemId;
     globalScrollTop = 0;
-    activeScrollTarget = null;
+    // Scroll to top for forward navigation (not back/forward, which restores saved position)
+    if (!isBackForward()) {
+      tick().then(() => {
+        if (activeScrollTarget) {
+          activeScrollTarget.scrollTop = 0;
+        }
+      });
+    }
   });
 
   function globalScrollToTop() {
