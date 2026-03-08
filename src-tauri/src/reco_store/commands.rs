@@ -582,10 +582,10 @@ fn format_quality(hires: bool, bit_depth: Option<u32>, sampling_rate: Option<f64
 
 fn get_image(image: &ImageSet) -> String {
     image
-        .large
+        .small
         .as_ref()
+        .or(image.large.as_ref())
         .or(image.thumbnail.as_ref())
-        .or(image.small.as_ref())
         .cloned()
         .unwrap_or_default()
 }
@@ -794,17 +794,25 @@ pub async fn reco_get_home_resolved(
         .map(|s| (s.artist_id, s.play_count))
         .collect();
 
-    // Step 3: Resolve albums (recent + favorite)
-    let recently_played_albums = resolve_albums(
+    // Step 3: Resolve albums, tracks, AND artists in parallel
+    // Artists are independent of albums/tracks, so start them concurrently.
+    let albums_fut = resolve_albums(
         &seeds.recently_played_album_ids,
         &reco_state,
         &app_state,
         &cache_state,
-    )
-    .await?;
+    );
+    let tracks_fut = resolve_tracks(&all_track_ids, &reco_state, &app_state, &cache_state);
+    let artists_fut = resolve_artists(
+        &all_artist_ids,
+        &artist_play_counts,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    );
 
-    // Step 4: Resolve tracks (continue + favorite)
-    let all_tracks = resolve_tracks(&all_track_ids, &reco_state, &app_state, &cache_state).await?;
+    let (recently_played_albums, all_tracks, top_artists) =
+        tokio::try_join!(albums_fut, tracks_fut, artists_fut)?;
 
     // Build track lookup
     let track_map: HashMap<u64, &TrackDisplayMeta> =
@@ -942,16 +950,6 @@ pub async fn reco_get_home_resolved(
         all_albums.truncate(limit_favorites as usize);
         all_albums
     };
-
-    // Step 6: Resolve artists
-    let top_artists = resolve_artists(
-        &all_artist_ids,
-        &artist_play_counts,
-        &reco_state,
-        &app_state,
-        &cache_state,
-    )
-    .await?;
 
     Ok(HomeResolved {
         recently_played_albums,
