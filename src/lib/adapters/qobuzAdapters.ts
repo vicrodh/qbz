@@ -679,9 +679,11 @@ export function convertPageArtist(response: PageArtistResponse): ArtistDetail {
       const summary = pageReleaseToSummary(release, response.id);
       if (!summary) continue;
 
-      // For groups like "download", "other", "awardedRelease" that map to "others",
-      // re-categorize each item by its individual release_type (single → eps, album → albums, etc.)
-      const itemCategory = groupCategory === 'others' && release.release_type
+      // Only re-categorize items from the "download" group by their individual release_type,
+      // since "download" is a distribution channel, not a content type.
+      // Groups like "other" and "compilation" are intentional content classifications
+      // (e.g., podcast episodes have release_type "album" but belong in Others).
+      const itemCategory = group.type === 'download' && release.release_type
         ? mapReleaseType(release.release_type)
         : groupCategory;
 
@@ -799,8 +801,8 @@ export function appendPageReleases(
     const summary = pageReleaseToSummary(release, artist.id);
     if (!summary || allExistingIds.has(summary.id)) continue;
 
-    // Re-categorize items from "others" groups by their individual release_type
-    const itemCategory = groupCategory === 'others' && release.release_type
+    // Only re-categorize items from the "download" group (distribution channel, not content type)
+    const itemCategory = releaseType === 'download' && release.release_type
       ? mapReleaseType(release.release_type)
       : groupCategory;
 
