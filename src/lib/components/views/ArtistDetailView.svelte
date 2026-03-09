@@ -509,6 +509,15 @@
     tributesExpanded = false;
     tributesVisibleCount = 20;
 
+    // Clear sidebar data immediately to avoid stale content from previous artist
+    mbRelationships = null;
+    mbRelationshipsLoading = true;
+    mbArtistMbid = null;
+    discoveryArtists = [];
+    discoveryReserves = [];
+    discoveryTag = '';
+    discoveryLoading = true;
+
     // Use pre-loaded data from /artist/page if available
     if (initialTopTracks && initialTopTracks.length > 0) {
       topTracks = convertPageTopTracks(initialTopTracks);
@@ -2901,6 +2910,12 @@
 
   .sidebar-section {
     margin-bottom: 24px;
+    animation: sidebarFadeIn 200ms ease-out;
+  }
+
+  @keyframes sidebarFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
   }
 
   .sidebar-section:last-child {
