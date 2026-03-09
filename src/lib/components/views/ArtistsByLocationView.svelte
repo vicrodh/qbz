@@ -130,7 +130,8 @@
       const response: LocationDiscoveryResponse = await invoke('v2_discover_artists_by_location', {
         sourceMbid: context.sourceArtistMbid,
         areaId: context.location.areaId,
-        areaName: context.location.displayName,
+        areaName: context.location.city || context.location.displayName,
+        country: context.location.country || null,
         genres: context.affinitySeeds.genres,
         tags: context.affinitySeeds.tags,
         limit: 30,

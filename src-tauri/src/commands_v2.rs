@@ -8810,6 +8810,7 @@ pub async fn v2_discover_artists_by_location(
     source_mbid: String,
     area_id: Option<String>,
     area_name: String,
+    country: Option<String>,
     genres: Vec<String>,
     tags: Vec<String>,
     limit: usize,
@@ -8831,10 +8832,18 @@ pub async fn v2_discover_artists_by_location(
         .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
         .await?;
 
+    // Build display name for headers: "Country, City" or just area_name
+    let display_name = if let Some(ref c) = country {
+        format!("{}, {}", c, area_name)
+    } else {
+        area_name.clone()
+    };
+
     log::info!(
-        "[V2] discover_artists_by_location: area={:?} name={} genres={:?} offset={}",
+        "[V2] discover_artists_by_location: area={:?} search_name={} display={} genres={:?} offset={}",
         area_id,
         area_name,
+        display_name,
         genres,
         offset
     );
@@ -8888,7 +8897,7 @@ pub async fn v2_discover_artists_by_location(
     if search_genres.is_empty() {
         return Ok(LocationDiscoveryResponse {
             artists: Vec::new(),
-            scene_label: format!("{} scene", area_name),
+            scene_label: format!("{} scene", display_name),
             genre_summary: String::new(),
             total_candidates: 0,
             has_more: false,
@@ -9094,7 +9103,7 @@ pub async fn v2_discover_artists_by_location(
         area_name
     );
 
-    let scene_label = format!("{} scene", area_name);
+    let scene_label = format!("{} scene", display_name);
     let genre_sum = genre_summary(&source_seeds);
     let has_more = offset + candidates_to_validate.len() < total_candidates;
 
