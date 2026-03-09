@@ -79,7 +79,6 @@
   let totalCandidates = $state(0);
   let hasMore = $state(false);
   let nextOffset = $state(0);
-  let loadingMore = $state(false);
 
   // View state
   type ViewMode = 'grid' | 'sidepanel';
@@ -317,7 +316,7 @@
         country: context.location.country || null,
         genres: context.affinitySeeds.genres,
         tags: context.affinitySeeds.tags,
-        limit: 50,
+        limit: 200,
         offset,
       });
 
@@ -337,13 +336,6 @@
       console.error('[ArtistsByLocationView] Discovery failed:', err);
       error = String(err);
     }
-  }
-
-  async function loadMore() {
-    if (loadingMore || !hasMore) return;
-    loadingMore = true;
-    await discoverArtists(nextOffset);
-    loadingMore = false;
   }
 
   onMount(async () => {
@@ -557,19 +549,6 @@
         {/if}
       </div>
 
-      {#if hasMore}
-        <div class="load-more-container">
-          <button class="load-more-button" onclick={loadMore} disabled={loadingMore}>
-            {#if loadingMore}
-              <Loader2 size={16} class="spin" />
-            {/if}
-            <span>
-              {$t('actions.loadMore')}
-              ({allArtists.length} / {totalCandidates})
-            </span>
-          </button>
-        </div>
-      {/if}
     {:else}
       <!-- Sidepanel mode -->
       <div class="artist-two-column-layout">
@@ -683,17 +662,19 @@
   .scene-view {
     display: flex;
     flex-direction: column;
+    width: 100%;
     height: 100%;
     overflow: hidden;
+    padding-top: 0;
     padding-left: 18px;
     padding-right: 8px;
+    padding-bottom: 0;
   }
 
-  /* Top bar - matches FavoritesView */
+  /* Top bar */
   .top-bar {
     display: flex;
     align-items: center;
-    margin-bottom: 16px;
   }
 
   .back-btn {
@@ -706,6 +687,8 @@
     border: none;
     cursor: pointer;
     padding: 0;
+    margin-top: 24px;
+    margin-bottom: 24px;
     transition: color 150ms ease;
   }
 
@@ -1245,41 +1228,6 @@
     padding: 80px 0;
     color: var(--text-muted);
     font-size: 14px;
-  }
-
-  /* Load more */
-  .load-more-container {
-    display: flex;
-    justify-content: center;
-    padding: 16px 0 8px;
-    flex-shrink: 0;
-  }
-
-  .load-more-button {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 24px;
-    border-radius: 8px;
-    border: 1px solid var(--border-primary);
-    background: var(--bg-secondary);
-    color: var(--text-primary);
-    cursor: pointer;
-    font-size: 13px;
-    transition: background-color 150ms ease;
-  }
-
-  .load-more-button:hover:not(:disabled) {
-    background: var(--bg-tertiary);
-  }
-
-  .load-more-button:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  :global(.load-more-button .spin) {
-    animation: spin 1s linear infinite;
   }
 
   @keyframes spin {
