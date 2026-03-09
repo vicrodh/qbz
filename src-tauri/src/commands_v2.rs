@@ -8784,33 +8784,7 @@ pub async fn v2_musicbrainz_get_artist_metadata(
     let artist = state.client.get_artist_with_relations(&mbid).await?;
 
     // Extract metadata using the location discovery module
-    let mut metadata = crate::musicbrainz::location_discovery::extract_metadata(&artist);
-
-    // Resolve city → top-level subdivision for display
-    // Shows "Country, England" instead of "Country, Brixton"
-    if let Some(ref mut loc) = metadata.location {
-        if let Some(ref aid) = loc.area_id {
-            if matches!(loc.precision, crate::musicbrainz::LocationPrecision::City) {
-                match state.client.resolve_parent_subdivision(aid).await {
-                    Ok(Some((subdivision_name, _))) => {
-                        // Update display_name to Country, Subdivision
-                        loc.display_name = if let Some(ref c) = loc.country {
-                            format!("{}, {}", c, subdivision_name)
-                        } else {
-                            subdivision_name
-                        };
-                    }
-                    Ok(None) => {
-                        // Already a subdivision or no resolution possible — keep as-is
-                    }
-                    Err(e) => {
-                        log::warn!("Area resolution failed for {}: {}", aid, e);
-                        // Keep original display_name
-                    }
-                }
-            }
-        }
-    }
+    let metadata = crate::musicbrainz::location_discovery::extract_metadata(&artist);
 
     // Cache result
     {
