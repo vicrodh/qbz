@@ -126,7 +126,7 @@
       const unsubscribe = subscribeFavorites(() => {
         favoriteFromStore = isTrackFavorite(trackId);
         isToggling = isTrackToggling(trackId);
-      });
+      }, trackId);
       return unsubscribe;
     }
   });

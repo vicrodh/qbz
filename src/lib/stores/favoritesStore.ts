@@ -18,20 +18,55 @@ let favoriteTrackIds = new Set<number>();
 let togglingTrackIds = new Set<number>(); // Track IDs currently being toggled (API in progress)
 let isLoaded = false;
 let isLoading = false;
-const listeners = new Set<() => void>();
+type FavoriteListener = (changedTrackId?: number) => void;
+const listeners = new Set<FavoriteListener>();
+const trackListeners = new Map<number, Set<FavoriteListener>>();
 
-function notifyListeners(): void {
+function notifyListeners(changedTrackId?: number): void {
+  // Always notify global listeners (FavoritesView, QueuePanel, etc.)
   for (const listener of listeners) {
-    listener();
+    listener(changedTrackId);
+  }
+  // If a specific trackId changed, only notify its filtered listeners
+  if (changedTrackId !== undefined) {
+    const filtered = trackListeners.get(changedTrackId);
+    if (filtered) {
+      for (const listener of filtered) {
+        listener(changedTrackId);
+      }
+    }
+  } else {
+    // Bulk change (sync/load/reset) — notify all filtered listeners
+    for (const filteredSet of trackListeners.values()) {
+      for (const listener of filteredSet) {
+        listener();
+      }
+    }
   }
 }
 
 // ============ Public API ============
 
 /**
- * Subscribe to favorites changes
+ * Subscribe to favorites changes.
+ * If trackId is provided, the listener only fires when that specific track changes
+ * (or on bulk changes like sync/load/reset).
  */
-export function subscribe(listener: () => void): () => void {
+export function subscribe(listener: FavoriteListener, trackId?: number): () => void {
+  if (trackId !== undefined) {
+    let filtered = trackListeners.get(trackId);
+    if (!filtered) {
+      filtered = new Set();
+      trackListeners.set(trackId, filtered);
+    }
+    filtered.add(listener);
+    return () => {
+      filtered!.delete(listener);
+      if (filtered!.size === 0) {
+        trackListeners.delete(trackId);
+      }
+    };
+  }
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
@@ -162,7 +197,7 @@ export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
 
   // Mark as toggling (UI shows loading state)
   togglingTrackIds.add(trackId);
-  notifyListeners();
+  notifyListeners(trackId);
 
   try {
     // Call API first - no optimistic update (V2)
@@ -194,7 +229,7 @@ export async function toggleTrackFavorite(trackId: number): Promise<boolean> {
   } finally {
     // Always clear toggling state
     togglingTrackIds.delete(trackId);
-    notifyListeners();
+    notifyListeners(trackId);
   }
 }
 
@@ -251,7 +286,7 @@ export function markAsFavorite(trackId: number): void {
     favoriteTrackIds.add(trackId);
     // Also update cache
     invoke('v2_cache_favorite_track', { trackId }).catch(() => {});
-    notifyListeners();
+    notifyListeners(trackId);
   }
 }
 
@@ -260,6 +295,6 @@ export function unmarkAsFavorite(trackId: number): void {
     favoriteTrackIds.delete(trackId);
     // Also update cache
     invoke('v2_uncache_favorite_track', { trackId }).catch(() => {});
-    notifyListeners();
+    notifyListeners(trackId);
   }
 }
