@@ -9142,7 +9142,7 @@ pub async fn v2_discover_artists_by_location(
         area_name
     );
 
-    let scene_label = format!("{} scene", display_name);
+    let scene_label = country.clone().unwrap_or_else(|| display_name.clone());
     let genre_sum = genre_summary(&source_seeds);
     let next_offset = offset + candidates_to_validate.len();
     let has_more = next_offset < total_candidates;

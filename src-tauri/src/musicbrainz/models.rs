@@ -573,6 +573,8 @@ pub struct ArtistLocation {
     pub city: Option<String>,
     pub area_id: Option<String>,
     pub country: Option<String>,
+    /// ISO 3166-1 alpha-2 country code (e.g., "GB", "US") for flag display
+    pub country_code: Option<String>,
     pub display_name: String,
     pub precision: LocationPrecision,
 }

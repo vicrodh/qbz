@@ -41,6 +41,8 @@ fn resolve_location(
     area: Option<&Area>,
     country: Option<&str>,
 ) -> Option<ArtistLocation> {
+    let cc = country.map(|c| c.to_lowercase());
+
     // Try begin_area first (formation/birth location — typically city-level)
     if let Some(ba) = begin_area {
         let is_city = ba
@@ -80,6 +82,7 @@ fn resolve_location(
                 city: Some(ba.name.clone()),
                 area_id: Some(ba.id.clone()),
                 country: country_name,
+                country_code: cc,
                 display_name: display,
                 precision: LocationPrecision::City,
             });
@@ -96,6 +99,7 @@ fn resolve_location(
                 city: Some(ba.name.clone()),
                 area_id: Some(ba.id.clone()),
                 country: country_name,
+                country_code: cc,
                 display_name: display,
                 precision: LocationPrecision::State,
             });
@@ -112,6 +116,7 @@ fn resolve_location(
             city: Some(ba.name.clone()),
             area_id: Some(ba.id.clone()),
             country: country_name,
+            country_code: cc,
             display_name: display,
             precision: LocationPrecision::City,
         });
@@ -130,6 +135,7 @@ fn resolve_location(
                 city: None,
                 area_id: Some(a.id.clone()),
                 country: Some(a.name.clone()),
+                country_code: cc,
                 display_name: a.name.clone(),
                 precision: LocationPrecision::Country,
             });
@@ -147,18 +153,20 @@ fn resolve_location(
             city: Some(a.name.clone()),
             area_id: Some(a.id.clone()),
             country: country_name,
+            country_code: cc,
             display_name: display,
             precision: LocationPrecision::City,
         });
     }
 
     // Country code only (no area data)
-    if let Some(cc) = country {
-        let name = country_code_to_name(cc);
+    if let Some(raw_cc) = country {
+        let name = country_code_to_name(raw_cc);
         return Some(ArtistLocation {
             city: None,
             area_id: None,
             country: Some(name.clone()),
+            country_code: cc,
             display_name: name,
             precision: LocationPrecision::Country,
         });
