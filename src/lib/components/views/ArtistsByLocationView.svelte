@@ -917,8 +917,8 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 4px 12px;
-    border-radius: 16px;
+    padding: 6px 12px;
+    border-radius: 8px;
     border: 1px solid var(--border-subtle);
     background: var(--bg-tertiary);
     color: var(--text-muted);
@@ -929,7 +929,7 @@
   }
 
   .genre-pill:hover {
-    border-color: var(--text-muted);
+    background: var(--bg-hover);
     color: var(--text-secondary);
   }
 

@@ -5495,12 +5495,13 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 16px;
+    padding: 0;
     background: none;
     border: none;
     color: var(--text-muted);
     font-size: 14px;
     cursor: pointer;
+    margin-top: 24px;
     margin-bottom: 24px;
     transition: color 150ms ease;
   }

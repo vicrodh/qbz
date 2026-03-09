@@ -619,12 +619,14 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 16px;
+    padding: 0;
     background: none;
     border: none;
-    color: var(--text-secondary);
+    color: var(--text-muted);
     cursor: pointer;
     font-size: 14px;
+    margin-top: 24px;
+    margin-bottom: 24px;
     transition: color 150ms ease;
   }
 

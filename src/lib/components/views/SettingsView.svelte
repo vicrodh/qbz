@@ -5793,7 +5793,8 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     background: none;
     border: none;
     cursor: pointer;
-    margin-bottom: 16px;
+    margin-top: 24px;
+    margin-bottom: 24px;
     transition: color 150ms ease;
   }
 

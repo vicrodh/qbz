@@ -2119,6 +2119,8 @@
     border: none;
     cursor: pointer;
     padding: 0;
+    margin-top: 24px;
+    margin-bottom: 24px;
     transition: color 150ms ease;
   }
 
