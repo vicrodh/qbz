@@ -104,6 +104,7 @@
     onLabelClick?: (labelId: number, labelName?: string) => void;
     onMusicianClick?: (name: string, role: string) => void;
     onLocationClick?: (context: ArtistsByLocationContext) => void;
+    knownMbid?: string | null;
     activeTrackId?: number | null;
     isPlaybackActive?: boolean;
   }
@@ -180,6 +181,7 @@
     onLabelClick,
     onMusicianClick,
     onLocationClick,
+    knownMbid = null,
     activeTrackId = null,
     isPlaybackActive = false
   }: Props = $props();
@@ -944,23 +946,27 @@
         return;
       }
 
-      // Resolve artist name to MBID
-      const resolved = await invoke<{
-        mbid?: string;
-        name?: string;
-        confidence: string;
-      }>('v2_musicbrainz_resolve_artist', { name: artist.name });
+      // Use known MBID if provided (e.g. from scene discovery), otherwise resolve by name
+      let resolvedMbid: string | null = knownMbid ?? null;
+      if (!resolvedMbid) {
+        const resolved = await invoke<{
+          mbid?: string;
+          name?: string;
+          confidence: string;
+        }>('v2_musicbrainz_resolve_artist', { name: artist.name });
 
-      if (!resolved?.mbid || resolved.confidence === 'none') {
-        mbRelationshipsLoading = false;
-        return;
+        if (!resolved?.mbid || resolved.confidence === 'none') {
+          mbRelationshipsLoading = false;
+          return;
+        }
+        resolvedMbid = resolved.mbid;
       }
 
-      mbArtistMbid = resolved.mbid;
+      mbArtistMbid = resolvedMbid;
 
       // Fetch metadata (location, genres) in parallel with relationships
       mbMetadataLoading = true;
-      invoke<ArtistMbMetadata>('v2_musicbrainz_get_artist_metadata', { mbid: resolved.mbid })
+      invoke<ArtistMbMetadata>('v2_musicbrainz_get_artist_metadata', { mbid: resolvedMbid })
         .then(metadata => {
           mbMetadata = metadata;
         })
@@ -978,7 +984,7 @@
         past_members: RelatedArtist[];
         groups: RelatedArtist[];
         collaborators: RelatedArtist[];
-      }>('v2_musicbrainz_get_artist_relationships', { mbid: resolved.mbid });
+      }>('v2_musicbrainz_get_artist_relationships', { mbid: resolvedMbid });
 
       mbRelationships = {
         members: relationships.members || [],

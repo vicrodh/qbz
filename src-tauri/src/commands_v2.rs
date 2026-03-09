@@ -9103,48 +9103,54 @@ pub async fn v2_discover_artists_by_location(
             let _name_normalized =
                 crate::musicbrainz::cache::MusicBrainzCache::normalize_name(mb_name);
 
-            // Search Qobuz for this artist
-            match core_bridge.search_artists(mb_name, 1, 0, None).await {
+            // Search Qobuz for this artist — request multiple results to handle
+            // name collisions (e.g., multiple "The Warning" artists)
+            match core_bridge.search_artists(mb_name, 5, 0, None).await {
                 Ok(search_results) => {
-                    if let Some(qobuz_artist) = search_results.items.first() {
-                        let qobuz_norm = normalize_artist_name(&qobuz_artist.name);
-                        let mb_norm = normalize_artist_name(mb_name);
+                    let mb_norm = normalize_artist_name(mb_name);
 
-                        if qobuz_norm == mb_norm
-                            && !blacklist_state.is_blacklisted(qobuz_artist.id)
-                        {
-                            let image_url = qobuz_artist
-                                .image
-                                .as_ref()
-                                .and_then(|img| {
-                                    img.small
-                                        .as_ref()
-                                        .or(img.thumbnail.as_ref())
-                                        .cloned()
-                                });
+                    // Find best match: exact name match with most albums (popularity proxy)
+                    let best_match = search_results
+                        .items
+                        .iter()
+                        .filter(|a| {
+                            normalize_artist_name(&a.name) == mb_norm
+                                && !blacklist_state.is_blacklisted(a.id)
+                        })
+                        .max_by_key(|a| a.albums_count.unwrap_or(0));
 
-                            let candidate = LocationCandidate {
-                                mbid: mbid.clone(),
-                                mb_name: mb_name.clone(),
-                                qobuz_id: Some(qobuz_artist.id as i64),
-                                qobuz_name: Some(qobuz_artist.name.clone()),
-                                qobuz_image: image_url,
-                                score: *score,
-                                genres: candidate_genres.clone(),
-                            };
+                    if let Some(qobuz_artist) = best_match {
+                        let image_url = qobuz_artist
+                            .image
+                            .as_ref()
+                            .and_then(|img| {
+                                img.small
+                                    .as_ref()
+                                    .or(img.thumbnail.as_ref())
+                                    .cloned()
+                            });
 
-                            // Qobuz validation write cache — TEMPORARILY DISABLED
-                            // if let Ok(json) = serde_json::to_string(&candidate) {
-                            //     let cache_opt = state.cache.lock().await;
-                            //     if let Some(cache) = cache_opt.as_ref() {
-                            //         let _ = cache.set_qobuz_validation(&name_normalized, &json);
-                            //     }
-                            // }
+                        let candidate = LocationCandidate {
+                            mbid: mbid.clone(),
+                            mb_name: mb_name.clone(),
+                            qobuz_id: Some(qobuz_artist.id as i64),
+                            qobuz_name: Some(qobuz_artist.name.clone()),
+                            qobuz_image: image_url,
+                            score: *score,
+                            genres: candidate_genres.clone(),
+                        };
 
-                            validated.push(candidate);
-                        } else {
-                            // Negative cache — TEMPORARILY DISABLED
-                        }
+                        // Qobuz validation write cache — TEMPORARILY DISABLED
+                        // if let Ok(json) = serde_json::to_string(&candidate) {
+                        //     let cache_opt = state.cache.lock().await;
+                        //     if let Some(cache) = cache_opt.as_ref() {
+                        //         let _ = cache.set_qobuz_validation(&name_normalized, &json);
+                        //     }
+                        // }
+
+                        validated.push(candidate);
+                    } else {
+                        // Negative cache — TEMPORARILY DISABLED
                     }
                 }
                 Err(e) => {

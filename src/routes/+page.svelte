@@ -494,6 +494,7 @@
   // Album, Artist and Label data are fetched, so kept local
   let selectedAlbum = $state<AlbumDetail | null>(null);
   let selectedArtist = $state<ArtistDetail | null>(null);
+  let selectedArtistKnownMbid = $state<string | null>(null);
   let artistTopTracks = $state<PageArtistTrack[]>([]);
   let artistSimilarArtists = $state<PageArtistSimilarItem[]>([]);
   let selectedLabel = $state<{ id: number; name: string } | null>(null);
@@ -900,8 +901,9 @@
   }
 
 
-  async function handleArtistClick(artistId: number) {
+  async function handleArtistClick(artistId: number, mbid?: string) {
     try {
+      selectedArtistKnownMbid = mbid ?? null;
       showToast($t('toast.loadingArtist'), 'info');
       const response = await invoke<PageArtistResponse>('v2_get_artist_page', { artistId });
       console.log('Artist page:', response);
@@ -4051,6 +4053,7 @@
       {:else if activeView === 'artist' && selectedArtist}
         <ArtistDetailView
           artist={selectedArtist}
+          knownMbid={selectedArtistKnownMbid}
           initialTopTracks={artistTopTracks}
           initialSimilarArtists={artistSimilarArtists}
           onBack={navGoBack}

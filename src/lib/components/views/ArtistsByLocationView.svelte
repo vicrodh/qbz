@@ -63,7 +63,7 @@
   interface Props {
     context: LocationContext;
     onBack: () => void;
-    onArtistClick: (artistId: number) => void;
+    onArtistClick: (artistId: number, mbid?: string) => void;
     onAlbumClick?: (albumId: string) => void;
     onAlbumPlay?: (albumId: string) => void;
   }
@@ -146,6 +146,17 @@
         image: candidate.qobuz_image ? { small: candidate.qobuz_image } : undefined,
       }));
   }
+
+  // Lookup: qobuz_id -> mbid for passing correct MBID on click
+  let mbidByQobuzId = $derived.by(() => {
+    const map = new Map<number, string>();
+    for (const candidate of artists) {
+      if (candidate.qobuz_id != null) {
+        map.set(candidate.qobuz_id, candidate.mbid);
+      }
+    }
+    return map;
+  });
 
   // Client-side search filter
   let allArtists = $derived(candidatesToFavoriteArtists(artists));
@@ -451,7 +462,7 @@
           <VirtualizedFavoritesArtistGrid
             {groups}
             showGroupHeaders={groupingEnabled}
-            onArtistClick={(id) => onArtistClick(id)}
+            onArtistClick={(id) => onArtistClick(id, mbidByQobuzId.get(id))}
             {scrollToGroupId}
           />
         </div>
