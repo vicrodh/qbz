@@ -8761,6 +8761,42 @@ pub async fn v2_musicbrainz_get_artist_relationships(
     Ok(result)
 }
 
+/// Get artist metadata (location, genres, life span) from MusicBrainz (V2)
+///
+/// Returns location data (city/country), formatted date, and affinity seeds.
+/// Used by the ArtistNetwork sidebar and scene discovery feature.
+#[tauri::command]
+pub async fn v2_musicbrainz_get_artist_metadata(
+    mbid: String,
+    state: State<'_, MusicBrainzSharedState>,
+) -> Result<crate::musicbrainz::ArtistMetadata, String> {
+    // Check cache first
+    {
+        let cache_opt = state.cache.lock().await;
+        if let Some(cache) = cache_opt.as_ref() {
+            if let Some(cached) = cache.get_artist_metadata(&mbid)? {
+                return Ok(cached);
+            }
+        }
+    }
+
+    // Fetch from MB API (reuses the same endpoint as relationships)
+    let artist = state.client.get_artist_with_relations(&mbid).await?;
+
+    // Extract metadata using the location discovery module
+    let metadata = crate::musicbrainz::location_discovery::extract_metadata(&artist);
+
+    // Cache result
+    {
+        let cache_opt = state.cache.lock().await;
+        if let Some(cache) = cache_opt.as_ref() {
+            let _ = cache.set_artist_metadata(&mbid, &metadata);
+        }
+    }
+
+    Ok(metadata)
+}
+
 // --- Last.fm V2 ---
 
 /// Get Last.fm auth token and URL (V2)
