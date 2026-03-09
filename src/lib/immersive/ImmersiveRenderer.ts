@@ -16,6 +16,7 @@ import {
   shouldImmersiveBeAvailable,
   getWebGL2Info,
   getConfig,
+  setConfig,
   setRuntimeEnabled as setConfigRuntimeEnabled,
 } from './config';
 import type {
@@ -23,7 +24,9 @@ import type {
   ImmersiveBackend,
   UnavailableReason,
   ImmersiveMetrics,
+  BackgroundMode,
 } from './types';
+import { showToast } from '$lib/stores/toastStore';
 
 // ============================================================================
 // State Store
@@ -59,6 +62,14 @@ let lastFpsUpdate = 0;
 let currentFps = 0;
 let lastFrameTime = 0;
 
+// Performance watchdog: auto-degrade background mode on sustained low FPS
+const PERF_FPS_THRESHOLD = 15;      // Below this = performance issue (real failures drop to single digits)
+const PERF_WARMUP_MS = 3000;        // Ignore first 3s (texture loading, init)
+const PERF_SUSTAIN_SECONDS = 5;     // Must be sustained for 5s before acting
+let perfWatchdogStart = 0;           // When immersive was initialized
+let lowFpsConsecutive = 0;           // Consecutive 1-second ticks below threshold
+let perfDegraded = false;            // Already degraded this session (don't loop)
+
 /**
  * Update metrics from render loop.
  * Called by ImmersiveAmbientCanvas on each frame.
@@ -85,6 +96,64 @@ export function updateMetrics(frameTimeMs: number): void {
         },
       };
     });
+
+    // Performance watchdog (only after warmup, only once per session)
+    if (!perfDegraded && perfWatchdogStart > 0 && (now - perfWatchdogStart) > PERF_WARMUP_MS) {
+      if (currentFps > 0 && currentFps < PERF_FPS_THRESHOLD) {
+        lowFpsConsecutive++;
+        if (lowFpsConsecutive >= PERF_SUSTAIN_SECONDS) {
+          degradeBackgroundMode();
+        }
+      } else {
+        // Reset counter if FPS recovers
+        lowFpsConsecutive = 0;
+      }
+    }
+  }
+}
+
+/**
+ * Auto-degrade background mode due to detected performance issues.
+ * Full → Lite → Off. Persists the change and notifies the user.
+ */
+function degradeBackgroundMode(): void {
+  const config = getConfig();
+  const currentMode: BackgroundMode = config.backgroundMode ?? 'full';
+
+  let newMode: BackgroundMode;
+  if (currentMode === 'full') {
+    newMode = 'lite';
+  } else if (currentMode === 'lite') {
+    newMode = 'off';
+  } else {
+    // Already off, nothing to degrade to
+    perfDegraded = true;
+    return;
+  }
+
+  console.warn(
+    `[Immersive] Performance watchdog: ${currentFps} FPS for ${PERF_SUSTAIN_SECONDS}s, ` +
+    `degrading background ${currentMode} → ${newMode}`
+  );
+
+  // Persist the change
+  setConfig({ backgroundMode: newMode });
+  perfDegraded = true;
+  lowFpsConsecutive = 0;
+
+  // Notify user
+  const modeLabel = newMode === 'lite' ? 'Lite' : 'Off';
+  showToast(
+    `Low FPS detected — background switched to ${modeLabel} for better performance`,
+    'info',
+    5000
+  );
+
+  // Emit event so ImmersiveBackground can react without full remount
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('immersive:background-degraded', {
+      detail: { from: currentMode, to: newMode }
+    }));
   }
 }
 
@@ -193,6 +262,11 @@ export async function init(): Promise<boolean> {
   const renderer = gpuInfo?.renderer ?? 'Unknown GPU';
   console.log(`[Immersive] Initializing with WebGL2 - ${renderer}`);
 
+  // Reset performance watchdog
+  perfWatchdogStart = performance.now();
+  lowFpsConsecutive = 0;
+  perfDegraded = false;
+
   // Set initial state
   stateStore.set({
     active: true,
@@ -216,10 +290,12 @@ export async function init(): Promise<boolean> {
 export function destroy(): void {
   console.log('[Immersive] Destroyed');
 
-  // Reset metrics
+  // Reset metrics and watchdog
   frameCount = 0;
   lastFpsUpdate = 0;
   currentFps = 0;
+  perfWatchdogStart = 0;
+  lowFpsConsecutive = 0;
 
   stateStore.set({
     active: false,

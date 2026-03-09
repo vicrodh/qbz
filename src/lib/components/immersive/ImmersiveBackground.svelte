@@ -6,7 +6,7 @@
    * Uses WebGL2 when available (with ambient motion), falls back to CSS blur.
    */
 
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import {
     BUILD_IMMERSIVE_ENABLED,
     isWebGL2Available,
@@ -45,8 +45,47 @@
   let isTransitioning = $state(false);
   let previousArtwork = $state('');
 
+  /**
+   * Switch to a degraded background mode (called by performance watchdog).
+   */
+  async function switchToMode(mode: BackgroundMode): Promise<void> {
+    console.log(`[ImmersiveBackground] Switching to mode: ${mode}`);
+
+    // Reset all mode flags
+    useWebGL = false;
+    useFallback = false;
+    useSolidColor = false;
+    useLiteMode = false;
+    WebGLCanvas = null;
+    backgroundMode = mode;
+
+    if (mode === 'off') {
+      useSolidColor = true;
+      if (artwork) extractDominantColor(artwork);
+    } else if (mode === 'lite') {
+      useLiteMode = true;
+      if (artwork) {
+        try {
+          liteImageUrl = await generateAtmosphere(artwork);
+        } catch (err) {
+          console.warn('[ImmersiveBackground] Lite mode texture failed:', err);
+        }
+      }
+    }
+  }
+
+  function handleBackgroundDegraded(event: Event): void {
+    const detail = (event as CustomEvent).detail;
+    if (detail?.to) {
+      switchToMode(detail.to as BackgroundMode);
+    }
+  }
+
   // Check capabilities and load WebGL component if available
   onMount(async () => {
+    // Listen for performance watchdog degradation events
+    window.addEventListener('immersive:background-degraded', handleBackgroundDegraded);
+
     const config = getConfig();
     backgroundMode = config.backgroundMode ?? 'full';
 
@@ -88,6 +127,10 @@
       useFallback = true;
       console.log('[ImmersiveBackground] Background mode: full (CSS fallback)');
     }
+  });
+
+  onDestroy(() => {
+    window.removeEventListener('immersive:background-degraded', handleBackgroundDegraded);
   });
 
   /**
