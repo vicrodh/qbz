@@ -888,9 +888,9 @@
     }
   }
 
-  // Load "You may also like" discovery artists from ListenBrainz
+  // Load "Listeners also enjoy" discovery artists from ListenBrainz + MB genre filter
   async function loadDiscoveryArtists() {
-    if (!mbArtistMbid || !mbAvailable) return;
+    if (!mbArtistMbid) return;
 
     discoveryLoading = true;
     discoveryArtists = [];
@@ -899,6 +899,7 @@
       const similarNames = similarArtists.map(sa => sa.name);
       const results = await invoke<DiscoveryArtist[]>('v2_get_discovery_artists', {
         seedMbid: mbArtistMbid,
+        seedArtistName: artist.name,
         similarArtistNames: similarNames
       });
       discoveryArtists = results || [];
@@ -2670,7 +2671,7 @@
           </section>
         {/if}
 
-        <!-- You may also like (ListenBrainz discovery) -->
+        <!-- Listeners also enjoy (ListenBrainz discovery) -->
         {#if mbAvailable && (discoveryLoading || discoveryArtists.length > 0)}
           <section class="sidebar-section">
             <h4 class="section-label">{$t('artist.youMayAlsoLike')}</h4>
@@ -2680,13 +2681,12 @@
               {:else}
                 {#each discoveryArtists as disc}
                   <button
-                    class="sidebar-artist-link discovery-link"
+                    class="sidebar-artist-link"
                     onclick={() => disc.qobuzId && onTrackGoToArtist?.(disc.qobuzId)}
-                    title="{disc.name} — {disc.similarityPercent}%"
+                    title={disc.name}
                   >
                     <User size={12} />
-                    <span class="discovery-name">{disc.name}</span>
-                    <span class="discovery-score">{disc.similarityPercent}%</span>
+                    {disc.name}
                   </button>
                 {/each}
               {/if}
@@ -2921,26 +2921,6 @@
   .sidebar-artist-link:hover {
     background: var(--bg-tertiary);
     color: var(--text-primary);
-  }
-
-  .sidebar-artist-link.discovery-link {
-    justify-content: flex-start;
-  }
-
-  .discovery-name {
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .discovery-score {
-    font-size: 10px;
-    color: var(--accent-primary);
-    font-weight: 600;
-    flex-shrink: 0;
-    opacity: 0.8;
   }
 
   .relationship-group {

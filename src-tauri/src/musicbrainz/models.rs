@@ -180,6 +180,9 @@ pub struct ArtistFullResponse {
     #[serde(rename = "life-span")]
     pub life_span: Option<LifeSpan>,
     pub relations: Option<Vec<Relation>>,
+    /// Genre/style tags from MusicBrainz community
+    #[serde(default)]
+    pub tags: Option<Vec<Tag>>,
 }
 
 /// Relation between entities

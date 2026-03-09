@@ -31,4 +31,4 @@ mod client;
 mod models;
 
 pub use client::LastFmClient;
-pub use models::LastFmSession;
+pub use models::{LastFmSession, LastFmSimilarArtist};

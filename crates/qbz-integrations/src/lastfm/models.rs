@@ -48,3 +48,15 @@ pub(crate) enum LastFmResponse<T> {
     Success(T),
     Error { error: u32, message: String },
 }
+
+/// A similar artist from Last.fm's artist.getSimilar
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastFmSimilarArtist {
+    /// Artist name
+    pub name: String,
+    /// Similarity score from 0.0 to 1.0
+    pub match_score: f64,
+    /// MusicBrainz ID if available
+    pub mbid: Option<String>,
+}

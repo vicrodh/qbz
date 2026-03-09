@@ -11519,29 +11519,35 @@ fn normalize_artist_name(name: &str) -> String {
         .join(" ")
 }
 
-/// Discover new artists via ListenBrainz lb-radio API.
+/// Discover new artists via MusicBrainz tag-based search.
+///
+/// Pipeline: "Listeners also enjoy"
+///
+/// Uses MusicBrainz tag search to find artists that share the seed artist's
+/// primary genre tag. This gives genre-accurate results (e.g., searching
+/// "thrash metal" for Metallica returns Megadeth, Slayer, Anthrax — not
+/// mainstream crossover like Led Zeppelin).
 ///
 /// Pipeline:
-/// 1. Call ListenBrainz lb-radio for the seed artist MBID
-/// 2. Aggregate listen counts per similar artist
-/// 3. Filter: seed artist, already-known similar artists, local listening history
-/// 4. Resolve surviving candidates on Qobuz (skip if not found)
-/// 5. Filter blacklisted artists
-/// 6. Return top 8 by affinity score
+/// 1. Fetch seed artist's tags from MusicBrainz (sorted by vote count)
+/// 2. Search MB for artists tagged with the primary genre tag
+/// 3. Filter: seed artist, known similar artists, local listening history
+/// 4. Resolve on Qobuz (verify exact name match to avoid homonyms)
+/// 5. Return top 6, minimum 5
 #[tauri::command]
 #[allow(non_snake_case)]
 pub async fn v2_get_discovery_artists(
     seedMbid: String,
+    seedArtistName: String,
     similarArtistNames: Vec<String>,
     musicbrainz: State<'_, MusicBrainzSharedState>,
     reco_state: State<'_, RecoState>,
     bridge: State<'_, CoreBridgeState>,
     blacklist_state: State<'_, BlacklistState>,
 ) -> Result<Vec<crate::listenbrainz::DiscoveryArtist>, String> {
-    use std::collections::HashMap;
-
     log::info!(
-        "[Discovery] Starting pipeline for seed MBID: {}",
+        "[Discovery] Starting pipeline for {} (MBID: {})",
+        seedArtistName,
         seedMbid
     );
 
@@ -11551,120 +11557,75 @@ pub async fn v2_get_discovery_artists(
         return Ok(Vec::new());
     }
 
-    // Step 2: Call ListenBrainz Labs similar-artists API
-    let version = env!("CARGO_PKG_VERSION");
-    let user_agent = format!(
-        "QBZ/{} (https://github.com/vicrodh/qbz; qbz@vicrodh.dev)",
-        version
-    );
-
-    let lb_client = reqwest::Client::builder()
-        .user_agent(&user_agent)
-        .timeout(std::time::Duration::from_secs(15))
-        .build()
-        .map_err(|e| format!("Failed to build ListenBrainz HTTP client: {}", e))?;
-
-    let lb_url = "https://labs.api.listenbrainz.org/similar-artists/json";
-    let lb_body = serde_json::json!([{
-        "artist_mbids": [seedMbid],
-        "algorithm": "session_based_days_7500_session_300_contribution_5_threshold_10_limit_100_filter_True_skip_30"
-    }]);
-
-    log::debug!("[Discovery] Calling ListenBrainz Labs: {}", lb_url);
-
-    let lb_response = lb_client
-        .post(lb_url)
-        .json(&lb_body)
-        .send()
+    // Step 2: Get seed artist's primary genre tag
+    let seed_tags = musicbrainz
+        .client
+        .get_artist_tags(&seedMbid)
         .await
-        .map_err(|e| format!("ListenBrainz Labs request failed: {}", e))?;
+        .unwrap_or_default();
 
-    if !lb_response.status().is_success() {
-        let status = lb_response.status();
-        let text = lb_response.text().await.unwrap_or_default();
-        log::warn!(
-            "[Discovery] ListenBrainz Labs API error {}: {}",
-            status,
-            text
-        );
+    if seed_tags.is_empty() {
+        log::warn!("[Discovery] No tags found for seed artist, returning empty");
         return Ok(Vec::new());
     }
 
-    // Step 3: Parse response - array of similar artist entries
-    let lb_data: Vec<crate::listenbrainz::LbSimilarArtist> = lb_response
-        .json()
-        .await
-        .map_err(|e| {
-            log::warn!("[Discovery] Failed to parse ListenBrainz Labs response: {}", e);
-            format!("Failed to parse ListenBrainz Labs response: {}", e)
-        })?;
-
+    let primary_tag = &seed_tags[0];
     log::info!(
-        "[Discovery] ListenBrainz Labs returned {} similar artists",
-        lb_data.len()
+        "[Discovery] Seed primary tag: '{}' (from {} tags total)",
+        primary_tag,
+        seed_tags.len()
     );
 
-    // Step 4: Find max score for normalization, then build candidate map
-    let max_score = lb_data
-        .iter()
-        .map(|a| a.score)
-        .fold(0.0_f64, f64::max);
+    // Step 3: Search MB for artists with the same primary tag
+    // Request more than we need to account for filtering
+    let mb_results = musicbrainz
+        .client
+        .search_artists_by_tag(primary_tag, 50)
+        .await
+        .map_err(|e| format!("Tag search failed: {}", e))?;
 
-    if max_score <= 0.0 {
-        log::info!("[Discovery] No valid scores returned, returning empty");
+    log::info!(
+        "[Discovery] MB tag search returned {} artists for '{}'",
+        mb_results.artists.len(),
+        primary_tag
+    );
+
+    if mb_results.artists.is_empty() {
         return Ok(Vec::new());
     }
 
-    // Deduplicate by MBID (take highest score)
-    let mut artist_scores: HashMap<String, (String, f64)> = HashMap::new();
-    for artist in &lb_data {
-        let entry = artist_scores
-            .entry(artist.artist_mbid.clone())
-            .or_insert_with(|| (artist.name.clone(), 0.0));
-        if artist.score > entry.1 {
-            entry.1 = artist.score;
-        }
-    }
+    // Step 4: Build exclusion sets
+    let seed_name_normalized = normalize_artist_name(&seedArtistName);
 
-    log::info!(
-        "[Discovery] {} unique candidate artists (max score: {:.0})",
-        artist_scores.len(),
-        max_score
-    );
-
-    // Step 5: Build exclusion sets
-    let seed_mbid_lower = seedMbid.to_lowercase();
-
-    // 5a: Similar artist names (from frontend, normalized)
     let similar_names_set: HashSet<String> = similarArtistNames
         .iter()
         .map(|name| normalize_artist_name(name))
         .collect();
 
-    log::debug!(
-        "[Discovery] Exclusion: {} similar artist names from frontend",
-        similar_names_set.len()
-    );
-
-    // 5b: Local history from reco_store
-    let (local_qobuz_ids, local_names): (HashSet<u64>, HashSet<String>) = {
+    // Exclude any artist listened more than 2 times (user already knows them)
+    let listen_threshold: u32 = 2;
+    let (local_known_qobuz_ids, local_known_names): (HashSet<u64>, HashSet<String>) = {
         let guard = reco_state.db.lock().await;
         if let Some(db) = guard.as_ref() {
-            // Get top artist IDs (Qobuz IDs)
-            let top_artists = db.get_top_artist_ids(200).unwrap_or_default();
-            let qobuz_ids: HashSet<u64> = top_artists.iter().map(|a| a.artist_id).collect();
+            let top_artists = db.get_top_artist_ids(500).unwrap_or_default();
+            let qobuz_ids: HashSet<u64> = top_artists
+                .iter()
+                .filter(|a| a.play_count > listen_threshold)
+                .map(|a| a.artist_id)
+                .collect();
 
-            // Get cached artist names from reco_artist_meta
-            let known_artists = db.get_known_artist_names(500).unwrap_or_default();
+            let known_artists = db.get_known_artist_names(1000).unwrap_or_default();
+            let known_ids: HashSet<u64> = qobuz_ids.clone();
             let names: HashSet<String> = known_artists
                 .iter()
+                .filter(|(id, _)| known_ids.contains(id))
                 .map(|(_, name)| normalize_artist_name(name))
                 .collect();
 
             log::debug!(
-                "[Discovery] Exclusion: {} local Qobuz IDs, {} known artist names",
+                "[Discovery] Exclusion: {} known artists (>{} plays)",
                 qobuz_ids.len(),
-                names.len()
+                listen_threshold
             );
 
             (qobuz_ids, names)
@@ -11673,169 +11634,190 @@ pub async fn v2_get_discovery_artists(
         }
     };
 
-    // Step 6: Filter candidates - apply 85% similarity threshold
-    let similarity_threshold = 85.0;
-    let mut candidates: Vec<crate::listenbrainz::DiscoveryArtist> = Vec::new();
+    // Step 5: Filter MB results
+    let mut candidates: Vec<(String, String)> = Vec::new(); // (mbid, name)
 
-    for (mbid, (name, score)) in &artist_scores {
-        // Calculate similarity percentage (relative to max score)
-        let similarity_pct = (*score / max_score) * 100.0;
+    for artist in &mb_results.artists {
+        let normalized = normalize_artist_name(&artist.name);
 
-        // Filter below threshold
-        if similarity_pct < similarity_threshold {
-            log::debug!(
-                "[Discovery] Below threshold ({:.1}%): {}",
-                similarity_pct,
-                name
-            );
+        // Skip seed artist
+        if normalized == seed_name_normalized || artist.id.to_lowercase() == seedMbid.to_lowercase()
+        {
             continue;
         }
-
-        // Filter seed artist
-        if mbid.to_lowercase() == seed_mbid_lower {
-            log::debug!("[Discovery] Excluding seed artist: {}", name);
-            continue;
-        }
-
-        let normalized = normalize_artist_name(name);
-
-        // Filter already-known similar artists (by name)
+        // Skip artists already shown in the similar section
         if similar_names_set.contains(&normalized) {
-            log::debug!("[Discovery] Excluding similar artist: {}", name);
             continue;
         }
-
-        // Filter local history (by normalized name)
-        if local_names.contains(&normalized) {
-            log::debug!("[Discovery] Excluding local history artist: {}", name);
+        // Skip locally known artists
+        if local_known_names.contains(&normalized) {
             continue;
         }
+        candidates.push((artist.id.clone(), artist.name.clone()));
+    }
 
-        candidates.push(crate::listenbrainz::DiscoveryArtist {
-            mbid: mbid.clone(),
-            name: name.clone(),
-            normalized_name: normalized,
-            affinity_score: *score,
-            similarity_percent: (similarity_pct * 10.0).round() / 10.0, // 1 decimal place
-            qobuz_id: None,
-        });
+    // Step 6: Shuffle deterministically using seed MBID
+    // This ensures: same artist page = same results, different artist = different results
+    {
+        use rand::seq::SliceRandom;
+        use rand::SeedableRng;
+        use std::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
+
+        let mut hasher = DefaultHasher::new();
+        seedMbid.hash(&mut hasher);
+        let hash = hasher.finish();
+        let mut rng = rand::rngs::StdRng::seed_from_u64(hash);
+        candidates.shuffle(&mut rng);
     }
 
     log::info!(
-        "[Discovery] {} candidates after exclusion + {:.0}% threshold filtering",
+        "[Discovery] {} candidates after filtering + shuffle (from {} MB results)",
         candidates.len(),
-        similarity_threshold
+        mb_results.artists.len()
     );
 
-    // Sort by affinity_score DESC before Qobuz resolution (so we try the best ones first)
-    candidates.sort_by(|a, b| {
-        b.affinity_score
-            .partial_cmp(&a.affinity_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Step 7: Resolve on Qobuz - try to find each candidate, skip if not found
+    // Step 7: Resolve on Qobuz
     let bridge_guard = bridge.try_get().await;
-    let mut resolved: Vec<crate::listenbrainz::DiscoveryArtist> = Vec::new();
+    let mut results: Vec<crate::listenbrainz::DiscoveryArtist> = Vec::new();
+    let min_results = 5;
+    let max_results = 6;
 
     if let Some(ref core_bridge) = bridge_guard {
-        for candidate in &candidates {
-            if resolved.len() >= 12 {
-                // Enough resolved candidates (will trim to 8 after blacklist)
+        for (mbid, name) in &candidates {
+            if results.len() >= max_results {
                 break;
             }
 
-            match core_bridge
-                .search_artists(&candidate.name, 1, 0, None)
-                .await
-            {
-                Ok(results) => {
-                    if let Some(artist) = results.items.first() {
-                        // Verify the name roughly matches (avoid false positives)
-                        let qobuz_normalized = normalize_artist_name(&artist.name);
-                        if qobuz_normalized == candidate.normalized_name {
-                            // Also check against local Qobuz IDs
-                            if local_qobuz_ids.contains(&artist.id) {
-                                log::debug!(
-                                    "[Discovery] Excluding {} - found in local history by Qobuz ID {}",
-                                    candidate.name,
-                                    artist.id
-                                );
-                                continue;
-                            }
-
-                            let mut resolved_candidate = candidate.clone();
-                            resolved_candidate.qobuz_id = Some(artist.id);
-                            resolved.push(resolved_candidate);
-                            log::debug!(
-                                "[Discovery] Resolved: {} -> Qobuz ID {}",
-                                candidate.name,
-                                artist.id
-                            );
+            let qobuz_artist = match core_bridge.search_artists(name, 1, 0, None).await {
+                Ok(search_results) => {
+                    if let Some(artist) = search_results.items.first() {
+                        let qobuz_norm = normalize_artist_name(&artist.name);
+                        let cand_norm = normalize_artist_name(name);
+                        if qobuz_norm == cand_norm
+                            && !local_known_qobuz_ids.contains(&artist.id)
+                            && !blacklist_state.is_blacklisted(artist.id)
+                        {
+                            Some((artist.id, artist.name.clone()))
                         } else {
-                            log::debug!(
-                                "[Discovery] Name mismatch for {}: Qobuz returned '{}'",
-                                candidate.name,
-                                artist.name
-                            );
+                            None
                         }
                     } else {
-                        log::debug!(
-                            "[Discovery] Not found on Qobuz: {}",
-                            candidate.name
-                        );
+                        None
                     }
                 }
-                Err(err) => {
-                    log::warn!(
-                        "[Discovery] Qobuz search failed for {}: {}",
-                        candidate.name,
-                        err
-                    );
-                }
+                Err(_) => None,
+            };
+
+            if let Some((qobuz_id, qobuz_name)) = qobuz_artist {
+                results.push(crate::listenbrainz::DiscoveryArtist {
+                    mbid: mbid.to_string(),
+                    name: qobuz_name.clone(),
+                    normalized_name: normalize_artist_name(&qobuz_name),
+                    affinity_score: 0.0,
+                    similarity_percent: 0.0,
+                    qobuz_id: Some(qobuz_id),
+                });
             }
         }
     } else {
-        log::warn!("[Discovery] CoreBridge not available, cannot resolve on Qobuz");
+        log::warn!("[Discovery] CoreBridge not available");
         return Ok(Vec::new());
     }
 
-    log::info!(
-        "[Discovery] {} candidates resolved on Qobuz",
-        resolved.len()
-    );
-
-    // Step 8: Filter blacklisted artists
-    let before_blacklist = resolved.len();
-    resolved.retain(|candidate| {
-        if let Some(qid) = candidate.qobuz_id {
-            !blacklist_state.is_blacklisted(qid)
-        } else {
-            true
-        }
-    });
-
-    if before_blacklist > resolved.len() {
-        log::debug!(
-            "[Discovery] Filtered {} blacklisted artists",
-            before_blacklist - resolved.len()
+    // Step 7: If not enough results with primary tag, try secondary tag
+    if results.len() < min_results && seed_tags.len() > 1 {
+        let secondary_tag = &seed_tags[1];
+        log::info!(
+            "[Discovery] Only {} results, trying secondary tag: '{}'",
+            results.len(),
+            secondary_tag
         );
+
+        if let Ok(secondary_results) = musicbrainz
+            .client
+            .search_artists_by_tag(secondary_tag, 30)
+            .await
+        {
+            let existing_mbids: HashSet<String> =
+                results.iter().map(|r| r.mbid.clone()).collect();
+
+            // Filter and shuffle secondary candidates too
+            let mut secondary_candidates: Vec<(String, String)> = Vec::new();
+            for artist in &secondary_results.artists {
+                let normalized = normalize_artist_name(&artist.name);
+                if normalized == seed_name_normalized
+                    || artist.id.to_lowercase() == seedMbid.to_lowercase()
+                {
+                    continue;
+                }
+                if similar_names_set.contains(&normalized)
+                    || local_known_names.contains(&normalized)
+                {
+                    continue;
+                }
+                if existing_mbids.contains(&artist.id) {
+                    continue;
+                }
+                secondary_candidates.push((artist.id.clone(), artist.name.clone()));
+            }
+
+            {
+                use rand::seq::SliceRandom;
+                use rand::SeedableRng;
+                use std::hash::{Hash, Hasher};
+                use std::collections::hash_map::DefaultHasher;
+
+                let mut hasher = DefaultHasher::new();
+                seedMbid.hash(&mut hasher);
+                secondary_tag.hash(&mut hasher);
+                let hash = hasher.finish();
+                let mut rng = rand::rngs::StdRng::seed_from_u64(hash);
+                secondary_candidates.shuffle(&mut rng);
+            }
+
+            if let Some(ref core_bridge) = bridge_guard {
+                for (mbid, name) in &secondary_candidates {
+                    if results.len() >= max_results {
+                        break;
+                    }
+
+                    let qobuz_artist =
+                        match core_bridge.search_artists(name, 1, 0, None).await {
+                            Ok(sr) => {
+                                if let Some(qa) = sr.items.first() {
+                                    let qobuz_norm = normalize_artist_name(&qa.name);
+                                    let cand_norm = normalize_artist_name(name);
+                                    if qobuz_norm == cand_norm
+                                        && !local_known_qobuz_ids.contains(&qa.id)
+                                        && !blacklist_state.is_blacklisted(qa.id)
+                                    {
+                                        Some((qa.id, qa.name.clone()))
+                                    } else {
+                                        None
+                                    }
+                                } else {
+                                    None
+                                }
+                            }
+                            Err(_) => None,
+                        };
+
+                    if let Some((qobuz_id, qobuz_name)) = qobuz_artist {
+                        results.push(crate::listenbrainz::DiscoveryArtist {
+                            mbid: mbid.clone(),
+                            name: qobuz_name.clone(),
+                            normalized_name: normalize_artist_name(&qobuz_name),
+                            affinity_score: 0.0,
+                            similarity_percent: 0.0,
+                            qobuz_id: Some(qobuz_id),
+                        });
+                    }
+                }
+            }
+        }
     }
 
-    // Step 9: Sort by affinity_score DESC (already sorted but re-sort after filtering)
-    resolved.sort_by(|a, b| {
-        b.affinity_score
-            .partial_cmp(&a.affinity_score)
-            .unwrap_or(std::cmp::Ordering::Equal)
-    });
-
-    // Step 10: Return top 8
-    resolved.truncate(8);
-
-    log::info!(
-        "[Discovery] Returning {} discovery artists",
-        resolved.len()
-    );
-
-    Ok(resolved)
+    log::info!("[Discovery] Returning {} discovery artists", results.len());
+    Ok(results)
 }

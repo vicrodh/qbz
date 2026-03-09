@@ -254,4 +254,100 @@ impl LastFmClient {
             Err(format!("Update now playing failed: {}", text))
         }
     }
+
+    /// Get similar artists for a given artist name
+    /// Returns a list of (artist_name, match_score) where match_score is 0.0 to 1.0
+    pub async fn get_similar_artists(
+        &self,
+        artist: &str,
+        limit: u32,
+    ) -> Result<Vec<LastFmSimilarArtist>, String> {
+        // Gate on authentication - user must have Last.fm connected
+        if !self.is_authenticated() {
+            return Err("Not authenticated with Last.fm".to_string());
+        }
+
+        let url = format!("{}/artist.getSimilar", LASTFM_PROXY_URL);
+
+        let response = self
+            .client
+            .post(&url)
+            .json(&json!({
+                "artist": artist,
+                "limit": limit,
+            }))
+            .send()
+            .await
+            .map_err(|e| format!("Failed to get similar artists: {}", e))?;
+
+        if !response.status().is_success() {
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("Last.fm API error: {}", text));
+        }
+
+        let text = response
+            .text()
+            .await
+            .map_err(|e| format!("Failed to read response: {}", e))?;
+
+        // Parse the Last.fm response format
+        let data: serde_json::Value = serde_json::from_str(&text)
+            .map_err(|e| format!("Failed to parse response: {} - Raw: {}", e, &text[..text.len().min(200)]))?;
+
+        // Handle Last.fm error responses
+        if let Some(error) = data.get("error") {
+            let message = data
+                .get("message")
+                .and_then(|m| m.as_str())
+                .unwrap_or("Unknown error");
+            return Err(format!("Last.fm error {}: {}", error, message));
+        }
+
+        let artists = data
+            .get("similarartists")
+            .and_then(|sa| sa.get("artist"))
+            .and_then(|a| a.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|item| {
+                        let name = item.get("name")?.as_str()?.to_string();
+                        let match_score: f64 = item
+                            .get("match")
+                            .and_then(|m| m.as_str().or_else(|| m.as_f64().map(|_| "")).and_then(|s| {
+                                if s.is_empty() {
+                                    item.get("match").and_then(|m| m.as_f64())
+                                } else {
+                                    s.parse().ok()
+                                }
+                            }))
+                            .unwrap_or(0.0);
+                        let mbid = item
+                            .get("mbid")
+                            .and_then(|m| m.as_str())
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string());
+
+                        Some(LastFmSimilarArtist {
+                            name,
+                            match_score,
+                            mbid,
+                        })
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+
+        Ok(artists)
+    }
+}
+
+/// A similar artist from Last.fm's artist.getSimilar
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LastFmSimilarArtist {
+    pub name: String,
+    /// Similarity score from 0.0 to 1.0
+    pub match_score: f64,
+    /// MusicBrainz ID if available
+    pub mbid: Option<String>,
 }

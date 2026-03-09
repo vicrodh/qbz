@@ -272,7 +272,7 @@ impl MusicBrainzClient {
         self.rate_limiter.wait().await;
 
         let base_url = self.base_url().await;
-        let url = format!("{}/artist/{}?inc=artist-rels&fmt=json", base_url, mbid);
+        let url = format!("{}/artist/{}?inc=artist-rels+tags&fmt=json", base_url, mbid);
 
         log::debug!("MusicBrainz artist lookup with relations: {}", mbid);
 
@@ -291,6 +291,95 @@ impl MusicBrainzClient {
 
         response
             .json::<ArtistFullResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse MusicBrainz response: {}", e))
+    }
+
+    /// Fetch artist tags only (lightweight, no relations)
+    pub async fn get_artist_tags(
+        &self,
+        mbid: &str,
+    ) -> Result<Vec<String>, String> {
+        if !self.is_enabled().await {
+            return Err("MusicBrainz integration is disabled".to_string());
+        }
+
+        self.rate_limiter.wait().await;
+
+        let base_url = self.base_url().await;
+        let url = format!("{}/artist/{}?inc=tags&fmt=json", base_url, mbid);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("MusicBrainz request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            return Ok(Vec::new());
+        }
+
+        let artist: ArtistFullResponse = response
+            .json()
+            .await
+            .map_err(|e| format!("Failed to parse MusicBrainz response: {}", e))?;
+
+        let mut tags: Vec<_> = artist
+            .tags
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|tag| tag.count.unwrap_or(0) > 0)
+            .collect();
+
+        // Sort by vote count descending — highest voted tag = primary genre
+        tags.sort_by(|a, b| b.count.unwrap_or(0).cmp(&a.count.unwrap_or(0)));
+
+        Ok(tags.into_iter().map(|tag| tag.name.to_lowercase()).collect())
+    }
+
+    /// Search artists by tag (genre)
+    ///
+    /// Returns artists tagged with the given genre on MusicBrainz,
+    /// sorted by search relevance. Used for "Listeners also enjoy" discovery.
+    pub async fn search_artists_by_tag(
+        &self,
+        tag: &str,
+        limit: usize,
+    ) -> Result<ArtistSearchResponse, String> {
+        if !self.is_enabled().await {
+            return Err("MusicBrainz integration is disabled".to_string());
+        }
+
+        self.rate_limiter.wait().await;
+
+        let base_url = self.base_url().await;
+        let limit = limit.min(100).max(1);
+        let query = format!("tag:\"{}\"", Self::escape_query(tag));
+        let url = format!(
+            "{}/artist?query={}&fmt=json&limit={}",
+            base_url,
+            urlencoding::encode(&query),
+            limit
+        );
+
+        log::debug!("MusicBrainz artist search by tag '{}' (limit {})", tag, limit);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("MusicBrainz request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("MusicBrainz API error {}: {}", status, text));
+        }
+
+        response
+            .json::<ArtistSearchResponse>()
             .await
             .map_err(|e| format!("Failed to parse MusicBrainz response: {}", e))
     }
