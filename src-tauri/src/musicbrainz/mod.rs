@@ -21,8 +21,13 @@ pub mod smart_playlists;
 
 pub use cache::{CacheStats, MusicBrainzCache, MusicBrainzCacheState};
 pub use client::{MusicBrainzClient, MusicBrainzConfig};
+pub mod genre_normalization;
+pub mod location_discovery;
+
 pub use models::{
-    AlbumAppearance, ArtistFullResponse, ArtistRelationships, ArtistType, MatchConfidence, Medium,
+    AffinitySeeds, AlbumAppearance, Area, AreaResult, AreaSearchResponse, ArtistBrowseResponse,
+    ArtistFullResponse, ArtistLocation, ArtistMetadata, ArtistRelationships, ArtistType,
+    LocationCandidate, LocationDiscoveryResponse, LocationPrecision, MatchConfidence, Medium,
     MediumTrack, MusicianAppearances, MusicianConfidence, Period, RelatedArtist, Relation,
     ReleaseFullResponse, ReleaseSearchResponse, ResolvedArtist, ResolvedMusician, ResolvedRelease,
     ResolvedTrack, Tag,

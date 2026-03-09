@@ -144,6 +144,15 @@ pub struct ArtistResult {
     pub aliases: Option<Vec<Alias>>,
     #[serde(rename = "life-span")]
     pub life_span: Option<LifeSpan>,
+    /// Home area
+    #[serde(default)]
+    pub area: Option<Area>,
+    /// Formation/birth area
+    #[serde(rename = "begin-area", default)]
+    pub begin_area: Option<Area>,
+    /// Tags (included in some search/browse responses)
+    #[serde(default)]
+    pub tags: Option<Vec<Tag>>,
 }
 
 /// Artist alias
@@ -166,6 +175,18 @@ pub struct LifeSpan {
     pub ended: Option<bool>,
 }
 
+/// MusicBrainz area (city, state, country, etc.)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Area {
+    pub id: String,
+    pub name: String,
+    #[serde(rename = "sort-name")]
+    pub sort_name: Option<String>,
+    /// Area type: "Country", "City", "Subdivision", etc.
+    #[serde(rename = "type")]
+    pub area_type: Option<String>,
+}
+
 /// Full artist response (with includes)
 #[derive(Debug, Deserialize)]
 pub struct ArtistFullResponse {
@@ -179,6 +200,12 @@ pub struct ArtistFullResponse {
     pub disambiguation: Option<String>,
     #[serde(rename = "life-span")]
     pub life_span: Option<LifeSpan>,
+    /// Home area (country/region)
+    #[serde(default)]
+    pub area: Option<Area>,
+    /// Formation/birth area (typically city-level)
+    #[serde(rename = "begin-area", default)]
+    pub begin_area: Option<Area>,
     pub relations: Option<Vec<Relation>>,
     /// Genre/style tags from MusicBrainz community
     #[serde(default)]
@@ -319,12 +346,47 @@ pub struct TrackRecording {
 }
 
 /// Community tag (used for genres)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Tag {
     /// Tag name (e.g., "rock", "electronic")
     pub name: String,
     /// Number of times this tag was applied
     pub count: Option<i32>,
+}
+
+/// Artist browse response (from browse API, e.g., /artist?area=...)
+#[derive(Debug, Deserialize)]
+pub struct ArtistBrowseResponse {
+    #[serde(rename = "artist-count")]
+    pub artist_count: Option<i32>,
+    #[serde(rename = "artist-offset")]
+    pub artist_offset: Option<i32>,
+    pub artists: Vec<ArtistResult>,
+}
+
+/// Area search response
+#[derive(Debug, Deserialize)]
+pub struct AreaSearchResponse {
+    pub count: Option<i32>,
+    pub offset: Option<i32>,
+    pub areas: Vec<AreaResult>,
+}
+
+/// Single area in search results
+#[derive(Debug, Deserialize)]
+pub struct AreaResult {
+    pub id: String,
+    pub score: Option<i32>,
+    pub name: String,
+    #[serde(rename = "sort-name")]
+    pub sort_name: Option<String>,
+    #[serde(rename = "type")]
+    pub area_type: Option<String>,
+    /// ISO 3166-1 codes for countries
+    #[serde(rename = "iso-3166-1-codes", default)]
+    pub iso_codes: Option<Vec<String>>,
+    #[serde(rename = "life-span")]
+    pub life_span: Option<LifeSpan>,
 }
 
 // ============ Resolved Types (Output) ============
@@ -451,6 +513,83 @@ impl ArtistRelationships {
             && self.groups.is_empty()
             && self.collaborators.is_empty()
     }
+}
+
+// ============ Artist Metadata (Location Discovery) ============
+
+/// Precision level for artist location data
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LocationPrecision {
+    City,
+    State,
+    Country,
+}
+
+/// Resolved location for an artist
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtistLocation {
+    pub city: Option<String>,
+    pub area_id: Option<String>,
+    pub country: Option<String>,
+    pub display_name: String,
+    pub precision: LocationPrecision,
+}
+
+/// Affinity seeds extracted from an artist's tags
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AffinitySeeds {
+    /// Primary genre signals (high-vote tags normalized)
+    pub genres: Vec<String>,
+    /// Secondary tag signals (filtered, normalized)
+    pub tags: Vec<String>,
+    /// Union of genres + tags for search queries
+    pub normalized_seeds: Vec<String>,
+}
+
+/// Complete artist metadata for location discovery
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtistMetadata {
+    pub mbid: String,
+    pub name: String,
+    pub artist_type: ArtistType,
+    pub life_span: Option<LifeSpan>,
+    pub location: Option<ArtistLocation>,
+    pub affinity_seeds: AffinitySeeds,
+}
+
+/// A candidate artist from location discovery, validated against Qobuz
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocationCandidate {
+    /// MusicBrainz ID
+    pub mbid: String,
+    /// Artist name from MusicBrainz
+    pub mb_name: String,
+    /// Qobuz artist ID (if validated)
+    pub qobuz_id: Option<i64>,
+    /// Qobuz artist name (may differ slightly from MB name)
+    pub qobuz_name: Option<String>,
+    /// Qobuz artist image URL
+    pub qobuz_image: Option<String>,
+    /// Affinity score (higher = more relevant to the scene)
+    pub score: i32,
+    /// Primary genres of this candidate
+    pub genres: Vec<String>,
+}
+
+/// Response from the location discovery pipeline
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LocationDiscoveryResponse {
+    /// Validated artists sorted by affinity score
+    pub artists: Vec<LocationCandidate>,
+    /// Human-readable scene label (e.g., "Seattle scene")
+    pub scene_label: String,
+    /// Genre summary for the header (e.g., "grunge / alternative rock")
+    pub genre_summary: String,
+    /// How many total candidates were found before Qobuz validation
+    pub total_candidates: usize,
+    /// Whether more results can be loaded
+    pub has_more: bool,
 }
 
 // ============ Musician Types ============

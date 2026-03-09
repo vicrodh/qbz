@@ -22,6 +22,15 @@ const RELEASE_TTL_SECS: i64 = 30 * 24 * 60 * 60;
 /// TTL for artist relationships cache (7 days)
 const RELATIONS_TTL_SECS: i64 = 7 * 24 * 60 * 60;
 
+/// TTL for artist metadata cache (30 days)
+const METADATA_TTL_SECS: i64 = 30 * 24 * 60 * 60;
+
+/// TTL for scene discovery cache (30 days)
+const SCENE_TTL_SECS: i64 = 30 * 24 * 60 * 60;
+
+/// TTL for Qobuz artist validation cache (30 days)
+const QOBUZ_VALIDATION_TTL_SECS: i64 = 30 * 24 * 60 * 60;
+
 /// MusicBrainz cache state shared across commands
 pub struct MusicBrainzCacheState {
     pub cache: Arc<Mutex<Option<MusicBrainzCache>>>,
@@ -125,6 +134,30 @@ impl MusicBrainzCache {
                     fetched_at INTEGER NOT NULL
                 );
                 CREATE INDEX IF NOT EXISTS idx_mb_relations_fetched ON mb_artist_relations(fetched_at);
+
+                -- Artist metadata (location, genres, life span) indexed by MBID
+                CREATE TABLE IF NOT EXISTS mb_artist_metadata (
+                    mbid TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    fetched_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_mb_metadata_fetched ON mb_artist_metadata(fetched_at);
+
+                -- Scene discovery results indexed by area + seed hash
+                CREATE TABLE IF NOT EXISTS mb_scene_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    fetched_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_mb_scene_fetched ON mb_scene_cache(fetched_at);
+
+                -- Qobuz artist validation cache
+                CREATE TABLE IF NOT EXISTS mb_qobuz_validation (
+                    name_normalized TEXT PRIMARY KEY,
+                    data TEXT NOT NULL,
+                    fetched_at INTEGER NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_mb_qobuz_validation_fetched ON mb_qobuz_validation(fetched_at);
                 "#,
             )
             .map_err(|e| format!("Failed to initialize MusicBrainz cache: {}", e))?;
@@ -314,6 +347,118 @@ impl MusicBrainzCache {
         Ok(())
     }
 
+    // ============ Artist Metadata Cache ============
+
+    /// Get cached artist metadata by MBID
+    pub fn get_artist_metadata(&self, mbid: &str) -> Result<Option<ArtistMetadata>, String> {
+        let min_fetched_at = Self::current_timestamp() - METADATA_TTL_SECS;
+
+        let result: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT data FROM mb_artist_metadata WHERE mbid = ? AND fetched_at > ?",
+                params![mbid, min_fetched_at],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("Failed to query metadata cache: {}", e))?;
+
+        if let Some(data) = result {
+            serde_json::from_str(&data)
+                .map(Some)
+                .map_err(|e| format!("Failed to parse cached metadata: {}", e))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Cache artist metadata
+    pub fn set_artist_metadata(&self, mbid: &str, data: &ArtistMetadata) -> Result<(), String> {
+        let fetched_at = Self::current_timestamp();
+        let json = serde_json::to_string(data)
+            .map_err(|e| format!("Failed to serialize metadata: {}", e))?;
+
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO mb_artist_metadata (mbid, data, fetched_at) VALUES (?, ?, ?)",
+                params![mbid, json, fetched_at],
+            )
+            .map_err(|e| format!("Failed to cache metadata: {}", e))?;
+        Ok(())
+    }
+
+    // ============ Scene Discovery Cache ============
+
+    /// Get cached scene discovery results
+    pub fn get_scene_cache(&self, cache_key: &str) -> Result<Option<LocationDiscoveryResponse>, String> {
+        let min_fetched_at = Self::current_timestamp() - SCENE_TTL_SECS;
+
+        let result: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT data FROM mb_scene_cache WHERE cache_key = ? AND fetched_at > ?",
+                params![cache_key, min_fetched_at],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("Failed to query scene cache: {}", e))?;
+
+        if let Some(data) = result {
+            serde_json::from_str(&data)
+                .map(Some)
+                .map_err(|e| format!("Failed to parse cached scene: {}", e))
+        } else {
+            Ok(None)
+        }
+    }
+
+    /// Cache scene discovery results
+    pub fn set_scene_cache(&self, cache_key: &str, data: &LocationDiscoveryResponse) -> Result<(), String> {
+        let fetched_at = Self::current_timestamp();
+        let json = serde_json::to_string(data)
+            .map_err(|e| format!("Failed to serialize scene: {}", e))?;
+
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO mb_scene_cache (cache_key, data, fetched_at) VALUES (?, ?, ?)",
+                params![cache_key, json, fetched_at],
+            )
+            .map_err(|e| format!("Failed to cache scene: {}", e))?;
+        Ok(())
+    }
+
+    // ============ Qobuz Validation Cache ============
+
+    /// Get cached Qobuz validation result for an artist name
+    pub fn get_qobuz_validation(&self, name_normalized: &str) -> Result<Option<String>, String> {
+        let min_fetched_at = Self::current_timestamp() - QOBUZ_VALIDATION_TTL_SECS;
+
+        let result: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT data FROM mb_qobuz_validation WHERE name_normalized = ? AND fetched_at > ?",
+                params![name_normalized, min_fetched_at],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("Failed to query validation cache: {}", e))?;
+
+        Ok(result)
+    }
+
+    /// Cache Qobuz validation result
+    pub fn set_qobuz_validation(&self, name_normalized: &str, data: &str) -> Result<(), String> {
+        let fetched_at = Self::current_timestamp();
+
+        self.conn
+            .execute(
+                "INSERT OR REPLACE INTO mb_qobuz_validation (name_normalized, data, fetched_at) VALUES (?, ?, ?)",
+                params![name_normalized, data, fetched_at],
+            )
+            .map_err(|e| format!("Failed to cache validation: {}", e))?;
+        Ok(())
+    }
+
     // ============ Maintenance ============
 
     /// Clear expired entries from all tables
@@ -353,6 +498,30 @@ impl MusicBrainzCache {
             )
             .map_err(|e| format!("Failed to cleanup relations: {}", e))?;
 
+        total_deleted += self
+            .conn
+            .execute(
+                "DELETE FROM mb_artist_metadata WHERE fetched_at <= ?",
+                params![now - METADATA_TTL_SECS],
+            )
+            .map_err(|e| format!("Failed to cleanup metadata: {}", e))?;
+
+        total_deleted += self
+            .conn
+            .execute(
+                "DELETE FROM mb_scene_cache WHERE fetched_at <= ?",
+                params![now - SCENE_TTL_SECS],
+            )
+            .map_err(|e| format!("Failed to cleanup scene cache: {}", e))?;
+
+        total_deleted += self
+            .conn
+            .execute(
+                "DELETE FROM mb_qobuz_validation WHERE fetched_at <= ?",
+                params![now - QOBUZ_VALIDATION_TTL_SECS],
+            )
+            .map_err(|e| format!("Failed to cleanup validation cache: {}", e))?;
+
         if total_deleted > 0 {
             log::info!(
                 "MusicBrainz cache cleanup: removed {} expired entries",
@@ -372,6 +541,9 @@ impl MusicBrainzCache {
                 DELETE FROM mb_artists;
                 DELETE FROM mb_releases;
                 DELETE FROM mb_artist_relations;
+                DELETE FROM mb_artist_metadata;
+                DELETE FROM mb_scene_cache;
+                DELETE FROM mb_qobuz_validation;
                 "#,
             )
             .map_err(|e| format!("Failed to clear MusicBrainz cache: {}", e))?;

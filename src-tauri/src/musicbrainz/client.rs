@@ -542,6 +542,103 @@ impl MusicBrainzClient {
             .map_err(|e| format!("Failed to parse MusicBrainz response: {}", e))
     }
 
+    /// Browse artists by area MBID
+    ///
+    /// Returns artists associated with the given area (city/country).
+    /// Uses the MB browse API which is more precise than Lucene area search.
+    pub async fn browse_artists_by_area(
+        &self,
+        area_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<ArtistBrowseResponse, String> {
+        if !self.is_enabled().await {
+            return Err("MusicBrainz integration is disabled".to_string());
+        }
+
+        self.rate_limiter.wait().await;
+
+        let base_url = self.base_url().await;
+        let limit = limit.min(100).max(1);
+        let url = format!(
+            "{}/artist?area={}&fmt=json&limit={}&offset={}&inc=tags",
+            base_url, area_id, limit, offset
+        );
+
+        log::debug!(
+            "MusicBrainz browse artists by area {} (limit {}, offset {})",
+            area_id, limit, offset
+        );
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("MusicBrainz request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("MusicBrainz API error {}: {}", status, text));
+        }
+
+        response
+            .json::<ArtistBrowseResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse MusicBrainz response: {}", e))
+    }
+
+    /// Search for an area by name (to resolve area MBID)
+    pub async fn search_area(
+        &self,
+        name: &str,
+        area_type: Option<&str>,
+    ) -> Result<AreaSearchResponse, String> {
+        if !self.is_enabled().await {
+            return Err("MusicBrainz integration is disabled".to_string());
+        }
+
+        self.rate_limiter.wait().await;
+
+        let base_url = self.base_url().await;
+        let query = if let Some(atype) = area_type {
+            format!(
+                "area:\"{}\" AND type:\"{}\"",
+                Self::escape_query(name),
+                Self::escape_query(atype)
+            )
+        } else {
+            format!("area:\"{}\"", Self::escape_query(name))
+        };
+
+        let url = format!(
+            "{}/area?query={}&fmt=json&limit=5",
+            base_url,
+            urlencoding::encode(&query)
+        );
+
+        log::debug!("MusicBrainz area search: {} (type: {:?})", name, area_type);
+
+        let response = self
+            .client
+            .get(&url)
+            .send()
+            .await
+            .map_err(|e| format!("MusicBrainz request failed: {}", e))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let text = response.text().await.unwrap_or_default();
+            return Err(format!("MusicBrainz API error {}: {}", status, text));
+        }
+
+        response
+            .json::<AreaSearchResponse>()
+            .await
+            .map_err(|e| format!("Failed to parse MusicBrainz response: {}", e))
+    }
+
     /// Escape special characters in Lucene queries
     fn escape_query(s: &str) -> String {
         s.replace('\\', "\\\\")
