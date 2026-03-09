@@ -197,7 +197,7 @@
     border-radius: 50%;
     color: var(--alpha-85, rgba(255, 255, 255, 0.85));
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .control-btn:disabled {
@@ -268,7 +268,7 @@
     border-radius: 50%;
     color: var(--alpha-60, rgba(255, 255, 255, 0.6));
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .action-btn:hover {

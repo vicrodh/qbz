@@ -1765,7 +1765,7 @@
     margin-left: auto;
     padding: 4px;
     border-radius: 4px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .info-icon:hover {
@@ -1894,7 +1894,7 @@
     background: var(--bg-tertiary);
     border-radius: 8px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .folder-list-item:hover {
@@ -1963,7 +1963,7 @@
     color: var(--text-muted);
     cursor: pointer;
     opacity: 0;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .folder-list-item:hover .folder-list-edit {
@@ -2126,7 +2126,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .clear-search:hover {
@@ -2187,7 +2187,7 @@
     padding: 10px;
     background: var(--bg-secondary);
     border-radius: 8px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .grid-item:hover {
@@ -2280,7 +2280,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .edit-btn:hover {
@@ -2298,7 +2298,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .visibility-btn:hover {
@@ -2326,7 +2326,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .favorite-btn:hover {
@@ -2463,7 +2463,7 @@
     background: var(--bg-secondary);
     border-radius: 6px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .list-item:hover {

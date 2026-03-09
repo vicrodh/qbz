@@ -455,7 +455,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .close-btn:hover {
@@ -624,7 +624,7 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .platform-tab:hover {
@@ -725,7 +725,7 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .btn-primary {

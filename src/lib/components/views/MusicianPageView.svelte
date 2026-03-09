@@ -235,7 +235,7 @@
     border-radius: 8px;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -327,7 +327,7 @@
     color: var(--text-primary);
     font-size: 14px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .band-card:hover {
@@ -454,7 +454,7 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .load-more-btn:hover:not(:disabled) {

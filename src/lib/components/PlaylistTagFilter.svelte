@@ -140,7 +140,7 @@
     color: var(--text-secondary);
     font-size: 12px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .tag-filter-btn:hover {

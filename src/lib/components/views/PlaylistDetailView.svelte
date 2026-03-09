@@ -2530,7 +2530,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 6px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .edit-btn:hover {
@@ -2665,7 +2665,7 @@
     border-radius: 50%;
     color: white;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .artwork-btn:hover {
@@ -2961,7 +2961,7 @@
     text-align: left;
     cursor: pointer;
     border-radius: 4px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     white-space: nowrap;
   }
 
@@ -3151,7 +3151,7 @@
     color: var(--text-secondary);
     font-size: 12px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .batch-btn:hover {

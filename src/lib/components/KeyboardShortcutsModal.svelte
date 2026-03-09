@@ -215,7 +215,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .close-btn:hover {
@@ -299,7 +299,7 @@
     color: var(--text-secondary);
     font-size: 14px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .customize-btn:hover {

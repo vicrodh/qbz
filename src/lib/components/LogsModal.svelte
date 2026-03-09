@@ -163,7 +163,7 @@
     border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .tab:hover {
@@ -234,7 +234,7 @@
     border-radius: 6px;
     font-size: 13px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     white-space: nowrap;
   }
 
@@ -273,7 +273,7 @@
     color: var(--text-muted);
     border-radius: 4px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .copy-url-btn:hover {

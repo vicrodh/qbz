@@ -161,7 +161,7 @@
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
     cursor: pointer;
     opacity: 0;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 

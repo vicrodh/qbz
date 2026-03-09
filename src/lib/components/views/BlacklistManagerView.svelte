@@ -357,7 +357,7 @@
     color: var(--text-muted);
     font-size: 13px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .toggle-btn:hover {
@@ -415,7 +415,7 @@
     align-items: center;
     justify-content: center;
     border-radius: 4px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .clear-search:hover {
@@ -434,7 +434,7 @@
     color: #ef4444;
     font-size: 13px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .clear-all-btn:hover {
@@ -583,7 +583,7 @@
     border-radius: 6px;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -639,7 +639,7 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .modal-btn.cancel {

@@ -140,7 +140,7 @@
     font-size: 11px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .toc-item:hover {

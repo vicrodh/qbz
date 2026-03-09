@@ -95,7 +95,7 @@
     border-radius: 50%;
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .volume-icon:hover {

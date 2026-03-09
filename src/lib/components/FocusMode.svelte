@@ -372,7 +372,7 @@
     color: var(--alpha-70);
     cursor: pointer;
     opacity: 0;
-    transition: all 200ms ease;
+    transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease, opacity 200ms ease;
   }
 
   .close-btn.visible {
@@ -507,7 +507,7 @@
     background: linear-gradient(to top, rgba(0, 0, 0, 0.85) 0%, rgba(0, 0, 0, 0.4) 60%, transparent 100%);
     opacity: 0;
     transform: translateY(8px);
-    transition: all 250ms ease;
+    transition: color 250ms ease, background-color 250ms ease, border-color 250ms ease, opacity 250ms ease;
   }
 
   .bottom-bar.visible {
@@ -592,7 +592,7 @@
     border-radius: 50%;
     color: var(--alpha-85);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .control-btn:disabled {

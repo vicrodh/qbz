@@ -188,7 +188,7 @@
     color: var(--text-secondary);
     font-size: 14px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .tab-move-btn:hover:not(:disabled) {

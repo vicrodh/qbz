@@ -196,7 +196,7 @@
     border: none;
     padding: 0;
     cursor: pointer;
-    transition: all 500ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: transform 500ms cubic-bezier(0.4, 0, 0.2, 1), opacity 500ms cubic-bezier(0.4, 0, 0.2, 1);
     transform-style: preserve-3d;
   }
 

@@ -4366,7 +4366,7 @@
     border-radius: 8px;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .icon-btn:hover {
@@ -4464,7 +4464,7 @@
     color: var(--text-secondary);
     font-size: 12px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .stop-scan-btn:hover {
@@ -4765,7 +4765,7 @@
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .danger-btn-small:hover {
@@ -4901,7 +4901,7 @@
     color: var(--text-muted);
     border-radius: 4px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .search-close-btn:hover {
@@ -4927,7 +4927,7 @@
     border-radius: 8px;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .control-btn:hover {
@@ -5142,7 +5142,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -5208,7 +5208,7 @@
     border-radius: 6px;
     cursor: pointer;
     text-align: left;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .sort-menu .dropdown-item:hover {
@@ -5697,7 +5697,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 6px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .edit-btn:hover {
@@ -5757,7 +5757,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 6px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .close-btn:hover {
@@ -5813,7 +5813,7 @@
     border-radius: 10px;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .album-action-btn:hover:not(:disabled) {
@@ -5953,7 +5953,7 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .discogs-btn:hover:not(:disabled) {
@@ -6002,7 +6002,7 @@
     border-radius: 8px;
     overflow: hidden;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .discogs-option:hover {
@@ -6074,7 +6074,7 @@
     border-radius: 6px;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .carousel-btn:hover:not(:disabled) {

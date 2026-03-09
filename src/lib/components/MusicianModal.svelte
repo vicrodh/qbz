@@ -221,7 +221,7 @@
     border-radius: 8px;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -312,7 +312,7 @@
     font-size: 14px;
     font-weight: 600;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .cta-btn:hover {

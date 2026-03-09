@@ -135,7 +135,7 @@
     color: var(--text-secondary);
     font-size: 12px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .genre-filter-btn:hover {
@@ -174,7 +174,7 @@
     padding: 8px 12px;
     font-size: 12px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .control-btn:hover {

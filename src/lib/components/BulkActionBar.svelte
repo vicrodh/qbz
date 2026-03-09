@@ -290,7 +290,7 @@
     border-radius: 50%;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 120ms ease;
+    transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease, opacity 120ms ease;
     margin-left: 4px;
   }
 

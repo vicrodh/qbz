@@ -329,7 +329,7 @@
     border: 2px solid transparent;
     border-radius: 6px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     color: var(--text-secondary);
   }
 
@@ -363,7 +363,7 @@
     border: 2px solid transparent;
     border-radius: 6px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     padding: 3px;
   }
 
@@ -421,7 +421,7 @@
     color: var(--text-secondary);
     font-size: 13px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .upload-btn:hover {

@@ -539,7 +539,7 @@
     border-radius: 6px;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .refresh-btn:hover:not(:disabled) {
@@ -729,7 +729,7 @@
     border: none;
     border-radius: 4px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .action-btn.add {

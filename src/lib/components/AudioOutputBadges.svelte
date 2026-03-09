@@ -367,7 +367,7 @@
     background: transparent;
     color: var(--alpha-15);
     border: 1px solid var(--alpha-6);
-    transition: all 200ms ease;
+    transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease, opacity 200ms ease;
     cursor: help;
   }
 

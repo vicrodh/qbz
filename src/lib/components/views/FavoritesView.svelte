@@ -2202,7 +2202,7 @@
     color: var(--text-secondary);
     cursor: pointer;
     margin-left: auto;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .edit-btn:hover {
@@ -2273,7 +2273,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 6px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .search-icon-btn:hover {
@@ -2316,7 +2316,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 4px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 

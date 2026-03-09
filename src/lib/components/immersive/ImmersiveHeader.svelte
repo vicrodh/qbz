@@ -428,7 +428,7 @@
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .mode-toggle:hover {
@@ -477,7 +477,7 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .tab:hover {
@@ -546,7 +546,7 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 120ms ease;
+    transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease, opacity 120ms ease;
     white-space: nowrap;
     text-align: left;
   }
@@ -636,7 +636,7 @@
     border-radius: 20px;
     padding: 4px;
     overflow: hidden;
-    transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: opacity 250ms cubic-bezier(0.4, 0, 0.2, 1), background-color 250ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .window-trigger {
@@ -649,7 +649,7 @@
     border: none;
     border-radius: 50%;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -675,7 +675,7 @@
     max-width: 0;
     opacity: 0;
     overflow: hidden;
-    transition: all 250ms cubic-bezier(0.4, 0, 0.2, 1);
+    transition: max-width 250ms cubic-bezier(0.4, 0, 0.2, 1), opacity 250ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
   .window-controls.expanded .expanded-buttons {
@@ -695,7 +695,7 @@
     border-radius: 50%;
     color: rgba(255, 255, 255, 0.85);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 

@@ -102,7 +102,7 @@
     font-size: 12px;
     font-weight: 600;
     flex-shrink: 0;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .step-button.complete .step-indicator {

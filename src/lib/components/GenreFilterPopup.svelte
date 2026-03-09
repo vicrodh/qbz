@@ -587,7 +587,7 @@
     align-items: center;
     justify-content: space-between;
     padding: 0 10px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .genre-card:hover {
@@ -627,7 +627,7 @@
     border-radius: 50%;
     border: 1.5px solid var(--text-muted);
     background: transparent;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     position: relative;
   }
 
@@ -756,7 +756,7 @@
     align-items: center;
     justify-content: center;
     color: transparent;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .check-box.small {

@@ -331,7 +331,7 @@
     inset: 0;
     background-color: var(--bg-tertiary);
     border-radius: 24px;
-    transition: all 200ms ease;
+    transition: color 200ms ease, background-color 200ms ease, border-color 200ms ease, opacity 200ms ease;
   }
 
   .toggle-slider::before {
@@ -369,7 +369,7 @@
     flex-direction: column;
     padding: 10px 12px;
     background: var(--bg-secondary);
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .section-item:hover {
@@ -411,7 +411,7 @@
     border-radius: 4px;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .order-btn:hover:not(:disabled) {
@@ -467,7 +467,7 @@
     color: var(--text-muted);
     font-size: 13px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .reset-btn:hover {
@@ -491,7 +491,7 @@
     border-radius: 6px;
     color: var(--text-primary);
     font-size: 13px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .limit-input:focus {

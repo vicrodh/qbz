@@ -288,7 +288,7 @@
     cursor: pointer;
     padding: 4px;
     border-radius: 4px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .close-btn:hover {
@@ -350,7 +350,7 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -410,7 +410,7 @@
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     text-align: left;
   }
 
@@ -514,7 +514,7 @@
     border-radius: 50%;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     opacity: 0;
   }
 
@@ -553,7 +553,7 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .cancel-btn {

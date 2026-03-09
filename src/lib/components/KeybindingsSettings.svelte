@@ -244,7 +244,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .close-btn:hover {
@@ -298,7 +298,7 @@
     color: var(--color-error, #ef4444);
     font-size: 14px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .reset-all-btn:hover:not(:disabled) {
@@ -354,7 +354,7 @@
     border-radius: 6px;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .cancel-btn:hover {
@@ -369,7 +369,7 @@
     border-radius: 6px;
     color: white;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .confirm-btn:hover {

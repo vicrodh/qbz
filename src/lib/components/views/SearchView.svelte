@@ -2121,7 +2121,7 @@
     font-size: 16px;
     color: var(--text-primary);
     outline: none;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .search-input:focus {
@@ -2211,7 +2211,7 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .tab:hover {
@@ -2265,7 +2265,7 @@
     border: none;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     opacity: 0;
     pointer-events: none;
   }
@@ -2555,7 +2555,7 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .load-more-btn:hover:not(:disabled) {
@@ -2927,7 +2927,7 @@
     background-color: transparent;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .carousel-btn:hover:not(:disabled) {
@@ -2948,7 +2948,7 @@
     cursor: pointer;
     padding: 4px 8px;
     border-radius: 4px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .view-all-link:hover {
@@ -3012,7 +3012,7 @@
     border: 2px solid var(--bg-tertiary);
     border-radius: 8px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .view-more-cover:hover {

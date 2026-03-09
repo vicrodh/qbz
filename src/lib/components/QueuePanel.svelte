@@ -757,7 +757,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 6px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -862,7 +862,7 @@
     color: var(--text-muted);
     cursor: pointer;
     opacity: 0;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .queue-track:hover .track-menu-btn,
@@ -902,7 +902,7 @@
     font-size: 13px;
     text-align: left;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .menu-item:hover {
@@ -1072,7 +1072,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 6px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .footer-icon-btn:hover {

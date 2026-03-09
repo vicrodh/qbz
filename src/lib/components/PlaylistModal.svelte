@@ -1099,7 +1099,7 @@
     background: var(--bg-tertiary);
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .clear-selection:hover {
@@ -1238,7 +1238,7 @@
     color: var(--text-primary);
     font-size: 12px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .artwork-action-btn:hover:not(:disabled) {
@@ -1324,7 +1324,7 @@
     font-size: 13px;
     color: #ef4444;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .btn-danger-sm:hover:not(:disabled) {
@@ -1354,7 +1354,7 @@
     border-radius: 6px;
     font-size: 13px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     border: none;
   }
 

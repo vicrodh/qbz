@@ -1161,7 +1161,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 6px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .search-icon-btn:hover {
@@ -1204,7 +1204,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 4px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -1242,7 +1242,7 @@
     padding: 8px 12px;
     font-size: 12px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .control-btn:hover {
@@ -1460,7 +1460,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -1809,7 +1809,7 @@
     background: var(--bg-tertiary);
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .download-btn:hover {

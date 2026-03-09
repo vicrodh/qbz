@@ -126,7 +126,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 4px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     padding: 0;
   }
 

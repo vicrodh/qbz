@@ -182,7 +182,7 @@
     font-size: 12px;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     min-height: 32px;
   }
 
@@ -237,7 +237,7 @@
     border-radius: 6px;
     color: var(--text-muted);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .reset-btn:hover:not(:disabled) {

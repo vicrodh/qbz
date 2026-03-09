@@ -746,7 +746,7 @@
     color: var(--text-muted);
     cursor: pointer;
     border-radius: 4px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -768,7 +768,7 @@
     cursor: pointer;
     border-radius: 6px;
     font-size: 12px;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     white-space: nowrap;
   }
 
@@ -823,7 +823,7 @@
     text-align: left;
     cursor: pointer;
     border-radius: 5px;
-    transition: all 100ms ease;
+    transition: color 100ms ease, background-color 100ms ease, border-color 100ms ease, opacity 100ms ease;
   }
 
   .sort-option:hover {

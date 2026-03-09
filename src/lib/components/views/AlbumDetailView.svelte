@@ -1077,7 +1077,7 @@
     background-color: transparent;
     color: var(--text-primary);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .carousel-btn:hover:not(:disabled) {
@@ -1123,7 +1123,7 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .view-more-cover:hover {

@@ -302,7 +302,7 @@
     justify-content: center;
     cursor: pointer;
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.85);
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .overlay-btn:hover {

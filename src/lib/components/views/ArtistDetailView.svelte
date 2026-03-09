@@ -3129,7 +3129,7 @@
     border-radius: 50%;
     cursor: pointer;
     color: var(--text-muted);
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -3316,7 +3316,7 @@
     border: none;
     border-radius: 6px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
@@ -3325,7 +3325,7 @@
     height: 18px;
     opacity: 0.5;
     filter: brightness(0) saturate(100%) invert(70%) sepia(0%) saturate(0%) hue-rotate(0deg) brightness(90%) contrast(90%);
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .hide-artist-btn:hover {
@@ -3449,7 +3449,7 @@
     font-size: 12px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .unblock-btn:hover:not(:disabled) {
@@ -3625,7 +3625,7 @@
     font-size: 12px;
     color: var(--text-secondary);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .sort-btn:hover {
@@ -3656,7 +3656,7 @@
     cursor: pointer;
     border-radius: 4px;
     font-size: 12px;
-    transition: all 100ms ease;
+    transition: color 100ms ease, background-color 100ms ease, border-color 100ms ease, opacity 100ms ease;
   }
 
   .sort-item:hover,
@@ -3751,7 +3751,7 @@
     color: var(--text-muted);
     border-radius: 4px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .search-nav-btn:hover:not(:disabled) {
@@ -3775,7 +3775,7 @@
     color: var(--text-muted);
     border-radius: 4px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     margin-left: 2px;
   }
 
@@ -3984,7 +3984,7 @@
     font-size: 14px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .load-more-btn:hover:not(:disabled) {
@@ -4081,7 +4081,7 @@
     color: var(--text-secondary);
     font-size: 13px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .load-more-btn:hover:not(:disabled) {

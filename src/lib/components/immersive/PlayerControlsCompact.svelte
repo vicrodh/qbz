@@ -466,7 +466,7 @@
     border-radius: 50%;
     color: rgba(255, 255, 255, 0.65);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     position: relative;
   }
 

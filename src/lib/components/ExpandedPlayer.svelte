@@ -462,7 +462,7 @@
     border-radius: 50%;
     color: var(--alpha-70);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .close-btn:hover {
@@ -630,7 +630,7 @@
     border: none;
     color: var(--alpha-60);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     position: relative;
     padding: 8px;
     border-radius: 50%;
@@ -753,7 +753,7 @@
     border-radius: 50%;
     color: var(--alpha-60);
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .action-btn:hover {

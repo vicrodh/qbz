@@ -1653,7 +1653,7 @@
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     opacity: 0.7;
   }
 

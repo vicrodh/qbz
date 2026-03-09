@@ -206,7 +206,7 @@
     font-size: 13px;
     font-weight: 500;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .sub-tab:hover {
@@ -236,7 +236,7 @@
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
     font-size: 12px;
     cursor: pointer;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
   }
 
   .clear-btn:hover {
@@ -322,7 +322,7 @@
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
     cursor: pointer;
     opacity: 0;
-    transition: all 150ms ease;
+    transition: color 150ms ease, background-color 150ms ease, border-color 150ms ease, opacity 150ms ease;
     flex-shrink: 0;
   }
 
