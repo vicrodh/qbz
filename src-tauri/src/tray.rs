@@ -25,7 +25,7 @@ fn load_tray_icon() -> Image<'static> {
     // This works better with StatusNotifierItem/libayatana-appindicator
     if is_flatpak() {
         let icon_path =
-            PathBuf::from("/app/share/icons/hicolor/32x32/apps/com.blitzkriegfc.qbz.png");
+            PathBuf::from("/app/share/icons/hicolor/32x32/apps/com.blitzfc.qbz.png");
         if icon_path.exists() {
             log::info!("Flatpak detected, loading tray icon from: {:?}", icon_path);
             if let Ok(icon_data) = std::fs::read(&icon_path) {
@@ -135,22 +135,32 @@ pub fn init_tray(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>> {
                     log::info!("Tray icon left-click");
                     let app = tray.app_handle();
                     if let Some(window) = app.get_webview_window("main") {
-                        if window.is_visible().unwrap_or(true) {
+                        let is_visible = window.is_visible().unwrap_or(true);
+                        let is_minimized = window.is_minimized().unwrap_or(false);
+
+                        if is_visible && !is_minimized {
                             let _ = window.hide();
                         } else {
                             let _ = window.show();
-                            let _ = window.unminimize();
+                            if is_minimized {
+                                let _ = window.unminimize();
+                            }
                             let _ = window.set_focus();
                         }
                     }
                 }
-                // Double click always shows and focuses
+                // Double click always brings window to front
                 TrayIconEvent::DoubleClick { .. } => {
                     log::info!("Tray icon double-click");
                     let app = tray.app_handle();
                     if let Some(window) = app.get_webview_window("main") {
+                        // Ensure window is visible first
                         let _ = window.show();
-                        let _ = window.unminimize();
+                        // Unminimize if minimized
+                        if window.is_minimized().unwrap_or(false) {
+                            let _ = window.unminimize();
+                        }
+                        // Always bring to front and focus
                         let _ = window.set_focus();
                     }
                 }

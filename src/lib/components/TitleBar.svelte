@@ -94,8 +94,13 @@
   }
 
   async function handleDoubleClick(e: MouseEvent) {
-    // Don't toggle maximize when double-clicking the search input
+    // Don't toggle maximize when double-clicking the search input or window controls
     if ((e.target as HTMLElement)?.closest('.titlebar-search')) return;
+    if ((e.target as HTMLElement)?.closest('.window-controls')) return;
+    // Don't toggle if the native drag region already handles it
+    // (data-tauri-drag-region natively double-clicks to toggle maximize)
+    const target = e.target as HTMLElement;
+    if (target?.hasAttribute('data-tauri-drag-region')) return;
     await appWindow?.toggleMaximize();
   }
 
