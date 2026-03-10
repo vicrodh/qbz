@@ -1227,7 +1227,7 @@
     display: flex; align-items: center; gap: 8px;
     font-size: 14px; color: var(--text-muted);
     background: none; border: none; cursor: pointer;
-    margin-top: 24px; margin-bottom: 24px; transition: color 150ms ease;
+    margin-top: 8px; margin-bottom: 24px; transition: color 150ms ease;
   }
   .back-btn:hover { color: var(--text-secondary); }
 

@@ -326,9 +326,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    padding: 24px;
-    padding-left: 18px;
-    padding-right: 8px;
+    padding: 8px 8px 0 18px;
   }
 
   .top-bar {

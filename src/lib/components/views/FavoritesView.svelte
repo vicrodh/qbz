@@ -2106,10 +2106,7 @@
   }
 
   .favorites-view {
-    padding: 24px;
-    padding-left: 18px;
-    padding-right: 8px;
-    padding-bottom: 100px;
+    padding: 8px 8px 100px 18px;
     overflow-y: auto;
     height: 100%;
   }
@@ -2131,7 +2128,7 @@
     border: none;
     cursor: pointer;
     padding: 0;
-    margin-top: 24px;
+    margin-top: 8px;
     margin-bottom: 24px;
     transition: color 150ms ease;
   }

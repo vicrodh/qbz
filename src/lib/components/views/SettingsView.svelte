@@ -5880,7 +5880,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
   }
 
   .header {
-    padding-top: 24px;
+    padding-top: 8px;
     margin-bottom: 32px;
   }
 
@@ -5893,7 +5893,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     background: none;
     border: none;
     cursor: pointer;
-    margin-top: 24px;
+    margin-top: 8px;
     margin-bottom: 24px;
     transition: color 150ms ease;
   }

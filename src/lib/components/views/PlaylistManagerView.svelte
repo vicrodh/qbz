@@ -1633,10 +1633,7 @@
 
 <style>
   .playlist-manager {
-    padding: 24px;
-    padding-left: 18px;
-    padding-right: 8px;
-    padding-bottom: 100px;
+    padding: 8px 8px 100px 18px;
     height: 100%;
     overflow-y: auto;
   }

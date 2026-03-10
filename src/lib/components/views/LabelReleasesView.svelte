@@ -552,10 +552,7 @@
 
 <style>
   .label-view {
-    padding: 24px;
-    padding-left: 18px;
-    padding-right: 8px;
-    padding-bottom: 100px;
+    padding: 8px 8px 100px 18px;
     overflow-y: auto;
     height: 100%;
   }

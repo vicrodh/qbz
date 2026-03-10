@@ -2470,10 +2470,7 @@
 
 <style>
   .playlist-detail {
-    padding: 24px;
-    padding-left: 18px;
-    padding-right: 8px;
-    padding-bottom: 100px;
+    padding: 8px 8px 100px 18px;
     overflow-y: auto;
     height: 100%;
   }
@@ -2513,7 +2510,7 @@
     color: var(--text-muted);
     cursor: pointer;
     font-size: 14px;
-    margin-top: 24px;
+    margin-top: 8px;
     margin-bottom: 24px;
     transition: color 150ms ease;
   }

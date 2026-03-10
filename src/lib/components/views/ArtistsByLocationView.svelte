@@ -849,7 +849,7 @@
     border: none;
     cursor: pointer;
     padding: 0;
-    margin-top: 24px;
+    margin-top: 8px;
     margin-bottom: 12px;
     transition: color 150ms ease;
   }

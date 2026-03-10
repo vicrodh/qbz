@@ -673,8 +673,7 @@
 
 <style>
   .topq-view {
-    padding: 24px;
-    padding-bottom: 100px;
+    padding: 8px 24px 100px 24px;
     color: var(--text-primary);
     height: 100%;
     overflow-y: auto;
