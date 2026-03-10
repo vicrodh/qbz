@@ -8,6 +8,8 @@
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
   import { formatDuration, formatQuality, getQobuzImage, getQobuzImageForSize } from '$lib/adapters/qobuzAdapters';
+  import { playTrack } from '$lib/services/playbackService';
+  import { playQueueIndex } from '$lib/stores/queueStore';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
   import { isBlacklisted as isArtistBlacklisted } from '$lib/stores/artistBlacklistStore';
   import { toggleArtistFavorite } from '$lib/stores/artistFavoritesStore';
@@ -156,6 +158,7 @@
   let failedArtistImages = $state<Set<number>>(new Set());
   let radioLoading = $state<string | null>(null); // album ID currently creating radio
   let radioCardColors = $state<Record<string, string>>({}); // album ID -> dominant color
+  let radioCardTextColors = $state<Record<string, string>>({}); // album ID -> lightest color for RADIO text
 
   // Phase 2: Artists to Follow
   let suggestedArtists = $state<SuggestedArtist[]>([]);
@@ -490,6 +493,7 @@
         artistId: spotlightData.artistId,
         artistName: spotlightData.artistName
       });
+      await startRadioPlayback();
     } catch (err) {
       console.error('Failed to create spotlight radio:', err);
     } finally {
@@ -507,11 +511,34 @@
     );
   }
 
+  async function startRadioPlayback() {
+    const firstTrack = await playQueueIndex(0);
+    if (firstTrack) {
+      const quality = firstTrack.bit_depth && firstTrack.sample_rate
+        ? `${firstTrack.bit_depth}bit/${firstTrack.sample_rate}kHz`
+        : firstTrack.hires ? 'Hi-Res' : '-';
+      await playTrack({
+        id: firstTrack.id,
+        title: firstTrack.title,
+        artist: firstTrack.artist,
+        album: firstTrack.album,
+        artwork: firstTrack.artwork_url || '',
+        duration: firstTrack.duration_secs,
+        quality,
+        bitDepth: firstTrack.bit_depth ?? undefined,
+        samplingRate: firstTrack.sample_rate ?? undefined,
+        albumId: firstTrack.album_id ?? undefined,
+        artistId: firstTrack.artist_id ?? undefined,
+      });
+    }
+  }
+
   async function handleRadioPlay(albumId: string, albumTitle: string) {
     if (radioLoading) return;
     radioLoading = albumId;
     try {
       await invoke('v2_create_album_radio', { albumId, albumName: albumTitle });
+      await startRadioPlayback();
     } catch (err) {
       console.error('Failed to create radio:', err);
     } finally {
@@ -531,22 +558,44 @@
         if (!ctx) return;
         ctx.drawImage(img, 0, 0, 8, 8);
         const data = ctx.getImageData(0, 0, 8, 8).data;
-        // Sample several pixels and average
+        // Average all pixels for background color
         let rSum = 0, gSum = 0, bSum = 0, count = 0;
+        // Track lightest pixel for RADIO text color
+        let lightR = 0, lightG = 0, lightB = 0, maxBrightness = 0;
         for (let i = 0; i < data.length; i += 4) {
-          rSum += data[i];
-          gSum += data[i + 1];
-          bSum += data[i + 2];
+          const pr = data[i], pg = data[i + 1], pb = data[i + 2];
+          rSum += pr;
+          gSum += pg;
+          bSum += pb;
           count++;
+          // Perceived brightness (luminance-weighted)
+          const brightness = pr * 0.299 + pg * 0.587 + pb * 0.114;
+          if (brightness > maxBrightness) {
+            maxBrightness = brightness;
+            lightR = pr;
+            lightG = pg;
+            lightB = pb;
+          }
         }
         const r = Math.round(rSum / count);
         const g = Math.round(gSum / count);
         const b = Math.round(bSum / count);
-        // Slightly darken for better contrast with white text
+        // Darken background for contrast
         const dr = Math.round(r * 0.7);
         const dg = Math.round(g * 0.7);
         const db = Math.round(b * 0.7);
         radioCardColors = { ...radioCardColors, [albumId]: `rgb(${dr}, ${dg}, ${db})` };
+        // For RADIO text: use lightest tone, fallback to bright white for very dark covers
+        if (maxBrightness < 60) {
+          radioCardTextColors = { ...radioCardTextColors, [albumId]: 'rgb(255, 255, 255)' };
+        } else {
+          // Boost the lightest color slightly for better visibility
+          const boost = Math.min(1.3, 255 / Math.max(lightR, lightG, lightB, 1));
+          const tr = Math.min(255, Math.round(lightR * boost));
+          const tg = Math.min(255, Math.round(lightG * boost));
+          const tb = Math.min(255, Math.round(lightB * boost));
+          radioCardTextColors = { ...radioCardTextColors, [albumId]: `rgb(${tr}, ${tg}, ${tb})` };
+        }
       } catch {
         // Canvas tainted - ignore
       }
@@ -695,7 +744,10 @@
               alt=""
               class="radio-card-shadow"
             />
-            <span class="radio-card-label">{$t('home.radioLabel')}</span>
+            <span
+              class="radio-card-label"
+              style:color={radioCardTextColors[album.id] || 'rgba(255, 255, 255, 0.85)'}
+            >{$t('home.radioLabel')}</span>
             <div class="radio-card-hover-overlay" class:visible={isThisLoading}>
               {#if isThisLoading}
                 <div class="radio-play-spinner">
@@ -1305,6 +1357,19 @@
     transition: background-color 400ms ease;
   }
 
+  .radio-card-visual::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 50%;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.65), transparent);
+    pointer-events: none;
+    z-index: 2;
+    border-radius: 0 0 8px 8px;
+  }
+
   .radio-card-art {
     position: relative;
     z-index: 1;
@@ -1336,7 +1401,7 @@
     font-weight: 300;
     letter-spacing: 0.35em;
     padding-left: 0.35em;
-    color: rgba(255, 255, 255, 0.85);
+    /* color set inline from extracted lightest album tone */
     text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
     pointer-events: none;
     z-index: 3;
