@@ -547,7 +547,6 @@
 
   .time {
     font-size: 11px;
-    font-family: var(--font-mono, monospace);
     font-variant-numeric: tabular-nums;
     color: var(--text-muted);
     min-width: 40px;
