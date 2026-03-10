@@ -1441,7 +1441,7 @@
 
   .mix-cards-row {
     display: flex;
-    gap: 16px;
+    gap: 22px;
   }
 
   .mix-card {
