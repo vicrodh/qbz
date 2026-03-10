@@ -4,13 +4,15 @@
 
   interface Props {
     activeView: string;
-    onNavigate: (view: string) => void;
+    activeItemId?: string | number;
+    onNavigate: (view: string, itemId?: string | number) => void;
     favoritesTabOrder?: string[];
     position?: 'left' | 'right';
   }
 
   let {
     activeView,
+    activeItemId,
     onNavigate,
     favoritesTabOrder = ['tracks', 'albums', 'artists'],
     position = 'left'
@@ -21,12 +23,8 @@
   let discoverTimeout: ReturnType<typeof setTimeout> | null = null;
   let favoritesTimeout: ReturnType<typeof setTimeout> | null = null;
 
-  const discoverViews = ['home', 'discover-new-releases', 'discover-ideal-discography',
-    'discover-top-albums', 'discover-qobuzissimes', 'discover-albums-of-the-week',
-    'discover-press-accolades', 'discover-playlists'];
-
   function isDiscoverActive(): boolean {
-    return discoverViews.includes(activeView);
+    return activeView === 'home';
   }
 
   function isFavoritesActive(): boolean {
@@ -61,8 +59,8 @@
     if (favoritesTimeout) { clearTimeout(favoritesTimeout); favoritesTimeout = null; }
   }
 
-  function handleDiscoverItem(view: string) {
-    onNavigate(view);
+  function handleDiscoverItem(tab: 'home' | 'editorPicks' | 'forYou') {
+    onNavigate('home', tab);
     discoverOpen = false;
   }
 
@@ -112,22 +110,22 @@
       >
         <button
           class="dropdown-item"
-          class:active={activeView === 'home'}
+          class:active={activeView === 'home' && (!activeItemId || activeItemId === 'home')}
           onclick={() => handleDiscoverItem('home')}
         >
           {$t('home.title')}
         </button>
         <button
           class="dropdown-item"
-          class:active={activeView === 'discover-qobuzissimes'}
-          onclick={() => handleDiscoverItem('discover-qobuzissimes')}
+          class:active={activeView === 'home' && activeItemId === 'editorPicks'}
+          onclick={() => handleDiscoverItem('editorPicks')}
         >
           {$t('home.tabEditorPicks')}
         </button>
         <button
           class="dropdown-item"
-          class:active={activeView === 'discover-ideal-discography' || activeView === 'discover-top-albums'}
-          onclick={() => handleDiscoverItem('discover-ideal-discography')}
+          class:active={activeView === 'home' && activeItemId === 'forYou'}
+          onclick={() => handleDiscoverItem('forYou')}
         >
           {$t('home.tabForYou')}
         </button>

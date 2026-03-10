@@ -3870,6 +3870,7 @@
 {#snippet titlebarNavSnippet()}
   <TitleBarNav
     {activeView}
+    activeItemId={activeView === 'home' ? homeTab : undefined}
     onNavigate={navigateTo}
     position={titlebarNavPosition}
   />
