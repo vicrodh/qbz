@@ -460,7 +460,7 @@
   }
 
   .metadata-value.mono {
-    font-family: monospace;
+    font-family: var(--font-sans);
     font-size: 13px;
     color: var(--text-muted);
   }

@@ -176,7 +176,7 @@
     border-radius: 6px;
     font-size: 14px;
     color: var(--text-primary);
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans);
   }
 
   .custom-input:focus {
@@ -236,7 +236,7 @@
     color: white;
     border-radius: 4px;
     font-size: 13px;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans);
   }
 
   .remove-btn {

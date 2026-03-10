@@ -632,7 +632,7 @@
 
   .time {
     font-size: 12px;
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
     color: var(--alpha-60);
     min-width: 40px;

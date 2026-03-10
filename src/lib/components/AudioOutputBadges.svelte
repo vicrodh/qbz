@@ -475,7 +475,7 @@
   .tooltip-raw {
     font-size: 9px;
     color: var(--alpha-30);
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans);
     margin-top: 4px;
     white-space: nowrap;
     overflow: hidden;
@@ -562,6 +562,6 @@
   .setting-detail {
     font-size: 10px;
     color: var(--alpha-50);
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans);
   }
 </style>

@@ -622,7 +622,7 @@
 
   .spek-header-text {
     display: inline-block;
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-family: var(--font-sans);
     font-size: 15px;
     color: rgba(215, 255, 225, 0.94);
     text-shadow: 0 1px 5px rgba(0, 0, 0, 0.45);

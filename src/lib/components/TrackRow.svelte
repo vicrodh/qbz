@@ -639,7 +639,7 @@
   .track-duration {
     font-size: 14px;
     color: var(--text-muted);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
     width: 80px;
     text-align: center;

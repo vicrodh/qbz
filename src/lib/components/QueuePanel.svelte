@@ -838,7 +838,7 @@
   .track-duration {
     font-size: 12px;
     color: var(--text-muted);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
     flex-shrink: 0;
   }

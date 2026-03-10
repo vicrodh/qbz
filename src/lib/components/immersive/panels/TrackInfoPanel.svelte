@@ -333,7 +333,7 @@
   }
 
   .metadata-value.mono {
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans);
     font-size: 12px;
     color: var(--alpha-70, rgba(255, 255, 255, 0.7));
   }

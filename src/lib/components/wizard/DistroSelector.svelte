@@ -114,6 +114,6 @@
     border-radius: 6px;
     font-size: 13px;
     color: var(--text-secondary);
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans);
   }
 </style>

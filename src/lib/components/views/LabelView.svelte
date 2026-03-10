@@ -1414,7 +1414,7 @@
   }
   .track-link:hover { color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; }
   .track-quality { display: flex; align-items: center; }
-  .track-duration { font-size: 13px; color: var(--text-muted); font-family: var(--font-mono); }
+  .track-duration { font-size: 13px; color: var(--text-muted); font-family: var(--font-sans); }
   .track-actions { display: flex; align-items: center; gap: 4px; margin-left: 8px; }
   .track-favorite-btn {
     display: flex; align-items: center; justify-content: center;

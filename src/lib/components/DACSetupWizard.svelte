@@ -1011,7 +1011,7 @@
   }
 
   .text-input.mono {
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans);
   }
 
   .text-input::placeholder {
@@ -1142,7 +1142,7 @@
   }
 
   .cap-value.rates {
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans);
     color: var(--color-success, #22c55e);
   }
 
@@ -1237,7 +1237,7 @@
 
   .targeting-value {
     font-size: 14px;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans);
     color: var(--accent-primary);
     word-break: break-all;
   }
@@ -1337,7 +1337,7 @@
 
   .config-list code {
     font-size: 12px;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--font-sans);
     color: var(--text-secondary);
   }
 

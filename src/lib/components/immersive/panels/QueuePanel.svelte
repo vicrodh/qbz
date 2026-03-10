@@ -369,7 +369,7 @@
 
   .track-duration {
     font-size: 12px;
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     color: var(--alpha-50, rgba(255, 255, 255, 0.5));
     flex-shrink: 0;
   }

@@ -580,7 +580,7 @@
     justify-content: space-between;
     font-size: 12px;
     color: var(--alpha-50);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
     margin-bottom: 8px;
   }

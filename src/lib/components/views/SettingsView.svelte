@@ -6217,7 +6217,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     padding: 4px 8px;
     border-radius: 4px;
     background: var(--bg-tertiary);
-    font-family: monospace;
+    font-family: var(--font-sans);
     font-size: 12px;
     color: var(--text-primary);
     user-select: all;
@@ -6266,7 +6266,7 @@ flatpak override --user --filesystem=/home/USUARIO/Música com.blitzfc.qbz</pre>
     padding: 2px 6px;
     border-radius: 4px;
     background: var(--bg-tertiary);
-    font-family: monospace;
+    font-family: var(--font-sans);
     font-size: 11px;
     color: var(--text-primary);
   }

@@ -262,7 +262,7 @@
   .version {
     font-size: 13px;
     color: var(--text-muted);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
   }
 
   .close-btn {
@@ -351,7 +351,7 @@
 
   .value {
     color: var(--text-primary);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
   }
 
   .commit {

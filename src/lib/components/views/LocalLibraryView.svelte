@@ -4633,7 +4633,7 @@
     flex: 1;
     font-size: 13px;
     color: var(--text-primary);
-    font-family: var(--font-mono, 'Courier New', monospace);
+    font-family: var(--font-sans);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -4678,7 +4678,7 @@
   .folder-path {
     font-size: 13px;
     color: var(--text-primary);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
   }
 
   .settings-actions {

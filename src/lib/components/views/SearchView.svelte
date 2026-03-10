@@ -2432,7 +2432,7 @@
   .track-duration {
     font-size: 13px;
     color: var(--text-muted);
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
   }
 

@@ -200,7 +200,7 @@
     flex-shrink: 0;
     font-size: 11px;
     color: var(--text-muted);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+    font-family: var(--font-sans);
   }
 
   .artwork-play-btn {

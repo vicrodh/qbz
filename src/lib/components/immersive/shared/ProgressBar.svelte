@@ -103,7 +103,7 @@
 
   .time {
     font-size: 12px;
-    font-family: var(--font-mono);
+    font-family: var(--font-sans);
     font-variant-numeric: tabular-nums;
     color: var(--alpha-60, rgba(255, 255, 255, 0.6));
     min-width: 40px;
