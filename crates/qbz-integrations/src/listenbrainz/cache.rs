@@ -227,6 +227,44 @@ impl ListenBrainzCache {
         Ok(())
     }
 
+    /// Batch mark multiple listens as sent
+    pub fn mark_listens_sent(&self, ids: &[i64]) -> Result<(), String> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+        let placeholders: Vec<String> = ids.iter().map(|_| "?".to_string()).collect();
+        let sql = format!(
+            "UPDATE listen_queue SET sent = 1 WHERE id IN ({})",
+            placeholders.join(", ")
+        );
+        let params: Vec<Box<dyn rusqlite::types::ToSql>> = ids
+            .iter()
+            .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
+            .collect();
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+        self.conn
+            .execute(&sql, params_refs.as_slice())
+            .map_err(|e| format!("Failed to batch mark sent: {}", e))?;
+        Ok(())
+    }
+
+    /// Get count of unsent listens in queue
+    pub fn get_queue_count(&self) -> Result<u32, String> {
+        let count: i64 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM listen_queue WHERE sent = 0", [], |row| row.get(0))
+            .unwrap_or(0);
+        Ok(count as u32)
+    }
+
+    /// Clear all queued listens
+    pub fn clear_queue(&self) -> Result<(), String> {
+        self.conn
+            .execute("DELETE FROM listen_queue", [])
+            .map_err(|e| format!("Failed to clear queue: {}", e))?;
+        Ok(())
+    }
+
     /// Delete old sent listens
     pub fn cleanup_sent(&self, older_than_days: u32) -> Result<u64, String> {
         let cutoff = chrono::Utc::now().timestamp() - (older_than_days as i64 * 86400);
