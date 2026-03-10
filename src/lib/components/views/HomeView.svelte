@@ -2,7 +2,7 @@
   import { onMount, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
-  import { Music, User, Loader2, ArrowRight } from 'lucide-svelte';
+  import { Music, User, Loader2, ArrowRight, Home } from 'lucide-svelte';
   import { cachedSrc } from '$lib/actions/cachedImage';
   import { type OfflineCacheStatus } from '$lib/stores/offlineCacheState';
   import {
@@ -190,6 +190,10 @@
   // Home settings state
   let homeSettings = $state<HomeSettings>(getSettings());
   let isSettingsModalOpen = $state(false);
+
+  // Tab state
+  type HomeTab = 'home' | 'editorPicks' | 'forYou';
+  let activeTab = $state<HomeTab>('home');
 
   // Computed greeting with i18n support — never call $t() inside $derived()
   function getGreetingText(): string {
@@ -868,28 +872,54 @@
 </script>
 
 <div class="home-view" bind:this={homeViewEl} onscroll={handleHomeScroll}>
-  <!-- Header with greeting, filter and settings -->
+  <!-- Header with greeting + tabs + actions -->
   <div class="home-header">
-    {#if homeSettings.greeting.enabled}
-      <h2 class="greeting">{getGreetingText()}</h2>
-    {:else}
-      <div></div>
-    {/if}
+    <div class="header-left">
+      {#if homeSettings.greeting.enabled}
+        <h2 class="greeting">{getGreetingText()}</h2>
+      {/if}
+      <div class="home-tabs">
+        <button
+          class="home-tab"
+          class:active={activeTab === 'home'}
+          onclick={() => { activeTab = 'home'; }}
+        >
+          <Home size={14} />
+        </button>
+        <button
+          class="home-tab"
+          class:active={activeTab === 'editorPicks'}
+          onclick={() => { activeTab = 'editorPicks'; }}
+        >
+          {$t('home.editorPicks')}
+        </button>
+        <button
+          class="home-tab"
+          class:active={activeTab === 'forYou'}
+          onclick={() => { activeTab = 'forYou'; }}
+        >
+          {$t('home.forYou')}
+        </button>
+      </div>
+    </div>
     <div class="header-actions">
-      <GenreFilterButton onFilterChange={handleGenreFilterChange} />
-      <button class="settings-btn" onclick={() => isSettingsModalOpen = true} title={$t('home.customizeHome')}>
-        <img
-          src="/home-gear.svg"
-          alt="Settings"
-          class="settings-icon"
-          width="22"
-          height="22"
-          style="width:22px;height:22px;filter:invert(1) opacity(0.8);"
-        />
-      </button>
+      {#if activeTab === 'home'}
+        <GenreFilterButton onFilterChange={handleGenreFilterChange} />
+        <button class="settings-btn" onclick={() => isSettingsModalOpen = true} title={$t('home.customizeHome')}>
+          <img
+            src="/home-gear.svg"
+            alt="Settings"
+            class="settings-icon"
+            width="22"
+            height="22"
+            style="width:22px;height:22px;filter:invert(1) opacity(0.8);"
+          />
+        </button>
+      {/if}
     </div>
   </div>
 
+  {#if activeTab === 'home'}
   {#if error}
     <div class="home-state">
       <div class="state-icon">
@@ -1508,6 +1538,21 @@
       <p>{$t('home.startListeningDescription')}</p>
     </div>
   {/if}
+  {:else if activeTab === 'editorPicks'}
+    <!-- Editor's Picks tab: curated Qobuz editorial content -->
+    <div class="tab-placeholder">
+      <Music size={48} />
+      <h2>{$t('home.editorPicks')}</h2>
+      <p>Coming soon</p>
+    </div>
+  {:else if activeTab === 'forYou'}
+    <!-- For You tab: personalized recommendations -->
+    <div class="tab-placeholder">
+      <User size={48} />
+      <h2>{$t('home.forYou')}</h2>
+      <p>Coming soon</p>
+    </div>
+  {/if}
 
   <!-- Settings Modal -->
   <HomeSettingsModal
@@ -1628,6 +1673,14 @@
     align-items: center;
     justify-content: space-between;
     margin-bottom: 24px;
+    gap: 16px;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
   }
 
   .greeting {
@@ -1635,12 +1688,73 @@
     font-weight: 600;
     color: var(--text-primary);
     margin: 0;
+    white-space: nowrap;
+  }
+
+  .home-tabs {
+    display: flex;
+    align-items: center;
+    background: var(--bg-tertiary);
+    border-radius: 8px;
+    padding: 3px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .home-tab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .home-tab:hover {
+    color: var(--text-primary);
+  }
+
+  .home-tab.active {
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    font-weight: 600;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   }
 
   .header-actions {
     display: flex;
     align-items: center;
     gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .tab-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 120px 0;
+    color: var(--text-muted);
+  }
+
+  .tab-placeholder h2 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--text-secondary);
+  }
+
+  .tab-placeholder p {
+    margin: 0;
+    font-size: 14px;
   }
 
   .settings-btn {

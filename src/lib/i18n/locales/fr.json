@@ -46,7 +46,9 @@
     "moreFromFavorites": "Plus de favoris",
     "startListening": "Commencer l'écoute",
     "startListeningDescription": "Lisez de la musique ou ajoutez des favoris pour activer les recommandations.",
-    "yourMixes": "Tes mix"
+    "yourMixes": "Tes mix",
+    "tabEditorPicks": "Sélection éditoriale",
+    "tabForYou": "Pour toi"
   },
   "discover": {
     "newReleases": "Nouvelles sorties",

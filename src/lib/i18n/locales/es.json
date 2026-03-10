@@ -49,7 +49,9 @@
     "moreFromFavorites": "Más de Favoritos",
     "startListening": "Empieza a Escuchar",
     "startListeningDescription": "Reproduce música o agrega favoritos para activar recomendaciones.",
-    "yourMixes": "Tus mixes"
+    "yourMixes": "Tus mixes",
+    "tabEditorPicks": "Selección editorial",
+    "tabForYou": "Para ti"
   },
   "discover": {
     "newReleases": "Novedades",
