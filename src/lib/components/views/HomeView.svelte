@@ -1578,8 +1578,8 @@
   }
 
   .skeleton-card {
-    width: 200px;
-    height: 260px;
+    width: 210px;
+    height: 270px;
     background: var(--bg-tertiary);
     border-radius: 12px;
     flex-shrink: 0;
@@ -1596,8 +1596,8 @@
   }
 
   .skeleton-artist {
-    width: 200px;
-    height: 240px;
+    width: 210px;
+    height: 250px;
     background: var(--bg-tertiary);
     border-radius: 12px;
     flex-shrink: 0;
@@ -1701,8 +1701,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 200px;
-    min-height: 200px;
+    min-width: 210px;
+    min-height: 210px;
     color: var(--text-muted);
   }
 
@@ -1726,7 +1726,7 @@
   }
 
   .artist-card {
-    width: 200px;
+    width: 210px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1878,7 +1878,7 @@
 
   .mix-card {
     flex-shrink: 0;
-    width: 200px;
+    width: 210px;
     cursor: pointer;
     background: none;
     border: none;
@@ -1888,8 +1888,8 @@
   }
 
   .mix-card-artwork {
-    width: 200px;
-    height: 200px;
+    width: 210px;
+    height: 210px;
     border-radius: 8px;
     overflow: hidden;
     margin-bottom: 8px;

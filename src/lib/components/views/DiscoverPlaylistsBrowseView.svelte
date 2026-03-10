@@ -536,11 +536,11 @@
   .playlist-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 24px 20px;
+    gap: 24px 22px;
   }
 
   .grid-item {
-    width: 200px;
+    width: 210px;
     position: relative;
   }
 
@@ -687,7 +687,7 @@
   .skeleton-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 24px 20px;
+    gap: 24px 22px;
   }
 
   .skeleton-grid.list-mode {
@@ -696,12 +696,12 @@
   }
 
   .skeleton-card {
-    width: 200px;
+    width: 210px;
   }
 
   .skeleton-art {
-    width: 200px;
-    height: 200px;
+    width: 210px;
+    height: 210px;
     border-radius: 8px;
     background: var(--bg-secondary);
     animation: pulse 1.5s ease-in-out infinite;

@@ -4075,7 +4075,7 @@
   .albums-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 24px 20px;
+    gap: 24px 22px;
   }
 
   .playlists-grid {
