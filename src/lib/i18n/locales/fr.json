@@ -1802,7 +1802,11 @@
     "title": "DailyQ",
     "subtitle": "Base sur vos ecoutes recentes.",
     "cardDesc": "Sublimez votre journee avec une selection musicale personnalisee.",
-    "algorithmInfo": "Propulse par l'algorithme de suggestion Qobuz™, compose a partir de votre historique d'ecoute local."
+    "algorithmInfo": "Propulse par l'algorithme de suggestion Qobuz™, compose a partir de votre historique d'ecoute local.",
+    "errors": {
+      "fetchFailed": "Impossible de charger les suggestions dynamiques.",
+      "insufficientHistory": "Pas assez d'historique d'ecoute pour generer des suggestions. Ecoutez de la musique et reessayez plus tard."
+    }
   },
   "weeklyMixes": {
     "title": "WeeklyQ",

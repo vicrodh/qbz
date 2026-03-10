@@ -247,6 +247,13 @@
       }
 
       const seedPayload = await buildSeeds();
+
+      if (seedPayload.listenedTrackIds.length === 0) {
+        error = $t('yourMixes.errors.insufficientHistory');
+        result = null;
+        return;
+      }
+
       let response = await getDynamicSuggest(seedPayload);
 
       if (response.tracks.items.length === 0 && seedPayload.listenedTrackIds.length > 0) {

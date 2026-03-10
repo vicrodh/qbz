@@ -1802,7 +1802,11 @@
     "title": "DailyQ",
     "subtitle": "Basierend auf deinem letzten Hoerverlauf.",
     "cardDesc": "Bereichere deinen Tag mit einer personalisierten Musikauswahl.",
-    "algorithmInfo": "Basierend auf dem Qobuz™-Vorschlagsalgorithmus, kuratiert aus deinem lokalen Hoerverlauf."
+    "algorithmInfo": "Basierend auf dem Qobuz™-Vorschlagsalgorithmus, kuratiert aus deinem lokalen Hoerverlauf.",
+    "errors": {
+      "fetchFailed": "Dynamische Vorschlaege konnten nicht geladen werden.",
+      "insufficientHistory": "Nicht genuegend Hoerverlauf fuer Vorschlaege. Hoere etwas Musik und versuche es spaeter erneut."
+    }
   },
   "weeklyMixes": {
     "title": "WeeklyQ",

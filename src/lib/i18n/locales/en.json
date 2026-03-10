@@ -1992,6 +1992,7 @@
     },
     "errors": {
       "fetchFailed": "Failed to fetch dynamic suggestions.",
+      "insufficientHistory": "Not enough listening history to generate suggestions. Play some music and check back later.",
       "prefillFailed": "Failed to load recent data from QBZ logs.",
       "rawProbeFailed": "Failed to fetch raw endpoint response.",
       "playlistsLoadFailed": "Failed to load your playlists.",
