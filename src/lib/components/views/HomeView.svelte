@@ -136,6 +136,8 @@
     onNavigateWeeklyQ?: () => void;
     onNavigateFavQ?: () => void;
     onNavigateTopQ?: () => void;
+    homeTab?: 'home' | 'editorPicks' | 'forYou';
+    onTabChange?: (tab: 'home' | 'editorPicks' | 'forYou') => void;
   }
 
   let {
@@ -186,6 +188,8 @@
     onNavigateWeeklyQ,
     onNavigateFavQ,
     onNavigateTopQ,
+    homeTab,
+    onTabChange,
   }: Props = $props();
 
   // Home settings state
@@ -194,7 +198,32 @@
 
   // Tab state
   type HomeTab = 'home' | 'editorPicks' | 'forYou';
-  let activeTab = $state<HomeTab>('home');
+  const LAST_TAB_KEY = 'qbz_home_last_tab';
+
+  function getInitialTab(): HomeTab {
+    if (homeTab) return homeTab;
+    try {
+      const saved = localStorage.getItem(LAST_TAB_KEY);
+      if (saved === 'home' || saved === 'editorPicks' || saved === 'forYou') return saved;
+    } catch { /* ignore */ }
+    return 'home';
+  }
+
+  let activeTab = $state<HomeTab>(getInitialTab());
+
+  function switchTab(tab: HomeTab) {
+    if (activeTab === tab) return;
+    activeTab = tab;
+    try { localStorage.setItem(LAST_TAB_KEY, tab); } catch { /* ignore */ }
+    onTabChange?.(tab);
+  }
+
+  // Sync with external homeTab prop (back/forward navigation)
+  $effect(() => {
+    if (homeTab && homeTab !== activeTab) {
+      activeTab = homeTab;
+    }
+  });
 
   // Computed greeting with i18n support — never call $t() inside $derived()
   function getGreetingText(): string {
@@ -621,7 +650,7 @@
 
       await setPlaybackContext(
         'home_list',
-        'continue_listening',
+        'home:continue_listening',
         'Continue Listening',
         'qobuz',
         trackIds,
@@ -851,35 +880,36 @@
 </script>
 
 <div class="home-view" bind:this={homeViewEl} onscroll={handleHomeScroll}>
-  <!-- Header with greeting + tabs + actions -->
+  <!-- Header: greeting row + centered tabs -->
+  {#if homeSettings.greeting.enabled}
+    <div class="greeting-row">
+      <h2 class="greeting">{getGreetingText()}</h2>
+    </div>
+  {/if}
   <div class="home-header">
-    <div class="header-left">
-      {#if homeSettings.greeting.enabled}
-        <h2 class="greeting">{getGreetingText()}</h2>
-      {/if}
-      <div class="home-tabs">
-        <button
-          class="home-tab"
-          class:active={activeTab === 'home'}
-          onclick={() => { activeTab = 'home'; }}
-        >
-          <Home size={14} />
-        </button>
-        <button
-          class="home-tab"
-          class:active={activeTab === 'editorPicks'}
-          onclick={() => { activeTab = 'editorPicks'; }}
-        >
-          {$t('home.tabEditorPicks')}
-        </button>
-        <button
-          class="home-tab"
-          class:active={activeTab === 'forYou'}
-          onclick={() => { activeTab = 'forYou'; }}
-        >
-          {$t('home.tabForYou')}
-        </button>
-      </div>
+    <div class="header-left"></div>
+    <div class="home-tabs">
+      <button
+        class="home-tab"
+        class:active={activeTab === 'home'}
+        onclick={() => switchTab('home')}
+      >
+        <Home size={14} />
+      </button>
+      <button
+        class="home-tab"
+        class:active={activeTab === 'editorPicks'}
+        onclick={() => switchTab('editorPicks')}
+      >
+        {$t('home.tabEditorPicks')}
+      </button>
+      <button
+        class="home-tab"
+        class:active={activeTab === 'forYou'}
+        onclick={() => switchTab('forYou')}
+      >
+        {$t('home.tabForYou')}
+      </button>
     </div>
     <div class="header-actions">
       {#if activeTab === 'home'}
@@ -2053,19 +2083,8 @@
     50% { opacity: 0.7; }
   }
 
-  .home-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 24px;
-    gap: 16px;
-  }
-
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    min-width: 0;
+  .greeting-row {
+    margin-bottom: 12px;
   }
 
   .greeting {
@@ -2076,12 +2095,26 @@
     white-space: nowrap;
   }
 
+  .home-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 24px;
+    gap: 16px;
+    position: relative;
+  }
+
+  .header-left {
+    position: absolute;
+    left: 0;
+  }
+
   .home-tabs {
     display: flex;
     align-items: center;
     background: var(--bg-tertiary);
     border-radius: 8px;
-    padding: 3px;
+    padding: 4px;
     gap: 2px;
     flex-shrink: 0;
   }
@@ -2091,12 +2124,12 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    padding: 6px 14px;
+    padding: 7px 16px;
     border: none;
     border-radius: 6px;
     background: transparent;
     color: var(--text-muted);
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 500;
     cursor: pointer;
     white-space: nowrap;
@@ -2119,6 +2152,8 @@
     align-items: center;
     gap: 8px;
     flex-shrink: 0;
+    position: absolute;
+    right: 0;
   }
 
   .tab-placeholder {

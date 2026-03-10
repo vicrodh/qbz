@@ -760,7 +760,7 @@
       const trackIds = continueTracks.map(trk => trk.id);
       await setPlaybackContext(
         'home_list',
-        'continue_listening',
+        'forYou:continue_listening',
         'Continue Listening',
         'qobuz',
         trackIds,

@@ -437,6 +437,7 @@
 
   // View State (from navigationStore subscription)
   let activeView = $state<ViewType>('home');
+  let homeTab = $state<'home' | 'editorPicks' | 'forYou' | undefined>(undefined);
   let selectedPlaylistId = $state<number | null>(null);
   let updatesCurrentVersion = $state('');
   let updateRelease = $state<ReleaseInfo | null>(null);
@@ -769,6 +770,11 @@
   async function restoreItemFromHistory(view: ViewType, itemId: string | number) {
     try {
       switch (view) {
+        case 'home':
+          if (itemId === 'home' || itemId === 'editorPicks' || itemId === 'forYou') {
+            homeTab = itemId;
+          }
+          break;
         case 'album':
           await handleAlbumClick(String(itemId));
           break;
@@ -1106,10 +1112,14 @@
           navigateToFavorites('tracks');
           break;
 
-        case 'home_list':
-          // Navigate to home page
-          navigateTo('home');
+        case 'home_list': {
+          // Navigate to home page with the correct tab
+          const tabFromId = context.id.split(':')[0];
+          const tab = (tabFromId === 'forYou' || tabFromId === 'editorPicks') ? tabFromId : 'home';
+          homeTab = tab;
+          navigateTo('home', tab);
           break;
+        }
 
         case 'search':
           // Navigate to search (could restore query if needed)
@@ -3937,6 +3947,8 @@
             onNavigateWeeklyQ={() => navigateTo('weeklyq')}
             onNavigateFavQ={() => navigateTo('favq')}
             onNavigateTopQ={() => navigateTo('topq')}
+            {homeTab}
+            onTabChange={(tab) => { homeTab = tab; navigateTo('home', tab); }}
           />
         {/if}
       {:else if activeView === 'search'}
