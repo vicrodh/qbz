@@ -849,9 +849,9 @@
   }
 
   // --- Albums tab virtualization ---
-  const ALBUM_CARD_WIDTH = 180;
-  const ALBUM_CARD_HEIGHT = 290;
-  const ALBUM_GAP_X = 14;
+  const ALBUM_CARD_WIDTH = 210;
+  const ALBUM_CARD_HEIGHT = 310;
+  const ALBUM_GAP_X = 22;
   const ALBUM_GAP_Y = 24;
   const LOAD_MORE_HEIGHT = 80;
   const V_BUFFER = 5;
