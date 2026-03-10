@@ -166,16 +166,27 @@
   let loadingSpotlight = $state(false);
   let spotlightRadioLoading = $state(false);
 
+  // Phase 3: Similar to [Album]
+  let similarAlbums = $state<AlbumCardData[]>([]);
+  let similarSeedTitle = $state('');
+  let loadingSimilarAlbums = $state(false);
+
+  // Phase 3: Rediscover your Library
+  let forgottenAlbums = $state<AlbumCardData[]>([]);
+  let loadingForgottenAlbums = $state(false);
+
   // Radio Stations: use recent albums as radio seeds
   // Take first 8 recent albums as potential radio stations
   const radioAlbums = $derived(recentAlbums.slice(0, 8));
 
-  // Load Phase 2 sections when component mounts (once)
+  // Load Phase 2+3 sections when component mounts (once)
   onMount(() => {
     if (!forYouLoaded) {
       forYouLoaded = true;
       loadArtistsToFollow();
       loadSpotlight();
+      loadSimilarAlbums();
+      loadForgottenFavorites();
     }
   });
 
@@ -231,6 +242,91 @@
       console.error('Failed to load suggested artists:', err);
     } finally {
       loadingSuggestedArtists = false;
+    }
+  }
+
+  interface AlbumSuggestResult {
+    id: string;
+    title: string;
+    artist: { id: number; name: string };
+    image: { small: string; large: string; thumbnail: string };
+    hires: boolean;
+    maximum_bit_depth?: number;
+    maximum_sampling_rate?: number;
+    genre?: { name: string };
+    release_date_original?: string;
+  }
+
+  async function loadSimilarAlbums() {
+    if (recentAlbums.length === 0) return;
+    loadingSimilarAlbums = true;
+
+    try {
+      // Pick a random recent album as seed
+      const seedIdx = Math.floor(Math.random() * Math.min(recentAlbums.length, 5));
+      const seed = recentAlbums[seedIdx];
+      similarSeedTitle = seed.title;
+
+      const albums = await invoke<AlbumSuggestResult[]>('v2_get_album_suggestions', {
+        albumId: seed.id,
+        limit: 10
+      });
+
+      similarAlbums = albums.map(album => ({
+        id: album.id,
+        artwork: album.image?.large || album.image?.small || '',
+        title: album.title,
+        artist: album.artist?.name || '',
+        artistId: album.artist?.id,
+        genre: album.genre?.name || '',
+        quality: formatQuality(
+          album.hires,
+          album.maximum_bit_depth,
+          album.maximum_sampling_rate
+        ),
+        releaseDate: album.release_date_original
+      }));
+    } catch (err) {
+      console.error('Failed to load similar albums:', err);
+    } finally {
+      loadingSimilarAlbums = false;
+    }
+  }
+
+  interface ForgottenAlbum {
+    id: string;
+    artwork: string;
+    title: string;
+    artist: string;
+    artistId?: number;
+    genre: string;
+    quality: string;
+    releaseDate?: string;
+  }
+
+  async function loadForgottenFavorites() {
+    loadingForgottenAlbums = true;
+
+    try {
+      const albums = await invoke<ForgottenAlbum[]>('v2_reco_get_forgotten_favorites', {
+        limit: 12,
+        recencyDays: 30
+      });
+
+      forgottenAlbums = albums.map(album => ({
+        id: album.id,
+        artwork: album.artwork,
+        title: album.title,
+        artist: album.artist,
+        artistId: album.artistId,
+        genre: album.genre,
+        quality: album.quality,
+        releaseDate: album.releaseDate
+      }));
+    } catch (err) {
+      console.error('Failed to load forgotten favorites:', err);
+    } finally {
+      loadingForgottenAlbums = false;
     }
   }
 
@@ -374,7 +470,9 @@
     recentAlbums.length > 0 ||
     continueTracks.length > 0 ||
     topArtists.length > 0 ||
-    favoriteAlbums.length > 0
+    favoriteAlbums.length > 0 ||
+    similarAlbums.length > 0 ||
+    forgottenAlbums.length > 0
   );
 
   const anyLoading = $derived(
@@ -625,6 +723,96 @@
   <HorizontalScrollRow title={$t('home.moreFromFavorites')}>
     {#snippet children()}
       {#each favoriteAlbums as album}
+        <AlbumCard
+          albumId={album.id}
+          artwork={album.artwork}
+          title={album.title}
+          artist={album.artist}
+          artistId={album.artistId}
+          onArtistClick={onArtistClick}
+          genre={album.genre}
+          releaseDate={album.releaseDate}
+          size="large"
+          quality={album.quality}
+          onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+          onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+          onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+          onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+          onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+          onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+          onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+          isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+          onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+          onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+          {downloadStateVersion}
+          onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+        />
+      {/each}
+      <div class="spacer"></div>
+    {/snippet}
+  </HorizontalScrollRow>
+{/if}
+
+<!-- Similar to [Album] -->
+{#if loadingSimilarAlbums}
+  <div class="skeleton-section">
+    <div class="skeleton-title"></div>
+    <div class="skeleton-row">
+      {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+    </div>
+  </div>
+{:else if similarAlbums.length > 0}
+  <HorizontalScrollRow title={$t('home.similarTo') + ' ' + similarSeedTitle}>
+    {#snippet children()}
+      {#each similarAlbums as album}
+        <AlbumCard
+          albumId={album.id}
+          artwork={album.artwork}
+          title={album.title}
+          artist={album.artist}
+          artistId={album.artistId}
+          onArtistClick={onArtistClick}
+          genre={album.genre}
+          releaseDate={album.releaseDate}
+          size="large"
+          quality={album.quality}
+          onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+          onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+          onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+          onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+          onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+          onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+          onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+          isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+          onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+          onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+          {downloadStateVersion}
+          onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
+        />
+      {/each}
+      <div class="spacer"></div>
+    {/snippet}
+  </HorizontalScrollRow>
+{/if}
+
+<!-- Rediscover your Library -->
+{#if loadingForgottenAlbums}
+  <div class="skeleton-section">
+    <div class="skeleton-title"></div>
+    <div class="skeleton-row">
+      {#each { length: 6 } as _}<div class="skeleton-card"></div>{/each}
+    </div>
+  </div>
+{:else if forgottenAlbums.length > 0}
+  <div class="section">
+    <div class="section-header">
+      <h2 class="section-title">{$t('home.rediscoverLibrary')}</h2>
+      <p class="section-subtitle">{$t('home.rediscoverLibraryDesc')}</p>
+    </div>
+  </div>
+  <HorizontalScrollRow>
+    {#snippet children()}
+      {#each forgottenAlbums as album}
         <AlbumCard
           albumId={album.id}
           artwork={album.artwork}
