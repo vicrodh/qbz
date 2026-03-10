@@ -8770,15 +8770,15 @@ pub async fn v2_musicbrainz_get_artist_metadata(
     mbid: String,
     state: State<'_, MusicBrainzSharedState>,
 ) -> Result<crate::musicbrainz::ArtistMetadata, String> {
-    // Check cache first — TEMPORARILY DISABLED for tuning (display_name now includes resolution)
-    // {
-    //     let cache_opt = state.cache.lock().await;
-    //     if let Some(cache) = cache_opt.as_ref() {
-    //         if let Some(cached) = cache.get_artist_metadata(&mbid)? {
-    //             return Ok(cached);
-    //         }
-    //     }
-    // }
+    // Check cache first
+    {
+        let cache_opt = state.cache.lock().await;
+        if let Some(cache) = cache_opt.as_ref() {
+            if let Some(cached) = cache.get_artist_metadata(&mbid)? {
+                return Ok(cached);
+            }
+        }
+    }
 
     // Fetch from MB API (reuses the same endpoint as relationships)
     let artist = state.client.get_artist_with_relations(&mbid).await?;
@@ -8898,24 +8898,23 @@ pub async fn v2_discover_artists_by_location(
             .collect(),
     };
 
-    // Build cache key from area + seeds — TEMPORARILY UNUSED
-    let _cache_key_area = area_id.as_deref().unwrap_or(&search_name);
-    let _cache_key = build_scene_cache_key(_cache_key_area, &source_seeds);
+    let cache_key_area = area_id.as_deref().unwrap_or(&search_name);
+    let cache_key = build_scene_cache_key(cache_key_area, &source_seeds);
 
-    // Step 1: Check scene cache — TEMPORARILY DISABLED for tuning
-    // if offset == 0 {
-    //     let cache_opt = state.cache.lock().await;
-    //     if let Some(cache) = cache_opt.as_ref() {
-    //         if let Ok(Some(cached)) = cache.get_scene_cache(&cache_key) {
-    //             log::info!(
-    //                 "[V2] Scene cache hit for {} ({} artists)",
-    //                 area_name,
-    //                 cached.artists.len()
-    //             );
-    //             return Ok(cached);
-    //         }
-    //     }
-    // }
+    // Step 1: Check scene cache
+    if offset == 0 {
+        let cache_opt = state.cache.lock().await;
+        if let Some(cache) = cache_opt.as_ref() {
+            if let Ok(Some(cached)) = cache.get_scene_cache(&cache_key) {
+                log::info!(
+                    "[V2] Scene cache hit for {} ({} artists)",
+                    area_name,
+                    cached.artists.len()
+                );
+                return Ok(cached);
+            }
+        }
+    }
 
     // Step 2: Search MB for each genre + area combination
     // Filter out overly broad tags (latin, rock, pop, etc.) that return the entire
@@ -9124,8 +9123,7 @@ pub async fn v2_discover_artists_by_location(
                     "detail": format!("{}/{}", validate_idx, total_to_validate)
                 }));
             }
-            // Qobuz validation cache — TEMPORARILY DISABLED for tuning
-            let _name_normalized =
+            let name_normalized =
                 crate::musicbrainz::cache::MusicBrainzCache::normalize_name(mb_name);
 
             // Search Qobuz for this artist — request multiple results to handle
@@ -9165,13 +9163,12 @@ pub async fn v2_discover_artists_by_location(
                             genres: candidate_genres.clone(),
                         };
 
-                        // Qobuz validation write cache — TEMPORARILY DISABLED
-                        // if let Ok(json) = serde_json::to_string(&candidate) {
-                        //     let cache_opt = state.cache.lock().await;
-                        //     if let Some(cache) = cache_opt.as_ref() {
-                        //         let _ = cache.set_qobuz_validation(&name_normalized, &json);
-                        //     }
-                        // }
+                        if let Ok(json) = serde_json::to_string(&candidate) {
+                            let cache_opt = state.cache.lock().await;
+                            if let Some(cache) = cache_opt.as_ref() {
+                                let _ = cache.set_qobuz_validation(&name_normalized, &json);
+                            }
+                        }
 
                         validated.push(candidate);
                     } else {
@@ -9215,13 +9212,13 @@ pub async fn v2_discover_artists_by_location(
         next_offset,
     };
 
-    // Cache the full response — TEMPORARILY DISABLED for tuning
-    // if offset == 0 && !response.artists.is_empty() {
-    //     let cache_opt = state.cache.lock().await;
-    //     if let Some(cache) = cache_opt.as_ref() {
-    //         let _ = cache.set_scene_cache(&cache_key, &response);
-    //     }
-    // }
+    // Cache the full response (first page only)
+    if offset == 0 && !response.artists.is_empty() {
+        let cache_opt = state.cache.lock().await;
+        if let Some(cache) = cache_opt.as_ref() {
+            let _ = cache.set_scene_cache(&cache_key, &response);
+        }
+    }
 
     Ok(response)
 }
