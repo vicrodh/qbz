@@ -115,6 +115,15 @@
     type WindowControlsConfig
   } from '$lib/stores/windowControlsStore';
 
+  // Titlebar navigation store
+  import {
+    subscribe as subscribeTitlebarNav,
+    initTitlebarNavStore,
+    isTitlebarNavEnabled,
+    getResolvedPosition,
+    getTitlebarNavConfig
+  } from '$lib/stores/titlebarNavStore';
+
   // Keybindings system
   import {
     registerAction,
@@ -336,6 +345,7 @@
 
   // Components
   import TitleBar from '$lib/components/TitleBar.svelte';
+  import TitleBarNav from '$lib/components/TitleBarNav.svelte';
   import Sidebar from '$lib/components/Sidebar.svelte';
   import AboutModal from '$lib/components/AboutModal.svelte';
   import NowPlayingBar from '$lib/components/NowPlayingBar.svelte';
@@ -431,6 +441,10 @@
 
   // Window Controls State
   let windowControlsConfig = $state<WindowControlsConfig>(getWindowControls());
+
+  // Titlebar Nav State
+  let titlebarNavEnabled = $state(isTitlebarNavEnabled());
+  let titlebarNavPosition = $state<'left' | 'right'>('left');
 
   // Window floating state (not maximized/tiled — for rounded corners + shadow)
   let isWindowFloating = $state(false);
@@ -3322,6 +3336,15 @@
     initWindowControlsStore();
     const unsubscribeWindowControls = subscribeWindowControls(() => {
       windowControlsConfig = getWindowControls();
+      // Recompute titlebar nav position when controls change
+      titlebarNavPosition = getResolvedPosition(windowControlsConfig.position);
+    });
+
+    // Initialize and subscribe to titlebar nav store
+    initTitlebarNavStore();
+    const unsubscribeTitlebarNav = subscribeTitlebarNav(() => {
+      titlebarNavEnabled = isTitlebarNavEnabled();
+      titlebarNavPosition = getResolvedPosition(windowControlsConfig.position);
     });
 
     // Detect floating window state (not maximized) for rounded corners + shadow
@@ -3745,6 +3768,7 @@
       unsubscribeTitleBar();
       unsubscribeSearchBarLocation();
       unsubscribeWindowControls();
+      unsubscribeTitlebarNav();
       unlistenResize?.();
       unsubscribeTitlebarSearch();
       unsubscribeOffline();
@@ -3840,6 +3864,13 @@
   } : null);
 </script>
 
+{#snippet titlebarNavSnippet()}
+  <TitleBarNav
+    {activeView}
+    onNavigate={navigateTo}
+  />
+{/snippet}
+
 {#if !isLoggedIn}
   <LoginView onLoginSuccess={handleLoginSuccess} onStartOffline={handleStartOffline} />
 {:else}
@@ -3860,6 +3891,8 @@
           maximize: windowControlsConfig.maximizeColors,
           close: windowControlsConfig.closeColors,
         }}
+        navSnippet={titlebarNavEnabled && showTitleBar ? titlebarNavSnippet : undefined}
+        navPosition={titlebarNavPosition}
       />
     {/if}
 
@@ -3886,6 +3919,7 @@
       showTitleBar={showTitleBar}
       {showPurchases}
       searchInTitlebar={isSearchInTitlebar()}
+      navInTitlebar={titlebarNavEnabled && showTitleBar}
     />
 
     <!-- Content Area (main + lyrics sidebar) -->

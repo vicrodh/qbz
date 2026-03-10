@@ -5,6 +5,7 @@
   import { onMount } from 'svelte';
   import { t } from '$lib/i18n';
   import type { ButtonColorSet } from '$lib/stores/windowControlsStore';
+  import type { Snippet } from 'svelte';
 
   interface TraySettings {
     enable_tray: boolean;
@@ -25,6 +26,8 @@
       maximize: ButtonColorSet;
       close: ButtonColorSet;
     };
+    navSnippet?: Snippet;
+    navPosition?: 'left' | 'right';
   }
 
   let {
@@ -35,7 +38,9 @@
     controlsPosition = 'right',
     controlsShape = 'rectangular',
     controlsSize = 'normal',
-    controlsColors
+    controlsColors,
+    navSnippet,
+    navPosition = 'left'
   }: Props = $props();
 
   let isMaximized = $state(false);
@@ -120,135 +125,157 @@
   }
 </script>
 
+{#snippet windowControls(position: 'left' | 'right')}
+  {#if position === 'left'}
+    <!-- macOS order: close, maximize, minimize -->
+    <div
+      class="window-controls shape-{controlsShape} size-{controlsSize}"
+      class:has-custom-colors={!!controlsColors}
+      data-tauri-drag-region="false"
+    >
+      <button
+        class="control-btn close"
+        onclick={handleClose}
+        title="Close"
+        aria-label="Close window"
+        style={btnStyle(controlsColors?.close)}
+        data-tauri-drag-region="false"
+      >
+        <X size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
+      </button>
+      <button
+        class="control-btn maximize"
+        onclick={handleMaximize}
+        title={isMaximized ? "Restore" : "Maximize"}
+        aria-label={isMaximized ? "Restore window" : "Maximize window"}
+        style={btnStyle(controlsColors?.maximize)}
+        data-tauri-drag-region="false"
+      >
+        {#if isMaximized}
+          <Minimize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
+        {:else}
+          <Maximize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
+        {/if}
+      </button>
+      <button
+        class="control-btn minimize"
+        onclick={handleMinimize}
+        title="Minimize"
+        aria-label="Minimize window"
+        style={btnStyle(controlsColors?.minimize)}
+        data-tauri-drag-region="false"
+      >
+        <Minus size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
+      </button>
+    </div>
+  {:else}
+    <!-- Standard order: minimize, maximize, close -->
+    <div
+      class="window-controls shape-{controlsShape} size-{controlsSize}"
+      class:has-custom-colors={!!controlsColors}
+      data-tauri-drag-region="false"
+    >
+      <button
+        class="control-btn minimize"
+        onclick={handleMinimize}
+        title="Minimize"
+        aria-label="Minimize window"
+        style={btnStyle(controlsColors?.minimize)}
+        data-tauri-drag-region="false"
+      >
+        <Minus size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
+      </button>
+      <button
+        class="control-btn maximize"
+        onclick={handleMaximize}
+        title={isMaximized ? "Restore" : "Maximize"}
+        aria-label={isMaximized ? "Restore window" : "Maximize window"}
+        style={btnStyle(controlsColors?.maximize)}
+        data-tauri-drag-region="false"
+      >
+        {#if isMaximized}
+          <Minimize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
+        {:else}
+          <Maximize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
+        {/if}
+      </button>
+      <button
+        class="control-btn close"
+        onclick={handleClose}
+        title="Close"
+        aria-label="Close window"
+        style={btnStyle(controlsColors?.close)}
+        data-tauri-drag-region="false"
+      >
+        <X size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
+      </button>
+    </div>
+  {/if}
+{/snippet}
+
 <!-- svelte-ignore a11y_no_static_element_interactions -->
 <header
   class="titlebar"
   class:has-search={searchInTitlebar}
+  class:has-nav={!!navSnippet}
   class:controls-left={controlsPosition === 'left'}
 >
-  {#if controlsPosition === 'left'}
-    <!-- Window Controls (left position - macOS order: close, maximize, minimize) -->
-    <div
-      class="window-controls shape-{controlsShape} size-{controlsSize}"
-      class:has-custom-colors={!!controlsColors}
-      data-tauri-drag-region="false"
-    >
-      <button
-        class="control-btn close"
-        onclick={handleClose}
-        title="Close"
-        aria-label="Close window"
-        style={btnStyle(controlsColors?.close)}
-        data-tauri-drag-region="false"
-      >
-        <X size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
-      </button>
-      <button
-        class="control-btn maximize"
-        onclick={handleMaximize}
-        title={isMaximized ? "Restore" : "Maximize"}
-        aria-label={isMaximized ? "Restore window" : "Maximize window"}
-        style={btnStyle(controlsColors?.maximize)}
-        data-tauri-drag-region="false"
-      >
-        {#if isMaximized}
-          <Minimize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
-        {:else}
-          <Maximize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
-        {/if}
-      </button>
-      <button
-        class="control-btn minimize"
-        onclick={handleMinimize}
-        title="Minimize"
-        aria-label="Minimize window"
-        style={btnStyle(controlsColors?.minimize)}
-        data-tauri-drag-region="false"
-      >
-        <Minus size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
-      </button>
-    </div>
-  {/if}
-
-  <!-- Left drag region -->
-  <div class="drag-region" data-tauri-drag-region></div>
-
-  <!-- Search Bar (only when active) -->
-  {#if searchInTitlebar}
-    <div
-      class="titlebar-search"
-      class:has-text={searchQuery.trim().length > 0}
-      data-tauri-drag-region="false"
-    >
-      <Search size={14} />
-      <input
-        type="text"
-        class="titlebar-search-input"
-        placeholder={$t('nav.search')}
-        value={searchQuery}
-        oninput={handleInput}
-        onkeydown={handleSearchKeydown}
-        bind:this={searchInputEl}
-        data-tauri-drag-region="false"
-      />
-      {#if searchQuery.trim()}
-        <button
-          type="button"
-          class="titlebar-search-clear"
-          onclick={onSearchClear}
-          data-tauri-drag-region="false"
-        >
-          <X size={12} />
-        </button>
-      {/if}
-    </div>
-    <!-- Right drag region after search -->
+  <!-- Left zone -->
+  <div class="zone zone-left">
+    {#if controlsPosition === 'left'}
+      {@render windowControls('left')}
+    {/if}
+    {#if navSnippet && navPosition === 'left'}
+      {@render navSnippet()}
+    {/if}
     <div class="drag-region" data-tauri-drag-region></div>
-  {/if}
+  </div>
 
-  {#if controlsPosition === 'right'}
-    <!-- Window Controls (right position - standard order: minimize, maximize, close) -->
-    <div
-      class="window-controls shape-{controlsShape} size-{controlsSize}"
-      class:has-custom-colors={!!controlsColors}
-      data-tauri-drag-region="false"
-    >
-      <button
-        class="control-btn minimize"
-        onclick={handleMinimize}
-        title="Minimize"
-        aria-label="Minimize window"
-        style={btnStyle(controlsColors?.minimize)}
+  <!-- Center zone (search, always centered) -->
+  <div class="zone zone-center">
+    {#if searchInTitlebar}
+      <div
+        class="titlebar-search"
+        class:has-text={searchQuery.trim().length > 0}
         data-tauri-drag-region="false"
       >
-        <Minus size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
-      </button>
-      <button
-        class="control-btn maximize"
-        onclick={handleMaximize}
-        title={isMaximized ? "Restore" : "Maximize"}
-        aria-label={isMaximized ? "Restore window" : "Maximize window"}
-        style={btnStyle(controlsColors?.maximize)}
-        data-tauri-drag-region="false"
-      >
-        {#if isMaximized}
-          <Minimize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
-        {:else}
-          <Maximize2 size={controlsShape === 'circular' ? 8 : controlsShape === 'square' ? 10 : 14} strokeWidth={1.5} />
+        <Search size={14} />
+        <input
+          type="text"
+          class="titlebar-search-input"
+          placeholder={$t('nav.search')}
+          value={searchQuery}
+          oninput={handleInput}
+          onkeydown={handleSearchKeydown}
+          bind:this={searchInputEl}
+          data-tauri-drag-region="false"
+        />
+        {#if searchQuery.trim()}
+          <button
+            type="button"
+            class="titlebar-search-clear"
+            onclick={onSearchClear}
+            data-tauri-drag-region="false"
+          >
+            <X size={12} />
+          </button>
         {/if}
-      </button>
-      <button
-        class="control-btn close"
-        onclick={handleClose}
-        title="Close"
-        aria-label="Close window"
-        style={btnStyle(controlsColors?.close)}
-        data-tauri-drag-region="false"
-      >
-        <X size={controlsShape === 'circular' ? 10 : controlsShape === 'square' ? 12 : 16} strokeWidth={1.5} />
-      </button>
-    </div>
-  {/if}
+      </div>
+    {:else}
+      <div class="drag-region" data-tauri-drag-region></div>
+    {/if}
+  </div>
+
+  <!-- Right zone -->
+  <div class="zone zone-right">
+    <div class="drag-region" data-tauri-drag-region></div>
+    {#if navSnippet && navPosition === 'right'}
+      {@render navSnippet()}
+    {/if}
+    {#if controlsPosition === 'right'}
+      {@render windowControls('right')}
+    {/if}
+  </div>
 </header>
 
 <style>
@@ -258,12 +285,35 @@
     background-color: var(--bg-secondary);
     display: flex;
     align-items: center;
-    justify-content: space-between;
     padding: 0;
     user-select: none;
     -webkit-user-select: none;
     -webkit-app-region: drag;
     app-region: drag;
+  }
+
+  /* 3-zone layout: left and right zones are equal width, center is fixed */
+  .zone {
+    display: flex;
+    align-items: center;
+    height: 100%;
+  }
+
+  .zone-left {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .zone-center {
+    flex: 0 0 auto;
+    width: 360px;
+    justify-content: center;
+  }
+
+  .zone-right {
+    flex: 1;
+    min-width: 0;
+    justify-content: flex-end;
   }
 
   .drag-region {
@@ -278,7 +328,7 @@
     align-items: center;
     gap: 6px;
     width: 100%;
-    max-width: 400px;
+    max-width: 360px;
     height: 28px;
     background-color: var(--bg-tertiary);
     border-radius: 6px;
@@ -352,6 +402,7 @@
     height: 100%;
     -webkit-app-region: no-drag;
     app-region: no-drag;
+    flex-shrink: 0;
   }
 
   /* Left position: add padding */

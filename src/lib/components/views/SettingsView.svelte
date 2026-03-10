@@ -85,6 +85,14 @@
     type SearchBarLocation
   } from '$lib/stores/searchBarLocationStore';
   import {
+    subscribe as subscribeTitlebarNav,
+    isTitlebarNavEnabled,
+    setTitlebarNavEnabled,
+    getTitlebarNavConfig,
+    setTitlebarNavPosition,
+    type TitlebarNavPosition
+  } from '$lib/stores/titlebarNavStore';
+  import {
     subscribe as subscribeWindowControls,
     getWindowControls,
     setButtonPosition,
@@ -913,6 +921,10 @@
   // Search bar location
   let searchInTitlebar = $state(getSearchBarLocation() === 'titlebar');
 
+  // Titlebar nav
+  let titlebarNavEnabled = $state(isTitlebarNavEnabled());
+  let titlebarNavPos = $state<TitlebarNavPosition>(getTitlebarNavConfig().position);
+
   // Window controls customization
   let wcConfig = $state<WindowControlsConfig>(getWindowControls());
 
@@ -1445,6 +1457,12 @@
       searchInTitlebar = getSearchBarLocation() === 'titlebar';
     });
 
+    // Subscribe to titlebar nav changes
+    const unsubscribeTitlebarNavSub = subscribeTitlebarNav(() => {
+      titlebarNavEnabled = isTitlebarNavEnabled();
+      titlebarNavPos = getTitlebarNavConfig().position;
+    });
+
     // Subscribe to window controls customization changes
     const unsubscribeWindowControls = subscribeWindowControls(() => {
       wcConfig = getWindowControls();
@@ -1464,6 +1482,7 @@
       unsubscribeZoom();
       unsubscribeTitleBar();
       unsubscribeSearchBarLoc();
+      unsubscribeTitlebarNavSub();
       unsubscribeWindowControls();
       unsubscribeUpdates();
       unsubscribeBlacklist();
@@ -4194,6 +4213,40 @@
         disabled={hideTitleBar || useSystemTitleBar}
       />
     </div>
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.navInTitleBar')}</span>
+        <span class="setting-desc">{$t('settings.appearance.navInTitleBarDesc')}</span>
+      </div>
+      <Toggle
+        enabled={titlebarNavEnabled}
+        onchange={(v) => setTitlebarNavEnabled(v)}
+        disabled={hideTitleBar || useSystemTitleBar}
+      />
+    </div>
+    {#if titlebarNavEnabled && !hideTitleBar && !useSystemTitleBar}
+    <div class="setting-row">
+      <div class="setting-info">
+        <span class="setting-label">{$t('settings.appearance.navInTitleBarPosition')}</span>
+        <span class="setting-desc">{$t('settings.appearance.navInTitleBarPositionDesc')}</span>
+      </div>
+      <Dropdown
+        value={titlebarNavPos === 'auto' ? $t('settings.appearance.navPositionAuto') : titlebarNavPos === 'left' ? $t('settings.appearance.windowControlsPositionLeft') : $t('settings.appearance.windowControlsPositionRight')}
+        options={[
+          $t('settings.appearance.navPositionAuto'),
+          $t('settings.appearance.windowControlsPositionLeft'),
+          $t('settings.appearance.windowControlsPositionRight')
+        ]}
+        onchange={(v) => {
+          const autoLabel = $t('settings.appearance.navPositionAuto');
+          const leftLabel = $t('settings.appearance.windowControlsPositionLeft');
+          if (v === autoLabel) setTitlebarNavPosition('auto');
+          else if (v === leftLabel) setTitlebarNavPosition('left');
+          else setTitlebarNavPosition('right');
+        }}
+      />
+    </div>
+    {/if}
     <div class="setting-row" class:disabled-section={hideTitleBar || useSystemTitleBar}>
       <div class="setting-info">
         <span class="setting-label">{$t('settings.appearance.windowControlsPosition')}</span>

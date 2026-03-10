@@ -93,6 +93,7 @@
     showTitleBar?: boolean;
     showPurchases?: boolean;
     searchInTitlebar?: boolean;
+    navInTitlebar?: boolean;
   }
 
   let {
@@ -114,7 +115,8 @@
     onToggle,
     showTitleBar = true,
     showPurchases = false,
-    searchInTitlebar = false
+    searchInTitlebar = false,
+    navInTitlebar = false
   }: Props = $props();
 
   let userPlaylists = $state<Playlist[]>([]);
@@ -1448,7 +1450,8 @@
       </div>
     {/if}
 
-    <!-- Navigation Section -->
+    <!-- Navigation Section (hidden when nav is in titlebar) -->
+    {#if !navInTitlebar}
     <nav class="nav-section">
       <NavigationItem
         label={$t('nav.home')}
@@ -1459,8 +1462,10 @@
         {#snippet icon()}<svg width="14" height="14" viewBox="0 0 64 64" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><circle cx="32" cy="32" r="4"/><path d="M32,0C14.328,0,0,14.328,0,32s14.328,32,32,32s32-14.328,32-32S49.672,0,32,0z M40,40l-22,6l6-22l22-6L40,40z"/></svg>{/snippet}
       </NavigationItem>
     </nav>
+    {/if}
 
-    <!-- Favorites Section (hybrid: Home style with expandable sub-items) -->
+    <!-- Favorites Section (hidden when nav is in titlebar) -->
+    {#if !navInTitlebar}
     <nav class="nav-section favorites-section">
       {#if isExpanded}
         <!-- Main Favorites item with chevron -->
@@ -1527,6 +1532,7 @@
         </button>
       {/if}
     </nav>
+    {/if}
 
     <!-- Purchases Section (conditional on settings toggle) -->
     {#if showPurchases}
@@ -1802,7 +1808,8 @@
     </div>
     {/if}
 
-    <!-- Local Library Section -->
+    <!-- Local Library Section (hidden when nav is in titlebar) -->
+    {#if !navInTitlebar}
     <div class="section local-library-section">
       {#if isExpanded}
         <button class="section-header-btn" onclick={() => { localLibraryCollapsed = !localLibraryCollapsed; saveSidebarCollapseState(); }}>
@@ -1825,6 +1832,7 @@
         </NavigationItem>
       {/if}
     </div>
+    {/if}
   </div>
 
   <!-- Toggle Button (Edge position) -->
@@ -1854,7 +1862,7 @@
 </aside>
 
 <!-- Favorites menu popover (when sidebar collapsed) - outside sidebar to avoid overflow clipping -->
-{#if showFavoritesMenu && !isExpanded}
+{#if showFavoritesMenu && !isExpanded && !navInTitlebar}
   <div
     class="favorites-popover"
     style="left: {favoritesMenuPos.x}px; top: {favoritesMenuPos.y}px;"
