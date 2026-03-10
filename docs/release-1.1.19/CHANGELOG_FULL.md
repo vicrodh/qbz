@@ -196,6 +196,53 @@ Three new Canvas 2D visualizers under Immersive > Neon:
 
 ---
 
+## Scene Discovery
+
+- **Explore by location** — discover artists from the same city, country, or musical scene as any artist
+- MusicBrainz-powered location and genre affinity matching with Qobuz catalog validation
+- Progress tracking with animated loading phases (searching → validating → done)
+- Two view modes: responsive grid and sidepanel with artist discography
+- Alphabetical A-Z grouping with jump navigation index
+- Genre multi-select filter with searchable popup (when >9 genres)
+- Text search across discovered artists
+- Sticky compact header on scroll with scene label, country flag, and genre summary
+- Paginated "Load More" for large scenes
+- Filtered count display (e.g., "42 / 100 artists")
+
+---
+
+## Discovery Tabs (Redesigned Home)
+
+### 3-tab home layout
+- **Home** — customizable feed with drag-to-reorder sections and per-section visibility toggles
+- **Editor's Picks** — fixed Qobuz editorial curation (New Releases, Editor's Picks, Qobuzissimes, Press Awards, Popular Albums)
+- **For You** — personalized recommendations built from listening history
+
+### Home tab customization
+- Sections include: New Releases, Press Awards, Popular Albums, Qobuzissimes, Editor's Picks, Qobuz Playlists, Your Mixes, Essential Discography, Recently Played, Continue Listening, Your Top Artists, More From Favorites
+- Settings modal (gear icon) to toggle visibility and reorder sections
+- Genre filter available on Home and Editor's Picks tabs
+
+### For You tab
+- Progressive loading with skeleton placeholders per section
+- **Radio Stations** — 9 album-based radios (3 recent + 3 favorites + 3 top artists); dominant color extraction per card
+- **Artists to Follow** — 10 suggested artists from similar-to-your-top-3 with styled 210px cards
+- **Spotlight** — featured artist card with top tracks, playlists, "Create Radio" button, and "Qobuz Radio Station" subtitle; dominant color from artist image
+- **Similar to [Album]** — albums related to a featured album
+- **Rediscover Your Library** — neglected/forgotten albums from your collection
+- **Essentials [Genre]** — essential albums from one of your top genres
+
+### Sticky compact header
+- Appears after 60px scroll; hides greeting and shows compact tab navigation with genre filter
+- Edge-to-edge positioning with negative margin pattern (matching ArtistDetailView jump-nav)
+- Time-based greeting (Morning/Afternoon/Evening) with i18n and username interpolation
+
+### Session cache
+- Album, artist, and track data cached to avoid redundant API calls on navigation
+- Scroll position preserved per tab
+
+---
+
 ## Packaging
 
 - **Cargo.lock tracked in git** — enables deterministic builds for distro packagers (NixOS, etc.)

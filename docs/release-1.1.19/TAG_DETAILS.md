@@ -1,6 +1,34 @@
 # 1.1.19 — Limpiando la casa
 
-Massive housekeeping release. Upgraded the audio engine, hardened security, rebuilt the booklet viewer, and added three new Neon visualizers — all while fixing dozens of stability issues across shutdown, window management, and audio routing.
+Massive housekeeping release with two headline features: **Scene Discovery** for exploring artists by location and musical scene, and a **redesigned Home with 3 Discovery Tabs** (Home, Editor's Picks, For You). Also upgraded the audio engine, hardened security, rebuilt the booklet viewer, and added three new Neon visualizers — all while fixing dozens of stability issues across shutdown, window management, and audio routing.
+
+---
+
+## Scene Discovery
+
+Discover artists from the same city, country, or musical scene as any artist in your library. Powered by MusicBrainz location and genre affinity matching, validated against the Qobuz catalog.
+
+  - **Two view modes** — responsive grid or sidepanel with selected artist's discography
+  - **A-Z grouping** — alphabetical jump navigation for large scenes
+  - **Genre multi-select filter** — searchable popup when >9 genres; real-time filtering with count display
+  - **Text search** — filter discovered artists by name
+  - **Sticky compact header** — scene label, country flag, and genre summary appear on scroll
+  - **Progressive loading** — animated phases (searching → validating → done) with paginated "Load More"
+
+## Discovery Tabs — Redesigned Home
+
+The Home view has been redesigned as a 3-tab discovery experience:
+
+  - **Home** — customizable feed with drag-to-reorder sections and per-section visibility toggles. Sections include New Releases, Press Awards, Popular Albums, Qobuzissimes, Editor's Picks, Qobuz Playlists, Your Mixes, Essential Discography, Recently Played, Continue Listening, Your Top Artists, and More From Favorites
+  - **Editor's Picks** — fixed Qobuz editorial curation in a curated order
+  - **For You** — personalized recommendations built from your listening history:
+    - **Radio Stations** — 9 album-based radios with dominant color extraction per card
+    - **Artists to Follow** — 10 suggestions from similar-to-your-top-3 artists
+    - **Spotlight** — featured artist with top tracks, playlists, and "Create Radio" button
+    - **Similar to [Album]**, **Rediscover Your Library**, and **Essentials [Genre]** sections
+  - **Sticky compact header** — appears after 60px scroll with tab navigation and genre filter
+  - **Session cache** — cached data and per-tab scroll position for instant back-navigation
+  - **Time-based greeting** — Morning/Afternoon/Evening with username, can be disabled
 
 ---
 
@@ -64,6 +92,8 @@ All three respond dynamically to bass, mids, and highs. The Comet visualizer fad
 
 ## New Features
 
+  - **Scene Discovery** — explore artists by location and musical scene (see above)
+  - **Discovery Tabs** — redesigned Home with 3-tab layout (see above)
   - **Explicit content badges** — shown across the entire app where applicable
   - **Search track context menu** — right-click on search result tracks now works
   - **Track/disc number extraction** — local library now reads track and disc numbers from file tags during import
