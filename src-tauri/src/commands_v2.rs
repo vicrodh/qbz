@@ -8585,7 +8585,7 @@ pub async fn v2_resolve_musician(
     mb_state: State<'_, MusicBrainzV2State>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<crate::musicbrainz::ResolvedMusician, RuntimeError> {
+) -> Result<qbz_integrations::musicbrainz::ResolvedMusician, RuntimeError> {
     runtime
         .manager()
         .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
@@ -8612,12 +8612,12 @@ pub async fn v2_resolve_musician(
 
     if let Some(artist) = exact {
         let qobuz_artist_id = i64::try_from(artist.id).ok();
-        return Ok(crate::musicbrainz::ResolvedMusician {
+        return Ok(qbz_integrations::musicbrainz::ResolvedMusician {
             name,
             role,
             mbid: None,
             qobuz_artist_id,
-            confidence: crate::musicbrainz::MusicianConfidence::Confirmed,
+            confidence: qbz_integrations::musicbrainz::MusicianConfidence::Confirmed,
             bands: Vec::new(),
             appears_on_count: 0,
         });
@@ -8630,14 +8630,14 @@ pub async fn v2_resolve_musician(
     let appears_on_count = album_results.total as usize;
 
     let confidence = if appears_on_count > 0 {
-        crate::musicbrainz::MusicianConfidence::Contextual
+        qbz_integrations::musicbrainz::MusicianConfidence::Contextual
     } else if resolved_artist.is_some() {
-        crate::musicbrainz::MusicianConfidence::Weak
+        qbz_integrations::musicbrainz::MusicianConfidence::Weak
     } else {
-        crate::musicbrainz::MusicianConfidence::None
+        qbz_integrations::musicbrainz::MusicianConfidence::None
     };
 
-    Ok(crate::musicbrainz::ResolvedMusician {
+    Ok(qbz_integrations::musicbrainz::ResolvedMusician {
         name,
         role,
         mbid: resolved_artist.as_ref().map(|a| a.mbid.clone()),
@@ -8656,7 +8656,7 @@ pub async fn v2_get_musician_appearances(
     offset: Option<u32>,
     bridge: State<'_, CoreBridgeState>,
     runtime: State<'_, RuntimeManagerState>,
-) -> Result<crate::musicbrainz::MusicianAppearances, RuntimeError> {
+) -> Result<qbz_integrations::musicbrainz::MusicianAppearances, RuntimeError> {
     runtime
         .manager()
         .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
@@ -8671,7 +8671,7 @@ pub async fn v2_get_musician_appearances(
     let albums = results
         .items
         .into_iter()
-        .map(|album| crate::musicbrainz::AlbumAppearance {
+        .map(|album| qbz_integrations::musicbrainz::AlbumAppearance {
             album_id: album.id,
             album_title: album.title,
             album_artwork: album.image.large.or(album.image.small).unwrap_or_default(),
@@ -8681,7 +8681,7 @@ pub async fn v2_get_musician_appearances(
         })
         .collect::<Vec<_>>();
 
-    Ok(crate::musicbrainz::MusicianAppearances {
+    Ok(qbz_integrations::musicbrainz::MusicianAppearances {
         albums,
         total: results.total as usize,
     })
