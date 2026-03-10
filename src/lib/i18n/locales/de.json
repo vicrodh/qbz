@@ -63,8 +63,10 @@
     "spotlightDesc": "Rücke einen deiner Lieblingskünstler ins Rampenlicht.",
     "spotlightArtist": "Künstler",
     "topTracks": "Top-Titel",
+    "topTracksLabel": "TOP TRACKS",
     "topTracksBy": "Von {artist}",
-    "andMore": "und mehr"
+    "andMore": "und mehr",
+    "playlistLabel": "PLAYLIST"
   },
   "discover": {
     "newReleases": "Neuerscheinungen",

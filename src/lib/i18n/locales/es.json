@@ -66,8 +66,10 @@
     "spotlightDesc": "Ilumina a uno de tus artistas favoritos.",
     "spotlightArtist": "Artista",
     "topTracks": "Canciones populares",
+    "topTracksLabel": "TOP TRACKS",
     "topTracksBy": "De {artist}",
-    "andMore": "y más"
+    "andMore": "y más",
+    "playlistLabel": "PLAYLIST"
   },
   "discover": {
     "newReleases": "Novedades",

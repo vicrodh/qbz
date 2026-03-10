@@ -1935,6 +1935,7 @@
       {onNavigateWeeklyQ}
       {onNavigateFavQ}
       {onNavigateTopQ}
+      {onPlaylistClick}
     />
   {/if}
 

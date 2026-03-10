@@ -7,7 +7,7 @@
   import HorizontalScrollRow from '../HorizontalScrollRow.svelte';
   import AlbumCard from '../AlbumCard.svelte';
   import TrackRow from '../TrackRow.svelte';
-  import { formatDuration, formatQuality, getQobuzImage, getQobuzImageForSize } from '$lib/adapters/qobuzAdapters';
+  import { formatQuality, getQobuzImageForSize } from '$lib/adapters/qobuzAdapters';
   import { playTrack } from '$lib/services/playbackService';
   import { playQueueIndex } from '$lib/stores/queueStore';
   import { resolveArtistImage } from '$lib/stores/customArtistImageStore';
@@ -84,6 +84,7 @@
     onNavigateWeeklyQ?: () => void;
     onNavigateFavQ?: () => void;
     onNavigateTopQ?: () => void;
+    onPlaylistClick?: (playlistId: number) => void;
   }
 
   let {
@@ -130,6 +131,7 @@
     onNavigateWeeklyQ,
     onNavigateFavQ,
     onNavigateTopQ,
+    onPlaylistClick,
   }: Props = $props();
 
   interface SimilarArtistsPage {
@@ -146,12 +148,32 @@
     isFavoriting: boolean;
   }
 
+  interface SpotlightAlbum {
+    id: string;
+    artwork: string;
+    title: string;
+    artist: string;
+    artistId?: number;
+    genre: string;
+    quality?: string;
+    releaseDate?: string;
+  }
+
+  interface SpotlightPlaylist {
+    id: number;
+    title: string;
+    image?: string;
+    tracksCount?: number;
+  }
+
   interface SpotlightData {
     artistId: number;
     artistName: string;
     artistImage?: string;
     topTracks: PageArtistTrack[];
     category?: string;
+    albums: SpotlightAlbum[];
+    playlists: SpotlightPlaylist[];
   }
 
   // For You-specific state
@@ -169,6 +191,9 @@
   let spotlightData = $state<SpotlightData | null>(null);
   let loadingSpotlight = $state(false);
   let spotlightRadioLoading = $state(false);
+  let spotlightTopTracksLoading = $state(false);
+  let spotlightRadioColor = $state<string>('');
+  let spotlightRadioTextColor = $state<string>('');
 
   // Phase 3: Similar to [Album]
   let similarAlbums = $state<AlbumCardData[]>([]);
@@ -471,18 +496,103 @@
       }
       artistImage = resolveArtistImage(response.name.display, artistImage || '');
 
+      // Extract up to 6 albums: prefer "album" type, then fill with "live", "ep-single"
+      const allAlbums: SpotlightAlbum[] = [];
+      const seenAlbumIds = new Set<string>();
+      const releaseTypes = ['album', 'live', 'ep-single', 'compilation'];
+      for (const releaseType of releaseTypes) {
+        const group = (response.releases || []).find(rg => rg.type === releaseType);
+        if (group) {
+          for (const rel of group.items) {
+            if (seenAlbumIds.has(rel.id)) continue;
+            seenAlbumIds.add(rel.id);
+            allAlbums.push({
+              id: rel.id,
+              artwork: rel.image?.large || rel.image?.small || '',
+              title: rel.title,
+              artist: rel.artist?.name?.display || response.name.display,
+              artistId: rel.artist?.id || response.id,
+              genre: rel.genre?.name || '',
+              quality: formatQuality(
+                (rel.audio_info?.maximum_bit_depth ?? 16) > 16,
+                rel.audio_info?.maximum_bit_depth,
+                rel.audio_info?.maximum_sampling_rate
+              ),
+              releaseDate: rel.dates?.original
+            });
+            if (allAlbums.length >= 6) break;
+          }
+        }
+        if (allAlbums.length >= 6) break;
+      }
+
+      // Extract playlists
+      const playlists: SpotlightPlaylist[] = (response.playlists?.items || []).map(pl => ({
+        id: pl.id,
+        title: pl.title || '',
+        image: pl.images?.rectangle?.[0],
+        tracksCount: pl.tracks_count
+      }));
+
       spotlightData = {
         artistId: response.id,
         artistName: response.name.display,
         artistImage,
-        topTracks: (response.top_tracks || []).slice(0, 5),
-        category: response.artist_category
+        topTracks: response.top_tracks || [],
+        category: response.artist_category,
+        albums: allAlbums,
+        playlists
       };
+
+      // Extract color for spotlight radio card from artist image
+      if (artistImage) {
+        extractSpotlightRadioColor(artistImage);
+      }
     } catch (err) {
       console.error('Failed to load spotlight:', err);
     } finally {
       loadingSpotlight = false;
     }
+  }
+
+  function extractSpotlightRadioColor(artworkUrl: string) {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = 8;
+        canvas.height = 8;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, 8, 8);
+        const data = ctx.getImageData(0, 0, 8, 8).data;
+        let rSum = 0, gSum = 0, bSum = 0, count = 0;
+        let lightR = 0, lightG = 0, lightB = 0, maxBrightness = 0;
+        for (let i = 0; i < data.length; i += 4) {
+          const pr = data[i], pg = data[i + 1], pb = data[i + 2];
+          rSum += pr; gSum += pg; bSum += pb; count++;
+          const brightness = pr * 0.299 + pg * 0.587 + pb * 0.114;
+          if (brightness > maxBrightness) {
+            maxBrightness = brightness;
+            lightR = pr; lightG = pg; lightB = pb;
+          }
+        }
+        const dr = Math.round((rSum / count) * 0.7);
+        const dg = Math.round((gSum / count) * 0.7);
+        const db = Math.round((bSum / count) * 0.7);
+        spotlightRadioColor = `rgb(${dr}, ${dg}, ${db})`;
+        if (maxBrightness < 60) {
+          spotlightRadioTextColor = 'rgb(255, 255, 255)';
+        } else {
+          const boost = Math.min(1.3, 255 / Math.max(lightR, lightG, lightB, 1));
+          spotlightRadioTextColor = `rgb(${Math.min(255, Math.round(lightR * boost))}, ${Math.min(255, Math.round(lightG * boost))}, ${Math.min(255, Math.round(lightB * boost))})`;
+        }
+      } catch {
+        // Canvas tainted
+      }
+    };
+    img.src = artworkUrl;
   }
 
   async function handleSpotlightRadio() {
@@ -501,14 +611,31 @@
     }
   }
 
-  function getSpotlightTrackQuality(track: PageArtistTrack): string {
-    const bitDepth = track.audio_info?.maximum_bit_depth;
-    const sampleRate = track.audio_info?.maximum_sampling_rate;
-    return formatQuality(
-      (bitDepth ?? 16) > 16,
-      bitDepth,
-      sampleRate
-    );
+  async function handleSpotlightTopTracks() {
+    if (!spotlightData || spotlightTopTracksLoading || spotlightData.topTracks.length === 0) return;
+    spotlightTopTracksLoading = true;
+    try {
+      const queueTracks = spotlightData.topTracks.map(track => ({
+        id: track.id,
+        title: track.title,
+        artist: track.artist?.name?.display || spotlightData!.artistName,
+        album: track.album?.title || '',
+        duration_secs: track.duration ?? 0,
+        artwork_url: track.album?.image?.small || '',
+        hires: (track.audio_info?.maximum_bit_depth ?? 16) > 16,
+        bit_depth: track.audio_info?.maximum_bit_depth ?? null,
+        sample_rate: track.audio_info?.maximum_sampling_rate ?? null,
+        is_local: false,
+        album_id: track.album?.id || null,
+        artist_id: track.artist?.id || spotlightData!.artistId,
+      }));
+      await invoke('v2_set_queue', { tracks: queueTracks, startIndex: 0 });
+      await startRadioPlayback();
+    } catch (err) {
+      console.error('Failed to play spotlight top tracks:', err);
+    } finally {
+      spotlightTopTracksLoading = false;
+    }
   }
 
   async function startRadioPlayback() {
@@ -1208,71 +1335,143 @@
       </div>
     </div>
 
-    <!-- Spotlight Top Tracks -->
-    {#if spotlightData.topTracks.length > 0}
-      <div class="spotlight-tracks">
-        <h4 class="spotlight-tracks-title">{$t('home.topTracks')}</h4>
-        <div class="track-list compact">
-          {#each spotlightData.topTracks as track, index (track.id)}
-            {@const isThisActiveTrack = activeTrackId === track.id}
-            <TrackRow
-              trackId={track.id}
-              number={index + 1}
-              title={track.title}
-              artist={track.artist?.name?.display || spotlightData.artistName}
-              album={track.album?.title}
-              duration={track.duration ? formatDuration(track.duration) : ''}
-              quality={getSpotlightTrackQuality(track)}
-              isPlaying={isPlaybackActive && isThisActiveTrack}
-              isActiveTrack={isThisActiveTrack}
-              compact={true}
-              onPlay={onTrackPlay ? () => onTrackPlay({
-                id: track.id,
-                title: track.title,
-                artist: track.artist?.name?.display || spotlightData!.artistName,
-                album: track.album?.title,
-                albumArt: track.album?.image?.small,
-                albumId: track.album?.id,
-                artistId: track.artist?.id || spotlightData!.artistId,
-                duration: track.duration ? formatDuration(track.duration) : '',
-                durationSeconds: track.duration ?? 0
-              }) : undefined}
-              menuActions={{
-                onGoToAlbum: track.album?.id && onTrackGoToAlbum ? () => onTrackGoToAlbum(track.album!.id) : undefined,
-                onGoToArtist: onArtistClick ? () => onArtistClick(track.artist?.id || spotlightData!.artistId) : undefined,
-                onShowInfo: onTrackShowInfo ? () => onTrackShowInfo(track.id) : undefined
-              }}
-            />
-          {/each}
-        </div>
-      </div>
-    {/if}
+    <!-- Spotlight Content Row: Top Tracks card, Radio card, Playlists, Albums -->
+    <HorizontalScrollRow>
+      {#snippet children()}
+        <!-- TOP TRACKS card -->
+        {#if spotlightData!.topTracks.length > 0}
+          {@const isTopTracksLoading = spotlightTopTracksLoading}
+          <button
+            class="radio-card"
+            class:loading={isTopTracksLoading}
+            onclick={() => handleSpotlightTopTracks()}
+            disabled={spotlightTopTracksLoading}
+          >
+            <div class="radio-card-visual spotlight-top-tracks-visual">
+              <span class="spotlight-top-tracks-label">{$t('home.topTracksLabel')}</span>
+              <div class="radio-card-hover-overlay" class:visible={isTopTracksLoading}>
+                {#if isTopTracksLoading}
+                  <div class="radio-play-spinner">
+                    <svg viewBox="0 0 50 50" class="radio-spinner-svg">
+                      <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+                    </svg>
+                  </div>
+                {:else}
+                  <button class="radio-overlay-play-btn" type="button">
+                    <Play size={18} fill="white" color="white" />
+                  </button>
+                {/if}
+              </div>
+            </div>
+            <div class="radio-card-meta-title">{$t('home.topTracks')}</div>
+            <div class="radio-card-artist">{$t('home.topTracksBy', { values: { artist: spotlightData!.artistName } })}</div>
+          </button>
+        {/if}
 
-    <!-- Spotlight Radio Card -->
-    <div class="spotlight-extras">
-      <button class="spotlight-radio-card" onclick={() => handleSpotlightRadio()}>
-        <div class="spotlight-radio-visual">
-          {#if spotlightData.artistImage}
+        <!-- RADIO card (artist radio, homologated style) -->
+        <button
+          class="radio-card"
+          class:loading={spotlightRadioLoading}
+          onclick={() => handleSpotlightRadio()}
+          disabled={spotlightRadioLoading}
+        >
+          <div
+            class="radio-card-visual"
+            style:background-color={spotlightRadioColor || 'var(--bg-tertiary)'}
+          >
+            {#if spotlightData!.artistImage}
+              <img
+                use:cachedSrc={spotlightData!.artistImage}
+                alt={spotlightData!.artistName}
+                class="radio-card-art"
+                loading="lazy"
+                decoding="async"
+              />
+            {/if}
             <img
-              use:cachedSrc={spotlightData.artistImage}
-              alt={spotlightData.artistName}
-              class="spotlight-radio-img"
-              loading="lazy"
-              decoding="async"
+              src="/image_radio_shadows.png"
+              alt=""
+              class="radio-card-shadow"
             />
-          {/if}
-          <img
-            src="/image_radio_shadows.png"
-            alt=""
-            class="radio-card-shadow"
+            <span
+              class="radio-card-label"
+              style:color={spotlightRadioTextColor || 'rgba(255, 255, 255, 0.85)'}
+            >{$t('home.radioLabel')}</span>
+            <div class="radio-card-hover-overlay" class:visible={spotlightRadioLoading}>
+              {#if spotlightRadioLoading}
+                <div class="radio-play-spinner">
+                  <svg viewBox="0 0 50 50" class="radio-spinner-svg">
+                    <circle cx="25" cy="25" r="20" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
+                  </svg>
+                </div>
+              {:else}
+                <button class="radio-overlay-play-btn" type="button">
+                  <Play size={18} fill="white" color="white" />
+                </button>
+              {/if}
+            </div>
+          </div>
+          <div class="radio-card-meta-title">{spotlightData!.artistName}</div>
+          <div class="radio-card-artist">{$t('home.andMore')}</div>
+        </button>
+
+        <!-- Playlist cards (if artist has Qobuz playlists) -->
+        {#each spotlightData!.playlists as pl (pl.id)}
+          <button
+            class="radio-card"
+            onclick={() => onPlaylistClick?.(pl.id)}
+          >
+            <div class="radio-card-visual spotlight-playlist-visual">
+              {#if pl.image}
+                <img
+                  use:cachedSrc={pl.image}
+                  alt={pl.title}
+                  class="spotlight-playlist-img"
+                  loading="lazy"
+                  decoding="async"
+                />
+              {/if}
+              <div class="radio-card-hover-overlay">
+                <div class="radio-overlay-play-btn">
+                  <Play size={18} fill="white" color="white" />
+                </div>
+              </div>
+            </div>
+            <div class="radio-card-meta-title" title={pl.title}>{pl.title}</div>
+            <div class="radio-card-artist spotlight-playlist-label">{$t('home.playlistLabel')}</div>
+          </button>
+        {/each}
+
+        <!-- Artist albums -->
+        {#each spotlightData!.albums as album (album.id)}
+          <AlbumCard
+            albumId={album.id}
+            artwork={album.artwork}
+            title={album.title}
+            artist={album.artist}
+            artistId={album.artistId}
+            onArtistClick={onArtistClick}
+            genre={album.genre}
+            releaseDate={album.releaseDate}
+            size="large"
+            quality={album.quality}
+            onPlay={onAlbumPlay ? () => onAlbumPlay(album.id) : undefined}
+            onPlayNext={onAlbumPlayNext ? () => onAlbumPlayNext(album.id) : undefined}
+            onPlayLater={onAlbumPlayLater ? () => onAlbumPlayLater(album.id) : undefined}
+            onAddAlbumToPlaylist={onAddAlbumToPlaylist ? () => onAddAlbumToPlaylist(album.id) : undefined}
+            onShareQobuz={onAlbumShareQobuz ? () => onAlbumShareQobuz(album.id) : undefined}
+            onShareSonglink={onAlbumShareSonglink ? () => onAlbumShareSonglink(album.id) : undefined}
+            onDownload={onAlbumDownload ? () => onAlbumDownload(album.id) : undefined}
+            isAlbumFullyDownloaded={isAlbumDownloaded(album.id)}
+            onOpenContainingFolder={onOpenAlbumFolder ? () => onOpenAlbumFolder(album.id) : undefined}
+            onReDownloadAlbum={onReDownloadAlbum ? () => onReDownloadAlbum(album.id) : undefined}
+            {downloadStateVersion}
+            onclick={() => { onAlbumClick?.(album.id); loadAlbumDownloadStatus(album.id); }}
           />
-          <span class="spotlight-radio-name">{spotlightData.artistName}</span>
-          <span class="radio-card-label">{$t('home.radioLabel')}</span>
-        </div>
-        <div class="spotlight-radio-title">{spotlightData.artistName}</div>
-        <div class="spotlight-radio-subtitle">{$t('home.andMore')}</div>
-      </button>
-    </div>
+        {/each}
+        <div class="spacer"></div>
+      {/snippet}
+    </HorizontalScrollRow>
   </div>
 {/if}
 
@@ -1956,79 +2155,45 @@
 
   /* Spotlight uses global .action-btn-circle and .action-btn-circle.primary */
 
-  .spotlight-tracks {
+  /* ---- Spotlight: Top Tracks card ---- */
+  .spotlight-top-tracks-visual {
+    background: #f5f5f5;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    justify-content: center;
   }
 
-  .spotlight-tracks-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-secondary);
-    margin: 0;
+  .spotlight-top-tracks-label {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    padding-left: 0.12em;
+    color: #111;
+    pointer-events: none;
+    z-index: 3;
+    text-align: center;
+    line-height: 1.2;
   }
 
-  .spotlight-extras {
-    display: flex;
-    gap: 16px;
-    overflow-x: auto;
-    scrollbar-width: none;
+  /* ---- Spotlight: Playlist card ---- */
+  .spotlight-playlist-visual {
+    background: var(--bg-tertiary);
   }
 
-  .spotlight-extras::-webkit-scrollbar {
-    display: none;
-  }
-
-  .spotlight-radio-card {
-    flex-shrink: 0;
-    width: 180px;
-    cursor: pointer;
-    background: none;
-    border: none;
-    padding: 0;
-    text-align: left;
-    color: inherit;
-  }
-
-  .spotlight-radio-visual {
-    position: relative;
-    width: 180px;
-    height: 180px;
-    border-radius: 8px;
-    overflow: hidden;
-    margin-bottom: 8px;
-  }
-
-  .spotlight-radio-img {
+  .spotlight-playlist-img {
     width: 100%;
     height: 100%;
     object-fit: cover;
-  }
-
-  .spotlight-radio-name {
     position: absolute;
-    top: 12px;
-    left: 12px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #fff;
-    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
-    pointer-events: none;
+    inset: 0;
   }
 
-  .spotlight-radio-title {
-    font-size: 13px;
+  .spotlight-playlist-label {
+    color: var(--accent-primary);
     font-weight: 600;
-    color: var(--text-primary);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .spotlight-radio-subtitle {
-    font-size: 12px;
-    color: var(--text-muted);
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.05em;
   }
 
   /* ---- Skeleton additions ---- */
