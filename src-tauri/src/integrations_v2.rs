@@ -40,14 +40,14 @@ impl ListenBrainzV2State {
     }
 
     /// Initialize cache at user data directory
-    pub fn init_cache_at(&self, base_dir: &Path) -> Result<(), String> {
+    pub async fn init_cache_at(&self, base_dir: &Path) -> Result<(), String> {
         let cache_dir = base_dir.join("cache");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| format!("Failed to create LB cache directory: {}", e))?;
         let db_path = cache_dir.join("listenbrainz_v2.db");
         let cache = ListenBrainzCache::new(&db_path)?;
         log::info!("ListenBrainz V2 cache initialized at {:?}", db_path);
-        let mut guard = self.cache.blocking_lock();
+        let mut guard = self.cache.lock().await;
         *guard = Some(cache);
         Ok(())
     }
@@ -154,14 +154,14 @@ impl MusicBrainzV2State {
     }
 
     /// Initialize cache at user data directory
-    pub fn init_cache_at(&self, base_dir: &Path) -> Result<(), String> {
+    pub async fn init_cache_at(&self, base_dir: &Path) -> Result<(), String> {
         let cache_dir = base_dir.join("cache");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| format!("Failed to create MB cache directory: {}", e))?;
         let db_path = cache_dir.join("musicbrainz_v2.db");
         let cache = MusicBrainzCache::new(&db_path)?;
         log::info!("MusicBrainz V2 cache initialized at {:?}", db_path);
-        let mut guard = self.cache.blocking_lock();
+        let mut guard = self.cache.lock().await;
         *guard = Some(cache);
         Ok(())
     }
