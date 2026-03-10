@@ -5197,6 +5197,7 @@ pub async fn v2_create_artist_radio(
         tracks.iter().map(track_to_queue_track_from_api).collect();
     let bridge = bridge.get().await;
     bridge.set_queue(queue_tracks, Some(0)).await;
+    bridge.play_index(0).await;
 
     let queue_track_ids: Vec<u64> = tracks.iter().map(|t| t.id).collect();
     let context = PlaybackContext::new(
@@ -5298,6 +5299,7 @@ pub async fn v2_create_track_radio(
         tracks.iter().map(track_to_queue_track_from_api).collect();
     let bridge = bridge.get().await;
     bridge.set_queue(queue_tracks, Some(0)).await;
+    bridge.play_index(0).await;
 
     let queue_track_ids: Vec<u64> = tracks.iter().map(|t| t.id).collect();
     let context = PlaybackContext::new(
@@ -5367,6 +5369,7 @@ pub async fn v2_create_album_radio(
         tracks.iter().map(track_to_queue_track_from_api).collect();
     let bridge = bridge.get().await;
     bridge.set_queue(queue_tracks, Some(0)).await;
+    bridge.play_index(0).await;
 
     let queue_track_ids: Vec<u64> = tracks.iter().map(|track| track.id).collect();
     let context_id = format!("album_radio_{}_{}", album_id, chrono::Utc::now().timestamp());
