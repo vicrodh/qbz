@@ -79,7 +79,7 @@
   });
 
   let imageError = $state(false);
-  const cardSize = $derived(size === 'large' ? 180 : 162);
+  const cardSize = $derived(size === 'large' ? 200 : 180);
   let titleRef: HTMLDivElement | null = $state(null);
   let titleTextRef: HTMLSpanElement | null = $state(null);
   let titleOverflow = $state(0);

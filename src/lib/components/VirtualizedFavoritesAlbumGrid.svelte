@@ -81,9 +81,9 @@
   }: Props = $props();
 
   // Constants
-  const GRID_CARD_WIDTH = 180;
-  const GRID_CARD_HEIGHT = 290;
-  const GRID_GAP_X = 14;
+  const GRID_CARD_WIDTH = 200;
+  const GRID_CARD_HEIGHT = 310;
+  const GRID_GAP_X = 20;
   const GRID_GAP_Y = 24;
   const LIST_ROW_HEIGHT = 76; // 52px art + padding
   const LIST_ROW_GAP = 8;
@@ -437,7 +437,7 @@
   .album-grid-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 24px 14px;
+    gap: 24px 20px;
   }
 
   /* List mode styles */

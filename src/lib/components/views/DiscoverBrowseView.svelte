@@ -459,16 +459,16 @@
   .skeleton-grid {
     display: flex;
     flex-wrap: wrap;
-    gap: 24px 14px;
+    gap: 24px 20px;
   }
 
   .skeleton-card {
-    width: 180px;
+    width: 200px;
   }
 
   .skeleton-art {
-    width: 180px;
-    height: 180px;
+    width: 200px;
+    height: 200px;
     border-radius: 8px;
     background: var(--bg-secondary);
     animation: pulse 1.5s ease-in-out infinite;

@@ -117,7 +117,7 @@
 
   .content {
     display: flex;
-    gap: 16px;
+    gap: 20px;
     width: max-content;
   }
 </style>

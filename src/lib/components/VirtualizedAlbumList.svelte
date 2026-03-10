@@ -67,9 +67,9 @@
   // Constants
   const HEADER_HEIGHT = 44; // px
   const LIST_ROW_HEIGHT = 76; // px (52px art + padding + gap)
-  const GRID_ROW_HEIGHT = 290; // px (180px artwork + 8px margin + ~64px info + 24px gap + buffer)
-  const GRID_MIN_CARD_WIDTH = 180; // px - matches AlbumCard size="large"
-  const GRID_GAP = 14; // px (horizontal gap between cards)
+  const GRID_ROW_HEIGHT = 310; // px (200px artwork + 8px margin + ~64px info + 24px gap + buffer)
+  const GRID_MIN_CARD_WIDTH = 200; // px - matches AlbumCard size="large"
+  const GRID_GAP = 20; // px (horizontal gap between cards)
   const BUFFER_ITEMS = 5; // Extra items to render above/below viewport
   const BOTTOM_PADDING = 100; // px - extra space at bottom for player bar
 
@@ -473,7 +473,7 @@
   /* Album Grid Row (Grid Mode) */
   .album-grid-row {
     display: flex;
-    gap: 14px;
+    gap: 20px;
     padding: 0;
   }
 

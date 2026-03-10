@@ -2337,7 +2337,7 @@
   .albums-grid-row {
     display: flex;
     flex-wrap: wrap;
-    gap: 24px 14px;
+    gap: 24px 20px;
   }
 
   .artists-grid-row {

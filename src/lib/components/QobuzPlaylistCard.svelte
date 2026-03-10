@@ -48,7 +48,7 @@
   let menuEl: HTMLDivElement | null = $state(null);
   let menuStyle = $state('');
 
-  const cardSize = 180;
+  const cardSize = 200;
 
   // Global floating menu coordination
   const _menuTimestamp = Date.now();
