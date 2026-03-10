@@ -693,6 +693,13 @@ pub struct RadioResponse {
     pub tracks: SearchResultsPage<Track>,
 }
 
+/// Album suggestion response from /album/suggest
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AlbumSuggestResponse {
+    pub algorithm: Option<String>,
+    pub albums: Option<SearchResultsPage<Album>>,
+}
+
 /// Favorites container
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Favorites {

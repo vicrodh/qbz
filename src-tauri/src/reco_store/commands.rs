@@ -967,7 +967,7 @@ pub async fn reco_get_home_resolved(
 }
 
 /// Resolve album IDs → AlbumCardMeta with 3-tier cache
-async fn resolve_albums(
+pub async fn resolve_albums(
     ids: &[String],
     reco_state: &State<'_, RecoState>,
     app_state: &State<'_, AppState>,

@@ -1385,6 +1385,8 @@ pub fn run() {
             commands_v2::v2_reco_get_home,
             commands_v2::v2_reco_get_home_ml,
             commands_v2::v2_reco_get_home_resolved,
+            commands_v2::v2_get_album_suggestions,
+            commands_v2::v2_reco_get_forgotten_favorites,
             commands_v2::v2_library_get_cache_stats,
             commands_v2::v2_library_get_stats,
             commands_v2::v2_library_get_albums,

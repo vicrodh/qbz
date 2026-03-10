@@ -4368,6 +4368,75 @@ pub async fn v2_reco_get_home_resolved(
     .await
 }
 
+/// Get album suggestions (similar albums) from Qobuz /album/suggest API
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_get_album_suggestions(
+    albumId: String,
+    limit: Option<u32>,
+    state: State<'_, AppState>,
+    blacklist_state: State<'_, BlacklistState>,
+    runtime: State<'_, RuntimeManagerState>,
+) -> Result<Vec<crate::api::models::Album>, String> {
+    runtime
+        .manager()
+        .check_requirements(CommandRequirement::RequiresCoreBridgeAuth)
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let client = state.client.read().await.clone();
+    let response = client
+        .get_album_suggest(&albumId)
+        .await
+        .map_err(|e| format!("Failed to get album suggestions: {}", e))?;
+
+    let mut albums = response.albums
+        .map(|page| page.items)
+        .unwrap_or_default();
+
+    // Apply blacklist
+    albums.retain(|album| {
+        !blacklist_state.is_blacklisted(album.artist.id)
+    });
+
+    let max = limit.unwrap_or(10) as usize;
+    albums.truncate(max);
+
+    Ok(albums)
+}
+
+/// Get "forgotten" favorite albums — favorites not played in recent N days
+#[tauri::command]
+#[allow(non_snake_case)]
+pub async fn v2_reco_get_forgotten_favorites(
+    limit: Option<u32>,
+    recencyDays: Option<u32>,
+    reco_state: State<'_, RecoState>,
+    app_state: State<'_, AppState>,
+    cache_state: State<'_, ApiCacheState>,
+) -> Result<Vec<crate::reco_store::AlbumCardMeta>, String> {
+    let guard = reco_state.db.lock().await;
+    let db = guard.as_ref().ok_or("No active session")?;
+    let album_ids = db.get_forgotten_favorite_album_ids(
+        limit.unwrap_or(12),
+        recencyDays.unwrap_or(30),
+    )?;
+    drop(guard);
+
+    if album_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Resolve album IDs to metadata using the same 3-tier cache as home
+    crate::reco_store::commands::resolve_albums(
+        &album_ids,
+        &reco_state,
+        &app_state,
+        &cache_state,
+    )
+    .await
+}
+
 #[derive(Debug, Clone, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct V2LibraryCacheStats {

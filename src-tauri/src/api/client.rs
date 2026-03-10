@@ -631,6 +631,33 @@ impl QobuzClient {
         Ok(serde_json::from_value(response)?)
     }
 
+    /// Get album suggestions (similar albums) from /album/suggest
+    pub async fn get_album_suggest(
+        &self,
+        album_id: &str,
+    ) -> Result<AlbumSuggestResponse> {
+        let url = endpoints::build_url(paths::ALBUM_SUGGEST);
+        let http_response = self
+            .http
+            .get(&url)
+            .headers(self.api_headers().await?)
+            .query(&[("album_id", album_id)])
+            .send()
+            .await?;
+        let status = http_response.status();
+        log::debug!("[API] get_album_suggest({}) status={}", album_id, status);
+
+        if !status.is_success() {
+            return Err(ApiError::ApiResponse(format!(
+                "get_album_suggest({}) status {}",
+                album_id, status
+            )));
+        }
+
+        let response: Value = http_response.json().await?;
+        Ok(serde_json::from_value(response)?)
+    }
+
     /// Get featured albums by type (new-releases, press-awards, most-streamed)
     pub async fn get_featured_albums(
         &self,

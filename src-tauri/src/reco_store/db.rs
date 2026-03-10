@@ -387,6 +387,44 @@ impl RecoStoreDb {
         Ok(albums)
     }
 
+    /// Get favorite album IDs that haven't been played recently ("forgotten favorites")
+    pub fn get_forgotten_favorite_album_ids(
+        &self,
+        limit: u32,
+        recency_days: u32,
+    ) -> Result<Vec<String>, String> {
+        let mut stmt = self
+            .conn
+            .prepare(
+                r#"
+                SELECT f.album_id
+                FROM reco_events f
+                WHERE f.event_type = 'favorite' AND f.album_id IS NOT NULL
+                  AND f.album_id NOT IN (
+                    SELECT DISTINCT p.album_id
+                    FROM reco_events p
+                    WHERE p.event_type = 'play'
+                      AND p.album_id IS NOT NULL
+                      AND p.created_at > datetime('now', '-' || ? || ' days')
+                  )
+                GROUP BY f.album_id
+                ORDER BY RANDOM()
+                LIMIT ?
+                "#,
+            )
+            .map_err(|e| format!("Failed to prepare forgotten favorites query: {}", e))?;
+
+        let rows = stmt
+            .query_map(params![recency_days, limit], |row| row.get::<_, String>(0))
+            .map_err(|e| format!("Failed to query forgotten favorites: {}", e))?;
+
+        let mut albums = Vec::new();
+        for row in rows {
+            albums.push(row.map_err(|e| format!("Failed to read forgotten favorite row: {}", e))?);
+        }
+        Ok(albums)
+    }
+
     pub fn get_favorite_track_ids(&self, limit: u32) -> Result<Vec<u64>, String> {
         let mut stmt = self
             .conn
