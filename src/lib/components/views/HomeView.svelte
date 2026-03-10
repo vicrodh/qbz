@@ -869,14 +869,14 @@
           class:active={activeTab === 'editorPicks'}
           onclick={() => { activeTab = 'editorPicks'; }}
         >
-          {$t('home.editorPicks')}
+          {$t('home.tabEditorPicks')}
         </button>
         <button
           class="home-tab"
           class:active={activeTab === 'forYou'}
           onclick={() => { activeTab = 'forYou'; }}
         >
-          {$t('home.forYou')}
+          {$t('home.tabForYou')}
         </button>
       </div>
     </div>
